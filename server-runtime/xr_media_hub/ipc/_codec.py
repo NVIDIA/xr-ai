@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 import msgpack
 
-from ._types import AudioChunk, ControlMessage, FrameSignal, MsgType, PixelFormat
+from ._types import AudioChunk, ControlMessage, DataMessage, FrameSignal, MsgType, PixelFormat
 
 _TYPE_HDR = struct.Struct("=B")
 
@@ -46,21 +46,24 @@ def decode(raw: bytes) -> tuple[int, Any]:
 
 register_encoder(
     MsgType.FRAME_SIGNAL,
-    lambda m: [m.slot, m.seq, m.pts_us, m.width, m.height, int(m.fmt), m.data_sz],
+    lambda m: [m.slot, m.seq, m.pts_us, m.width, m.height, int(m.fmt), m.data_sz, m.track_id],
 )
 register_decoder(
     MsgType.FRAME_SIGNAL,
-    lambda p: FrameSignal(p[0], p[1], p[2], p[3], p[4], PixelFormat(p[5]), p[6]),
+    lambda p: FrameSignal(p[0], p[1], p[2], p[3], p[4], PixelFormat(p[5]), p[6], p[7]),
 )
 
 register_encoder(
     MsgType.AUDIO_CHUNK,
-    lambda m: [m.pts_us, m.sample_rate, m.channels, m.samples, m.data],
+    lambda m: [m.pts_us, m.sample_rate, m.channels, m.samples, m.data, m.track_id],
 )
 register_decoder(
     MsgType.AUDIO_CHUNK,
-    lambda p: AudioChunk(p[0], p[1], p[2], p[3], bytes(p[4])),
+    lambda p: AudioChunk(p[0], p[1], p[2], p[3], bytes(p[4]), p[5]),
 )
 
-register_encoder(MsgType.CONTROL, lambda m: [m.topic, m.payload])
-register_decoder(MsgType.CONTROL, lambda p: ControlMessage(p[0], p[1]))
+register_encoder(MsgType.CONTROL,      lambda m: [m.topic, m.payload])
+register_decoder(MsgType.CONTROL,      lambda p: ControlMessage(p[0], p[1]))
+
+register_encoder(MsgType.DATA_MESSAGE, lambda m: [m.track_id, m.pts_us, m.data])
+register_decoder(MsgType.DATA_MESSAGE, lambda p: DataMessage(p[0], p[1], bytes(p[2])))
