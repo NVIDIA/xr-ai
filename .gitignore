@@ -1,3 +1,12 @@
+# macOS
+.DS_Store
+
+# Swift / Xcode
+*.xcuserstate
+xcuserdata/
+.build/
+livekit-client-sdk-swift/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
