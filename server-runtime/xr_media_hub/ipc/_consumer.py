@@ -1,11 +1,15 @@
 """
 Consumer-side IPC endpoint (subscriber).
 
-Connects to the hub's PUB socket and receives real-time audio and control
-messages. Video chunk queries (MP4, frame sets) are left to the application
-layer — this module is transport-only.
+Connects to the hub's PUB socket and receives real-time audio, data, and
+control messages. Video chunk queries (MP4, frame sets) are left to the
+application layer — this module is transport-only.
 
 Multiple consumers can connect to the same hub simultaneously.
+
+Isolation: return_audio.* and return_data.* topics are connector-only and
+are excluded from the default subscription. Subscribing to those topics from
+a consumer is unsupported and would break the participant isolation contract.
 """
 from __future__ import annotations
 
@@ -48,16 +52,17 @@ class ConsumerEndpoint:
     Pass topics=None (default) to subscribe to everything.
     """
 
+    # Topics a consumer subscribes to by default. Deliberately excludes
+    # return_audio.* and return_data.* which are connector-only channels.
+    _DEFAULT_TOPICS: tuple[bytes, ...] = (b"audio", b"data", b"participant", b"control")
+
     def __init__(self, sub_addr: str, topics: list[str | bytes] | None = None) -> None:
         ctx       = zmq.asyncio.Context.instance()
         self._sub: zmq.asyncio.Socket = ctx.socket(zmq.SUB)
         self._sub.connect(sub_addr)
 
-        if topics is None:
-            self._sub.setsockopt(zmq.SUBSCRIBE, b"")
-        else:
-            for t in topics:
-                self.subscribe_topic(t)
+        for t in (topics if topics is not None else self._DEFAULT_TOPICS):
+            self.subscribe_topic(t)
 
         self._audio_cbs:       list[AudioCallback]       = []
         self._data_cbs:        list[DataCallback]        = []
@@ -67,6 +72,13 @@ class ConsumerEndpoint:
 
     def subscribe_topic(self, topic: str | bytes) -> None:
         t = topic.encode() if isinstance(topic, str) else topic
+        if t.startswith((b"return_audio", b"return_data")):
+            log.warning(
+                "ConsumerEndpoint.subscribe_topic(%r): return_* topics are "
+                "connector-only — subscribing here breaks participant isolation. "
+                "Use HubEndpoint.send_return_audio/send_return_data instead.",
+                topic,
+            )
         self._sub.setsockopt(zmq.SUBSCRIBE, t)
 
     def on_audio(self,       cb: AudioCallback)       -> None: self._audio_cbs.append(cb)

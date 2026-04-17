@@ -11,6 +11,18 @@ regardless of how many connectors exist or how many participants each carries.
   connector_N ──PUSH──┘    ↓ dispatch
                         on_frame / on_audio / on_data / on_participant
 
+Isolation contract
+──────────────────
+The hub is NOT a routing switch between participants. There is no supported
+path for participant A's data to reach participant B. The only supported flow
+is: participant → hub → consumer (agent) → hub → same participant.
+
+Enforcement:
+  • send_return_audio / send_return_data validate that the target participant
+    is currently connected; unknown targets are dropped with a warning.
+  • Return-traffic topics (return_audio.*, return_data.*) are connector-only;
+    ConsumerEndpoint's default subscription excludes them.
+
 Frame callbacks receive a SlotView (zero-copy memoryview into the originating
 connector's ring buffer). The slot is released after ALL frame callbacks
 return — do not hold the view beyond the callback boundary.
@@ -99,14 +111,35 @@ class HubEndpoint:
         await self._pub.send_multipart([t, encode(type_id, msg)])
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
-        """Send TTS/agent audio back to the client via its connector."""
+        """
+        Send TTS/agent audio back to a specific connected participant.
+
+        Drops the message with a warning if the participant is not currently
+        connected — the hub does not support cross-participant routing.
+        """
+        if not self._is_connected(chunk.participant_id):
+            log.warning("send_return_audio: participant %r not connected — dropped",
+                        chunk.participant_id)
+            return
         topic = f"return_audio.{chunk.participant_id}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_AUDIO, chunk)])
 
     async def send_return_data(self, msg: DataMessage) -> None:
-        """Send agent text/binary back to the client via its connector."""
+        """
+        Send agent text/binary back to a specific connected participant.
+
+        Drops the message with a warning if the participant is not currently
+        connected — the hub does not support cross-participant routing.
+        """
+        if not self._is_connected(msg.participant_id):
+            log.warning("send_return_data: participant %r not connected — dropped",
+                        msg.participant_id)
+            return
         topic = f"return_data.{msg.participant_id}.{msg.topic}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_DATA, msg)])
+
+    def _is_connected(self, participant_id: str) -> bool:
+        return participant_id in self._participant_connector
 
     # ── receive loop ─────────────────────────────────────────────────────────
 
