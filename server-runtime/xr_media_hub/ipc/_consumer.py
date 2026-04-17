@@ -16,11 +16,12 @@ import zmq
 import zmq.asyncio
 
 from ._codec import decode
-from ._types import AudioChunk, ControlMessage, MsgType
+from ._types import AudioChunk, ControlMessage, DataMessage, MsgType
 
 log = logging.getLogger(__name__)
 
 AudioCallback   = Callable[[AudioChunk],     Awaitable[None]]
+DataCallback    = Callable[[DataMessage],    Awaitable[None]]
 ControlCallback = Callable[[ControlMessage], Awaitable[None]]
 
 
@@ -28,19 +29,20 @@ class ConsumerEndpoint:
     """
     Consumer-side IPC endpoint.
 
-    Parameters
-    ----------
-    sub_addr : ZMQ address of the hub's PUB socket.
-    topics   : Topics to subscribe to. Pass None to subscribe to everything.
-               Use the TOPIC_AUDIO / TOPIC_CONTROL constants from _hub for
-               well-known topics.
+    Supports subscribing to individual tracks or all tracks of a type using
+    ZMQ prefix matching:
 
-    Usage
-    -----
-    ep = ConsumerEndpoint(sub_addr="ipc:///tmp/xr_hub_pub")
-    ep.on_audio(my_audio_handler)
-    ep.on_control(my_control_handler)
-    await ep.run()
+        ep = ConsumerEndpoint(sub_addr="ipc:///tmp/xr_hub_pub")
+        # all audio tracks:
+        ep.subscribe_topic("audio")
+        # only one specific audio track:
+        ep.subscribe_topic("audio.mic_0")
+        # all data channels:
+        ep.subscribe_topic("data")
+        # one data channel:
+        ep.subscribe_topic("data.chat")
+
+    Pass topics=None (default) to subscribe to everything.
     """
 
     def __init__(self, sub_addr: str, topics: list[str | bytes] | None = None) -> None:
@@ -49,13 +51,13 @@ class ConsumerEndpoint:
         self._sub.connect(sub_addr)
 
         if topics is None:
-            # Subscribe to everything.
             self._sub.setsockopt(zmq.SUBSCRIBE, b"")
         else:
             for t in topics:
                 self.subscribe_topic(t)
 
         self._audio_cbs:   list[AudioCallback]   = []
+        self._data_cbs:    list[DataCallback]    = []
         self._control_cbs: list[ControlCallback] = []
         self._running = False
 
@@ -64,6 +66,7 @@ class ConsumerEndpoint:
         self._sub.setsockopt(zmq.SUBSCRIBE, t)
 
     def on_audio(self,   cb: AudioCallback)   -> None: self._audio_cbs.append(cb)
+    def on_data(self,    cb: DataCallback)    -> None: self._data_cbs.append(cb)
     def on_control(self, cb: ControlCallback) -> None: self._control_cbs.append(cb)
 
     async def run(self) -> None:
@@ -86,6 +89,9 @@ class ConsumerEndpoint:
     async def _dispatch(self, type_id: int, msg) -> None:
         if type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
+                await cb(msg)
+        elif type_id == MsgType.DATA_MESSAGE:
+            for cb in self._data_cbs:
                 await cb(msg)
         elif type_id == MsgType.CONTROL:
             for cb in self._control_cbs:

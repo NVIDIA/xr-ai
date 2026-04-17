@@ -26,16 +26,24 @@ import zmq.asyncio
 
 from ._codec import decode, encode
 from ._shm import ShmRingBuffer, SlotView
-from ._types import AudioChunk, ControlMessage, MsgType
+from ._types import AudioChunk, ControlMessage, DataMessage, MsgType
 
 log = logging.getLogger(__name__)
 
 FrameCallback   = Callable[[SlotView],       Awaitable[None]]
 AudioCallback   = Callable[[AudioChunk],     Awaitable[None]]
+DataCallback    = Callable[[DataMessage],    Awaitable[None]]
 ControlCallback = Callable[[ControlMessage], Awaitable[None]]
 
-# Well-known PUB topics — consumers subscribe to these strings.
+# Topic prefixes for ZMQ PUB/SUB.
+# The hub publishes to "<prefix>.<track_id>" so consumers can subscribe to:
+#   b"audio"          — all audio tracks   (ZMQ prefix match)
+#   b"audio.mic_0"    — only mic_0
+#   b"data"           — all data channels
+#   b"data.chat"      — only the chat channel
+#   b"control"        — hub control messages (no track suffix)
 TOPIC_AUDIO   = b"audio"
+TOPIC_DATA    = b"data"
 TOPIC_CONTROL = b"control"
 
 
@@ -76,6 +84,7 @@ class HubEndpoint:
 
         self._frame_cbs:   list[FrameCallback]   = []
         self._audio_cbs:   list[AudioCallback]   = []
+        self._data_cbs:    list[DataCallback]    = []
         self._control_cbs: list[ControlCallback] = []
         self._running = False
 
@@ -83,6 +92,7 @@ class HubEndpoint:
 
     def on_frame(self,   cb: FrameCallback)   -> None: self._frame_cbs.append(cb)
     def on_audio(self,   cb: AudioCallback)   -> None: self._audio_cbs.append(cb)
+    def on_data(self,    cb: DataCallback)    -> None: self._data_cbs.append(cb)
     def on_control(self, cb: ControlCallback) -> None: self._control_cbs.append(cb)
 
     # ── outbound broadcast (hub → consumers) ─────────────────────────────────
@@ -123,8 +133,16 @@ class HubEndpoint:
         elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
                 await cb(msg)
-            # Auto-broadcast audio to all consumers.
-            await self._pub.send_multipart([TOPIC_AUDIO, encode(MsgType.AUDIO_CHUNK, msg)])
+            # Publish as "audio.<track_id>" — consumers can subscribe to the
+            # prefix "audio" for all tracks or "audio.mic_0" for one track.
+            topic = f"audio.{msg.track_id}".encode()
+            await self._pub.send_multipart([topic, encode(MsgType.AUDIO_CHUNK, msg)])
+
+        elif type_id == MsgType.DATA_MESSAGE:
+            for cb in self._data_cbs:
+                await cb(msg)
+            topic = f"data.{msg.track_id}".encode()
+            await self._pub.send_multipart([topic, encode(MsgType.DATA_MESSAGE, msg)])
 
         elif type_id == MsgType.CONTROL:
             for cb in self._control_cbs:
