@@ -23,7 +23,7 @@ import zmq.asyncio
 
 from ._codec import decode, encode
 from ._shm import ShmRingBuffer
-from ._types import AudioChunk, ControlMessage, DataMessage, FrameSignal, MsgType, PixelFormat
+from ._types import AudioChunk, ControlMessage, DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat
 
 log = logging.getLogger(__name__)
 
@@ -33,44 +33,32 @@ ReturnDataCallback  = Callable[[DataMessage], Awaitable[None]]
 
 class ConnectorEndpoint:
     """
-    Producer endpoint for the LiveKit connector process.
+    Producer + receiver endpoint for the LiveKit connector process.
 
-    Supports multiple LiveKit participants, each with multiple video, audio,
-    and data tracks. Tracks are addressed by (participant_id, track_id) —
-    matching LiveKit's participant identity and track SID.
+    Participants are dynamic: call notify_participant_joined() / left() as
+    LiveKit room events arrive. Each call atomically updates the return-traffic
+    SUB subscriptions and notifies the hub so agents can react.
 
     Usage
     -----
-    ep = ConnectorEndpoint(shm_name="xr_hub_frames", push_addr="ipc:///tmp/xr_hub_in")
+    ep = ConnectorEndpoint(shm_name="xr_hub_frames",
+                           push_addr="ipc:///tmp/xr_hub_in",
+                           sub_addr="ipc:///tmp/xr_hub_pub")
+    ep.on_return_audio(send_to_livekit)
 
-    # Two participants each with their own camera and mic:
-    await ep.push_frame(data, width=1920, height=1080, fmt=PixelFormat.NV12,
-                        pts_us=t, participant_id="alice", track_id="TR_cam_001")
+    # LiveKit participant-joined event fires:
+    await ep.notify_participant_joined("alice", pts_us=t)
+
+    await ep.push_frame(data, 1920, 1080, PixelFormat.NV12, t, "alice", "TR_cam_001")
     await ep.push_audio(AudioChunk(..., participant_id="alice", track_id="TR_mic_001"))
-    await ep.push_audio(AudioChunk(..., participant_id="bob",   track_id="TR_mic_002"))
-
-    # Data channel message from a participant:
     await ep.push_data(DataMessage(participant_id="alice", topic="chat", pts_us=t, data=b"hi"))
+
+    # LiveKit participant-left event fires:
+    await ep.notify_participant_left("alice", pts_us=t)
     ep.close()
     """
 
-    def __init__(
-        self,
-        shm_name:  str,
-        push_addr: str,
-        sub_addr:  str,
-        participant_ids: list[str] | None = None,
-    ) -> None:
-        """
-        Parameters
-        ----------
-        shm_name        : Shared-memory segment name (hub creates it first).
-        push_addr       : Hub's PULL address — connector connects and PUSHes here.
-        sub_addr        : Hub's PUB address  — connector subscribes for return traffic.
-        participant_ids : If given, subscribe only to return traffic for these
-                          participant IDs. Pass None to receive return traffic for
-                          all participants (useful for a single-client connector).
-        """
+    def __init__(self, shm_name: str, push_addr: str, sub_addr: str) -> None:
         self._ring = ShmRingBuffer(name=shm_name, create=False)
         ctx        = zmq.asyncio.Context.instance()
 
@@ -79,16 +67,8 @@ class ConnectorEndpoint:
 
         self._sub: zmq.asyncio.Socket = ctx.socket(zmq.SUB)
         self._sub.connect(sub_addr)
-        if participant_ids is None:
-            # Receive all return traffic.
-            self._sub.setsockopt(zmq.SUBSCRIBE, b"return_audio")
-            self._sub.setsockopt(zmq.SUBSCRIBE, b"return_data")
-        else:
-            for pid in participant_ids:
-                self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio.{pid}".encode())
-                self._sub.setsockopt(zmq.SUBSCRIBE, f"return_data.{pid}".encode())
+        # No subscriptions yet — added dynamically as participants join.
 
-        # Sequence counters keyed by (participant_id, track_id).
         self._seq: dict[tuple[str, str], int] = defaultdict(int)
 
         self._return_audio_cbs: list[ReturnAudioCallback] = []
@@ -130,6 +110,36 @@ class ConnectorEndpoint:
 
     async def send_control(self, msg: ControlMessage) -> None:
         await self._push.send(encode(MsgType.CONTROL, msg))
+
+    # ── participant lifecycle ─────────────────────────────────────────────────
+
+    async def notify_participant_joined(self, participant_id: str, pts_us: int = 0) -> None:
+        """
+        Call when a LiveKit participant connects to the room.
+
+        Subscribes the connector to return traffic for this participant and
+        notifies the hub so agents/consumers can react.
+        """
+        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio.{participant_id}".encode())
+        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_data.{participant_id}".encode())
+        event = ParticipantEvent(participant_id=participant_id, joined=True, pts_us=pts_us)
+        await self._push.send(encode(MsgType.PARTICIPANT_EVENT, event))
+
+    async def notify_participant_left(self, participant_id: str, pts_us: int = 0) -> None:
+        """
+        Call when a LiveKit participant disconnects from the room.
+
+        Unsubscribes the connector from return traffic for this participant,
+        cleans up per-track sequence counters, and notifies the hub.
+        """
+        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio.{participant_id}".encode())
+        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_data.{participant_id}".encode())
+        # Drop stale sequence counters for this participant.
+        stale = [k for k in self._seq if k[0] == participant_id]
+        for k in stale:
+            del self._seq[k]
+        event = ParticipantEvent(participant_id=participant_id, joined=False, pts_us=pts_us)
+        await self._push.send(encode(MsgType.PARTICIPANT_EVENT, event))
 
     # ── return-path callbacks ─────────────────────────────────────────────────
 

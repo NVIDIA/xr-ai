@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 import msgpack
 
-from ._types import AudioChunk, ControlMessage, DataMessage, FrameSignal, MsgType, PixelFormat
+from ._types import AudioChunk, ControlMessage, DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat
 
 _TYPE_HDR = struct.Struct("=B")
 
@@ -76,3 +76,6 @@ register_decoder(MsgType.RETURN_AUDIO, lambda p: AudioChunk(p[0], p[1], p[2], p[
 
 register_encoder(MsgType.RETURN_DATA,  lambda m: [m.participant_id, m.topic, m.pts_us, m.data])
 register_decoder(MsgType.RETURN_DATA,  lambda p: DataMessage(p[0], p[1], p[2], bytes(p[3])))
+
+register_encoder(MsgType.PARTICIPANT_EVENT, lambda m: [m.participant_id, m.joined, m.pts_us])
+register_decoder(MsgType.PARTICIPANT_EVENT, lambda p: ParticipantEvent(p[0], p[1], p[2]))
