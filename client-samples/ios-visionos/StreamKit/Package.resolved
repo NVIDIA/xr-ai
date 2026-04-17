@@ -1,0 +1,33 @@
+{
+  "originHash" : "44c092fef08bb0cd5e7dc9192bc7e8fd0d4d40551d2f55c2b8505df1cab5ccc8",
+  "pins" : [
+    {
+      "identity" : "livekit-uniffi-xcframework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/livekit/livekit-uniffi-xcframework.git",
+      "state" : {
+        "revision" : "61229f4032131311b997ddb1bc1cb8f5afbe30c8",
+        "version" : "0.0.5"
+      }
+    },
+    {
+      "identity" : "swift-protobuf",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-protobuf.git",
+      "state" : {
+        "revision" : "a008af1a102ff3dd6cc3764bb69bf63226d0f5f6",
+        "version" : "1.36.1"
+      }
+    },
+    {
+      "identity" : "webrtc-xcframework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/livekit/webrtc-xcframework.git",
+      "state" : {
+        "revision" : "f6017e189972b86f90e0ec406b1629828bc75748",
+        "version" : "144.7559.3"
+      }
+    }
+  ],
+  "version" : 3
+}
