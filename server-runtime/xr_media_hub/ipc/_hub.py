@@ -46,9 +46,11 @@ ControlCallback = Callable[[ControlMessage], Awaitable[None]]
 #   b"data.alice"               — all of alice's data channels
 #   b"data.alice.chat"          — alice's "chat" topic only
 #   b"control"                  — hub control messages (no participant/track)
-TOPIC_AUDIO   = b"audio"
-TOPIC_DATA    = b"data"
-TOPIC_CONTROL = b"control"
+TOPIC_AUDIO        = b"audio"
+TOPIC_DATA         = b"data"
+TOPIC_CONTROL      = b"control"
+TOPIC_RETURN_AUDIO = b"return_audio"  # hub → connector: agent/TTS audio for client
+TOPIC_RETURN_DATA  = b"return_data"   # hub → connector: agent text/binary for client
 
 
 class HubEndpoint:
@@ -102,9 +104,19 @@ class HubEndpoint:
     # ── outbound broadcast (hub → consumers) ─────────────────────────────────
 
     async def broadcast(self, topic: bytes | str, type_id: int, msg) -> None:
-        """Send an arbitrary message to all consumers subscribed to topic."""
+        """Send an arbitrary message to all subscribers of topic."""
         t = topic.encode() if isinstance(topic, str) else topic
         await self._pub.send_multipart([t, encode(type_id, msg)])
+
+    async def send_return_audio(self, chunk: AudioChunk) -> None:
+        """Send TTS/agent audio back to a specific client via the connector."""
+        topic = f"return_audio.{chunk.participant_id}".encode()
+        await self._pub.send_multipart([topic, encode(MsgType.RETURN_AUDIO, chunk)])
+
+    async def send_return_data(self, msg: DataMessage) -> None:
+        """Send agent text/binary back to a specific client via the connector."""
+        topic = f"return_data.{msg.participant_id}.{msg.topic}".encode()
+        await self._pub.send_multipart([topic, encode(MsgType.RETURN_DATA, msg)])
 
     # ── receive loop ─────────────────────────────────────────────────────────
 

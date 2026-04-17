@@ -24,7 +24,7 @@ Register new message types at import time:
 from ._codec import decode, encode, register_decoder, register_encoder
 from ._consumer import ConsumerEndpoint
 from ._connector import ConnectorEndpoint
-from ._hub import HubEndpoint, TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL
+from ._hub import HubEndpoint, TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL, TOPIC_RETURN_AUDIO, TOPIC_RETURN_DATA
 from ._shm import ShmRingBuffer, SlotView
 from ._types import AudioChunk, ControlMessage, DataMessage, FrameSignal, MsgType, PixelFormat
 
@@ -52,4 +52,6 @@ __all__ = [
     "TOPIC_AUDIO",
     "TOPIC_DATA",
     "TOPIC_CONTROL",
+    "TOPIC_RETURN_AUDIO",
+    "TOPIC_RETURN_DATA",
 ]
