@@ -16,13 +16,14 @@ import zmq
 import zmq.asyncio
 
 from ._codec import decode
-from ._types import AudioChunk, ControlMessage, DataMessage, MsgType
+from ._types import AudioChunk, ControlMessage, DataMessage, MsgType, ParticipantEvent
 
 log = logging.getLogger(__name__)
 
-AudioCallback   = Callable[[AudioChunk],     Awaitable[None]]
-DataCallback    = Callable[[DataMessage],    Awaitable[None]]
-ControlCallback = Callable[[ControlMessage], Awaitable[None]]
+AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
+DataCallback        = Callable[[DataMessage],      Awaitable[None]]
+ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
+ControlCallback     = Callable[[ControlMessage],   Awaitable[None]]
 
 
 class ConsumerEndpoint:
@@ -58,18 +59,20 @@ class ConsumerEndpoint:
             for t in topics:
                 self.subscribe_topic(t)
 
-        self._audio_cbs:   list[AudioCallback]   = []
-        self._data_cbs:    list[DataCallback]    = []
-        self._control_cbs: list[ControlCallback] = []
+        self._audio_cbs:       list[AudioCallback]       = []
+        self._data_cbs:        list[DataCallback]        = []
+        self._participant_cbs: list[ParticipantCallback] = []
+        self._control_cbs:     list[ControlCallback]     = []
         self._running = False
 
     def subscribe_topic(self, topic: str | bytes) -> None:
         t = topic.encode() if isinstance(topic, str) else topic
         self._sub.setsockopt(zmq.SUBSCRIBE, t)
 
-    def on_audio(self,   cb: AudioCallback)   -> None: self._audio_cbs.append(cb)
-    def on_data(self,    cb: DataCallback)    -> None: self._data_cbs.append(cb)
-    def on_control(self, cb: ControlCallback) -> None: self._control_cbs.append(cb)
+    def on_audio(self,       cb: AudioCallback)       -> None: self._audio_cbs.append(cb)
+    def on_data(self,        cb: DataCallback)        -> None: self._data_cbs.append(cb)
+    def on_participant(self, cb: ParticipantCallback) -> None: self._participant_cbs.append(cb)
+    def on_control(self,     cb: ControlCallback)     -> None: self._control_cbs.append(cb)
 
     async def run(self) -> None:
         """Receive and dispatch messages until stop() is called."""
@@ -94,6 +97,9 @@ class ConsumerEndpoint:
                 await cb(msg)
         elif type_id == MsgType.DATA_MESSAGE:
             for cb in self._data_cbs:
+                await cb(msg)
+        elif type_id == MsgType.PARTICIPANT_EVENT:
+            for cb in self._participant_cbs:
                 await cb(msg)
         elif type_id == MsgType.CONTROL:
             for cb in self._control_cbs:

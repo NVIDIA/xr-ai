@@ -26,14 +26,15 @@ import zmq.asyncio
 
 from ._codec import decode, encode
 from ._shm import ShmRingBuffer, SlotView
-from ._types import AudioChunk, ControlMessage, DataMessage, MsgType
+from ._types import AudioChunk, ControlMessage, DataMessage, MsgType, ParticipantEvent
 
 log = logging.getLogger(__name__)
 
-FrameCallback   = Callable[[SlotView],       Awaitable[None]]
-AudioCallback   = Callable[[AudioChunk],     Awaitable[None]]
-DataCallback    = Callable[[DataMessage],    Awaitable[None]]
-ControlCallback = Callable[[ControlMessage], Awaitable[None]]
+FrameCallback       = Callable[[SlotView],          Awaitable[None]]
+AudioCallback       = Callable[[AudioChunk],        Awaitable[None]]
+DataCallback        = Callable[[DataMessage],       Awaitable[None]]
+ParticipantCallback = Callable[[ParticipantEvent],  Awaitable[None]]
+ControlCallback     = Callable[[ControlMessage],    Awaitable[None]]
 
 # Topic prefixes for ZMQ PUB/SUB.
 # The hub publishes to "<type>.<participant_id>.<track_or_topic>" so consumers
@@ -88,18 +89,20 @@ class HubEndpoint:
         self._pub: zmq.asyncio.Socket = ctx.socket(zmq.PUB)
         self._pub.bind(pub_addr)
 
-        self._frame_cbs:   list[FrameCallback]   = []
-        self._audio_cbs:   list[AudioCallback]   = []
-        self._data_cbs:    list[DataCallback]    = []
-        self._control_cbs: list[ControlCallback] = []
+        self._frame_cbs:       list[FrameCallback]       = []
+        self._audio_cbs:       list[AudioCallback]       = []
+        self._data_cbs:        list[DataCallback]        = []
+        self._participant_cbs: list[ParticipantCallback] = []
+        self._control_cbs:     list[ControlCallback]     = []
         self._running = False
 
     # ── callback registration ─────────────────────────────────────────────────
 
-    def on_frame(self,   cb: FrameCallback)   -> None: self._frame_cbs.append(cb)
-    def on_audio(self,   cb: AudioCallback)   -> None: self._audio_cbs.append(cb)
-    def on_data(self,    cb: DataCallback)    -> None: self._data_cbs.append(cb)
-    def on_control(self, cb: ControlCallback) -> None: self._control_cbs.append(cb)
+    def on_frame(self,       cb: FrameCallback)       -> None: self._frame_cbs.append(cb)
+    def on_audio(self,       cb: AudioCallback)       -> None: self._audio_cbs.append(cb)
+    def on_data(self,        cb: DataCallback)        -> None: self._data_cbs.append(cb)
+    def on_participant(self, cb: ParticipantCallback) -> None: self._participant_cbs.append(cb)
+    def on_control(self,     cb: ControlCallback)     -> None: self._control_cbs.append(cb)
 
     # ── outbound broadcast (hub → consumers) ─────────────────────────────────
 
@@ -157,6 +160,12 @@ class HubEndpoint:
                 await cb(msg)
             topic = f"data.{msg.participant_id}.{msg.topic}".encode()
             await self._pub.send_multipart([topic, encode(MsgType.DATA_MESSAGE, msg)])
+
+        elif type_id == MsgType.PARTICIPANT_EVENT:
+            for cb in self._participant_cbs:
+                await cb(msg)
+            # Broadcast so consumers (agents, MCP servers) know the room state.
+            await self._pub.send_multipart([b"participant", encode(MsgType.PARTICIPANT_EVENT, msg)])
 
         elif type_id == MsgType.CONTROL:
             for cb in self._control_cbs:
