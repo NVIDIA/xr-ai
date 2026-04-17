@@ -15,10 +15,14 @@ class PixelFormat(IntEnum):
 
 
 class MsgType(IntEnum):
+    # Inbound  (connector → hub)
     FRAME_SIGNAL  = 1
     AUDIO_CHUNK   = 2
     CONTROL       = 3
     DATA_MESSAGE  = 4
+    # Outbound (hub → connector)
+    RETURN_AUDIO  = 5   # agent/TTS audio destined for a specific client
+    RETURN_DATA   = 6   # agent text/binary destined for a specific client
     # Add new types here; existing code is unaffected.
 
 

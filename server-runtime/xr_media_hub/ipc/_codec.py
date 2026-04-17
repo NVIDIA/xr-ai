@@ -69,3 +69,10 @@ register_decoder(MsgType.CONTROL,      lambda p: ControlMessage(p[0], p[1]))
 
 register_encoder(MsgType.DATA_MESSAGE, lambda m: [m.participant_id, m.topic, m.pts_us, m.data])
 register_decoder(MsgType.DATA_MESSAGE, lambda p: DataMessage(p[0], p[1], p[2], bytes(p[3])))
+
+# Return-path types reuse the same wire layout as their inbound counterparts.
+register_encoder(MsgType.RETURN_AUDIO, lambda m: [m.pts_us, m.sample_rate, m.channels, m.samples, m.data, m.participant_id, m.track_id])
+register_decoder(MsgType.RETURN_AUDIO, lambda p: AudioChunk(p[0], p[1], p[2], p[3], bytes(p[4]), p[5], p[6]))
+
+register_encoder(MsgType.RETURN_DATA,  lambda m: [m.participant_id, m.topic, m.pts_us, m.data])
+register_decoder(MsgType.RETURN_DATA,  lambda p: DataMessage(p[0], p[1], p[2], bytes(p[3])))
