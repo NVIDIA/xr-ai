@@ -1,2 +1,16 @@
+# IPC layer
 pyzmq>=26.0
 msgpack>=1.0
+
+# LiveKit transport
+livekit>=0.17
+livekit-api>=0.7
+
+# Token server
+fastapi>=0.111
+uvicorn[standard]>=0.29
+httpx>=0.27
+websockets>=12.0
+
+# Media processing
+numpy>=1.24
