@@ -24,7 +24,8 @@ class MsgType(IntEnum):
     RETURN_AUDIO     = 5   # agent/TTS audio destined for a specific client
     RETURN_DATA      = 6   # agent text/binary destined for a specific client
     # Bidirectional lifecycle events
-    PARTICIPANT_EVENT = 7  # participant joined or left the LiveKit room
+    PARTICIPANT_EVENT   = 7  # participant joined or left the LiveKit room
+    CONNECTOR_REGISTER  = 8  # connector announces itself + its shm name to the hub
     # Add new types here; existing code is unaffected.
 
 
@@ -74,6 +75,14 @@ class ParticipantEvent:
     participant_id: str
     joined:         bool   # True = joined, False = left
     pts_us:         int
+    connector_id:   str = ""  # which connector this participant arrived on
+
+
+@dataclass(slots=True)
+class ConnectorRegistration:
+    """Sent by a connector on startup so the hub can open its ring buffer."""
+    connector_id: str
+    shm_name:     str
 
 
 @dataclass(slots=True)

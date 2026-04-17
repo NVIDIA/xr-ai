@@ -1,23 +1,22 @@
 """
 Hub-side IPC endpoint (server).
 
-Creates and owns the shared-memory ring buffer. Receives frame signals and
-audio from the connector via ZMQ PULL, dispatches to registered async
-callbacks, then broadcasts audio/control to downstream consumers via ZMQ PUB.
+Connectors register themselves on startup; the hub opens their ring buffers
+on demand. From the application's perspective (on_frame, on_audio, etc.) the
+connector topology is invisible — callbacks receive participant_id / track_id
+regardless of how many connectors exist or how many participants each carries.
 
-                  ┌──────────────────────────────────────┐
-  connector ──PUSH──► PULL   HubEndpoint   PUB ──SUB──► consumers
-                  │    ↓ dispatch                        │
-                  │  on_frame / on_audio / on_control    │
-                  └──────────────────────────────────────┘
+  connector_A ──PUSH──┐
+  connector_B ──PUSH──┤─► PULL   HubEndpoint   PUB ──SUB──► consumers
+  connector_N ──PUSH──┘    ↓ dispatch
+                        on_frame / on_audio / on_data / on_participant
 
-Frame callbacks receive a SlotView (zero-copy memoryview). The slot is released
-automatically after ALL frame callbacks return — do not hold the view beyond
-the callback boundary.
+Frame callbacks receive a SlotView (zero-copy memoryview into the originating
+connector's ring buffer). The slot is released after ALL frame callbacks
+return — do not hold the view beyond the callback boundary.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Awaitable, Callable
 
@@ -26,7 +25,8 @@ import zmq.asyncio
 
 from ._codec import decode, encode
 from ._shm import ShmRingBuffer, SlotView
-from ._types import AudioChunk, ControlMessage, DataMessage, MsgType, ParticipantEvent
+from ._types import (AudioChunk, ConnectorRegistration, ControlMessage,
+                     DataMessage, MsgType, ParticipantEvent)
 
 log = logging.getLogger(__name__)
 
@@ -37,21 +37,19 @@ ParticipantCallback = Callable[[ParticipantEvent],  Awaitable[None]]
 ControlCallback     = Callable[[ControlMessage],    Awaitable[None]]
 
 # Topic prefixes for ZMQ PUB/SUB.
-# The hub publishes to "<type>.<participant_id>.<track_or_topic>" so consumers
-# can subscribe at any granularity using ZMQ prefix matching:
-#
+# Format: "<type>.<participant_id>.<track_or_topic>"
+# ZMQ prefix matching lets consumers subscribe at any granularity:
 #   b"audio"                    — all audio, all participants
 #   b"audio.alice"              — all of alice's audio tracks
 #   b"audio.alice.TR_mic_001"   — alice's specific mic track
-#   b"data"                     — all data channels, all participants
-#   b"data.alice"               — all of alice's data channels
-#   b"data.alice.chat"          — alice's "chat" topic only
-#   b"control"                  — hub control messages (no participant/track)
+#   b"data.alice.chat"          — alice's "chat" data channel only
+#   b"participant"              — join/leave events
+#   b"control"                  — hub control messages
 TOPIC_AUDIO        = b"audio"
 TOPIC_DATA         = b"data"
 TOPIC_CONTROL      = b"control"
-TOPIC_RETURN_AUDIO = b"return_audio"  # hub → connector: agent/TTS audio for client
-TOPIC_RETURN_DATA  = b"return_data"   # hub → connector: agent text/binary for client
+TOPIC_RETURN_AUDIO = b"return_audio"
+TOPIC_RETURN_DATA  = b"return_data"
 
 
 class HubEndpoint:
@@ -60,27 +58,11 @@ class HubEndpoint:
 
     Parameters
     ----------
-    shm_name        : Shared-memory segment name (e.g. "xr_hub_frames").
-    num_slots       : Ring buffer slot count. 10 slots @ 1080p NV12 ≈ 30 MB.
-    max_frame_bytes : Maximum bytes per slot. 4K NV12 = 12_441_600.
-    pull_addr       : ZMQ address the hub binds for connector PUSH traffic.
-    pub_addr        : ZMQ address the hub binds for consumer SUB traffic.
+    pull_addr : ZMQ address the hub binds for connector PUSH traffic.
+    pub_addr  : ZMQ address the hub binds for consumer SUB traffic.
     """
 
-    def __init__(
-        self,
-        shm_name:        str,
-        num_slots:       int,
-        max_frame_bytes: int,
-        pull_addr:       str,
-        pub_addr:        str,
-    ) -> None:
-        self._ring = ShmRingBuffer(
-            name=shm_name,
-            num_slots=num_slots,
-            max_frame_bytes=max_frame_bytes,
-            create=True,
-        )
+    def __init__(self, pull_addr: str, pub_addr: str) -> None:
         ctx = zmq.asyncio.Context.instance()
 
         self._pull: zmq.asyncio.Socket = ctx.socket(zmq.PULL)
@@ -88,6 +70,11 @@ class HubEndpoint:
 
         self._pub: zmq.asyncio.Socket = ctx.socket(zmq.PUB)
         self._pub.bind(pub_addr)
+
+        # connector_id → ShmRingBuffer (opened on CONNECTOR_REGISTER)
+        self._ring_registry: dict[str, ShmRingBuffer] = {}
+        # participant_id → connector_id (updated on PARTICIPANT_EVENT)
+        self._participant_connector: dict[str, str] = {}
 
         self._frame_cbs:       list[FrameCallback]       = []
         self._audio_cbs:       list[AudioCallback]       = []
@@ -104,7 +91,7 @@ class HubEndpoint:
     def on_participant(self, cb: ParticipantCallback) -> None: self._participant_cbs.append(cb)
     def on_control(self,     cb: ControlCallback)     -> None: self._control_cbs.append(cb)
 
-    # ── outbound broadcast (hub → consumers) ─────────────────────────────────
+    # ── outbound (hub → connectors / consumers) ───────────────────────────────
 
     async def broadcast(self, topic: bytes | str, type_id: int, msg) -> None:
         """Send an arbitrary message to all subscribers of topic."""
@@ -112,19 +99,19 @@ class HubEndpoint:
         await self._pub.send_multipart([t, encode(type_id, msg)])
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
-        """Send TTS/agent audio back to a specific client via the connector."""
+        """Send TTS/agent audio back to the client via its connector."""
         topic = f"return_audio.{chunk.participant_id}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_AUDIO, chunk)])
 
     async def send_return_data(self, msg: DataMessage) -> None:
-        """Send agent text/binary back to a specific client via the connector."""
+        """Send agent text/binary back to the client via its connector."""
         topic = f"return_data.{msg.participant_id}.{msg.topic}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_DATA, msg)])
 
     # ── receive loop ─────────────────────────────────────────────────────────
 
     async def run(self) -> None:
-        """Receive and dispatch messages until stop() is called."""
+        """Receive and dispatch messages from all connectors until stop()."""
         self._running = True
         while self._running:
             try:
@@ -141,13 +128,24 @@ class HubEndpoint:
                 log.exception("Error dispatching message")
 
     async def _dispatch(self, type_id: int, msg) -> None:
-        if type_id == MsgType.FRAME_SIGNAL:
-            view = self._ring.read_slot(msg)
+        if type_id == MsgType.CONNECTOR_REGISTER:
+            self._handle_registration(msg)
+
+        elif type_id == MsgType.FRAME_SIGNAL:
+            connector_id = self._participant_connector.get(msg.participant_id)
+            if connector_id is None:
+                log.warning("Frame for unknown participant %s — dropped", msg.participant_id)
+                return
+            ring = self._ring_registry.get(connector_id)
+            if ring is None:
+                log.warning("Ring buffer for connector %s not found — dropped", connector_id)
+                return
+            view = ring.read_slot(msg)
             try:
                 for cb in self._frame_cbs:
                     await cb(view)
             finally:
-                self._ring.release_slot(msg.slot)
+                ring.release_slot(msg.slot)
 
         elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
@@ -162,9 +160,12 @@ class HubEndpoint:
             await self._pub.send_multipart([topic, encode(MsgType.DATA_MESSAGE, msg)])
 
         elif type_id == MsgType.PARTICIPANT_EVENT:
+            if msg.joined:
+                self._participant_connector[msg.participant_id] = msg.connector_id
+            else:
+                self._participant_connector.pop(msg.participant_id, None)
             for cb in self._participant_cbs:
                 await cb(msg)
-            # Broadcast so consumers (agents, MCP servers) know the room state.
             await self._pub.send_multipart([b"participant", encode(MsgType.PARTICIPANT_EVENT, msg)])
 
         elif type_id == MsgType.CONTROL:
@@ -175,6 +176,18 @@ class HubEndpoint:
         else:
             log.warning("Unknown message type %d — ignored", type_id)
 
+    def _handle_registration(self, reg: ConnectorRegistration) -> None:
+        if reg.connector_id in self._ring_registry:
+            log.warning("Connector %s re-registered — replacing ring buffer", reg.connector_id)
+            self._ring_registry[reg.connector_id].close()
+        try:
+            self._ring_registry[reg.connector_id] = ShmRingBuffer(
+                name=reg.shm_name, create=False,
+            )
+            log.info("Connector %s registered (shm=%s)", reg.connector_id, reg.shm_name)
+        except Exception:
+            log.exception("Failed to open shm %s for connector %s", reg.shm_name, reg.connector_id)
+
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     def stop(self) -> None:
@@ -183,8 +196,6 @@ class HubEndpoint:
     def close(self) -> None:
         self._pull.close(linger=0)
         self._pub.close(linger=0)
-        self._ring.close()
-
-    def unlink(self) -> None:
-        """Remove the shared-memory segment. Call once on clean shutdown."""
-        self._ring.unlink()
+        for ring in self._ring_registry.values():
+            ring.close()
+        self._ring_registry.clear()
