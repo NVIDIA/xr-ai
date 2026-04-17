@@ -25,33 +25,41 @@ class MsgType(IntEnum):
 @dataclass(slots=True)
 class FrameSignal:
     """Signals that a decoded frame has been written into the shared-memory ring buffer."""
-    slot:     int
-    seq:      int          # per-track monotonically increasing sequence number
-    pts_us:   int          # presentation timestamp, microseconds (signed)
-    width:    int
-    height:   int
-    fmt:      PixelFormat
-    data_sz:  int          # bytes actually written into the slot
-    track_id: str = "default"
+    slot:           int
+    seq:            int          # per-(participant, track) monotonically increasing sequence
+    pts_us:         int          # presentation timestamp, microseconds (signed)
+    width:          int
+    height:         int
+    fmt:            PixelFormat
+    data_sz:        int          # bytes actually written into the slot
+    participant_id: str = "default"  # LiveKit participant identity
+    track_id:       str = "default"  # LiveKit track SID
 
 
 @dataclass(slots=True)
 class AudioChunk:
     """Raw PCM audio chunk from the connector."""
-    pts_us:      int
-    sample_rate: int
-    channels:    int
-    samples:     int    # frames per channel
-    data:        bytes  # float32 LE, interleaved
-    track_id:    str = "default"
+    pts_us:         int
+    sample_rate:    int
+    channels:       int
+    samples:        int    # frames per channel
+    data:           bytes  # float32 LE, interleaved
+    participant_id: str = "default"  # LiveKit participant identity
+    track_id:       str = "default"  # LiveKit track SID
 
 
 @dataclass(slots=True)
 class DataMessage:
-    """Arbitrary binary/text payload from a LiveKit data channel."""
-    track_id: str
-    pts_us:   int
-    data:     bytes
+    """
+    Arbitrary binary/text payload from a LiveKit data channel.
+
+    LiveKit data channels are per-participant and routed by topic string —
+    there is no track SID for data.
+    """
+    participant_id: str
+    topic:          str    # LiveKit data channel topic
+    pts_us:         int
+    data:           bytes
 
 
 @dataclass(slots=True)

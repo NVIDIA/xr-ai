@@ -36,12 +36,16 @@ DataCallback    = Callable[[DataMessage],    Awaitable[None]]
 ControlCallback = Callable[[ControlMessage], Awaitable[None]]
 
 # Topic prefixes for ZMQ PUB/SUB.
-# The hub publishes to "<prefix>.<track_id>" so consumers can subscribe to:
-#   b"audio"          — all audio tracks   (ZMQ prefix match)
-#   b"audio.mic_0"    — only mic_0
-#   b"data"           — all data channels
-#   b"data.chat"      — only the chat channel
-#   b"control"        — hub control messages (no track suffix)
+# The hub publishes to "<type>.<participant_id>.<track_or_topic>" so consumers
+# can subscribe at any granularity using ZMQ prefix matching:
+#
+#   b"audio"                    — all audio, all participants
+#   b"audio.alice"              — all of alice's audio tracks
+#   b"audio.alice.TR_mic_001"   — alice's specific mic track
+#   b"data"                     — all data channels, all participants
+#   b"data.alice"               — all of alice's data channels
+#   b"data.alice.chat"          — alice's "chat" topic only
+#   b"control"                  — hub control messages (no participant/track)
 TOPIC_AUDIO   = b"audio"
 TOPIC_DATA    = b"data"
 TOPIC_CONTROL = b"control"
@@ -133,15 +137,13 @@ class HubEndpoint:
         elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
                 await cb(msg)
-            # Publish as "audio.<track_id>" — consumers can subscribe to the
-            # prefix "audio" for all tracks or "audio.mic_0" for one track.
-            topic = f"audio.{msg.track_id}".encode()
+            topic = f"audio.{msg.participant_id}.{msg.track_id}".encode()
             await self._pub.send_multipart([topic, encode(MsgType.AUDIO_CHUNK, msg)])
 
         elif type_id == MsgType.DATA_MESSAGE:
             for cb in self._data_cbs:
                 await cb(msg)
-            topic = f"data.{msg.track_id}".encode()
+            topic = f"data.{msg.participant_id}.{msg.topic}".encode()
             await self._pub.send_multipart([topic, encode(MsgType.DATA_MESSAGE, msg)])
 
         elif type_id == MsgType.CONTROL:
