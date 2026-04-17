@@ -29,18 +29,20 @@ class ConsumerEndpoint:
     """
     Consumer-side IPC endpoint.
 
-    Supports subscribing to individual tracks or all tracks of a type using
-    ZMQ prefix matching:
+    Supports subscribing at any granularity using ZMQ prefix matching.
+    Topics follow the format "<type>.<participant_id>.<track_or_topic>":
 
         ep = ConsumerEndpoint(sub_addr="ipc:///tmp/xr_hub_pub")
-        # all audio tracks:
+        # all audio from all participants:
         ep.subscribe_topic("audio")
-        # only one specific audio track:
-        ep.subscribe_topic("audio.mic_0")
-        # all data channels:
+        # all audio from one participant:
+        ep.subscribe_topic("audio.alice")
+        # one specific track from one participant:
+        ep.subscribe_topic("audio.alice.TR_mic_001")
+        # all data channels from all participants:
         ep.subscribe_topic("data")
-        # one data channel:
-        ep.subscribe_topic("data.chat")
+        # one participant's data channel by topic:
+        ep.subscribe_topic("data.alice.chat")
 
     Pass topics=None (default) to subscribe to everything.
     """

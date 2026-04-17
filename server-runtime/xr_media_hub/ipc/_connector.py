@@ -22,17 +22,22 @@ class ConnectorEndpoint:
     """
     Producer endpoint for the LiveKit connector process.
 
-    Supports multiple video, audio, and data tracks simultaneously.
-    Each track is identified by a track_id string (e.g. "camera_main",
-    "mic_0", "data_chat"). Sequence numbers are tracked per video track.
+    Supports multiple LiveKit participants, each with multiple video, audio,
+    and data tracks. Tracks are addressed by (participant_id, track_id) —
+    matching LiveKit's participant identity and track SID.
 
     Usage
     -----
     ep = ConnectorEndpoint(shm_name="xr_hub_frames", push_addr="ipc:///tmp/xr_hub_in")
+
+    # Two participants each with their own camera and mic:
     await ep.push_frame(data, width=1920, height=1080, fmt=PixelFormat.NV12,
-                        pts_us=t, track_id="camera_main")
-    await ep.push_audio(AudioChunk(..., track_id="mic_0"))
-    await ep.push_data(DataMessage(track_id="data_chat", pts_us=t, data=b"hello"))
+                        pts_us=t, participant_id="alice", track_id="TR_cam_001")
+    await ep.push_audio(AudioChunk(..., participant_id="alice", track_id="TR_mic_001"))
+    await ep.push_audio(AudioChunk(..., participant_id="bob",   track_id="TR_mic_002"))
+
+    # Data channel message from a participant:
+    await ep.push_data(DataMessage(participant_id="alice", topic="chat", pts_us=t, data=b"hi"))
     ep.close()
     """
 
@@ -42,16 +47,18 @@ class ConnectorEndpoint:
         ctx        = zmq.asyncio.Context.instance()
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
         self._push.connect(push_addr)
-        self._seq: dict[str, int] = defaultdict(int)  # per-track sequence counters
+        # Sequence counters keyed by (participant_id, track_id).
+        self._seq: dict[tuple[str, str], int] = defaultdict(int)
 
     async def push_frame(
         self,
-        data:     bytes | memoryview,
-        width:    int,
-        height:   int,
-        fmt:      PixelFormat,
-        pts_us:   int,
-        track_id: str = "default",
+        data:           bytes | memoryview,
+        width:          int,
+        height:         int,
+        fmt:            PixelFormat,
+        pts_us:         int,
+        participant_id: str = "default",
+        track_id:       str = "default",
     ) -> None:
         """
         Write a decoded CPU frame into the ring buffer and signal the hub.
@@ -59,13 +66,14 @@ class ConnectorEndpoint:
         Raises RuntimeError (propagated from ShmRingBuffer) if all slots are
         occupied — caller should drop the frame and log a warning.
         """
-        self._seq[track_id] += 1
-        seq  = self._seq[track_id]
+        key = (participant_id, track_id)
+        self._seq[key] += 1
+        seq  = self._seq[key]
         slot = self._ring.write_frame(data, width, height, fmt, pts_us, seq)
         sig  = FrameSignal(
             slot=slot, seq=seq, pts_us=pts_us,
-            width=width, height=height, fmt=fmt,
-            data_sz=len(data), track_id=track_id,
+            width=width, height=height, fmt=fmt, data_sz=len(data),
+            participant_id=participant_id, track_id=track_id,
         )
         await self._push.send(encode(MsgType.FRAME_SIGNAL, sig))
 
