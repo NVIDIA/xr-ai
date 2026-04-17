@@ -1,9 +1,13 @@
 """
 Connector-side IPC endpoint (producer + receiver).
 
-Opens the shared-memory ring buffer created by HubEndpoint, pushes inbound
-media to the hub via ZMQ PUSH, and receives outbound media (return audio,
-return data) from the hub via ZMQ SUB.
+Each connector creates and owns its own shared-memory ring buffer, then
+registers with the hub by sending a ConnectorRegistration message. From that
+point the hub can read frames from this connector's buffer regardless of how
+many other connectors are connected.
+
+Participants are dynamic: call notify_participant_joined() / left() as
+LiveKit room events arrive.
 
                         ┌─────────────────┐
   LiveKit inbound  ──►  │   Connector     │ ──PUSH──► Hub
@@ -15,6 +19,7 @@ The connector process only needs: pyzmq, msgpack (no CUDA, no GPU deps).
 from __future__ import annotations
 
 import logging
+import uuid
 from collections import defaultdict
 from typing import Awaitable, Callable
 
@@ -23,44 +28,73 @@ import zmq.asyncio
 
 from ._codec import decode, encode
 from ._shm import ShmRingBuffer
-from ._types import AudioChunk, ControlMessage, DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat
+from ._types import (AudioChunk, ConnectorRegistration, ControlMessage,
+                     DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat)
 
 log = logging.getLogger(__name__)
 
 ReturnAudioCallback = Callable[[AudioChunk],  Awaitable[None]]
 ReturnDataCallback  = Callable[[DataMessage], Awaitable[None]]
 
+_DEFAULT_NUM_SLOTS       = 10
+_DEFAULT_MAX_FRAME_BYTES = 12_441_600  # 4K NV12
+
 
 class ConnectorEndpoint:
     """
     Producer + receiver endpoint for the LiveKit connector process.
 
-    Participants are dynamic: call notify_participant_joined() / left() as
-    LiveKit room events arrive. Each call atomically updates the return-traffic
-    SUB subscriptions and notifies the hub so agents can react.
+    Each instance owns a dedicated ring buffer so multiple connectors can
+    write frames concurrently without any locking. The hub is agnostic to
+    how many connectors exist or how many participants each carries.
 
     Usage
     -----
-    ep = ConnectorEndpoint(shm_name="xr_hub_frames",
-                           push_addr="ipc:///tmp/xr_hub_in",
+    ep = ConnectorEndpoint(push_addr="ipc:///tmp/xr_hub_in",
                            sub_addr="ipc:///tmp/xr_hub_pub")
     ep.on_return_audio(send_to_livekit)
+    await ep.register()                          # announce to hub
 
-    # LiveKit participant-joined event fires:
     await ep.notify_participant_joined("alice", pts_us=t)
-
     await ep.push_frame(data, 1920, 1080, PixelFormat.NV12, t, "alice", "TR_cam_001")
     await ep.push_audio(AudioChunk(..., participant_id="alice", track_id="TR_mic_001"))
     await ep.push_data(DataMessage(participant_id="alice", topic="chat", pts_us=t, data=b"hi"))
-
-    # LiveKit participant-left event fires:
     await ep.notify_participant_left("alice", pts_us=t)
-    ep.close()
+
+    ep.stop(); ep.close()
     """
 
-    def __init__(self, shm_name: str, push_addr: str, sub_addr: str) -> None:
-        self._ring = ShmRingBuffer(name=shm_name, create=False)
-        ctx        = zmq.asyncio.Context.instance()
+    def __init__(
+        self,
+        push_addr:       str,
+        sub_addr:        str,
+        connector_id:    str = "",
+        shm_name:        str = "",
+        num_slots:       int = _DEFAULT_NUM_SLOTS,
+        max_frame_bytes: int = _DEFAULT_MAX_FRAME_BYTES,
+    ) -> None:
+        """
+        Parameters
+        ----------
+        push_addr       : Hub's PULL address — connector connects and PUSHes here.
+        sub_addr        : Hub's PUB address  — connector subscribes for return traffic.
+        connector_id    : Unique ID for this connector. Defaults to a UUID.
+        shm_name        : Shared-memory segment name. Defaults to xr_conn_<connector_id>.
+        num_slots       : Ring buffer slot count (default 10).
+        max_frame_bytes : Max bytes per slot (default 4K NV12 = 12 441 600).
+        """
+        self._connector_id = connector_id or uuid.uuid4().hex
+        self._shm_name     = shm_name or f"xr_conn_{self._connector_id[:8]}"
+
+        # Each connector owns and creates its own ring buffer.
+        self._ring = ShmRingBuffer(
+            name=self._shm_name,
+            num_slots=num_slots,
+            max_frame_bytes=max_frame_bytes,
+            create=True,
+        )
+
+        ctx = zmq.asyncio.Context.instance()
 
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
         self._push.connect(push_addr)
@@ -75,6 +109,20 @@ class ConnectorEndpoint:
         self._return_data_cbs:  list[ReturnDataCallback]  = []
         self._running = False
 
+    # ── registration ─────────────────────────────────────────────────────────
+
+    async def register(self) -> None:
+        """
+        Announce this connector to the hub.
+
+        Must be called once before pushing any media. The hub opens the
+        ring buffer upon receiving the registration message.
+        """
+        reg = ConnectorRegistration(connector_id=self._connector_id, shm_name=self._shm_name)
+        await self._push.send(encode(MsgType.CONNECTOR_REGISTER, reg))
+
+    # ── inbound media ─────────────────────────────────────────────────────────
+
     async def push_frame(
         self,
         data:           bytes | memoryview,
@@ -86,10 +134,9 @@ class ConnectorEndpoint:
         track_id:       str = "default",
     ) -> None:
         """
-        Write a decoded CPU frame into the ring buffer and signal the hub.
-
-        Raises RuntimeError (propagated from ShmRingBuffer) if all slots are
-        occupied — caller should drop the frame and log a warning.
+        Write a decoded CPU frame into this connector's ring buffer and signal
+        the hub. Raises RuntimeError if all slots are occupied — caller should
+        drop the frame and log a warning.
         """
         key = (participant_id, track_id)
         self._seq[key] += 1
@@ -117,38 +164,42 @@ class ConnectorEndpoint:
         """
         Call when a LiveKit participant connects to the room.
 
-        Subscribes the connector to return traffic for this participant and
-        notifies the hub so agents/consumers can react.
+        Subscribes to return traffic for this participant and notifies the hub.
+        The hub uses the embedded connector_id to maintain its participant →
+        connector mapping.
         """
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio.{participant_id}".encode())
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_data.{participant_id}".encode())
-        event = ParticipantEvent(participant_id=participant_id, joined=True, pts_us=pts_us)
+        event = ParticipantEvent(
+            participant_id=participant_id, joined=True,
+            pts_us=pts_us, connector_id=self._connector_id,
+        )
         await self._push.send(encode(MsgType.PARTICIPANT_EVENT, event))
 
     async def notify_participant_left(self, participant_id: str, pts_us: int = 0) -> None:
         """
         Call when a LiveKit participant disconnects from the room.
 
-        Unsubscribes the connector from return traffic for this participant,
-        cleans up per-track sequence counters, and notifies the hub.
+        Unsubscribes from return traffic, cleans up sequence counters, and
+        notifies the hub.
         """
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio.{participant_id}".encode())
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_data.{participant_id}".encode())
-        # Drop stale sequence counters for this participant.
         stale = [k for k in self._seq if k[0] == participant_id]
         for k in stale:
             del self._seq[k]
-        event = ParticipantEvent(participant_id=participant_id, joined=False, pts_us=pts_us)
+        event = ParticipantEvent(
+            participant_id=participant_id, joined=False,
+            pts_us=pts_us, connector_id=self._connector_id,
+        )
         await self._push.send(encode(MsgType.PARTICIPANT_EVENT, event))
 
     # ── return-path callbacks ─────────────────────────────────────────────────
 
     def on_return_audio(self, cb: ReturnAudioCallback) -> None:
-        """Register a callback for agent/TTS audio to be sent back to the client."""
         self._return_audio_cbs.append(cb)
 
     def on_return_data(self, cb: ReturnDataCallback) -> None:
-        """Register a callback for agent text/binary to be sent back to the client."""
         self._return_data_cbs.append(cb)
 
     # ── receive loop ─────────────────────────────────────────────────────────
@@ -177,10 +228,14 @@ class ConnectorEndpoint:
             except Exception:
                 log.exception("Error dispatching return message")
 
+    # ── lifecycle ─────────────────────────────────────────────────────────────
+
     def stop(self) -> None:
         self._running = False
 
     def close(self) -> None:
+        """Close sockets and release the ring buffer. Unlinks the shm segment."""
         self._push.close(linger=0)
         self._sub.close(linger=0)
         self._ring.close()
+        self._ring.unlink()

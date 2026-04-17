@@ -26,7 +26,8 @@ from ._consumer import ConsumerEndpoint
 from ._connector import ConnectorEndpoint
 from ._hub import HubEndpoint, TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL, TOPIC_RETURN_AUDIO, TOPIC_RETURN_DATA
 from ._shm import ShmRingBuffer, SlotView
-from ._types import AudioChunk, ControlMessage, DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat
+from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
+                     FrameSignal, MsgType, ParticipantEvent, PixelFormat)
 
 __all__ = [
     # endpoints
@@ -47,6 +48,7 @@ __all__ = [
     "AudioChunk",
     "DataMessage",
     "ParticipantEvent",
+    "ConnectorRegistration",
     "ControlMessage",
     "MsgType",
     # well-known topic prefixes
