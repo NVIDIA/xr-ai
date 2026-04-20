@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamKit Sample</title>
+
+  <!-- LiveKit JS SDK v2 — resolved via import map, no build step required -->
+  <script type="importmap">
+  {
+    "imports": {
+      "livekit-client": "https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.esm-browser.min.js"
+    }
+  }
+  </script>
+
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:            #f2f2f7;
+      --card:          #ffffff;
+      --separator:     rgba(60, 60, 67, 0.12);
+      --label:         #000000;
+      --secondary:     rgba(60, 60, 67, 0.6);
+      --blue:          #007aff;
+      --red:           #ff3b30;
+      --green:         #34c759;
+      --orange:        #ff9500;
+      --yellow:        #ffcc00;
+      --grey:          rgba(60, 60, 67, 0.18);
+      --radius:        12px;
+      --font:          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --mono:          ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      font-size: 15px;
+      background: var(--bg);
+      color: var(--label);
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    /* ── Page header ──────────────────────────────────────────────────── */
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin: 8px 0 24px;
+    }
+
+    /* ── Grouped sections (iOS-style) ─────────────────────────────────── */
+    .section {
+      margin-bottom: 32px;
+    }
+
+    .section-header {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+      padding: 0 4px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 1px 0 var(--separator);
+    }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--separator);
+      gap: 12px;
+      transition: opacity 0.2s;
+    }
+
+    .field-row:last-child { border-bottom: none; }
+
+    .field-row.dimmed { opacity: 0.4; pointer-events: none; }
+
+    .field-label {
+      font-size: 15px;
+      color: var(--label);
+      min-width: 90px;
+      flex-shrink: 0;
+    }
+
+    .field-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-family: var(--font);
+      font-size: 15px;
+      color: var(--label);
+      background: transparent;
+      text-align: right;
+    }
+
+    .field-input::placeholder { color: var(--secondary); }
+
+    .field-input:disabled { cursor: default; }
+
+    /* ── State badge ──────────────────────────────────────────────────── */
+    .state-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .state-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: background-color 0.3s ease;
+    }
+
+    .state-dot.disconnected  { background: var(--secondary); }
+    .state-dot.connected     { background: var(--green); }
+
+    .state-dot.connecting,
+    .state-dot.reconnecting  {
+      background: var(--orange);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+
+    #state-label {
+      font-size: 15px;
+      color: var(--secondary);
+    }
+
+    /* ── Buttons ──────────────────────────────────────────────────────── */
+    .btn-row {
+      display: flex;
+      align-items: center;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--separator);
+    }
+
+    .btn-row:last-child { border-bottom: none; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 8px;
+      font-family: var(--font);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:active:not(:disabled) { transform: scale(0.97); }
+
+    .btn:disabled { opacity: 0.4; cursor: default; }
+
+    .btn-primary     { background: var(--blue);    color: #fff; }
+    .btn-destructive { background: var(--red);     color: #fff; }
+    .btn-secondary   { background: var(--grey);    color: var(--label); }
+
+    .btn-full { width: 100%; }
+
+    /* ── Camera status ────────────────────────────────────────────────── */
+    .status-text {
+      font-size: 15px;
+    }
+
+    .status-active { color: var(--green);    font-weight: 500; }
+    .status-idle   { color: var(--secondary); }
+
+    /* ── Data channel row ─────────────────────────────────────────────── */
+    .input-send-row {
+      display: flex;
+      align-items: center;
+      padding: 8px 16px;
+      gap: 10px;
+      border-bottom: 1px solid var(--separator);
+    }
+
+    .input-send-row:last-child { border-bottom: none; }
+
+    .text-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-family: var(--font);
+      font-size: 15px;
+      color: var(--label);
+      background: transparent;
+    }
+
+    .text-input::placeholder { color: var(--secondary); }
+
+    /* ── Camera + data rows with label + trailing content ─────────────── */
+    .labeled-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--separator);
+    }
+
+    .labeled-row:last-child { border-bottom: none; }
+
+    .labeled-row .row-label {
+      font-size: 15px;
+      color: var(--label);
+    }
+
+    /* ── Messages list ────────────────────────────────────────────────── */
+    #messages {
+      list-style: none;
+    }
+
+    .message-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--separator);
+    }
+
+    .message-item:last-child { border-bottom: none; }
+
+    .message-text {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--label);
+      word-break: break-all;
+      flex: 1;
+    }
+
+    .message-time {
+      font-size: 11px;
+      color: var(--secondary);
+      flex-shrink: 0;
+    }
+
+    .empty-hint {
+      padding: 12px 16px;
+      font-size: 14px;
+      color: var(--secondary);
+      font-style: italic;
+    }
+
+    /* ── Error toast ──────────────────────────────────────────────────── */
+    #error-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: rgba(30, 30, 30, 0.9);
+      color: #fff;
+      font-size: 14px;
+      padding: 12px 20px;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+      max-width: min(420px, calc(100vw - 32px));
+      text-align: center;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    #error-toast.visible {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    /* ── Responsive max-width ─────────────────────────────────────────── */
+    .page-content {
+      max-width: 540px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page-content">
+    <h1 class="page-title">StreamKit Sample</h1>
+
+    <!-- ── Connection section ─────────────────────────────────────────── -->
+    <section class="section">
+      <h2 class="section-header">Connection</h2>
+      <div class="card">
+
+        <!-- State badge -->
+        <div class="labeled-row">
+          <span class="row-label">State</span>
+          <div class="state-badge">
+            <span id="state-dot" class="state-dot disconnected"></span>
+            <span id="state-label">Disconnected</span>
+          </div>
+        </div>
+
+        <!-- Host -->
+        <div class="field-row">
+          <label class="field-label" for="host-input">Host / IP</label>
+          <input
+            id="host-input"
+            class="field-input"
+            type="text"
+            placeholder="192.168.1.100"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          >
+        </div>
+
+        <!-- Port -->
+        <div class="field-row">
+          <label class="field-label" for="port-input">Port</label>
+          <input
+            id="port-input"
+            class="field-input"
+            type="number"
+            min="1"
+            max="65535"
+            placeholder="7880"
+          >
+        </div>
+
+        <!-- Token (JWT) -->
+        <div class="field-row">
+          <label class="field-label" for="token-input">Token</label>
+          <input
+            id="token-input"
+            class="field-input"
+            type="text"
+            placeholder="Paste JWT directly"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          >
+        </div>
+
+        <!-- Token server URL -->
+        <div class="field-row">
+          <label class="field-label" for="token-url-input">Token URL</label>
+          <input
+            id="token-url-input"
+            class="field-input"
+            type="url"
+            placeholder="/token (default)"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          >
+        </div>
+
+        <!-- Identity -->
+        <div class="field-row">
+          <label class="field-label" for="identity-input">Identity</label>
+          <input
+            id="identity-input"
+            class="field-input"
+            type="text"
+            placeholder="web-client"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          >
+        </div>
+
+        <!-- Connect / Disconnect -->
+        <div class="btn-row">
+          <button id="connect-btn" class="btn btn-primary btn-full">Connect</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Media section ──────────────────────────────────────────────── -->
+    <section class="section">
+      <h2 class="section-header">Media</h2>
+      <div class="card">
+
+        <!-- Camera toggle -->
+        <div class="btn-row">
+          <button id="camera-btn" class="btn btn-secondary btn-full" disabled>
+            Start Camera
+          </button>
+        </div>
+
+        <!-- Camera status -->
+        <div class="labeled-row">
+          <span class="row-label">Camera</span>
+          <span id="camera-status" class="status-text status-idle">Not connected</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Data channel section ───────────────────────────────────────── -->
+    <section class="section">
+      <h2 class="section-header">Data Channel</h2>
+      <div class="card">
+
+        <!-- Ping -->
+        <div class="btn-row">
+          <button id="ping-btn" class="btn btn-secondary btn-full" disabled>
+            Send Ping
+          </button>
+        </div>
+
+        <!-- Custom message -->
+        <div class="input-send-row">
+          <input
+            id="message-input"
+            class="text-input"
+            type="text"
+            placeholder="Custom message\u2026"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          >
+          <button id="send-btn" class="btn btn-primary" disabled>Send</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Received messages ──────────────────────────────────────────── -->
+    <section class="section">
+      <h2 class="section-header">Received</h2>
+      <div class="card">
+        <ul id="messages">
+          <li class="empty-hint">No messages received yet.</li>
+        </ul>
+      </div>
+    </section>
+
+  </div><!-- /.page-content -->
+
+  <!-- Error toast -->
+  <div id="error-toast" role="alert" aria-live="assertive"></div>
+
+  <!-- Application entry point -->
+  <script type="module" src="/App/app.js"></script>
+</body>
+</html>

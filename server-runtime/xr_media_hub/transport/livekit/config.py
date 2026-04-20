@@ -1,7 +1,15 @@
 """Configuration for the LiveKit connector."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+def _default_web_client_dir() -> str:
+    # Walks up from this file: transport/livekit/ → transport/ → xr_media_hub/
+    # → server-runtime/ → xr-ai/ → client-samples/web/
+    candidate = Path(__file__).parents[4] / "client-samples" / "web"
+    return str(candidate) if candidate.is_dir() else ""
 
 
 @dataclass
@@ -41,6 +49,13 @@ class LiveKitConnectorConfig:
     # ── IPC hub ZMQ addresses ─────────────────────────────────────────────────
     hub_push_addr: str = "ipc:///tmp/xr_hub_in"
     hub_sub_addr:  str = "ipc:///tmp/xr_hub_pub"
+
+    # ── Web server (serves client-samples/web/ + /token endpoint) ────────────
+    enable_web_server: bool = True
+    web_server_host:   str  = "0.0.0.0"
+    web_server_port:   int  = 8080
+    # Auto-detected as <repo-root>/client-samples/web/ if it exists.
+    web_client_dir: str = field(default_factory=_default_web_client_dir)
 
     # ── Shared-memory ring buffer ──────────────────────────────────────────────
     shm_num_slots:       int = 10
