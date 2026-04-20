@@ -14,7 +14,7 @@ import asyncio
 import logging
 
 import uvicorn
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from livekit.api import AccessToken, VideoGrants
@@ -25,8 +25,6 @@ log = logging.getLogger(__name__)
 
 
 def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
-    lk_url = f"ws://{cfg.web_server_host}:{cfg.lk_port_ws}"
-
     app = FastAPI(title="XR-Media-Hub Web Server", docs_url=None, redoc_url=None)
     app.add_middleware(
         CORSMiddleware,
@@ -36,7 +34,11 @@ def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
     )
 
     @app.get("/token")
-    async def get_token(identity: str = Query(default="web-user")) -> dict:
+    async def get_token(request: Request, identity: str = Query(default="web-user")) -> dict:
+        # Derive the LiveKit host from the incoming request so the URL works
+        # whether the browser is on localhost or a remote machine.
+        host = request.headers.get("host", "localhost").split(":")[0]
+        lk_url = f"ws://{host}:{cfg.lk_port_ws}"
         token = (
             AccessToken(cfg.api_key, cfg.api_secret)
             .with_identity(identity)
@@ -45,6 +47,12 @@ def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
             .to_jwt()
         )
         return {"token": token, "room": cfg.room_name, "url": lk_url}
+
+    # StaticFiles asserts scope["type"] == "http" and crashes on WebSocket upgrades.
+    # Catch all WebSocket connections first and close them before the mount sees them.
+    @app.websocket("/{path:path}")
+    async def _close_ws(ws: WebSocket, path: str = "") -> None:
+        await ws.close(1001)
 
     if cfg.web_client_dir:
         app.mount("/", StaticFiles(directory=cfg.web_client_dir, html=True), name="static")
