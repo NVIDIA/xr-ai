@@ -35,6 +35,7 @@ from xr_media_hub.ipc._types import AudioChunk, DataMessage
 from ._docker import LiveKitDocker
 from ._room_client import RoomClient
 from ._token_server import TokenServer
+from ._web_server import WebServer
 from .config import LiveKitConnectorConfig
 
 log = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ class LiveKitConnector:
         self._cfg    = cfg or LiveKitConnectorConfig()
         self._docker = LiveKitDocker(self._cfg)
         self._token  = TokenServer(self._cfg) if self._cfg.enable_token_server else None
+        self._web    = WebServer(self._cfg)    if self._cfg.enable_web_server   else None
         self._ep     = ConnectorEndpoint(
             push_addr=self._cfg.hub_push_addr,
             sub_addr=self._cfg.hub_sub_addr,
@@ -70,10 +72,12 @@ class LiveKitConnector:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
-        """Start Docker, optionally token server, register IPC endpoint, connect room client."""
+        """Start Docker, optional servers, register IPC endpoint, connect room client."""
         await self._docker.start()
         if self._token:
             await self._token.start()
+        if self._web:
+            await self._web.start()
         await self._ep.register()
         await self._room_client.connect()
         log.info("LiveKitConnector started — room=%r", self._cfg.room_name)
@@ -113,6 +117,8 @@ class LiveKitConnector:
         self._room_client.stop()
         await self._room_client.disconnect()
         self._ep.close()
+        if self._web:
+            await self._web.stop()
         if self._token:
             await self._token.stop()
         await self._docker.stop()

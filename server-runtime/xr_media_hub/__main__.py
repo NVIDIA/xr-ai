@@ -51,7 +51,10 @@ async def main() -> None:
     token = make_client_token(cfg, identity="ios-client")
     print(f"\n  LiveKit URL : ws://0.0.0.0:{cfg.lk_port_ws}")
     print(f"  Room        : {cfg.room_name}")
-    print(f"  Token       : {token}\n")
+    print(f"  Token       : {token}")
+    if cfg.enable_web_server:
+        print(f"  Web client  : http://localhost:{cfg.web_server_port}")
+    print()
 
     stop = asyncio.Event()
     loop = asyncio.get_event_loop()
