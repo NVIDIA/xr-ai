@@ -67,12 +67,23 @@ class WebServer:
             log_level="warning",
         )
         self._server = uvicorn.Server(uv_cfg)
-        self._task = asyncio.create_task(self._server.serve())
+        self._task = asyncio.create_task(self._serve_safe())
         log.info(
             "Web server → http://%s:%d  client=%r",
             self._cfg.web_server_host, self._cfg.web_server_port,
             self._cfg.web_client_dir or "<no static dir>",
         )
+
+    async def _serve_safe(self) -> None:
+        # uvicorn calls sys.exit(1) on bind failure; SystemExit is a BaseException
+        # and asyncio would re-raise it in the event loop, crashing the process.
+        try:
+            await self._server.serve()
+        except SystemExit as exc:
+            log.error(
+                "Web server failed to start on port %d — is it already in use? (exit code %s)",
+                self._cfg.web_server_port, exc.code,
+            )
 
     async def stop(self) -> None:
         if self._server:
