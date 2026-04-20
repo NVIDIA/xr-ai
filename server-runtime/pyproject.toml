@@ -20,6 +20,8 @@ dependencies = [
     "websockets>=12.0",
     # Media processing
     "numpy>=1.24",
+    # Config file
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]

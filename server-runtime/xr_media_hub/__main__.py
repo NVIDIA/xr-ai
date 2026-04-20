@@ -10,8 +10,9 @@ import asyncio
 import logging
 import signal
 
+from xr_media_hub._config_loader import load_config
 from xr_media_hub.ipc import AudioChunk, HubEndpoint, ParticipantEvent, SlotView
-from xr_media_hub.transport.livekit import LiveKitConnector, LiveKitConnectorConfig, make_client_token
+from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ async def main() -> None:
     hub.on_audio(on_audio)
     hub.on_participant(on_participant)
 
-    cfg = LiveKitConnectorConfig()
+    cfg = load_config()
     connector = LiveKitConnector(cfg)
     await connector.start()
 
