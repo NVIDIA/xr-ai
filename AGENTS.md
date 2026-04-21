@@ -85,6 +85,17 @@ The launcher will eventually start MCP servers, CloudXR runtime, and other
 components — keeping it separate keeps dependency chains lean and the boundary
 clean. `launcher/` has zero runtime dependencies (stdlib only).
 
+### 2026-04-21 — Video frame delivery: metadata push, pixel pull
+
+Processors receive `FrameSignal` metadata at full frame rate via `on_frame()`.
+Pixel data is only copied when the processor calls `await ep.request_frame(signal)`.
+The hub holds one SHM slot per (participant, track) — always the latest frame.
+The slot stays `_STATE_READY` (not released to the connector) until the next frame
+arrives for the same track, so `bytes(view.data)` in FRAME_REQUEST is safe.
+**Why:** avoids copying every frame over IPC; agents sample at their own rate.
+Concurrent `request_frame()` calls for the same track are coalesced into one
+FRAME_REQUEST; all waiters receive the same FRAME_DATA response.
+
 ### 2026-04-21 — `AgentEndpoint` + `ConsumerEndpoint` → `ProcessorEndpoint`
 
 `ipc/_agent.py` and `ipc/_consumer.py` are deleted. Both are replaced by a
