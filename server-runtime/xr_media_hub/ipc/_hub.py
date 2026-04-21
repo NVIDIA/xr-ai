@@ -206,6 +206,12 @@ class HubEndpoint:
                 await cb(msg)
             await self._pub.send_multipart([TOPIC_CONTROL, encode(MsgType.CONTROL, msg)])
 
+        elif type_id == MsgType.RETURN_AUDIO:
+            await self.send_return_audio(msg)
+
+        elif type_id == MsgType.RETURN_DATA:
+            await self.send_return_data(msg)
+
         else:
             log.warning("Unknown message type %d — ignored", type_id)
 

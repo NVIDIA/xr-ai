@@ -22,6 +22,7 @@ Register new message types at import time:
 """
 
 from ._codec import decode, encode, register_decoder, register_encoder
+from ._agent import AgentEndpoint
 from ._consumer import ConsumerEndpoint
 from ._connector import ConnectorEndpoint
 from ._hub import HubEndpoint, TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL, TOPIC_RETURN_AUDIO, TOPIC_RETURN_DATA
@@ -31,6 +32,7 @@ from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMess
 
 __all__ = [
     # endpoints
+    "AgentEndpoint",
     "ConnectorEndpoint",
     "HubEndpoint",
     "ConsumerEndpoint",
