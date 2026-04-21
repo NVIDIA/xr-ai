@@ -51,6 +51,10 @@ public protocol StreamingBackend: AnyObject, Sendable {
     /// Fired when binary data arrives from the remote end.
     var onDataReceived: (@Sendable (Data) -> Void)? { get set }
 
+    /// Fired when audio capture fails non-fatally (e.g. device held by another app).
+    /// The session remains connected; data channel and camera are unaffected.
+    var onAudioWarning: (@Sendable (Error) -> Void)? { get set }
+
     // MARK: - Lifecycle
 
     /// Establish a connection using the provided session configuration.
