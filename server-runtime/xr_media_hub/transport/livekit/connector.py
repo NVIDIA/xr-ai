@@ -80,6 +80,8 @@ class LiveKitConnector:
             await self._web.start()
         await self._ep.register()
         await self._room_client.connect()
+        self._ep.on_return_data(self._room_client.send_return_data)
+        self._ep.on_return_audio(self._room_client.send_return_audio)
         log.info("LiveKitConnector started — room=%r", self._cfg.room_name)
 
     async def run(self) -> None:

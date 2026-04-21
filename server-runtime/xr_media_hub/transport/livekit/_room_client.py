@@ -50,6 +50,7 @@ class RoomClient:
         # track SID → streaming task; lets us cancel exactly the right task on unsubscribe.
         self._track_tasks: dict[str, asyncio.Task] = {}
         self._stop = asyncio.Event()
+        self._return_audio_source: rtc.AudioSource | None = None
 
         # ── room event handlers ───────────────────────────────────────────────
 
@@ -156,7 +157,45 @@ class RoomClient:
             t.cancel()
         await asyncio.gather(*self._track_tasks.values(), return_exceptions=True)
         self._track_tasks.clear()
+        if self._return_audio_source is not None:
+            self._return_audio_source = None
         await self._room.disconnect()
+
+    async def send_return_data(self, msg: DataMessage) -> None:
+        """Publish data back to all room participants via LiveKit data channel."""
+        if not self._room:
+            return
+        try:
+            await self._room.local_participant.publish_data(
+                msg.data, reliable=True, topic=msg.topic or ""
+            )
+        except Exception:
+            log.exception("send_return_data failed")
+
+    async def send_return_audio(self, chunk: AudioChunk) -> None:
+        """Push return audio into the LiveKit room via a shared AudioSource."""
+        if not self._room:
+            return
+        if self._return_audio_source is None:
+            self._return_audio_source = rtc.AudioSource(
+                sample_rate=chunk.sample_rate,
+                num_channels=chunk.channels,
+            )
+            track = rtc.LocalAudioTrack.create_audio_track(
+                "xr-hub-return", self._return_audio_source
+            )
+            await self._room.local_participant.publish_track(track)
+            log.info("Return audio track published to room")
+
+        pcm_f32 = np.frombuffer(chunk.data, dtype=np.float32)
+        pcm_i16 = (np.clip(pcm_f32, -1.0, 1.0) * 32767).astype(np.int16)
+        frame = rtc.AudioFrame(
+            data=pcm_i16.tobytes(),
+            samples_per_channel=chunk.samples,
+            sample_rate=chunk.sample_rate,
+            num_channels=chunk.channels,
+        )
+        await self._return_audio_source.capture_frame(frame)
 
     # ── participant events ────────────────────────────────────────────────────
 
