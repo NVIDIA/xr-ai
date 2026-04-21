@@ -33,6 +33,7 @@ from xr_media_hub.ipc._connector import ConnectorEndpoint
 from xr_media_hub.ipc._types import AudioChunk, DataMessage
 
 from ._docker import LiveKitDocker
+from ._hwcodec import require_nvidia_video_codecs
 from ._room_client import RoomClient
 from ._token_server import TokenServer
 from ._web_server import WebServer
@@ -73,6 +74,7 @@ class LiveKitConnector:
 
     async def start(self) -> None:
         """Start Docker, optional servers, register IPC endpoint, connect room client."""
+        require_nvidia_video_codecs()
         await self._docker.start()
         if self._token:
             await self._token.start()
