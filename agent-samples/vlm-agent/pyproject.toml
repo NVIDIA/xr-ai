@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vlm-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "xr-media-hub",
+    "xr-ai-launcher",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "torch>=2.2",
+    "torchvision>=0.17",
+    "transformers>=4.49",
+    "accelerate>=0.30",
+    "qwen-vl-utils>=0.0.8",
+    "hf-transfer>=0.1.4",
+]
+
+[tool.uv.sources]
+xr-media-hub   = { path = "../../server-runtime", editable = true }
+xr-ai-launcher = { path = "../../launcher",       editable = true }
+
+[project.scripts]
+vlm_agent = "vlm_agent.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vlm_agent"]

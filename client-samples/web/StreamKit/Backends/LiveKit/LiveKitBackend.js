@@ -220,13 +220,15 @@ export class LiveKitBackend {
   /**
    * Captures the local camera and publishes it to the room.
    *
-   * The `facingMode` is taken from `sessionConfig.camera.facing`, which is
-   * already a browser `getUserMedia` constraint value (`'user'`/`'environment'`).
+   * An optional `cameraConfig` overrides the config supplied at connect time.
+   * When `cameraConfig.deviceId` is set it takes precedence over `facingMode`,
+   * selecting the exact device returned by `enumerateDevices()`.
    *
+   * @param {import('../../Config/CameraConfig.js').CameraConfig} [cameraConfig]
    * @returns {Promise<void>}
    * @throws {StreamError} `cameraRequiresConnection` if not connected.
    */
-  async startCamera() {
+  async startCamera(cameraConfig) {
     if (!this.#room || this.#room.state !== 'connected') {
       throw StreamError.cameraRequiresConnection();
     }
@@ -234,8 +236,15 @@ export class LiveKitBackend {
     // Stop any previous video track first.
     await this.stopCamera();
 
-    const facingMode = this.#sessionConfig?.camera?.facing ?? 'user';
-    const track = await createLocalVideoTrack({ facingMode });
+    const config     = cameraConfig ?? this.#sessionConfig?.camera;
+    const deviceId   = config?.deviceId ?? null;
+    const facingMode = config?.facing   ?? 'user';
+
+    const constraints = deviceId
+      ? { deviceId: { exact: deviceId } }
+      : { facingMode };
+
+    const track = await createLocalVideoTrack(constraints);
     this.#videoTrack = track;
 
     await this.#room.localParticipant.publishTrack(track, {

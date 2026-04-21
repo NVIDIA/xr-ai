@@ -184,30 +184,39 @@ class ProcessorEndpoint:
     async def _dispatch(self, type_id: int, msg) -> None:
         if type_id == MsgType.FRAME_SIGNAL:
             for cb in self._frame_cbs:
-                await cb(msg)
+                self._spawn(cb(msg))
         elif type_id == MsgType.FRAME_DATA:
+            # Resolve pending request_frame() futures synchronously so they can
+            # proceed as soon as the event loop next runs their awaiting coroutine.
             key = (msg.participant_id, msg.track_id)
             waiters = self._pending.pop(key, [])
             for fut in waiters:
                 if not fut.done():
                     fut.set_result(msg)
             for cb in self._frame_data_cbs:
-                await cb(msg)
+                self._spawn(cb(msg))
         elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
-                await cb(msg)
+                self._spawn(cb(msg))
         elif type_id == MsgType.DATA_MESSAGE:
             for cb in self._data_cbs:
-                await cb(msg)
+                self._spawn(cb(msg))
         elif type_id == MsgType.PARTICIPANT_EVENT:
+            # Update participant set before spawning callbacks.
             if msg.joined:
                 self._participants.add(msg.participant_id)
             else:
                 self._participants.discard(msg.participant_id)
             for cb in self._participant_cbs:
-                await cb(msg)
+                self._spawn(cb(msg))
         else:
             log.debug("Unhandled message type %d on processor endpoint", type_id)
+
+    @staticmethod
+    def _spawn(coro) -> None:
+        t = asyncio.create_task(coro)
+        t.add_done_callback(lambda t: log.error("Callback raised: %s", t.exception())
+                            if not t.cancelled() and t.exception() else None)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 

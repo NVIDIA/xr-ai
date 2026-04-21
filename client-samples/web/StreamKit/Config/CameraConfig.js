@@ -55,13 +55,23 @@ export class CameraConfig {
   #facing;
 
   /**
-   * @param {object}  [opts]
-   * @param {boolean} [opts.enabled=true]
-   * @param {string}  [opts.facing=CameraFacing.FRONT]
+   * Specific device ID from `navigator.mediaDevices.enumerateDevices()`.
+   * When set, takes precedence over `facing`.
+   *
+   * @type {string | null}
    */
-  constructor({ enabled = true, facing = CameraFacing.FRONT } = {}) {
-    this.#enabled = enabled;
-    this.#facing = facing;
+  #deviceId;
+
+  /**
+   * @param {object}       [opts]
+   * @param {boolean}      [opts.enabled=true]
+   * @param {string}       [opts.facing=CameraFacing.FRONT]
+   * @param {string|null}  [opts.deviceId=null]
+   */
+  constructor({ enabled = true, facing = CameraFacing.FRONT, deviceId = null } = {}) {
+    this.#enabled  = enabled;
+    this.#facing   = facing;
+    this.#deviceId = deviceId;
   }
 
   /** @returns {boolean} Whether the camera should be captured and streamed. */
@@ -76,6 +86,14 @@ export class CameraConfig {
    */
   get facing() { return this.#facing; }
   set facing(v) { this.#facing = v; }
+
+  /**
+   * Specific device ID. When set, overrides `facing`.
+   *
+   * @returns {string | null}
+   */
+  get deviceId() { return this.#deviceId; }
+  set deviceId(v) { this.#deviceId = v; }
 
   // -------------------------------------------------------------------------
   // Presets

@@ -77,6 +77,21 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-04-21 — VLM agent sample added
+
+`agent-samples/vlm-agent/` — answers natural-language queries about live XR
+video using a locally-hosted vision-language model.
+**Model:** `nvidia/Cosmos-Reason1-7B` (NVIDIA Open Model License + Apache 2.0,
+commercial use permitted; ~16 GB VRAM at BF16). Architecture:
+`Qwen2_5_VLForConditionalGeneration` + `AutoProcessor` + `qwen-vl-utils`.
+**Protocol:** client sends `vlm.query` data message (raw text or
+`{"query":"…","track_id":"…"}`); agent replies on `vlm.response`.
+**Frame flow:** `on_frame()` tracks latest `FrameSignal` per (participant,
+track); on query, `request_frame(signal)` pulls a pixel copy, converts to PIL
+via numpy (I420/NV12/RGB24/RGBA/BGRA), then calls `_VlmBackend.infer()` in a
+thread pool so the asyncio loop is not blocked. Model is loaded lazily on the
+first query. Override model via `VLM_MODEL` env var.
+
 ### 2026-04-21 — Process management moved to `launcher/`
 
 `HubLauncher` lives in `launcher/xr_ai_launcher/`, not in `server-runtime`.

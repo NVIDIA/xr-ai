@@ -208,6 +208,21 @@
 
     .text-input::placeholder { color: var(--secondary); }
 
+    /* ── Camera select ───────────────────────────────────────────────── */
+    .field-select {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-family: var(--font);
+      font-size: 15px;
+      color: var(--label);
+      background: transparent;
+      cursor: pointer;
+      text-align: right;
+    }
+
+    .field-select:disabled { opacity: 0.4; cursor: default; }
+
     /* ── Camera + data rows with label + trailing content ─────────────── */
     .labeled-row {
       display: flex;
@@ -407,6 +422,12 @@
         <div class="labeled-row">
           <span class="row-label">Microphone</span>
           <span id="audio-status" class="status-text status-idle">Not connected</span>
+        </div>
+
+        <!-- Camera selector (hidden when only one camera is available) -->
+        <div id="camera-select-row" class="field-row" style="display:none">
+          <label class="field-label" for="camera-select">Camera</label>
+          <select id="camera-select" class="field-select"></select>
         </div>
 
         <!-- Camera toggle -->

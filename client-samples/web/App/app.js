@@ -21,6 +21,50 @@ import {
 } from '/StreamKit/index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Camera enumeration
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Queries available video input devices and updates `model.cameras`.
+ * Labels are only populated after the user has granted camera permission;
+ * calling this again after the first `startCamera()` yields labelled entries.
+ *
+ * @returns {Promise<void>}
+ */
+async function enumerateCameras() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    let devices = await navigator.mediaDevices.enumerateDevices();
+    let cameras = devices.filter(d => d.kind === 'videoinput');
+
+    // deviceId is an empty string until camera permission has been granted.
+    // Request a brief permission probe so we get real device IDs and labels.
+    if (cameras.length > 0 && !cameras.some(d => d.deviceId)) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        stream.getTracks().forEach(t => t.stop());
+        devices  = await navigator.mediaDevices.enumerateDevices();
+        cameras  = devices.filter(d => d.kind === 'videoinput');
+      } catch { /* permission denied — proceed with anonymous devices */ }
+    }
+
+    const list = cameras.map((d, i) => ({
+      deviceId: d.deviceId,
+      label:    d.label || `Camera ${i + 1}`,
+    }));
+
+    model.cameras = list;
+    // Preserve selection if it still exists; otherwise default to first device.
+    if (list.length > 0 && !list.some(c => c.deviceId === model.selectedCameraId)) {
+      model.selectedCameraId = list[0].deviceId;
+    }
+    render();
+  } catch {
+    // enumerateDevices not available — ignore.
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Model state  (mirrors AppModel.swift field-for-field)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -41,6 +85,10 @@ const model = {
   connectionState: ConnectionState.DISCONNECTED,
   isAudioActive:   false,
   isCameraActive:  false,
+  /** @type {Array<{deviceId: string, label: string}>} */
+  cameras:          [],
+  /** @type {string|null} */
+  selectedCameraId: null,
   /** @type {Array<{id: string, text: string, timestamp: Date}>} */
   receivedMessages: [],
   /** @type {string|null} */
@@ -147,6 +195,26 @@ function render() {
     cameraBtn.className   = 'btn btn-secondary';
     cameraStatus.textContent = isConnected ? 'Idle' : 'Not connected';
     cameraStatus.className   = 'status-text status-idle';
+  }
+
+  // ── Camera selector (shown only when multiple cameras detected) ────────────
+  const selectRow = $('camera-select-row');
+  const camSelect = $('camera-select');
+
+  if (model.cameras.length > 1) {
+    selectRow.style.display = '';
+    // Rebuild options only when the list has changed.
+    const currentIds = [...camSelect.options].map(o => o.value).join(',');
+    const newIds     = model.cameras.map(c => c.deviceId).join(',');
+    if (currentIds !== newIds) {
+      camSelect.innerHTML = model.cameras
+        .map(c => `<option value="${escapeHtml(c.deviceId)}">${escapeHtml(c.label)}</option>`)
+        .join('');
+    }
+    camSelect.value    = model.selectedCameraId ?? '';
+    camSelect.disabled = model.isCameraActive;
+  } else {
+    selectRow.style.display = 'none';
   }
 
   // ── Data channel ───────────────────────────────────────────────────────────
@@ -326,8 +394,15 @@ async function stopAudio() {
  * @returns {Promise<void>}
  */
 async function startCamera() {
+  // Enumerate first (triggers permission prompt if needed) so the selector
+  // is populated with real device names before the camera goes active.
+  await enumerateCameras();
+
+  const cameraConfig = model.selectedCameraId
+    ? new CameraConfig({ deviceId: model.selectedCameraId })
+    : CameraConfig.default;
   try {
-    await model.session?.startCamera();
+    await model.session?.startCamera(cameraConfig);
     model.isCameraActive = true;
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
@@ -415,6 +490,11 @@ function wireEvents() {
     } else {
       startAudio();
     }
+  });
+
+  // Camera selector
+  $('camera-select').addEventListener('change', (e) => {
+    model.selectedCameraId = e.target.value || null;
   });
 
   // Camera toggle
