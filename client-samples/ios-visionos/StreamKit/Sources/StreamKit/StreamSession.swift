@@ -2,7 +2,7 @@
  * StreamKit — StreamSession
  *
  * The single public entry-point of the SDK.
- * Runs on @MainActor so it is safe to bind directly to SwiftUI Published properties.
+ * Runs on @MainActor so it is safe to bind directly to SwiftUI.
  */
 
 import Foundation
@@ -12,31 +12,26 @@ import Foundation
 /// A transport-agnostic streaming session.
 ///
 /// `StreamSession` wraps any ``StreamingBackend`` with a clean, SwiftUI-friendly API.
-/// The choice of backend (e.g. LiveKit) is made at init time and is completely hidden
-/// from the call-site.
 ///
-/// ## Using a built-in backend
+/// ## Lifecycle
 ///
 /// ```swift
-/// let session = StreamSession(.liveKit(LiveKitConfig(host: "192.168.1.100", token: jwt)))
-/// try await session.connect()
+/// // 1. Connect — WebRTC peer connection + data channel only
+/// try await session.connect(config: SessionConfig(identity: "ipad-1"))
+///
+/// // 2. Start media independently — each throws its own error, never drops the connection
+/// try await session.startAudio()
 /// try await session.startCamera()
+///
+/// // 3. Send / receive data
+/// session.onDataReceived = { data in … }
 /// try await session.send(Data("hello".utf8))
+///
+/// // 4. Stop media / disconnect
+/// try await session.stopAudio()
+/// try await session.stopCamera()
+/// await session.disconnect()
 /// ```
-///
-/// ## Using a custom backend
-///
-/// Conform to ``StreamingBackend`` and pass your instance to ``init(backend:)``:
-///
-/// ```swift
-/// let session = StreamSession(backend: MyCustomBackend())
-/// ```
-///
-/// ## visionOS
-///
-/// On visionOS, ``startCamera()`` requires an immersive space to be open in your app
-/// **before** it is called. The SDK manages the ARKit session internally; your app only
-/// needs to keep the immersive space active while streaming.
 @MainActor
 public final class StreamSession: ObservableObject {
 
@@ -45,17 +40,13 @@ public final class StreamSession: ObservableObject {
     /// Current connection state. Safe to observe from SwiftUI.
     @Published public private(set) var connectionState: ConnectionState = .disconnected
 
-    // MARK: - Callbacks (alternative to Combine / observation)
-
-    /// Called on the main actor when binary data is received from the server.
-    public var onDataReceived: ((Data) -> Void)?
+    // MARK: - Callbacks
 
     /// Called on the main actor when the connection state changes.
     public var onConnectionStateChanged: ((ConnectionState) -> Void)?
 
-    /// Called on the main actor when audio capture fails non-fatally.
-    /// The session remains connected; data and camera are unaffected.
-    public var onAudioWarning: ((Error) -> Void)?
+    /// Called on the main actor when binary data is received.
+    public var onDataReceived: ((Data) -> Void)?
 
     // MARK: - Private
 
@@ -70,20 +61,16 @@ public final class StreamSession: ObservableObject {
     }
 
     /// Creates a session backed by a custom ``StreamingBackend`` implementation.
-    ///
-    /// ```swift
-    /// let session = StreamSession(backend: MyCustomBackend())
-    /// ```
     public init(backend: any StreamingBackend) {
         self.backend = backend
         wireCallbacks()
     }
 
-    // MARK: - Connect / disconnect
+    // MARK: - Connection
 
-    /// Connects using the current backend.
-    ///
-    /// - Parameter config: Room / participant metadata and media settings.
+    /// Establishes a WebRTC peer connection and data channel.
+    /// Does **not** start audio or camera — call ``startAudio(config:)`` and
+    /// ``startCamera(config:)`` explicitly once connected.
     public func connect(config: SessionConfig = .default) async throws {
         try await backend.connect(config: config)
     }
@@ -93,13 +80,28 @@ public final class StreamSession: ObservableObject {
         await backend.disconnect()
     }
 
+    // MARK: - Audio
+
+    /// Starts microphone capture and publishes an audio track.
+    ///
+    /// Throws if the audio device is unavailable. Never drops the connection.
+    public func startAudio(config: AudioConfig = .default) async throws {
+        try await backend.startAudio(config: config)
+    }
+
+    /// Stops microphone capture.
+    public func stopAudio() async throws {
+        try await backend.stopAudio()
+    }
+
     // MARK: - Camera
 
     /// Starts camera capture and publishes a video track.
     ///
     /// On **visionOS** an immersive space must already be open.
-    public func startCamera() async throws {
-        try await backend.startCamera()
+    /// Throws if the camera is unavailable. Never drops the connection.
+    public func startCamera(config: CameraConfig = .default) async throws {
+        try await backend.startCamera(config: config)
     }
 
     /// Stops camera capture.
@@ -131,11 +133,6 @@ public final class StreamSession: ObservableObject {
         backend.onDataReceived = { [weak self] data in
             Task { @MainActor [weak self] in
                 self?.onDataReceived?(data)
-            }
-        }
-        backend.onAudioWarning = { [weak self] error in
-            Task { @MainActor [weak self] in
-                self?.onAudioWarning?(error)
             }
         }
     }

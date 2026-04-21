@@ -1,30 +1,18 @@
 import Foundation
 
-/// Generic session configuration passed to ``StreamSession/connect(config:)``.
+/// Configuration passed to ``StreamSession/connect(config:)``.
 ///
-/// Network endpoint details (host, port, token) are backend-specific and live in
-/// ``LiveKitConfig`` (or your custom backend's own config type). `SessionConfig`
-/// captures only the cross-backend concerns: participant identity and media settings.
+/// Only carries identity — network details live in the backend config
+/// (e.g. ``LiveKitConfig``), and media settings are passed directly to
+/// ``StreamSession/startAudio(config:)`` and ``StreamSession/startCamera(config:)``.
 public struct SessionConfig: Sendable {
 
-    /// Microphone capture settings.
-    public var audio: AudioConfig
-
-    /// Camera capture settings.
-    public var camera: CameraConfig
-
-    /// A unique identity for this participant.
+    /// A unique label for this participant in the session.
     public var identity: String
 
     public static let `default` = SessionConfig()
 
-    public init(
-        audio: AudioConfig = .default,
-        camera: CameraConfig = .default,
-        identity: String = "participant-\(UInt32.random(in: 100_000...999_999))"
-    ) {
-        self.audio = audio
-        self.camera = camera
+    public init(identity: String = "participant-\(UInt32.random(in: 100_000...999_999))") {
         self.identity = identity
     }
 }
