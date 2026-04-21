@@ -3,9 +3,9 @@ xr_media_hub.ipc — extensible IPC layer for XR-Media-Hub.
 
 Endpoints
 ---------
-ConnectorEndpoint  — producer (LiveKit connector process)
-HubEndpoint        — server  (XR-Media-Hub process)
-ConsumerEndpoint   — subscriber (MCP servers, agent pipelines)
+ConnectorEndpoint   — producer (LiveKit connector process)
+HubEndpoint         — server  (XR-Media-Hub process)
+ProcessorEndpoint   — subscriber + publisher (downstream processors, agents, analytics)
 
 Extensibility
 -------------
@@ -22,20 +22,18 @@ Register new message types at import time:
 """
 
 from ._codec import decode, encode, register_decoder, register_encoder
-from ._agent import AgentEndpoint
-from ._consumer import ConsumerEndpoint
 from ._connector import ConnectorEndpoint
 from ._hub import HubEndpoint, TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL, TOPIC_RETURN_AUDIO, TOPIC_RETURN_DATA
+from ._processor import ProcessorEndpoint
 from ._shm import ShmRingBuffer, SlotView
 from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
                      FrameSignal, MsgType, ParticipantEvent, PixelFormat)
 
 __all__ = [
     # endpoints
-    "AgentEndpoint",
     "ConnectorEndpoint",
     "HubEndpoint",
-    "ConsumerEndpoint",
+    "ProcessorEndpoint",
     # shared memory
     "ShmRingBuffer",
     "SlotView",
