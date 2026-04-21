@@ -45,11 +45,16 @@ final class AppModel {
         receivedMessages.removeAll()
 
         let portNumber = Int(port) ?? 7880
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTokenURL = tokenServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTokenURL = trimmedTokenURL.isEmpty
+            ? URL(string: "http://\(host):8080/token")
+            : URL(string: trimmedTokenURL)
         let lkConfig = LiveKitConfig(
             host: host,
             port: portNumber,
-            token: token.isEmpty ? nil : token,
-            tokenURL: URL(string: tokenServerURL)
+            token: trimmedToken.isEmpty ? nil : trimmedToken,
+            tokenURL: resolvedTokenURL
         )
 
         let newSession = StreamSession(.liveKit(lkConfig))

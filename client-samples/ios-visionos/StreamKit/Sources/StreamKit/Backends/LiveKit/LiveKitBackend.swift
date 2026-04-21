@@ -158,7 +158,6 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
     private static func fetchToken(from base: URL, identity: String) async throws -> String {
         var components = URLComponents(url: base, resolvingAgainstBaseURL: true)
         var items = components?.queryItems ?? []
-        items.append(URLQueryItem(name: "room",     value: "xr-room"))
         items.append(URLQueryItem(name: "identity", value: identity))
         components?.queryItems = items
 

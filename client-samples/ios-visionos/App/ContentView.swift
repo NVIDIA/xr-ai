@@ -62,9 +62,6 @@ struct ContentView: View {
                     .keyboardType(.numberPad)
                     #endif
 
-                TextField("Token (paste JWT directly)", text: $m.token)
-                    .autocorrectionDisabled()
-
                 TextField("Token server URL (e.g. http://host/token)", text: $m.tokenServerURL)
                     .autocorrectionDisabled()
                     #if os(iOS)
