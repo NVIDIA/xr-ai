@@ -13,7 +13,7 @@ import signal
 import time
 
 from xr_media_hub._config_loader import load_config
-from xr_media_hub.ipc import AudioChunk, HubEndpoint, ParticipantEvent, SlotView
+from xr_media_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
 from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
 
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +26,7 @@ STATS_INTERVAL = 5.0  # seconds between stats prints
 # Counters keyed by participant_id.
 _frame_counts: dict[str, int] = collections.defaultdict(int)
 _audio_counts: dict[str, int] = collections.defaultdict(int)
+_data_counts:  dict[str, int] = collections.defaultdict(int)
 _participants: set[str] = set()
 
 
@@ -37,6 +38,12 @@ async def on_audio(chunk: AudioChunk) -> None:
     _audio_counts[chunk.participant_id] += 1
 
 
+async def on_data(msg: DataMessage) -> None:
+    text = msg.data.decode("utf-8", errors="replace") if msg.data else ""
+    log.info("data  participant=%s  topic=%r  %r", msg.participant_id, msg.topic, text[:120])
+    _data_counts[msg.participant_id] += 1
+
+
 async def on_participant(event: ParticipantEvent) -> None:
     action = "joined" if event.joined else "left"
     log.info("participant %s %s", event.participant_id, action)
@@ -46,6 +53,7 @@ async def on_participant(event: ParticipantEvent) -> None:
         _participants.discard(event.participant_id)
         _frame_counts.pop(event.participant_id, None)
         _audio_counts.pop(event.participant_id, None)
+        _data_counts.pop(event.participant_id, None)
 
 
 async def _stats_loop() -> None:
@@ -57,7 +65,8 @@ async def _stats_loop() -> None:
         for pid in sorted(_participants):
             fps   = _frame_counts.pop(pid, 0) / STATS_INTERVAL
             achps = _audio_counts.pop(pid, 0) / STATS_INTERVAL
-            parts.append(f"{pid}  video={fps:.1f}fps  audio={achps:.1f}chunks/s")
+            dps   = _data_counts.pop(pid, 0)  / STATS_INTERVAL
+            parts.append(f"{pid}  video={fps:.1f}fps  audio={achps:.1f}ch/s  data={dps:.1f}msg/s")
         log.info("stats ─ %s", " │ ".join(parts))
 
 
@@ -65,6 +74,7 @@ async def main() -> None:
     hub = HubEndpoint(pull_addr=PULL_ADDR, pub_addr=PUB_ADDR)
     hub.on_frame(on_frame)
     hub.on_audio(on_audio)
+    hub.on_data(on_data)
     hub.on_participant(on_participant)
 
     cfg = load_config()

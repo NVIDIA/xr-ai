@@ -47,7 +47,8 @@ class RoomClient:
         self._cfg  = cfg
         self._ep   = ep
         self._room = rtc.Room()
-        self._tasks: list[asyncio.Task] = []
+        # track SID → streaming task; lets us cancel exactly the right task on unsubscribe.
+        self._track_tasks: dict[str, asyncio.Task] = {}
         self._stop = asyncio.Event()
 
         # ── room event handlers ───────────────────────────────────────────────
@@ -67,15 +68,23 @@ class RoomClient:
             participant: rtc.RemoteParticipant,
         ) -> None:
             if track.kind == rtc.TrackKind.KIND_VIDEO:
-                t = asyncio.ensure_future(
-                    self._stream_video(track, participant.identity, track.sid)
+                self._start_track_task(
+                    track.sid,
+                    self._stream_video(track, participant.identity, track.sid),
                 )
-                self._tasks.append(t)
             elif track.kind == rtc.TrackKind.KIND_AUDIO:
-                t = asyncio.ensure_future(
-                    self._stream_audio(track, participant.identity, track.sid)
+                self._start_track_task(
+                    track.sid,
+                    self._stream_audio(track, participant.identity, track.sid),
                 )
-                self._tasks.append(t)
+
+        @self._room.on("track_unsubscribed")
+        def _on_track_end(
+            track: rtc.Track,
+            _pub: rtc.RemoteTrackPublication,
+            _participant: rtc.RemoteParticipant,
+        ) -> None:
+            self._cancel_track_task(track.sid)
 
         @self._room.on("data_received")
         def _on_data(packet: rtc.DataPacket) -> None:
@@ -111,19 +120,19 @@ class RoomClient:
             for pub in participant.track_publications.values():
                 if pub.track is not None and pub.subscribed:
                     if pub.track.kind == rtc.TrackKind.KIND_VIDEO:
-                        t = asyncio.ensure_future(
+                        self._start_track_task(
+                            pub.track.sid,
                             self._stream_video(
                                 pub.track, participant.identity, pub.track.sid
-                            )
+                            ),
                         )
-                        self._tasks.append(t)
                     elif pub.track.kind == rtc.TrackKind.KIND_AUDIO:
-                        t = asyncio.ensure_future(
+                        self._start_track_task(
+                            pub.track.sid,
                             self._stream_audio(
                                 pub.track, participant.identity, pub.track.sid
-                            )
+                            ),
                         )
-                        self._tasks.append(t)
 
     async def run(self) -> None:
         """Wait until stop() is called."""
@@ -132,11 +141,21 @@ class RoomClient:
     def stop(self) -> None:
         self._stop.set()
 
-    async def disconnect(self) -> None:
-        for t in self._tasks:
+    def _start_track_task(self, sid: str, coro) -> None:
+        # Cancel any existing task for this SID before starting a new one.
+        self._cancel_track_task(sid)
+        self._track_tasks[sid] = asyncio.ensure_future(coro)
+
+    def _cancel_track_task(self, sid: str) -> None:
+        t = self._track_tasks.pop(sid, None)
+        if t and not t.done():
             t.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
-        self._tasks.clear()
+
+    async def disconnect(self) -> None:
+        for t in self._track_tasks.values():
+            t.cancel()
+        await asyncio.gather(*self._track_tasks.values(), return_exceptions=True)
+        self._track_tasks.clear()
         await self._room.disconnect()
 
     # ── participant events ────────────────────────────────────────────────────
