@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "xr-media-hub @ ../../server-runtime",
+    "xr-ai-launcher @ ../../launcher",
     "numpy>=1.24",
 ]
 
