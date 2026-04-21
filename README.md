@@ -41,6 +41,33 @@ point `web_client_dir` at a different web client build.
 
 ---
 
+### VLM agent (vision-language queries over live video)
+
+Requires ~16 GB VRAM. Default model: `nvidia/Cosmos-Reason1-7B`
+(NVIDIA Open Model License + Apache 2.0 — commercial use permitted).
+
+```bash
+cd xr-ai/agent-samples/vlm-agent
+uv sync
+uv run vlm_agent
+```
+
+Override the model via environment variable:
+
+```bash
+VLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct uv run vlm_agent
+```
+
+**Client protocol** — send any data channel message (no specific topic required):
+- Raw UTF-8 text: `"What objects are on the table?"`
+- Or JSON: `{"query": "What objects are on the table?", "track_id": "optional"}`
+
+The agent replies on topic `vlm.response` with plain UTF-8 text.
+
+The model is loaded on the first query (~30–60 s). Subsequent queries are fast.
+
+---
+
 ### Hub only (server-runtime standalone)
 
 ```bash

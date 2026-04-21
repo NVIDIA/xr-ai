@@ -157,8 +157,16 @@ export class StreamSession {
     await this.#backend.stopAudio();
   }
 
-  async startCamera() {
-    await this.#backend.startCamera();
+  /**
+   * Captures the local camera and publishes it.
+   *
+   * @param {import('./Config/CameraConfig.js').CameraConfig} [cameraConfig]
+   *   Optional override. When `cameraConfig.deviceId` is set the exact device
+   *   is selected; otherwise falls back to the `facingMode` from session config.
+   * @returns {Promise<void>}
+   */
+  async startCamera(cameraConfig) {
+    await this.#backend.startCamera(cameraConfig);
   }
 
   /**
