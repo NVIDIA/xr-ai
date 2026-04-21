@@ -44,11 +44,24 @@ final class AppModel {
         receivedMessages.removeAll()
 
         let portNumber = Int(port) ?? 7880
+
+        // Mirror web client behaviour: if neither token nor tokenServerURL is
+        // provided, fall back to http://<host>:8080/token (the server's built-in
+        // token endpoint served alongside the web client).
+        let effectiveTokenURL: URL?
+        if !tokenServerURL.isEmpty {
+            effectiveTokenURL = URL(string: tokenServerURL)
+        } else if token.isEmpty {
+            effectiveTokenURL = URL(string: "http://\(host):8080/token")
+        } else {
+            effectiveTokenURL = nil
+        }
+
         let lkConfig = LiveKitConfig(
             host: host,
             port: portNumber,
             token: token.isEmpty ? nil : token,
-            tokenURL: URL(string: tokenServerURL)
+            tokenURL: effectiveTokenURL
         )
 
         let newSession = StreamSession(.liveKit(lkConfig))
