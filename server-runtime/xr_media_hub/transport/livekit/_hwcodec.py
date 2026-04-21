@@ -5,66 +5,152 @@ We require NVIDIA hardware video codecs (NVDEC + NVENC) because OpenH264,
 the software fallback bundled with libwebrtc inside livekit-rtc, is
 royalty-bearing for end users and must not be used in distribution.
 
-Call require_nvidia_video_codecs() before the LiveKit connector starts.
-It raises RuntimeError immediately if the required libraries are absent,
-preventing any silent fallback to software decode/encode.
+The check is intentionally strict:
+  - macOS: always fails — Apple dropped NVIDIA GPU support in macOS 10.14.
+  - Linux: requires libnvcuvid.so (NVDEC) + libnvidia-encode.so (NVENC).
+           VA-API on NVIDIA routes through these same libraries, so the
+           check covers both the direct NVDEC path and the VA-API path.
+  - Windows: requires nvcuvid.dll + nvEncodeAPI64.dll.
+
+Override (development only)
+───────────────────────────
+Set the environment variable to bypass the check at your own risk:
+
+    XR_AI_SKIP_HWCODEC_CHECK=1 uv run xr_media_hub
+
+This will log a prominent warning and continue. Do NOT set this in
+production — OpenH264 must not be used in distributed software.
 """
 from __future__ import annotations
 
 import ctypes
 import ctypes.util
-import platform
+import logging
+import os
 import sys
+
+log = logging.getLogger(__name__)
+
+_SKIP_ENV = "XR_AI_SKIP_HWCODEC_CHECK"
 
 
 def require_nvidia_video_codecs() -> None:
     """
-    Raise RuntimeError if NVDEC or NVENC libraries are not found.
+    Raise RuntimeError unless NVIDIA NVDEC and NVENC are present.
 
-    Only enforced on Linux (the primary server target). macOS uses
-    VideoToolbox (always present); Windows support is a future TODO.
+    Fails on macOS unconditionally (no NVIDIA GPU support).
+    On Linux and Windows, probes the NVIDIA Video SDK libraries directly.
+
+    Set XR_AI_SKIP_HWCODEC_CHECK=1 to bypass (development only).
     """
-    if sys.platform != "linux":
+    if os.environ.get(_SKIP_ENV):
+        log.warning(
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  %s is set — hardware codec check SKIPPED\n"
+            "  OpenH264 (royalty-bearing) may be used. DO NOT distribute.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            _SKIP_ENV,
+        )
         return
 
+    if sys.platform == "darwin":
+        _fail(
+            "macOS",
+            ["NVDEC", "NVENC"],
+            "Apple dropped NVIDIA GPU support in macOS 10.14. "
+            "Run the server on a Linux machine with an NVIDIA GPU.",
+        )
+
+    if sys.platform == "linux":
+        _check_linux()
+        return
+
+    if sys.platform == "win32":
+        _check_windows()
+        return
+
+    _fail(sys.platform, ["NVDEC", "NVENC"], f"Unsupported platform: {sys.platform}")
+
+
+# ── platform checks ───────────────────────────────────────────────────────────
+
+def _check_linux() -> None:
     missing = []
 
-    # NVDEC — libnvcuvid: used by libwebrtc for hardware H.264/H.265 decode.
-    if not _find_lib("nvcuvid"):
-        missing.append("NVDEC (libnvcuvid.so)")
+    # NVDEC — libnvcuvid: the NVIDIA CUVID / Video Decode API.
+    # Present whenever the NVIDIA driver + Video SDK are installed.
+    # VA-API on NVIDIA (nvidia-vaapi-driver) also requires this library.
+    if not _so("nvcuvid", [".so.1", ".so"]):
+        missing.append("NVDEC (libnvcuvid.so.1)")
 
-    # NVENC — libnvidia-encode: used by libwebrtc for hardware H.264 encode.
-    if not _find_lib("nvidia-encode"):
-        missing.append("NVENC (libnvidia-encode.so)")
+    # NVENC — libnvidia-encode: the NVIDIA Video Encode API.
+    if not _so("nvidia-encode", [".so.1", ".so"]):
+        missing.append("NVENC (libnvidia-encode.so.1)")
 
     if missing:
-        raise RuntimeError(
-            "\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "  Hardware video codec required — refusing to start\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"  Missing: {', '.join(missing)}\n"
-            "\n"
-            "  livekit-rtc bundles libwebrtc, which includes OpenH264 as a\n"
-            "  software fallback. OpenH264 is royalty-bearing for end users\n"
-            "  and must not be used in this deployment.\n"
-            "\n"
-            "  Fix: ensure the NVIDIA driver and CUDA Video SDK are installed\n"
-            "  and that /dev/nvidia* devices are accessible to this process.\n"
-            "  In Docker: pass --gpus all (or --device /dev/nvidia0, etc.).\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        _fail(
+            "Linux",
+            missing,
+            "Ensure the NVIDIA driver and CUDA Video SDK are installed and that\n"
+            "  /dev/nvidia* devices are accessible to this process.\n"
+            "  In Docker: pass --gpus all  (or --device /dev/nvcuvid etc.).",
         )
 
 
-def _find_lib(name: str) -> bool:
-    """Return True if lib<name> can be located or loaded."""
+def _check_windows() -> None:
+    missing = []
+
+    if not _dll("nvcuvid"):
+        missing.append("NVDEC (nvcuvid.dll)")
+
+    # 64-bit systems ship nvEncodeAPI64.dll; 32-bit ship nvEncodeAPI.dll.
+    if not _dll("nvEncodeAPI64") and not _dll("nvEncodeAPI"):
+        missing.append("NVENC (nvEncodeAPI64.dll)")
+
+    if missing:
+        _fail(
+            "Windows",
+            missing,
+            "Ensure the NVIDIA driver and CUDA Video SDK are installed.",
+        )
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _so(name: str, suffixes: list[str]) -> bool:
     if ctypes.util.find_library(name):
         return True
-    # find_library may miss versioned .so on some distros; try loading directly.
-    for suffix in (".so", ".so.1", ".so.0"):
+    for s in suffixes:
         try:
-            ctypes.CDLL(f"lib{name}{suffix}")
+            ctypes.CDLL(f"lib{name}{s}")
             return True
         except OSError:
             pass
     return False
+
+
+def _dll(name: str) -> bool:
+    try:
+        ctypes.CDLL(f"{name}.dll")
+        return True
+    except OSError:
+        return False
+
+
+def _fail(platform: str, missing: list[str], hint: str) -> None:
+    lines = [
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "  NVIDIA hardware video codec required — refusing to start",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"  Platform : {platform}",
+        f"  Missing  : {', '.join(missing)}",
+        "",
+        "  livekit-rtc bundles libwebrtc which includes OpenH264 as a",
+        "  software fallback. OpenH264 is royalty-bearing for end users",
+        "  and must not be used in this deployment.",
+        "",
+        f"  {hint}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+    raise RuntimeError("\n".join(lines))
