@@ -19,4 +19,4 @@ web_server_port:   8080
 web_client_dir:    client-samples/web
 
 # ── Optional: token server (only needed for HTTPS/WSS proxy) ─────────────────
-enable_token_server: false
+enable_token_server: true
