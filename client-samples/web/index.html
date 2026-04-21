@@ -396,6 +396,19 @@
       <h2 class="section-header">Media</h2>
       <div class="card">
 
+        <!-- Microphone toggle -->
+        <div class="btn-row">
+          <button id="audio-btn" class="btn btn-secondary btn-full" disabled>
+            Start Microphone
+          </button>
+        </div>
+
+        <!-- Microphone status -->
+        <div class="labeled-row">
+          <span class="row-label">Microphone</span>
+          <span id="audio-status" class="status-text status-idle">Not connected</span>
+        </div>
+
         <!-- Camera toggle -->
         <div class="btn-row">
           <button id="camera-btn" class="btn btn-secondary btn-full" disabled>

@@ -173,12 +173,37 @@ export class LiveKitBackend {
 
     // ── Connect ───────────────────────────────────────────────────────────────
     await room.connect(wsURL, token);
+  }
 
-    // ── Publish audio (unless disabled) ──────────────────────────────────────
-    const audioMode = sessionConfig.audio?.mode;
-    if (audioMode !== MicrophoneMode.DISABLED) {
-      await this.#publishAudio(sessionConfig);
+  /**
+   * Starts microphone capture and publishes it to the room.
+   *
+   * @param {import('../../Config/AudioConfig.js').AudioConfig} [audioConfig]
+   * @returns {Promise<void>}
+   * @throws {StreamError} `notConnected` if called while not connected.
+   */
+  async startAudio(audioConfig) {
+    if (!this.#room || this.#room.state !== 'connected') {
+      throw StreamError.notConnected();
     }
+    await this.stopAudio();
+    await this.#publishAudio(audioConfig ?? this.#sessionConfig?.audio);
+  }
+
+  /**
+   * Unpublishes and stops the local audio track.
+   *
+   * Resolves silently if audio was never started.
+   *
+   * @returns {Promise<void>}
+   */
+  async stopAudio() {
+    if (!this.#audioTrack) return;
+    if (this.#room) {
+      await this.#room.localParticipant.unpublishTrack(this.#audioTrack);
+    }
+    this.#audioTrack.stop();
+    this.#audioTrack = null;
   }
 
   /**
@@ -301,18 +326,18 @@ export class LiveKitBackend {
    * @param {import('../../Config/SessionConfig.js').SessionConfig} sessionConfig
    * @returns {Promise<void>}
    */
-  async #publishAudio(sessionConfig) {
-    const { mode, echoCancellation } = sessionConfig.audio;
+  async #publishAudio(audioConfig) {
+    const { mode } = audioConfig ?? {};
 
     // Derive WebRTC constraint booleans from MicrophoneMode.
     // VOICE_PROCESSING: enable the full browser voice-isolation pipeline.
     // SOFTWARE_PROCESSING: standard WebRTC DSP — use echoCancellation setting.
     // RAW: disable all DSP so the server can handle processing.
-    const isVoice = mode === MicrophoneMode.VOICE_PROCESSING;
+    const isVoice    = mode === MicrophoneMode.VOICE_PROCESSING;
     const isSoftware = mode === MicrophoneMode.SOFTWARE_PROCESSING;
 
     const track = await createLocalAudioTrack({
-      echoCancellation: isVoice ? true : (isSoftware ? echoCancellation : false),
+      echoCancellation: isVoice || isSoftware,
       noiseSuppression: isVoice || isSoftware,
       autoGainControl:  isVoice || isSoftware,
     });

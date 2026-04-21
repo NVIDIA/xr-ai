@@ -149,6 +149,14 @@ export class StreamSession {
    * @throws {import('./StreamError.js').StreamError} `cameraRequiresConnection`
    *   if called while not connected.
    */
+  async startAudio(config) {
+    await this.#backend.startAudio(config);
+  }
+
+  async stopAudio() {
+    await this.#backend.stopAudio();
+  }
+
   async startCamera() {
     await this.#backend.startCamera();
   }

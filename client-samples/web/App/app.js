@@ -39,6 +39,7 @@ const model = {
   /** @type {StreamSession|null} */
   session:         null,
   connectionState: ConnectionState.DISCONNECTED,
+  isAudioActive:   false,
   isCameraActive:  false,
   /** @type {Array<{id: string, text: string, timestamp: Date}>} */
   receivedMessages: [],
@@ -112,6 +113,23 @@ function render() {
     connectBtn.textContent = 'Disconnect';
     connectBtn.className   = 'btn btn-destructive';
     connectBtn.disabled    = false;
+  }
+
+  // ── Audio ──────────────────────────────────────────────────────────────────
+  const audioBtn    = $('audio-btn');
+  const audioStatus = $('audio-status');
+
+  audioBtn.disabled = !isConnected;
+  if (model.isAudioActive) {
+    audioBtn.textContent     = 'Stop Microphone';
+    audioBtn.className       = 'btn btn-destructive';
+    audioStatus.textContent  = 'Live';
+    audioStatus.className    = 'status-text status-active';
+  } else {
+    audioBtn.textContent     = 'Start Microphone';
+    audioBtn.className       = 'btn btn-secondary';
+    audioStatus.textContent  = isConnected ? 'Idle' : 'Not connected';
+    audioStatus.className    = 'status-text status-idle';
   }
 
   // ── Camera ─────────────────────────────────────────────────────────────────
@@ -225,6 +243,7 @@ async function connect() {
   newSession.onConnectionStateChanged = (state) => {
     model.connectionState = state;
     if (state === ConnectionState.DISCONNECTED) {
+      model.isAudioActive  = false;
       model.isCameraActive = false;
     }
     render();
@@ -249,8 +268,8 @@ async function connect() {
   model.session = newSession;
 
   const sessionConfig = new SessionConfig({
-    audio:    new AudioConfig({ mode: model.audioMode }),
-    camera:   CameraConfig.disabled,   // camera off by default, user starts explicitly
+    audio:    new AudioConfig({ mode: MicrophoneMode.DISABLED }),  // user starts explicitly
+    camera:   CameraConfig.disabled,
     identity: model.identity,
   });
 
@@ -275,7 +294,28 @@ async function disconnect() {
   await model.session?.disconnect();
   model.session          = null;
   model.connectionState  = ConnectionState.DISCONNECTED;
+  model.isAudioActive    = false;
   model.isCameraActive   = false;
+  render();
+}
+
+async function startAudio() {
+  try {
+    await model.session?.startAudio(new AudioConfig({ mode: model.audioMode }));
+    model.isAudioActive = true;
+  } catch (err) {
+    showError(err instanceof StreamError ? err.message : String(err));
+  }
+  render();
+}
+
+async function stopAudio() {
+  try {
+    await model.session?.stopAudio();
+  } catch (err) {
+    showError(err instanceof StreamError ? err.message : String(err));
+  }
+  model.isAudioActive = false;
   render();
 }
 
@@ -365,6 +405,15 @@ function wireEvents() {
       connect();
     } else {
       disconnect();
+    }
+  });
+
+  // Audio toggle
+  $('audio-btn').addEventListener('click', () => {
+    if (model.isAudioActive) {
+      stopAudio();
+    } else {
+      startAudio();
     }
   });
 
