@@ -23,11 +23,14 @@ Register new message types at import time:
 
 from ._codec import decode, encode, register_decoder, register_encoder
 from ._connector import ConnectorEndpoint
-from ._hub import HubEndpoint, TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL, TOPIC_RETURN_AUDIO, TOPIC_RETURN_DATA
+from ._hub import (HubEndpoint,
+                   TOPIC_VIDEO, TOPIC_VIDEO_DATA,
+                   TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL,
+                   TOPIC_RETURN_AUDIO, TOPIC_RETURN_DATA)
 from ._processor import ProcessorEndpoint
 from ._shm import ShmRingBuffer, SlotView
 from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
-                     FrameSignal, MsgType, ParticipantEvent, PixelFormat)
+                     FrameData, FrameRequest, FrameSignal, MsgType, ParticipantEvent, PixelFormat)
 
 __all__ = [
     # endpoints
@@ -51,7 +54,12 @@ __all__ = [
     "ConnectorRegistration",
     "ControlMessage",
     "MsgType",
+    # data types
+    "FrameData",
+    "FrameRequest",
     # well-known topic prefixes
+    "TOPIC_VIDEO",
+    "TOPIC_VIDEO_DATA",
     "TOPIC_AUDIO",
     "TOPIC_DATA",
     "TOPIC_CONTROL",

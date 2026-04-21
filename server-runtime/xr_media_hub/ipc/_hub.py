@@ -38,7 +38,7 @@ import zmq.asyncio
 from ._codec import decode, encode
 from ._shm import ShmRingBuffer, SlotView
 from ._types import (AudioChunk, ConnectorRegistration, ControlMessage,
-                     DataMessage, MsgType, ParticipantEvent)
+                     DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent)
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +57,8 @@ ControlCallback     = Callable[[ControlMessage],    Awaitable[None]]
 #   b"data.alice.chat"          — alice's "chat" data channel only
 #   b"participant"              — join/leave events
 #   b"control"                  — hub control messages
+TOPIC_VIDEO        = b"video"       # FRAME_SIGNAL metadata (fires at full frame rate)
+TOPIC_VIDEO_DATA   = b"video_data"  # FRAME_DATA pixel response (on-demand only)
 TOPIC_AUDIO        = b"audio"
 TOPIC_DATA         = b"data"
 TOPIC_CONTROL      = b"control"
@@ -87,6 +89,10 @@ class HubEndpoint:
         self._ring_registry: dict[str, ShmRingBuffer] = {}
         # participant_id → connector_id (updated on PARTICIPANT_EVENT)
         self._participant_connector: dict[str, str] = {}
+        # (participant_id, track_id) → (ring, SlotView) of the latest frame.
+        # The slot is held open (not released) until the next frame for the same
+        # track arrives, so pixels can be copied on demand without eager allocation.
+        self._latest_slots: dict[tuple[str, str], tuple[ShmRingBuffer, SlotView]] = {}
 
         self._frame_cbs:       list[FrameCallback]       = []
         self._audio_cbs:       list[AudioCallback]       = []
@@ -173,12 +179,43 @@ class HubEndpoint:
             if ring is None:
                 log.warning("Ring buffer for connector %s not found — dropped", connector_id)
                 return
+
+            key = (msg.participant_id, msg.track_id)
+
+            # Release the previously held slot for this track before taking the new one.
+            prev = self._latest_slots.pop(key, None)
+            if prev:
+                prev[0].release_slot(prev[1].signal.slot)
+
+            # Read and hold the new slot — NOT released until the next frame
+            # arrives or the hub shuts down, so pixels remain readable on demand.
             view = ring.read_slot(msg)
-            try:
-                for cb in self._frame_cbs:
-                    await cb(view)
-            finally:
-                ring.release_slot(msg.slot)
+            self._latest_slots[key] = (ring, view)
+
+            # Call hub-local frame callbacks while the slot is still held.
+            for cb in self._frame_cbs:
+                await cb(view)
+
+            # Publish metadata so processors know a frame arrived.
+            topic = f"video.{msg.participant_id}.{msg.track_id}".encode()
+            await self._pub.send_multipart([topic, encode(MsgType.FRAME_SIGNAL, msg)])
+
+        elif type_id == MsgType.FRAME_REQUEST:
+            key = (msg.participant_id, msg.track_id)
+            held = self._latest_slots.get(key)
+            if held is None:
+                log.debug("FRAME_REQUEST for %s/%s — no frame held", msg.participant_id, msg.track_id)
+                return
+            _, view = held
+            sig = view.signal
+            frame_data = FrameData(
+                seq=sig.seq, pts_us=sig.pts_us,
+                width=sig.width, height=sig.height, fmt=sig.fmt,
+                data=bytes(view.data[:sig.data_sz]),
+                participant_id=sig.participant_id, track_id=sig.track_id,
+            )
+            topic = f"video_data.{msg.participant_id}.{msg.track_id}".encode()
+            await self._pub.send_multipart([topic, encode(MsgType.FRAME_DATA, frame_data)])
 
         elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
@@ -235,6 +272,9 @@ class HubEndpoint:
     def close(self) -> None:
         self._pull.close(linger=0)
         self._pub.close(linger=0)
+        for ring, view in self._latest_slots.values():
+            ring.release_slot(view.signal.slot)
+        self._latest_slots.clear()
         for ring in self._ring_registry.values():
             ring.close()
         self._ring_registry.clear()

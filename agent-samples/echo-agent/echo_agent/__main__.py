@@ -23,7 +23,7 @@ import time
 from collections import defaultdict
 
 from xr_media_hub.ipc import ProcessorEndpoint
-from xr_media_hub.ipc._types import AudioChunk, DataMessage, ParticipantEvent
+from xr_media_hub.ipc._types import AudioChunk, DataMessage, FrameSignal, ParticipantEvent
 from xr_ai_launcher import HubLauncher
 
 log = logging.getLogger("echo_agent")
@@ -47,11 +47,13 @@ class EchoAgent:
 
     def __init__(self) -> None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
+        self._ep.on_frame(self._on_frame)
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
         self._ep.on_participant(self._on_participant)
 
         # participant_id → counter value
+        self._video_frames:  dict[str, int]   = defaultdict(int)
         self._audio_chunks:  dict[str, int]   = defaultdict(int)
         self._data_msgs:     dict[str, int]   = defaultdict(int)
         self._audio_bytes:   dict[str, int]   = defaultdict(int)
@@ -61,6 +63,16 @@ class EchoAgent:
         self._start_time = time.monotonic()
 
     # ── callbacks ─────────────────────────────────────────────────────────────
+
+    async def _on_frame(self, signal: FrameSignal) -> None:
+        pid = signal.participant_id
+        self._video_frames[pid] += 1
+        # Sample pixel data at ~1 fps (every 30th frame) to show request_frame usage.
+        if self._video_frames[pid] % 30 == 0:
+            frame = await self._ep.request_frame(signal)
+            if frame:
+                log.debug("frame sample: %s  %dx%d  %d bytes",
+                          pid, frame.width, frame.height, len(frame.data))
 
     async def _on_audio(self, chunk: AudioChunk) -> None:
         pid = chunk.participant_id
@@ -84,6 +96,7 @@ class EchoAgent:
         else:
             log.info("participant left: %r", pid)
             self._join_time.pop(pid, None)
+            self._video_frames.pop(pid, None)
             self._audio_chunks.pop(pid, None)
             self._data_msgs.pop(pid, None)
             self._audio_bytes.pop(pid, None)
@@ -99,6 +112,7 @@ class EchoAgent:
                 stats = {
                     "agent": "echo-agent",
                     "participant": pid,
+                    "video_frames_received": self._video_frames[pid],
                     "audio_chunks_received": self._audio_chunks[pid],
                     "data_msgs_received": self._data_msgs[pid],
                     "audio_bytes_received": self._audio_bytes[pid],
