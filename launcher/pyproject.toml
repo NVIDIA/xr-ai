@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-launcher"
+version = "0.1.0"
+requires-python = ">=3.11"
+# Intentionally no runtime dependencies — stdlib only.
+# This package manages other processes; it must not pull in their dep chains.
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_launcher"]

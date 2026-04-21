@@ -1,14 +1,15 @@
 """
 Echo agent for XR-Media-Hub.
 
-Connects to the hub via IPC, echoes every audio chunk back to the originating
-participant, and sends a JSON stats ping to each connected participant every 5
-seconds.
+Starts the hub as a subprocess, connects to it via IPC, echoes every audio
+chunk back to the originating participant, and sends a JSON stats ping to each
+connected participant every 5 seconds.
 
-How to run (from agent-samples/echo-agent/):
+How to run (from agent-samples/echo-agent/ or xr-ai/):
     uv run echo_agent
 
 What you should see:
+    - [hub] prefixed log lines from the hub process.
     - Stats lines printed every 5 s showing audio chunk / data message counters.
     - Clients receive JSON pings on their data channel (topic "agent.stats").
 """
@@ -23,6 +24,7 @@ from collections import defaultdict
 
 from xr_media_hub.ipc import ProcessorEndpoint
 from xr_media_hub.ipc._types import AudioChunk, DataMessage, ParticipantEvent
+from xr_ai_launcher import HubLauncher
 
 log = logging.getLogger("echo_agent")
 
@@ -131,17 +133,19 @@ async def main() -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
-    agent = EchoAgent()
+    async with HubLauncher():
+        agent = EchoAgent()
 
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, agent.shutdown)
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, agent.shutdown)
 
-    log.info("echo-agent starting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
-    try:
-        await agent.run()
-    finally:
-        agent.shutdown()
+        log.info("echo-agent starting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
+        try:
+            await agent.run()
+        finally:
+            agent.shutdown()
+
     log.info("echo-agent stopped")
 
 
