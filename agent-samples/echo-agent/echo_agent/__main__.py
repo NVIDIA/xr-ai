@@ -21,7 +21,7 @@ import signal
 import time
 from collections import defaultdict
 
-from xr_media_hub.ipc import AgentEndpoint
+from xr_media_hub.ipc import ProcessorEndpoint
 from xr_media_hub.ipc._types import AudioChunk, DataMessage, ParticipantEvent
 
 log = logging.getLogger("echo_agent")
@@ -44,7 +44,7 @@ class EchoAgent:
     """
 
     def __init__(self) -> None:
-        self._ep = AgentEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
+        self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
         self._ep.on_participant(self._on_participant)
@@ -92,7 +92,8 @@ class EchoAgent:
         while True:
             await asyncio.sleep(_STATS_INTERVAL_S)
             now = time.monotonic()
-            for pid, joined_at in list(self._join_time.items()):
+            for pid in self._ep.connected_participants:
+                joined_at = self._join_time.get(pid, now)
                 stats = {
                     "agent": "echo-agent",
                     "participant": pid,
