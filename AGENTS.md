@@ -32,8 +32,10 @@ processes automatically. No separate server launch step.
 
 1. Create `agent-samples/<name>/` with its own `pyproject.toml`.
 2. Add `xr-ai-launcher @ ../../launcher` as a dependency.
-3. Wrap `main()` with `async with HubLauncher():` to start the full stack.
-4. Update `README.md` — architecture table and quickstart section.
+3. Add `[tool.hatch.metadata] allow-direct-references = true` — hatchling requires
+   this for any path (`@ ../..`) dependency.
+4. Wrap `main()` with `async with HubLauncher():` to start the full stack.
+5. Update `README.md` — architecture table and quickstart section.
 
 ## Adding a new managed process type
 
