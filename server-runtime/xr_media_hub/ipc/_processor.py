@@ -1,9 +1,9 @@
 """
 Processor-side IPC endpoint (subscriber + publisher).
 
-Connects to the hub's PUB socket to receive real-time audio, data, and
-participant events. Also connects a PUSH socket to send RETURN_DATA and
-RETURN_AUDIO back through the hub to connected clients.
+Connects to the hub's PUB socket to receive real-time video signals, audio,
+data, and participant events. Also connects a PUSH socket to send RETURN_DATA,
+RETURN_AUDIO, and FRAME_REQUEST back to the hub.
 
 Works for any downstream processing workload — analytics, ML inference,
 transcription, echo, recording — not just agentic pipelines.
@@ -12,16 +12,23 @@ A single ProcessorEndpoint instance serves all participants simultaneously.
 It maintains its own connected-participant set so processors always know
 who is present without having to track participant events manually.
 
+Video frame access is two-step:
+  1. on_frame callback receives FrameSignal metadata (always, at full rate).
+  2. Call await ep.request_frame(signal) to pull pixel data on demand.
+     The hub serves from a small cache; returns None if the frame has expired.
+
     ep = ProcessorEndpoint(
         sub_addr="ipc:///tmp/xr_hub_pub",
         push_addr="ipc:///tmp/xr_hub_in",
     )
+    ep.on_frame(handle_frame_signal)   # metadata — fires at full frame rate
     ep.on_audio(my_audio_handler)
     ep.on_data(my_data_handler)
     await ep.run()
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Awaitable, Callable
 
@@ -29,29 +36,38 @@ import zmq
 import zmq.asyncio
 
 from ._codec import decode, encode
-from ._types import AudioChunk, DataMessage, MsgType, ParticipantEvent
+from ._types import (AudioChunk, DataMessage, FrameData, FrameRequest,
+                     FrameSignal, MsgType, ParticipantEvent)
 
 log = logging.getLogger(__name__)
 
+FrameSignalCallback = Callable[[FrameSignal], Awaitable[None]]
+FrameDataCallback   = Callable[[FrameData],   Awaitable[None]]
 AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
 DataCallback        = Callable[[DataMessage],      Awaitable[None]]
 ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
 
-_DEFAULT_TOPICS: tuple[bytes, ...] = (b"audio", b"data", b"participant", b"control")
+_DEFAULT_TOPICS: tuple[bytes, ...] = (
+    b"video", b"video_data", b"audio", b"data", b"participant", b"control",
+)
+
+_FRAME_REQUEST_TIMEOUT = 1.0  # seconds before request_frame() gives up
 
 
 class ProcessorEndpoint:
     """
     Downstream IPC endpoint for data processors.
 
-    Receives audio, data, and participant events from the hub. Maintains a
-    live set of connected participants updated automatically as join/leave
-    events arrive. Can send return data and audio back to clients via the hub.
+    Receives video signals, audio, data, and participant events from the hub.
+    Maintains a live set of connected participants updated automatically as
+    join/leave events arrive. Can send return data, audio, and frame requests
+    back to the hub via the PUSH socket.
 
         ep = ProcessorEndpoint(
             sub_addr="ipc:///tmp/xr_hub_pub",
             push_addr="ipc:///tmp/xr_hub_in",
         )
+        ep.on_frame(handle_frame_signal)
         ep.on_audio(handle_audio)
         ep.on_data(handle_data)
         ep.on_participant(handle_participant)  # optional — set is auto-maintained
@@ -71,9 +87,17 @@ class ProcessorEndpoint:
 
         self._participants: set[str] = set()
 
+        self._frame_cbs:       list[FrameSignalCallback] = []
+        self._frame_data_cbs:  list[FrameDataCallback]   = []
         self._audio_cbs:       list[AudioCallback]       = []
         self._data_cbs:        list[DataCallback]        = []
         self._participant_cbs: list[ParticipantCallback] = []
+
+        # Pending request_frame() calls keyed by (participant_id, track_id).
+        # Each entry is a list of futures — all resolved when FRAME_DATA arrives.
+        # Multiple concurrent requests for the same track share one FRAME_REQUEST.
+        self._pending: dict[tuple[str, str], list[asyncio.Future[FrameData]]] = {}
+
         self._running = False
 
     # ── participant roster ────────────────────────────────────────────────────
@@ -85,6 +109,8 @@ class ProcessorEndpoint:
 
     # ── callback registration ─────────────────────────────────────────────────
 
+    def on_frame(self,       cb: FrameSignalCallback) -> None: self._frame_cbs.append(cb)
+    def on_frame_data(self,  cb: FrameDataCallback)   -> None: self._frame_data_cbs.append(cb)
     def on_audio(self,       cb: AudioCallback)       -> None: self._audio_cbs.append(cb)
     def on_data(self,        cb: DataCallback)        -> None: self._data_cbs.append(cb)
     def on_participant(self, cb: ParticipantCallback) -> None: self._participant_cbs.append(cb)
@@ -96,6 +122,45 @@ class ProcessorEndpoint:
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
         await self._push.send(encode(MsgType.RETURN_AUDIO, chunk))
+
+    async def request_frame(self, signal: FrameSignal,
+                            timeout: float = _FRAME_REQUEST_TIMEOUT) -> FrameData | None:
+        """
+        Request a pixel-data snapshot of the latest frame for this participant/track.
+
+        The hub holds the most recent SHM slot and copies pixels only when a
+        request arrives — no frame data is sent unless explicitly requested.
+
+        Multiple concurrent calls for the same (participant, track) are coalesced:
+        only one FRAME_REQUEST is sent and all callers receive the same response.
+
+        Returns None if the hub has no frame for this track yet, or on timeout.
+        """
+        key = (signal.participant_id, signal.track_id)
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[FrameData] = loop.create_future()
+
+        if key in self._pending:
+            # A request is already in-flight — piggyback on it.
+            self._pending[key].append(fut)
+        else:
+            self._pending[key] = [fut]
+            await self._push.send(encode(MsgType.FRAME_REQUEST, FrameRequest(
+                participant_id=signal.participant_id,
+                track_id=signal.track_id,
+            )))
+
+        try:
+            return await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
+        except asyncio.TimeoutError:
+            waiters = self._pending.get(key, [])
+            if fut in waiters:
+                waiters.remove(fut)
+            if not waiters:
+                self._pending.pop(key, None)
+            log.debug("request_frame timed out: participant=%s track=%s",
+                      signal.participant_id, signal.track_id)
+            return None
 
     # ── receive loop ──────────────────────────────────────────────────────────
 
@@ -117,7 +182,18 @@ class ProcessorEndpoint:
                 log.exception("Error dispatching message")
 
     async def _dispatch(self, type_id: int, msg) -> None:
-        if type_id == MsgType.AUDIO_CHUNK:
+        if type_id == MsgType.FRAME_SIGNAL:
+            for cb in self._frame_cbs:
+                await cb(msg)
+        elif type_id == MsgType.FRAME_DATA:
+            key = (msg.participant_id, msg.track_id)
+            waiters = self._pending.pop(key, [])
+            for fut in waiters:
+                if not fut.done():
+                    fut.set_result(msg)
+            for cb in self._frame_data_cbs:
+                await cb(msg)
+        elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
                 await cb(msg)
         elif type_id == MsgType.DATA_MESSAGE:

@@ -26,6 +26,9 @@ class MsgType(IntEnum):
     # Bidirectional lifecycle events
     PARTICIPANT_EVENT   = 7  # participant joined or left the LiveKit room
     CONNECTOR_REGISTER  = 8  # connector announces itself + its shm name to the hub
+    # Frame pixel request/response (processor → hub → processor)
+    FRAME_REQUEST = 9   # processor requests pixel data for a specific frame by seq
+    FRAME_DATA    = 10  # hub delivers pixel data to requesting processor
     # Add new types here; existing code is unaffected.
 
 
@@ -83,6 +86,33 @@ class ConnectorRegistration:
     """Sent by a connector on startup so the hub can open its ring buffer."""
     connector_id: str
     shm_name:     str
+
+
+@dataclass(slots=True)
+class FrameRequest:
+    """Sent by a processor to request a copy of the current latest frame."""
+    participant_id: str
+    track_id: str
+
+
+@dataclass(slots=True)
+class FrameData:
+    """
+    Pixel data for the latest frame, published by the hub on `video_data.<pid>.<track>`.
+
+    The hub holds one SHM slot per (participant, track) — always the most recent
+    frame. Processors receive FrameSignal metadata at full rate via on_frame(),
+    then call ProcessorEndpoint.request_frame() to get a pixel copy at their own
+    sampling rate. The hub only copies pixels when a request arrives.
+    """
+    seq:            int
+    pts_us:         int
+    width:          int
+    height:         int
+    fmt:            PixelFormat
+    data:           bytes          # raw pixels in the format specified by fmt
+    participant_id: str = "default"
+    track_id:       str = "default"
 
 
 @dataclass(slots=True)
