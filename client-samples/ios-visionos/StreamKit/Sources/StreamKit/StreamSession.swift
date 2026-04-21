@@ -53,6 +53,10 @@ public final class StreamSession: ObservableObject {
     /// Called on the main actor when the connection state changes.
     public var onConnectionStateChanged: ((ConnectionState) -> Void)?
 
+    /// Called on the main actor when audio capture fails non-fatally.
+    /// The session remains connected; data and camera are unaffected.
+    public var onAudioWarning: ((Error) -> Void)?
+
     // MARK: - Private
 
     private var backend: any StreamingBackend
@@ -127,6 +131,11 @@ public final class StreamSession: ObservableObject {
         backend.onDataReceived = { [weak self] data in
             Task { @MainActor [weak self] in
                 self?.onDataReceived?(data)
+            }
+        }
+        backend.onAudioWarning = { [weak self] error in
+            Task { @MainActor [weak self] in
+                self?.onAudioWarning?(error)
             }
         }
     }

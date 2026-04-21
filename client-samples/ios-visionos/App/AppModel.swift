@@ -44,24 +44,11 @@ final class AppModel {
         receivedMessages.removeAll()
 
         let portNumber = Int(port) ?? 7880
-
-        // Mirror web client behaviour: if neither token nor tokenServerURL is
-        // provided, fall back to http://<host>:8080/token (the server's built-in
-        // token endpoint served alongside the web client).
-        let effectiveTokenURL: URL?
-        if !tokenServerURL.isEmpty {
-            effectiveTokenURL = URL(string: tokenServerURL)
-        } else if token.isEmpty {
-            effectiveTokenURL = URL(string: "http://\(host):8080/token")
-        } else {
-            effectiveTokenURL = nil
-        }
-
         let lkConfig = LiveKitConfig(
             host: host,
             port: portNumber,
             token: token.isEmpty ? nil : token,
-            tokenURL: effectiveTokenURL
+            tokenURL: URL(string: tokenServerURL)
         )
 
         let newSession = StreamSession(.liveKit(lkConfig))
@@ -69,12 +56,16 @@ final class AppModel {
         // Wire callbacks before connecting.
         newSession.onConnectionStateChanged = { [weak self] state in
             self?.connectionState = state
-            // Camera is no longer active after disconnect.
             if state == .disconnected { self?.isCameraActive = false }
         }
         newSession.onDataReceived = { [weak self] data in
             let text = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
             self?.receivedMessages.insert(ReceivedMessage(text: text), at: 0)
+        }
+        newSession.onAudioWarning = { [weak self] error in
+            // Audio is unavailable (e.g. held by browser on the same machine).
+            // Session stays connected — show a non-blocking warning.
+            self?.lastError = "Audio unavailable: \(error.localizedDescription)"
         }
 
         session = newSession
@@ -88,6 +79,7 @@ final class AppModel {
             try await newSession.connect(config: config)
         } catch {
             lastError = error.localizedDescription
+            await newSession.disconnect()  // ensure server is notified before dropping the session
             session = nil
         }
     }

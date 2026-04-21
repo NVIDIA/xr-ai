@@ -21,6 +21,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
 
     public var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
     public var onDataReceived: (@Sendable (Data) -> Void)?
+    public var onAudioWarning: (@Sendable (Error) -> Void)?
 
     // MARK: Private state
 
@@ -72,11 +73,18 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
         try await room.connect(url: url, token: token, roomOptions: roomOptions)
 
         // Publish microphone unless disabled.
+        // Audio publication is best-effort: if the audio device is held by another app
+        // (e.g. a browser on the same machine), we surface a warning but keep the session
+        // alive — the WebRTC connection, data channel, and camera are unaffected.
         if sessionConfig.audio.mode != .disabled {
-            try await room.localParticipant.setMicrophone(
-                enabled: true,
-                captureOptions: audioCaptureOptions
-            )
+            do {
+                try await room.localParticipant.setMicrophone(
+                    enabled: true,
+                    captureOptions: audioCaptureOptions
+                )
+            } catch {
+                onAudioWarning?(error)
+            }
         }
     }
 
