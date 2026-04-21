@@ -85,6 +85,16 @@ The launcher will eventually start MCP servers, CloudXR runtime, and other
 components — keeping it separate keeps dependency chains lean and the boundary
 clean. `launcher/` has zero runtime dependencies (stdlib only).
 
+### 2026-04-21 — NVDEC/NVENC required; OpenH264 must not be used
+
+`LiveKitConnector.start()` calls `require_nvidia_video_codecs()` before doing
+anything else. It checks for `libnvcuvid.so` (NVDEC) and `libnvidia-encode.so`
+(NVENC) via ctypes and raises `RuntimeError` if either is absent (Linux only).
+**Why:** `livekit-rtc` bundles `libwebrtc` which includes OpenH264 as a software
+fallback. OpenH264 is royalty-bearing for end users and must not ship in this
+product. The guard prevents silent fallback at the cost of a hard startup failure.
+In Docker: `--gpus all` or `--device /dev/nvidia*` must be passed.
+
 ### 2026-04-21 — Video frame delivery: metadata push, pixel pull
 
 Processors receive `FrameSignal` metadata at full frame rate via `on_frame()`.
