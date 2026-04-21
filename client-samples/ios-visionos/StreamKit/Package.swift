@@ -20,7 +20,7 @@ let package = Package(
         .target(
             name: "StreamKit",
             dependencies: [
-                .product(name: "LiveKit", package: "livekit-client-sdk-swift"),
+                .product(name: "LiveKit", package: "client-sdk-swift"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

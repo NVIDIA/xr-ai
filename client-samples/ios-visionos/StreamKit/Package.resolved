@@ -1,6 +1,15 @@
 {
-  "originHash" : "44c092fef08bb0cd5e7dc9192bc7e8fd0d4d40551d2f55c2b8505df1cab5ccc8",
+  "originHash" : "c603ff8e74756595b6bdbf95b011a031feaa3a11e1e305cdfda32ecd7e35bda0",
   "pins" : [
+    {
+      "identity" : "client-sdk-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/livekit/client-sdk-swift",
+      "state" : {
+        "revision" : "f70911172031fe40042266ed3bc35171224c2ef0",
+        "version" : "2.13.0"
+      }
+    },
     {
       "identity" : "livekit-uniffi-xcframework",
       "kind" : "remoteSourceControl",
