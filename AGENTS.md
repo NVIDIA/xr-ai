@@ -31,11 +31,19 @@ processes automatically. No separate server launch step.
 ## Adding a new sample
 
 1. Create `agent-samples/<name>/` with its own `pyproject.toml`.
-2. Add `xr-ai-launcher @ ../../launcher` as a dependency.
-3. Add `[tool.hatch.metadata] allow-direct-references = true` — hatchling requires
-   this for any path (`@ ../..`) dependency.
-4. Wrap `main()` with `async with HubLauncher():` to start the full stack.
-5. Update `README.md` — architecture table and quickstart section.
+2. Declare local dependencies by name in `[project.dependencies]` and resolve
+   them with `[tool.uv.sources]` — **not** with inline `@ ../../path` syntax,
+   which breaks at wheel build time:
+   ```toml
+   [project]
+   dependencies = ["xr-media-hub", "xr-ai-launcher"]
+
+   [tool.uv.sources]
+   xr-media-hub  = { path = "../../server-runtime", editable = true }
+   xr-ai-launcher = { path = "../../launcher",      editable = true }
+   ```
+3. Wrap `main()` with `async with HubLauncher():` to start the full stack.
+4. Update `README.md` — architecture table and quickstart section.
 
 ## Adding a new managed process type
 
