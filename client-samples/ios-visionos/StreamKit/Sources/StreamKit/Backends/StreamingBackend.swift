@@ -14,7 +14,21 @@ import Foundation
 /// The contract that every networking backend must satisfy.
 ///
 /// ``StreamSession`` delegates all network operations to an object conforming to this
-/// protocol, so the call-site never depends on a specific transport technology.
+/// protocol. The call-site never depends on a specific transport technology.
+///
+/// ## Lifecycle
+///
+/// ```
+/// connect()            → WebRTC peer connection + data channel only
+/// startAudio(config:)  → microphone capture + publish  (independent, throws on failure)
+/// startCamera(config:) → camera capture + publish      (independent, throws on failure)
+/// send(_:reliable:)    → data channel message
+/// stopAudio()          → stop microphone
+/// stopCamera()         → stop camera
+/// disconnect()         → tear down everything
+/// ```
+///
+/// Audio and camera failures never affect the connection itself.
 ///
 /// ## Implementing a custom backend
 ///
@@ -25,17 +39,16 @@ import Foundation
 ///     var onDataReceived: (@Sendable (Data) -> Void)?
 ///
 ///     func connect(config: SessionConfig) async throws {
-///         // establish connection using config.roomName / config.identity …
 ///         onConnectionStateChanged?(.connected)
 ///     }
-///
 ///     func disconnect() async { … }
-///     func startCamera() async throws { … }
+///     func startAudio(config: AudioConfig) async throws { … }
+///     func stopAudio() async throws { … }
+///     func startCamera(config: CameraConfig) async throws { … }
 ///     func stopCamera() async throws { … }
 ///     func send(_ data: Data, reliable: Bool) async throws { … }
 /// }
 ///
-/// // Then:
 /// let session = StreamSession(backend: MyBackend())
 /// ```
 public protocol StreamingBackend: AnyObject, Sendable {
@@ -51,31 +64,34 @@ public protocol StreamingBackend: AnyObject, Sendable {
     /// Fired when binary data arrives from the remote end.
     var onDataReceived: (@Sendable (Data) -> Void)? { get set }
 
-    /// Fired when audio capture fails non-fatally (e.g. device held by another app).
-    /// The session remains connected; data channel and camera are unaffected.
-    var onAudioWarning: (@Sendable (Error) -> Void)? { get set }
+    // MARK: - Connection
 
-    // MARK: - Lifecycle
-
-    /// Establish a connection using the provided session configuration.
-    ///
-    /// - Parameter config: Room/participant metadata and media settings.
-    ///   Network endpoint details are supplied at backend-construction time
-    ///   (see ``BackendConfiguration``).
+    /// Establish a WebRTC peer connection and data channel.
+    /// Does **not** start audio or camera capture.
     func connect(config: SessionConfig) async throws
 
     /// Cleanly disconnect and release all resources.
     func disconnect() async
 
-    // MARK: - Media
+    // MARK: - Audio
 
-    /// Begin capturing the local camera and streaming it to remote participants.
+    /// Begin microphone capture and publish an audio track.
     ///
-    /// - Note: On **visionOS** this requires an immersive space to already be open
-    ///   in your app. The backend manages the ARKit session internally.
-    func startCamera() async throws
+    /// Throws if the audio device is unavailable. Does not affect the connection.
+    func startAudio(config: AudioConfig) async throws
 
-    /// Stop camera capture and streaming.
+    /// Stop microphone capture.
+    func stopAudio() async throws
+
+    // MARK: - Camera
+
+    /// Begin camera capture and publish a video track.
+    ///
+    /// On **visionOS** an immersive space must already be open.
+    /// Throws if the camera is unavailable. Does not affect the connection.
+    func startCamera(config: CameraConfig) async throws
+
+    /// Stop camera capture.
     func stopCamera() async throws
 
     // MARK: - Data channel
@@ -83,9 +99,7 @@ public protocol StreamingBackend: AnyObject, Sendable {
     /// Send binary data to remote participants.
     ///
     /// - Parameters:
-    ///   - data: Payload bytes. Keep individual messages under the transport's MTU
-    ///     (15 KB for LiveKit's WebRTC data channel).
+    ///   - data: Payload bytes.
     ///   - reliable: `true` for ordered, guaranteed delivery (default).
-    ///     `false` for low-latency best-effort delivery.
     func send(_ data: Data, reliable: Bool) async throws
 }

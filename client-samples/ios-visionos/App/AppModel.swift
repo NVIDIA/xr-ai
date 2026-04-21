@@ -25,7 +25,7 @@ final class AppModel {
     var tokenServerURL: String = ""
     var identity: String = "ios-client"
 
-    // MARK: - Media settings
+    // MARK: - Audio settings
 
     var audioMode: AudioConfig.MicrophoneMode = .voiceProcessing
 
@@ -33,6 +33,7 @@ final class AppModel {
 
     var session: StreamSession?
     var connectionState: ConnectionState = .disconnected
+    var isAudioActive = false
     var isCameraActive = false
     var receivedMessages: [ReceivedMessage] = []
     var lastError: String?
@@ -53,33 +54,25 @@ final class AppModel {
 
         let newSession = StreamSession(.liveKit(lkConfig))
 
-        // Wire callbacks before connecting.
         newSession.onConnectionStateChanged = { [weak self] state in
             self?.connectionState = state
-            if state == .disconnected { self?.isCameraActive = false }
+            if state == .disconnected {
+                self?.isAudioActive = false
+                self?.isCameraActive = false
+            }
         }
         newSession.onDataReceived = { [weak self] data in
             let text = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
             self?.receivedMessages.insert(ReceivedMessage(text: text), at: 0)
         }
-        newSession.onAudioWarning = { [weak self] error in
-            // Audio is unavailable (e.g. held by browser on the same machine).
-            // Session stays connected — show a non-blocking warning.
-            self?.lastError = "Audio unavailable: \(error.localizedDescription)"
-        }
 
         session = newSession
 
-        let config = SessionConfig(
-            audio: AudioConfig(mode: audioMode),
-            identity: identity
-        )
-
         do {
-            try await newSession.connect(config: config)
+            try await newSession.connect(config: SessionConfig(identity: identity))
         } catch {
             lastError = error.localizedDescription
-            await newSession.disconnect()  // ensure server is notified before dropping the session
+            await newSession.disconnect()
             session = nil
         }
     }
@@ -88,7 +81,28 @@ final class AppModel {
         await session?.disconnect()
         session = nil
         connectionState = .disconnected
+        isAudioActive = false
         isCameraActive = false
+    }
+
+    // MARK: - Audio
+
+    func startAudio() async {
+        do {
+            try await session?.startAudio(config: AudioConfig(mode: audioMode))
+            isAudioActive = true
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func stopAudio() async {
+        do {
+            try await session?.stopAudio()
+        } catch {
+            lastError = error.localizedDescription
+        }
+        isAudioActive = false
     }
 
     // MARK: - Camera

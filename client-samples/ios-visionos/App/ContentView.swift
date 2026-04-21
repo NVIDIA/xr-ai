@@ -92,36 +92,71 @@ struct ContentView: View {
     private var mediaSection: some View {
         Section("Media") {
 
-            // visionOS: immersive space toggle must come before camera
+            // visionOS: immersive space must be open before camera can start
             #if os(visionOS)
             LabeledContent("Immersive Space") {
                 immersiveSpaceToggle
             }
             #endif
 
-            // Camera
-            if model.connectionState == .connected {
-                if model.isCameraActive {
-                    Button("Stop Camera", role: .destructive) {
-                        Task { await model.stopCamera() }
-                    }
-                } else {
-                    #if os(visionOS)
-                    Button("Start Camera") {
-                        Task { await model.startCamera() }
-                    }
-                    .disabled(!model.immersiveSpaceIsOpen)
-                    .help(model.immersiveSpaceIsOpen ? "" : "Open the immersive space first.")
-                    #else
-                    Button("Start Camera") {
-                        Task { await model.startCamera() }
-                    }
-                    #endif
-                }
+            // Audio
+            audioRow
 
-                LabeledContent("Camera") {
+            // Camera
+            cameraRow
+        }
+    }
+
+    @ViewBuilder
+    private var audioRow: some View {
+        if model.connectionState == .connected {
+            LabeledContent("Microphone") {
+                HStack {
+                    Text(model.isAudioActive ? "Streaming" : "Idle")
+                        .foregroundStyle(model.isAudioActive ? .green : .secondary)
+                    if model.isAudioActive {
+                        Button("Stop", role: .destructive) {
+                            Task { await model.stopAudio() }
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        Button("Start") {
+                            Task { await model.startAudio() }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cameraRow: some View {
+        if model.connectionState == .connected {
+            LabeledContent("Camera") {
+                HStack {
                     Text(model.isCameraActive ? "Streaming" : "Idle")
                         .foregroundStyle(model.isCameraActive ? .green : .secondary)
+                    if model.isCameraActive {
+                        Button("Stop", role: .destructive) {
+                            Task { await model.stopCamera() }
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        #if os(visionOS)
+                        Button("Start") {
+                            Task { await model.startCamera() }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!model.immersiveSpaceIsOpen)
+                        .help(model.immersiveSpaceIsOpen ? "" : "Open the immersive space first.")
+                        #else
+                        Button("Start") {
+                            Task { await model.startCamera() }
+                        }
+                        .buttonStyle(.bordered)
+                        #endif
+                    }
                 }
             }
         }

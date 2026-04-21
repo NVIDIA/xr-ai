@@ -21,14 +21,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
 
     public var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
     public var onDataReceived: (@Sendable (Data) -> Void)?
-    public var onAudioWarning: (@Sendable (Error) -> Void)?
 
     // MARK: Private state
 
     private let config: LiveKitConfig
     private var room: Room?
-    private var videoPublication: LocalTrackPublication?
     private var sessionConfig: SessionConfig = .default
+    private var videoPublication: LocalTrackPublication?
 
     // MARK: - Init
 
@@ -38,10 +37,12 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
 
     // MARK: - StreamingBackend: connect / disconnect
 
+    /// Establishes the WebRTC peer connection and data channel only.
+    /// Audio and camera are not started — call ``startAudio(config:)`` and
+    /// ``startCamera(config:)`` explicitly after connecting.
     public func connect(config sessionConfig: SessionConfig) async throws {
         self.sessionConfig = sessionConfig
 
-        // Tear down any existing room.
         await tearDown()
 
         guard !config.host.isEmpty else {
@@ -55,7 +56,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
         if let t = config.token, !t.isEmpty {
             token = t
         } else if let tokenURL = config.tokenURL {
-            token = try await Self.fetchToken(from: tokenURL, config: sessionConfig)
+            token = try await Self.fetchToken(from: tokenURL, identity: sessionConfig.identity)
         } else {
             throw StreamError.missingToken
         }
@@ -64,37 +65,35 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
         self.room = room
         room.delegates.add(delegate: self)
 
-        let audioCaptureOptions = AudioCaptureOptions(from: sessionConfig.audio)
-        let roomOptions = RoomOptions(
-            defaultAudioCaptureOptions: audioCaptureOptions,
-            stopLocalTrackOnUnpublish: true
-        )
-
+        let roomOptions = RoomOptions(stopLocalTrackOnUnpublish: true)
         try await room.connect(url: url, token: token, roomOptions: roomOptions)
-
-        // Publish microphone unless disabled.
-        // Audio publication is best-effort: if the audio device is held by another app
-        // (e.g. a browser on the same machine), we surface a warning but keep the session
-        // alive — the WebRTC connection, data channel, and camera are unaffected.
-        if sessionConfig.audio.mode != .disabled {
-            do {
-                try await room.localParticipant.setMicrophone(
-                    enabled: true,
-                    captureOptions: audioCaptureOptions
-                )
-            } catch {
-                onAudioWarning?(error)
-            }
-        }
     }
 
     public func disconnect() async {
         await tearDown()
     }
 
+    // MARK: - StreamingBackend: audio
+
+    public func startAudio(config: AudioConfig) async throws {
+        guard let room, room.connectionState == .connected else {
+            throw StreamError.notConnected
+        }
+        let captureOptions = AudioCaptureOptions(from: config)
+        try await room.localParticipant.setMicrophone(
+            enabled: true,
+            captureOptions: captureOptions
+        )
+    }
+
+    public func stopAudio() async throws {
+        guard let room else { return }
+        try await room.localParticipant.setMicrophone(enabled: false)
+    }
+
     // MARK: - StreamingBackend: camera
 
-    public func startCamera() async throws {
+    public func startCamera(config: CameraConfig) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
@@ -106,7 +105,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
         #if os(visionOS)
         let track = makeVisionOSTrack()
         #else
-        let track = makeIOSTrack()
+        let track = makeIOSTrack(config: config)
         #endif
 
         videoPublication = try await room.localParticipant.publish(videoTrack: track)
@@ -144,24 +143,23 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
     #if os(visionOS)
     private func makeVisionOSTrack() -> LocalVideoTrack {
         // ARCameraFrameProvider streams at the hardware's native resolution;
-        // dimension/fps hints are ignored by the system, so we pass none.
+        // dimension/fps hints are ignored by the system.
         return LocalVideoTrack.createARCameraTrack(options: ARCameraCaptureOptions())
     }
     #else
-    private func makeIOSTrack() -> LocalVideoTrack {
-        // Let AVFoundation negotiate the best supported format automatically.
-        let options = CameraCaptureOptions(position: sessionConfig.camera.avCapturePosition)
+    private func makeIOSTrack(config: CameraConfig) -> LocalVideoTrack {
+        let options = CameraCaptureOptions(position: config.avCapturePosition)
         return LocalVideoTrack.createCameraTrack(options: options)
     }
     #endif
 
     // MARK: - Token fetch
 
-    private static func fetchToken(from base: URL, config: SessionConfig) async throws -> String {
+    private static func fetchToken(from base: URL, identity: String) async throws -> String {
         var components = URLComponents(url: base, resolvingAgainstBaseURL: true)
         var items = components?.queryItems ?? []
         items.append(URLQueryItem(name: "room",     value: "xr-room"))
-        items.append(URLQueryItem(name: "identity", value: config.identity))
+        items.append(URLQueryItem(name: "identity", value: identity))
         components?.queryItems = items
 
         guard let url = components?.url else { throw StreamError.tokenFetchFailed(base) }
@@ -216,11 +214,9 @@ private extension LiveKit.ConnectionState {
 }
 
 private extension AudioCaptureOptions {
-    /// Maps ``AudioConfig`` to LiveKit's capture options.
     convenience init(from config: AudioConfig) {
         switch config.mode {
         case .voiceProcessing:
-            // Apple's AUVoiceIO handles DSP on device; disable WebRTC's duplicate stack.
             self.init(echoCancellation: false, autoGainControl: false, noiseSuppression: false,
                       highpassFilter: config.highpassFilter, typingNoiseDetection: config.typingNoiseDetection)
         case .softwareProcessing:
