@@ -15,5 +15,8 @@ dependencies = [
 [project.scripts]
 echo_agent = "echo_agent.__main__:run"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["echo_agent"]
