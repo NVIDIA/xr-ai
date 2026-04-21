@@ -7,8 +7,10 @@ Entry point for xr_media_hub.
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 import signal
+import time
 
 from xr_media_hub._config_loader import load_config
 from xr_media_hub.ipc import AudioChunk, HubEndpoint, ParticipantEvent, SlotView
@@ -17,26 +19,46 @@ from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-PULL_ADDR = "ipc:///tmp/xr_hub_in"
-PUB_ADDR  = "ipc:///tmp/xr_hub_pub"
+PULL_ADDR   = "ipc:///tmp/xr_hub_in"
+PUB_ADDR    = "ipc:///tmp/xr_hub_pub"
+STATS_INTERVAL = 5.0  # seconds between stats prints
+
+# Counters keyed by participant_id.
+_frame_counts: dict[str, int] = collections.defaultdict(int)
+_audio_counts: dict[str, int] = collections.defaultdict(int)
+_participants: set[str] = set()
 
 
 async def on_frame(view: SlotView) -> None:
-    sig = view.signal
-    log.info("frame  participant=%s  track=%s  seq=%d  %dx%d  fmt=%s",
-             sig.participant_id, sig.track_id, sig.seq, sig.width, sig.height, sig.fmt.name)
-    # TODO: upload view.data to GPU (CuPy H2D), feed rolling window.
+    _frame_counts[view.signal.participant_id] += 1
 
 
 async def on_audio(chunk: AudioChunk) -> None:
-    log.info("audio  participant=%s  track=%s  pts=%d  %dHz  %dch",
-             chunk.participant_id, chunk.track_id, chunk.pts_us, chunk.sample_rate, chunk.channels)
-    # TODO: feed real-time audio pipeline.
+    _audio_counts[chunk.participant_id] += 1
 
 
 async def on_participant(event: ParticipantEvent) -> None:
     action = "joined" if event.joined else "left"
-    log.info("participant %s %s (connector=%s)", event.participant_id, action, event.connector_id)
+    log.info("participant %s %s", event.participant_id, action)
+    if event.joined:
+        _participants.add(event.participant_id)
+    else:
+        _participants.discard(event.participant_id)
+        _frame_counts.pop(event.participant_id, None)
+        _audio_counts.pop(event.participant_id, None)
+
+
+async def _stats_loop() -> None:
+    while True:
+        await asyncio.sleep(STATS_INTERVAL)
+        if not _participants:
+            continue
+        parts = []
+        for pid in sorted(_participants):
+            fps   = _frame_counts.pop(pid, 0) / STATS_INTERVAL
+            achps = _audio_counts.pop(pid, 0) / STATS_INTERVAL
+            parts.append(f"{pid}  video={fps:.1f}fps  audio={achps:.1f}chunks/s")
+        log.info("stats ─ %s", " │ ".join(parts))
 
 
 async def main() -> None:
@@ -63,17 +85,19 @@ async def main() -> None:
         loop.add_signal_handler(sig, stop.set)
 
     log.info("XR-Media-Hub running — press Ctrl-C to exit")
-    hub_task  = asyncio.create_task(hub.run(),       name="hub")
-    conn_task = asyncio.create_task(connector.run(), name="connector")
+    hub_task   = asyncio.create_task(hub.run(),       name="hub")
+    conn_task  = asyncio.create_task(connector.run(), name="connector")
+    stats_task = asyncio.create_task(_stats_loop(),   name="stats")
 
     await stop.wait()
     log.info("Shutting down…")
 
+    stats_task.cancel()
     hub.stop()
     hub.close()
     await connector.stop()
 
-    await asyncio.gather(hub_task, conn_task, return_exceptions=True)
+    await asyncio.gather(hub_task, conn_task, stats_task, return_exceptions=True)
 
 
 def run() -> None:
