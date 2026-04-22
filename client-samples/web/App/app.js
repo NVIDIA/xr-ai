@@ -89,6 +89,8 @@ const model = {
   cameras:          [],
   /** @type {string|null} */
   selectedCameraId: null,
+  /** @type {string|null} */
+  agentStatus: null,
   /** @type {Array<{id: string, text: string, timestamp: Date}>} */
   receivedMessages: [],
   /** @type {string|null} */
@@ -217,6 +219,24 @@ function render() {
     selectRow.style.display = 'none';
   }
 
+  // ── Agent status ───────────────────────────────────────────────────────────
+  const agentDot   = $('agent-status-dot');
+  const agentLabel = $('agent-status-label');
+
+  if (!isConnected) {
+    agentDot.className    = 'state-dot disconnected';
+    agentLabel.textContent = '—';
+  } else if (model.agentStatus === 'processing') {
+    agentDot.className    = 'state-dot connecting';  // orange pulse
+    agentLabel.textContent = 'Processing\u2026';
+  } else if (model.agentStatus === 'idle') {
+    agentDot.className    = 'state-dot connected';   // green
+    agentLabel.textContent = 'Idle';
+  } else {
+    agentDot.className    = 'state-dot disconnected';
+    agentLabel.textContent = 'Unknown';
+  }
+
   // ── Data channel ───────────────────────────────────────────────────────────
   $('ping-btn').disabled = !isConnected;
   $('send-btn').disabled = !isConnected || $('message-input').value.trim() === '';
@@ -313,7 +333,13 @@ async function connect() {
     if (state === ConnectionState.DISCONNECTED) {
       model.isAudioActive  = false;
       model.isCameraActive = false;
+      model.agentStatus    = null;
     }
+    render();
+  };
+
+  newSession.onAgentStatus = (status) => {
+    model.agentStatus = status;
     render();
   };
 

@@ -260,10 +260,12 @@ class VlmAgent:
         image = _frame_to_pil(frame)   # raises on unrecognised format → crash
         log.info("vlm  pid=%r  %dx%d  query=%r", pid, frame.width, frame.height, query[:60])
 
+        await self._ep.set_status("processing", pid)
         loop   = asyncio.get_running_loop()
         answer = await loop.run_in_executor(None, self._vlm.infer, image, query)
         log.info("vlm response  pid=%r  %d chars", pid, len(answer))
         await self._reply(pid, answer, frame.pts_us)
+        await self._ep.set_status("idle", pid)
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if not event.joined:

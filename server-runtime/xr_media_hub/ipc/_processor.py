@@ -29,8 +29,10 @@ Video frame access is two-step:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import time
 from typing import Awaitable, Callable
 
 import zmq
@@ -51,6 +53,9 @@ ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
 _DEFAULT_TOPICS: tuple[bytes, ...] = (
     b"video", b"video_data", b"audio", b"data", b"participant", b"control",
 )
+
+# Reserved topic for internal SDK status messages — not forwarded to app callbacks.
+AGENT_STATUS_TOPIC = "_agent.status"
 
 _FRAME_REQUEST_TIMEOUT = 1.0  # seconds before request_frame() gives up
 
@@ -123,6 +128,39 @@ class ProcessorEndpoint:
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
         await self._push.send(encode(MsgType.RETURN_AUDIO, chunk))
+
+    async def set_status(self, status: str,
+                         participant_id: str | None = None) -> None:
+        """
+        Publish agent status to connected clients via the internal SDK channel.
+
+        The status is delivered on the reserved LiveKit topic ``_agent.status``
+        and is intercepted client-side by the StreamKit SDK — it never surfaces
+        as a raw ``onDataReceived`` message.
+
+        Parameters
+        ----------
+        status :
+            Arbitrary status string.  Conventional values: ``"idle"``,
+            ``"processing"``.
+        participant_id :
+            Target participant.  If *None*, broadcasts to every participant
+            currently in ``connected_participants``.
+        """
+        payload = json.dumps({"status": status}).encode()
+        pts_us  = int(time.time() * 1_000_000)
+        targets = (
+            [participant_id]
+            if participant_id is not None
+            else list(self._participants)
+        )
+        for pid in targets:
+            await self.send_return_data(DataMessage(
+                participant_id=pid,
+                topic=AGENT_STATUS_TOPIC,
+                pts_us=pts_us,
+                data=payload,
+            ))
 
     async def request_frame(self, signal: FrameSignal,
                             timeout: float = _FRAME_REQUEST_TIMEOUT) -> FrameData | None:

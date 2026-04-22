@@ -27,7 +27,7 @@ from ._hub import (HubEndpoint,
                    TOPIC_VIDEO, TOPIC_VIDEO_DATA,
                    TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL,
                    TOPIC_RETURN_AUDIO, TOPIC_RETURN_DATA)
-from ._processor import ProcessorEndpoint
+from ._processor import ProcessorEndpoint, AGENT_STATUS_TOPIC
 from ._shm import ShmRingBuffer, SlotView
 from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
                      FrameData, FrameRequest, FrameSignal, MsgType, ParticipantEvent, PixelFormat)
@@ -65,4 +65,6 @@ __all__ = [
     "TOPIC_CONTROL",
     "TOPIC_RETURN_AUDIO",
     "TOPIC_RETURN_DATA",
+    # internal SDK channel topic
+    "AGENT_STATUS_TOPIC",
 ]

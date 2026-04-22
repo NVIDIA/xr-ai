@@ -60,6 +60,14 @@ export class StreamSession {
    */
   onDataReceived = null;
 
+  /**
+   * Called when an agent publishes a status update.
+   * Common values: `"idle"`, `"processing"`.
+   *
+   * @type {((status: string) => void) | null}
+   */
+  onAgentStatus = null;
+
   // ── Constructor ─────────────────────────────────────────────────────────────
 
   /**
@@ -213,6 +221,10 @@ export class StreamSession {
 
     this.#backend.onDataReceived = (data) => {
       this.onDataReceived?.(data);
+    };
+
+    this.#backend.onAgentStatus = (status) => {
+      this.onAgentStatus?.(status);
     };
   }
 }
