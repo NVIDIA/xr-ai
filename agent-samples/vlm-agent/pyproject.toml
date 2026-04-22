@@ -7,7 +7,7 @@ name = "vlm-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "xr-media-hub",
+    "xr-ai-agent",
     "xr-ai-launcher",
     "numpy>=1.24",
     "Pillow>=10.0",
@@ -20,8 +20,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-media-hub   = { path = "../../server-runtime", editable = true }
-xr-ai-launcher = { path = "../../launcher",       editable = true }
+xr-ai-agent    = { path = "../../agent-sdk", editable = true }
+xr-ai-launcher = { path = "../../launcher",  editable = true }
 
 [project.scripts]
 vlm_agent = "vlm_agent.__main__:run"

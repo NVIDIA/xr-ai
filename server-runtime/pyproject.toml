@@ -7,9 +7,10 @@ name = "xr-media-hub"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    # IPC layer
+    # Agent-SDK (IPC types, codec, SHM, ProcessorEndpoint)
+    "xr-ai-agent",
+    # IPC layer — server side uses ZMQ directly (connector + hub)
     "pyzmq>=26.0",
-    "msgpack>=1.0",
     # LiveKit transport
     "livekit>=0.17",
     "livekit-api>=0.7",
@@ -28,6 +29,9 @@ dependencies = [
 
 [project.scripts]
 xr_media_hub = "xr_media_hub.__main__:run"
+
+[tool.uv.sources]
+xr-ai-agent = { path = "../agent-sdk", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_media_hub"]

@@ -22,8 +22,7 @@ import signal
 import time
 from collections import defaultdict
 
-from xr_media_hub.ipc import ProcessorEndpoint
-from xr_media_hub.ipc._types import AudioChunk, DataMessage, FrameSignal, ParticipantEvent
+from xr_ai_agent import AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint
 from xr_ai_launcher import HubLauncher
 
 log = logging.getLogger("echo_agent")

@@ -5,7 +5,10 @@ Endpoints
 ---------
 ConnectorEndpoint   — producer (LiveKit connector process)
 HubEndpoint         — server  (XR-Media-Hub process)
-ProcessorEndpoint   — subscriber + publisher (downstream processors, agents, analytics)
+ProcessorEndpoint   — subscriber + publisher (agents, analytics, downstream processors)
+
+Agent code should import from `xr_ai_agent` directly rather than this module —
+it avoids pulling in the full server-runtime dependency tree.
 
 Extensibility
 -------------
@@ -21,16 +24,41 @@ Register new message types at import time:
     register_decoder(MyMsgType.MY_MSG, lambda p: MyMsg(p[0], p[1]))
 """
 
-from ._codec import decode, encode, register_decoder, register_encoder
+# Agent-facing types and endpoint — re-exported from xr_ai_agent for
+# backwards compatibility with code that imports from xr_media_hub.ipc.
+from xr_ai_agent import (
+    AGENT_STATUS_TOPIC,
+    AudioChunk,
+    ConnectorRegistration,
+    ControlMessage,
+    DataMessage,
+    FrameData,
+    FrameRequest,
+    FrameSignal,
+    MsgType,
+    ParticipantEvent,
+    PixelFormat,
+    ProcessorEndpoint,
+    ShmRingBuffer,
+    SlotView,
+    decode,
+    encode,
+    register_decoder,
+    register_encoder,
+)
+
+# Server-side endpoints — only available when xr-media-hub is installed.
 from ._connector import ConnectorEndpoint
-from ._hub import (HubEndpoint,
-                   TOPIC_VIDEO, TOPIC_VIDEO_DATA,
-                   TOPIC_AUDIO, TOPIC_DATA, TOPIC_CONTROL,
-                   TOPIC_RETURN_AUDIO, TOPIC_RETURN_DATA)
-from ._processor import ProcessorEndpoint, AGENT_STATUS_TOPIC
-from ._shm import ShmRingBuffer, SlotView
-from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
-                     FrameData, FrameRequest, FrameSignal, MsgType, ParticipantEvent, PixelFormat)
+from ._hub import (
+    TOPIC_AUDIO,
+    TOPIC_CONTROL,
+    TOPIC_DATA,
+    TOPIC_RETURN_AUDIO,
+    TOPIC_RETURN_DATA,
+    TOPIC_VIDEO,
+    TOPIC_VIDEO_DATA,
+    HubEndpoint,
+)
 
 __all__ = [
     # endpoints
@@ -46,17 +74,16 @@ __all__ = [
     "register_encoder",
     "register_decoder",
     # data types
-    "PixelFormat",
-    "FrameSignal",
     "AudioChunk",
-    "DataMessage",
-    "ParticipantEvent",
     "ConnectorRegistration",
     "ControlMessage",
-    "MsgType",
-    # data types
+    "DataMessage",
     "FrameData",
     "FrameRequest",
+    "FrameSignal",
+    "MsgType",
+    "ParticipantEvent",
+    "PixelFormat",
     # well-known topic prefixes
     "TOPIC_VIDEO",
     "TOPIC_VIDEO_DATA",
