@@ -29,8 +29,7 @@ import asyncio
 import logging
 from typing import Awaitable, Callable
 
-from xr_media_hub.ipc._connector import ConnectorEndpoint
-from xr_media_hub.ipc._types import AudioChunk, DataMessage
+from xr_media_hub.ipc import AudioChunk, ConnectorEndpoint, DataMessage
 
 from ._docker import LiveKitDocker
 from ._hwcodec import require_nvidia_video_codecs

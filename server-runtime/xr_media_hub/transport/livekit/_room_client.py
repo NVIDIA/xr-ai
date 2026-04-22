@@ -20,8 +20,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from livekit import rtc
 
-from xr_media_hub.ipc._connector import ConnectorEndpoint
-from xr_media_hub.ipc._types import AudioChunk, DataMessage, PixelFormat
+from xr_media_hub.ipc import AudioChunk, ConnectorEndpoint, DataMessage, PixelFormat
 
 from ._token import make_client_token
 from .config import LiveKitConnectorConfig
