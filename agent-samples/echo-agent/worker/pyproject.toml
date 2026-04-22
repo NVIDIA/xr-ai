@@ -3,18 +3,18 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "echo-agent"
+name = "echo-agent-worker"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "xr-ai-launcher",
+    "xr-ai-agent",
 ]
 
 [tool.uv.sources]
-xr-ai-launcher = { path = "../../launcher", editable = true }
+xr-ai-agent = { path = "../../../agent-sdk", editable = true }
 
 [project.scripts]
-echo_agent = "echo_agent.__main__:run"
+echo_agent_worker = "echo_agent_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["echo_agent"]
+packages = ["echo_agent_worker"]

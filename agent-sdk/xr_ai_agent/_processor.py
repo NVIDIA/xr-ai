@@ -84,12 +84,12 @@ class ProcessorEndpoint:
         ctx = zmq.asyncio.Context.instance()
 
         self._sub: zmq.asyncio.Socket = ctx.socket(zmq.SUB)
-        self._sub.connect(sub_addr)
+        self._sub.connect(sub_addr)      # ZMQ retries until the hub binds — startup order is irrelevant
         for t in _DEFAULT_TOPICS:
             self._sub.setsockopt(zmq.SUBSCRIBE, t)
 
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
-        self._push.connect(push_addr)
+        self._push.connect(push_addr)    # same — outbound messages queue until hub is ready
 
         self._participants: set[str] = set()
 

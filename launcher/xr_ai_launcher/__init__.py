@@ -4,13 +4,24 @@ xr-ai-launcher — process management for the xr-ai stack.
 Intentionally stdlib-only so it can be added to any sample without pulling
 in the dependency chain of the processes it manages.
 
-    from xr_ai_launcher import HubLauncher
+Typical usage — thin orchestrator backed by a stack.toml::
 
-    async with HubLauncher():
-        await my_agent.run()
+    from xr_ai_launcher import run_stack
+
+    def run() -> None:
+        asyncio.run(run_stack())
+
+Advanced usage — compose with custom async logic::
+
+    from xr_ai_launcher import StackLauncher
+
+    async with StackLauncher("stack.toml") as procs:
+        await my_loop()
 """
 
 from ._processes import ManagedProcess
+from ._project import ProjectLauncher
 from ._hub import HubLauncher
+from ._stack import Process, StackLauncher, run_stack
 
-__all__ = ["ManagedProcess", "HubLauncher"]
+__all__ = ["ManagedProcess", "ProjectLauncher", "HubLauncher", "Process", "StackLauncher", "run_stack"]
