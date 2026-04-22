@@ -9,6 +9,7 @@ client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
 launcher/           # stdlib-only process manager (used by samples)
+cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in per sample)
 agent-mcp-servers/  # MCP adapters: oxr, render, client, xr-media
 agent-samples/      # End-to-end agent demos
 docs/               # Design docs
@@ -44,10 +45,11 @@ The orchestrator declares the process sequence in code:
 _BASE = Path(__file__).resolve().parents[1]   # sample root
 
 PROCESSES = [
-    Process("hub",    "../../server-runtime", "xr_media_hub"),
-    Process("worker", "worker",               "my_agent_worker"),
-    # future: Process("cloudxr", "../../cloudxr-runtime", "cloudxr_runtime"),
-    #         Process("mcp",     "../../agent-mcp-servers/oxr", "oxr_mcp"),
+    Process("hub",     "../../server-runtime",  "xr_media_hub"),
+    Process("worker",  "worker",                "my_agent_worker"),
+    # Optional shared components — add as needed:
+    # Process("cloudxr", "../../cloudxr-runtime",         "cloudxr_runtime"),
+    # Process("mcp",     "../../agent-mcp-servers/oxr",   "oxr_mcp"),
 ]
 
 def run() -> None:
@@ -300,6 +302,60 @@ if __name__ == "__main__":
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
 - [ ] `README.md` updated — architecture table and quickstart section
 
+## Adding CloudXR to a sample
+
+`cloudxr-runtime/` is a shared top-level component, like `server-runtime/`.
+Any sample can stream XR content to a device by adding one line to its
+orchestrator and a config file in the sample root.
+
+### 1 — Add the process to the orchestrator
+
+```python
+PROCESSES = [
+    Process("hub",     "../../server-runtime",  "xr_media_hub"),
+    Process("cloudxr", "../../cloudxr-runtime", "cloudxr_runtime"),  # ← add this
+    Process("worker",  "worker",                "my_agent_worker"),
+]
+```
+
+### 2 — Add `cloudxr_runtime.yaml` to the sample root
+
+The launcher auto-discovers this file and passes it as `--config`.
+
+```yaml
+# CloudXR runtime configuration.
+cloudxr_install_dir: ~/.cloudxr
+
+# Accept the NVIDIA CloudXR EULA non-interactively.
+# View: https://github.com/NVIDIA/IsaacTeleop/blob/main/deps/cloudxr/CLOUDXR_LICENSE
+# Written once to <cloudxr_install_dir>/run/eula_accepted; ignored on subsequent runs.
+accept_eula: true
+
+# Device profile — controls transport and XR device defaults.
+# Valid: auto-native | auto-webrtc | apple-vision-pro | ipad-pro | quest3
+cloudxr_env:
+  NV_DEVICE_PROFILE: auto-webrtc
+
+# ── Ports (do not conflict with LiveKit) ──────────────────────────────────────
+# CloudXR native service:  localhost:49100  (internal)
+# WSS proxy (TLS):         0.0.0.0:48322   (XR clients connect here; auto-webrtc only)
+```
+
+### Notes
+
+- CloudXR and the hub are **independent stacks**. CloudXR streams sim/render
+  content directly to XR devices over WebRTC; the hub handles agent media via
+  LiveKit. They share no ports.
+- `auto-webrtc` profile starts a WSS proxy on port 48322 for WebRTC signaling.
+  `auto-native` uses a direct native transport and does not need the proxy.
+- After CloudXR is ready, activate its environment in a separate terminal to
+  run an OpenXR app against it:
+  ```bash
+  source ~/.cloudxr/run/cloudxr.env
+  ```
+- Full list of supported `NV_*` env vars: `cloudxr-openxr-runtime` source,
+  `env_config` / `nv_config.h`.
+
 ## Adding a new managed process type
 
 Add `launcher/xr_ai_launcher/_<name>.py` following the pattern in `_hub.py`.
@@ -330,6 +386,29 @@ Paths inside the YAML (e.g. `web_client_dir`) resolve relative to the YAML
 file's own directory, not CWD. `HubLauncher` finds the YAML automatically by
 searching upward from CWD when the orchestrator runs.
 
+### Known limitations
+
+**LiveKit always uses plain `ws://` (no TLS)**
+
+The web server (`web_server_tls: true`) and token endpoint both support HTTPS,
+but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
+
+- The `/token` response returns `url: ws://<host>:<lk_port_ws>`.
+- Browsers loaded over HTTPS will block the `ws://` connection as mixed content.
+- Native clients (iOS, visionOS, Android) are unaffected — they accept both.
+
+**Workarounds until LiveKit TLS is added:**
+
+1. Use a reverse proxy (nginx, Caddy) in front of LiveKit to terminate TLS and
+   forward as plain WebSocket internally.  Point `web_client_dir` at a build
+   that targets the proxy URL.
+2. Run the web client over plain HTTP (`web_server_tls: false`), which avoids
+   the mixed-content restriction.  Camera/mic access requires a secure context,
+   so this only works on `localhost` or with a browser flag override.
+3. Add native LiveKit TLS: set `tls.cert` and `tls.key` in the generated
+   `livekit.yaml` (see `_docker.py`) and change the token URL scheme to `wss://`.
+   This is the correct long-term fix but has not been implemented yet.
+
 ---
 
 ## Decisions & change log
@@ -337,6 +416,19 @@ searching upward from CWD when the orchestrator runs.
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-22 — CloudXR runtime extracted to top-level shared component
+
+`cloudxr-runtime/` added as a peer of `server-runtime/`, wrapping
+`isaacteleop[cloudxr]` (NVIDIA IsaacTeleop SDK).  Samples opt-in by adding
+`Process("cloudxr", "../../cloudxr-runtime", "cloudxr_runtime")` to their
+`PROCESSES` list and providing a `cloudxr_runtime.yaml` in the sample root.
+
+The native CloudXR service runs entirely as a local process (no Docker).
+`isaacteleop`'s Python `wss_run()` provides a TLS WebSocket proxy on port 48322
+required for `auto-webrtc` profile; `auto-native` does not need it.
+CloudXR and the hub are fully independent: CloudXR streams rendered/sim content
+to XR devices over WebRTC while the hub handles agent media via LiveKit.
 
 ### 2026-04-22 — Launchable convention + StackLauncher
 

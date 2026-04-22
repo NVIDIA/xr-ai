@@ -82,12 +82,13 @@ async def main() -> None:
     await connector.start()
 
     token = make_client_token(cfg, identity="ios-client")
-    print(f"\n  LiveKit URL : ws://0.0.0.0:{cfg.lk_port_ws}")
-    print(f"  Room        : {cfg.room_name}")
-    print(f"  Token       : {token}")
+    web_scheme = "https" if cfg.web_server_tls else "http"
+    print(f"\n  LiveKit URL : ws://0.0.0.0:{cfg.lk_port_ws}  (plain ws — no TLS)", flush=True)
+    print(f"  Room        : {cfg.room_name}", flush=True)
+    print(f"  Token       : {token}", flush=True)
     if cfg.enable_web_server:
-        print(f"  Web client  : http://localhost:{cfg.web_server_port}")
-    print()
+        print(f"  Web client  : {web_scheme}://localhost:{cfg.web_server_port}", flush=True)
+    print(flush=True)
 
     stop = asyncio.Event()
     loop = asyncio.get_event_loop()

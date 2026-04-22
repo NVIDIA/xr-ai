@@ -1,0 +1,20 @@
+# CloudXR runtime configuration.
+# Full docs: python -m isaacteleop.cloudxr --help
+
+# Directory where CloudXR stores runtime state, certs, and logs (default: ~/.cloudxr).
+cloudxr_install_dir: ~/.cloudxr
+
+# Set to true to accept the NVIDIA CloudXR EULA non-interactively.
+# EULA: https://github.com/NVIDIA/IsaacTeleop/blob/main/deps/cloudxr/CLOUDXR_LICENSE
+# Once accepted the marker is written to <cloudxr_install_dir>/run/eula_accepted
+# and this flag is no longer checked.
+accept_eula: true
+
+# CloudXR env overrides applied before the native service starts.
+# Valid NV_DEVICE_PROFILE values: auto-native | auto-webrtc | apple-vision-pro | ipad-pro | quest3
+cloudxr_env:
+  NV_DEVICE_PROFILE: auto-webrtc
+
+# ── Network ports (CloudXR owns these — do not conflict with LiveKit) ─────────
+# CloudXR native service:  localhost:49100  (internal, not exposed)
+# WSS proxy (TLS):         0.0.0.0:48322   (XR clients connect here)

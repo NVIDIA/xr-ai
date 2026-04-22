@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cloudxr-runtime"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "isaacteleop[cloudxr]",
+    "pyyaml",
+]
+
+[project.scripts]
+cloudxr_runtime = "cloudxr_runtime.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cloudxr_runtime"]

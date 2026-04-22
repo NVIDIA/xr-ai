@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cloudxr-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "xr-ai-launcher",
+]
+
+[tool.uv.sources]
+xr-ai-launcher = { path = "../../launcher", editable = true }
+
+[project.scripts]
+cloudxr_agent = "cloudxr_agent.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cloudxr_agent"]
