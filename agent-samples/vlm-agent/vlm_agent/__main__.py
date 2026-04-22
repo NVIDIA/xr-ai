@@ -293,6 +293,8 @@ class VlmAgent:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def run(self) -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._vlm._ensure_loaded)
         await self._ep.run()
 
     def shutdown(self) -> None:
