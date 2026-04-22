@@ -65,45 +65,240 @@ Rules:
 
 ## Adding a new sample
 
-1. Create `agent-samples/<name>/` — the orchestrator project:
-   ```toml
-   # pyproject.toml
-   dependencies = ["xr-ai-launcher"]
+### Naming conventions
 
-   [tool.uv.sources]
-   xr-ai-launcher = { path = "../../launcher", editable = true }
+Choose a kebab-case sample name (e.g. `echo-agent`, `vlm-agent`).  Derive
+all other names from it mechanically:
 
-   [project.scripts]
-   my_agent = "my_agent.__main__:run"
-   ```
+| Thing | Convention | Example |
+|---|---|---|
+| Sample directory | `agent-samples/<kebab-name>/` | `echo-agent/` |
+| Orchestrator package | `<snake_name>/` | `echo_agent/` |
+| Orchestrator entry point | `<snake_name>` | `echo_agent` |
+| Worker package | `<snake_name>_worker/` | `echo_agent_worker/` |
+| Worker entry point | `<snake_name>_worker` | `echo_agent_worker` |
+| Agent class | `<CamelName>Agent` | `EchoAgent` |
+| Logger name | `"<snake_name>"` | `"echo_agent"` |
+| pyproject name (orch) | `"<kebab-name>"` | `"echo-agent"` |
+| pyproject name (worker) | `"<kebab-name>-worker"` | `"echo-agent-worker"` |
 
-2. Create `agent-samples/<name>/worker/` — the agent worker project:
-   ```toml
-   # worker/pyproject.toml
-   dependencies = ["xr-ai-agent"]   # add numpy, torch, etc. as needed
+### Directory layout
 
-   [tool.uv.sources]
-   xr-ai-agent = { path = "../../../agent-sdk", editable = true }
+```
+agent-samples/<name>/
+├── pyproject.toml                  ← orchestrator project
+├── xr_media_hub.yaml               ← hub config for this sample
+├── <snake_name>/
+│   └── __main__.py                 ← orchestrator (declare PROCESSES, call run_stack)
+└── worker/
+    ├── pyproject.toml              ← worker project
+    └── <snake_name>_worker/
+        └── __main__.py             ← agent logic (imports only from xr_ai_agent)
+```
 
-   [project.scripts]
-   my_agent_worker = "my_agent_worker.__main__:run"
-   ```
+### Orchestrator `pyproject.toml`
 
-3. Write `my_agent/__main__.py` as the orchestrator:
-   ```python
-   _BASE = Path(__file__).resolve().parents[1]
-   PROCESSES = [
-       Process("hub",    "../../server-runtime", "xr_media_hub"),
-       Process("worker", "worker",               "my_agent_worker"),
-   ]
-   def run(): asyncio.run(run_stack(PROCESSES, _BASE))
-   ```
+```toml
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-4. Write `worker/my_agent_worker/__main__.py` — import only from `xr_ai_agent`.
+[project]
+name = "<kebab-name>"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["xr-ai-launcher"]
 
-5. Copy or symlink a `xr_media_hub.yaml` into `agent-samples/<name>/`.
+[tool.uv.sources]
+xr-ai-launcher = { path = "../../launcher", editable = true }
 
-6. Update `README.md` — architecture table and quickstart section.
+[project.scripts]
+<snake_name> = "<snake_name>.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["<snake_name>"]
+```
+
+### Worker `pyproject.toml`
+
+```toml
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "<kebab-name>-worker"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "xr-ai-agent",
+    # add task-specific deps here: numpy, torch, etc.
+]
+
+[tool.uv.sources]
+xr-ai-agent = { path = "../../../agent-sdk", editable = true }
+
+[project.scripts]
+<snake_name>_worker = "<snake_name>_worker.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["<snake_name>_worker"]
+```
+
+### Orchestrator `__main__.py`
+
+Exact boilerplate — do not add logic here:
+
+```python
+"""
+<Name> agent orchestrator.  Runs the process stack for this sample.
+
+How to run (from agent-samples/<name>/):
+    uv sync && uv run <snake_name>
+"""
+import asyncio
+from pathlib import Path
+
+from xr_ai_launcher import Process, run_stack
+
+_BASE = Path(__file__).resolve().parents[1]
+
+PROCESSES = [
+    Process("hub",    "../../server-runtime", "xr_media_hub"),
+    Process("worker", "worker",               "<snake_name>_worker"),
+]
+
+
+def run() -> None:
+    asyncio.run(run_stack(PROCESSES, _BASE))
+
+
+if __name__ == "__main__":
+    run()
+```
+
+### Worker `__main__.py`
+
+Follow this structure exactly.  Fill in the sections marked `# ← FILL IN`.
+
+```python
+"""
+<Name> agent worker — <one-line description>.
+
+Launched as a subprocess by ``uv run <snake_name>`` (the orchestrator).
+Do not run this directly.
+
+Protocol                            # ← include only if the worker sends/receives data msgs
+--------
+Client → agent  (topic "<in.topic>"):
+    <description>
+
+Agent → client  (topic "<out.topic>"):
+    <description>
+
+Environment                         # ← include only if env vars are read
+-----------
+    ENV_VAR   description (default: value)
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import signal
+
+from xr_ai_agent import (          # ← import only what you use
+    AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint,
+)
+
+log = logging.getLogger("<snake_name>")
+
+_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
+_HUB_PUSH = "ipc:///tmp/xr_hub_in"
+
+
+class <CamelName>Agent:            # ← FILL IN agent logic
+
+    def __init__(self) -> None:
+        self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
+        self._ep.on_frame(self._on_frame)       # ← remove callbacks you don't use
+        self._ep.on_audio(self._on_audio)
+        self._ep.on_data(self._on_data)
+        self._ep.on_participant(self._on_participant)
+
+    # ── callbacks ─────────────────────────────────────────────────────────────
+
+    async def _on_frame(self, sig: FrameSignal) -> None: ...
+    async def _on_audio(self, chunk: AudioChunk) -> None: ...
+    async def _on_data(self, msg: DataMessage) -> None: ...
+    async def _on_participant(self, event: ParticipantEvent) -> None: ...
+
+    # ── lifecycle ─────────────────────────────────────────────────────────────
+
+    async def run(self) -> None:
+        await self._ep.run()        # ← start any background tasks before this line
+
+    def shutdown(self) -> None:
+        # ← cancel any background tasks here first
+        self._ep.stop()
+        self._ep.close()
+
+
+async def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
+    agent = <CamelName>Agent()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, agent.shutdown)
+
+    log.info("<snake_name> connecting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
+    try:
+        await agent.run()
+    finally:
+        agent.shutdown()
+
+
+def run() -> None:
+    asyncio.run(main())
+
+
+if __name__ == "__main__":
+    run()
+```
+
+### Rules for worker code
+
+- **Only import from `xr_ai_agent`** for IPC types. Never import from
+  `xr_media_hub`, `xr_ai_launcher`, or any server-side package.
+- **`_HUB_PUB` / `_HUB_PUSH`** are module-level constants, not magic strings
+  scattered through the code.
+- **Signal handling**: wire `SIGINT` and `SIGTERM` to `agent.shutdown()` in
+  `main()`.  Always wrap `await agent.run()` in `try/finally` that calls
+  `shutdown()` — this covers the edge case where `run()` raises.
+- **`shutdown()` is synchronous** — it must be safe to call from a signal
+  handler.  Cancel asyncio tasks first, then call `ep.stop()` + `ep.close()`.
+- **Background tasks** (e.g. a stats loop): create them in `run()` before
+  calling `await ep.run()`, and cancel them at the top of `shutdown()`.
+- **Callbacks are async** even if they do synchronous work — the signature
+  must match `async def _on_*(self, ...)`.
+- **CPU-bound or blocking work** (model inference, heavy image processing):
+  use `await loop.run_in_executor(None, ...)` to avoid blocking the event loop.
+- **One agent class per worker** — keep the file flat; no sub-modules unless
+  the file exceeds ~300 lines.
+
+### Checklist
+
+- [ ] `agent-samples/<name>/pyproject.toml` — orchestrator, deps: `xr-ai-launcher` only
+- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-agent` + task libs
+- [ ] `agent-samples/<name>/<snake_name>/__main__.py` — exact orchestrator boilerplate
+- [ ] `agent-samples/<name>/worker/<snake_name>_worker/__main__.py` — agent logic
+- [ ] `agent-samples/<name>/xr_media_hub.yaml` — hub config (copy from `server-runtime/xr_media_hub.yaml`)
+- [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
+- [ ] `README.md` updated — architecture table and quickstart section
 
 ## Adding a new managed process type
 
