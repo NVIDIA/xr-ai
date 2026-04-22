@@ -54,6 +54,11 @@ log = logging.getLogger("vlm_agent")
 _MODEL_ID    = os.environ.get("VLM_MODEL", "nvidia/Cosmos-Reason1-7B")
 # Models are cached inside this sample's directory, gitignored.
 _MODEL_CACHE = pathlib.Path(__file__).resolve().parents[1] / "models"
+
+# Qwen2.5-VL image token budget: 1 token per 28×28 px patch.
+# Large frames (e.g. 1920×1080) produce ~2500 tokens and push the model past
+# its context limit, triggering a CUDA device-side assert.  Cap to ~1 MP.
+_MAX_IMAGE_PIXELS = 1280 * 28 * 28   # ≈ 1 003 520 px  (~1002×1002)
 _HUB_PUB     = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH    = "ipc:///tmp/xr_hub_in"
 
@@ -135,14 +140,18 @@ class _VlmBackend:
                 device_map="auto",
                 cache_dir=str(_MODEL_CACHE),
             )
+            proc_kwargs = dict(
+                cache_dir=str(_MODEL_CACHE),
+                min_pixels=256 * 28 * 28,
+                max_pixels=_MAX_IMAGE_PIXELS,
+            )
             # Try offline first — avoids a network round-trip when weights are cached.
             try:
                 self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                     self._model_id, local_files_only=True, **kwargs,
                 ).eval()
                 self._processor = AutoProcessor.from_pretrained(
-                    self._model_id, local_files_only=True,
-                    cache_dir=str(_MODEL_CACHE),
+                    self._model_id, local_files_only=True, **proc_kwargs,
                 )
             except OSError:
                 log.info("Model not in cache — downloading %s", self._model_id)
@@ -150,7 +159,7 @@ class _VlmBackend:
                     self._model_id, **kwargs,
                 ).eval()
                 self._processor = AutoProcessor.from_pretrained(
-                    self._model_id, cache_dir=str(_MODEL_CACHE),
+                    self._model_id, **proc_kwargs,
                 )
             log.info("VLM ready on %s", next(self._model.parameters()).device)
 
@@ -159,6 +168,15 @@ class _VlmBackend:
         self._ensure_loaded()
         import torch
         from qwen_vl_utils import process_vision_info
+
+        # Resize before tokenisation — large frames (e.g. 1920×1080) exceed the
+        # model's context window and cause a CUDA device-side assert at runtime.
+        if image.width * image.height > _MAX_IMAGE_PIXELS:
+            scale = (_MAX_IMAGE_PIXELS / (image.width * image.height)) ** 0.5
+            image = image.resize(
+                (int(image.width * scale), int(image.height * scale)),
+                Image.LANCZOS,
+            )
 
         messages = [{"role": "user", "content": [
             {"type": "image", "image": image},
@@ -235,10 +253,11 @@ class VlmAgent:
 
         frame = await self._ep.request_frame(signal)
         if frame is None:
+            # Hub had no slot for this track yet — client can retry.
             await self._reply(pid, "Frame data unavailable — please retry.", msg.pts_us)
             return
 
-        image = _frame_to_pil(frame)
+        image = _frame_to_pil(frame)   # raises on unrecognised format → crash
         log.info("vlm  pid=%r  %dx%d  query=%r", pid, frame.width, frame.height, query[:60])
 
         loop   = asyncio.get_running_loop()
