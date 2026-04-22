@@ -21,6 +21,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, @unchecked Sendab
 
     public var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
     public var onDataReceived: (@Sendable (Data) -> Void)?
+    public var onAgentStatus: (@Sendable (String) -> Void)?
+
+    // MARK: Private constants
+
+    /// Reserved LiveKit topic for internal agent status messages.
+    /// Matches the web client's `LiveKitBackend.#STATUS_TOPIC`.
+    private static let agentStatusTopic = "_agent.status"
 
     // MARK: Private state
 
@@ -192,9 +199,17 @@ extension LiveKitBackend: RoomDelegate {
         _ room: Room,
         participant _: RemoteParticipant?,
         didReceiveData data: Data,
-        forTopic _: String,
+        forTopic topic: String,
         encryptionType _: EncryptionType
     ) {
+        // Intercept the reserved agent-status topic — never forward to onDataReceived.
+        if topic == Self.agentStatusTopic {
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let status = json["status"] as? String, !status.isEmpty {
+                onAgentStatus?(status)
+            }
+            return
+        }
         onDataReceived?(data)
     }
 }

@@ -21,6 +21,7 @@ final class AppModel {
 
     var host: String = "192.168.1.100"
     var port: String = "7880"
+    var secure: Bool = false
     var token: String = ""
     var tokenServerURL: String = ""
     var identity: String = "ios-client"
@@ -33,6 +34,7 @@ final class AppModel {
 
     var session: StreamSession?
     var connectionState: ConnectionState = .disconnected
+    var agentStatus: String?
     var isAudioActive = false
     var isCameraActive = false
     var receivedMessages: [ReceivedMessage] = []
@@ -47,12 +49,14 @@ final class AppModel {
         let portNumber = Int(port) ?? 7880
         let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTokenURL = tokenServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tokenScheme = secure ? "https" : "http"
         let resolvedTokenURL = trimmedTokenURL.isEmpty
-            ? URL(string: "http://\(host):8080/token")
+            ? URL(string: "\(tokenScheme)://\(host):8080/token")
             : URL(string: trimmedTokenURL)
         let lkConfig = LiveKitConfig(
             host: host,
             port: portNumber,
+            secure: secure,
             token: trimmedToken.isEmpty ? nil : trimmedToken,
             tokenURL: resolvedTokenURL
         )
@@ -64,7 +68,11 @@ final class AppModel {
             if state == .disconnected {
                 self?.isAudioActive = false
                 self?.isCameraActive = false
+                self?.agentStatus = nil
             }
+        }
+        newSession.onAgentStatus = { [weak self] status in
+            self?.agentStatus = status
         }
         newSession.onDataReceived = { [weak self] data in
             let text = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
@@ -86,6 +94,7 @@ final class AppModel {
         await session?.disconnect()
         session = nil
         connectionState = .disconnected
+        agentStatus = nil
         isAudioActive = false
         isCameraActive = false
     }

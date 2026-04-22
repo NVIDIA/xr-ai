@@ -40,6 +40,10 @@ public final class StreamSession: ObservableObject {
     /// Current connection state. Safe to observe from SwiftUI.
     @Published public private(set) var connectionState: ConnectionState = .disconnected
 
+    /// Latest agent status. `nil` when disconnected or no status has been received yet.
+    /// Common values: `"idle"`, `"processing"`.
+    @Published public private(set) var agentStatus: String?
+
     // MARK: - Callbacks
 
     /// Called on the main actor when the connection state changes.
@@ -47,6 +51,10 @@ public final class StreamSession: ObservableObject {
 
     /// Called on the main actor when binary data is received.
     public var onDataReceived: ((Data) -> Void)?
+
+    /// Called on the main actor when the agent publishes a status update.
+    /// Common values: `"idle"`, `"processing"`.
+    public var onAgentStatus: ((String) -> Void)?
 
     // MARK: - Private
 
@@ -78,6 +86,7 @@ public final class StreamSession: ObservableObject {
     /// Disconnects and releases all resources.
     public func disconnect() async {
         await backend.disconnect()
+        agentStatus = nil
     }
 
     // MARK: - Audio
@@ -133,6 +142,13 @@ public final class StreamSession: ObservableObject {
         backend.onDataReceived = { [weak self] data in
             Task { @MainActor [weak self] in
                 self?.onDataReceived?(data)
+            }
+        }
+        backend.onAgentStatus = { [weak self] status in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                agentStatus = status
+                onAgentStatus?(status)
             }
         }
     }

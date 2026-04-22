@@ -50,6 +50,12 @@ struct ContentView: View {
                 ConnectionStateBadge(state: model.connectionState)
             }
 
+            if model.connectionState == .connected {
+                LabeledContent("Agent") {
+                    AgentStatusBadge(status: model.agentStatus)
+                }
+            }
+
             if model.connectionState == .disconnected {
                 TextField("Host / IP", text: $m.host)
                     .autocorrectionDisabled()
@@ -61,6 +67,8 @@ struct ContentView: View {
                     #if os(iOS)
                     .keyboardType(.numberPad)
                     #endif
+
+                Toggle("Secure (TLS)", isOn: $m.secure)
 
                 TextField("Token server URL (e.g. http://host/token)", text: $m.tokenServerURL)
                     .autocorrectionDisabled()
@@ -251,6 +259,54 @@ private struct ConnectionStateBadge: View {
         case .connecting:    return "Connecting…"
         case .connected:     return "Connected"
         case .reconnecting:  return "Reconnecting…"
+        }
+    }
+}
+
+// MARK: - AgentStatusBadge
+
+private struct AgentStatusBadge: View {
+    let status: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if status == "processing" {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 8, height: 8)
+                    .opacity(pulseOpacity)
+                    .animation(
+                        .easeInOut(duration: 0.7).repeatForever(autoreverses: true),
+                        value: pulseOpacity
+                    )
+                    .onAppear { pulseOpacity = 0.3 }
+            } else {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 8, height: 8)
+            }
+            Text(label)
+                .font(.footnote)
+                .foregroundStyle(dotColor)
+        }
+        .animation(.easeInOut, value: status)
+    }
+
+    @State private var pulseOpacity: Double = 1.0
+
+    private var dotColor: Color {
+        switch status {
+        case "idle":       return .green
+        case "processing": return .orange
+        default:           return .secondary
+        }
+    }
+
+    private var label: String {
+        switch status {
+        case "idle":       return "Idle"
+        case "processing": return "Processing…"
+        default:           return "—"
         }
     }
 }
