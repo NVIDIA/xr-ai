@@ -36,8 +36,10 @@ connecting. The hub prints connection details:
 [hub]   Web client  : http://localhost:8080
 ```
 
-Edit `xr_media_hub.yaml` at the repo root to change ports, credentials, or
-point `web_client_dir` at a different web client build.
+Each agent sample has its own `xr_media_hub.yaml` in its directory. Edit it to
+change ports, credentials, or other options. See
+[`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml) for a
+reference listing every available option.
 
 ---
 
@@ -73,10 +75,11 @@ The model is loaded at startup (~30–60 s). It is ready before the first query.
 ```bash
 cd xr-ai/server-runtime
 uv sync
-uv run xr_media_hub --config ../xr_media_hub.yaml
+uv run xr_media_hub
 ```
 
 Useful for development or when running an agent in a separate terminal.
+The hub auto-discovers `server-runtime/xr_media_hub.yaml`.
 
 ---
 

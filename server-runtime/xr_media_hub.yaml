@@ -1,26 +1,35 @@
-# XR Media Hub configuration
-# Run from the xr-ai/ directory:  uv run --project server-runtime xr_media_hub
-# Or from server-runtime/:        uv run xr_media_hub --config ../xr_media_hub.yaml
+# XR Media Hub — reference configuration
+#
+# All available options are listed here with their defaults.
+# Copy this file (or a subset of it) to your agent sample directory and
+# edit as needed.  Relative paths are resolved from this file's directory.
+#
+# Run from server-runtime/:
+#   uv run xr_media_hub            # auto-discovers this file
+#   uv run xr_media_hub --config xr_media_hub.yaml
 
 # ── LiveKit server ────────────────────────────────────────────────────────────
 api_key:    devkey
 api_secret: devsecret-xr-livekit-prototype-2026
 room_name:  xr-room
 
-lk_port_ws:  7880
-lk_port_tcp: 7881
-lk_port_udp: 7882
+lk_port_ws:  7880   # WebSocket signaling
+lk_port_tcp: 7881   # WebRTC TCP fallback
+lk_port_udp: 7882   # WebRTC UDP media
 
 # ── Web client server ─────────────────────────────────────────────────────────
 enable_web_server: true
 web_server_host:   "0.0.0.0"
 web_server_port:   8080
 # Path is relative to this file's directory.
-web_client_dir:    client-samples/web
+web_client_dir:    ../client-samples/web
 # Enable HTTPS with a self-signed certificate (auto-generated on first run at
 # ~/.local/share/xr-ai/web-server.crt).  Required for camera access when
 # connecting from a device other than localhost.
 # web_server_tls: true
+# Supply your own cert/key to replace the auto-generated one:
+# cert_file: /path/to/cert.pem
+# key_file:  /path/to/key.pem
 
 # ── Optional: token server (only needed for HTTPS/WSS proxy) ─────────────────
 enable_token_server: true
