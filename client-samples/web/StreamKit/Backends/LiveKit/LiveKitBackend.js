@@ -81,6 +81,9 @@ export class LiveKitBackend {
   /** @type {import('../../Config/SessionConfig.js').SessionConfig | null} */
   #sessionConfig = null;
 
+  /** @type {Map<string, HTMLAudioElement>} sid → element, for cleanup on teardown */
+  #audioElements = new Map();
+
   // ── Public event hooks ──────────────────────────────────────────────────────
 
   /**
@@ -187,6 +190,26 @@ export class LiveKitBackend {
         return;
       }
       this.onDataReceived?.(payload);
+    });
+
+    room.on(RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === Track.Kind.Audio) {
+        const el = track.attach();
+        el.id = `remote-audio-${track.sid}`;
+        el.style.display = 'none';
+        document.body.appendChild(el);
+        this.#audioElements.set(track.sid, el);
+        el.play().catch(() => {
+          // Autoplay blocked — will resume on next user gesture.
+        });
+      }
+    });
+
+    room.on(RoomEvent.TrackUnsubscribed, (track) => {
+      if (track.kind === Track.Kind.Audio) {
+        for (const el of track.detach()) el.remove();
+        this.#audioElements.delete(track.sid);
+      }
     });
 
     // ── Connect ───────────────────────────────────────────────────────────────
@@ -332,6 +355,9 @@ export class LiveKitBackend {
       await this.#room.disconnect();
       this.#room = null;
     }
+
+    for (const el of this.#audioElements.values()) el.remove();
+    this.#audioElements.clear();
 
     if (this.#videoTrack) {
       this.#videoTrack.stop();

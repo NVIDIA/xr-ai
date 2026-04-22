@@ -77,7 +77,7 @@ const model = {
   identity:       'web-client',
 
   // Media settings
-  audioMode:      MicrophoneMode.SOFTWARE_PROCESSING,
+  audioMode:      MicrophoneMode.RAW,
 
   // Live state
   /** @type {StreamSession|null} */
@@ -168,8 +168,10 @@ function render() {
   // ── Audio ──────────────────────────────────────────────────────────────────
   const audioBtn    = $('audio-btn');
   const audioStatus = $('audio-status');
+  const audioModeSelect = $('audio-mode-select');
 
   audioBtn.disabled = !isConnected;
+  audioModeSelect.disabled = model.isAudioActive;
   if (model.isAudioActive) {
     audioBtn.textContent     = 'Stop Microphone';
     audioBtn.className       = 'btn btn-destructive';
@@ -499,6 +501,21 @@ function wireEvents() {
   $('host-input').value     = model.host;
   $('port-input').value     = model.port;
   $('identity-input').value = model.identity;
+
+  // Populate audio mode dropdown
+  const audioModeOptions = [
+    { value: MicrophoneMode.SOFTWARE_PROCESSING, label: 'Software (AEC on)' },
+    { value: MicrophoneMode.VOICE_PROCESSING,    label: 'Voice Processing' },
+    { value: MicrophoneMode.RAW,                 label: 'Raw (no DSP)' },
+  ];
+  const audioModeSelect = $('audio-mode-select');
+  audioModeSelect.innerHTML = audioModeOptions
+    .map(o => `<option value="${o.value}">${o.label}</option>`)
+    .join('');
+  audioModeSelect.value = model.audioMode;
+  audioModeSelect.addEventListener('change', (e) => {
+    model.audioMode = e.target.value;
+  });
 
   // Connect / disconnect button — toggles based on state
   $('connect-btn').addEventListener('click', () => {

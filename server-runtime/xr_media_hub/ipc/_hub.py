@@ -272,6 +272,7 @@ class HubEndpoint:
         self._pull.close(linger=0)
         self._pub.close(linger=0)
         for ring, view in self._latest_slots.values():
+            view.data.release()  # must release before ring.close() so mmap has no exported pointers
             ring.release_slot(view.signal.slot)
         self._latest_slots.clear()
         for ring in self._ring_registry.values():
