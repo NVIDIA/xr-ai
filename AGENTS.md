@@ -7,6 +7,7 @@ Guidelines for developers and AI assistants working in this repo.
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
+agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
 launcher/           # stdlib-only process manager (used by samples)
 agent-mcp-servers/  # MCP adapters: oxr, render, client, xr-media
 agent-samples/      # End-to-end agent demos
@@ -16,6 +17,8 @@ docs/               # Design docs
 Key design decisions:
 - **XR-Media-Hub** is transport-agnostic at its IPC boundary. Agents connect via IPC only.
 - **LiveKit** is an internal transport detail — not exposed to the agent layer.
+- **`agent-sdk/`** (`xr-ai-agent`) contains only the agent-facing IPC layer. Its sole
+  runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI, or uvicorn.
 - MCP servers are the agent's only interface to XR data and rendering.
 - No API keys or tokens in source files — use env vars or `xr_media_hub.yaml`.
 
@@ -24,26 +27,83 @@ Key design decisions:
 Every sample is self-contained: running it starts the hub and all required
 processes automatically. No separate server launch step.
 
+Each sample has **two sub-projects**:
+
+| Sub-project | Role | Dependencies |
+|---|---|---|
+| `<sample>/` | Orchestrator — declares process list in code, launches all | `xr-ai-launcher` only (stdlib) |
+| `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-agent`, numpy, etc. |
+
+**Launchable convention** — every sub-project that can be run is self-describing:
+it has an entry-point command and optionally a YAML config named `<command>.yaml`
+that lives in the sample root.  The launcher discovers the YAML automatically
+and passes it as `--config`.  No separate launcher config file exists.
+
+The orchestrator declares the process sequence in code:
+```python
+_BASE = Path(__file__).resolve().parents[1]   # sample root
+
+PROCESSES = [
+    Process("hub",    "../../server-runtime", "xr_media_hub"),
+    Process("worker", "worker",               "my_agent_worker"),
+    # future: Process("cloudxr", "../../cloudxr-runtime", "cloudxr_runtime"),
+    #         Process("mcp",     "../../agent-mcp-servers/oxr", "oxr_mcp"),
+]
+
+def run() -> None:
+    asyncio.run(run_stack(PROCESSES, _BASE))
+```
+
+Rules:
+- **All processes start concurrently** — no ordering is required or expressed.
+  Every process must tolerate its peers not being ready at startup.
+  ZMQ reconnects automatically; `ProcessorEndpoint` works regardless of hub startup order.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
+- The worker never imports anything from `server-runtime` or `launcher/`.
 - Process management lives in `launcher/`, not inside any process it manages.
-- Agents connect to the hub via IPC (`xr_media_hub.ipc.ProcessorEndpoint`).
+- `run_stack` is fail-fast: if any process exits, the rest are terminated.
 
 ## Adding a new sample
 
-1. Create `agent-samples/<name>/` with its own `pyproject.toml`.
-2. Declare local dependencies by name in `[project.dependencies]` and resolve
-   them with `[tool.uv.sources]` — **not** with inline `@ ../../path` syntax,
-   which breaks at wheel build time:
+1. Create `agent-samples/<name>/` — the orchestrator project:
    ```toml
-   [project]
-   dependencies = ["xr-media-hub", "xr-ai-launcher"]
+   # pyproject.toml
+   dependencies = ["xr-ai-launcher"]
 
    [tool.uv.sources]
-   xr-media-hub  = { path = "../../server-runtime", editable = true }
-   xr-ai-launcher = { path = "../../launcher",      editable = true }
+   xr-ai-launcher = { path = "../../launcher", editable = true }
+
+   [project.scripts]
+   my_agent = "my_agent.__main__:run"
    ```
-3. Wrap `main()` with `async with HubLauncher():` to start the full stack.
-4. Update `README.md` — architecture table and quickstart section.
+
+2. Create `agent-samples/<name>/worker/` — the agent worker project:
+   ```toml
+   # worker/pyproject.toml
+   dependencies = ["xr-ai-agent"]   # add numpy, torch, etc. as needed
+
+   [tool.uv.sources]
+   xr-ai-agent = { path = "../../../agent-sdk", editable = true }
+
+   [project.scripts]
+   my_agent_worker = "my_agent_worker.__main__:run"
+   ```
+
+3. Write `my_agent/__main__.py` as the orchestrator:
+   ```python
+   _BASE = Path(__file__).resolve().parents[1]
+   PROCESSES = [
+       Process("hub",    "../../server-runtime", "xr_media_hub"),
+       Process("worker", "worker",               "my_agent_worker"),
+   ]
+   def run(): asyncio.run(run_stack(PROCESSES, _BASE))
+   ```
+
+4. Write `worker/my_agent_worker/__main__.py` — import only from `xr_ai_agent`.
+
+5. Copy or symlink a `xr_media_hub.yaml` into `agent-samples/<name>/`.
+
+6. Update `README.md` — architecture table and quickstart section.
 
 ## Adding a new managed process type
 
@@ -60,14 +120,20 @@ config files.
 ## Dependency discipline
 
 - `launcher/` has zero runtime dependencies — stdlib only. Keep it that way.
-- Samples depend on `xr-media-hub` (IPC types) + `xr-ai-launcher` (launch) only.
+- `agent-sdk/` (`xr-ai-agent`) depends only on `pyzmq` + `msgpack`. No server deps.
+- Agent workers import only from `xr_ai_agent` (and task-specific libs like numpy/torch).
+- Agent workers must never import from `xr_media_hub` or `xr_ai_launcher`.
 - Don't add abstractions until needed by two concrete use-cases.
 
 ## Config
 
-`xr_media_hub.yaml` at the repo root is the primary config. Paths inside it
-resolve relative to the file's location. `HubLauncher` finds it automatically
-by searching upward from CWD.
+Each sample provides its own `xr_media_hub.yaml` in its project directory
+(e.g. `agent-samples/echo-agent/xr_media_hub.yaml`). `server-runtime/` also
+contains a reference copy documenting all available fields.
+
+Paths inside the YAML (e.g. `web_client_dir`) resolve relative to the YAML
+file's own directory, not CWD. `HubLauncher` finds the YAML automatically by
+searching upward from CWD when the orchestrator runs.
 
 ---
 
@@ -76,6 +142,44 @@ by searching upward from CWD.
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-22 — Launchable convention + StackLauncher
+
+Each runnable sub-project (hub, worker, future CloudXR runtime, MCP servers) is a
+**launchable**: an entry-point command + an optional `<command>.yaml` config.
+The launcher discovers YAML files automatically by convention — no separate
+launcher config file (the previous `stack.toml` idea was dropped).
+
+The orchestrator code declares the process sequence using `Process` + `run_stack`.
+All processes start concurrently; startup order does not matter because every
+launchable must be resilient to peers not being ready (ZMQ reconnects, etc.).
+`run_stack` is fail-fast: any process exit terminates the whole stack.
+
+`launcher/` gained `Process`, `StackLauncher`, and `run_stack` (all stdlib-only).
+`HubLauncher` / `ProjectLauncher` remain as lower-level building blocks.
+
+### 2026-04-21 — Agent-SDK extracted; samples use orchestrator + worker subprocess model
+
+`agent-sdk/` (`xr-ai-agent`) was extracted as a standalone package with only
+`pyzmq` + `msgpack` as runtime dependencies. The four IPC client modules
+(`_types`, `_codec`, `_shm`, `_processor`) moved there from `server-runtime`.
+`server-runtime/xr_media_hub/ipc/__init__` re-exports everything for backwards compat.
+
+Each sample now has two entry points:
+- **Orchestrator** (`<name>`): stdlib + `xr-ai-launcher` only. Uses `HubLauncher`
+  (which runs the hub via `uv run --project server-runtime`) and `ProjectLauncher`
+  (which runs the worker via `uv run --project .`). Waits for the worker to exit.
+- **Worker** (`<name>_worker`): imports only from `xr_ai_agent`. Contains all
+  agent logic. Launched as a subprocess by the orchestrator.
+
+`launcher/` gained `ProjectLauncher` — a generic context manager that runs any
+uv project command as a managed subprocess in its own isolated venv, yielding
+the `asyncio.subprocess.Process` for lifecycle control.
+
+**Why:** complete venv isolation between hub (server-runtime), agent (sample), and
+orchestrator (launcher-only). No cross-contamination of server deps into agent
+venvs and vice versa. `uv run --project` is the mechanism — uv resolves and caches
+each project's venv independently.
 
 ### 2026-04-21 — VLM agent sample added
 

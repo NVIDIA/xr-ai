@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from ._processes import ManagedProcess
+from ._project import ProjectLauncher
 
 _CONFIG_NAME = "xr_media_hub.yaml"
 
@@ -21,6 +22,15 @@ def _find_config(start: Path) -> Path | None:
     return None
 
 
+def _find_server_runtime(start: Path) -> Path | None:
+    """Walk upward from *start* looking for a server-runtime/ project dir."""
+    for p in [start, *start.parents]:
+        sr = p / "server-runtime"
+        if (sr / "pyproject.toml").exists():
+            return sr
+    return None
+
+
 @asynccontextmanager
 async def HubLauncher(config: str | Path | None = None):
     """
@@ -29,8 +39,9 @@ async def HubLauncher(config: str | Path | None = None):
     Config discovery: walks upward from CWD for xr_media_hub.yaml.
     Pass config=<path> to override.
 
-    The hub's stdout/stderr is forwarded with a [hub] prefix so it appears
-    inline with the calling process's output.
+    The hub is launched via ``uv run --project <server-runtime>`` so it runs
+    in its own isolated environment regardless of the caller's venv.
+    Falls back to sys.executable if uv is not on PATH.
 
         async with HubLauncher():
             await my_agent.run()
@@ -38,9 +49,15 @@ async def HubLauncher(config: str | Path | None = None):
     if config is None:
         config = _find_config(Path.cwd())
 
-    cmd = [sys.executable, "-m", "xr_media_hub"]
-    if config:
-        cmd += ["--config", str(config)]
+    config_path = Path(config) if config else None
+    start = config_path.parent if config_path else Path.cwd()
+    server_runtime = _find_server_runtime(start)
 
-    async with ManagedProcess("hub", cmd):
-        yield
+    extra = ["--config", str(config)] if config else []
+
+    if server_runtime:
+        async with ProjectLauncher(server_runtime, "xr_media_hub", *extra):
+            yield
+    else:
+        async with ManagedProcess("hub", [sys.executable, "-m", "xr_media_hub", *extra]):
+            yield
