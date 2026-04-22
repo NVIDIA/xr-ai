@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Awaitable, Callable
 
 import zmq
@@ -215,8 +216,12 @@ class ProcessorEndpoint:
     @staticmethod
     def _spawn(coro) -> None:
         t = asyncio.create_task(coro)
-        t.add_done_callback(lambda t: log.error("Callback raised: %s", t.exception())
-                            if not t.cancelled() and t.exception() else None)
+        def _on_done(t: asyncio.Task) -> None:
+            if not t.cancelled() and (exc := t.exception()):
+                log.critical("Unhandled error in processor callback — crashing",
+                             exc_info=exc)
+                os._exit(1)
+        t.add_done_callback(_on_done)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
