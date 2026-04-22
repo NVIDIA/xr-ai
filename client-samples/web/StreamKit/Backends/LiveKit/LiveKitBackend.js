@@ -99,6 +99,17 @@ export class LiveKitBackend {
    */
   onDataReceived = null;
 
+  /**
+   * Called when an agent publishes a status update on the internal SDK channel.
+   * `StreamSession` assigns this before calling `connect()`.
+   *
+   * @type {((status: string) => void) | null}
+   */
+  onAgentStatus = null;
+
+  /** @type {string} Reserved LiveKit topic for internal SDK status messages. */
+  static #STATUS_TOPIC = '_agent.status';
+
   // ── Constructor ─────────────────────────────────────────────────────────────
 
   /**
@@ -166,8 +177,15 @@ export class LiveKitBackend {
       this.onConnectionStateChanged?.(mapState(lkState));
     });
 
-    room.on(RoomEvent.DataReceived, (payload /*, participant, kind, topic */) => {
-      // payload is already a Uint8Array per the LiveKit v2 API.
+    room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
+      // Intercept internal SDK messages; never forward them to the application.
+      if (topic === LiveKitBackend.#STATUS_TOPIC) {
+        try {
+          const { status } = JSON.parse(new TextDecoder().decode(payload));
+          if (status) this.onAgentStatus?.(status);
+        } catch { /* malformed — ignore */ }
+        return;
+      }
       this.onDataReceived?.(payload);
     });
 
