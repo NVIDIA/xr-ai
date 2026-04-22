@@ -22,6 +22,8 @@ dependencies = [
     "numpy>=1.24",
     # Config file
     "pyyaml>=6.0",
+    # TLS certificate generation
+    "cryptography>=42.0",
 ]
 
 [project.scripts]

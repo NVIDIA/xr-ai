@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from livekit.api import AccessToken, VideoGrants
 
+from ._tls import ensure_self_signed_cert
 from .config import LiveKitConnectorConfig
 
 log = logging.getLogger(__name__)
@@ -68,17 +69,30 @@ class WebServer:
 
     async def start(self) -> None:
         app = _build_app(self._cfg)
+
+        ssl_kwargs: dict = {}
+        scheme = "http"
+        if self._cfg.web_server_tls:
+            cert = self._cfg.cert_file or None
+            key  = self._cfg.key_file  or None
+            if not cert or not key:
+                cert, key = ensure_self_signed_cert()
+                log.info("TLS: using auto-generated self-signed cert  %s", cert)
+            ssl_kwargs = {"ssl_certfile": cert, "ssl_keyfile": key}
+            scheme = "https"
+
         uv_cfg = uvicorn.Config(
             app=app,
             host=self._cfg.web_server_host,
             port=self._cfg.web_server_port,
             log_level="warning",
+            **ssl_kwargs,
         )
         self._server = uvicorn.Server(uv_cfg)
         self._task = asyncio.create_task(self._serve_safe())
         log.info(
-            "Web server → http://%s:%d  client=%r",
-            self._cfg.web_server_host, self._cfg.web_server_port,
+            "Web server → %s://%s:%d  client=%r",
+            scheme, self._cfg.web_server_host, self._cfg.web_server_port,
             self._cfg.web_client_dir or "<no static dir>",
         )
 
