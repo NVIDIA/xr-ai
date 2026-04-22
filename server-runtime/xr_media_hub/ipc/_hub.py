@@ -35,10 +35,9 @@ from typing import Awaitable, Callable
 import zmq
 import zmq.asyncio
 
-from ._codec import decode, encode
-from ._shm import ShmRingBuffer, SlotView
-from ._types import (AudioChunk, ConnectorRegistration, ControlMessage,
-                     DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent)
+from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
+                         DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent,
+                         ShmRingBuffer, SlotView, decode, encode)
 
 log = logging.getLogger(__name__)
 

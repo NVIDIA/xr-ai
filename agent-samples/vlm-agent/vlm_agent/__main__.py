@@ -43,11 +43,9 @@ os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
 import numpy as np
 from PIL import Image
 
+from xr_ai_agent import (DataMessage, FrameData, FrameSignal, ParticipantEvent,
+                          PixelFormat, ProcessorEndpoint)
 from xr_ai_launcher import HubLauncher
-from xr_media_hub.ipc import ProcessorEndpoint
-from xr_media_hub.ipc._types import (
-    DataMessage, FrameData, FrameSignal, ParticipantEvent, PixelFormat,
-)
 
 log = logging.getLogger("vlm_agent")
 
