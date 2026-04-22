@@ -48,6 +48,10 @@ class LiveKitConnectorConfig:
     web_server_port:   int  = 8080
     # Absolute path to the web client directory. Set via xr_media_hub.yaml.
     web_client_dir:    str  = ""
+    # Enable HTTPS. A self-signed cert is auto-generated in
+    # ~/.local/share/xr-ai/ on first run. Supply cert_file/key_file to use
+    # your own certificate instead.
+    web_server_tls:    bool = False
 
     # ── Shared-memory ring buffer ──────────────────────────────────────────────
     shm_num_slots:       int = 10

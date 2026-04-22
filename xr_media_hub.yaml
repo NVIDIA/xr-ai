@@ -17,6 +17,10 @@ web_server_host:   "0.0.0.0"
 web_server_port:   8080
 # Path is relative to this file's directory.
 web_client_dir:    client-samples/web
+# Enable HTTPS with a self-signed certificate (auto-generated on first run at
+# ~/.local/share/xr-ai/web-server.crt).  Required for camera access when
+# connecting from a device other than localhost.
+# web_server_tls: true
 
 # ── Optional: token server (only needed for HTTPS/WSS proxy) ─────────────────
 enable_token_server: true
