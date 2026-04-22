@@ -69,7 +69,7 @@ class EchoAgent:
         pid = chunk.participant_id
         self._audio_chunks[pid] += 1
         self._audio_bytes[pid] += len(chunk.data)
-await self._ep.send_return_audio(chunk)
+        await self._ep.send_return_audio(chunk)
 
     async def _on_data(self, msg: DataMessage) -> None:
         pid = msg.participant_id
