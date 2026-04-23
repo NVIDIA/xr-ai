@@ -116,6 +116,9 @@ class LiveKitConnector:
     async def stop(self) -> None:
         """Gracefully shut down all components in reverse-start order."""
         log.info("LiveKitConnector stopping…")
+        # Start Docker shutdown immediately so it runs in parallel with the
+        # other cleanup steps — docker compose down can take several seconds.
+        docker_task = asyncio.create_task(self._docker.stop(), name="docker-stop")
         self._ep.stop()
         self._room_client.stop()
         await self._room_client.disconnect()
@@ -124,5 +127,5 @@ class LiveKitConnector:
             await self._web.stop()
         if self._token:
             await self._token.stop()
-        await self._docker.stop()
+        await docker_task
         log.info("LiveKitConnector stopped")

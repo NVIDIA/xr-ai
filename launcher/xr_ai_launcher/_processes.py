@@ -11,7 +11,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-_STOP_TIMEOUT = 5.0  # seconds before SIGKILL
+_STOP_TIMEOUT = 20.0  # seconds before SIGKILL (docker compose down can take ~10 s)
 
 
 async def _forward(stream: asyncio.StreamReader, prefix: str) -> None:
