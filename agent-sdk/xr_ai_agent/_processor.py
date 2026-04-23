@@ -209,6 +209,8 @@ class ProcessorEndpoint:
         while self._running:
             try:
                 _topic, raw = await self._sub.recv_multipart()
+            except asyncio.CancelledError:
+                break
             except zmq.ZMQError as exc:
                 if not self._running:
                     break
