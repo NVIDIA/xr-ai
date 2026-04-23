@@ -50,6 +50,12 @@ struct ContentView: View {
                 ConnectionStateBadge(state: model.connectionState)
             }
 
+            if model.connectionState == .connected {
+                LabeledContent("Agent") {
+                    AgentStatusBadge(status: model.agentStatus)
+                }
+            }
+
             if model.connectionState == .disconnected {
                 TextField("Host / IP", text: $m.host)
                     .autocorrectionDisabled()
@@ -62,6 +68,8 @@ struct ContentView: View {
                     .keyboardType(.numberPad)
                     #endif
 
+                Toggle("Token server uses HTTPS", isOn: $m.secure)
+
                 TextField("Token server URL (e.g. http://host/token)", text: $m.tokenServerURL)
                     .autocorrectionDisabled()
                     #if os(iOS)
@@ -71,10 +79,11 @@ struct ContentView: View {
                 TextField("Identity", text: $m.identity)
                     .autocorrectionDisabled()
 
-                Button("Connect") {
+                Button(model.isConnecting ? "Connecting…" : "Connect") {
                     Task { await model.connect() }
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(model.isConnecting)
             } else {
                 Button("Disconnect", role: .destructive) {
                     Task { await model.disconnect() }
@@ -89,7 +98,7 @@ struct ContentView: View {
     private var mediaSection: some View {
         Section("Media") {
 
-            // visionOS: immersive space must be open before camera can start
+            // visionOS: immersive space must be open before camera can start.
             #if os(visionOS)
             LabeledContent("Immersive Space") {
                 immersiveSpaceToggle
@@ -107,6 +116,17 @@ struct ContentView: View {
     @ViewBuilder
     private var audioRow: some View {
         if model.connectionState == .connected {
+            @Bindable var m = model
+
+            // Audio mode picker — mirrors the web client's dropdown.
+            // Disabled while the mic is actively streaming (same as web).
+            Picker("Audio Mode", selection: $m.audioMode) {
+                Text("Voice Processing").tag(AudioConfig.MicrophoneMode.voiceProcessing)
+                Text("Software (AEC on)").tag(AudioConfig.MicrophoneMode.softwareProcessing)
+                Text("Raw (no DSP)").tag(AudioConfig.MicrophoneMode.raw)
+            }
+            .disabled(model.isAudioActive)
+
             LabeledContent("Microphone") {
                 HStack {
                     Text(model.isAudioActive ? "Streaming" : "Idle")
@@ -251,6 +271,55 @@ private struct ConnectionStateBadge: View {
         case .connecting:    return "Connecting…"
         case .connected:     return "Connected"
         case .reconnecting:  return "Reconnecting…"
+        }
+    }
+}
+
+// MARK: - AgentStatusBadge
+
+private struct AgentStatusBadge: View {
+    let status: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if status == "processing" {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 8, height: 8)
+                    .opacity(pulseOpacity)
+                    .animation(
+                        .easeInOut(duration: 0.7).repeatForever(autoreverses: true),
+                        value: pulseOpacity
+                    )
+                    .onAppear { pulseOpacity = 0.3 }
+            } else {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 8, height: 8)
+            }
+            Text(label)
+                .font(.footnote)
+                .foregroundStyle(dotColor)
+        }
+        .animation(.easeInOut, value: status)
+    }
+
+    @State private var pulseOpacity: Double = 1.0
+
+    private var dotColor: Color {
+        switch status {
+        case "idle":       return .green
+        case "processing": return .orange
+        default:           return .secondary
+        }
+    }
+
+    private var label: String {
+        switch status {
+        case "idle":       return "Idle"
+        case "processing": return "Processing…"
+        case nil:          return "—"
+        default:           return "Unknown"
         }
     }
 }

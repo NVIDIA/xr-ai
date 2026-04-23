@@ -22,6 +22,11 @@ let package = Package(
             dependencies: [
                 .product(name: "LiveKit", package: "client-sdk-swift"),
             ],
+            resources: [
+                // SimulatorFeed.gif is used as the fake camera feed on the iOS simulator.
+                // Replace it with any animated GIF to customise what gets streamed.
+                .copy("Resources/SimulatorFeed.gif"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

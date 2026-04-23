@@ -5,6 +5,7 @@
  * Runs on @MainActor so it is safe to bind directly to SwiftUI.
  */
 
+import CoreMedia
 import Foundation
 
 // MARK: - StreamSession
@@ -40,6 +41,10 @@ public final class StreamSession: ObservableObject {
     /// Current connection state. Safe to observe from SwiftUI.
     @Published public private(set) var connectionState: ConnectionState = .disconnected
 
+    /// Latest agent status. `nil` when disconnected or no status has been received yet.
+    /// Common values: `"idle"`, `"processing"`.
+    @Published public private(set) var agentStatus: String?
+
     // MARK: - Callbacks
 
     /// Called on the main actor when the connection state changes.
@@ -47,6 +52,10 @@ public final class StreamSession: ObservableObject {
 
     /// Called on the main actor when binary data is received.
     public var onDataReceived: ((Data) -> Void)?
+
+    /// Called on the main actor when the agent publishes a status update.
+    /// Common values: `"idle"`, `"processing"`.
+    public var onAgentStatus: ((String) -> Void)?
 
     // MARK: - Private
 
@@ -78,6 +87,7 @@ public final class StreamSession: ObservableObject {
     /// Disconnects and releases all resources.
     public func disconnect() async {
         await backend.disconnect()
+        agentStatus = nil
     }
 
     // MARK: - Audio
@@ -109,6 +119,25 @@ public final class StreamSession: ObservableObject {
         try await backend.stopCamera()
     }
 
+    // MARK: - Frame injection
+
+    /// Pushes a ``CMSampleBuffer`` from an external camera source into the video stream.
+    ///
+    /// Use this to stream video from the **Meta wearables SDK** or any other source that
+    /// delivers `CMSampleBuffer` frames. A LiveKit video track is created and published
+    /// automatically on the first call; subsequent calls deliver frames to the
+    /// already-published track.
+    ///
+    /// On the **simulator**, ``startCamera()`` calls this method internally with synthetic
+    /// test frames, so you can develop and test without wearable hardware.
+    ///
+    /// - Parameter sampleBuffer: A `CMSampleBuffer` containing a `CVPixelBuffer`.
+    /// - Throws: ``StreamError/notConnected`` if not connected.
+    public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer) async throws {
+        guard let injectable = backend as? FrameInjectable else { return }
+        try await injectable.injectVideoFrame(sampleBuffer)
+    }
+
     // MARK: - Data channel
 
     /// Sends binary data to all participants.
@@ -133,6 +162,13 @@ public final class StreamSession: ObservableObject {
         backend.onDataReceived = { [weak self] data in
             Task { @MainActor [weak self] in
                 self?.onDataReceived?(data)
+            }
+        }
+        backend.onAgentStatus = { [weak self] status in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                agentStatus = status
+                onAgentStatus?(status)
             }
         }
     }
