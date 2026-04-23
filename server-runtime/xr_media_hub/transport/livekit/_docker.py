@@ -48,6 +48,7 @@ class LiveKitDocker:
         self._cfg = cfg
         self._tmpdir: tempfile.TemporaryDirectory | None = None
         self._compose_path: str | None = None
+        self._container_id: str | None = None
 
     async def start(self) -> None:
         """Write config files, start the container, wait for readiness."""
@@ -81,7 +82,18 @@ class LiveKitDocker:
             raise RuntimeError(f"docker compose up failed:\n{stderr.decode()}")
 
         await self._wait_ready(self._cfg.lk_port_ws)
-        log.info("LiveKit container ready on port %d", self._cfg.lk_port_ws)
+
+        # Record container ID for fallback stop.
+        id_proc = await asyncio.create_subprocess_exec(
+            "docker", "compose", "-f", self._compose_path, "ps", "-q",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        id_out, _ = await id_proc.communicate()
+        self._container_id = id_out.decode().strip().splitlines()[0] if id_out.strip() else None
+
+        log.info("LiveKit container ready on port %d  id=%s",
+                 self._cfg.lk_port_ws, self._container_id or "unknown")
 
     async def stop(self) -> None:
         if self._compose_path:
@@ -91,11 +103,40 @@ class LiveKitDocker:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await proc.communicate()
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                log.warning(
+                    "docker compose down exited %d — trying docker stop fallback\n%s",
+                    proc.returncode,
+                    (stderr or stdout or b"").decode(errors="replace").strip(),
+                )
+                await self._stop_by_id()
+            else:
+                log.info("LiveKit container stopped")
             self._compose_path = None
         if self._tmpdir:
             self._tmpdir.cleanup()
             self._tmpdir = None
+
+    async def _stop_by_id(self) -> None:
+        """Fallback: stop and remove the container by ID when compose down fails."""
+        if not self._container_id:
+            return
+        for cmd in (["docker", "stop", self._container_id],
+                    ["docker", "rm",   self._container_id]):
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                log.warning(
+                    "%s failed (rc=%d): %s",
+                    " ".join(cmd), proc.returncode,
+                    stderr.decode(errors="replace").strip(),
+                )
+        self._container_id = None
 
     async def _wait_ready(self, port: int, timeout: float = 30.0) -> None:
         loop = asyncio.get_event_loop()
