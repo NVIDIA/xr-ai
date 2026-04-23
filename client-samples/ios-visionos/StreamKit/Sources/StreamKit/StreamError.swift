@@ -23,6 +23,9 @@ public enum StreamError: Error, LocalizedError, Sendable {
     /// Open your app's `ImmersiveSpace` scene **before** calling `startCamera()`.
     case immersiveSpaceRequired
 
+    /// *(simulator)* `injectVideoFrame(_:)` was called before `startCamera()`.
+    case cameraNotStarted
+
     // MARK: - LocalizedError
 
     public var errorDescription: String? {
@@ -35,6 +38,8 @@ public enum StreamError: Error, LocalizedError, Sendable {
         case .immersiveSpaceRequired:
             return "Camera capture on visionOS requires an open ImmersiveSpace. " +
                    "Call openImmersiveSpace() in your app before startCamera()."
+        case .cameraNotStarted:
+            return "Call startCamera() before injecting frames."
         }
     }
 }

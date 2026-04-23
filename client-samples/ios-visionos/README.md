@@ -95,14 +95,24 @@ target's **Info** tab):
 <string>Used to stream the main passthrough camera via ARKit.</string>
 ```
 
-### 6. Entitlements file (visionOS passthrough camera)
+### 6. Entitlements file (visionOS passthrough camera — device only)
 
-Access to the visionOS main passthrough camera requires an Apple-granted enterprise
-entitlement. Without it, `startCamera()` throws an access-denied error on device; all
-other features (audio, data channel) work without it.
+> **Enterprise license required.**  
+> Access to the Apple Vision Pro main passthrough camera is an Apple enterprise API.
+> You must request the entitlement from Apple before it will work on a physical device.
+> All other features — audio, data channel, and the visionOS simulator — work without it.
 
-Create `StreamKitSample.entitlements` (**File → New → File → Property List**, then
-rename it) with the following content:
+#### Requesting the entitlement
+
+1. Visit <https://developer.apple.com/contact/request/visionos-enterprise-api/> and
+   submit a request for the **Main Camera Access** enterprise entitlement.
+2. Apple will review your use case and, if approved, add the entitlement to your
+   App ID in the developer portal.
+3. Regenerate your provisioning profile after it is granted.
+
+#### Adding it to the project
+
+An entitlements file is already provided at `App/StreamKitSample.entitlements`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -116,18 +126,34 @@ rename it) with the following content:
 </plist>
 ```
 
-Then in **Build Settings → Code Signing Entitlements** point the visionOS target at
-this file.
+Verify that **Build Settings → Code Signing Entitlements** for the visionOS target
+points at this file. Without a matching provisioning profile from Apple the build will
+succeed but `startCamera()` will throw an access-denied error at runtime on device.
 
-To request the entitlement from Apple, visit
-<https://developer.apple.com/contact/>.
+The visionOS simulator does **not** require this entitlement and will always use the
+GIF-based camera feed regardless.
 
 ### 7. Build and run
 
-| Destination | Notes |
-|---|---|
-| **visionOS Simulator / device** | Full feature set. Camera requires device + entitlement. |
-| **iOS Simulator / device** | ImmersiveView and all `#if os(visionOS)` blocks compile out automatically. Camera uses `AVCaptureSession`. |
+| Destination | Camera | Immersive Space | Microphone |
+|---|---|---|---|
+| **visionOS device** | ARKit passthrough — requires enterprise entitlement (see §6) | Supported — must be opened before starting the camera | Works |
+| **visionOS Simulator** | Streams `SimulatorFeed.gif` (see below) | Not supported by the simulator — the UI row is hidden automatically | Works if the host platform has a mic |
+| **iOS / iPadOS device** | `AVCaptureSession` front/back camera | N/A | Works |
+| **iOS Simulator** | Streams `SimulatorFeed.gif` (see below) | N/A | Limited — WebRTC ADM may error; other features unaffected |
+
+#### Simulator camera feed
+
+On both the iOS and visionOS simulators there is no physical camera. Instead, the SDK
+streams an animated GIF bundled inside the package:
+
+```
+StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif
+```
+
+To use a custom feed, replace that file with any animated GIF of the same name before
+building. No code changes are required — the file is declared as a Swift Package
+resource and loaded automatically at runtime.
 
 ---
 

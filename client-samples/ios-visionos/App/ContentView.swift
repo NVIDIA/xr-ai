@@ -68,7 +68,7 @@ struct ContentView: View {
                     .keyboardType(.numberPad)
                     #endif
 
-                Toggle("Secure (TLS)", isOn: $m.secure)
+                Toggle("Token server uses HTTPS", isOn: $m.secure)
 
                 TextField("Token server URL (e.g. http://host/token)", text: $m.tokenServerURL)
                     .autocorrectionDisabled()
@@ -79,10 +79,11 @@ struct ContentView: View {
                 TextField("Identity", text: $m.identity)
                     .autocorrectionDisabled()
 
-                Button("Connect") {
+                Button(model.isConnecting ? "Connecting…" : "Connect") {
                     Task { await model.connect() }
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(model.isConnecting)
             } else {
                 Button("Disconnect", role: .destructive) {
                     Task { await model.disconnect() }
@@ -97,7 +98,7 @@ struct ContentView: View {
     private var mediaSection: some View {
         Section("Media") {
 
-            // visionOS: immersive space must be open before camera can start
+            // visionOS: immersive space must be open before camera can start.
             #if os(visionOS)
             LabeledContent("Immersive Space") {
                 immersiveSpaceToggle
@@ -115,6 +116,17 @@ struct ContentView: View {
     @ViewBuilder
     private var audioRow: some View {
         if model.connectionState == .connected {
+            @Bindable var m = model
+
+            // Audio mode picker — mirrors the web client's dropdown.
+            // Disabled while the mic is actively streaming (same as web).
+            Picker("Audio Mode", selection: $m.audioMode) {
+                Text("Voice Processing").tag(AudioConfig.MicrophoneMode.voiceProcessing)
+                Text("Software (AEC on)").tag(AudioConfig.MicrophoneMode.softwareProcessing)
+                Text("Raw (no DSP)").tag(AudioConfig.MicrophoneMode.raw)
+            }
+            .disabled(model.isAudioActive)
+
             LabeledContent("Microphone") {
                 HStack {
                     Text(model.isAudioActive ? "Streaming" : "Idle")
@@ -306,7 +318,8 @@ private struct AgentStatusBadge: View {
         switch status {
         case "idle":       return "Idle"
         case "processing": return "Processing…"
-        default:           return "—"
+        case nil:          return "—"
+        default:           return "Unknown"
         }
     }
 }

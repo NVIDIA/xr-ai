@@ -37,12 +37,17 @@ final class AppModel {
     var agentStatus: String?
     var isAudioActive = false
     var isCameraActive = false
+    var isConnecting = false
     var receivedMessages: [ReceivedMessage] = []
     var lastError: String?
 
     // MARK: - Connect / disconnect
 
     func connect() async {
+        guard !isConnecting, connectionState == .disconnected else { return }
+        isConnecting = true
+        defer { isConnecting = false }
+
         lastError = nil
         receivedMessages.removeAll()
 
@@ -53,30 +58,39 @@ final class AppModel {
         let resolvedTokenURL = trimmedTokenURL.isEmpty
             ? URL(string: "\(tokenScheme)://\(host):8080/token")
             : URL(string: trimmedTokenURL)
+        // LiveKit always runs on plain ws:// in this deployment — TLS is terminated
+        // at the web-server layer (port 8080), not at the LiveKit signaling port (7880).
+        // `secure` only affects the token-endpoint URL scheme (http vs https).
         let lkConfig = LiveKitConfig(
             host: host,
             port: portNumber,
-            secure: secure,
+            secure: false,
             token: trimmedToken.isEmpty ? nil : trimmedToken,
             tokenURL: resolvedTokenURL
         )
 
         let newSession = StreamSession(.liveKit(lkConfig))
 
-        newSession.onConnectionStateChanged = { [weak self] state in
-            self?.connectionState = state
+        // Capture newSession weakly in every callback so that stale Tasks dispatched
+        // to @MainActor (e.g. a ".connecting" update that arrives after the catch block
+        // resets state) are silently dropped once `session` no longer points to this object.
+        newSession.onConnectionStateChanged = { [weak self, weak newSession] state in
+            guard let self, self.session === newSession else { return }
+            self.connectionState = state
             if state == .disconnected {
-                self?.isAudioActive = false
-                self?.isCameraActive = false
-                self?.agentStatus = nil
+                self.isAudioActive = false
+                self.isCameraActive = false
+                self.agentStatus = nil
             }
         }
-        newSession.onAgentStatus = { [weak self] status in
-            self?.agentStatus = status
+        newSession.onAgentStatus = { [weak self, weak newSession] status in
+            guard let self, self.session === newSession else { return }
+            self.agentStatus = status
         }
-        newSession.onDataReceived = { [weak self] data in
+        newSession.onDataReceived = { [weak self, weak newSession] data in
+            guard let self, self.session === newSession else { return }
             let text = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
-            self?.receivedMessages.insert(ReceivedMessage(text: text), at: 0)
+            self.receivedMessages.insert(ReceivedMessage(text: text), at: 0)
         }
 
         session = newSession
@@ -85,8 +99,11 @@ final class AppModel {
             try await newSession.connect(config: SessionConfig(identity: identity))
         } catch {
             lastError = error.localizedDescription
+            // Tear down synchronously — don't rely on the delegate callback firing
+            // when the connection never fully established.
             await newSession.disconnect()
             session = nil
+            connectionState = .disconnected
         }
     }
 

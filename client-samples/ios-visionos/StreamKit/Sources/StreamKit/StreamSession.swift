@@ -5,6 +5,7 @@
  * Runs on @MainActor so it is safe to bind directly to SwiftUI.
  */
 
+import CoreMedia
 import Foundation
 
 // MARK: - StreamSession
@@ -116,6 +117,25 @@ public final class StreamSession: ObservableObject {
     /// Stops camera capture.
     public func stopCamera() async throws {
         try await backend.stopCamera()
+    }
+
+    // MARK: - Frame injection
+
+    /// Pushes a ``CMSampleBuffer`` from an external camera source into the video stream.
+    ///
+    /// Use this to stream video from the **Meta wearables SDK** or any other source that
+    /// delivers `CMSampleBuffer` frames. A LiveKit video track is created and published
+    /// automatically on the first call; subsequent calls deliver frames to the
+    /// already-published track.
+    ///
+    /// On the **simulator**, ``startCamera()`` calls this method internally with synthetic
+    /// test frames, so you can develop and test without wearable hardware.
+    ///
+    /// - Parameter sampleBuffer: A `CMSampleBuffer` containing a `CVPixelBuffer`.
+    /// - Throws: ``StreamError/notConnected`` if not connected.
+    public func injectVideoFrame(_ sampleBuffer: sending CMSampleBuffer) async throws {
+        guard let injectable = backend as? FrameInjectable else { return }
+        try await injectable.injectVideoFrame(sampleBuffer)
     }
 
     // MARK: - Data channel
