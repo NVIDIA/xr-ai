@@ -1,2 +1,2 @@
-# Downloaded model weights — large binary files, never commit
-models/
+# Local config — may contain HF tokens. Copy from vlm_agent_worker.yaml.example.
+vlm_agent_worker.yaml

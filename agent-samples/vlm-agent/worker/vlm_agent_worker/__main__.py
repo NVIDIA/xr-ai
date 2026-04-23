@@ -12,18 +12,19 @@ Client → agent  (LiveKit data channel, any topic):
 Agent → client  (topic "vlm.response"):
     Raw UTF-8 text — the model's answer
 
-Environment
------------
-    VLM_MODEL   HuggingFace model ID (default: nvidia/Cosmos-Reason1-7B)
-                Must be a Qwen2.5-VL-compatible model.
-                License: NVIDIA Open Model License + Apache 2.0 (commercial OK).
-                ~16 GB VRAM required at BF16; use device_map="auto" for multi-GPU.
+Config (vlm_agent_worker.yaml in the sample root, auto-passed by launcher)
+---------------------------------------------------------------------------
+    model:     nvidia/Cosmos-Reason2-8B   # HuggingFace model ID
+    hf_token:  hf_xxxx                    # token for gated models — do NOT commit
+
+    # hf_token can also be provided via the HF_TOKEN environment variable.
 
 First-query note: the model is loaded on demand. The first query after
 startup will block for ~30–60 s while weights load from disk.
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import logging
@@ -37,6 +38,7 @@ import threading
 os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
 
 import numpy as np
+import yaml
 from PIL import Image
 
 from xr_ai_agent import (DataMessage, FrameData, FrameSignal, ParticipantEvent,
@@ -44,9 +46,22 @@ from xr_ai_agent import (DataMessage, FrameData, FrameSignal, ParticipantEvent,
 
 log = logging.getLogger("vlm_agent")
 
-_MODEL_ID    = os.environ.get("VLM_MODEL", "nvidia/Cosmos-Reason1-7B")
 # Cache under vlm-agent/ (two levels up from this file: vlm_agent_worker/ → worker/ → vlm-agent/)
 _MODEL_CACHE = pathlib.Path(__file__).resolve().parents[2] / "models"
+
+
+def _load_config(path: pathlib.Path) -> dict:
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
+
+
+def _apply_config(cfg: dict) -> tuple[str, str]:
+    """Apply config values to environment. Returns (model_id, system_prompt)."""
+    if token := cfg.get("hf_token", "").strip():
+        os.environ["HF_TOKEN"] = token
+    model = cfg.get("model", "").strip() or os.environ.get("VLM_MODEL", "nvidia/Cosmos-Reason2-8B")
+    system_prompt = cfg.get("system_prompt", "").strip()
+    return model, system_prompt
 
 # Qwen2.5-VL image token budget: 1 token per 28×28 px patch.
 # Large frames (e.g. 1920×1080) produce ~2500 tokens and push the model past
@@ -106,14 +121,15 @@ def _frame_to_pil(frame: FrameData) -> Image.Image:
 
 class _VlmBackend:
     """
-    Thread-safe lazy loader and inference runner for a Qwen2.5-VL model.
+    Thread-safe lazy loader and inference runner for any VLM supported by AutoModelForImageTextToText.
 
     Model is loaded on the first call to infer() and reused for all subsequent
     calls. Loading blocks the calling thread; use run_in_executor from asyncio.
     """
 
-    def __init__(self, model_id: str) -> None:
-        self._model_id  = model_id
+    def __init__(self, model_id: str, system_prompt: str = "") -> None:
+        self._model_id     = model_id
+        self._system_prompt = system_prompt
         self._model     = None
         self._processor = None
         self._lock      = threading.Lock()
@@ -125,7 +141,7 @@ class _VlmBackend:
             if self._model is not None:
                 return
             import torch
-            from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+            from transformers import AutoModelForImageTextToText, AutoProcessor
             _MODEL_CACHE.mkdir(parents=True, exist_ok=True)
             log.info("Loading VLM %s  cache=%s", self._model_id, _MODEL_CACHE)
             kwargs = dict(
@@ -140,7 +156,7 @@ class _VlmBackend:
             )
             # Try offline first — avoids a network round-trip when weights are cached.
             try:
-                self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                self._model = AutoModelForImageTextToText.from_pretrained(
                     self._model_id, local_files_only=True, **kwargs,
                 ).eval()
                 self._processor = AutoProcessor.from_pretrained(
@@ -148,7 +164,7 @@ class _VlmBackend:
                 )
             except OSError:
                 log.info("Model not in cache — downloading %s", self._model_id)
-                self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                self._model = AutoModelForImageTextToText.from_pretrained(
                     self._model_id, **kwargs,
                 ).eval()
                 self._processor = AutoProcessor.from_pretrained(
@@ -171,10 +187,13 @@ class _VlmBackend:
                 Image.LANCZOS,
             )
 
-        messages = [{"role": "user", "content": [
+        messages = []
+        if self._system_prompt:
+            messages.append({"role": "system", "content": self._system_prompt})
+        messages.append({"role": "user", "content": [
             {"type": "image", "image": image},
             {"type": "text",  "text":  query},
-        ]}]
+        ]})
         text = self._processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
         )
@@ -184,9 +203,16 @@ class _VlmBackend:
             padding=True, return_tensors="pt",
         ).to(self._model.device)
         with torch.inference_mode():
-            out_ids = self._model.generate(**inputs, max_new_tokens=512)
+            out_ids = self._model.generate(
+                **inputs,
+                max_new_tokens=4096,   # reasoning models emit <think> blocks before answering
+                repetition_penalty=1.05,
+            )
         trimmed = out_ids[:, inputs.input_ids.shape[1]:]
-        return self._processor.batch_decode(trimmed, skip_special_tokens=True)[0]
+        raw = self._processor.batch_decode(trimmed, skip_special_tokens=True)[0]
+        # Strip <think>…</think> reasoning block emitted by Cosmos-Reason and similar models.
+        import re
+        return re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
 
 
 # ── agent ─────────────────────────────────────────────────────────────────────
@@ -205,14 +231,14 @@ class VlmAgent:
        d. send_return_data("vlm.response") → client data channel
     """
 
-    def __init__(self) -> None:
+    def __init__(self, model_id: str, system_prompt: str = "") -> None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
         self._ep.on_frame(self._on_frame)
         self._ep.on_data(self._on_data)
         self._ep.on_participant(self._on_participant)
 
         self._latest: dict[tuple[str, str], FrameSignal] = {}
-        self._vlm = _VlmBackend(_MODEL_ID)
+        self._vlm = _VlmBackend(model_id, system_prompt)
 
     # ── callbacks ─────────────────────────────────────────────────────────────
 
@@ -295,14 +321,14 @@ class VlmAgent:
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
-async def main() -> None:
+async def main(model_id: str, system_prompt: str = "") -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
-    log.info("vlm-agent  model=%s", _MODEL_ID)
+    log.info("vlm-agent  model=%s", model_id)
 
-    agent = VlmAgent()
+    agent = VlmAgent(model_id, system_prompt)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -318,7 +344,14 @@ async def main() -> None:
 
 
 def run() -> None:
-    asyncio.run(main())
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--config", type=pathlib.Path, default=None)
+    ns, _ = p.parse_known_args()
+
+    cfg = _load_config(ns.config) if ns.config else {}
+    model_id, system_prompt = _apply_config(cfg)
+
+    asyncio.run(main(model_id, system_prompt))
 
 
 if __name__ == "__main__":
