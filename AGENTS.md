@@ -370,6 +370,12 @@ config files.
 
 ## Dependency discipline
 
+**`DEPENDENCIES.md` at the repo root is the authoritative dependency map.**
+Any change to a `pyproject.toml` must update `DEPENDENCIES.md` in the same
+commit. This applies to adding, removing, or updating any dependency — internal
+or external. A change is not complete until `DEPENDENCIES.md` reflects it.
+
+Hard rules (also documented in `DEPENDENCIES.md`):
 - `launcher/` has zero runtime dependencies — stdlib only. Keep it that way.
 - `agent-sdk/` (`xr-ai-agent`) depends only on `pyzmq` + `msgpack`. No server deps.
 - Agent workers import only from `xr_ai_agent` (and task-specific libs like numpy/torch).
