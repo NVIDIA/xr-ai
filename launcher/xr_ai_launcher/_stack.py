@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from ._credentials import load_credentials
 from ._project import ProjectLauncher
 
 log = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ async def run_stack(processes: Sequence[Process], base: Path) -> None:
         def run() -> None:
             asyncio.run(run_stack(PROCESSES, _BASE))
     """
+    load_credentials()  # inject any saved tokens before spawning child processes
     async with StackLauncher(processes, base) as procs:
         loop = asyncio.get_running_loop()
         stop = asyncio.Event()

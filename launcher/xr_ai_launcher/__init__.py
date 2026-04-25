@@ -19,9 +19,14 @@ Advanced usage — compose with custom async logic::
         await my_loop()
 """
 
+from ._credentials import ensure_credentials, load_credentials
 from ._processes import ManagedProcess
 from ._project import ProjectLauncher
 from ._hub import HubLauncher
 from ._stack import Process, StackLauncher, run_stack
 
-__all__ = ["ManagedProcess", "ProjectLauncher", "HubLauncher", "Process", "StackLauncher", "run_stack"]
+__all__ = [
+    "ensure_credentials", "load_credentials",
+    "ManagedProcess", "ProjectLauncher", "HubLauncher",
+    "Process", "StackLauncher", "run_stack",
+]

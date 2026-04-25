@@ -1,0 +1,20 @@
+# TTS server configuration — nvidia/magpie_tts_multilingual_357m.
+# Auto-discovered by xr-ai-launcher and passed as --config to tts_server.
+# OpenAI-compatible API at http://localhost:8104/v1
+
+# NeMo TTS model name.
+# nvidia/magpie_tts_multilingual_357m  — multilingual, NVIDIA Open Model License;
+#                                         ~1 GB VRAM
+model: nvidia/magpie_tts_multilingual_357m
+
+# Inference device: "cuda", "cpu", or "auto" (CUDA if available, else CPU).
+device: auto
+
+port: 8104
+host: "0.0.0.0"
+
+# NeMo FastPitch/VITS native output sample rate.
+sample_rate: 22050
+
+# NeMo + HuggingFace weight cache — resolved relative to this YAML file.
+model_cache: ../models

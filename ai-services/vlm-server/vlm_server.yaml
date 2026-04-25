@@ -1,0 +1,26 @@
+# VLM server configuration — nvidia/Cosmos-Reason1-7B.
+# Auto-discovered by xr-ai-launcher and passed as --config to vlm_server.
+# OpenAI-compatible API at http://localhost:8100/v1 (accepts image_url in messages)
+
+# HuggingFace model ID — any Qwen2.5-VL-compatible model is supported.
+# nvidia/Cosmos-Reason1-7B   — NVIDIA VLM; Apache 2.0 + NVIDIA Open Model License;
+#                              no HF login required; ~16 GB VRAM at BF16
+# nvidia/Cosmos-Reason2-8B   — stronger reasoning; gated — requires HF login + license
+model: nvidia/Cosmos-Reason1-7B
+
+# HuggingFace token — required for gated models (e.g. Cosmos-Reason2-8B).
+# Accept license at https://huggingface.co/nvidia/Cosmos-Reason2-8B first.
+# !! Do not commit this file with a real token !!
+hf_token: ""
+
+port: 8100
+host: "0.0.0.0"
+
+# Optional system prompt — leave empty for Cosmos-Reason1 (no system prompt needed).
+system_prompt: ""
+
+# Max tokens to generate per request (reasoning models emit <think> blocks).
+max_new_tokens: 4096
+
+# HuggingFace weight cache — resolved relative to this YAML file.
+model_cache: ../models

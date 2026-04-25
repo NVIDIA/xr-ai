@@ -33,7 +33,53 @@ xr-media-hub  (server-runtime/)
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
     └── pyyaml
+
+vlm-server  (vlm-server/)
+    └── torch >=2.2
+    └── torchvision >=0.17
+    └── transformers >=4.49
+    └── accelerate >=0.30
+    └── qwen-vl-utils >=0.0.8
+    └── Pillow >=10.0
+    └── numpy >=1.24
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── hf-transfer >=0.1.4
+    └── pyyaml >=6.0
+    Model: nvidia/Cosmos-Reason1-7B (Qwen2.5-VL architecture, in-process)
+
+stt-server  (stt-server/)
+    └── nemo_toolkit[asr] >=2.0
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── python-multipart >=0.0.9
+    └── pyyaml >=6.0
+    Model: nvidia/parakeet-tdt-0.6b-v3 (NeMo ASR, in-process)
+
+tts-server  (tts-server/)
+    └── nemo_toolkit[tts] >=2.0
+    └── soundfile >=0.12
+    └── numpy >=1.24
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── hf-transfer >=0.1.4
+    └── pyyaml >=6.0
+    Model: nvidia/magpie_tts_multilingual_357m (NeMo TTS, in-process)
 ```
+
+---
+
+## AI inference servers
+
+| Server | Package | Command | Default port | Model | Backend |
+|---|---|---|---|---|---|
+| `vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
+| `stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
+| `tts-server/` | `tts-server` | `tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+
+All model weights are cached under `models/` at the repo root (gitignored except
+`.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
+relative to the YAML file's directory.
 
 ---
 
@@ -41,17 +87,23 @@ cloudxr-runtime  (cloudxr-runtime/)
 
 ### echo-agent  (agent-samples/echo-agent/)
 
+STT → TTS echo pipeline: audio → STT → TTS → audio; text → TTS → audio.
+
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `echo-agent` | `xr-ai-launcher` | — |
-| Worker | `echo-agent-worker` | `xr-ai-agent` | — |
+| Worker | `echo-agent-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, pyyaml >=6.0 |
+
+Uses stt-server (port 8103), tts-server (port 8104).
 
 ### vlm-agent  (agent-samples/vlm-agent/)
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `vlm-agent` | `xr-ai-launcher` | — |
-| Worker | `vlm-agent-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, torch >=2.2, torchvision >=0.17, transformers >=4.49, accelerate >=0.30, qwen-vl-utils >=0.0.8, hf-transfer >=0.1.4, pyyaml >=6.0 |
+| Worker | `vlm-agent-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0 |
+
+Worker calls the vlm-server HTTP API (`POST /v1/chat/completions`) — no model weights loaded in-process.
 
 ### cloudxr-agent  (agent-samples/cloudxr-agent/)
 

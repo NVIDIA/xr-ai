@@ -10,6 +10,7 @@ server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
 launcher/           # stdlib-only process manager (used by samples)
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in per sample)
+ai-services/        # OpenAI-compatible AI inference servers (VLM, STT, TTS)
 agent-mcp-servers/  # MCP adapters: oxr, render, client, xr-media
 agent-samples/      # End-to-end agent demos
 docs/               # Design docs
@@ -64,6 +65,149 @@ Rules:
 - The worker never imports anything from `server-runtime` or `launcher/`.
 - Process management lives in `launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast: if any process exits, the rest are terminated.
+
+## Credentials
+
+The launcher manages HuggingFace and NGC API tokens so they are never stored
+in source files or YAML configs.
+
+Tokens are cached in `~/.config/xr-ai/credentials.json` — outside any repo,
+no `.gitignore` entry required.  Values already in `os.environ` always take
+priority (useful in CI or when you want to override the cache).
+
+`HF_TOKEN` is additionally written to `~/.cache/huggingface/token`, the same
+file used by `huggingface-cli login`.  This means:
+- Child processes find it without relying on env-var inheritance.
+- If you've already run `huggingface-cli login`, no prompt appears.
+
+### Prompting for a token
+
+Call `ensure_credentials` **before** `asyncio.run(run_stack(...))` in any
+orchestrator that needs a token:
+
+```python
+from xr_ai_launcher import ensure_credentials, run_stack
+
+def run() -> None:
+    ensure_credentials("HF_TOKEN")          # prompts once, saves for future runs
+    asyncio.run(run_stack(PROCESSES, _BASE))
+```
+
+Supported tokens: `HF_TOKEN`, `NGC_API_KEY`.  The user is shown a one-line
+prompt (password-style, no echo) with a link to generate the token.  Pressing
+Enter without typing skips the token (left unset, not saved).
+
+### Automatic injection
+
+`run_stack` always calls `load_credentials()` internally before spawning child
+processes, so any token already saved in the credentials file is available to
+every subprocess in the stack — even orchestrators that never call
+`ensure_credentials` directly.
+
+### Managing saved tokens
+
+```bash
+# View saved tokens
+cat ~/.config/xr-ai/credentials.json
+
+# Remove a token (re-run will prompt again)
+python3 -c "
+import json, pathlib
+p = pathlib.Path.home() / '.config/xr-ai/credentials.json'
+d = json.loads(p.read_text()); d.pop('HF_TOKEN', None); p.write_text(json.dumps(d, indent=2))
+"
+```
+
+---
+
+## Using AI inference servers
+
+Four reusable HTTP servers are available as launchable peers of `server-runtime/`.
+All expose an OpenAI-compatible REST API so agent workers can call them with any
+OpenAI SDK client or plain `httpx` / `requests`.
+
+| Server | Command | Port | Model | Backend |
+|---|---|---|---|---|
+| `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
+| `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
+| `ai-services/tts-server/` | `tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+
+All model weights land in `models/` at the repo root (gitignored, shared across all
+servers).  Each YAML configures `model_cache` — resolved relative to the YAML file.
+
+### Adding a server to a sample
+
+**1 — Add the process to the orchestrator:**
+
+```python
+PROCESSES = [
+    Process("hub",    "../../server-runtime",          "xr_media_hub"),
+    Process("vlm",    "../../ai-services/vlm-server",  "vlm_server"),   # ← add as needed
+    Process("stt",    "../../ai-services/stt-server",  "stt_server"),
+    Process("tts",    "../../ai-services/tts-server",  "tts_server"),
+    Process("worker", "worker",                        "my_agent_worker"),
+]
+```
+
+**2 — Copy the reference YAML to your sample root:**
+
+```bash
+cp ../../ai-services/vlm-server/vlm_server.yaml ./vlm_server.yaml
+cp ../../ai-services/stt-server/stt_server.yaml ./stt_server.yaml
+cp ../../ai-services/tts-server/tts_server.yaml ./tts_server.yaml
+```
+
+Edit the YAML as needed (model, port, device, etc.).  The launcher auto-discovers
+`<command>.yaml` in the sample root and passes it as `--config`.
+
+### Calling the servers from a worker
+
+```python
+import httpx
+
+# STT — POST multipart/form-data
+async with httpx.AsyncClient() as client:
+    resp = await client.post(
+        "http://localhost:8103/v1/audio/transcriptions",
+        files={"file": ("audio.wav", wav_bytes, "audio/wav")},
+        data={"response_format": "json"},
+    )
+    transcript = resp.json()["text"]
+
+# TTS — POST JSON
+async with httpx.AsyncClient() as client:
+    resp = await client.post(
+        "http://localhost:8104/v1/audio/speech",
+        json={"input": "Hello from XR.", "response_format": "wav"},
+    )
+    wav_bytes = resp.content
+
+# VLM — POST JSON with base64 image
+async with httpx.AsyncClient() as client:
+    resp = await client.post(
+        "http://localhost:8100/v1/chat/completions",
+        json={"model": "vlm", "messages": [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": image_data_url}},
+            {"type": "text", "text": "What do you see?"},
+        ]}]},
+    )
+    answer = resp.json()["choices"][0]["message"]["content"]
+```
+
+### Notes
+
+- **vlm-server** loads Cosmos-Reason1-7B in-process via HuggingFace transformers.
+  Model warms up at startup; strips `<think>…</think>` blocks automatically.
+- **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
+  English-only; `language` / `temperature` form fields are accepted but ignored.
+- **tts-server** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
+  All inference runs in a thread pool so the asyncio loop is never blocked.
+- Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080).
+- **Sample YAMLs** for each service ship with `cloudxr-agent` as a working example.
+  Copy them to other sample roots and adjust `model_cache` (`../../models` resolves
+  to `xr-ai/models/` from any `agent-samples/<name>/` directory).
+
+---
 
 ## Adding a new sample
 
@@ -422,6 +566,28 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-24 — AI inference servers added; NVIDIA models; shared model cache
+
+`ai-services/` added as a sibling of `server-runtime/`, containing three reusable
+OpenAI-compatible HTTP inference servers.
+
+Model choices — all NVIDIA:
+- **vlm-server**: `nvidia/Cosmos-Reason1-7B` in-process via HuggingFace
+  transformers (Qwen2.5-VL architecture).  Accepts base64 image_url in messages.
+- **stt-server**: `nvidia/parakeet-tdt-0.6b-v3` in-process via NeMo ASR.
+  English-only TDT model, CC-BY-4.0.  ~1.5 GB VRAM.
+- **tts-server**: `nvidia/magpie_tts_multilingual_357m` in-process via NeMo TTS.
+  Multilingual, NVIDIA Open Model License.  ~1 GB VRAM.
+
+Shared model cache: all weights land in `models/` at the repo root (gitignored).
+Each YAML configures `model_cache` (resolved relative to the YAML file) so the
+same physical directory is used regardless of which sample root the YAML is in.
+
+Sample YAMLs for all four services ship with `cloudxr-agent` as a template.
+
+OpenAI-compatible APIs chosen so workers never need to know backend details —
+swap models by changing the YAML only.
 
 ### 2026-04-22 — CloudXR runtime extracted to top-level shared component
 

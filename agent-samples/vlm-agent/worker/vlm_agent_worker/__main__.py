@@ -14,29 +14,20 @@ Agent → client  (topic "vlm.response"):
 
 Config (vlm_agent_worker.yaml in the sample root, auto-passed by launcher)
 ---------------------------------------------------------------------------
-    model:     nvidia/Cosmos-Reason2-8B   # HuggingFace model ID
-    hf_token:  hf_xxxx                    # token for gated models — do NOT commit
-
-    # hf_token can also be provided via the HF_TOKEN environment variable.
-
-First-query note: the model is loaded on demand. The first query after
-startup will block for ~30–60 s while weights load from disk.
+    vlm_server:  http://localhost:8100   # base URL of the vlm-server HTTP API
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import io
 import json
 import logging
-import os
 import pathlib
 import signal
-import threading
 
-# Must be set before huggingface_hub is imported — enables the Rust-based
-# parallel downloader (hf-transfer) which is ~5-10x faster than urllib.
-os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-
+import httpx
 import numpy as np
 import yaml
 from PIL import Image
@@ -46,29 +37,15 @@ from xr_ai_agent import (DataMessage, FrameData, FrameSignal, ParticipantEvent,
 
 log = logging.getLogger("vlm_agent")
 
-# Cache under vlm-agent/ (two levels up from this file: vlm_agent_worker/ → worker/ → vlm-agent/)
-_MODEL_CACHE = pathlib.Path(__file__).resolve().parents[2] / "models"
+_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
+_HUB_PUSH = "ipc:///tmp/xr_hub_in"
+
+_MAX_IMAGE_PIXELS = 1280 * 28 * 28   # ~1 MP — matches vlm-server's pixel cap
 
 
 def _load_config(path: pathlib.Path) -> dict:
     with open(path) as f:
         return yaml.safe_load(f) or {}
-
-
-def _apply_config(cfg: dict) -> tuple[str, str]:
-    """Apply config values to environment. Returns (model_id, system_prompt)."""
-    if token := cfg.get("hf_token", "").strip():
-        os.environ["HF_TOKEN"] = token
-    model = cfg.get("model", "").strip() or os.environ.get("VLM_MODEL", "nvidia/Cosmos-Reason2-8B")
-    system_prompt = cfg.get("system_prompt", "").strip()
-    return model, system_prompt
-
-# Qwen2.5-VL image token budget: 1 token per 28×28 px patch.
-# Large frames (e.g. 1920×1080) produce ~2500 tokens and push the model past
-# its context limit, triggering a CUDA device-side assert.  Cap to ~1 MP.
-_MAX_IMAGE_PIXELS = 1280 * 28 * 28   # ≈ 1 003 520 px  (~1002×1002)
-_HUB_PUB     = "ipc:///tmp/xr_hub_pub"
-_HUB_PUSH    = "ipc:///tmp/xr_hub_in"
 
 
 # ── pixel conversion ──────────────────────────────────────────────────────────
@@ -117,102 +94,12 @@ def _frame_to_pil(frame: FrameData) -> Image.Image:
     raise ValueError(f"Unsupported pixel format: {frame.fmt!r}")
 
 
-# ── VLM inference ─────────────────────────────────────────────────────────────
-
-class _VlmBackend:
-    """
-    Thread-safe lazy loader and inference runner for any VLM supported by AutoModelForImageTextToText.
-
-    Model is loaded on the first call to infer() and reused for all subsequent
-    calls. Loading blocks the calling thread; use run_in_executor from asyncio.
-    """
-
-    def __init__(self, model_id: str, system_prompt: str = "") -> None:
-        self._model_id     = model_id
-        self._system_prompt = system_prompt
-        self._model     = None
-        self._processor = None
-        self._lock      = threading.Lock()
-
-    def _ensure_loaded(self) -> None:
-        if self._model is not None:
-            return
-        with self._lock:
-            if self._model is not None:
-                return
-            import torch
-            from transformers import AutoModelForImageTextToText, AutoProcessor
-            _MODEL_CACHE.mkdir(parents=True, exist_ok=True)
-            log.info("Loading VLM %s  cache=%s", self._model_id, _MODEL_CACHE)
-            kwargs = dict(
-                torch_dtype=torch.bfloat16,
-                device_map="auto",
-                cache_dir=str(_MODEL_CACHE),
-            )
-            proc_kwargs = dict(
-                cache_dir=str(_MODEL_CACHE),
-                min_pixels=256 * 28 * 28,
-                max_pixels=_MAX_IMAGE_PIXELS,
-            )
-            # Try offline first — avoids a network round-trip when weights are cached.
-            try:
-                self._model = AutoModelForImageTextToText.from_pretrained(
-                    self._model_id, local_files_only=True, **kwargs,
-                ).eval()
-                self._processor = AutoProcessor.from_pretrained(
-                    self._model_id, local_files_only=True, **proc_kwargs,
-                )
-            except OSError:
-                log.info("Model not in cache — downloading %s", self._model_id)
-                self._model = AutoModelForImageTextToText.from_pretrained(
-                    self._model_id, **kwargs,
-                ).eval()
-                self._processor = AutoProcessor.from_pretrained(
-                    self._model_id, **proc_kwargs,
-                )
-            log.info("VLM ready on %s", next(self._model.parameters()).device)
-
-    def infer(self, image: Image.Image, query: str) -> str:
-        """Synchronous inference. Call from a thread pool, not the event loop."""
-        self._ensure_loaded()
-        import torch
-        from qwen_vl_utils import process_vision_info
-
-        # Resize before tokenisation — large frames (e.g. 1920×1080) exceed the
-        # model's context window and cause a CUDA device-side assert at runtime.
-        if image.width * image.height > _MAX_IMAGE_PIXELS:
-            scale = (_MAX_IMAGE_PIXELS / (image.width * image.height)) ** 0.5
-            image = image.resize(
-                (int(image.width * scale), int(image.height * scale)),
-                Image.LANCZOS,
-            )
-
-        messages = []
-        if self._system_prompt:
-            messages.append({"role": "system", "content": self._system_prompt})
-        messages.append({"role": "user", "content": [
-            {"type": "image", "image": image},
-            {"type": "text",  "text":  query},
-        ]})
-        text = self._processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
-        )
-        image_inputs, video_inputs = process_vision_info(messages)
-        inputs = self._processor(
-            text=[text], images=image_inputs, videos=video_inputs,
-            padding=True, return_tensors="pt",
-        ).to(self._model.device)
-        with torch.inference_mode():
-            out_ids = self._model.generate(
-                **inputs,
-                max_new_tokens=4096,   # reasoning models emit <think> blocks before answering
-                repetition_penalty=1.05,
-            )
-        trimmed = out_ids[:, inputs.input_ids.shape[1]:]
-        raw = self._processor.batch_decode(trimmed, skip_special_tokens=True)[0]
-        # Strip <think>…</think> reasoning block emitted by Cosmos-Reason and similar models.
-        import re
-        return re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+def _encode_image(image: Image.Image) -> str:
+    """PIL Image → JPEG data URL for the vlm-server API."""
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=90)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/jpeg;base64,{b64}"
 
 
 # ── agent ─────────────────────────────────────────────────────────────────────
@@ -225,20 +112,20 @@ class VlmAgent:
     ----
     1. on_frame() keeps track of the latest FrameSignal per (participant, track).
     2. on_data() — any data message is treated as a query (raw text or JSON):
-       a. request_frame(latest_signal)   — pixel copy from hub SHM
-       b. _frame_to_pil(frame)           — pixel format → PIL Image
-       c. _VlmBackend.infer()            — VLM inference in thread pool
-       d. send_return_data("vlm.response") → client data channel
+       a. request_frame(latest_signal)      — pixel copy from hub SHM
+       b. _frame_to_pil / _encode_image     — pixel format → JPEG data URL
+       c. POST /v1/chat/completions         — vlm-server HTTP API
+       d. send_return_data("vlm.response")  → client data channel
     """
 
-    def __init__(self, model_id: str, system_prompt: str = "") -> None:
+    def __init__(self, vlm_server: str) -> None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
         self._ep.on_frame(self._on_frame)
         self._ep.on_data(self._on_data)
         self._ep.on_participant(self._on_participant)
 
+        self._vlm_url = vlm_server.rstrip("/") + "/v1/chat/completions"
         self._latest: dict[tuple[str, str], FrameSignal] = {}
-        self._vlm = _VlmBackend(model_id, system_prompt)
 
     # ── callbacks ─────────────────────────────────────────────────────────────
 
@@ -273,12 +160,19 @@ class VlmAgent:
             await self._reply(pid, "Frame data unavailable — please retry.", msg.pts_us)
             return
 
-        image = _frame_to_pil(frame)
+        image     = _frame_to_pil(frame)
+        image_url = _encode_image(image)
         log.info("vlm  pid=%r  %dx%d  query=%r", pid, frame.width, frame.height, query[:60])
 
         await self._ep.set_status("processing", pid)
-        loop   = asyncio.get_running_loop()
-        answer = await loop.run_in_executor(None, self._vlm.infer, image, query)
+        try:
+            answer = await self._call_vlm(image_url, query)
+        except httpx.HTTPError as exc:
+            log.error("vlm-server error: %s", exc)
+            await self._reply(pid, "VLM server unavailable — please retry.", frame.pts_us)
+            await self._ep.set_status("idle", pid)
+            return
+
         log.info("vlm response  pid=%r  %d chars", pid, len(answer))
         await self._reply(pid, answer, frame.pts_us)
         await self._ep.set_status("idle", pid)
@@ -290,6 +184,21 @@ class VlmAgent:
                 del self._latest[k]
 
     # ── helpers ───────────────────────────────────────────────────────────────
+
+    async def _call_vlm(self, image_url: str, query: str) -> str:
+        payload = {
+            "model": "vlm",
+            "messages": [{"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": image_url}},
+                {"type": "text",      "text": query},
+            ]}],
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(self._vlm_url, json=payload)
+            if resp.is_error:
+                log.error("vlm-server %s: %s", resp.status_code, resp.text[:500])
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
 
     def _pick_signal(self, pid: str, track_id: str | None) -> FrameSignal | None:
         if track_id:
@@ -310,8 +219,6 @@ class VlmAgent:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def run(self) -> None:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._vlm._ensure_loaded)
         await self._ep.run()
 
     def shutdown(self) -> None:
@@ -321,14 +228,14 @@ class VlmAgent:
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
-async def main(model_id: str, system_prompt: str = "") -> None:
+async def main(vlm_server: str) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
-    log.info("vlm-agent  model=%s", model_id)
+    log.info("vlm-agent  server=%s", vlm_server)
 
-    agent = VlmAgent(model_id, system_prompt)
+    agent = VlmAgent(vlm_server)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -349,9 +256,9 @@ def run() -> None:
     ns, _ = p.parse_known_args()
 
     cfg = _load_config(ns.config) if ns.config else {}
-    model_id, system_prompt = _apply_config(cfg)
+    vlm_server = cfg.get("vlm_server", "http://localhost:8100").strip()
 
-    asyncio.run(main(model_id, system_prompt))
+    asyncio.run(main(vlm_server))
 
 
 if __name__ == "__main__":
