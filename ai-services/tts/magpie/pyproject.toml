@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tts-server"
+name = "magpie-tts-server"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tts_server = "tts_server.__main__:run"
+magpie_tts_server = "magpie_tts_server.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["tts_server"]
+packages = ["magpie_tts_server"]

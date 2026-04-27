@@ -1,5 +1,5 @@
 """
-tts_server — OpenAI-compatible Text-to-Speech server.
+magpie_tts_server — OpenAI-compatible Text-to-Speech server.
 
 Loads nvidia/magpie_tts_multilingual_357m (NeMo TTS) in-process and serves an
 OpenAI-compatible speech API:
@@ -69,13 +69,13 @@ class _TtsBackend:
             if device == "auto":
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            print(f"[tts_server] Loading NeMo TTS {self._model_name!r} on {device}…")
+            print(f"[magpie_tts_server] Loading NeMo TTS {self._model_name!r} on {device}…")
             model = MagpieTTSModel.from_pretrained(self._model_name)
             model.eval()
             if device == "cuda":
                 model = model.cuda()
             self._model = model
-            print("[tts_server] TTS model ready.")
+            print("[magpie_tts_server] TTS model ready.")
 
     def synthesize(self, text: str) -> bytes:
         """Synthesize text → WAV bytes. Synchronous — call from a thread pool."""
@@ -85,9 +85,11 @@ class _TtsBackend:
 
         self._ensure_loaded()
 
-        with torch.inference_mode():
-            # do_tts returns (audio, audio_len): audio shape (1, T), audio_len shape (1,)
-            audio, audio_len = self._model.do_tts(text)
+        # Magpie TTS is not re-entrant — serialize all synthesis calls.
+        with self._lock:
+            with torch.inference_mode():
+                # do_tts returns (audio, audio_len): audio shape (1, T), audio_len shape (1,)
+                audio, audio_len = self._model.do_tts(text)
 
         length   = int(audio_len[0].item())
         audio_np = audio[0, :length].cpu().float().numpy()
@@ -147,7 +149,7 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     import uvicorn
 
     if not cfg.get("model"):
-        print("[tts_server] 'model' is required in config", file=sys.stderr)
+        print("[magpie_tts_server] 'model' is required in config", file=sys.stderr)
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
@@ -167,9 +169,9 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    print(f"[tts_server] Ready  →  http://localhost:{port}/v1")
+    print(f"[magpie_tts_server] Ready  →  http://localhost:{port}/v1")
     await server.serve()
-    print("[tts_server] Stopped.")
+    print("[magpie_tts_server] Stopped.")
 
 
 def run() -> None:

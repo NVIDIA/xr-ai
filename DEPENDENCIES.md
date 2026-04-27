@@ -56,7 +56,7 @@ stt-server  (stt-server/)
     └── pyyaml >=6.0
     Model: nvidia/parakeet-tdt-0.6b-v3 (NeMo ASR, in-process)
 
-tts-server  (tts-server/)
+magpie-tts-server  (tts/magpie/)
     └── nemo_toolkit[tts] >=2.0
     └── soundfile >=0.12
     └── numpy >=1.24
@@ -75,6 +75,15 @@ llm-server  (llm-server/)
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
     Model: nvidia/Mistral-NeMo-Minitron-8B-Instruct (HuggingFace transformers, in-process)
+
+piper-tts-server  (tts/piper/)
+    └── piper-tts >=1.4.0
+    └── huggingface-hub >=0.22
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── pyyaml >=6.0
+    Voices: rhasspy/piper-voices on HuggingFace (ONNX, auto-downloaded)
+    Trade-off vs magpie: ~100 ms/sentence on CPU vs. 2-5 s; no GPU needed.
 ```
 
 ---
@@ -86,7 +95,8 @@ llm-server  (llm-server/)
 | `vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
 | `llm-server/` | `llm-server` | `llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
 | `stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
-| `tts-server/` | `tts-server` | `tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -114,7 +124,10 @@ Uses stt-server (port 8103), tts-server (port 8104).
 | Orchestrator | `vlm-agent` | `xr-ai-launcher` | — |
 | Worker | `vlm-agent-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0 |
 
-Worker calls the vlm-server HTTP API (`POST /v1/chat/completions`) — no model weights loaded in-process.
+Worker calls the vlm-server HTTP API (`POST /v1/chat/completions`) and tts-server HTTP API
+(`POST /v1/audio/speech`) — no model weights loaded in-process.
+
+Uses tts-server (port 8104).
 
 ### cloudxr-agent  (agent-samples/cloudxr-agent/)
 

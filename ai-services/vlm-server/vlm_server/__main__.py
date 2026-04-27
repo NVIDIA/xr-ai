@@ -26,9 +26,9 @@ import argparse
 import asyncio
 import base64
 import io
+import json
 import os
 import re
-import signal
 import sys
 import threading
 import uuid
@@ -145,6 +145,79 @@ class _VlmBackend:
         raw = self._processor.batch_decode(trimmed, skip_special_tokens=True)[0]
         return re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
 
+    def infer_stream(self, images: list, text: str, max_new_tokens: int):
+        """Synchronous generator that yields answer tokens as they're produced.
+
+        Buffers and discards any <think>…</think> preamble so only the answer
+        reaches callers. Call from a background thread — NOT the event loop.
+        """
+        from transformers import TextIteratorStreamer
+        self._ensure_loaded()
+        import torch
+        from qwen_vl_utils import process_vision_info
+        from PIL import Image
+
+        pil_images = []
+        for img in images:
+            if img.width * img.height > _MAX_PIXELS:
+                scale = (_MAX_PIXELS / (img.width * img.height)) ** 0.5
+                img = img.resize(
+                    (int(img.width * scale), int(img.height * scale)), Image.LANCZOS,
+                )
+            pil_images.append(img)
+
+        content = [{"type": "image", "image": img} for img in pil_images]
+        content.append({"type": "text", "text": text})
+        messages = []
+        if self._system_prompt:
+            messages.append({"role": "system", "content": self._system_prompt})
+        messages.append({"role": "user", "content": content})
+
+        text_input = self._processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True,
+        )
+        image_inputs, video_inputs = process_vision_info(messages)
+        inputs = self._processor(
+            text=[text_input], images=image_inputs, videos=video_inputs,
+            padding=True, return_tensors="pt",
+        ).to(self._model.device)
+
+        streamer = TextIteratorStreamer(
+            self._processor.tokenizer,
+            skip_prompt=True,
+            skip_special_tokens=True,
+            timeout=120.0,
+        )
+        gen_kwargs = dict(
+            **inputs,
+            streamer=streamer,
+            max_new_tokens=max_new_tokens,
+            repetition_penalty=1.05,
+        )
+        t = threading.Thread(target=self._model.generate, kwargs=gen_kwargs, daemon=True)
+        t.start()
+
+        # Buffer tokens until the <think> preamble (if any) is complete.
+        # Once past it, yield tokens directly for minimum latency.
+        preamble = ""
+        past_think = False
+        with torch.inference_mode():
+            for token in streamer:
+                if past_think:
+                    yield token
+                    continue
+                preamble += token
+                if "</think>" in preamble:
+                    past_think = True
+                    tail = preamble.split("</think>", 1)[1].lstrip()
+                    if tail:
+                        yield tail
+                elif not preamble.lstrip().startswith("<") and len(preamble) >= 8:
+                    # No think block — emit accumulated preamble and stream directly.
+                    past_think = True
+                    yield preamble
+        t.join()
+
 
 # ── image decoding ─────────────────────────────────────────────────────────────
 
@@ -162,7 +235,7 @@ def _decode_image(url: str):
 
 def _build_app(cfg: dict, model_cache: Path):
     from fastapi import FastAPI
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import JSONResponse, StreamingResponse
     from pydantic import BaseModel
 
     model_id      = cfg["model"]
@@ -216,14 +289,52 @@ def _build_app(cfg: dict, model_cache: Path):
                     elif block.type == "text" and block.text:
                         text_parts.append(block.text)
 
-        query = "\n".join(text_parts)
-        loop  = asyncio.get_running_loop()
+        query  = "\n".join(text_parts)
+        req_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+
+        if req.stream:
+            async def _sse():
+                loop  = asyncio.get_running_loop()
+                queue: asyncio.Queue = asyncio.Queue()
+
+                def _run_stream():
+                    try:
+                        for token in backend.infer_stream(images, query, req.max_tokens):
+                            loop.call_soon_threadsafe(queue.put_nowait, token)
+                    finally:
+                        loop.call_soon_threadsafe(queue.put_nowait, None)
+
+                threading.Thread(target=_run_stream, daemon=True).start()
+
+                while True:
+                    token = await queue.get()
+                    if token is None:
+                        break
+                    chunk = {
+                        "id": req_id, "object": "chat.completion.chunk",
+                        "model": model_id,
+                        "choices": [{"index": 0,
+                                     "delta": {"content": token},
+                                     "finish_reason": None}],
+                    }
+                    yield f"data: {json.dumps(chunk)}\n\n"
+
+                done = {
+                    "id": req_id, "object": "chat.completion.chunk",
+                    "model": model_id,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+                yield f"data: {json.dumps(done)}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(_sse(), media_type="text/event-stream")
+
+        loop   = asyncio.get_running_loop()
         answer = await loop.run_in_executor(
             None, backend.infer, images, query, req.max_tokens,
         )
-
         return {
-            "id":      f"chatcmpl-{uuid.uuid4().hex[:12]}",
+            "id":      req_id,
             "object":  "chat.completion",
             "model":   model_id,
             "choices": [{"index": 0,

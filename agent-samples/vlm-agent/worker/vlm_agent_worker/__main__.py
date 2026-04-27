@@ -12,9 +12,14 @@ Client → agent  (LiveKit data channel, any topic):
 Agent → client  (topic "vlm.response"):
     Raw UTF-8 text — the model's answer
 
+The response is also spoken aloud via TTS, sentence by sentence.
+TTS synthesis tasks are launched in parallel as each sentence completes,
+so audio starts playing shortly after the first sentence is generated.
+
 Config (vlm_agent_worker.yaml in the sample root, auto-passed by launcher)
 ---------------------------------------------------------------------------
     vlm_server:  http://localhost:8100   # base URL of the vlm-server HTTP API
+    tts_server:  http://localhost:8104   # base URL of the tts-server HTTP API
 """
 from __future__ import annotations
 
@@ -25,15 +30,18 @@ import io
 import json
 import logging
 import pathlib
+import re
 import signal
+import time
+import wave
 
 import httpx
 import numpy as np
 import yaml
 from PIL import Image
 
-from xr_ai_agent import (DataMessage, FrameData, FrameSignal, ParticipantEvent,
-                          PixelFormat, ProcessorEndpoint)
+from xr_ai_agent import (AudioChunk, DataMessage, FrameData, FrameSignal,
+                          ParticipantEvent, PixelFormat, ProcessorEndpoint)
 
 log = logging.getLogger("vlm_agent")
 
@@ -46,6 +54,33 @@ _MAX_IMAGE_PIXELS = 1280 * 28 * 28   # ~1 MP — matches vlm-server's pixel cap
 def _load_config(path: pathlib.Path) -> dict:
     with open(path) as f:
         return yaml.safe_load(f) or {}
+
+
+def _now_us() -> int:
+    return time.time_ns() // 1_000
+
+
+def _wav_to_chunks(wav_bytes: bytes, participant_id: str) -> list:
+    buf = io.BytesIO(wav_bytes)
+    with wave.open(buf, "rb") as wf:
+        sr  = wf.getframerate()
+        ch  = wf.getnchannels()
+        raw = wf.readframes(wf.getnframes())
+    arr = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    chunk_frames = max(1, sr // 50)  # 20 ms chunks
+    pts = _now_us()
+    out = []
+    for i in range(0, len(arr), chunk_frames * ch):
+        seg = arr[i : i + chunk_frames * ch]
+        if not len(seg):
+            break
+        out.append(AudioChunk(
+            pts_us=pts, sample_rate=sr, channels=ch,
+            samples=len(seg) // ch, data=seg.tobytes(),
+            participant_id=participant_id,
+        ))
+        pts += 20_000
+    return out
 
 
 # ── pixel conversion ──────────────────────────────────────────────────────────
@@ -114,17 +149,20 @@ class VlmAgent:
     2. on_data() — any data message is treated as a query (raw text or JSON):
        a. request_frame(latest_signal)      — pixel copy from hub SHM
        b. _frame_to_pil / _encode_image     — pixel format → JPEG data URL
-       c. POST /v1/chat/completions         — vlm-server HTTP API
-       d. send_return_data("vlm.response")  → client data channel
+       c. POST /v1/chat/completions         — vlm-server HTTP API (streaming)
+       d. Each complete sentence → asyncio.create_task(_synthesize) in parallel
+       e. send_return_data("vlm.response")  → client data channel
+       f. Await TTS tasks in order, send audio chunks as each finishes
     """
 
-    def __init__(self, vlm_server: str) -> None:
+    def __init__(self, vlm_server: str, tts_server: str) -> None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
         self._ep.on_frame(self._on_frame)
         self._ep.on_data(self._on_data)
         self._ep.on_participant(self._on_participant)
 
         self._vlm_url = vlm_server.rstrip("/") + "/v1/chat/completions"
+        self._tts_url = tts_server.rstrip("/") + "/v1/audio/speech"
         self._latest: dict[tuple[str, str], FrameSignal] = {}
 
     # ── callbacks ─────────────────────────────────────────────────────────────
@@ -165,40 +203,103 @@ class VlmAgent:
         log.info("vlm  pid=%r  %dx%d  query=%r", pid, frame.width, frame.height, query[:60])
 
         await self._ep.set_status("processing", pid)
+        full_response = ""
+        sentence_buf  = ""
+        # Queue of synthesis tasks in sentence order. None signals the sender to stop.
+        tts_queue: asyncio.Queue[asyncio.Task | None] = asyncio.Queue()
+
+        async def _audio_sender() -> None:
+            while True:
+                task = await tts_queue.get()
+                if task is None:
+                    break
+                try:
+                    wav = await task
+                    for chunk in _wav_to_chunks(wav, pid):
+                        await self._ep.send_return_audio(chunk)
+                except Exception as exc:
+                    log.error("tts audio error pid=%r: %s", pid, exc, exc_info=True)
+
+        sender = asyncio.create_task(_audio_sender())
+
         try:
-            answer = await self._call_vlm(image_url, query)
+            async for token in self._call_vlm_stream(image_url, query):
+                full_response += token
+                sentence_buf  += token
+                while True:
+                    m = re.search(r'(?<=[.!?])\s+', sentence_buf)
+                    if not m:
+                        break
+                    sentence     = sentence_buf[:m.start() + 1].strip()
+                    sentence_buf = sentence_buf[m.end():]
+                    if sentence:
+                        await tts_queue.put(asyncio.create_task(self._synthesize(sentence)))
         except httpx.HTTPError as exc:
             log.error("vlm-server error: %s", exc)
+            await tts_queue.put(None)
+            await sender
             await self._reply(pid, "VLM server unavailable — please retry.", frame.pts_us)
             await self._ep.set_status("idle", pid)
             return
 
-        log.info("vlm response  pid=%r  %d chars", pid, len(answer))
-        await self._reply(pid, answer, frame.pts_us)
+        if sentence_buf.strip():
+            await tts_queue.put(asyncio.create_task(self._synthesize(sentence_buf.strip())))
+        await tts_queue.put(None)
+
+        full_response = full_response.strip()
+        log.info("vlm response  pid=%r  %d chars", pid, len(full_response))
+        await self._reply(pid, full_response, frame.pts_us)
+        await sender
         await self._ep.set_status("idle", pid)
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if not event.joined:
-            keys = [k for k in self._latest if k[0] == event.participant_id]
+            pid  = event.participant_id
+            keys = [k for k in self._latest if k[0] == pid]
             for k in keys:
                 del self._latest[k]
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
-    async def _call_vlm(self, image_url: str, query: str) -> str:
+    async def _call_vlm_stream(self, image_url: str, query: str):
+        """Async generator that yields text tokens from the VLM server via SSE."""
         payload = {
             "model": "vlm",
+            "stream": True,
             "messages": [{"role": "user", "content": [
                 {"type": "image_url", "image_url": {"url": image_url}},
                 {"type": "text",      "text": query},
             ]}],
         }
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(self._vlm_url, json=payload)
+            async with client.stream("POST", self._vlm_url, json=payload) as resp:
+                if resp.is_error:
+                    log.error("vlm-server %s", resp.status_code)
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        return
+                    try:
+                        chunk   = json.loads(data)
+                        content = chunk["choices"][0]["delta"].get("content", "")
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
+
+    async def _synthesize(self, text: str) -> bytes:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                self._tts_url,
+                json={"input": text, "response_format": "wav"},
+            )
             if resp.is_error:
-                log.error("vlm-server %s: %s", resp.status_code, resp.text[:500])
+                log.error("tts %s: %s", resp.status_code, resp.text[:300])
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            return resp.content
 
     def _pick_signal(self, pid: str, track_id: str | None) -> FrameSignal | None:
         if track_id:
@@ -228,14 +329,14 @@ class VlmAgent:
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
-async def main(vlm_server: str) -> None:
+async def main(vlm_server: str, tts_server: str) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
-    log.info("vlm-agent  server=%s", vlm_server)
+    log.info("vlm-agent  vlm=%s  tts=%s", vlm_server, tts_server)
 
-    agent = VlmAgent(vlm_server)
+    agent = VlmAgent(vlm_server, tts_server)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -257,8 +358,9 @@ def run() -> None:
 
     cfg = _load_config(ns.config) if ns.config else {}
     vlm_server = cfg.get("vlm_server", "http://localhost:8100").strip()
+    tts_server = cfg.get("tts_server", "http://localhost:8104").strip()
 
-    asyncio.run(main(vlm_server))
+    asyncio.run(main(vlm_server, tts_server))
 
 
 if __name__ == "__main__":

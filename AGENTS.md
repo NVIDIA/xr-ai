@@ -131,7 +131,8 @@ OpenAI SDK client or plain `httpx` / `requests`.
 | `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
 | `ai-services/llm-server/` | `llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
 | `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
-| `ai-services/tts-server/` | `tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `ai-services/tts/magpie/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
 
 All model weights land in `models/` at the repo root (gitignored, shared across all
 servers).  Each YAML configures `model_cache` — resolved relative to the YAML file.
@@ -146,7 +147,7 @@ PROCESSES = [
     Process("vlm",    "../../ai-services/vlm-server",  "vlm_server"),   # ← add as needed
     Process("llm",    "../../ai-services/llm-server",  "llm_server"),
     Process("stt",    "../../ai-services/stt-server",  "stt_server"),
-    Process("tts",    "../../ai-services/tts-server",  "tts_server"),
+    Process("tts",    "../../ai-services/tts/magpie",   "magpie_tts_server"),
     Process("worker", "worker",                        "my_agent_worker"),
 ]
 ```
@@ -157,7 +158,9 @@ PROCESSES = [
 cp ../../ai-services/vlm-server/vlm_server.yaml ./vlm_server.yaml
 cp ../../ai-services/llm-server/llm_server.yaml ./llm_server.yaml
 cp ../../ai-services/stt-server/stt_server.yaml ./stt_server.yaml
-cp ../../ai-services/tts-server/tts_server.yaml ./tts_server.yaml
+cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./magpie_tts_server.yaml
+# or for Piper (~100 ms latency, CPU):
+cp ../../ai-services/tts/piper/piper_tts_server.yaml ./piper_tts_server.yaml
 ```
 
 Edit the YAML as needed (model, port, device, etc.).  The launcher auto-discovers
@@ -216,7 +219,8 @@ async with httpx.AsyncClient() as client:
   Minitron's `<extra_id_*>` chat-template tokens. Swap models via `llm_server.yaml`.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; `language` / `temperature` form fields are accepted but ignored.
-- **tts-server** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
+- **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
+- **tts/piper** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080).
 - **Sample YAMLs** for each service ship with `cloudxr-agent` as a working example.
@@ -621,8 +625,9 @@ Model choices — all NVIDIA:
   transformers (Qwen2.5-VL architecture).  Accepts base64 image_url in messages.
 - **stt-server**: `nvidia/parakeet-tdt-0.6b-v3` in-process via NeMo ASR.
   English-only TDT model, CC-BY-4.0.  ~1.5 GB VRAM.
-- **tts-server**: `nvidia/magpie_tts_multilingual_357m` in-process via NeMo TTS.
+- **tts/magpie**: `nvidia/magpie_tts_multilingual_357m` in-process via NeMo TTS.
   Multilingual, NVIDIA Open Model License.  ~1 GB VRAM.
+- **tts/piper**: any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
 
 Shared model cache: all weights land in `models/` at the repo root (gitignored).
 Each YAML configures `model_cache` (resolved relative to the YAML file) so the

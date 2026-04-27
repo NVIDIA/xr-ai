@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "piper-tts-server"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "piper-tts>=1.4.0",
+    "huggingface-hub>=0.22",
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+piper_tts_server = "piper_tts_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["piper_tts_server"]

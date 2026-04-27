@@ -17,7 +17,7 @@ _BASE = Path(__file__).resolve().parents[1]  # agent-samples/echo-agent/
 PROCESSES = [
     Process("hub",    "../../server-runtime",         "xr_media_hub"),
     Process("stt",    "../../ai-services/stt-server", "stt_server"),
-    Process("tts",    "../../ai-services/tts-server", "tts_server"),
+    Process("tts",    "../../ai-services/tts/magpie",  "magpie_tts_server"),
     Process("worker", "worker",                       "echo_agent_worker"),
 ]
 

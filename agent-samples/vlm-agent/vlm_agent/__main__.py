@@ -1,8 +1,7 @@
 """
-VLM agent orchestrator.
+VLM agent orchestrator — vision query pipeline.
 
-Declares the process sequence and delegates to run_stack.
-Each process owns its own venv and YAML config (<command>.yaml in this dir).
+Video + text query → VLM response → data channel + TTS audio.
 
 How to run (from agent-samples/vlm-agent/):
     uv sync && uv run vlm_agent
@@ -17,6 +16,7 @@ _BASE = Path(__file__).resolve().parents[1]  # agent-samples/vlm-agent/
 PROCESSES = [
     Process("hub",    "../../server-runtime",          "xr_media_hub"),
     Process("vlm",    "../../ai-services/vlm-server",  "vlm_server"),
+    Process("tts",    "../../ai-services/tts/piper",    "piper_tts_server"),
     Process("worker", "worker",                        "vlm_agent_worker"),
 ]
 
