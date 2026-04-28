@@ -5,6 +5,10 @@
 **/models/**
 !**/models/.gitkeep
 
+# Downloaded binaries (e.g. LOVR AppImage) — same convention as models/
+**/deps/**
+!**/deps/.gitkeep
+
 # macOS
 .DS_Store
 
@@ -31,6 +35,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!agent-mcp-servers/render-mcp/xr_app/lib/
 lib64/
 parts/
 sdist/

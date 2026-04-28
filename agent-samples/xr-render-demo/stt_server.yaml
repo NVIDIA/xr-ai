@@ -1,0 +1,17 @@
+# STT server configuration — nvidia/parakeet-tdt-0.6b-v3.
+# Auto-discovered by xr-ai-launcher and passed as --config to stt_server.
+# OpenAI-compatible API at http://localhost:8103/v1
+
+# NeMo model name.
+# nvidia/parakeet-tdt-0.6b-v3  — 0.6B TDT model; CC-BY-4.0; ~1.5 GB VRAM; English only
+# nvidia/parakeet-rnnt-1.1b    — stronger, larger; same CC-BY-4.0 license
+model: nvidia/parakeet-tdt-0.6b-v3
+
+# Inference device: "cuda", "cpu", or "auto" (CUDA if available, else CPU).
+device: auto
+
+port: 8103
+host: "0.0.0.0"
+
+# NeMo + HuggingFace weight cache — resolved relative to this YAML file.
+model_cache: ../models

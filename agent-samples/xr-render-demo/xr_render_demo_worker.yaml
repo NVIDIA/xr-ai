@@ -1,0 +1,70 @@
+# xr-render-demo worker configuration.
+# Paths and addresses resolve as-is.
+
+# ── render-mcp HTTP API ───────────────────────────────────────────────────────
+# Worker hits the FastAPI surface (POST /xr/start, /sphere/radius, /sphere/color,
+# /sphere/position, /sphere/reset). LLM agents would talk to /mcp instead —
+# see render_mcp.yaml.
+render_mcp_url: http://localhost:8220
+
+# ── oxr-mcp HTTP API ──────────────────────────────────────────────────────────
+# Worker GETs /pose once per utterance to translate the LLM's user-frame
+# coords into world-frame before forwarding to render-mcp.
+oxr_mcp_url: http://localhost:8230
+
+# ── llm-server (intent extraction) ────────────────────────────────────────────
+# Worker prompts /v1/chat/completions with a strict JSON-only system prompt
+# that asks for user-frame action lists. See _classify_actions in worker code.
+llm_server: http://localhost:8101
+
+# ── Sphere mapping tunables ───────────────────────────────────────────────────
+# radius = clamp(radius_base + radius_gain * sqrt(ema_rms), radius_min, radius_max)
+# sqrt() linearises human loudness perception so normal speech occupies most of
+# the range; nothing here requires yelling to drive against radius_max.
+# Tuned for VR (sphere a few metres in front, lots of room to expand) and an
+# office speaking voice — a confident indoor voice should saturate radius_max,
+# a relaxed voice should sit comfortably in the middle of the range.
+#
+# radius_min < radius_base is intentional: when the loudness EMA dips during
+# silence the computed target falls below radius_base, and clamping it at
+# radius_min (rather than radius_base) lets the sphere visibly shrink toward
+# zero on quiet moments instead of plateauing. radius_min stays just above 0
+# so the sphere never disappears completely (which would look like a render
+# bug).
+radius_base: 0.05
+radius_gain: 5.0
+radius_min:  0.03
+radius_max:  1.5
+
+# EMA smoothing factor applied to RMS (0..1; higher = snappier, lower = softer).
+ema_alpha: 0.30
+
+# ── STT ───────────────────────────────────────────────────────────────────────
+# Worker POSTs each detected utterance to this server's
+# /v1/audio/transcriptions endpoint (OpenAI-compatible).
+stt_server: http://localhost:8103
+
+# ── Voice activity detection (used to slice utterances for STT) ──────────────
+# silence_threshold: float32 RMS below which a chunk is considered silence.
+#   Tune to your mic. The worker logs ``vad ... max_rms=...`` once a second
+#   so you can pick a value above your idle floor and below your speech
+#   peaks. Browsers often apply aggressive AGC + noise suppression on the
+#   LiveKit capture path, so peaks can land in the 0.001–0.005 range —
+#   raise back toward 0.005+ on a hot mic.
+# silence_duration: seconds of trailing silence that ends an utterance.
+# min_speech: minimum cumulative speech in an utterance before STT fires
+#   (filters single-word coughs / clicks). 0.15s lets one-syllable words
+#   like "red" / "test" through; raise to ~0.3s if STT starts misfiring on
+#   short blips.
+silence_threshold: 0.005
+silence_duration:  0.8
+min_speech:        0.15
+
+# ── Sphere position bounds (enforced by the worker) ──────────────────────────
+# The LLM emits raw (x, y, z) for sphere.position commands; the worker clamps
+# each axis to a reasonable range before forwarding so the LLM can't yeet the
+# sphere out of reach. See _POS_BOUNDS in xr_render_demo_worker/__main__.py.
+#
+# (No knob here yet — bounds live in code; expose if you ever need to widen
+# them per-deployment.)
+

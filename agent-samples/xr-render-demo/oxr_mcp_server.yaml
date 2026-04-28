@@ -1,0 +1,21 @@
+# oxr-mcp configuration.
+# Paths in this file resolve relative to the file's own directory.
+#
+# Overridable per sample by dropping an oxr_mcp_server.yaml next to the sample's
+# orchestrator (the launcher auto-discovers <command>.yaml by convention).
+
+# ── HTTP / MCP server ─────────────────────────────────────────────────────────
+# oxr-mcp exposes:
+#   GET /health        — readiness probe
+#   GET /pose          — current head pose (position + orientation quaternion)
+#   /mcp/*             — FastMCP tool: get_head_pose
+#
+# Other MCP servers in this repo: transcript-mcp 8200, video-mcp 8210,
+# render-mcp 8220. oxr-mcp is the OpenXR tracking adapter at 8230.
+host: 0.0.0.0
+port: 8230
+
+# CloudXR environment file. Values from this file are sourced into oxr-mcp's
+# environment so it picks up XR_RUNTIME_JSON before opening the OpenXR session.
+# Same convention as render_mcp.yaml.
+cloudxr_env_file: ~/.cloudxr/run/cloudxr.env

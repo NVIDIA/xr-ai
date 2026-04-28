@@ -66,6 +66,35 @@ before the first query.
 
 ---
 
+### XR render demo (voice-driven sphere in CloudXR)
+
+Speak to the web client and a sphere in the streamed scene tracks your
+voice — radius follows loudness, colour and position follow spoken commands
+("make it red", "put it to my left", "where I'm looking"). Runs against a
+Quest 3 / Vision Pro on the same LAN, or the IWER emulator built into the
+web client for desktop dev.
+
+```bash
+cd xr-ai/agent-samples/xr-render-demo
+uv run xr_render_demo
+```
+
+On first run the orchestrator automatically downloads LOVR v0.18.0 to
+`deps/lovr/` inside the repo and builds the web vendor bundle (requires npm
+and network access). Both steps are skipped on subsequent runs.
+
+To use a custom LOVR build instead:
+
+```bash
+export LOVR_BIN=/path/to/your/lovr   # or set lovr_bin: in render_mcp.yaml
+uv run xr_render_demo
+```
+
+Plan ~17 GB VRAM for the LLM + STT models on first run (weights download
+on demand).
+
+---
+
 ### Hub only (server-runtime standalone)
 
 ```bash
@@ -80,6 +109,25 @@ The hub auto-discovers `server-runtime/xr_media_hub.yaml`.
 ---
 
 ### Web client
+
+#### Vendor bundle setup
+
+The page's import map loads `livekit-client` and `@nvidia/cloudxr` from
+`client-samples/web/vendor/` (same-origin, so XR headsets and offline
+LANs work). Both bundles are gitignored build output.
+
+The xr-render-demo orchestrator builds them automatically on first run
+(requires npm on PATH). To build manually or to rebuild after an SDK bump:
+
+```bash
+cd xr-ai/client-samples/web-xr-build
+./build.sh
+```
+
+Re-run only when bumping the SDK versions in `web-xr-build/package.json`
+or `web-xr-build/.sdk-version`.
+
+#### Connecting
 
 Open `http://localhost:8080` in a browser. Leave **Token URL** blank to use the
 server's built-in `/token` endpoint, or paste the printed token directly.
@@ -138,7 +186,7 @@ The token is valid for 24 hours. To get a fresh one restart the server or call
 
 ## Firewall
 
-The hub uses the following ports. Open them permanently if a firewall is active.
+The hub and CloudXR runtime use the following ports. Open them permanently if a firewall is active.
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
@@ -147,6 +195,7 @@ The hub uses the following ports. Open them permanently if a firewall is active.
 | 7882 | UDP | LiveKit WebRTC UDP media |
 | 8080 | TCP | Web client / token server (HTTP) |
 | 8443 | TCP | Web client / token server (HTTPS, if enabled) |
+| 48322 | TCP | CloudXR WSS proxy (XR headset / client connection) |
 
 **Ubuntu / Debian (`ufw`)**
 
@@ -156,6 +205,7 @@ sudo ufw allow 7881/tcp
 sudo ufw allow 7882/udp
 sudo ufw allow 8080/tcp
 sudo ufw allow 8443/tcp   # HTTPS only
+sudo ufw allow 48322/tcp  # CloudXR (xr-render-demo)
 sudo ufw reload
 ```
 
@@ -167,6 +217,7 @@ sudo firewall-cmd --permanent --add-port=7881/tcp
 sudo firewall-cmd --permanent --add-port=7882/udp
 sudo firewall-cmd --permanent --add-port=8080/tcp
 sudo firewall-cmd --permanent --add-port=8443/tcp   # HTTPS only
+sudo firewall-cmd --permanent --add-port=48322/tcp  # CloudXR (xr-render-demo)
 sudo firewall-cmd --reload
 ```
 

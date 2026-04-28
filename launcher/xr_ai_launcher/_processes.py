@@ -26,17 +26,21 @@ async def _forward(stream: asyncio.StreamReader, prefix: str) -> None:
 
 
 @asynccontextmanager
-async def ManagedProcess(name: str, cmd: list[str], cwd: Path | None = None):
+async def ManagedProcess(name: str, cmd: list[str], cwd: Path | None = None,
+                         env: dict[str, str] | None = None):
     """
     Run *cmd* as a subprocess, forward stdout/stderr prefixed with [name],
     and terminate it cleanly when the context exits.
 
     Sends SIGTERM on exit; escalates to SIGKILL after _STOP_TIMEOUT seconds.
+    *env*, if given, replaces the child's environment entirely; otherwise
+    the child inherits the parent's.
     """
     log.info("[%s] starting: %s", name, " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=cwd,
+        env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

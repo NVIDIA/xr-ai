@@ -74,6 +74,29 @@ cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
     └── pyyaml
 
+render-mcp-server  (agent-mcp-servers/render-mcp/)
+    └── xr-ai-launcher  [editable: ../../launcher] (ManagedProcess + cloudxr-env helpers)
+    └── pyzmq >=26.0       (PUSH socket → LOVR; libzmq.so reused by LOVR FFI)
+    └── msgpack >=1.0      (wire format for LOVR ops)
+    └── pyyaml >=6.0
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    Spawns LOVR (the OpenXR rendering app) on the first start_xr call.
+    Mixed HTTP surface: POST /sphere/radius is a plain route for the
+    worker's per-audio-chunk firehose; /mcp hosts the discrete MCP tools
+    (start_xr, set_sphere_color, set_sphere_position, reset_sphere,
+    get_health) that an LLM agent or worker can drive.
+
+oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
+    └── xr-ai-launcher  [editable: ../../launcher] (cloudxr-env helpers)
+    └── isaacteleop                                (headless OpenXR + HeadTracker)
+    └── pyyaml >=6.0
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    Pure FastMCP at /mcp. Reads pose from CloudXR via a second (headless)
+    OpenXR session; runs alongside LOVR's rendering session.
+
 xr-ai-tests  (tests/)
     └── xr-ai-agent   [editable: ../agent-sdk]
     └── xr-media-hub  [editable: ../server-runtime]
@@ -175,6 +198,8 @@ piper-tts-server  (tts/piper/)
 | `llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 | vLLM (execvp shim) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
+| `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
+| `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -201,7 +226,14 @@ Swift / SwiftUI + Swift Package Manager.  See `client-samples/ios-visionos/READM
 
 ### Web  (client-samples/web/)
 
-Vanilla JS, no build step.  Depends on `livekit-client` v2 via CDN import map.
+Vanilla JS. The page's import map loads `livekit-client` and
+`@nvidia/cloudxr` from `client-samples/web/vendor/`, served same-origin
+by the hub so headsets / offline LANs work. Both bundles are gitignored
+build output of `client-samples/web-xr-build/build.sh` — every host
+serving any web sample runs that script once:
+
+  - `cloudxr-sdk.esm.mjs`   — webpack-bundled from the @nvidia/cloudxr NGC tarball
+  - `livekit-client.esm.mjs` — copied from npm's prebuilt ESM
 
 ---
 
@@ -222,13 +254,6 @@ the latest video frame via streaming VLM and replies with both
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP — no model weights loaded in-process.
 
-### cloudxr-agent  (agent-samples/cloudxr-agent/)
-
-| Sub-project | Package | Internal deps | External deps |
-|---|---|---|---|
-| Orchestrator | `cloudxr-agent` | `xr-ai-launcher` | — |
-| Worker | `cloudxr-agent-worker` | `xr-ai-agent` | — |
-
 ### mcp-agent  (agent-samples/mcp-agent/)
 
 Continuous STT → transcript ingest + MCP-accessible transcript and video query.
@@ -244,6 +269,22 @@ tools at `/mcp`. Worker reaches it via `fastmcp.Client`; uses STT (8103) for
 transcription. Hub video recording requires `PyNvVideoCodec` (dep of
 `xr-media-hub`; included in `uv sync`).
 
+### xr-render-demo  (agent-samples/xr-render-demo/)
+
+Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
+action list (user-frame coords) → render-mcp → LOVR. Pose from oxr-mcp lets
+the worker convert user-frame requests ("to my left") to world-frame before
+forwarding.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `xr-render-demo` | `xr-ai-launcher` | — |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
+
+Uses cloudxr-runtime, render-mcp-server (8220), oxr-mcp-server (8230),
+stt-server (8103), llm-server (8101). Web client must be a build that
+includes the bundled CloudXR JS SDK (see `client-samples/web-xr-build/`).
+
 ---
 
 ## Change impact map
@@ -258,7 +299,10 @@ updated in the same commit**.
 | `launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
-| cloudxr-runtime YAML config keys | `agent-samples/cloudxr-agent/cloudxr_runtime.yaml`, `AGENTS.md` CloudXR section |
+| cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/cloudxr_runtime.yaml`, `AGENTS.md` CloudXR section |
+| `launcher/_cloudxr_env.py` API | render-mcp + oxr-mcp `__main__.py` imports, `AGENTS.md` cloudxr-env section |
+| render-mcp YAML config keys | `agent-mcp-servers/render-mcp/render_mcp.yaml`, sample copies, worker URL constants |
+| oxr-mcp YAML config keys | `agent-mcp-servers/oxr-mcp/oxr_mcp_server.yaml`, sample copies, worker URL constants |
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
 | Any new sample added | `DEPENDENCIES.md`, `AGENTS.md`, `README.md` |
 | Any new shared component added (peer of `server-runtime/`) | `AGENTS.md` Architecture section, `DEPENDENCIES.md` |

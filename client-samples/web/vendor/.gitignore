@@ -1,0 +1,4 @@
+# Output of client-samples/web-xr-build/build.sh — gitignored, fetched
+# per host. The page's import map points at /vendor/{cloudxr-sdk,livekit-client}.esm.mjs;
+# every web sample needs both bundles to be present.
+*.esm.mjs

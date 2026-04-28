@@ -1,7 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-
-# XR Media Hub configuration for the cloudxr-agent sample.
+# XR Media Hub configuration for the xr-render-demo sample.
 # Paths are relative to this file's directory.
 # See server-runtime/xr_media_hub.yaml for all available options.
 
@@ -15,6 +12,10 @@ lk_port_tcp: 7881
 lk_port_udp: 7882
 
 # ── Web client server ─────────────────────────────────────────────────────────
+# The page serves both stacks: LiveKit (agent audio/data over the WSS proxy on
+# this port) AND CloudXR (one-tap Launch XR → WebXR over wss://<host>:48322).
+# Because both live in the same JS context, entering XR does not drop the
+# agent connection.
 enable_web_server: true
 web_server_port:   8080
 web_client_dir:    ../../client-samples/web

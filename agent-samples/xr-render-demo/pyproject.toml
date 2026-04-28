@@ -1,12 +1,9 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cloudxr-agent"
+name = "xr-render-demo"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
@@ -17,7 +14,7 @@ dependencies = [
 xr-ai-launcher = { path = "../../launcher", editable = true }
 
 [project.scripts]
-cloudxr_agent = "cloudxr_agent:run"
+xr_render_demo = "xr_render_demo.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["cloudxr_agent.py"]
+packages = ["xr_render_demo"]
