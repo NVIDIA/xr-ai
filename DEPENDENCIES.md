@@ -65,6 +65,16 @@ tts-server  (tts-server/)
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
     Model: nvidia/magpie_tts_multilingual_357m (NeMo TTS, in-process)
+
+llm-server  (llm-server/)
+    └── torch >=2.2
+    └── transformers >=4.49
+    └── accelerate >=0.30
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── hf-transfer >=0.1.4
+    └── pyyaml >=6.0
+    Model: nvidia/Mistral-NeMo-Minitron-8B-Instruct (HuggingFace transformers, in-process)
 ```
 
 ---
@@ -74,6 +84,7 @@ tts-server  (tts-server/)
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
 | `vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
+| `llm-server/` | `llm-server` | `llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
 | `stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `tts-server/` | `tts-server` | `tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 

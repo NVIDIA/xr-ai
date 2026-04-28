@@ -129,6 +129,7 @@ OpenAI SDK client or plain `httpx` / `requests`.
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
 | `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
+| `ai-services/llm-server/` | `llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
 | `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `ai-services/tts-server/` | `tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 
@@ -143,6 +144,7 @@ servers).  Each YAML configures `model_cache` — resolved relative to the YAML 
 PROCESSES = [
     Process("hub",    "../../server-runtime",          "xr_media_hub"),
     Process("vlm",    "../../ai-services/vlm-server",  "vlm_server"),   # ← add as needed
+    Process("llm",    "../../ai-services/llm-server",  "llm_server"),
     Process("stt",    "../../ai-services/stt-server",  "stt_server"),
     Process("tts",    "../../ai-services/tts-server",  "tts_server"),
     Process("worker", "worker",                        "my_agent_worker"),
@@ -153,6 +155,7 @@ PROCESSES = [
 
 ```bash
 cp ../../ai-services/vlm-server/vlm_server.yaml ./vlm_server.yaml
+cp ../../ai-services/llm-server/llm_server.yaml ./llm_server.yaml
 cp ../../ai-services/stt-server/stt_server.yaml ./stt_server.yaml
 cp ../../ai-services/tts-server/tts_server.yaml ./tts_server.yaml
 ```
@@ -192,12 +195,25 @@ async with httpx.AsyncClient() as client:
         ]}]},
     )
     answer = resp.json()["choices"][0]["message"]["content"]
+
+# LLM — POST JSON (pure-text chat completion)
+async with httpx.AsyncClient() as client:
+    resp = await client.post(
+        "http://localhost:8101/v1/chat/completions",
+        json={"model": "llm", "messages": [
+            {"role": "user", "content": "Say OK"},
+        ], "max_tokens": 16},
+    )
+    answer = resp.json()["choices"][0]["message"]["content"]
 ```
 
 ### Notes
 
 - **vlm-server** loads Cosmos-Reason1-7B in-process via HuggingFace transformers.
   Model warms up at startup; strips `<think>…</think>` blocks automatically.
+- **llm-server** loads Mistral-NeMo-Minitron-8B-Instruct in-process via HuggingFace
+  transformers. Pure-text `/v1/chat/completions` only; default stop list handles
+  Minitron's `<extra_id_*>` chat-template tokens. Swap models via `llm_server.yaml`.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; `language` / `temperature` form fields are accepted but ignored.
 - **tts-server** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
@@ -566,6 +582,34 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-28 — llm-server added (pure-text LLM)
+
+Fourth AI inference server added under `ai-services/llm-server/`, filling the
+pure-text LLM gap alongside the existing VLM / STT / TTS servers.
+
+- **Model**: `nvidia/Mistral-NeMo-Minitron-8B-Instruct` (HuggingFace causal LM,
+  ~16 GB VRAM at BF16) loaded in-process via `AutoModelForCausalLM` +
+  `AutoTokenizer`. Any `AutoModelForCausalLM`-compatible HF model works — swap
+  by editing `llm_server.yaml` (`model`, `max_new_tokens`, `dtype`, `stop`).
+- **API**: OpenAI-compatible `GET /health`, `GET /v1/models`,
+  `POST /v1/chat/completions` on default port **8101** (avoiding the VLM 8100
+  and the STT/TTS 8103/8104 slots). Pure-text messages only — multi-modal
+  content blocks are flattened to text (non-`text` blocks are dropped).
+- **No strict Pydantic schema** on the request body — the endpoint parses
+  raw JSON. This sidesteps FastAPI/Pydantic v2 ForwardRef issues with
+  closure-defined models and tolerates the many optional fields OpenAI
+  clients send (`n`, `frequency_penalty`, `seed`, `reasoning_effort`, …).
+- **Stop handling**: the request's `stop` list is honored; if absent, the
+  YAML's `stop` default is used. For Minitron-8B this defaults to
+  `["<extra_id_1>", "<extra_id_0>"]` so chat-template tokens don't leak
+  into replies. A `StringStopCriteria` hook also halts generation mid-stream
+  once a stop string appears in decoded output.
+- **Threading**: blocking `generate()` runs in the default thread pool
+  executor via `loop.run_in_executor` so the asyncio loop is never blocked.
+  The backend is loaded lazily under a lock (warmed at startup from `_run`).
+- **No continuous batching.** Single-user voice-agent workloads only; for
+  higher concurrency swap in vLLM behind the same HTTP contract.
 
 ### 2026-04-24 — AI inference servers added; NVIDIA models; shared model cache
 
