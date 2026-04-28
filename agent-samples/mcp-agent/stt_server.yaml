@@ -1,0 +1,7 @@
+# STT server configuration for mcp-agent.
+# Auto-discovered by the launcher and passed as --config to stt_server.
+
+model:       nvidia/parakeet-tdt-0.6b-v3
+device:      auto
+port:        8103
+model_cache: ../../models

@@ -1,0 +1,9 @@
+# Transcript MCP server configuration for mcp-agent.
+# Auto-discovered by the launcher and passed as --config to transcript_mcp_server.
+#
+# HTTP ingest:  POST http://localhost:8200/ingest
+# MCP endpoint: http://localhost:8200/mcp  (StreamableHTTP transport)
+
+transcripts_dir: /tmp/xr_transcripts/mcp-agent   # persists across runs
+host:            0.0.0.0
+port:            8200

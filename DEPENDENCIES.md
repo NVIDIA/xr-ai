@@ -29,6 +29,20 @@ xr-media-hub  (server-runtime/)
     └── numpy >=1.24
     └── pyyaml >=6.0
     └── cryptography >=42.0
+    PyNvVideoCodec >=1.0 (NVENC H.264 encoder; used when video_recording.enabled: true)
+
+transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    Storage: JSONL files per participant in configurable transcripts_dir
+
+video-mcp-server  (agent-mcp-servers/video-mcp/)
+    └── fastmcp >=0.4
+    └── httpx >=0.27
+    └── pyyaml >=6.0
+    Wraps the hub video HTTP API (GET /video) as an MCP tool
 
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
@@ -97,6 +111,8 @@ piper-tts-server  (tts/piper/)
 | `stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | JSONL storage + FastMCP |
+| `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP → hub video API |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -135,6 +151,18 @@ Uses tts-server (port 8104).
 |---|---|---|---|
 | Orchestrator | `cloudxr-agent` | `xr-ai-launcher` | — |
 | Worker | `cloudxr-agent-worker` | `xr-ai-agent` | — |
+
+### mcp-agent  (agent-samples/mcp-agent/)
+
+Continuous STT → transcript ingest + MCP-accessible transcript and video query.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `mcp-agent` | `xr-ai-launcher` | — |
+| Worker | `mcp-agent-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, pyyaml >=6.0 |
+
+Uses stt-server (8103), transcript-mcp-server (8200), video-mcp-server (8210).
+Hub video recording requires `PyNvVideoCodec` (dep of xr-media-hub; included in `uv sync`).
 
 ---
 

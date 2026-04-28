@@ -11,7 +11,7 @@ agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
 launcher/           # stdlib-only process manager (used by samples)
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in per sample)
 ai-services/        # OpenAI-compatible AI inference servers (VLM, STT, TTS)
-agent-mcp-servers/  # MCP adapters: oxr, render, client, xr-media
+agent-mcp-servers/  # MCP adapters: oxr, render, client, xr-media, transcript, video
 agent-samples/      # End-to-end agent demos
 docs/               # Design docs
 ```
@@ -133,6 +133,8 @@ OpenAI SDK client or plain `httpx` / `requests`.
 | `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `ai-services/tts/magpie/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
+| `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → hub |
 
 All model weights land in `models/` at the repo root (gitignored, shared across all
 servers).  Each YAML configures `model_cache` — resolved relative to the YAML file.
@@ -161,6 +163,9 @@ cp ../../ai-services/stt-server/stt_server.yaml ./stt_server.yaml
 cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./magpie_tts_server.yaml
 # or for Piper (~100 ms latency, CPU):
 cp ../../ai-services/tts/piper/piper_tts_server.yaml ./piper_tts_server.yaml
+# MCP servers:
+cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./transcript_mcp_server.yaml
+cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./video_mcp_server.yaml
 ```
 
 Edit the YAML as needed (model, port, device, etc.).  The launcher auto-discovers
@@ -222,8 +227,15 @@ async with httpx.AsyncClient() as client:
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
 - **tts/piper** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
-- Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080).
-- **Sample YAMLs** for each service ship with `cloudxr-agent` as a working example.
+- **transcript-mcp-server** exposes two interfaces on port 8200:
+  - `POST /ingest` — non-MCP HTTP endpoint for workers to push timestamped transcripts.
+  - `/mcp` — FastMCP StreamableHTTP endpoint with tools `query_transcripts` and
+    `list_participants`.  Transcripts persist as JSONL files across server restarts.
+- **video-mcp-server** wraps the hub video query HTTP API (port 8090) as an MCP tool
+  (`query_video`) on port 8210.  Requires hub video recording to be enabled via
+  `video_recording.enabled: true` in `xr_media_hub.yaml`.
+- Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
+- **Sample YAMLs** for each service ship with `cloudxr-agent` or `mcp-agent` as examples.
   Copy them to other sample roots and adjust `model_cache` (`../../models` resolves
   to `xr-ai/models/` from any `agent-samples/<name>/` directory).
 
@@ -614,6 +626,50 @@ pure-text LLM gap alongside the existing VLM / STT / TTS servers.
   The backend is loaded lazily under a lock (warmed at startup from `_run`).
 - **No continuous batching.** Single-user voice-agent workloads only; for
   higher concurrency swap in vLLM behind the same HTTP contract.
+
+### 2026-04-27 — MCP example: transcript + video MCP servers; NVENC recording in hub
+
+`agent-samples/mcp-agent/` added as a demonstration of MCP integration with XR data.
+
+**Transcript MCP server** (`agent-mcp-servers/transcript-mcp/`, port 8200):
+- Single FastAPI process hosts both the non-MCP HTTP ingest endpoint (`POST /ingest`)
+  and the FastMCP tools (`/mcp`) so agents can query historical transcripts.
+- Agent workers POST transcripts over plain HTTP; MCP is for LLM tool-use only.
+- JSONL storage persists across server restarts; one file per participant.
+
+**Video MCP server** (`agent-mcp-servers/video-mcp/`, port 8210):
+- Thin FastMCP wrapper around the hub video HTTP API (`GET /video`).
+  Fetches the concatenated H.264 byte stream, writes it to a temp file, returns path.
+- Kept separate from the transcript server so either can be used independently.
+
+**Hub NVENC video recording** (`server-runtime/xr_media_hub/video/_recorder.py`):
+- Opt-in via `video_recording.enabled: true` in `xr_media_hub.yaml`.
+- Uses `PyNvVideoCodec` (on PyPI) for NVENC encoding; included in the standard `uv sync`.
+  The config guard (`enabled: true`) prevents instantiation when recording is not needed.
+- VBR mode, no B-frames (`bf=0`), `repeat_sps_pps=1`.  Each chunk uses a fresh encoder
+  session so it always begins with SPS+PPS+IDR and is independently decodable.
+  Chunks are binary-concatenable with `cat`.
+- Hub exposes a video query HTTP API on port 8090 (`GET /video?pid=&start_us=&end_us=`).
+
+**PyNvVideoCodec pitfalls (hard-won)**:
+- `Encode()` must receive a **2D numpy array** of shape `(H*3//2, W)` — do **not** call
+  `.flatten()`.  NVENC reads the array using numpy strides to determine the row pitch.
+  A 1D array causes NVENC to assume an internally aligned pitch (e.g. 512 for W=320),
+  producing a circular horizontal shift in every decoded frame.
+- `GetSequenceParams()` does not exist in PyNvVideoCodec 2.x.  Use `repeat_sps_pps=1`
+  in `CreateEncoder` kwargs instead; it prepends SPS+PPS automatically before each IDR.
+- WebRTC adaptive bitrate changes the frame resolution mid-stream.  The encoder must be
+  recreated (and the current chunk flushed) whenever `width` or `height` changes.  Feeding
+  wrong-sized frames to the encoder silently corrupts all subsequent output.
+- There is no reliable option that forces repeated IDR frames in PyNvVideoCodec 2.x.
+  `gopLength`, `gop`, `idrPeriod` were all tested — NVENC only emits one IDR at the start
+  of a session regardless.  Use per-chunk fresh encoders (`EndEncode` → `CreateEncoder`)
+  to guarantee IDR boundaries; each new encoder session always begins its output with IDR.
+
+**mcp-agent worker** (`agent-samples/mcp-agent/worker/`):
+- Runs continuous STT (same VAD logic as echo-agent).
+- POSTs each final utterance to the transcript-mcp-server over HTTP.
+- Does not speak TTS — pure observation/logging pipeline.
 
 ### 2026-04-24 — AI inference servers added; NVIDIA models; shared model cache
 

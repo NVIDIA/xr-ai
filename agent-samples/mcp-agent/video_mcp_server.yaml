@@ -1,0 +1,9 @@
+# Video MCP server configuration for mcp-agent.
+# Auto-discovered by the launcher and passed as --config to video_mcp_server.
+#
+# MCP endpoint: http://localhost:8210/  (StreamableHTTP transport)
+
+recordings_dir: /tmp/xr_recordings/mcp-agent   # must match xr_media_hub.yaml video_recording.out_dir
+out_dir:        /tmp/xr_video_queries/mcp-agent
+host:          0.0.0.0
+port:          8210

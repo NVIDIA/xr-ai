@@ -1,0 +1,13 @@
+# Video MCP server reference configuration.
+# Copy to your agent sample root as video_mcp_server.yaml and edit.
+#
+# recordings_dir must point to the same path as video_recording.out_dir
+# in xr_media_hub.yaml — the server reads chunk files directly from disk.
+#
+# MCP endpoint: http://localhost:8210/mcp  (StreamableHTTP transport)
+# HTTP stats:   GET http://localhost:8210/stats/<participant_id>
+
+recordings_dir: /tmp/xr_recordings     # must match hub video_recording.out_dir
+out_dir:        /tmp/xr_video_queries
+host:           0.0.0.0
+port:           8210

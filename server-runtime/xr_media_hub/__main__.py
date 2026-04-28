@@ -19,19 +19,22 @@ from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-PULL_ADDR   = "ipc:///tmp/xr_hub_in"
-PUB_ADDR    = "ipc:///tmp/xr_hub_pub"
-STATS_INTERVAL = 5.0  # seconds between stats prints
+PULL_ADDR      = "ipc:///tmp/xr_hub_in"
+PUB_ADDR       = "ipc:///tmp/xr_hub_pub"
+STATS_INTERVAL = 5.0
 
-# Counters keyed by participant_id.
 _frame_counts: dict[str, int] = collections.defaultdict(int)
 _audio_counts: dict[str, int] = collections.defaultdict(int)
 _data_counts:  dict[str, int] = collections.defaultdict(int)
 _participants: set[str] = set()
 
+_recorder = None
+
 
 async def on_frame(view: SlotView) -> None:
     _frame_counts[view.signal.participant_id] += 1
+    if _recorder is not None:
+        await _recorder.on_frame(view)
 
 
 async def on_audio(chunk: AudioChunk) -> None:
@@ -54,6 +57,8 @@ async def on_participant(event: ParticipantEvent) -> None:
         _frame_counts.pop(event.participant_id, None)
         _audio_counts.pop(event.participant_id, None)
         _data_counts.pop(event.participant_id, None)
+        if _recorder is not None:
+            _recorder.close_participant(event.participant_id)
 
 
 async def _stats_loop() -> None:
@@ -71,6 +76,8 @@ async def _stats_loop() -> None:
 
 
 async def main() -> None:
+    global _recorder
+
     hub = HubEndpoint(pull_addr=PULL_ADDR, pub_addr=PUB_ADDR)
     hub.on_frame(on_frame)
     hub.on_audio(on_audio)
@@ -81,6 +88,19 @@ async def main() -> None:
     connector = LiveKitConnector(cfg)
     await connector.start()
 
+    vr_cfg = cfg.video_recording or {}
+    if vr_cfg.get("enabled"):
+        from xr_media_hub.video import VideoRecorder, VideoRecorderConfig
+        rc = VideoRecorderConfig(
+            out_dir      = vr_cfg.get("out_dir",       "/tmp/xr_recordings"),
+            chunk_frames = int(vr_cfg.get("chunk_frames", 150)),
+            sample_fps   = float(vr_cfg.get("sample_fps",  30.0)),
+            bitrate      = int(vr_cfg.get("bitrate",    4_000_000)),
+            gpu_id       = int(vr_cfg.get("gpu_id",        0)),
+        )
+        _recorder = VideoRecorder(rc)
+        log.info("Video recording enabled  out_dir=%s", rc.out_dir)
+
     token = make_client_token(cfg, identity="ios-client")
     web_scheme = "https" if cfg.web_server_tls else "http"
     print(f"\n  LiveKit URL : ws://0.0.0.0:{cfg.lk_port_ws}  (plain ws — no TLS)", flush=True)
@@ -88,6 +108,8 @@ async def main() -> None:
     print(f"  Token       : {token}", flush=True)
     if cfg.enable_web_server:
         print(f"  Web client  : {web_scheme}://localhost:{cfg.web_server_port}", flush=True)
+    if _recorder is not None:
+        print(f"  Recording   : {rc.out_dir}", flush=True)
     print(flush=True)
 
     stop = asyncio.Event()

@@ -523,6 +523,7 @@ extension LiveKitBackend: RoomDelegate {
             }
             return
         }
+        // TODO: surface topic to the app alongside data so clients can filter by topic
         onDataReceived?(data)
     }
 }

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-server"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "transcript-mcp-server",
+    "video-mcp-server",
+    "fastmcp>=0.4",
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "pyyaml>=6.0",
+]
+
+[tool.uv.sources]
+transcript-mcp-server = { path = "../../../agent-mcp-servers/transcript-mcp", editable = true }
+video-mcp-server      = { path = "../../../agent-mcp-servers/video-mcp",      editable = true }
+
+[project.scripts]
+mcp_server = "mcp_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mcp_server"]

@@ -189,6 +189,7 @@ export class LiveKitBackend {
         } catch { /* malformed — ignore */ }
         return;
       }
+      // TODO: surface topic to the app alongside payload so clients can filter by topic
       this.onDataReceived?.(payload);
     });
 

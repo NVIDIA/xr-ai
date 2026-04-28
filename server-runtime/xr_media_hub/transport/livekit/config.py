@@ -1,7 +1,8 @@
 """Configuration for the LiveKit connector."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -56,3 +57,9 @@ class LiveKitConnectorConfig:
     # ── Shared-memory ring buffer ──────────────────────────────────────────────
     shm_num_slots:       int = 10
     shm_max_frame_bytes: int = 12_441_600   # 4K NV12
+
+    # ── Video recording (NVENC, optional) ─────────────────────────────────────
+    # Set video_recording.enabled: true in xr_media_hub.yaml to activate.
+    # Frames are encoded via NVENC (pynvvideocodec) and written as H.264
+    # Annex B chunks to video_recording.out_dir.
+    video_recording: Any = field(default=None)

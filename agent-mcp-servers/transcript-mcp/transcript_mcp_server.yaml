@@ -1,0 +1,9 @@
+# Transcript MCP server reference configuration.
+# Copy to your agent sample root as transcript_mcp_server.yaml and edit.
+#
+# HTTP ingest:  POST http://localhost:8200/ingest
+# MCP endpoint: http://localhost:8200/mcp  (StreamableHTTP transport)
+
+transcripts_dir: /tmp/xr_transcripts   # persistent JSONL storage
+host:            0.0.0.0
+port:            8200

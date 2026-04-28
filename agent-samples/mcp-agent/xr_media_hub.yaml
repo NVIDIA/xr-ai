@@ -1,0 +1,33 @@
+# XR Media Hub configuration for the mcp-agent sample.
+# Paths are relative to this file's directory.
+# See server-runtime/xr_media_hub.yaml for all available options.
+
+# ── LiveKit server ────────────────────────────────────────────────────────────
+api_key:    devkey
+api_secret: devsecret-xr-livekit-prototype-2026
+room_name:  xr-room
+
+lk_port_ws:  7880
+lk_port_tcp: 7881
+lk_port_udp: 7882
+
+# ── Web client server ─────────────────────────────────────────────────────────
+enable_web_server: true
+web_server_port:   8080
+web_client_dir:    ../../client-samples/web
+web_server_tls:    true
+
+# ── Optional: token server ────────────────────────────────────────────────────
+enable_token_server: true
+
+# ── NVENC video recording ─────────────────────────────────────────────────────
+# Requires pynvvideocodec.  Set enabled: true to activate.
+# Video query API will be available at http://localhost:8090/video
+video_recording:
+  enabled:       true
+  out_dir:       /tmp/xr_recordings/mcp-agent
+  chunk_frames:  30         # 1 s at 30 fps
+  max_chunks:    300        # keep last 300 s (~5 min) per participant
+  sample_fps:    30.0
+  bitrate:       4000000    # VBR target bitrate in bps
+  gpu_id:        0
