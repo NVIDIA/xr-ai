@@ -39,6 +39,10 @@
         <true/>
     </dict>
 
+    <!-- Launch screen — enables native resolution on all iPhone screen sizes -->
+    <key>UILaunchScreen</key>
+    <dict/>
+
     <!-- SwiftUI scene support (equivalent to INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES) -->
     <key>UIApplicationSceneManifest</key>
     <dict>
