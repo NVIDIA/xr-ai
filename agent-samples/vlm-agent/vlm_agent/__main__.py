@@ -14,10 +14,10 @@ from xr_ai_launcher import Process, ensure_credentials, run_stack
 _BASE = Path(__file__).resolve().parents[1]  # agent-samples/vlm-agent/
 
 PROCESSES = [
-    Process("hub",    "../../server-runtime",          "xr_media_hub"),
-    Process("vlm",    "../../ai-services/vlm-server",  "vlm_server"),
-    Process("tts",    "../../ai-services/tts/piper",    "piper_tts_server"),
-    Process("worker", "worker",                        "vlm_agent_worker"),
+    Process("hub",     "../../server-runtime",         "xr_media_hub"),
+    Process("vlm",     "../../ai-services/vlm-server", "vlm_server"),
+    Process("tts",     "../../ai-services/tts/piper",  "piper_tts_server"),
+    Process("worker",  "worker",                       "vlm_agent_worker"),
 ]
 
 

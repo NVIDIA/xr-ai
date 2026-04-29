@@ -37,6 +37,7 @@ final class AppModel {
     var agentStatus: String?
     var isAudioActive = false
     var isCameraActive = false
+    var cameraOnDemand = false
     var isConnecting = false
     var receivedMessages: [ReceivedMessage] = []
     var lastError: String?
@@ -87,8 +88,19 @@ final class AppModel {
             guard let self, self.session === newSession else { return }
             self.agentStatus = status
         }
-        newSession.onDataReceived = { [weak self, weak newSession] data in
+        newSession.onDataReceived = { [weak self, weak newSession] topic, data in
             guard let self, self.session === newSession else { return }
+            if topic == "clientControl" {
+                if self.cameraOnDemand,
+                   let payload = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+                   let action = payload["action"] {
+                    Task {
+                        if action == "startCamera" { await self.startCamera() }
+                        if action == "stopCamera"  { await self.stopCamera()  }
+                    }
+                }
+                return
+            }
             let text = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
             self.receivedMessages.insert(ReceivedMessage(text: text), at: 0)
         }
@@ -138,7 +150,32 @@ final class AppModel {
 
     // MARK: - Camera
 
-    func startCamera() async {
+    // Desired-state reconciler. Every caller — UI button, clientControl
+    // message — just sets `desiredCameraOn` and triggers a single in-flight
+    // reconcile task. Adjacent contradictory ops collapse: rapid
+    // start/stop/start/stop only runs the first start (and the final stop),
+    // which keeps the camera responsive when the agent fires many
+    // camera-on-demand requests during fast successive queries.
+    private var desiredCameraOn = false
+    private var cameraReconcile: Task<Void, Never>?
+
+    private func reconcileCamera() async {
+        if let existing = cameraReconcile {
+            await existing.value
+            return
+        }
+        let task = Task { @MainActor in
+            defer { self.cameraReconcile = nil }
+            while self.isCameraActive != self.desiredCameraOn {
+                if self.desiredCameraOn { await self.doStartCamera() }
+                else                    { await self.doStopCamera()  }
+            }
+        }
+        cameraReconcile = task
+        await task.value
+    }
+
+    private func doStartCamera() async {
         do {
             try await session?.startCamera()
             isCameraActive = true
@@ -147,13 +184,23 @@ final class AppModel {
         }
     }
 
-    func stopCamera() async {
+    private func doStopCamera() async {
         do {
             try await session?.stopCamera()
         } catch {
             lastError = error.localizedDescription
         }
         isCameraActive = false
+    }
+
+    func startCamera() async {
+        desiredCameraOn = true
+        await reconcileCamera()
+    }
+
+    func stopCamera() async {
+        desiredCameraOn = false
+        await reconcileCamera()
     }
 
     // MARK: - Data

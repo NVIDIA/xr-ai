@@ -10,7 +10,7 @@ What this starts
   worker  — mcp_agent_worker: VAD → STT → POST /ingest → mcp server
 
 MCP endpoint: http://localhost:8200/mcp
-  Tools: transcript_*, video_* (whichever skills are enabled in mcp_server.yaml)
+  Tools: transcript_*, video_*, client_control_* (whichever skills are enabled in mcp_server.yaml)
 
 How to run (from agent-samples/mcp-agent/):
     uv sync && uv run mcp_agent

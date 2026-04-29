@@ -18,10 +18,15 @@ path for participant A's data to reach participant B. The only supported flow
 is: participant → hub → consumer (agent) → hub → same participant.
 
 Enforcement:
-  • send_return_audio / send_return_data validate that the target participant
-    is currently connected; unknown targets are dropped with a warning.
-  • Return-traffic topics (return_audio.*, return_data.*) are connector-only;
-    ProcessorEndpoint's default subscription excludes them.
+  • send_return_audio / send_return_data / send_return_audio_flush validate
+    that the target participant is currently connected; unknown targets are
+    dropped with a warning.
+  • Return-traffic topics (return_audio.*, return_audio_flush.*, return_data.*)
+    are connector-only; ProcessorEndpoint's default subscription excludes them.
+  • The LiveKit transport publishes one return-audio track per participant
+    (xr-hub-return-{pid}) with subscribe permissions restricted so each pid
+    can only receive their own track. Return data uses destination_identities
+    so it is not broadcast to other participants.
 
 Frame callbacks receive a SlotView (zero-copy memoryview into the originating
 connector's ring buffer). The slot is released after ALL frame callbacks
@@ -37,7 +42,7 @@ import zmq.asyncio
 
 from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
                          DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent,
-                         ShmRingBuffer, SlotView, decode, encode)
+                         ReturnAudioFlush, ShmRingBuffer, SlotView, decode, encode)
 
 log = logging.getLogger(__name__)
 
@@ -56,13 +61,14 @@ ControlCallback     = Callable[[ControlMessage],    Awaitable[None]]
 #   b"data.alice.chat"          — alice's "chat" data channel only
 #   b"participant"              — join/leave events
 #   b"control"                  — hub control messages
-TOPIC_VIDEO        = b"video"       # FRAME_SIGNAL metadata (fires at full frame rate)
-TOPIC_VIDEO_DATA   = b"video_data"  # FRAME_DATA pixel response (on-demand only)
-TOPIC_AUDIO        = b"audio"
-TOPIC_DATA         = b"data"
-TOPIC_CONTROL      = b"control"
-TOPIC_RETURN_AUDIO = b"return_audio"
-TOPIC_RETURN_DATA  = b"return_data"
+TOPIC_VIDEO              = b"video"       # FRAME_SIGNAL metadata (fires at full frame rate)
+TOPIC_VIDEO_DATA         = b"video_data"  # FRAME_DATA pixel response (on-demand only)
+TOPIC_AUDIO              = b"audio"
+TOPIC_DATA               = b"data"
+TOPIC_CONTROL            = b"control"
+TOPIC_RETURN_AUDIO       = b"return_audio"
+TOPIC_RETURN_AUDIO_FLUSH = b"return_audio_flush"
+TOPIC_RETURN_DATA        = b"return_data"
 
 
 class HubEndpoint:
@@ -142,6 +148,19 @@ class HubEndpoint:
             return
         topic = f"return_data.{msg.participant_id}.{msg.topic}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_DATA, msg)])
+
+    async def send_return_audio_flush(self, flush: ReturnAudioFlush) -> None:
+        """
+        Tell the connector to drop any audio queued for *flush.participant_id*'s
+        return track. Used by processors to cleanly interrupt the agent's own
+        audio playback. No-op for unknown participants.
+        """
+        if not self._is_connected(flush.participant_id):
+            log.warning("send_return_audio_flush: participant %r not connected — dropped",
+                        flush.participant_id)
+            return
+        topic = f"return_audio_flush.{flush.participant_id}".encode()
+        await self._pub.send_multipart([topic, encode(MsgType.RETURN_AUDIO_FLUSH, flush)])
 
     def _is_connected(self, participant_id: str) -> bool:
         return participant_id in self._participant_connector
@@ -247,6 +266,9 @@ class HubEndpoint:
 
         elif type_id == MsgType.RETURN_DATA:
             await self.send_return_data(msg)
+
+        elif type_id == MsgType.RETURN_AUDIO_FLUSH:
+            await self.send_return_audio_flush(msg)
 
         else:
             log.warning("Unknown message type %d — ignored", type_id)

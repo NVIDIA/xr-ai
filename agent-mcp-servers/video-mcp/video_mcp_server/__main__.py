@@ -123,22 +123,33 @@ class ChunkStore:
 
 # ── app ───────────────────────────────────────────────────────────────────────
 
-def build_app(store: ChunkStore, out_dir: pathlib.Path) -> FastAPI:
-    app = FastAPI(title="Video MCP Server", docs_url=None, redoc_url=None)
+def register_rest(
+    app: FastAPI,
+    store: ChunkStore,
+    *,
+    stats_path: str = "/stats/{participant_id}",
+) -> None:
+    """Attach the worker-facing REST routes to *app* (composable with other servers)."""
 
-    @app.get("/health")
-    async def health() -> dict:
-        return {"status": "ok", "recordings_dir": str(store._root)}
-
-    @app.get("/stats/{participant_id}")
+    @app.get(stats_path)
     async def http_stats(participant_id: str) -> JSONResponse:
         result = store.stats(participant_id)
         if result is None:
             raise HTTPException(404, f"No video chunks for {participant_id!r}")
         return JSONResponse(result)
 
-    mcp = build_mcp(store, out_dir)
-    app.mount("/mcp", mcp.http_app())
+
+def build_app(store: ChunkStore, out_dir: pathlib.Path) -> FastAPI:
+    mcp_app = build_mcp(store, out_dir).http_app(path="/")
+    app = FastAPI(title="Video MCP Server", docs_url=None, redoc_url=None,
+                  lifespan=mcp_app.lifespan)
+
+    @app.get("/health")
+    async def health() -> dict:
+        return {"status": "ok", "recordings_dir": str(store._root)}
+
+    register_rest(app, store)
+    app.mount("/mcp", mcp_app)
     return app
 
 

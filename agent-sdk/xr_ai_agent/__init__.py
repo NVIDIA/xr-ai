@@ -16,7 +16,7 @@ Typical usage
 """
 
 from ._codec import decode, encode, register_decoder, register_encoder
-from ._processor import AGENT_STATUS_TOPIC, ProcessorEndpoint
+from ._processor import AGENT_STATUS_TOPIC, DEFAULT_TOPICS, ProcessorEndpoint
 from ._shm import ShmRingBuffer, SlotView
 from ._types import (
     AudioChunk,
@@ -29,12 +29,14 @@ from ._types import (
     MsgType,
     ParticipantEvent,
     PixelFormat,
+    ReturnAudioFlush,
 )
 
 __all__ = [
     # endpoint
     "ProcessorEndpoint",
     "AGENT_STATUS_TOPIC",
+    "DEFAULT_TOPICS",
     # shared memory (for agents that read raw pixels)
     "ShmRingBuffer",
     "SlotView",
@@ -54,4 +56,5 @@ __all__ = [
     "MsgType",
     "ParticipantEvent",
     "PixelFormat",
+    "ReturnAudioFlush",
 ]

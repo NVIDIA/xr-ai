@@ -137,12 +137,16 @@ class TranscriptStore:
 
 # ── server ────────────────────────────────────────────────────────────────────
 
-def build_app(store: TranscriptStore) -> FastAPI:
-    app = FastAPI(title="Transcript MCP Server", docs_url=None, redoc_url=None)
+def register_rest(
+    app: FastAPI,
+    store: TranscriptStore,
+    *,
+    ingest_path: str = "/ingest",
+    stats_path:  str = "/stats/{participant_id}",
+) -> None:
+    """Attach the worker-facing REST routes to *app* (composable with other servers)."""
 
-    # ── HTTP ingest endpoint ──────────────────────────────────────────────────
-
-    @app.post("/ingest")
+    @app.post(ingest_path)
     async def ingest(req: IngestRequest) -> JSONResponse:
         if not req.text.strip():
             raise HTTPException(400, "text must not be empty")
@@ -150,20 +154,25 @@ def build_app(store: TranscriptStore) -> FastAPI:
         log.info("ingest  pid=%r  ts=%d  %r", req.participant_id, req.timestamp_us, req.text[:80])
         return JSONResponse({"ok": True})
 
-    @app.get("/health")
-    async def health() -> dict:
-        return {"status": "ok"}
-
-    @app.get("/stats/{participant_id}")
+    @app.get(stats_path)
     async def stats(participant_id: str) -> JSONResponse:
         result = store.stats(participant_id)
         if result is None:
             raise HTTPException(404, f"No transcripts for {participant_id!r}")
         return JSONResponse(result)
 
-    mcp = build_mcp(store)
-    app.mount("/mcp", mcp.http_app())
 
+def build_app(store: TranscriptStore) -> FastAPI:
+    mcp_app = build_mcp(store).http_app(path="/")
+    app = FastAPI(title="Transcript MCP Server", docs_url=None, redoc_url=None,
+                  lifespan=mcp_app.lifespan)
+
+    @app.get("/health")
+    async def health() -> dict:
+        return {"status": "ok"}
+
+    register_rest(app, store)
+    app.mount("/mcp", mcp_app)
     return app
 
 
@@ -187,6 +196,20 @@ def build_mcp(store: TranscriptStore) -> "FastMCP":
         results = store.query(participant_id, start_us, end_us)
         results.sort(key=lambda r: r["timestamp_us"])
         return results
+
+    @mcp.tool()
+    def add_transcript(participant_id: str, timestamp_us: int, text: str) -> dict:
+        """
+        Append a transcript segment for *participant_id* at *timestamp_us*
+        (Unix microseconds). Used by ingest workers.
+
+        Returns ``{"ok": true}`` on success, or an error dict if *text* is empty.
+        """
+        if not text.strip():
+            return {"error": "text must not be empty"}
+        store.append(participant_id, timestamp_us, text)
+        log.info("add_transcript  pid=%r  ts=%d  %r", participant_id, timestamp_us, text[:80])
+        return {"ok": True}
 
     @mcp.tool()
     def list_participants() -> list[str]:

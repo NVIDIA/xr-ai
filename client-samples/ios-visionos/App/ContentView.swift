@@ -150,6 +150,8 @@ struct ContentView: View {
     @ViewBuilder
     private var cameraRow: some View {
         if model.connectionState == .connected {
+            @Bindable var m = model
+
             LabeledContent("Camera") {
                 HStack {
                     Text(model.isCameraActive ? "Streaming" : "Idle")
@@ -176,6 +178,9 @@ struct ContentView: View {
                     }
                 }
             }
+
+            Toggle("Camera On Demand", isOn: $m.cameraOnDemand)
+                .help("Allow the agent to start/stop the camera as needed (e.g. for VLM queries).")
         }
     }
 

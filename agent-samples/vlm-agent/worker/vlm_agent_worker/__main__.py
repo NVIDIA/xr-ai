@@ -16,10 +16,13 @@ The response is also spoken aloud via TTS, sentence by sentence.
 TTS synthesis tasks are launched in parallel as each sentence completes,
 so audio starts playing shortly after the first sentence is generated.
 
+All client communication (VLM response text, camera control, audio) goes
+out via this worker's own ProcessorEndpoint — no MCP indirection.
+
 Config (vlm_agent_worker.yaml in the sample root, auto-passed by launcher)
 ---------------------------------------------------------------------------
-    vlm_server:  http://localhost:8100   # base URL of the vlm-server HTTP API
-    tts_server:  http://localhost:8104   # base URL of the tts-server HTTP API
+    vlm_server:  http://localhost:8100   # vlm-server HTTP API
+    tts_server:  http://localhost:8104   # tts-server HTTP API
 """
 from __future__ import annotations
 
@@ -49,6 +52,10 @@ _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 _MAX_IMAGE_PIXELS = 1280 * 28 * 28   # ~1 MP — matches vlm-server's pixel cap
+_FRAME_STALE_S = 2.0                 # signals older than this are treated as no frame
+_CAMERA_ON_TIMEOUT_S = 10.0          # generous: client chains stop+start serially
+_CAMERA_GRACE_S = 5.0                # keep camera on this long after each query so
+                                     # rapid follow-up queries don't re-cycle it
 
 
 def _load_config(path: pathlib.Path) -> dict:
@@ -163,12 +170,21 @@ class VlmAgent:
 
         self._vlm_url = vlm_server.rstrip("/") + "/v1/chat/completions"
         self._tts_url = tts_server.rstrip("/") + "/v1/audio/speech"
-        self._latest: dict[tuple[str, str], FrameSignal] = {}
+        self._latest: dict[tuple[str, str], tuple[FrameSignal, float]] = {}  # signal + monotonic timestamp
+        self._frame_events: dict[str, asyncio.Event] = {}
+        self._inflight: dict[str, asyncio.Task] = {}  # current query task per participant
+        # Camera state at the worker. We keep the camera on for a grace period
+        # after each query so a follow-up doesn't pay a full start/stop cycle.
+        self._camera_on:   dict[str, bool] = {}
+        self._stop_timers: dict[str, asyncio.Task] = {}
 
     # ── callbacks ─────────────────────────────────────────────────────────────
 
     async def _on_frame(self, sig: FrameSignal) -> None:
-        self._latest[(sig.participant_id, sig.track_id)] = sig
+        self._latest[(sig.participant_id, sig.track_id)] = (sig, time.monotonic())
+        ev = self._frame_events.get(sig.participant_id)
+        if ev:
+            ev.set()
 
     async def _on_data(self, msg: DataMessage) -> None:
         query    = ""
@@ -187,16 +203,71 @@ class VlmAgent:
             return
 
         pid = msg.participant_id
+
+        # Cancel any in-flight task for this participant; its finally blocks
+        # release the camera and tear down sub-tasks.
+        prev = self._inflight.get(pid)
+        if prev is not None and not prev.done():
+            log.info("vlm  pid=%r — interrupting previous query", pid)
+            prev.cancel()
+            try:
+                await prev
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        # Always flush queued return audio. The previous task usually completes
+        # well before its TTS finishes playing on the client (sender drains the
+        # queue in ms; playback takes seconds), so even when there is no live
+        # task to cancel the hub still has audio queued from the prior query.
+        # Chunks already on the wire to the client may play out for ~100 ms.
+        await self._ep.flush_return_audio(pid)
+
+        me = asyncio.current_task()
+        self._inflight[pid] = me
+        try:
+            await self._handle_query(pid, query, track_id, msg.pts_us)
+        finally:
+            if self._inflight.get(pid) is me:
+                self._inflight.pop(pid, None)
+
+    async def _handle_query(
+        self,
+        pid: str,
+        query: str,
+        track_id: str | None,
+        pts_us: int,
+    ) -> None:
         sig = self._pick_signal(pid, track_id)
+        need_camera = sig is None
+
+        if need_camera:
+            log.info("vlm  pid=%r — no frame, requesting camera on demand", pid)
+            await self._ensure_camera_on(pid)
+            ev = asyncio.Event()
+            self._frame_events[pid] = ev
+            try:
+                await asyncio.wait_for(ev.wait(), timeout=_CAMERA_ON_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                self._schedule_camera_off(pid)
+                await self._reply(pid, "Camera unavailable — enable camera or Camera On Demand.", pts_us)
+                return
+            finally:
+                self._frame_events.pop(pid, None)
+            sig = self._pick_signal(pid, track_id)
+
         if sig is None:
-            log.warning("vlm from %r — no video frame yet", pid)
-            await self._reply(pid, "No video frame available yet.", msg.pts_us)
+            self._schedule_camera_off(pid)
+            await self._reply(pid, "Frame data unavailable — please retry.", pts_us)
             return
 
         frame = await self._ep.request_frame(sig)
         if frame is None:
-            await self._reply(pid, "Frame data unavailable — please retry.", msg.pts_us)
+            self._schedule_camera_off(pid)
+            await self._reply(pid, "Frame data unavailable — please retry.", pts_us)
             return
+
+        # Camera will stop after the grace period unless another query renews it.
+        self._schedule_camera_off(pid)
 
         image     = _frame_to_pil(frame)
         image_url = _encode_image(image)
@@ -207,8 +278,18 @@ class VlmAgent:
         sentence_buf  = ""
         # Queue of synthesis tasks in sentence order. None signals the sender to stop.
         tts_queue: asyncio.Queue[asyncio.Task | None] = asyncio.Queue()
+        synth_tasks: list[asyncio.Task] = []
 
         async def _audio_sender() -> None:
+            # Lead-time pacing: keep ~250 ms of audio ahead of real-time playback,
+            # then sleep so we don't outpace it. Bursts to fill the lead first; once
+            # caught up, paces at audio rate. Bounded buffer keeps the worker → hub
+            # → connector pipeline shallow so flush_return_audio actually interrupts
+            # quickly. 250 ms is enough headroom that scheduling jitter never
+            # underruns playback.
+            target_lead_s = 0.25
+            start = None
+            audio_sent_s = 0.0
             while True:
                 task = await tts_queue.get()
                 if task is None:
@@ -216,41 +297,60 @@ class VlmAgent:
                 try:
                     wav = await task
                     for chunk in _wav_to_chunks(wav, pid):
+                        if start is None:
+                            start = time.monotonic()
                         await self._ep.send_return_audio(chunk)
+                        audio_sent_s += chunk.samples / chunk.sample_rate
+                        lead = audio_sent_s - (time.monotonic() - start)
+                        if lead > target_lead_s:
+                            await asyncio.sleep(lead - target_lead_s)
+                except asyncio.CancelledError:
+                    raise
                 except Exception as exc:
                     log.error("tts audio error pid=%r: %s", pid, exc, exc_info=True)
 
         sender = asyncio.create_task(_audio_sender())
 
         try:
-            async for token in self._call_vlm_stream(image_url, query):
-                full_response += token
-                sentence_buf  += token
-                while True:
-                    m = re.search(r'(?<=[.!?])\s+', sentence_buf)
-                    if not m:
-                        break
-                    sentence     = sentence_buf[:m.start() + 1].strip()
-                    sentence_buf = sentence_buf[m.end():]
-                    if sentence:
-                        await tts_queue.put(asyncio.create_task(self._synthesize(sentence)))
-        except httpx.HTTPError as exc:
-            log.error("vlm-server error: %s", exc)
+            try:
+                async for token in self._call_vlm_stream(image_url, query):
+                    full_response += token
+                    sentence_buf  += token
+                    while True:
+                        m = re.search(r'(?<=[.!?])\s+', sentence_buf)
+                        if not m:
+                            break
+                        sentence     = sentence_buf[:m.start() + 1].strip()
+                        sentence_buf = sentence_buf[m.end():]
+                        if sentence:
+                            synth = asyncio.create_task(self._synthesize(sentence))
+                            synth_tasks.append(synth)
+                            await tts_queue.put(synth)
+            except httpx.HTTPError as exc:
+                log.error("vlm-server error: %s", exc)
+                await tts_queue.put(None)
+                await sender
+                await self._reply(pid, "VLM server unavailable — please retry.", frame.pts_us)
+                return
+
+            if sentence_buf.strip():
+                synth = asyncio.create_task(self._synthesize(sentence_buf.strip()))
+                synth_tasks.append(synth)
+                await tts_queue.put(synth)
             await tts_queue.put(None)
+
+            full_response = full_response.strip()
+            log.info("vlm response  pid=%r  %d chars", pid, len(full_response))
+            await self._reply(pid, full_response, frame.pts_us)
             await sender
-            await self._reply(pid, "VLM server unavailable — please retry.", frame.pts_us)
+        finally:
+            if not sender.done():
+                sender.cancel()
+            for t in synth_tasks:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(sender, *synth_tasks, return_exceptions=True)
             await self._ep.set_status("idle", pid)
-            return
-
-        if sentence_buf.strip():
-            await tts_queue.put(asyncio.create_task(self._synthesize(sentence_buf.strip())))
-        await tts_queue.put(None)
-
-        full_response = full_response.strip()
-        log.info("vlm response  pid=%r  %d chars", pid, len(full_response))
-        await self._reply(pid, full_response, frame.pts_us)
-        await sender
-        await self._ep.set_status("idle", pid)
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if not event.joined:
@@ -258,6 +358,14 @@ class VlmAgent:
             keys = [k for k in self._latest if k[0] == pid]
             for k in keys:
                 del self._latest[k]
+            self._frame_events.pop(pid, None)
+            self._camera_on.pop(pid, None)
+            timer = self._stop_timers.pop(pid, None)
+            if timer is not None and not timer.done():
+                timer.cancel()
+            task = self._inflight.pop(pid, None)
+            if task is not None and not task.done():
+                task.cancel()
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -302,12 +410,50 @@ class VlmAgent:
             return resp.content
 
     def _pick_signal(self, pid: str, track_id: str | None) -> FrameSignal | None:
-        if track_id:
-            return self._latest.get((pid, track_id))
-        candidates = [(k, v) for k, v in self._latest.items() if k[0] == pid]
-        if not candidates:
+        now = time.monotonic()
+        fresh = [(k, sig, ts) for k, (sig, ts) in self._latest.items()
+                 if k[0] == pid and now - ts < _FRAME_STALE_S]
+        if not fresh:
             return None
-        return max(candidates, key=lambda kv: kv[1].seq)[1]
+        if track_id:
+            for k, sig, _ in fresh:
+                if k[1] == track_id:
+                    return sig
+            return None
+        return max(fresh, key=lambda x: x[1].seq)[1]
+
+    async def _client_control(self, pid: str, action: str) -> None:
+        await self._ep.send_return_data(DataMessage(
+            participant_id=pid,
+            topic="clientControl",
+            pts_us=_now_us(),
+            data=json.dumps({"action": action}).encode(),
+        ))
+
+    async def _ensure_camera_on(self, pid: str) -> None:
+        """Cancel any pending stop and send startCamera if not already on."""
+        timer = self._stop_timers.pop(pid, None)
+        if timer is not None and not timer.done():
+            timer.cancel()
+        if not self._camera_on.get(pid, False):
+            await self._client_control(pid, "startCamera")
+            self._camera_on[pid] = True
+
+    def _schedule_camera_off(self, pid: str, delay: float = _CAMERA_GRACE_S) -> None:
+        """Replace any pending stop with one that fires after *delay* seconds."""
+        existing = self._stop_timers.pop(pid, None)
+        if existing is not None and not existing.done():
+            existing.cancel()
+        if not self._camera_on.get(pid, False):
+            return
+        async def _stop_after_delay() -> None:
+            try:
+                await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                return
+            await self._client_control(pid, "stopCamera")
+            self._camera_on[pid] = False
+        self._stop_timers[pid] = asyncio.create_task(_stop_after_delay())
 
     async def _reply(self, pid: str, text: str, pts_us: int) -> None:
         await self._ep.send_return_data(DataMessage(

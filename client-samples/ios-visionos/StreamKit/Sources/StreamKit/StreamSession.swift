@@ -50,8 +50,9 @@ public final class StreamSession: ObservableObject {
     /// Called on the main actor when the connection state changes.
     public var onConnectionStateChanged: ((ConnectionState) -> Void)?
 
-    /// Called on the main actor when binary data is received.
-    public var onDataReceived: ((Data) -> Void)?
+    /// Called on the main actor when data is received.
+    /// `topic` identifies the logical channel; `data` is the raw payload.
+    public var onDataReceived: ((_ topic: String, _ data: Data) -> Void)?
 
     /// Called on the main actor when the agent publishes a status update.
     /// Common values: `"idle"`, `"processing"`.
@@ -159,9 +160,9 @@ public final class StreamSession: ObservableObject {
                 onConnectionStateChanged?(state)
             }
         }
-        backend.onDataReceived = { [weak self] data in
+        backend.onDataReceived = { [weak self] topic, data in
             Task { @MainActor [weak self] in
-                self?.onDataReceived?(data)
+                self?.onDataReceived?(topic, data)
             }
         }
         backend.onAgentStatus = { [weak self] status in

@@ -28,12 +28,13 @@ import zmq.asyncio
 
 from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
                          DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat,
-                         ShmRingBuffer, decode, encode)
+                         ReturnAudioFlush, ShmRingBuffer, decode, encode)
 
 log = logging.getLogger(__name__)
 
-ReturnAudioCallback = Callable[[AudioChunk],  Awaitable[None]]
-ReturnDataCallback  = Callable[[DataMessage], Awaitable[None]]
+ReturnAudioCallback      = Callable[[AudioChunk],        Awaitable[None]]
+ReturnDataCallback       = Callable[[DataMessage],       Awaitable[None]]
+ReturnAudioFlushCallback = Callable[[ReturnAudioFlush],  Awaitable[None]]
 
 _DEFAULT_NUM_SLOTS       = 10
 _DEFAULT_MAX_FRAME_BYTES = 12_441_600  # 4K NV12
@@ -104,8 +105,9 @@ class ConnectorEndpoint:
 
         self._seq: dict[tuple[str, str], int] = defaultdict(int)
 
-        self._return_audio_cbs: list[ReturnAudioCallback] = []
-        self._return_data_cbs:  list[ReturnDataCallback]  = []
+        self._return_audio_cbs:       list[ReturnAudioCallback]      = []
+        self._return_data_cbs:        list[ReturnDataCallback]       = []
+        self._return_audio_flush_cbs: list[ReturnAudioFlushCallback] = []
         self._running = False
 
     # ── registration ─────────────────────────────────────────────────────────
@@ -168,6 +170,7 @@ class ConnectorEndpoint:
         connector mapping.
         """
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio.{participant_id}".encode())
+        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio_flush.{participant_id}".encode())
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_data.{participant_id}".encode())
         event = ParticipantEvent(
             participant_id=participant_id, joined=True,
@@ -183,6 +186,7 @@ class ConnectorEndpoint:
         notifies the hub.
         """
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio.{participant_id}".encode())
+        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio_flush.{participant_id}".encode())
         self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_data.{participant_id}".encode())
         stale = [k for k in self._seq if k[0] == participant_id]
         for k in stale:
@@ -200,6 +204,9 @@ class ConnectorEndpoint:
 
     def on_return_data(self, cb: ReturnDataCallback) -> None:
         self._return_data_cbs.append(cb)
+
+    def on_return_audio_flush(self, cb: ReturnAudioFlushCallback) -> None:
+        self._return_audio_flush_cbs.append(cb)
 
     # ── receive loop ─────────────────────────────────────────────────────────
 
@@ -221,6 +228,9 @@ class ConnectorEndpoint:
                         await cb(msg)
                 elif type_id == MsgType.RETURN_DATA:
                     for cb in self._return_data_cbs:
+                        await cb(msg)
+                elif type_id == MsgType.RETURN_AUDIO_FLUSH:
+                    for cb in self._return_audio_flush_cbs:
                         await cb(msg)
                 else:
                     log.debug("Connector: unhandled return type %d", type_id)

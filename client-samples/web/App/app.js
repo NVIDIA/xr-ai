@@ -84,7 +84,8 @@ const model = {
   session:         null,
   connectionState: ConnectionState.DISCONNECTED,
   isAudioActive:   false,
-  isCameraActive:  false,
+  isCameraActive:   false,
+  cameraOnDemand:   false,
   /** @type {Array<{deviceId: string, label: string}>} */
   cameras:          [],
   /** @type {string|null} */
@@ -199,6 +200,22 @@ function render() {
     cameraBtn.className   = 'btn btn-secondary';
     cameraStatus.textContent = isConnected ? 'Idle' : 'Not connected';
     cameraStatus.className   = 'status-text status-idle';
+  }
+
+  // ── Camera On Demand ───────────────────────────────────────────────────────
+  const codBtn    = $('camera-on-demand-btn');
+  const codStatus = $('camera-on-demand-status');
+  codBtn.disabled = !isConnected;
+  if (model.cameraOnDemand) {
+    codBtn.textContent      = 'Disable Camera On Demand';
+    codBtn.className        = 'btn btn-destructive btn-full';
+    codStatus.textContent   = 'Enabled';
+    codStatus.className     = 'status-text status-active';
+  } else {
+    codBtn.textContent      = 'Enable Camera On Demand';
+    codBtn.className        = 'btn btn-secondary btn-full';
+    codStatus.textContent   = isConnected ? 'Disabled' : 'Not connected';
+    codStatus.className     = 'status-text status-idle';
   }
 
   // ── Camera selector (shown only when multiple cameras detected) ────────────
@@ -345,7 +362,17 @@ async function connect() {
     render();
   };
 
-  newSession.onDataReceived = (data) => {
+  newSession.onDataReceived = (topic, data) => {
+    if (topic === 'clientControl') {
+      try {
+        const { action } = JSON.parse(new TextDecoder().decode(data));
+        if (model.cameraOnDemand) {
+          if (action === 'startCamera') startCamera();
+          if (action === 'stopCamera')  stopCamera();
+        }
+      } catch { /* malformed — ignore */ }
+      return;
+    }
     const text = (() => {
       try {
         return new TextDecoder().decode(data);
@@ -415,17 +442,33 @@ async function stopAudio() {
   render();
 }
 
-/**
- * Starts local camera capture and publishes it.
- * Mirrors AppModel.startCamera().
- *
- * @returns {Promise<void>}
- */
-async function startCamera() {
+// Desired-state reconciler. Every caller — UI button, clientControl message —
+// just sets `desiredCameraOn` and triggers a single in-flight reconcile loop.
+// Adjacent contradictory ops collapse: rapid start/stop/start/stop only ever
+// runs the start (and the final stop), which is what we want when the agent
+// fires many camera-on-demand requests during fast successive queries.
+let desiredCameraOn = false;
+let cameraReconcile = null;
+
+function reconcileCamera() {
+  if (cameraReconcile !== null) return cameraReconcile;
+  cameraReconcile = (async () => {
+    try {
+      while (model.isCameraActive !== desiredCameraOn) {
+        if (desiredCameraOn) await _doStartCamera();
+        else                 await _doStopCamera();
+      }
+    } finally {
+      cameraReconcile = null;
+    }
+  })();
+  return cameraReconcile;
+}
+
+async function _doStartCamera() {
   // Enumerate first (triggers permission prompt if needed) so the selector
   // is populated with real device names before the camera goes active.
   await enumerateCameras();
-
   const cameraConfig = model.selectedCameraId
     ? new CameraConfig({ deviceId: model.selectedCameraId })
     : CameraConfig.default;
@@ -438,13 +481,7 @@ async function startCamera() {
   render();
 }
 
-/**
- * Stops camera capture.
- * Mirrors AppModel.stopCamera().
- *
- * @returns {Promise<void>}
- */
-async function stopCamera() {
+async function _doStopCamera() {
   try {
     await model.session?.stopCamera();
   } catch (err) {
@@ -452,6 +489,28 @@ async function stopCamera() {
   }
   model.isCameraActive = false;
   render();
+}
+
+/**
+ * Starts local camera capture and publishes it.
+ * Mirrors AppModel.startCamera().
+ *
+ * @returns {Promise<void>}
+ */
+function startCamera() {
+  desiredCameraOn = true;
+  return reconcileCamera();
+}
+
+/**
+ * Stops camera capture.
+ * Mirrors AppModel.stopCamera().
+ *
+ * @returns {Promise<void>}
+ */
+function stopCamera() {
+  desiredCameraOn = false;
+  return reconcileCamera();
 }
 
 /**
@@ -547,6 +606,11 @@ function wireEvents() {
     } else {
       startCamera();
     }
+  });
+
+  $('camera-on-demand-btn').addEventListener('click', () => {
+    model.cameraOnDemand = !model.cameraOnDemand;
+    render();
   });
 
   // Data channel

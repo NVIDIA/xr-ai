@@ -135,6 +135,7 @@ OpenAI SDK client or plain `httpx` / `requests`.
 | `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → hub |
+| `agent-mcp-servers/client-control-mcp/` | `client_control_mcp_server` | 8201 | — | ProcessorEndpoint + FastMCP |
 
 All model weights land in `models/` at the repo root (gitignored, shared across all
 servers).  Each YAML configures `model_cache` — resolved relative to the YAML file.
@@ -166,6 +167,8 @@ cp ../../ai-services/tts/piper/piper_tts_server.yaml ./piper_tts_server.yaml
 # MCP servers:
 cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./transcript_mcp_server.yaml
 cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./video_mcp_server.yaml
+# Client control (camera control + send-to-client):
+cp ../../agent-mcp-servers/client-control-mcp/client_control_mcp_server.yaml ./client_control_mcp_server.yaml
 ```
 
 Edit the YAML as needed (model, port, device, etc.).  The launcher auto-discovers
@@ -398,6 +401,10 @@ class <CamelName>Agent:            # ← FILL IN agent logic
 
     def __init__(self) -> None:
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
+        # Pass topics= to subscribe only to what you need — avoids receiving
+        # audio/video you don't use.  Default: all topics.  Example:
+        #   ProcessorEndpoint(..., topics=(b"participant",))         # join/leave only
+        #   ProcessorEndpoint(..., topics=(b"audio", b"data", b"participant"))
         self._ep.on_frame(self._on_frame)       # ← remove callbacks you don't use
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
@@ -598,6 +605,37 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-29 — client-control-mcp-server; ProcessorEndpoint selective topic subscription
+
+**`client-control-mcp-server`** (`agent-mcp-servers/client-control-mcp/`):
+
+New reusable MCP skill that provides client-control operations (send message, start/stop
+camera) as MCP tools.  Has its own `ProcessorEndpoint` — it is a first-class worker,
+not just a library module.
+
+- **Standalone**: `uv run client_control_mcp_server` on port 8201 exposes `/mcp`
+  (FastMCP StreamableHTTP) and `/send`, `/camera/start`, `/camera/stop` REST endpoints.
+- **Embedded**: import `ClientControlBridge` + `build_mcp(bridge)` and mount into any
+  composite `FastMCP` server.  The mcp-agent's composite mcp-server does this under the
+  `client_control` namespace — all tools appear at `http://localhost:8200/mcp`.
+- **`ClientControlBridge`** owns its `ProcessorEndpoint` lifecycle (`start()` / `stop()`).
+  Subscribes only to `participant` events (join/leave for `connected_participants`).
+- The vlm-agent worker uses `fastmcp.Client` to call these tools for all data sends and
+  camera control, keeping the worker's own EP focused on frame/data receive.
+
+**`ProcessorEndpoint` selective topic subscription**:
+
+`ProcessorEndpoint.__init__` gained a `topics` parameter (default: all topics).
+Pass a subset to avoid receiving message types you have no callbacks for:
+
+```python
+ep = ProcessorEndpoint(sub_addr=..., push_addr=..., topics=(b"participant",))
+ep = ProcessorEndpoint(sub_addr=..., push_addr=..., topics=(b"audio", b"data", b"participant"))
+```
+
+`DEFAULT_TOPICS` is exported from `xr_ai_agent` for reference.  The prior behaviour
+(subscribe to everything) is preserved when `topics` is omitted.
 
 ### 2026-04-28 — llm-server added (pure-text LLM)
 

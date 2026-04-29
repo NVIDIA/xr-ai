@@ -40,7 +40,7 @@ import zmq.asyncio
 
 from ._codec import decode, encode
 from ._types import (AudioChunk, DataMessage, FrameData, FrameRequest,
-                     FrameSignal, MsgType, ParticipantEvent)
+                     FrameSignal, MsgType, ParticipantEvent, ReturnAudioFlush)
 
 log = logging.getLogger(__name__)
 
@@ -50,9 +50,10 @@ AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
 DataCallback        = Callable[[DataMessage],      Awaitable[None]]
 ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
 
-_DEFAULT_TOPICS: tuple[bytes, ...] = (
+DEFAULT_TOPICS: tuple[bytes, ...] = (
     b"video", b"video_data", b"audio", b"data", b"participant", b"control",
 )
+_DEFAULT_TOPICS = DEFAULT_TOPICS  # internal alias kept for backward compat
 
 # Reserved topic for internal SDK status messages — not forwarded to app callbacks.
 AGENT_STATUS_TOPIC = "_agent.status"
@@ -78,14 +79,24 @@ class ProcessorEndpoint:
         ep.on_data(handle_data)
         ep.on_participant(handle_participant)  # optional — set is auto-maintained
         await ep.run()
+
+    Pass ``topics`` to subscribe to only the message types you need::
+
+        ep = ProcessorEndpoint(..., topics=(b"participant",))  # participant events only
+        ep = ProcessorEndpoint(..., topics=(b"audio", b"data", b"participant"))
     """
 
-    def __init__(self, sub_addr: str, push_addr: str) -> None:
+    def __init__(
+        self,
+        sub_addr:  str,
+        push_addr: str,
+        topics:    tuple[bytes, ...] = _DEFAULT_TOPICS,
+    ) -> None:
         ctx = zmq.asyncio.Context.instance()
 
         self._sub: zmq.asyncio.Socket = ctx.socket(zmq.SUB)
         self._sub.connect(sub_addr)      # ZMQ retries until the hub binds — startup order is irrelevant
-        for t in _DEFAULT_TOPICS:
+        for t in topics:
             self._sub.setsockopt(zmq.SUBSCRIBE, t)
 
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
@@ -128,6 +139,20 @@ class ProcessorEndpoint:
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
         await self._push.send(encode(MsgType.RETURN_AUDIO, chunk))
+
+    async def flush_return_audio(self, participant_id: str) -> None:
+        """
+        Drop any return audio currently queued at the hub for *participant_id*.
+
+        Use to cleanly interrupt the agent's own audio playback (e.g. when
+        cancelling an in-flight TTS response on a new user query). Audio that
+        has already left the hub for the client may still play out for the
+        duration of the client's jitter buffer (~100 ms).
+        """
+        await self._push.send(encode(
+            MsgType.RETURN_AUDIO_FLUSH,
+            ReturnAudioFlush(participant_id=participant_id),
+        ))
 
     async def set_status(self, status: str,
                          participant_id: str | None = None) -> None:

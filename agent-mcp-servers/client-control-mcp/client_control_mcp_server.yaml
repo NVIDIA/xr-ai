@@ -1,0 +1,7 @@
+# Client-control MCP server configuration.
+# Copy this file to your sample root and the launcher will auto-discover it.
+
+hub_pub:  ipc:///tmp/xr_hub_pub   # hub PUB socket — subscribe for participant events
+hub_push: ipc:///tmp/xr_hub_in    # hub PUSH socket — send return data and control
+host:     0.0.0.0
+port:     8201

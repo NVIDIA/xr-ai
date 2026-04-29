@@ -39,6 +39,7 @@ from xr_ai_agent import (
     ParticipantEvent,
     PixelFormat,
     ProcessorEndpoint,
+    ReturnAudioFlush,
     ShmRingBuffer,
     SlotView,
     decode,
@@ -54,6 +55,7 @@ from ._hub import (
     TOPIC_CONTROL,
     TOPIC_DATA,
     TOPIC_RETURN_AUDIO,
+    TOPIC_RETURN_AUDIO_FLUSH,
     TOPIC_RETURN_DATA,
     TOPIC_VIDEO,
     TOPIC_VIDEO_DATA,
@@ -84,6 +86,7 @@ __all__ = [
     "MsgType",
     "ParticipantEvent",
     "PixelFormat",
+    "ReturnAudioFlush",
     # well-known topic prefixes
     "TOPIC_VIDEO",
     "TOPIC_VIDEO_DATA",
@@ -91,6 +94,7 @@ __all__ = [
     "TOPIC_DATA",
     "TOPIC_CONTROL",
     "TOPIC_RETURN_AUDIO",
+    "TOPIC_RETURN_AUDIO_FLUSH",
     "TOPIC_RETURN_DATA",
     # internal SDK channel topic
     "AGENT_STATUS_TOPIC",

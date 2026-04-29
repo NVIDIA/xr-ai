@@ -29,6 +29,8 @@ class MsgType(IntEnum):
     # Frame pixel request/response (processor → hub → processor)
     FRAME_REQUEST = 9   # processor requests pixel data for a specific frame by seq
     FRAME_DATA    = 10  # hub delivers pixel data to requesting processor
+    # Return-audio control (processor → hub → connector)
+    RETURN_AUDIO_FLUSH = 11  # drop any audio queued for a participant's return track
     # Add new types here; existing code is unaffected.
 
 
@@ -120,3 +122,9 @@ class ControlMessage:
     """Extensible key/value control message (hub-internal, no track concept)."""
     topic:   str
     payload: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ReturnAudioFlush:
+    """Drop any audio queued for *participant_id*'s return track."""
+    participant_id: str

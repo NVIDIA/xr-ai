@@ -98,7 +98,7 @@ export class LiveKitBackend {
    * Called whenever binary data is received from remote participants.
    * `StreamSession` assigns this before calling `connect()`.
    *
-   * @type {((data: Uint8Array) => void) | null}
+   * @type {((topic: string, data: Uint8Array) => void) | null}
    */
   onDataReceived = null;
 
@@ -189,8 +189,7 @@ export class LiveKitBackend {
         } catch { /* malformed — ignore */ }
         return;
       }
-      // TODO: surface topic to the app alongside payload so clients can filter by topic
-      this.onDataReceived?.(payload);
+      this.onDataReceived?.(topic ?? '', payload);
     });
 
     room.on(RoomEvent.TrackSubscribed, (track) => {

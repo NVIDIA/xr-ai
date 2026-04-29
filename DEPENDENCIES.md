@@ -44,6 +44,17 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── pyyaml >=6.0
     Wraps the hub video HTTP API (GET /video) as an MCP tool
 
+client-control-mcp-server  (agent-mcp-servers/client-control-mcp/)
+    └── xr-ai-agent  [editable: ../../agent-sdk]
+    └── fastmcp >=0.4
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── pyyaml >=6.0
+    Processor-endpoint worker that exposes client control as MCP tools.
+    Subscribes only to participant events (topics=(b"participant",)).
+    Standalone: port 8201.  Also embeddable — import ClientControlBridge + build_mcp()
+    and mount into any composite FastMCP server.
+
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
     └── pyyaml
@@ -113,6 +124,7 @@ piper-tts-server  (tts/piper/)
 | `tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | JSONL storage + FastMCP |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP → hub video API |
+| `agent-mcp-servers/client-control-mcp/` | `client-control-mcp-server` | `client_control_mcp_server` | 8201 | — | ProcessorEndpoint + FastMCP |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -142,8 +154,10 @@ Uses stt-server (port 8103), tts-server (port 8104).
 
 Worker calls the vlm-server HTTP API (`POST /v1/chat/completions`) and tts-server HTTP API
 (`POST /v1/audio/speech`) — no model weights loaded in-process.
+All client communication (VLM response text, camera control, audio) goes out via the
+worker's own `ProcessorEndpoint`. Camera-on-demand is implemented inline in the worker.
 
-Uses tts-server (port 8104).
+Uses vlm-server (8100), tts-server (8105).
 
 ### cloudxr-agent  (agent-samples/cloudxr-agent/)
 
@@ -154,14 +168,19 @@ Uses tts-server (port 8104).
 
 ### mcp-agent  (agent-samples/mcp-agent/)
 
-Continuous STT → transcript ingest + MCP-accessible transcript and video query.
+Continuous STT → transcript ingest + MCP-accessible transcript, video, and client control.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `mcp-agent` | `xr-ai-launcher` | — |
+| MCP server | `mcp-server` | `transcript-mcp-server`, `video-mcp-server`, `client-control-mcp-server` | fastmcp >=0.4, fastapi >=0.111, uvicorn[standard] >=0.29, pyyaml >=6.0 |
 | Worker | `mcp-agent-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, pyyaml >=6.0 |
 
-Uses stt-server (8103), transcript-mcp-server (8200), video-mcp-server (8210).
+The composite mcp-server mounts transcript, video, and client_control skills into a single
+FastMCP instance at `http://localhost:8200/mcp`.  The client_control skill runs its own
+`ProcessorEndpoint` (participant events only) inside the mcp-server process.
+
+Uses stt-server (8103), composite mcp-server (8200).
 Hub video recording requires `PyNvVideoCodec` (dep of xr-media-hub; included in `uv sync`).
 
 ---

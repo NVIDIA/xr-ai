@@ -9,6 +9,7 @@ requires-python = ">=3.11"
 dependencies = [
     "transcript-mcp-server",
     "video-mcp-server",
+    "client-control-mcp-server",
     "fastmcp>=0.4",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
@@ -16,8 +17,9 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-transcript-mcp-server = { path = "../../../agent-mcp-servers/transcript-mcp", editable = true }
-video-mcp-server      = { path = "../../../agent-mcp-servers/video-mcp",      editable = true }
+transcript-mcp-server      = { path = "../../../agent-mcp-servers/transcript-mcp",       editable = true }
+video-mcp-server           = { path = "../../../agent-mcp-servers/video-mcp",             editable = true }
+client-control-mcp-server  = { path = "../../../agent-mcp-servers/client-control-mcp",    editable = true }
 
 [project.scripts]
 mcp_server = "mcp_server.__main__:run"
