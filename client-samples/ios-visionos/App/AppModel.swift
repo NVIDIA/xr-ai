@@ -30,6 +30,10 @@ final class AppModel {
 
     var audioMode: AudioConfig.MicrophoneMode = .voiceProcessing
 
+    // MARK: - Camera settings
+
+    var cameraPosition: CameraConfig.Position = .front
+
     // MARK: - Live state
 
     var session: StreamSession?
@@ -141,7 +145,7 @@ final class AppModel {
 
     func startCamera() async {
         do {
-            try await session?.startCamera()
+            try await session?.startCamera(config: CameraConfig(position: cameraPosition))
             isCameraActive = true
         } catch {
             lastError = error.localizedDescription
@@ -155,6 +159,16 @@ final class AppModel {
             lastError = error.localizedDescription
         }
         isCameraActive = false
+    }
+
+    func switchCamera(to position: CameraConfig.Position) async {
+        cameraPosition = position
+        guard isCameraActive else { return }
+        do {
+            try await session?.startCamera(config: CameraConfig(position: cameraPosition))
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     // MARK: - Data

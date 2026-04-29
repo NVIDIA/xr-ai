@@ -27,6 +27,18 @@ struct ContentView: View {
             .navigationTitle("StreamKit Sample")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder),
+                            to: nil, from: nil, for: nil
+                        )
+                    }
+                }
+            }
             #endif
         }
         .alert("Error", isPresented: Binding(
@@ -72,12 +84,14 @@ struct ContentView: View {
 
                 TextField("Token server URL (e.g. http://host/token)", text: $m.tokenServerURL)
                     .autocorrectionDisabled()
+                    .onSubmit {}
                     #if os(iOS)
                     .keyboardType(.URL)
                     #endif
 
                 TextField("Identity", text: $m.identity)
                     .autocorrectionDisabled()
+                    .onSubmit {}
 
                 Button(model.isConnecting ? "Connecting…" : "Connect") {
                     Task { await model.connect() }
@@ -150,6 +164,19 @@ struct ContentView: View {
     @ViewBuilder
     private var cameraRow: some View {
         if model.connectionState == .connected {
+            @Bindable var m = model
+
+            Picker("Camera Mode", selection: $m.cameraPosition) {
+                Text("Front").tag(CameraConfig.Position.front)
+                Text("Back").tag(CameraConfig.Position.back)
+            }
+            #if os(visionOS)
+            .disabled(true)
+            #endif
+            .onChange(of: model.cameraPosition) { _, newValue in
+                Task { await model.switchCamera(to: newValue) }
+            }
+
             LabeledContent("Camera") {
                 HStack {
                     Text(model.isCameraActive ? "Streaming" : "Idle")
@@ -192,6 +219,7 @@ struct ContentView: View {
             HStack {
                 TextField("Custom message…", text: $sendText)
                     .autocorrectionDisabled()
+                    .onSubmit {}
                 Button("Send") {
                     Task {
                         await model.sendCustom(text: sendText)
