@@ -12,22 +12,33 @@ Inputs
 Each query is answered against the latest video frame for that participant
 via a streaming VLM call.  The response goes back two ways:
 
-* `vlm.response` data message — the assembled text reply.
-* `xr-hub-return-{pid}` audio track — sentence-by-sentence Piper TTS,
+* ``vlm.response`` data message — the assembled text reply.
+* ``xr-hub-return-{pid}`` audio track — sentence-by-sentence Piper TTS,
   started in parallel as soon as each sentence completes.
 
 Interruption
 ------------
-A new query (audio utterance, data message, or ping) cancels any
-in-flight response for the same participant.  The dispatcher cancels
-the running task, awaits its cleanup, and then calls
-``flush_return_audio`` so already-queued TTS chunks are dropped at the
-hub before the new response starts.  Dispatch is serialised per pid via
-a lock so rapid-fire queries don't race over ``current_task``.
+A new query cancels any in-flight response for the same participant.  The
+dispatcher cancels the running task, awaits cleanup, and unconditionally
+calls ``flush_return_audio`` before starting the new one.
+
+Camera on demand
+----------------
+The agent periodically sends ``{"action":"stopCamera"}`` on the
+``clientControl`` topic to every connected participant.  Clients in
+"always-on" camera mode ignore this signal; clients in "camera on demand"
+mode honour it and stop streaming.
+
+When a query needs a video frame and the latest is stale (or absent), the
+agent sends ``{"action":"startCamera"}`` and waits up to
+``camera_on_timeout_s`` for a fresh frame before proceeding.  While a
+query is actively using the camera the periodic stop is suppressed so
+rapid follow-up queries don't cause a stop/start cycle.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 
@@ -68,11 +79,14 @@ class SimpleVlmAgent:
         vlm: VlmClient,
         tts: TtsClient,
         *,
-        default_prompt:    str   = "Describe what you see.",
-        system_prompt:     str   = DEFAULT_SYSTEM_PROMPT,
-        silence_threshold: float = 0.01,
-        silence_duration:  float = 0.8,
-        min_speech:        float = 0.3,
+        default_prompt:     str   = "Describe what you see.",
+        system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
+        silence_threshold:  float = 0.01,
+        silence_duration:   float = 0.8,
+        min_speech:         float = 0.3,
+        frame_max_age_s:     float = 2.0,
+        camera_on_timeout_s: float = 15.0,
+        camera_grace_s:      float = 5.0,
     ) -> None:
         self._ep  = ep
         self._stt = stt
@@ -84,14 +98,23 @@ class SimpleVlmAgent:
         self._ep.on_frame(self._on_frame)
         self._ep.on_participant(self._on_participant)
 
-        self._default_prompt  = default_prompt
-        self._system_prompt   = system_prompt
-        self._vad_threshold   = silence_threshold
-        self._vad_silence_s   = silence_duration
-        self._vad_min_s       = min_speech
+        self._default_prompt    = default_prompt
+        self._system_prompt     = system_prompt
+        self._vad_threshold     = silence_threshold
+        self._vad_silence_s     = silence_duration
+        self._vad_min_s         = min_speech
+        self._frame_max_age_us  = int(frame_max_age_s * 1_000_000)
+        self._camera_on_timeout = camera_on_timeout_s
+        self._camera_grace_s    = camera_grace_s
 
-        self._voice:  dict[str, VoiceState]                = {}
-        self._latest: dict[tuple[str, str], FrameSignal]   = {}
+        self._voice:  dict[str, VoiceState]              = {}
+        self._latest: dict[tuple[str, str], FrameSignal] = {}
+
+        # Camera on demand state
+        self._camera_on: dict[str, bool]           = {}  # pid → agent requested camera on
+        self._camera_held: set[str]                = set()  # pids in active query
+        self._camera_off_timers: dict[str, asyncio.Task] = {}  # pid → delayed-off task
+        self._frame_events: dict[str, asyncio.Event]     = {}  # pid → event set on new frame
 
     # ── audio path: VAD → STT → query ─────────────────────────────────────────
 
@@ -109,6 +132,18 @@ class SimpleVlmAgent:
                 vs.chunks.append(chunk)
             vs.silent_s += chunk_s
 
+        # Speculative camera-on: the moment speech crosses min_speech, tell
+        # the client to start the camera so it warms up in parallel with the
+        # user finishing their sentence and STT processing.  By the time the
+        # query dispatches the camera is usually already streaming.
+        if (vs.speech_s >= self._vad_min_s
+                and vs.speech_s - chunk_s < self._vad_min_s
+                and not vs.transcribing):
+            old_timer = self._camera_off_timers.pop(pid, None)
+            if old_timer and not old_timer.done():
+                old_timer.cancel()
+            asyncio.create_task(self._ensure_camera_on(pid))
+
         if (vs.silent_s  >= self._vad_silence_s
                 and vs.speech_s >= self._vad_min_s
                 and not vs.transcribing):
@@ -120,8 +155,6 @@ class SimpleVlmAgent:
         elif (vs.silent_s >= self._vad_silence_s
                 and vs.speech_s < self._vad_min_s
                 and vs.chunks):
-            # Sub-min-speech blip followed by silence — drop so it doesn't
-            # pollute the next real utterance.
             vs.chunks   = []
             vs.speech_s = 0.0
 
@@ -160,16 +193,7 @@ class SimpleVlmAgent:
 
     async def _dispatch_query(self, pid: str, text: str, *, pts_us: int) -> None:
         """Cancel any in-flight response for ``pid``, flush queued audio,
-        then start the new query as a tracked task.
-
-        The flush runs **unconditionally** — not only on mid-response
-        interruption.  When the VLM is fast, the old task may have already
-        finished (``current_task.done()``) while several seconds of TTS
-        audio is still draining through the hub's pacing pipe → LiveKit
-        → client jitter buffer.  Without flushing in that window, the
-        new query's audio queues *behind* the old, and the user hears the
-        old reply continue uninterrupted before the new one starts.
-        """
+        then start the new query as a tracked task."""
         vs = self._get_voice(pid)
 
         async with vs.dispatch_lock:
@@ -182,56 +206,60 @@ class SimpleVlmAgent:
                 except (asyncio.CancelledError, Exception):
                     pass
 
-            # Always flush: covers both cancelled-mid-response and
-            # finished-but-audio-still-playing cases.  Cheap O(1) when there
-            # is nothing queued.
             await self._ep.flush_return_audio(pid)
-
             vs.current_task = asyncio.create_task(self._handle_query(pid, text, pts_us))
 
     async def _handle_query(self, pid: str, text: str, pts_us: int) -> None:
-        # "ping" — use the configured default prompt against the latest frame.
-        # ("stop" is handled by the system prompt — the unconditional flush
-        # in _dispatch_query has already silenced any in-flight TTS by then,
-        # so the model just replies with a short acknowledgement.)
         query = self._default_prompt if text.lower().strip() == "ping" else text
 
-        sig = self._latest_signal(pid)
-        if sig is None:
-            log.warning("query from %r — no video frame yet", pid)
-            await self._say(pid, "No video frame available yet.", pts_us)
-            return
+        # Cancel any pending camera-off so a rapid follow-up query doesn't
+        # see the camera turn off between the previous grace period firing.
+        old_timer = self._camera_off_timers.pop(pid, None)
+        if old_timer and not old_timer.done():
+            old_timer.cancel()
 
-        frame = await self._ep.request_frame(sig)
-        if frame is None:
-            await self._say(pid, "Frame data unavailable — please retry.", pts_us)
-            return
-
-        image_url = encode_image(frame_to_pil(frame))
-        log.info("vlm  pid=%r  %dx%d  query=%r", pid, frame.width, frame.height, query[:60])
-
-        await self._ep.set_status("processing", pid)
+        self._camera_held.add(pid)
         try:
-            full_response = await self._stream_and_speak(pid, image_url, query, frame.pts_us)
-        finally:
-            # Always restore status — both on success and on interruption.
-            await self._ep.set_status("idle", pid)
+            # Acquire a fresh frame, requesting the camera if needed.
+            sig = self._latest_signal(pid)
+            if not (sig and self._is_fresh(sig)):
+                await self._ensure_camera_on(pid)
+                sig = await self._wait_for_fresh_frame(pid, self._camera_on_timeout)
+                if sig is None:
+                    await self._say(pid, "Camera unavailable, please try again.", pts_us)
+                    return
 
-        if full_response is not None:
-            await self._reply(pid, full_response, frame.pts_us)
+            frame = await self._ep.request_frame(sig)
+            if frame is None:
+                await self._say(pid, "Frame data unavailable — please retry.", pts_us)
+                return
+
+            image_url = encode_image(frame_to_pil(frame))
+            log.info("vlm  pid=%r  %dx%d  query=%r",
+                     pid, frame.width, frame.height, query[:60])
+
+            await self._ep.set_status("processing", pid)
+            try:
+                full_response = await self._stream_and_speak(
+                    pid, image_url, query, frame.pts_us,
+                )
+            finally:
+                await self._ep.set_status("idle", pid)
+
+            if full_response is not None:
+                await self._reply(pid, full_response, frame.pts_us)
+        finally:
+            self._camera_held.discard(pid)
+            # After the query, keep camera on for a grace period so rapid
+            # follow-up queries skip the startup delay.  Then send stopCamera.
+            self._schedule_camera_off(pid)
 
     async def _stream_and_speak(
         self, pid: str, image_url: str, query: str, fallback_pts_us: int,
     ) -> str | None:
-        """Run streaming VLM → sentence-batched TTS in parallel.
-
-        Returns the assembled response text on success, or ``None`` on VLM
-        error (the error reply has already been sent).  On task cancellation
-        (interruption), cancels all pending TTS work and re-raises.
-        """
+        """Run streaming VLM → sentence-batched TTS in parallel."""
         full_response = ""
         sentence_buf  = ""
-        # Queue of synthesis tasks in sentence order.  None signals normal end.
         tts_queue: asyncio.Queue[asyncio.Task | None] = asyncio.Queue()
         pending_synth: list[asyncio.Task] = []
 
@@ -286,8 +314,6 @@ class SimpleVlmAgent:
             return full_response
 
         except asyncio.CancelledError:
-            # Interrupted: cancel synth tasks + sender, swallow their exceptions,
-            # and re-raise so the caller (dispatcher) sees the cancellation.
             log.info("response cancelled pid=%r", pid)
             for t in pending_synth:
                 t.cancel()
@@ -298,6 +324,73 @@ class SimpleVlmAgent:
                 except (asyncio.CancelledError, Exception):
                     pass
             raise
+
+    # ── camera on demand ──────────────────────────────────────────────────────
+
+    async def _client_control(self, pid: str, action: str) -> None:
+        """Send a camera-control signal on the ``clientControl`` topic."""
+        await self._ep.send_return_data(DataMessage(
+            participant_id=pid,
+            topic="clientControl",
+            pts_us=now_us(),
+            data=json.dumps({"action": action}).encode(),
+        ))
+
+    async def _ensure_camera_on(self, pid: str) -> None:
+        """Send startCamera if we haven't already (idempotent)."""
+        if not self._camera_on.get(pid, False):
+            log.info("camera.on → pid=%r", pid)
+            await self._client_control(pid, "startCamera")
+            self._camera_on[pid] = True
+
+    async def _wait_for_fresh_frame(
+        self, pid: str, timeout: float,
+    ) -> FrameSignal | None:
+        """Wait up to ``timeout`` seconds for a fresh (non-stale) frame."""
+        ev = self._frame_events.setdefault(pid, asyncio.Event())
+        deadline = asyncio.get_event_loop().time() + timeout
+        while True:
+            sig = self._latest_signal(pid)
+            if sig is not None and self._is_fresh(sig):
+                return sig
+            # Clear, then re-check to close the TOCTOU race between check and wait.
+            ev.clear()
+            sig = self._latest_signal(pid)
+            if sig is not None and self._is_fresh(sig):
+                return sig
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                return None
+            try:
+                await asyncio.wait_for(ev.wait(), timeout=remaining)
+            except asyncio.TimeoutError:
+                return None
+
+    def _is_fresh(self, sig: FrameSignal) -> bool:
+        return now_us() - sig.pts_us < self._frame_max_age_us
+
+    def _schedule_camera_off(self, pid: str) -> None:
+        """Schedule stopCamera for ``pid`` after the grace period.
+
+        Replaces any existing pending timer.  If a new query arrives before
+        the timer fires, ``_handle_query`` cancels it so the camera stays on.
+        """
+        old = self._camera_off_timers.pop(pid, None)
+        if old and not old.done():
+            old.cancel()
+
+        async def _off():
+            try:
+                await asyncio.sleep(self._camera_grace_s)
+                if pid not in self._camera_held:
+                    await self._client_control(pid, "stopCamera")
+                    self._camera_on[pid] = False
+            except asyncio.CancelledError:
+                pass
+
+        self._camera_off_timers[pid] = asyncio.create_task(_off())
+
+    # ── reply helpers ─────────────────────────────────────────────────────────
 
     async def _reply(self, pid: str, text: str, pts_us: int) -> None:
         await self._ep.send_return_data(DataMessage(
@@ -323,6 +416,10 @@ class SimpleVlmAgent:
 
     async def _on_frame(self, sig: FrameSignal) -> None:
         self._latest[(sig.participant_id, sig.track_id)] = sig
+        # Wake any waiter in _wait_for_fresh_frame.
+        ev = self._frame_events.get(sig.participant_id)
+        if ev is not None:
+            ev.set()
 
     def _latest_signal(self, pid: str) -> FrameSignal | None:
         candidates = [v for k, v in self._latest.items() if k[0] == pid]
@@ -339,11 +436,22 @@ class SimpleVlmAgent:
             vs.current_task.cancel()
         for k in [k for k in self._latest if k[0] == pid]:
             del self._latest[k]
+        self._frame_events.pop(pid, None)
+        self._camera_on.pop(pid, None)
+        self._camera_held.discard(pid)
+        timer = self._camera_off_timers.pop(pid, None)
+        if timer and not timer.done():
+            timer.cancel()
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def run(self) -> None:
-        await self._ep.run()
+        try:
+            await self._ep.run()
+        finally:
+            # Cancel any pending grace-period off timers.
+            for t in self._camera_off_timers.values():
+                t.cancel()
 
     def shutdown(self) -> None:
         self._ep.stop()

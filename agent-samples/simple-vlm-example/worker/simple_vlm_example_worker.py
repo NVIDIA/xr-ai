@@ -22,10 +22,13 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     vlm_server:        http://localhost:8100
     tts_server:        http://localhost:8105   # piper_tts_server
     default_prompt:    "Describe what you see."
-    system_prompt:     <multiline string>      # role/style guidance for the VLM
-    silence_threshold: 0.01    # float32 RMS below which audio is silence
-    silence_duration:  0.8     # seconds of silence that ends an utterance
-    min_speech:        0.3     # minimum seconds of speech before STT fires
+    system_prompt:          <multiline string>   # role/style guidance for the VLM
+    frame_max_age_s:       2.0   # frames older than this trigger a camera-on request
+    camera_on_timeout_s:  15.0   # how long to wait for a fresh frame after startCamera
+    camera_grace_s:        5.0   # keep camera on this long after a query (avoids restart on follow-ups)
+    silence_threshold:      0.01  # float32 RMS below which audio is silence
+    silence_duration:       0.8   # seconds of silence that ends an utterance
+    min_speech:             0.3   # minimum seconds of speech before STT fires
 """
 from __future__ import annotations
 
@@ -66,11 +69,14 @@ async def main(cfg: dict) -> None:
     ep    = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     agent = SimpleVlmAgent(
         ep, stt, vlm, tts,
-        default_prompt   =cfg.get("default_prompt",   "Describe what you see."),
-        system_prompt    =cfg.get("system_prompt",    DEFAULT_SYSTEM_PROMPT),
-        silence_threshold=float(cfg.get("silence_threshold", 0.01)),
-        silence_duration =float(cfg.get("silence_duration",  0.8)),
-        min_speech       =float(cfg.get("min_speech",        0.3)),
+        default_prompt        =cfg.get("default_prompt",        "Describe what you see."),
+        system_prompt         =cfg.get("system_prompt",         DEFAULT_SYSTEM_PROMPT),
+        frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),
+        camera_on_timeout_s   =float(cfg.get("camera_on_timeout_s",  10.0)),
+        camera_grace_s        =float(cfg.get("camera_grace_s",         5.0)),
+        silence_threshold     =float(cfg.get("silence_threshold",     0.01)),
+        silence_duration      =float(cfg.get("silence_duration",      0.8)),
+        min_speech            =float(cfg.get("min_speech",            0.3)),
     )
 
     loop = asyncio.get_running_loop()

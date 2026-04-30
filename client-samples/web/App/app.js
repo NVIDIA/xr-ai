@@ -91,6 +91,10 @@ const model = {
   selectedCameraId: null,
   /** @type {string|null} */
   agentStatus: null,
+  /** When true, ``clientControl`` startCamera/stopCamera messages from the
+   *  agent are honoured.  When false (default — always-on), they are ignored
+   *  and the camera button is the sole control. */
+  cameraOnDemand: false,
   /** @type {Array<{id: string, text: string, timestamp: Date}>} */
   receivedMessages: [],
   /** @type {string|null} */
@@ -200,6 +204,10 @@ function render() {
     cameraStatus.textContent = isConnected ? 'Idle' : 'Not connected';
     cameraStatus.className   = 'status-text status-idle';
   }
+
+  // ── Camera on demand toggle ────────────────────────────────────────────────
+  const codCheckbox = $('camera-on-demand');
+  if (codCheckbox) codCheckbox.checked = model.cameraOnDemand;
 
   // ── Camera selector (shown only when multiple cameras detected) ────────────
   const selectRow = $('camera-select-row');
@@ -346,6 +354,20 @@ async function connect() {
   };
 
   newSession.onDataReceived = (topic, data) => {
+    // Camera on demand: agent sends {"action":"startCamera/stopCamera"} on
+    // "clientControl".  In always-on mode (cameraOnDemand === false) these
+    // are silently ignored so manual camera control still works uninterrupted.
+    if (topic === 'clientControl') {
+      if (model.cameraOnDemand) {
+        try {
+          const { action } = JSON.parse(new TextDecoder().decode(data));
+          if (action === 'startCamera' && !model.isCameraActive) startCamera();
+          if (action === 'stopCamera'  &&  model.isCameraActive) stopCamera();
+        } catch { /* malformed — ignore */ }
+      }
+      return;  // never surface in the message list
+    }
+
     const text = (() => {
       try {
         return new TextDecoder().decode(data);
@@ -461,9 +483,13 @@ async function stopCamera() {
  * @returns {Promise<void>}
  */
 async function sendPing() {
-  const payload = `ping:${Date.now() / 1000}`;
+  // In on-demand mode, start the camera now so it warms up in parallel
+  // with the ping's network round-trip and agent processing.  The camera
+  // will be ready (or nearly so) by the time the agent needs a frame.
+  if (model.cameraOnDemand && !model.isCameraActive) startCamera();
+
   try {
-    await model.session?.send(payload);
+    await model.session?.send('ping');
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
   }
@@ -538,6 +564,11 @@ function wireEvents() {
   // Camera selector
   $('camera-select').addEventListener('change', (e) => {
     model.selectedCameraId = e.target.value || null;
+  });
+
+  // Camera on demand toggle
+  $('camera-on-demand')?.addEventListener('change', (e) => {
+    model.cameraOnDemand = e.target.checked;
   });
 
   // Camera toggle

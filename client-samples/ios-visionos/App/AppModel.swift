@@ -33,6 +33,10 @@ final class AppModel {
     // MARK: - Camera settings
 
     var cameraPosition: CameraConfig.Position = .front
+    /// When `true`, ``clientControl`` startCamera/stopCamera messages from
+    /// the agent are honoured.  When `false` (default — always-on), they are
+    /// ignored and the camera button is the sole control.
+    var cameraOnDemand: Bool = false
 
     // MARK: - Live state
 
@@ -93,6 +97,22 @@ final class AppModel {
         }
         newSession.onDataReceived = { [weak self, weak newSession] topic, data in
             guard let self, self.session === newSession else { return }
+
+            // Camera on demand: intercept clientControl signals from the agent.
+            // In always-on mode (cameraOnDemand = false) they are silently ignored.
+            if topic == "clientControl" {
+                if self.cameraOnDemand,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let action = json["action"] as? String {
+                    if action == "startCamera" && !self.isCameraActive {
+                        Task { await self.startCamera() }
+                    } else if action == "stopCamera" && self.isCameraActive {
+                        Task { await self.stopCamera() }
+                    }
+                }
+                return  // never surface in received messages
+            }
+
             let body = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
             let text = topic.isEmpty ? body : "[\(topic)] \(body)"
             self.receivedMessages.insert(ReceivedMessage(text: text), at: 0)
@@ -174,9 +194,13 @@ final class AppModel {
     // MARK: - Data
 
     func sendPing() async {
-        let payload = Data("ping:\(Date().timeIntervalSince1970)".utf8)
+        // In on-demand mode, start the camera now so it warms up in parallel
+        // with the ping's round-trip and agent processing.
+        if cameraOnDemand && !isCameraActive {
+            Task { await startCamera() }
+        }
         do {
-            try await session?.send(payload)
+            try await session?.send(Data("ping".utf8))
         } catch {
             lastError = error.localizedDescription
         }

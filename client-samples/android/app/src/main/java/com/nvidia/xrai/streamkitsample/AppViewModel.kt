@@ -86,6 +86,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val receivedMessages = mutableStateListOf<ReceivedMessage>()
     var lastError by mutableStateOf<String?>(null)
         private set
+    /** When true, ``clientControl`` startCamera/stopCamera messages from the
+     *  agent are honoured.  When false (default — always-on), they are ignored
+     *  and the camera button is the sole control. */
+    var cameraOnDemand by mutableStateOf(false)
 
     // ── Private ────────────────────────────────────────────────────────────────
 
@@ -135,13 +139,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     agentStatus = status
                 }
                 newSession.onDataReceived = { topic, data ->
-                    val body = try {
-                        String(data, Charsets.UTF_8)
-                    } catch (_: Exception) {
-                        "[${data.size} bytes binary]"
+                    if (topic == "clientControl") {
+                        // Camera on demand: intercept clientControl signals from the agent.
+                        // In always-on mode (cameraOnDemand = false) they are silently ignored.
+                        // Never surface in the received messages list.
+                        if (cameraOnDemand) {
+                            try {
+                                val json = org.json.JSONObject(String(data, Charsets.UTF_8))
+                                when (json.optString("action")) {
+                                    "startCamera" -> if (!isCameraActive) startCamera()
+                                    "stopCamera"  -> if (isCameraActive) stopCamera()
+                                }
+                            } catch (_: Exception) { /* malformed — ignore */ }
+                        }
+                    } else {
+                        val body = try {
+                            String(data, Charsets.UTF_8)
+                        } catch (_: Exception) {
+                            "[${data.size} bytes binary]"
+                        }
+                        val text = if (topic.isEmpty()) body else "[$topic] $body"
+                        receivedMessages.add(0, ReceivedMessage(text = text))
                     }
-                    val text = if (topic.isEmpty()) body else "[$topic] $body"
-                    receivedMessages.add(0, ReceivedMessage(text = text))
                 }
 
                 session = newSession
@@ -222,11 +241,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── Data channel ──────────────────────────────────────────────────────────
 
     fun sendPing() {
+        // In on-demand mode, start the camera now so it warms up in parallel
+        // with the ping's round-trip and agent processing.
+        if (cameraOnDemand && !isCameraActive) startCamera()
         viewModelScope.launch {
             try {
-                val payload = "ping:${System.currentTimeMillis() / 1000.0}"
-                    .toByteArray(Charsets.UTF_8)
-                session?.send(payload)
+                session?.send("ping".toByteArray(Charsets.UTF_8))
             } catch (e: Exception) {
                 lastError = e.message
             }

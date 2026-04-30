@@ -163,9 +163,13 @@ struct ContentView: View {
 
     @ViewBuilder
     private var cameraRow: some View {
-        if model.connectionState == .connected {
-            @Bindable var m = model
+        @Bindable var m = model
 
+        // Camera on demand toggle — always visible so the user can set the
+        // mode before connecting.  Ignored by the agent in always-on mode.
+        Toggle("Camera on demand", isOn: $m.cameraOnDemand)
+
+        if model.connectionState == .connected {
             Picker("Camera Mode", selection: $m.cameraPosition) {
                 Text("Front").tag(CameraConfig.Position.front)
                 Text("Back").tag(CameraConfig.Position.back)
