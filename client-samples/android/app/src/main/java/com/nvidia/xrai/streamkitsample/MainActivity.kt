@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -194,7 +195,7 @@ private fun SectionCard(
 private fun CardRow(
     modifier: Modifier = Modifier,
     showDivider: Boolean = true,
-    content: @Composable () -> Unit,
+    content: @Composable RowScope.() -> Unit,
 ) {
     Column {
         Row(
@@ -202,9 +203,8 @@ private fun CardRow(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
-        ) {
-            content()
-        }
+            content = content,
+        )
         if (showDivider) HorizontalDivider(color = ColorSeparator, thickness = 0.5.dp)
     }
 }

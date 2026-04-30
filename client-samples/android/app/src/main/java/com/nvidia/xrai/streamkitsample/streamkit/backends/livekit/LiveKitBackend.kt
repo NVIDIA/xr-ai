@@ -11,15 +11,15 @@ import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
+import io.livekit.android.events.collect
 import io.livekit.android.room.Room
-import io.livekit.android.room.participant.DataPublishReliability
 import io.livekit.android.room.track.CameraPosition
-import io.livekit.android.room.track.VideoCaptureOptions
+import io.livekit.android.room.track.DataPublishReliability
+import io.livekit.android.room.track.LocalVideoTrackOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -127,12 +127,15 @@ internal class LiveKitBackend(
     override suspend fun startCamera(config: CameraConfig) {
         if (!isConnected) throw StreamError.CameraRequiresConnection
 
+        val lp = room?.localParticipant ?: return
         val position = when (config.facing) {
             CameraConfig.CameraFacing.FRONT -> CameraPosition.FRONT
             CameraConfig.CameraFacing.BACK  -> CameraPosition.BACK
         }
-        val captureOptions = VideoCaptureOptions(position = position)
-        room?.localParticipant?.setCameraEnabled(true, captureOptions)
+        // setCameraEnabled() reads the current videoTrackCaptureDefaults when it
+        // creates the track. Mutate the position there before flipping it on.
+        lp.videoTrackCaptureDefaults = lp.videoTrackCaptureDefaults.copy(position = position)
+        lp.setCameraEnabled(true)
     }
 
     override suspend fun stopCamera() {
