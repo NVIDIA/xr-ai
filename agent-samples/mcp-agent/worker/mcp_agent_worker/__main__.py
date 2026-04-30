@@ -9,11 +9,14 @@ What it does
 1. Listens for audio from XR clients via the hub IPC.
 2. Runs VAD to detect speech boundaries (same logic as echo-agent).
 3. At end of each utterance, runs STT on the full audio buffer.
-4. Calls the ``transcript_add_transcript`` MCP tool on the composed
-   mcp-server to record the utterance.
-5. On any data-channel message, calls the ``transcript_get_transcript_stats``
-   and ``video_get_video_stats`` MCP tools and sends a summary back on
-   topic ``mcp.stats``.
+4. Calls the ``transcript_add_transcript`` MCP tool with
+   ``source_id=<participant_id>`` to record the utterance. (The
+   transcript store is keyed by an arbitrary ``source_id`` string —
+   live participant identities here, but agents can also write under
+   internal source names like ``"agent-vlm"``.)
+5. On any data-channel message, calls ``transcript_get_transcript_stats``
+   (``source_id=pid``) and ``video_get_video_stats`` (``participant_id=pid``)
+   and sends a summary back on topic ``mcp.stats``.
 
 The composed mcp-server is a pure-FastMCP process at /mcp (no REST). It
 mounts the transcript and video sub-servers under their respective
@@ -164,7 +167,7 @@ class McpAgent:
         pid = msg.participant_id
         async with McpClient(self._mcp_url) as mcp:
             t_res, v_res = await asyncio.gather(
-                mcp.call_tool("transcript_get_transcript_stats", {"participant_id": pid}),
+                mcp.call_tool("transcript_get_transcript_stats", {"source_id":      pid}),
                 mcp.call_tool("video_get_video_stats",           {"participant_id": pid}),
                 return_exceptions=True,
             )
@@ -227,7 +230,7 @@ class McpAgent:
             async with McpClient(self._mcp_url) as mcp:
                 await mcp.call_tool(
                     "transcript_add_transcript",
-                    {"participant_id": pid, "timestamp_us": timestamp_us, "text": text},
+                    {"source_id": pid, "timestamp_us": timestamp_us, "text": text},
                 )
         except Exception as exc:
             log.error("transcript add failed: %s", exc)

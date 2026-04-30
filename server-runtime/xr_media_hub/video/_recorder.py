@@ -13,11 +13,18 @@ are evicted FIFO when the budget is exceeded.
 
 On-disk layout
 --------------
-    <out_dir>/<participant_id>/
+    <out_dir>/<dir_name>/
+        .identity         — raw participant identity (utf-8, one line)
         <start_us>.264    — raw H.264 Annex B, starts with IDR
         <start_us>.json   — chunk metadata sidecar
 
-Sidecar JSON keys:
+``<dir_name>`` is ``_safe_name(participant_id)``; if two distinct raw
+identities collide on the same safe name, the second one gets a counter
+suffix (``alice_home`` then ``alice_home_2``…). The ``.identity`` file
+is the source of truth for the raw name; downstream consumers should
+prefer it over the directory name.
+
+Per-chunk sidecar JSON keys:
     start_us    int   chunk start time (Unix µs, same as filename stem)
     end_us      int   chunk end time (Unix µs, written when chunk is closed)
     num_frames  int   encoded frames in this chunk
@@ -164,11 +171,10 @@ class VideoRecorder:
         enc.chunk_frames   = 0
 
     def _make_track(self, pid: str, tid: str, width: int, height: int) -> _TrackEncoder:
-        out_dir = self._out_dir / _safe_name(pid)
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = _resolve_or_create_subdir(self._out_dir, pid)
         encoder = self._create_encoder(width, height)
-        log.info("recorder  new track  pid=%r  track=%r  %dx%d  bitrate=%d",
-                 pid, tid, width, height, self._cfg.bitrate)
+        log.info("recorder  new track  pid=%r  dir=%s  track=%r  %dx%d  bitrate=%d",
+                 pid, out_dir.name, tid, width, height, self._cfg.bitrate)
         return _TrackEncoder(
             encoder=encoder, out_dir=out_dir,
             width=width, height=height,
@@ -310,3 +316,31 @@ def _rgb24_to_nv12(rgb: np.ndarray, width: int, height: int) -> np.ndarray:
 
 def _safe_name(pid: str) -> str:
     return "".join(c if c.isalnum() or c in "-_." else "_" for c in pid)
+
+
+def _resolve_or_create_subdir(root: Path, raw: str) -> Path:
+    """Find or create the per-participant subdirectory for *raw*.
+
+    Disambiguates collisions (two raw identities mapping to the same
+    ``_safe_name``) by appending a counter suffix. Each subdir contains
+    a ``.identity`` file holding the raw identity verbatim — downstream
+    listing tools read it to recover the original name.
+    """
+    safe = _safe_name(raw)
+    suffix = 1
+    while True:
+        name      = safe if suffix == 1 else f"{safe}_{suffix}"
+        candidate = root / name
+        sidecar   = candidate / ".identity"
+        if not candidate.exists():
+            candidate.mkdir(parents=True, exist_ok=False)
+            sidecar.write_text(raw, encoding="utf-8")
+            return candidate
+        if sidecar.exists() and sidecar.read_text(encoding="utf-8") == raw:
+            return candidate
+        # Pre-sidecar legacy dirs: if there's no .identity file and the
+        # raw name already equals safe, claim it (and write the sidecar).
+        if not sidecar.exists() and raw == safe and suffix == 1:
+            sidecar.write_text(raw, encoding="utf-8")
+            return candidate
+        suffix += 1

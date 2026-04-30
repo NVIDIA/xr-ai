@@ -8,17 +8,25 @@ Two data paths:
 
 * **Historical chunks** — reads the H.264 Annex B chunks the hub recorder
   writes to (tmpfs by default). Used by ``query_video``,
-  ``get_video_stats``, ``list_recording_participants``,
+  ``get_video_stats``, ``list_recorded_participants``,
   ``get_frame_at_time``.
 
 * **Live frames** — connects to the hub as a ``ProcessorEndpoint``,
   tracks the most recent ``FrameSignal`` per participant, and pulls
-  pixels on demand via ``request_frame``. Used by ``get_latest_frame``.
+  pixels on demand via ``request_frame``. Used by
+  ``list_live_participants`` and ``get_latest_frame``.
+
+All tools accept and return raw LiveKit identities; sanitization happens
+internally for filesystem paths and is recovered via ``.identity``
+sidecars written by the recorder.
 
 Tools (FastMCP, mounted at /mcp)
 ────────────────────────────────
-  list_recording_participants() → list[str]
-      Participant IDs that have at least one chunk on disk.
+  list_live_participants() → list[str]
+      Identities currently connected to the hub (live IPC roster).
+
+  list_recorded_participants() → list[str]
+      Identities that have at least one chunk on disk.
 
   get_video_stats(participant_id) → dict
       num_chunks, total_bytes, avg_chunk_bytes, earliest_us, latest_us.
@@ -68,24 +76,62 @@ _DEFAULT_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _DEFAULT_HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 
+def _safe_name(s: str) -> str:
+    """Filesystem-safe version of *s*. Mirrors the recorder's helper."""
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in s)
+
+
 # ── chunk store (reads the recording directory) ───────────────────────────────
 
 class ChunkStore:
     def __init__(self, recordings_dir: pathlib.Path) -> None:
         self._root = recordings_dir
 
-    def _pid_dir(self, pid: str) -> pathlib.Path:
-        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in pid)
-        return self._root / safe
+    def _pid_dir(self, pid: str) -> pathlib.Path | None:
+        """Return the existing dir whose ``.identity`` matches *pid*, or
+        ``None`` if no recordings exist for that participant."""
+        if not self._root.exists():
+            return None
+        safe = _safe_name(pid)
+        # Fast path: canonical name and its .identity matches (or, for
+        # legacy pre-sidecar dirs, the dir name == raw == safe).
+        canonical = self._root / safe
+        if canonical.is_dir():
+            sidecar = canonical / ".identity"
+            if sidecar.exists():
+                if sidecar.read_text(encoding="utf-8") == pid:
+                    return canonical
+            elif pid == safe:
+                return canonical
+        # Slow path: scan all dirs (covers collision-bumped suffixes).
+        for d in sorted(self._root.iterdir()):
+            if not d.is_dir():
+                continue
+            sidecar = d / ".identity"
+            if sidecar.exists() and sidecar.read_text(encoding="utf-8") == pid:
+                return d
+        return None
 
     def list_participants(self) -> list[str]:
+        """Return raw participant identities for every recorded
+        participant (read from ``.identity`` sidecars; falls back to the
+        directory name for legacy dirs without a sidecar)."""
         if not self._root.exists():
             return []
-        return [d.name for d in sorted(self._root.iterdir()) if d.is_dir()]
+        out: list[str] = []
+        for d in sorted(self._root.iterdir()):
+            if not d.is_dir():
+                continue
+            sidecar = d / ".identity"
+            if sidecar.exists():
+                out.append(sidecar.read_text(encoding="utf-8"))
+            else:
+                out.append(d.name)
+        return out
 
     def _sorted_chunks(self, pid: str) -> list[pathlib.Path]:
         pid_dir = self._pid_dir(pid)
-        if not pid_dir.exists():
+        if pid_dir is None:
             return []
         return sorted(pid_dir.glob("*.264"), key=lambda p: int(p.stem))
 
@@ -182,6 +228,10 @@ class FrameProvider:
 
     def latest_signal(self, pid: str) -> FrameSignal | None:
         return self._latest.get(pid)
+
+    def connected_participants(self) -> frozenset[str]:
+        """Raw identities currently connected to the hub (live IPC roster)."""
+        return self._ep.connected_participants
 
     async def fetch_latest(self, pid: str) -> FrameData | None:
         sig = self._latest.get(pid)
@@ -283,8 +333,18 @@ def build_mcp(
     mcp = FastMCP("video-mcp")
 
     @mcp.tool()
-    def list_recording_participants() -> list[str]:
-        """Return participant IDs that have recorded video chunks on disk."""
+    def list_live_participants() -> list[str]:
+        """Return raw participant identities currently connected to the
+        hub. Drawn from the live IPC roster — these are the only pids
+        for which ``get_latest_frame`` will return a frame."""
+        return sorted(provider.connected_participants())
+
+    @mcp.tool()
+    def list_recorded_participants() -> list[str]:
+        """Return raw participant identities that have at least one
+        recorded chunk on disk. Read from ``.identity`` sidecars; covers
+        both currently-connected and previously-connected participants
+        whose chunks are still within the recorder's eviction window."""
         return store.list_participants()
 
     @mcp.tool()
@@ -313,7 +373,7 @@ def build_mcp(
         data = store.query(participant_id, start_us, end_us)
         if data is None:
             return {"error": f"No video chunks for {participant_id!r} in requested window"}
-        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in participant_id)
+        safe = _safe_name(participant_id)
         out_path = out_dir / f"{safe}_{start_us}_{end_us}.264"
         out_path.write_bytes(data)
         log.info("query_video  pid=%r  %d–%d  %d bytes → %s",
@@ -337,7 +397,7 @@ def build_mcp(
             rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
         except ValueError as exc:
             return {"error": str(exc)}
-        safe     = "".join(c if c.isalnum() or c in "-_." else "_" for c in participant_id)
+        safe     = _safe_name(participant_id)
         out_path = out_dir / f"{safe}_latest_{frame.pts_us}.png"
         _save_png(rgb, out_path)
         log.info("get_latest_frame  pid=%r  %dx%d  ts=%d → %s",
@@ -390,7 +450,7 @@ def build_mcp(
 
         nv12     = frames[idx]
         rgb      = _nv12_to_rgb(nv12, width, height)
-        safe     = "".join(c if c.isalnum() or c in "-_." else "_" for c in participant_id)
+        safe     = _safe_name(participant_id)
         out_path = out_dir / f"{safe}_at_{timestamp_us}.png"
         _save_png(rgb, out_path)
 
