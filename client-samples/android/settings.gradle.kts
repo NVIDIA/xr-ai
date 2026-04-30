@@ -16,6 +16,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // LiveKit Android transitively depends on `com.github.davidliu:audioswitch`
+        // pinned to a Git commit hash, which is only published on JitPack.
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
