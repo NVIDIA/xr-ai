@@ -19,16 +19,24 @@ required process automatically. No separate server launch step.
 
 ## Quickstart
 
-### Echo agent (starts hub + agent in one command)
+### Simple VLM example (vision Q&A over voice + text)
+
+End-to-end voice + vision sample.  Speak into the mic, type into the data
+channel, or send the literal text `"ping"` — all routes go through the
+same VLM pipeline against the latest video frame.  Replies arrive as
+streaming Piper TTS audio plus a `vlm.response` text message.
+
+Requires ~16 GB VRAM (default VLM is `nvidia/Cosmos-Reason1-7B`, NVIDIA
+Open Model License + Apache 2.0).
 
 ```bash
-cd xr-ai/agent-samples/echo-agent
+cd xr-ai/agent-samples/simple-vlm-example
 uv sync
-uv run echo_agent
+uv run simple_vlm_example
 ```
 
-On startup you will see hub output (prefixed `[hub]`) followed by the agent
-connecting. The hub prints connection details:
+On startup you will see hub output (prefixed `[hub]`) followed by the
+worker connecting.  The hub prints connection details:
 
 ```
 [hub]   LiveKit URL : ws://0.0.0.0:7880
@@ -37,37 +45,19 @@ connecting. The hub prints connection details:
 [hub]   Web client  : http://localhost:8080
 ```
 
-Each agent sample has its own `xr_media_hub.yaml` in its directory. Edit it to
-change ports, credentials, or other options. See
-[`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml) for a
-reference listing every available option.
+**Client protocol** — anything you send via the data channel is treated
+as a query:
+- `"ping"` → uses the configured default prompt (`"Describe what you see."`).
+- Any other UTF-8 text → used as the query verbatim.
+- Audio from the mic → STT (parakeet) → query.
 
----
+Override the VLM model by editing `vlm_server.yaml` in the sample
+directory.  Each sample has its own `xr_media_hub.yaml` controlling the
+hub; see [`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
+for the full option list.
 
-### VLM agent (vision-language queries over live video)
-
-Requires ~16 GB VRAM. Default model: `nvidia/Cosmos-Reason1-7B`
-(NVIDIA Open Model License + Apache 2.0 — commercial use permitted).
-
-```bash
-cd xr-ai/agent-samples/vlm-agent
-uv sync
-uv run vlm_agent
-```
-
-Override the model via environment variable:
-
-```bash
-VLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct uv run vlm_agent
-```
-
-**Client protocol** — send any data channel message (no specific topic required):
-- Raw UTF-8 text: `"What objects are on the table?"`
-- Or JSON: `{"query": "What objects are on the table?", "track_id": "optional"}`
-
-The agent replies on topic `vlm.response` with plain UTF-8 text.
-
-The model is loaded at startup (~30–60 s). It is ready before the first query.
+The VLM and TTS models are loaded at startup (~30–60 s).  They are ready
+before the first query.
 
 ---
 

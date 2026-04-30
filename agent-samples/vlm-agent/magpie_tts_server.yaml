@@ -1,8 +1,0 @@
-# Magpie TTS server configuration (reference — not active while piper_tts_server is used).
-# To switch back to Magpie: change the orchestrator command to tts_server and port to 8104.
-
-model:       nvidia/magpie_tts_multilingual_357m
-device:      auto
-port:        8104
-sample_rate: 22050
-model_cache: ../../models

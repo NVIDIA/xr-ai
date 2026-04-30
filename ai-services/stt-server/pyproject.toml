@@ -7,12 +7,25 @@ name = "stt-server"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "nemo_toolkit[asr]>=2.0",
+    # >=2.5 keeps us out of NeMo 2.0.0 (under-declared deps, no
+    # MagpieTTS).  NeMo's [asr] extra requires `lightning>2.2.1,<=2.4.0`
+    # (the umbrella package); see [tool.uv.sources] below.
+    "nemo_toolkit[asr]>=2.5",
+    "lightning>2.2.1,<=2.4.0",  # routed to GitHub source — see below
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "python-multipart>=0.0.9",
     "pyyaml>=6.0",
 ]
+
+[tool.uv.sources]
+# PyPI has the `lightning` umbrella package quarantined as of 2026-04-30,
+# blocking NeMo's [asr]/[tts] extras.  `pytorch-lightning` (a sibling
+# package, unaffected) is built from the same Lightning AI mono-repo
+# and exposes the same `lightning.pytorch` namespace NeMo uses.  Pull
+# `lightning` straight from the upstream tag — drop this source once
+# PyPI lifts the quarantine.
+lightning = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
 
 [project.scripts]
 stt_server = "stt_server.__main__:run"

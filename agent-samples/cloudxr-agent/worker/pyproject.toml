@@ -14,7 +14,7 @@ dependencies = [
 xr-ai-agent = { path = "../../../agent-sdk", editable = true }
 
 [project.scripts]
-cloudxr_agent_worker = "cloudxr_agent_worker.__main__:run"
+cloudxr_agent_worker = "cloudxr_agent_worker:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["cloudxr_agent_worker"]
+only-include = ["cloudxr_agent_worker.py"]

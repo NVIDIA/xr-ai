@@ -18,7 +18,13 @@ dependencies = [
 xr-ai-agent = { path = "../../../agent-sdk", editable = true }
 
 [project.scripts]
-mcp_agent_worker = "mcp_agent_worker.__main__:run"
+mcp_agent_worker = "mcp_agent_worker:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["mcp_agent_worker"]
+only-include = [
+    "mcp_agent_worker.py",
+    "agent.py",
+    "audio.py",
+    "services.py",
+    "voice.py",
+]

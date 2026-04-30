@@ -80,7 +80,8 @@ vlm-server  (vlm-server/)
     Model: nvidia/Cosmos-Reason1-7B (Qwen2.5-VL architecture, in-process)
 
 stt-server  (stt-server/)
-    └── nemo_toolkit[asr] >=2.0
+    └── nemo_toolkit[asr] >=2.5
+    └── lightning >2.2.1,<=2.4.0    # routed to github.com/Lightning-AI/pytorch-lightning
     └── fastapi >=0.111
     └── uvicorn[standard] >=0.29
     └── python-multipart >=0.0.9
@@ -88,7 +89,8 @@ stt-server  (stt-server/)
     Model: nvidia/parakeet-tdt-0.6b-v3 (NeMo ASR, in-process)
 
 magpie-tts-server  (tts/magpie/)
-    └── nemo_toolkit[tts] >=2.0
+    └── nemo_toolkit[tts] >=2.5
+    └── lightning >2.2.1,<=2.4.0    # routed to github.com/Lightning-AI/pytorch-lightning
     └── soundfile >=0.12
     └── numpy >=1.24
     └── fastapi >=0.111
@@ -162,28 +164,20 @@ Vanilla JS, no build step.  Depends on `livekit-client` v2 via CDN import map.
 
 ## Agent samples
 
-### echo-agent  (agent-samples/echo-agent/)
+### simple-vlm-example  (agent-samples/simple-vlm-example/)
 
-STT → TTS echo pipeline: audio → STT → TTS → audio; text → TTS → audio.
-
-| Sub-project | Package | Internal deps | External deps |
-|---|---|---|---|
-| Orchestrator | `echo-agent` | `xr-ai-launcher` | — |
-| Worker | `echo-agent-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, pyyaml >=6.0 |
-
-Uses stt-server (port 8103), tts-server (port 8104).
-
-### vlm-agent  (agent-samples/vlm-agent/)
+Vision Q&A driven by voice, text, or "ping": audio → STT → query;
+text → query; "ping" → default-prompt query.  Each query runs against
+the latest video frame via streaming VLM and replies with both
+`vlm.response` text and sentence-batched Piper TTS audio.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
-| Orchestrator | `vlm-agent` | `xr-ai-launcher` | — |
-| Worker | `vlm-agent-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0 |
+| Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0 |
 
-Worker calls the vlm-server HTTP API (`POST /v1/chat/completions`) and tts-server HTTP API
-(`POST /v1/audio/speech`) — no model weights loaded in-process.
-
-Uses tts-server (port 8104).
+Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
+(8105) over HTTP — no model weights loaded in-process.
 
 ### cloudxr-agent  (agent-samples/cloudxr-agent/)
 
@@ -219,8 +213,8 @@ updated in the same commit**.
 | `agent-sdk/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
-| vlm-agent model class or supported architectures | `agent-samples/vlm-agent/vlm_agent_worker.yaml.example` comments |
-| vlm-agent YAML config keys (`model`, `hf_token`, `system_prompt`, …) | `agent-samples/vlm-agent/vlm_agent_worker.yaml.example`, worker `__main__.py` docstring |
+| vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
+| vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/cloudxr-agent/cloudxr_runtime.yaml`, `AGENTS.md` CloudXR section |
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
 | Any new sample added | `DEPENDENCIES.md`, `AGENTS.md`, `README.md` |

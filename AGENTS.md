@@ -157,10 +157,15 @@ PROCESSES = [
     Process("vlm",    "../../ai-services/vlm-server",  "vlm_server"),   # ← add as needed
     Process("llm",    "../../ai-services/llm-server",  "llm_server"),
     Process("stt",    "../../ai-services/stt-server",  "stt_server"),
-    Process("tts",    "../../ai-services/tts/magpie",   "magpie_tts_server"),
-    Process("worker", "worker",                        "my_agent_worker"),
+    Process("tts",    "../../ai-services/tts/piper",    "piper_tts_server"),
+    Process("worker", "worker",                         "my_agent_worker"),
 ]
 ```
+
+The agent samples in this repo (`simple-vlm-example`) default to Piper
+TTS — it runs on CPU with ~100 ms/sentence latency and avoids the NeMo
+dep tree.  Magpie is still a supported option (better voice quality,
+multilingual) when GPU is available; swap the `Process` row and YAML.
 
 **2 — Copy the reference YAML to your sample root:**
 
@@ -168,9 +173,9 @@ PROCESSES = [
 cp ../../ai-services/vlm-server/vlm_server.yaml ./vlm_server.yaml
 cp ../../ai-services/llm-server/llm_server.yaml ./llm_server.yaml
 cp ../../ai-services/stt-server/stt_server.yaml ./stt_server.yaml
-cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./magpie_tts_server.yaml
-# or for Piper (~100 ms latency, CPU):
 cp ../../ai-services/tts/piper/piper_tts_server.yaml ./piper_tts_server.yaml
+# Or for Magpie (multilingual, GPU, ~2-5 s/sentence):
+cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./magpie_tts_server.yaml
 # MCP servers:
 cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./transcript_mcp_server.yaml
 cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./video_mcp_server.yaml
@@ -265,34 +270,55 @@ async with httpx.AsyncClient() as client:
 
 ### Naming conventions
 
-Choose a kebab-case sample name (e.g. `echo-agent`, `vlm-agent`).  Derive
-all other names from it mechanically:
+Choose a kebab-case sample name (e.g. `simple-vlm-example`,
+`cloudxr-agent`).  Derive all other names from it mechanically:
 
 | Thing | Convention | Example |
 |---|---|---|
-| Sample directory | `agent-samples/<kebab-name>/` | `echo-agent/` |
-| Orchestrator package | `<snake_name>/` | `echo_agent/` |
-| Orchestrator entry point | `<snake_name>` | `echo_agent` |
-| Worker package | `<snake_name>_worker/` | `echo_agent_worker/` |
-| Worker entry point | `<snake_name>_worker` | `echo_agent_worker` |
-| Agent class | `<CamelName>Agent` | `EchoAgent` |
-| Logger name | `"<snake_name>"` | `"echo_agent"` |
-| pyproject name (orch) | `"<kebab-name>"` | `"echo-agent"` |
-| pyproject name (worker) | `"<kebab-name>-worker"` | `"echo-agent-worker"` |
+| Sample directory | `agent-samples/<kebab-name>/` | `simple-vlm-example/` |
+| Orchestrator module | `<snake_name>.py` | `simple_vlm_example.py` |
+| Orchestrator entry point | `<snake_name>` | `simple_vlm_example` |
+| Worker entry module | `<snake_name>_worker.py` | `simple_vlm_example_worker.py` |
+| Worker entry point | `<snake_name>_worker` | `simple_vlm_example_worker` |
+| Agent class | `<CamelName>Agent` | `SimpleVlmAgent` |
+| Logger name | `"<snake_name>"` | `"simple_vlm_example"` |
+| pyproject name (orch) | `"<kebab-name>"` | `"simple-vlm-example"` |
+| pyproject name (worker) | `"<kebab-name>-worker"` | `"simple-vlm-example-worker"` |
 
 ### Directory layout
+
+Both sub-projects use **flat module layouts** — no nested package
+directories, no `__main__.py`, no `__init__.py`.  Hatchling ships the
+listed `.py` files as top-level modules in each sub-project's isolated
+venv.
 
 ```
 agent-samples/<name>/
 ├── pyproject.toml                  ← orchestrator project
 ├── xr_media_hub.yaml               ← hub config for this sample
-├── <snake_name>/
-│   └── __main__.py                 ← orchestrator (declare PROCESSES, call run_stack)
+├── <snake_name>.py                 ← orchestrator (declare PROCESSES, call run_stack)
 └── worker/
     ├── pyproject.toml              ← worker project
-    └── <snake_name>_worker/
-        └── __main__.py             ← agent logic (imports only from xr_ai_agent)
+    ├── <snake_name>_worker.py      ← entry point: parses config, runs main loop
+    ├── agent.py                    ← <CamelName>Agent class
+    └── …                           ← split helpers as needed (audio.py, services.py, …)
 ```
+
+When the worker is small (≲ 100 lines) keep it as a single file —
+`worker/<snake_name>_worker.py` containing everything.  Only split once
+the file makes the agent logic harder to read; aim for a few focused
+modules over one monolith *or* a swarm of tiny files.
+
+Suggested split (used by `simple-vlm-example` and `mcp-agent`):
+
+| File | Responsibility |
+|---|---|
+| `<snake>_worker.py` | Entry point: config parsing, signal handling, lifecycle |
+| `agent.py` | The agent class — IPC callbacks and orchestration |
+| `audio.py` | WAV/PCM helpers, RMS, pixel-format conversion (rename if not audio) |
+| `services.py` | Thin HTTP/MCP clients for external services + readiness probe |
+| `voice.py` | Per-participant VAD/streaming-STT bookkeeping (when applicable) |
+
 
 ### Orchestrator `pyproject.toml`
 
@@ -311,10 +337,10 @@ dependencies = ["xr-ai-launcher"]
 xr-ai-launcher = { path = "../../launcher", editable = true }
 
 [project.scripts]
-<snake_name> = "<snake_name>.__main__:run"
+<snake_name> = "<snake_name>:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["<snake_name>"]
+only-include = ["<snake_name>.py"]
 ```
 
 ### Worker `pyproject.toml`
@@ -337,13 +363,24 @@ dependencies = [
 xr-ai-agent = { path = "../../../agent-sdk", editable = true }
 
 [project.scripts]
-<snake_name>_worker = "<snake_name>_worker.__main__:run"
+<snake_name>_worker = "<snake_name>_worker:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["<snake_name>_worker"]
+only-include = [
+    "<snake_name>_worker.py",
+    "agent.py",
+    # add other split modules here
+]
 ```
 
-### Orchestrator `__main__.py`
+When the worker is a single file, drop the extra entries:
+
+```toml
+[tool.hatch.build.targets.wheel]
+only-include = ["<snake_name>_worker.py"]
+```
+
+### Orchestrator `<snake_name>.py`
 
 Exact boilerplate — do not add logic here:
 
@@ -359,7 +396,7 @@ from pathlib import Path
 
 from xr_ai_launcher import Process, run_stack
 
-_BASE = Path(__file__).resolve().parents[1]
+_BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
     Process("hub",    "../../server-runtime", "xr_media_hub"),
@@ -375,7 +412,7 @@ if __name__ == "__main__":
     run()
 ```
 
-### Worker `__main__.py`
+### Worker `<snake_name>_worker.py`
 
 Follow this structure exactly.  Fill in the sections marked `# ← FILL IN`.
 
@@ -486,15 +523,23 @@ if __name__ == "__main__":
   must match `async def _on_*(self, ...)`.
 - **CPU-bound or blocking work** (model inference, heavy image processing):
   use `await loop.run_in_executor(None, ...)` to avoid blocking the event loop.
-- **One agent class per worker** — keep the file flat; no sub-modules unless
-  the file exceeds ~300 lines.
+- **One agent class per worker.** Keep the entry-point file thin —
+  config parsing, signal handling, and `agent.run()`.  Put the agent
+  class in `agent.py`; split further (e.g. `audio.py`, `services.py`)
+  once the worker exceeds ~150 lines or mixes unrelated concerns.
+- **Imports are absolute, not relative.** Workers ship as flat
+  top-level modules — write `from agent import EchoAgent`, not
+  `from .agent import EchoAgent`.  Each worker venv is isolated, so
+  generic module names (`agent`, `audio`, `services`) don't conflict.
+- **Don't add `__init__.py` or `__main__.py`.** Both are unnecessary
+  with the flat-module layout and re-introduce nesting.
 
 ### Checklist
 
 - [ ] `agent-samples/<name>/pyproject.toml` — orchestrator, deps: `xr-ai-launcher` only
-- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-agent` + task libs
-- [ ] `agent-samples/<name>/<snake_name>/__main__.py` — exact orchestrator boilerplate
-- [ ] `agent-samples/<name>/worker/<snake_name>_worker/__main__.py` — agent logic
+- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-agent` + task libs (list every `.py` in `only-include`)
+- [ ] `agent-samples/<name>/<snake_name>.py` — exact orchestrator boilerplate
+- [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` — entry point + (optional) split helpers next to it
 - [ ] `agent-samples/<name>/xr_media_hub.yaml` — hub config (copy from `server-runtime/xr_media_hub.yaml`)
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
 - [ ] `README.md` updated — architecture table and quickstart section
@@ -582,7 +627,7 @@ Hard rules (also documented in `DEPENDENCIES.md`):
 ## Config
 
 Each sample provides its own `xr_media_hub.yaml` in its project directory
-(e.g. `agent-samples/echo-agent/xr_media_hub.yaml`). `server-runtime/` also
+(e.g. `agent-samples/simple-vlm-example/xr_media_hub.yaml`). `server-runtime/` also
 contains a reference copy documenting all available fields.
 
 Paths inside the YAML (e.g. `web_client_dir`) resolve relative to the YAML

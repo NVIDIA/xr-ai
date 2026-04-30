@@ -15,7 +15,7 @@ from pathlib import Path
 
 from xr_ai_launcher import Process, run_stack
 
-_BASE = Path(__file__).resolve().parents[1]  # agent-samples/cloudxr-agent/
+_BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
     Process("hub",     "../../server-runtime",  "xr_media_hub"),

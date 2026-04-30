@@ -1,5 +1,0 @@
-# Local config — may contain HF tokens. Copy from vlm_agent_worker.yaml.example.
-vlm_agent_worker.yaml
-
-# Downloaded model weights.
-models/

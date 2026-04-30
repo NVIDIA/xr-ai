@@ -20,13 +20,13 @@ from pathlib import Path
 
 from xr_ai_launcher import Process, ensure_credentials, run_stack
 
-_BASE = Path(__file__).resolve().parents[1]  # agent-samples/mcp-agent/
+_BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
-    Process("hub",    "../../server-runtime",        "xr_media_hub"),
+    Process("hub",    "../../server-runtime",         "xr_media_hub"),
     Process("stt",    "../../ai-services/stt-server", "stt_server"),
     Process("mcp",    "mcp_server",                   "mcp_server"),
-    Process("worker", "worker",                        "mcp_agent_worker"),
+    Process("worker", "worker",                       "mcp_agent_worker"),
 ]
 
 

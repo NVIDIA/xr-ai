@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "vlm-agent-worker"
+name = "simple-vlm-example-worker"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,7 +18,14 @@ dependencies = [
 xr-ai-agent = { path = "../../../agent-sdk", editable = true }
 
 [project.scripts]
-vlm_agent_worker = "vlm_agent_worker.__main__:run"
+simple_vlm_example_worker = "simple_vlm_example_worker:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["vlm_agent_worker"]
+only-include = [
+    "simple_vlm_example_worker.py",
+    "agent.py",
+    "audio.py",
+    "pixels.py",
+    "services.py",
+    "voice.py",
+]

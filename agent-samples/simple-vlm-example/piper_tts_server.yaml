@@ -1,0 +1,10 @@
+# Piper TTS server configuration for vlm-agent.
+# Auto-discovered by the launcher and passed as --config to piper_tts_server.
+#
+# Browse available voices: https://huggingface.co/rhasspy/piper-voices
+# Voice name format: <locale>-<speaker>-<quality>
+
+voice:       en_US-lessac-medium
+port:        8105
+use_cuda:    false    # CPU is fast enough for Piper (~100 ms/sentence)
+model_cache: ../../models

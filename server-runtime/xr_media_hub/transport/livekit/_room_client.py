@@ -41,6 +41,63 @@ def _now_us() -> int:
     return time.time_ns() // 1_000
 
 
+class _ReturnAudioPipe:
+    """Per-participant pacing pipe for return audio.
+
+    Decouples the connector's IPC recv loop from LiveKit's ``capture_frame``.
+    Without it, when the agent floods many TTS chunks back-to-back, the
+    connector's serial recv loop blocks on capture_frame's internal-queue
+    backpressure while a flush message sits FIFO-stuck behind dozens of
+    audio chunks in the ZMQ SUB buffer — by the time flush is delivered,
+    the audio is already past us.
+
+    With it, ``push`` is a non-blocking ``put_nowait`` so the connector
+    loop stays responsive; a background task drains the queue into
+    ``capture_frame`` at audio rate; ``flush`` is O(1) and drops both
+    layers instantly.  Only the client's jitter buffer (~100 ms) remains
+    irreducibly outside our control.
+    """
+
+    def __init__(self, src: rtc.AudioSource) -> None:
+        self._src   = src
+        self._queue: asyncio.Queue[rtc.AudioFrame | None] = asyncio.Queue()
+        self._task  = asyncio.create_task(self._drain(), name="return_audio_pipe")
+
+    def push(self, frame: rtc.AudioFrame) -> None:
+        self._queue.put_nowait(frame)
+
+    def flush(self) -> None:
+        try:
+            while True:
+                self._queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+        self._src.clear_queue()
+
+    async def _drain(self) -> None:
+        while True:
+            frame = await self._queue.get()
+            if frame is None:
+                return
+            try:
+                await self._src.capture_frame(frame)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("capture_frame failed")
+
+    async def close(self) -> None:
+        # Signal the drainer to exit cleanly; it finishes any frame mid-capture.
+        try:
+            self._queue.put_nowait(None)
+        except asyncio.QueueFull:
+            pass
+        try:
+            await self._task
+        except (asyncio.CancelledError, Exception):
+            pass
+
+
 class RoomClient:
     """
     Subscribe-only LiveKit room participant.
@@ -55,10 +112,14 @@ class RoomClient:
         # track SID → streaming task; lets us cancel exactly the right task on unsubscribe.
         self._track_tasks: dict[str, asyncio.Task] = {}
         self._stop = asyncio.Event()
-        # Per-participant return audio: pid → (AudioSource, LocalTrackPublication).
+        # Per-participant return audio: pid → (AudioSource, LocalTrackPublication, ReturnPipe).
         # Lazy-published on first send_return_audio for a pid; subscribe permissions
         # restrict each track so only the target participant can hear it.
-        self._return_audio: dict[str, tuple[rtc.AudioSource, rtc.LocalTrackPublication]] = {}
+        # The pipe paces audio into LiveKit at audio rate, so flush_return_audio
+        # can drop in-flight TTS instantly even after a burst of chunks.
+        self._return_audio: dict[
+            str, tuple[rtc.AudioSource, rtc.LocalTrackPublication, _ReturnAudioPipe]
+        ] = {}
 
         # ── room event handlers ───────────────────────────────────────────────
 
@@ -165,6 +226,11 @@ class RoomClient:
             t.cancel()
         await asyncio.gather(*self._track_tasks.values(), return_exceptions=True)
         self._track_tasks.clear()
+        # Close pacing pipes before dropping the entries so drainer tasks exit cleanly.
+        await asyncio.gather(
+            *(pipe.close() for _src, _pub, pipe in self._return_audio.values()),
+            return_exceptions=True,
+        )
         self._return_audio.clear()
         await self._room.disconnect()
 
@@ -183,7 +249,13 @@ class RoomClient:
             log.exception("send_return_data failed")
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
-        """Push return audio into the participant's dedicated return track."""
+        """Hand a return-audio chunk to the participant's pacing pipe.
+
+        Non-blocking: the pipe absorbs the chunk and a background task
+        feeds it into LiveKit at audio rate.  Keeps the connector's
+        recv loop responsive so flush messages are not stuck FIFO
+        behind a burst of chunks.
+        """
         if not self._room:
             return
         pid   = chunk.participant_id
@@ -192,7 +264,7 @@ class RoomClient:
             entry = await self._publish_return_track(pid, chunk.sample_rate, chunk.channels)
             self._return_audio[pid] = entry
             self._refresh_return_track_permissions()
-        src, _pub = entry
+        _src, _pub, pipe = entry
 
         pcm_f32 = np.frombuffer(chunk.data, dtype=np.float32)
         pcm_i16 = (np.clip(pcm_f32, -1.0, 1.0) * 32767).astype(np.int16)
@@ -202,24 +274,29 @@ class RoomClient:
             sample_rate=chunk.sample_rate,
             num_channels=chunk.channels,
         )
-        await src.capture_frame(frame)
+        pipe.push(frame)
 
     async def flush_return_audio(self, flush: ReturnAudioFlush) -> None:
-        """Drop any audio queued in *flush.participant_id*'s return AudioSource."""
+        """Drop every audio frame currently buffered for *flush.participant_id*.
+
+        Clears both the pacing-pipe queue and LiveKit's internal queue;
+        only the client's jitter buffer (~100 ms) plays out afterwards.
+        """
         entry = self._return_audio.get(flush.participant_id)
         if entry is None:
             return
-        src, _pub = entry
-        src.clear_queue()
+        _src, _pub, pipe = entry
+        pipe.flush()
 
     async def _publish_return_track(
         self, pid: str, sample_rate: int, channels: int,
-    ) -> tuple[rtc.AudioSource, rtc.LocalTrackPublication]:
+    ) -> tuple[rtc.AudioSource, rtc.LocalTrackPublication, _ReturnAudioPipe]:
         src   = rtc.AudioSource(sample_rate=sample_rate, num_channels=channels)
         track = rtc.LocalAudioTrack.create_audio_track(f"xr-hub-return-{pid}", src)
         pub   = await self._room.local_participant.publish_track(track)
+        pipe  = _ReturnAudioPipe(src)
         log.info("Return audio track published: pid=%r  sid=%r", pid, pub.sid)
-        return src, pub
+        return src, pub, pipe
 
     def _refresh_return_track_permissions(self) -> None:
         """
@@ -232,7 +309,7 @@ class RoomClient:
                 allow_all=False,
                 allowed_track_sids=[pub.sid],
             )
-            for pid, (_src, pub) in self._return_audio.items()
+            for pid, (_src, pub, _pipe) in self._return_audio.items()
         ]
         self._room.local_participant.set_track_subscription_permissions(
             allow_all_participants=False,
@@ -250,7 +327,8 @@ class RoomClient:
         await self._ep.notify_participant_left(participant.identity, _now_us())
         entry = self._return_audio.pop(participant.identity, None)
         if entry is not None:
-            _src, pub = entry
+            _src, pub, pipe = entry
+            await pipe.close()
             try:
                 await self._room.local_participant.unpublish_track(pub.sid)
             except Exception:

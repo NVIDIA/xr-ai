@@ -7,7 +7,11 @@ name = "magpie-tts-server"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "nemo_toolkit[tts]>=2.0",
+    # >=2.5 keeps us out of NeMo 2.0.0 (under-declared deps,
+    # no MagpieTTSModel).  NeMo's [tts] extra requires
+    # `lightning>2.2.1,<=2.4.0`; see [tool.uv.sources] below.
+    "nemo_toolkit[tts]>=2.5",
+    "lightning>2.2.1,<=2.4.0",  # routed to GitHub source — see below
     "soundfile>=0.12",
     "numpy>=1.24",
     "fastapi>=0.111",
@@ -15,6 +19,13 @@ dependencies = [
     "hf-transfer>=0.1.4",
     "pyyaml>=6.0",
 ]
+
+[tool.uv.sources]
+# PyPI has the `lightning` umbrella package quarantined as of 2026-04-30,
+# blocking NeMo's [asr]/[tts] extras.  Pull `lightning` straight from the
+# upstream tag (it builds from the same Lightning AI mono-repo as
+# `pytorch-lightning`).  Drop this source once PyPI lifts the quarantine.
+lightning = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
 
 [project.scripts]
 magpie_tts_server = "magpie_tts_server.__main__:run"

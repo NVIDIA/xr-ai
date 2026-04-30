@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "echo-agent"
+name = "simple-vlm-example"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
 xr-ai-launcher = { path = "../../launcher", editable = true }
 
 [project.scripts]
-echo_agent = "echo_agent.__main__:run"
+simple_vlm_example = "simple_vlm_example:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["echo_agent"]
+only-include = ["simple_vlm_example.py"]

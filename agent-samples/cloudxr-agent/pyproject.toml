@@ -14,7 +14,7 @@ dependencies = [
 xr-ai-launcher = { path = "../../launcher", editable = true }
 
 [project.scripts]
-cloudxr_agent = "cloudxr_agent.__main__:run"
+cloudxr_agent = "cloudxr_agent:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["cloudxr_agent"]
+only-include = ["cloudxr_agent.py"]

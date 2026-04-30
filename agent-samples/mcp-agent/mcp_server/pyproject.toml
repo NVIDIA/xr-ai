@@ -21,7 +21,7 @@ video-mcp-server      = { path = "../../../agent-mcp-servers/video-mcp",      ed
 xr-ai-agent           = { path = "../../../agent-sdk",                        editable = true }
 
 [project.scripts]
-mcp_server = "mcp_server.__main__:run"
+mcp_server = "mcp_server:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["mcp_server"]
+only-include = ["mcp_server.py", "app.py"]

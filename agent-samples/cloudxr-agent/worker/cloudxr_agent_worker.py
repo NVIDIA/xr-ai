@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
-import time
 from collections import defaultdict
 
 from xr_ai_agent import AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint
@@ -25,10 +24,6 @@ log = logging.getLogger("cloudxr_agent")
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
-
-
-def _now_us() -> int:
-    return time.time_ns() // 1_000
 
 
 class CloudXRAgent:

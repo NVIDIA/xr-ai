@@ -12,7 +12,7 @@ dependencies = ["xr-ai-launcher"]
 xr-ai-launcher = { path = "../../launcher", editable = true }
 
 [project.scripts]
-mcp_agent = "mcp_agent.__main__:run"
+mcp_agent = "mcp_agent:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["mcp_agent"]
+only-include = ["mcp_agent.py"]

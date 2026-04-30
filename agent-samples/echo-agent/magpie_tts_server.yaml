@@ -1,8 +1,0 @@
-# TTS server configuration for echo-agent.
-# Auto-discovered by the launcher and passed as --config to tts_server.
-
-model:       nvidia/magpie_tts_multilingual_357m
-device:      auto
-port:        8104
-sample_rate: 22050
-model_cache: ../../models

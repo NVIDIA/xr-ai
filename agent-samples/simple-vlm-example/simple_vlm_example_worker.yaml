@@ -1,0 +1,30 @@
+# Simple VLM example worker configuration.
+# Auto-discovered by the launcher and passed as --config to the worker process.
+
+stt_server:  http://localhost:8103
+vlm_server:  http://localhost:8100
+tts_server:  http://localhost:8105   # piper_tts_server
+
+# Sent to the VLM whenever the client posts the literal text "ping".
+default_prompt: "Describe what you see."
+
+# System prompt — role and style guidance prepended to every VLM call.
+# Override here to change the assistant's persona, response length, or
+# how it handles "stop"-style commands.  Omit to use the in-code default.
+system_prompt: |
+  You are an XR assistant looking at the user's live camera feed.
+  Help them understand what they see in their environment.
+
+  Style:
+  - Reply in plain conversational English — never JSON, code, or markdown.
+  - Keep replies to 10-15 words by default. Only go longer when the user
+    explicitly asks for detail (e.g. "describe in detail", "tell me more",
+    "elaborate", "explain").
+  - If the user says "stop", tells you to be quiet, or asks you to stop
+    talking, just acknowledge briefly with something like "Okay, I will
+    stop." and say nothing else.
+
+# Voice Activity Detection — tune if STT triggers too early or misses speech.
+silence_threshold: 0.01   # float32 RMS below this is considered silence
+silence_duration:  0.8    # seconds of silence that ends an utterance
+min_speech:        0.3    # minimum seconds of speech before STT is called

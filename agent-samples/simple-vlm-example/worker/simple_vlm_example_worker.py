@@ -1,0 +1,102 @@
+"""
+simple-vlm-example worker — entry point.
+
+Launched as a subprocess by ``uv run simple_vlm_example`` (the orchestrator).
+Do not run this directly.
+
+Protocol
+--------
+Client → agent  (LiveKit data channel, any topic):
+    "ping"      — case-insensitive trigger for the configured default prompt
+    Any other UTF-8 text — used verbatim as the query
+
+Audio in (mic) → STT → text → query (same path as a data message).
+
+Agent → client:
+    Topic "vlm.response"        — assembled UTF-8 text reply
+    `xr-hub-return-{pid}` track — sentence-by-sentence Piper TTS audio
+
+Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
+----------------------------------------------------------------------
+    stt_server:        http://localhost:8103
+    vlm_server:        http://localhost:8100
+    tts_server:        http://localhost:8105   # piper_tts_server
+    default_prompt:    "Describe what you see."
+    system_prompt:     <multiline string>      # role/style guidance for the VLM
+    silence_threshold: 0.01    # float32 RMS below which audio is silence
+    silence_duration:  0.8     # seconds of silence that ends an utterance
+    min_speech:        0.3     # minimum seconds of speech before STT fires
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import pathlib
+import signal
+
+import yaml
+
+from xr_ai_agent import ProcessorEndpoint
+
+from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmAgent
+from services import SttClient, TtsClient, VlmClient, wait_for_health
+
+log = logging.getLogger("simple_vlm_example")
+
+_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
+_HUB_PUSH = "ipc:///tmp/xr_hub_in"
+
+
+async def main(cfg: dict) -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
+    stt = SttClient(cfg.get("stt_server", "http://localhost:8103"))
+    vlm = VlmClient(cfg.get("vlm_server", "http://localhost:8100"))
+    tts = TtsClient(cfg.get("tts_server", "http://localhost:8105"))
+    await wait_for_health({
+        "STT": stt.health_url,
+        "VLM": vlm.health_url,
+        "TTS": tts.health_url,
+    })
+
+    ep    = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
+    agent = SimpleVlmAgent(
+        ep, stt, vlm, tts,
+        default_prompt   =cfg.get("default_prompt",   "Describe what you see."),
+        system_prompt    =cfg.get("system_prompt",    DEFAULT_SYSTEM_PROMPT),
+        silence_threshold=float(cfg.get("silence_threshold", 0.01)),
+        silence_duration =float(cfg.get("silence_duration",  0.8)),
+        min_speech       =float(cfg.get("min_speech",        0.3)),
+    )
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, agent.shutdown)
+
+    log.info("simple-vlm-example connecting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
+    try:
+        await agent.run()
+    finally:
+        agent.shutdown()
+    log.info("simple-vlm-example stopped")
+
+
+def run() -> None:
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--config", type=pathlib.Path, default=None)
+    ns, _ = p.parse_known_args()
+
+    cfg: dict = {}
+    if ns.config and ns.config.exists():
+        with open(ns.config) as f:
+            cfg = yaml.safe_load(f) or {}
+
+    asyncio.run(main(cfg))
+
+
+if __name__ == "__main__":
+    run()
