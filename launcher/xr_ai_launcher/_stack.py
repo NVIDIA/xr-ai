@@ -73,7 +73,7 @@ async def StackLauncher(processes: Sequence[Process], base: Path):
             project = (base / p.project).resolve()
             extra   = _config_args(p.command, base)
             proc    = await stack.enter_async_context(
-                ProjectLauncher(project, p.command, *extra)
+                ProjectLauncher(project, p.command, *extra, name=p.name)
             )
             procs[p.name] = proc
         yield procs
