@@ -53,10 +53,9 @@ data class LiveKitConfig(
     val port: Int = 7880,
 
     /**
-     * Use `wss://` / `https://`. Set to `false` for local / LAN connections.
-     * Note: LiveKit always runs on plain `ws://` in the reference deployment —
-     * TLS is terminated at the web-server layer (port 8080), not at port 7880.
-     * This flag only affects the token-endpoint URL scheme (http vs https).
+     * Use `wss://` for the LiveKit signaling WebSocket and `https://` for the
+     * default token endpoint. Set `false` for local / LAN connections that
+     * speak plain `ws://` and `http://`.
      */
     val secure: Boolean = false,
 

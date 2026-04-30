@@ -41,7 +41,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     var host by mutableStateOf("192.168.1.100")
     var port by mutableStateOf("7880")
-    /** When true, the token endpoint is fetched over HTTPS (not the LiveKit port). */
+    /** When true, use `wss://` for LiveKit and `https://` for the default token URL. */
     var secure by mutableStateOf(false)
     /** Pre-signed JWT token (alternative to tokenServerURL). */
     var tokenInput by mutableStateOf("")
@@ -95,13 +95,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "$tokenScheme://$host:8080/token"
                 }
 
-                // LiveKit always runs on plain ws:// in this deployment — TLS is
-                // terminated at the web-server layer. The `secure` flag only affects
-                // the token endpoint URL scheme. Matches AppModel.swift comment exactly.
                 val lkConfig = LiveKitConfig(
                     host = host,
                     port = portNumber,
-                    secure = false,
+                    secure = secure,
                     token = trimmedToken.ifEmpty { null },
                     tokenURL = resolvedTokenURL,
                 )

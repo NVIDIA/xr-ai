@@ -52,6 +52,8 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -294,6 +296,32 @@ private fun ConnectionSection(vm: AppViewModel) {
             keyboardType = KeyboardType.Number,
             placeholder = "7880",
         )
+        // TLS toggle — controls both wss:// for LiveKit and https:// for the
+        // default token endpoint. Off for plain LAN deployments, on for any
+        // server reached over the public internet or a TLS-terminated proxy.
+        CardRow {
+            Box(modifier = Modifier.alpha(fieldAlpha)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Use TLS",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Switch(
+                        checked = vm.secure,
+                        onCheckedChange = { vm.secure = it },
+                        enabled = isDisconnected,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = ColorGreen,
+                        ),
+                    )
+                }
+            }
+        }
         FieldRow(
             label = "Token",
             value = vm.tokenInput,
