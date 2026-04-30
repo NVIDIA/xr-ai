@@ -1,3 +1,8 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
 # xr-ai — Working Conventions
 
 Guidelines for developers and AI assistants working in this repo.
@@ -641,6 +646,33 @@ Use `ManagedProcess` as the base. Export from `__init__.py`.
 change.** A change is not done until the docs reflect it. This applies to: new
 packages, changed entry points, new quickstart flows, renamed commands, new
 config files.
+
+## License headers
+
+**Every new source file gets the SPDX header at the top.** The exact text is:
+
+```
+SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+```
+
+Use the comment syntax for the file's language and place the header before any
+other content, with one blank line separating it from the body:
+
+| Style | Used for |
+|---|---|
+| `# …` | `.py`, `.yaml`/`.yml`, `.toml`, `.properties`, `.sh`, `.pro`, `.gitignore`, `.gitattributes`, `requirements.txt` |
+| `// …` | `.swift`, `.kt`/`.kts`, `.js`, `.ts`/`.tsx` |
+| `<!-- … -->` | `.xml`, `.html`, `.plist`, `.entitlements`, `.md` |
+
+Insert the header **after** these required first-line directives when present:
+`#!/...` shebangs, `<?xml …?>` declarations, `<!DOCTYPE …>`, and Swift's
+`// swift-tools-version:` directive.
+
+Skip files that can't carry comments or aren't ours to license: `LICENSE`,
+`*.json`, `*.resolved`, binary assets (e.g. `*.gif`), `.gitkeep` markers,
+Xcode-managed files (`*.pbxproj`, `*.xcworkspacedata`), and third-party Gradle
+wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.properties`).
 
 ## Dependency discipline
 

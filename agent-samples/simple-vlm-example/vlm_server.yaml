@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # vlm-server configuration for vlm-agent.
 # Auto-discovered by the launcher and passed as --config to vlm_server.
 

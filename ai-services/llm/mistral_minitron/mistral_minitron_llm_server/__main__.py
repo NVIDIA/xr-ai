@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 mistral_minitron_llm_server — OpenAI-compatible LLM HTTP server
 (Mistral-NeMo-Minitron-8B).

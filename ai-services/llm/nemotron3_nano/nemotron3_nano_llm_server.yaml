@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Nemotron-3-Nano LLM server configuration —
 # nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4.
 # Auto-discovered by xr-ai-launcher (filename matches the

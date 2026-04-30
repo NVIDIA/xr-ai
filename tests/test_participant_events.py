@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Verify that participant join/leave events from connectors are observed by
 every subscribed processor and that ``ProcessorEndpoint.connected_participants``

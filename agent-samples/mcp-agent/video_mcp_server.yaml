@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Video MCP server configuration for mcp-agent.
 # Auto-discovered by the launcher and passed as --config to video_mcp_server.
 #

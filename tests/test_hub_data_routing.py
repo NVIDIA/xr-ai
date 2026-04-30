@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Verify that the hub fans data messages out to subscribed processors with
 the correct ``DataMessage`` payload, including the topic field that used

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 nemotron3_nano_llm_server — thin launcher for vLLM serving
 nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4.

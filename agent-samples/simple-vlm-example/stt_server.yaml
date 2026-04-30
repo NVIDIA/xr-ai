@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # STT server configuration for echo-agent.
 # Auto-discovered by the launcher and passed as --config to stt_server.
 

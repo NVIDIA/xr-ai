@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 llama_nemotron_llm_server — OpenAI-compatible LLM HTTP server (Llama-3.1-Nemotron-Nano-8B-v1).
 

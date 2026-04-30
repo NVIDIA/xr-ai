@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Video MCP server reference configuration.
 # Copy to your agent sample root as video_mcp_server.yaml and edit.
 #

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # TTS server configuration — nvidia/magpie_tts_multilingual_357m.
 # Auto-discovered by xr-ai-launcher and passed as --config to tts_server.
 # OpenAI-compatible API at http://localhost:8104/v1

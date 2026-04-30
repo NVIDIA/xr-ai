@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Pixel-format conversion: hub FrameData → PIL Image → JPEG data URL.
 
 The hub may deliver frames in any of several pixel formats depending on the

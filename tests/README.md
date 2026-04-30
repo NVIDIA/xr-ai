@@ -1,3 +1,8 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
 # xr-ai integration tests
 
 Multi-client / multi-agent coverage for the XR-Media-Hub IPC pipeline.
