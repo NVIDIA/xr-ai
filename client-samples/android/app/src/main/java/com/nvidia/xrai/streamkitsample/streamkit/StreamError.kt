@@ -20,8 +20,11 @@ sealed class StreamError(message: String) : Exception(message) {
         StreamError("Provide a token or tokenURL in LiveKitConfig.")
 
     /** Token-server request failed or returned an unparseable body. */
-    class TokenFetchFailed(url: String) :
-        StreamError("Failed to fetch token from $url.")
+    class TokenFetchFailed(url: String, detail: String? = null) :
+        StreamError(buildString {
+            append("Token fetch failed: ").append(url)
+            if (!detail.isNullOrBlank()) append(" — ").append(detail)
+        })
 
     /** startCamera() was called while not connected. */
     object CameraRequiresConnection :

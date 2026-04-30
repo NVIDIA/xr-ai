@@ -128,7 +128,7 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
         val err = vm.lastError ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(
             message = err,
-            duration = SnackbarDuration.Short,
+            duration = SnackbarDuration.Long,
         )
         vm.clearError()
     }

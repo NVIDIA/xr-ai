@@ -222,29 +222,49 @@ internal class LiveKitBackend(
             val separator       = if (tokenURL.contains('?')) '&' else '?'
             val urlStr          = "$tokenURL${separator}identity=$encodedIdentity"
 
-            val conn = URL(urlStr).openConnection() as HttpURLConnection
-            conn.connectTimeout = 5_000
-            conn.readTimeout    = 5_000
+            val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 5_000
+                readTimeout    = 5_000
+                requestMethod  = "GET"
+            }
 
             try {
-                val body = conn.inputStream.bufferedReader().readText()
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() } ?: ""
 
-                // Try JSON first: { "token": "eyJ…" }
+                if (code !in 200..299) {
+                    throw StreamError.TokenFetchFailed(
+                        urlStr,
+                        "HTTP $code${if (body.isNotBlank()) ": ${body.take(200)}" else ""}",
+                    )
+                }
+
+                // JSON form: { "token": "eyJ…" }
                 try {
-                    val json = JSONObject(body)
-                    val t    = json.optString("token")
+                    val t = JSONObject(body).optString("token")
                     if (t.isNotEmpty()) return@withContext t
-                } catch (_: Exception) {}
+                } catch (_: Exception) { /* not JSON, fall through */ }
 
-                // Plain string fallback.
+                // Plain JWT form. Reject HTML/JSON-shaped bodies that didn't have a token.
                 val trimmed = body.trim()
-                if (trimmed.isNotEmpty()) return@withContext trimmed
+                if (trimmed.isNotEmpty() && !trimmed.startsWith("{") && !trimmed.startsWith("<")) {
+                    return@withContext trimmed
+                }
 
-                throw StreamError.TokenFetchFailed(tokenURL)
+                throw StreamError.TokenFetchFailed(
+                    urlStr,
+                    "Unexpected response body: ${body.take(200)}",
+                )
             } catch (e: StreamError) {
                 throw e
-            } catch (_: Exception) {
-                throw StreamError.TokenFetchFailed(tokenURL)
+            } catch (e: Exception) {
+                // Surface the underlying failure (DNS, ConnectException, SSL, …) — the
+                // generic "Token fetch failed" was useless for debugging.
+                throw StreamError.TokenFetchFailed(
+                    urlStr,
+                    "${e.javaClass.simpleName}: ${e.message ?: "no message"}",
+                )
             } finally {
                 conn.disconnect()
             }
