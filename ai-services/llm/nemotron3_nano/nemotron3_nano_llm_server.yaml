@@ -1,0 +1,46 @@
+# Nemotron-3-Nano LLM server configuration —
+# nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4.
+# Auto-discovered by xr-ai-launcher (filename matches the
+# 'nemotron3_nano_llm_server' process command) and passed as --config.
+# Exposes an OpenAI-compatible API at http://localhost:8107/v1 via vLLM.
+#
+# Reasoning mode: the model's chat template defaults to
+# ``enable_thinking=True``.  vLLM's ``--reasoning-parser nano_v3`` splits
+# the resulting ``<think>…</think>`` into message.reasoning_content so the
+# actual answer in message.content is never polluted — this is what keeps
+# voice TTS from reading the reasoning aloud.
+
+model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+
+host: "0.0.0.0"
+port: 8107
+hf_token: ""
+
+# Shared weight + reasoning-parser cache.  Resolves relative to this YAML;
+# ../../models lands in the repo-root models/ dir (same place the other
+# ai-services write their weights).
+model_cache: ../../models
+
+# vLLM server knobs.  Defaults are conservative for single-GPU Blackwell
+# (B200 192GB or RTX PRO 6000 96GB) running one concurrent voice agent.
+max_num_seqs:         8
+tensor_parallel_size: 1
+max_model_len:        32768
+
+# Fraction of total GPU memory vLLM reserves at startup (weights + KV
+# cache + activations).  vLLM's own default is 0.92 — we lower it to
+# 0.6 because this LLM shares the GPU with vlm-server (Cosmos-Reason1-7B,
+# ~14 GB BF16) and stt-server (parakeet, ~1.5 GB) in the
+# pipecat-nat-nemotron3nano sample.  Bump back toward 0.85-0.92 if you
+# run this service on a dedicated GPU with no other tenants.
+gpu_memory_utilization: 0.6
+
+# Skip CUDA graph capture + FlashInfer MoE autotune at startup.  For
+# NemotronH-30B-A3B-NVFP4 those two phases are silent (no log output)
+# and take 3-8 min on first run — bad UX for a voice agent where the
+# user is waiting for the server to become healthy.  Eager mode starts
+# in ~5 s after weight load and is 10-20% slower per token, which is
+# imperceptible for this workload (<250 tokens per turn, STT+VAD+TTS
+# already dominate turn latency).  Set to ``false`` if you want
+# maximum throughput and can wait for graph capture to finish.
+enforce_eager: true

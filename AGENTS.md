@@ -130,17 +130,21 @@ d = json.loads(p.read_text()); d.pop('HF_TOKEN', None); p.write_text(json.dumps(
 
 ## Using AI inference servers
 
-Four reusable HTTP servers are available as launchable peers of `server-runtime/`.
+Multiple reusable HTTP servers are available as launchable peers of `server-runtime/`.
 All expose an OpenAI-compatible REST API so agent workers can call them with any
-OpenAI SDK client or plain `httpx` / `requests`.
+OpenAI SDK client or plain `httpx` / `requests`. Three LLM backends ship side-by-side
+under `ai-services/llm/` — pick one per sample based on the tool-calling /
+reasoning / hardware trade-offs documented below.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
 | `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
-| `ai-services/llm-server/` | `llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
+| `ai-services/llm/mistral_minitron/` | `mistral_minitron_llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
 | `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `ai-services/tts/magpie/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | transformers in-process (+ LMFE) |
+| `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 | vLLM (execvp shim) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → hub |
 
@@ -153,12 +157,17 @@ servers).  Each YAML configures `model_cache` — resolved relative to the YAML 
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../server-runtime",          "xr_media_hub"),
-    Process("vlm",    "../../ai-services/vlm-server",  "vlm_server"),   # ← add as needed
-    Process("llm",    "../../ai-services/llm-server",  "llm_server"),
-    Process("stt",    "../../ai-services/stt-server",  "stt_server"),
-    Process("tts",    "../../ai-services/tts/magpie",   "magpie_tts_server"),
-    Process("worker", "worker",                        "my_agent_worker"),
+    Process("hub",    "../../server-runtime",                     "xr_media_hub"),
+    Process("vlm",    "../../ai-services/vlm-server",             "vlm_server"),   # ← add as needed
+    # Pick ONE LLM backend per sample — they bind different default ports
+    # (8101 / 8106 / 8107) so running more than one at once is allowed but
+    # usually unnecessary.
+    Process("llm",    "../../ai-services/llm/mistral_minitron",   "mistral_minitron_llm_server"),
+    # Process("llm",  "../../ai-services/llm/llama_nemotron",     "llama_nemotron_llm_server"),
+    # Process("llm",  "../../ai-services/llm/nemotron3_nano",     "nemotron3_nano_llm_server"),
+    Process("stt",    "../../ai-services/stt-server",             "stt_server"),
+    Process("tts",    "../../ai-services/tts/magpie",             "magpie_tts_server"),
+    Process("worker", "worker",                                   "my_agent_worker"),
 ]
 ```
 
@@ -166,7 +175,10 @@ PROCESSES = [
 
 ```bash
 cp ../../ai-services/vlm-server/vlm_server.yaml ./vlm_server.yaml
-cp ../../ai-services/llm-server/llm_server.yaml ./llm_server.yaml
+# Pick ONE LLM YAML — copy the one matching the Process you picked above.
+cp ../../ai-services/llm/mistral_minitron/mistral_minitron_llm_server.yaml ./mistral_minitron_llm_server.yaml
+# cp ../../ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml ./llama_nemotron_llm_server.yaml
+# cp ../../ai-services/llm/nemotron3_nano/nemotron3_nano_llm_server.yaml ./nemotron3_nano_llm_server.yaml
 cp ../../ai-services/stt-server/stt_server.yaml ./stt_server.yaml
 cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./magpie_tts_server.yaml
 # or for Piper (~100 ms latency, CPU):
@@ -213,6 +225,9 @@ async with httpx.AsyncClient() as client:
     answer = resp.json()["choices"][0]["message"]["content"]
 
 # LLM — POST JSON (pure-text chat completion)
+# Ports: 8101 mistral_minitron | 8106 llama_nemotron | 8107 nemotron3_nano.
+# The HTTP contract is identical across all three; swap the port to swap
+# backends with no worker-side code changes.
 async with httpx.AsyncClient() as client:
     resp = await client.post(
         "http://localhost:8101/v1/chat/completions",
@@ -227,9 +242,24 @@ async with httpx.AsyncClient() as client:
 
 - **vlm-server** loads Cosmos-Reason1-7B in-process via HuggingFace transformers.
   Model warms up at startup; strips `<think>…</think>` blocks automatically.
-- **llm-server** loads Mistral-NeMo-Minitron-8B-Instruct in-process via HuggingFace
-  transformers. Pure-text `/v1/chat/completions` only; default stop list handles
-  Minitron's `<extra_id_*>` chat-template tokens. Swap models via `llm_server.yaml`.
+- **llm/mistral_minitron** loads Mistral-NeMo-Minitron-8B-Instruct in-process via
+  HuggingFace transformers. Pure-text `/v1/chat/completions` only — no tool
+  calling, no reasoning preamble. Default stop list handles Minitron's
+  `<extra_id_*>` chat-template tokens. Swap models via `mistral_minitron_llm_server.yaml`.
+- **llm/llama_nemotron** loads Llama-3.1-Nemotron-Nano-8B-v1 via HuggingFace
+  transformers (no `trust_remote_code`). Native Llama-3.1 tool calling —
+  `tools=[...]` in the request is rendered via the model's chat template and
+  decoding is grammar-constrained by `lm-format-enforcer` so the tool-call JSON
+  is always syntactically valid. Per-turn reasoning toggle via
+  `"detailed thinking on"` / `"detailed thinking off"` in a system or user message;
+  reasoning preamble is **not** stripped server-side.
+- **llm/nemotron3_nano** is a ~200-line `execvp` shim into vLLM serving
+  `NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4`. vLLM handles tool calling
+  (`qwen3_coder` parser), reasoning extraction (`nano_v3` parser — auto-fetched
+  into `model_cache`), and FlashInfer FP4 MoE kernels. Requires a Blackwell-class
+  GPU (B200 / RTX PRO 6000 / Jetson Thor) for native FP4; swap to the BF16 model
+  variant for Hopper/Ampere. `enforce_eager: true` by default to avoid the
+  silent 3–8 min CUDA graph + FlashInfer autotune on cold start.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; `language` / `temperature` form fields are accepted but ignored.
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
@@ -787,6 +817,53 @@ LiveKit transport layers were extended so:
   the real IPC layer (no Docker / LiveKit needed). CI workflow at
   `.github/workflows/tests.yml` runs the suite on every push and PR
   across Python 3.11 and 3.12.
+
+### 2026-04-30 — LLM servers reorganized into per-model packages
+
+`ai-services/llm-server/` (single package, single model) is split into three
+sibling packages under `ai-services/llm/`, each with its own entry-point
+command, YAML, default port, and dependency set. This lets a sample pick the
+LLM that matches its tool-calling / reasoning / hardware requirements without
+dragging in the dependencies of the others (notably vLLM and
+`lm-format-enforcer`, neither of which the Minitron backend needs).
+
+| New package | Command | Port | Model | Backend |
+|---|---|---|---|---|
+| `llm/mistral_minitron/` | `mistral_minitron_llm_server` | 8101 | `nvidia/Mistral-NeMo-Minitron-8B-Instruct` | HF transformers (in-process) — chat only |
+| `llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | `nvidia/Llama-3.1-Nemotron-Nano-8B-v1` | HF transformers + `lm-format-enforcer` — native tool calls, reasoning toggle |
+| `llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4` | vLLM (execvp shim) — Blackwell FP4 MoE |
+
+- **HTTP contract is identical** across all three (OpenAI-compatible
+  `GET /health`, `GET /v1/models`, `POST /v1/chat/completions`). Workers point
+  at a different port to swap backends — no worker-side code changes.
+- **Ports** chosen to be non-overlapping so two LLM backends can coexist in
+  the same stack if a sample actually wants that (unusual; typically pick one).
+  8101 slot is kept for Mistral-Minitron to preserve wire compatibility with
+  the previous `llm-server` deployment.
+- **`llama_nemotron`** adds grammar-constrained tool-call decoding via
+  `lm-format-enforcer`. When `tools=[...]` is present in the request, a
+  `UnionParser([tool_call_grammar, free_text])` is fed as
+  `prefix_allowed_tokens_fn` so the model's vocabulary is masked every step to
+  either valid `<TOOLCALL>[{...}]</TOOLCALL>` JSON or plain assistant text.
+  Rationale: the native Llama-3.1 chat template instructs the model to emit
+  tool calls as JSON, but sampling noise / schema drift can still produce
+  syntactically broken output. LMFE eliminates that entirely.
+- **`nemotron3_nano`** is intentionally thin (~200 lines). vLLM already
+  exposes the OpenAI API, parses Nemotron-3-Nano's XML tool-call format via
+  `--tool-call-parser qwen3_coder`, and splits the `<think>…</think>` preamble
+  via `--reasoning-parser nano_v3` (custom plugin auto-fetched from the model
+  card into `model_cache`). The shim reads the YAML, sets
+  `VLLM_USE_FLASHINFER_MOE_FP4=1`, and `os.execvp`s into `vllm serve` so the
+  launcher's signals go straight to vLLM with no intermediate wiring.
+- **`enforce_eager: true`** is the default for `nemotron3_nano` — CUDA graph
+  capture plus FlashInfer FP4 MoE autotune are silent and take 3–8 min on
+  first run, which is a bad UX for a voice agent waiting to become healthy.
+  Eager mode starts in ~5 s after weight load and is 10–20% slower per token
+  (imperceptible at <250 tokens/turn where STT+VAD+TTS already dominate).
+
+Dependency fan-out stays contained: only `llama_nemotron` pulls
+`lm-format-enforcer`, only `nemotron3_nano` pulls `vllm>=0.12.0`. Mistral
+Minitron remains a plain FastAPI + transformers box.
 
 ### 2026-04-28 — llm-server added (pure-text LLM)
 

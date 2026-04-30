@@ -97,7 +97,7 @@ magpie-tts-server  (tts/magpie/)
     └── pyyaml >=6.0
     Model: nvidia/magpie_tts_multilingual_357m (NeMo TTS, in-process)
 
-llm-server  (llm-server/)
+mistral-minitron-llm-server  (ai-services/llm/mistral_minitron/)
     └── torch >=2.2
     └── transformers >=4.49
     └── accelerate >=0.30
@@ -106,6 +106,29 @@ llm-server  (llm-server/)
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
     Model: nvidia/Mistral-NeMo-Minitron-8B-Instruct (HuggingFace transformers, in-process)
+    Chat-only; no tool calling, no reasoning preamble.
+
+llama-nemotron-llm-server  (ai-services/llm/llama_nemotron/)
+    └── torch >=2.2
+    └── transformers >=4.49
+    └── accelerate >=0.30
+    └── fastapi >=0.111
+    └── uvicorn[standard] >=0.29
+    └── hf-transfer >=0.1.4
+    └── pyyaml >=6.0
+    └── lm-format-enforcer >=0.11   # grammar-constrained tool-call JSON
+    Model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1 (HuggingFace transformers, in-process)
+    Native Llama-3.1 tool calling + per-turn reasoning toggle
+    ("detailed thinking on/off"). No `trust_remote_code`.
+
+nemotron3-nano-llm-server  (ai-services/llm/nemotron3_nano/)
+    └── vllm >=0.12.0
+    └── hf-transfer >=0.1.4
+    └── pyyaml >=6.0
+    Model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 (vLLM, NVFP4 + FP8 KV)
+    Thin execvp wrapper around `vllm serve`; Blackwell-class GPU required
+    for native FP4 MoE kernels. Qwen3-Coder tool-call parser +
+    nano_v3 reasoning parser handled server-side by vLLM.
 
 piper-tts-server  (tts/piper/)
     └── piper-tts >=1.4.0
@@ -124,10 +147,12 @@ piper-tts-server  (tts/piper/)
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
 | `vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
-| `llm-server/` | `llm-server` | `llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
+| `llm/mistral_minitron/` | `mistral-minitron-llm-server` | `mistral_minitron_llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
 | `stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `llm/llama_nemotron/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | transformers in-process (+ LMFE) |
+| `llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 | vLLM (execvp shim) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llama-nemotron-llm-server"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.2",
+    "transformers>=4.49",
+    "accelerate>=0.30",
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "hf-transfer>=0.1.4",
+    "pyyaml>=6.0",
+    # Grammar-constrained decoding: when a request includes tools=[...], the
+    # server wraps model.generate() with a SequenceParser that forces the
+    # output to be either (a) <TOOLCALL>[...valid JSON...]</TOOLCALL> or
+    # (b) plain free text.  Guarantees syntactically valid tool-call JSON
+    # regardless of sampling noise or model drift.
+    "lm-format-enforcer>=0.11",
+]
+
+[project.scripts]
+llama_nemotron_llm_server = "llama_nemotron_llm_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["llama_nemotron_llm_server"]
