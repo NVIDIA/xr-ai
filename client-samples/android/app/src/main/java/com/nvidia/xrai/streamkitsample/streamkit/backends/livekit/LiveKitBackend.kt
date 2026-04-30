@@ -10,6 +10,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import io.livekit.android.LiveKit
+import io.livekit.android.LiveKitOverrides
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
@@ -26,6 +27,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * [StreamingBackend] implementation using the LiveKit Android SDK.
@@ -80,7 +82,12 @@ internal class LiveKitBackend(
             else -> throw StreamError.MissingToken
         }
 
-        val newRoom = LiveKit.create(appContext)
+        // Trust all certs — the hub uses a self-signed cert by default and we
+        // don't want to require users to manually install a CA. See TrustAllCerts.
+        val newRoom = LiveKit.create(
+            appContext,
+            overrides = LiveKitOverrides(okHttpClient = TrustAllCerts.okHttpClient()),
+        )
         room = newRoom
 
         val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -226,6 +233,12 @@ internal class LiveKitBackend(
                 connectTimeout = 5_000
                 readTimeout    = 5_000
                 requestMethod  = "GET"
+                if (this is HttpsURLConnection) {
+                    // Match the WebSocket's trust-all behavior so the same self-signed
+                    // dev cert works for both the token endpoint and the LiveKit socket.
+                    sslSocketFactory  = TrustAllCerts.socketFactory
+                    hostnameVerifier  = TrustAllCerts.permissiveHostnameVerifier
+                }
             }
 
             try {
