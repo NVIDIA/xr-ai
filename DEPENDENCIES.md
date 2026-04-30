@@ -42,8 +42,15 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
     └── pyyaml >=6.0
+    └── xr-ai-agent  [editable: ../../agent-sdk]
+    └── PyNvVideoCodec >=1.0
+    └── Pillow >=10.0
+    └── numpy >=1.24
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
-    Reads NVENC chunks written by the hub directly from disk.
+    Reads NVENC H.264 chunks written by the hub from disk for historical
+    queries; connects to the hub as a ProcessorEndpoint to fetch live
+    frames for `get_latest_frame`. Decodes chunks via NVDEC and
+    re-encodes selected frames as PNG via Pillow.
 
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]

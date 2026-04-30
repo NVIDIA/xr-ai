@@ -4,6 +4,13 @@ NVENC video recorder for XR-Media-Hub.
 Records incoming video frames per participant to H.264 Annex B chunk files.
 Each chunk starts with SPS+PPS+IDR and is independently decodable.
 
+Storage backend
+---------------
+Defaults to a tmpfs path (``/dev/shm/xr-ai/recordings``) so chunk writes
+go to RAM, not disk. The hub holds at most ``max_total_bytes`` (default
+500 MB) of chunks across all participants combined; the oldest chunks
+are evicted FIFO when the budget is exceeded.
+
 On-disk layout
 --------------
     <out_dir>/<participant_id>/
@@ -18,8 +25,9 @@ Sidecar JSON keys:
     height      int   frame height in pixels
     size_bytes  int   .264 file size
 
-The video MCP server reads this directory directly — the hub exposes no HTTP API
-for video.
+The video MCP server reads this directory directly for historical
+queries. Latest-frame queries use a separate path: video-mcp connects
+to the hub as a ``ProcessorEndpoint`` and pulls live frames over IPC.
 """
 from __future__ import annotations
 
@@ -39,14 +47,20 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+# Default chunk root. /dev/shm is tmpfs on Linux (auto-mounted at boot),
+# so writes here cost RAM bandwidth, not disk IO.
+_DEFAULT_OUT_DIR     = "/dev/shm/xr-ai/recordings"
+_DEFAULT_MAX_BYTES   = 500 * 1024 * 1024   # 500 MB across all participants
+
+
 @dataclass
 class VideoRecorderConfig:
-    out_dir:      str   = "/tmp/xr_recordings"
-    chunk_frames: int   = 30        # frames per chunk (1 s at 30 fps)
-    max_chunks:   int   = 300       # max chunks retained per participant (0 = unlimited)
-    sample_fps:   float = 30.0
-    bitrate:      int   = 4_000_000
-    gpu_id:       int   = 0
+    out_dir:         str   = _DEFAULT_OUT_DIR
+    chunk_frames:    int   = 30                  # frames per chunk (1 s at 30 fps)
+    max_total_bytes: int   = _DEFAULT_MAX_BYTES  # global cap; FIFO eviction (0 = unlimited)
+    sample_fps:      float = 30.0
+    bitrate:         int   = 4_000_000
+    gpu_id:          int   = 0
 
 
 @dataclass
@@ -62,7 +76,6 @@ class _TrackEncoder:
     last_ts:        float          = 0.0
 
 
-
 class VideoRecorder:
     def __init__(self, cfg: VideoRecorderConfig) -> None:
         try:
@@ -76,9 +89,12 @@ class VideoRecorder:
 
         self._cfg          = cfg
         self._out_dir      = Path(cfg.out_dir)
+        self._out_dir.mkdir(parents=True, exist_ok=True)
         self._encoders:    dict[tuple[str, str], _TrackEncoder] = {}
         self._lock         = threading.Lock()
         self._min_interval = 1.0 / max(cfg.sample_fps, 1.0)
+        # Lock around global prune so two chunk-flushes can't double-evict.
+        self._prune_lock   = threading.Lock()
 
     # ── hub callback ──────────────────────────────────────────────────────────
 
@@ -195,15 +211,33 @@ class VideoRecorder:
         log.info("recorder  chunk  %s  %d frames  %d bytes",
                  h264_path.name, enc.chunk_frames, len(data))
         enc.chunk_buf.clear()
-        self._prune(enc.out_dir)
+        self._prune_by_total_bytes()
 
-    def _prune(self, out_dir: Path) -> None:
-        if not self._cfg.max_chunks:
+    def _prune_by_total_bytes(self) -> None:
+        """Keep total .264 chunk size under ``max_total_bytes`` across every
+        participant directory. FIFO eviction by chunk start_us."""
+        cap = self._cfg.max_total_bytes
+        if cap <= 0:
             return
-        chunks = sorted(out_dir.glob("*.264"))
-        for old in chunks[: max(0, len(chunks) - self._cfg.max_chunks)]:
-            old.unlink(missing_ok=True)
-            old.with_suffix(".json").unlink(missing_ok=True)
+        with self._prune_lock:
+            chunks: list[tuple[int, Path]] = []
+            for pid_dir in self._out_dir.iterdir():
+                if not pid_dir.is_dir():
+                    continue
+                for c in pid_dir.glob("*.264"):
+                    try:
+                        chunks.append((int(c.stem), c))
+                    except ValueError:
+                        continue
+            chunks.sort()  # oldest first
+            total = sum(c.stat().st_size for _, c in chunks)
+            for _, c in chunks:
+                if total <= cap:
+                    break
+                size = c.stat().st_size
+                c.unlink(missing_ok=True)
+                c.with_suffix(".json").unlink(missing_ok=True)
+                total -= size
 
     # ── public API ────────────────────────────────────────────────────────────
 

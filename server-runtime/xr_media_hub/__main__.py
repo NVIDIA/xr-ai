@@ -91,12 +91,14 @@ async def main() -> None:
     vr_cfg = cfg.video_recording or {}
     if vr_cfg.get("enabled"):
         from xr_media_hub.video import VideoRecorder, VideoRecorderConfig
+        rc_defaults = VideoRecorderConfig()
         rc = VideoRecorderConfig(
-            out_dir      = vr_cfg.get("out_dir",       "/tmp/xr_recordings"),
-            chunk_frames = int(vr_cfg.get("chunk_frames", 150)),
-            sample_fps   = float(vr_cfg.get("sample_fps",  30.0)),
-            bitrate      = int(vr_cfg.get("bitrate",    4_000_000)),
-            gpu_id       = int(vr_cfg.get("gpu_id",        0)),
+            out_dir         = vr_cfg.get("out_dir",         rc_defaults.out_dir),
+            chunk_frames    = int(vr_cfg.get("chunk_frames",    rc_defaults.chunk_frames)),
+            max_total_bytes = int(vr_cfg.get("max_total_bytes", rc_defaults.max_total_bytes)),
+            sample_fps      = float(vr_cfg.get("sample_fps",    rc_defaults.sample_fps)),
+            bitrate         = int(vr_cfg.get("bitrate",         rc_defaults.bitrate)),
+            gpu_id          = int(vr_cfg.get("gpu_id",          rc_defaults.gpu_id)),
         )
         _recorder = VideoRecorder(rc)
         log.info("Video recording enabled  out_dir=%s", rc.out_dir)

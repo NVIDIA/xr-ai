@@ -10,7 +10,15 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "fastmcp>=0.4",
     "pyyaml>=6.0",
+    # Frame querying — connects to the hub via IPC and decodes H.264 chunks.
+    "xr-ai-agent",
+    "PyNvVideoCodec>=1.0",
+    "Pillow>=10.0",
+    "numpy>=1.24",
 ]
+
+[tool.uv.sources]
+xr-ai-agent = { path = "../../agent-sdk", editable = true }
 
 [project.scripts]
 video_mcp_server = "video_mcp_server.__main__:run"

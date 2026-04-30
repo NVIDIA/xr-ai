@@ -22,12 +22,14 @@ enable_token_server: true
 
 # ── NVENC video recording ─────────────────────────────────────────────────────
 # Requires pynvvideocodec.  Set enabled: true to activate.
-# Video query API will be available at http://localhost:8090/video
+# out_dir defaults to /dev/shm/xr-ai/recordings (tmpfs — RAM-backed).
+# Eviction is FIFO once total chunk size across all participants exceeds
+# max_total_bytes.
 video_recording:
-  enabled:       true
-  out_dir:       /tmp/xr_recordings/mcp-agent
-  chunk_frames:  30         # 1 s at 30 fps
-  max_chunks:    300        # keep last 300 s (~5 min) per participant
-  sample_fps:    30.0
-  bitrate:       4000000    # VBR target bitrate in bps
-  gpu_id:        0
+  enabled:         true
+  out_dir:         /dev/shm/xr-ai/recordings
+  chunk_frames:    30                    # 1 s at 30 fps
+  max_total_bytes: 524288000             # 500 MB cap across all participants
+  sample_fps:      30.0
+  bitrate:         4000000               # VBR target bitrate in bps
+  gpu_id:          0

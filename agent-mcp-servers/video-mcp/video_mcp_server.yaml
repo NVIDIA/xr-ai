@@ -4,10 +4,16 @@
 # recordings_dir must point to the same path as video_recording.out_dir
 # in xr_media_hub.yaml — the server reads chunk files directly from disk.
 #
+# hub_pub / hub_push are the hub IPC sockets used to fetch live frames
+# (the `get_latest_frame` tool). They must match the hub's PUB / PULL
+# bindings. Defaults below match xr_media_hub's defaults.
+#
 # MCP endpoint: http://localhost:8210/mcp  (StreamableHTTP transport)
-# HTTP stats:   GET http://localhost:8210/stats/<participant_id>
 
-recordings_dir: /tmp/xr_recordings     # must match hub video_recording.out_dir
+recordings_dir: /dev/shm/xr-ai/recordings  # must match hub video_recording.out_dir
 out_dir:        /tmp/xr_video_queries
+hub_pub:        ipc:///tmp/xr_hub_pub
+hub_push:       ipc:///tmp/xr_hub_in
 host:           0.0.0.0
 port:           8210
+gpu_id:         0

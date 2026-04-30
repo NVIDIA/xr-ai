@@ -38,13 +38,18 @@ enable_token_server: true
 # Requires pynvvideocodec.  Frames are encoded via NVENC and written as
 # H.264 Annex B chunks.  Each chunk starts with an IDR frame and is
 # independently decodable.  Chunks can be concatenated with `cat`.
+#
+# Storage defaults to a tmpfs path (/dev/shm/xr-ai/recordings) so writes
+# go to RAM, not disk.  Eviction is FIFO once total chunk size across
+# all participants exceeds max_total_bytes (default 500 MB).
+#
 # Leave commented out (or set enabled: false) to disable.
 #
 # video_recording:
-#   enabled:       true
-#   out_dir:       /tmp/xr_recordings   # where to write .264 chunk files
-#   chunk_frames:  30                   # frames per chunk (1 s at 30 fps)
-#   max_chunks:    300                  # max chunks kept per participant (0 = unlimited)
-#   sample_fps:    30.0                 # recording frame rate (subsample if lower)
-#   bitrate:       4000000              # VBR target bitrate in bps
-#   gpu_id:        0                    # NVENC GPU device index
+#   enabled:         true
+#   out_dir:         /dev/shm/xr-ai/recordings   # tmpfs by default — set to a disk path to persist
+#   chunk_frames:    30                          # frames per chunk (1 s at 30 fps)
+#   max_total_bytes: 524288000                   # 500 MB cap across all participants (0 = unlimited)
+#   sample_fps:      30.0                        # recording frame rate (subsample if lower)
+#   bitrate:         4000000                     # VBR target bitrate in bps
+#   gpu_id:          0                           # NVENC GPU device index

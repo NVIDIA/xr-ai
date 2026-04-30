@@ -8,5 +8,8 @@ transcript:
   transcripts_dir: /tmp/xr_transcripts/mcp-agent
 
 video:
-  recordings_dir: /tmp/xr_recordings/mcp-agent   # must match xr_media_hub.yaml video_recording.out_dir
+  recordings_dir: /dev/shm/xr-ai/recordings      # must match xr_media_hub.yaml video_recording.out_dir
   out_dir:        /tmp/xr_video_queries/mcp-agent
+  hub_pub:        ipc:///tmp/xr_hub_pub
+  hub_push:       ipc:///tmp/xr_hub_in
+  gpu_id:         0

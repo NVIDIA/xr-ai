@@ -5,6 +5,10 @@ Pure FastMCP — mounts two sub-servers (transcript, video) into a single
 FastMCP instance and serves the StreamableHTTP transport at /mcp. There
 are no REST endpoints; workers use ``fastmcp.Client``.
 
+The video sub-server connects to the hub as a ``ProcessorEndpoint`` to
+serve live latest-frame queries; we manage the endpoint task in the same
+asyncio loop as the uvicorn server.
+
 Config (mcp_server.yaml)
 -------------------------
     host: 0.0.0.0
@@ -14,12 +18,16 @@ Config (mcp_server.yaml)
       transcripts_dir: /tmp/xr_transcripts/mcp-agent
 
     video:
-      recordings_dir:  /tmp/xr_recordings/mcp-agent   # must match hub out_dir
+      recordings_dir:  /dev/shm/xr-ai/recordings   # must match hub out_dir
       out_dir:         /tmp/xr_video_queries/mcp-agent
+      hub_pub:         ipc:///tmp/xr_hub_pub
+      hub_push:        ipc:///tmp/xr_hub_in
+      gpu_id:          0
 """
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import pathlib
 
@@ -28,27 +36,72 @@ import yaml
 from fastmcp import FastMCP
 
 from transcript_mcp_server import TranscriptStore, build_mcp as build_transcript_mcp
-from video_mcp_server      import ChunkStore,      build_mcp as build_video_mcp
+from video_mcp_server      import (ChunkStore, FrameProvider,
+                                   build_mcp as build_video_mcp)
+from xr_ai_agent           import ProcessorEndpoint, Subscribe
 
 log = logging.getLogger("mcp_server")
 
 
-def build_app(cfg: dict):
-    """Compose transcript + video MCP servers into one FastMCP and return its
-    ASGI app, served at /mcp."""
-    transcripts_dir = pathlib.Path(cfg.get("transcript", {}).get("transcripts_dir", "/tmp/xr_transcripts"))
-    recordings_dir  = pathlib.Path(cfg.get("video",      {}).get("recordings_dir",  "/tmp/xr_recordings"))
-    out_dir         = pathlib.Path(cfg.get("video",      {}).get("out_dir",         "/tmp/xr_video_queries"))
+def _build(cfg: dict) -> tuple[object, ProcessorEndpoint]:
+    """Build the composed FastMCP ASGI app and return it alongside the
+    ProcessorEndpoint that backs live frame queries (caller manages its
+    lifecycle)."""
+    transcript_cfg = cfg.get("transcript", {})
+    video_cfg      = cfg.get("video",      {})
+
+    transcripts_dir = pathlib.Path(transcript_cfg.get("transcripts_dir", "/tmp/xr_transcripts"))
+    recordings_dir  = pathlib.Path(video_cfg.get("recordings_dir",  "/dev/shm/xr-ai/recordings"))
+    out_dir         = pathlib.Path(video_cfg.get("out_dir",         "/tmp/xr_video_queries"))
+    hub_pub         = video_cfg.get("hub_pub",  "ipc:///tmp/xr_hub_pub")
+    hub_push        = video_cfg.get("hub_push", "ipc:///tmp/xr_hub_in")
+    gpu_id          = int(video_cfg.get("gpu_id", 0))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     transcripts = TranscriptStore(str(transcripts_dir))
     chunks      = ChunkStore(recordings_dir)
 
-    mcp = FastMCP("xr-mcp")
-    mcp.mount(build_transcript_mcp(transcripts),  namespace="transcript")
-    mcp.mount(build_video_mcp(chunks, out_dir),   namespace="video")
+    ep       = ProcessorEndpoint(
+        sub_addr=hub_pub, push_addr=hub_push,
+        filter=Subscribe.VIDEO,
+    )
+    provider = FrameProvider(ep)
 
-    return mcp.http_app(path="/mcp")
+    mcp = FastMCP("xr-mcp")
+    mcp.mount(build_transcript_mcp(transcripts),                          namespace="transcript")
+    mcp.mount(build_video_mcp(chunks, out_dir, provider, gpu_id=gpu_id),  namespace="video")
+
+    return mcp.http_app(path="/mcp"), ep
+
+
+def build_app(cfg: dict):
+    """Backwards-compatible entry: returns just the ASGI app (no
+    endpoint lifecycle). Used by tests; production should call
+    ``_build`` and manage the endpoint."""
+    app, _ep = _build(cfg)
+    return app
+
+
+async def _serve(cfg: dict) -> None:
+    app, ep = _build(cfg)
+
+    host = cfg.get("host", "0.0.0.0")
+    port = int(cfg.get("port", 8200))
+    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+    server = uvicorn.Server(config)
+
+    ep_task = asyncio.create_task(ep.run(), name="composed_mcp_processor")
+    log.info("xr-mcp-server  port=%d", port)
+    try:
+        await server.serve()
+    finally:
+        ep.stop()
+        ep_task.cancel()
+        try:
+            await ep_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        ep.close()
 
 
 def run() -> None:
@@ -63,12 +116,7 @@ def run() -> None:
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")
-
-    host = cfg.get("host", "0.0.0.0")
-    port = int(cfg.get("port", 8200))
-
-    log.info("xr-mcp-server  port=%d", port)
-    uvicorn.run(build_app(cfg), host=host, port=port, log_level="warning")
+    asyncio.run(_serve(cfg))
 
 
 if __name__ == "__main__":

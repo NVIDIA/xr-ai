@@ -239,9 +239,13 @@ async with httpx.AsyncClient() as client:
   `query_transcripts`, `add_transcript` (worker ingest), `list_participants`,
   `get_transcript_stats`. Transcripts persist as JSONL files across restarts.
 - **video-mcp-server** is pure FastMCP at `/mcp` on port 8210. Tools:
-  `list_recording_participants`, `get_video_stats`, `query_video`. Reads the
-  hub's NVENC chunks directly from disk — requires hub video recording
-  enabled via `video_recording.enabled: true` in `xr_media_hub.yaml`.
+  `list_recording_participants`, `get_video_stats`, `query_video`,
+  `get_latest_frame`, `get_frame_at_time`. Reads the hub's NVENC chunks
+  directly from disk for historical queries; also connects to the hub
+  as a `ProcessorEndpoint` (with `Subscribe.VIDEO`) to fetch live
+  frames for `get_latest_frame`. `get_frame_at_time` decodes via NVDEC
+  and returns a PNG path. Requires hub video recording enabled via
+  `video_recording.enabled: true` in `xr_media_hub.yaml`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship with `cloudxr-agent` or `mcp-agent` as examples.
   Copy them to other sample roots and adjust `model_cache` (`../../models` resolves
@@ -607,6 +611,43 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-29 — Video recording on tmpfs; video-mcp gains live-frame + frame-at-time
+
+`server-runtime/xr_media_hub/video/_recorder.py`:
+- Default `out_dir` flipped from `/tmp/xr_recordings` (disk) to
+  `/dev/shm/xr-ai/recordings` (tmpfs — RAM-backed). Writes don't touch
+  disk by default.
+- Eviction policy is now **size-based, global**: `max_total_bytes`
+  (default 500 MB) caps total chunk size across all participants.
+  When the cap is exceeded, oldest chunks are evicted FIFO. Replaces
+  the prior per-participant `max_chunks` count.
+
+`agent-mcp-servers/video-mcp/`:
+- Now connects to the hub as a `ProcessorEndpoint` with
+  `filter=Subscribe.VIDEO`. A small `FrameProvider` tracks the most
+  recent `FrameSignal` per pid; pixel bytes are pulled on demand via
+  `request_frame()`. No on-disk side-channel — the live path is
+  entirely IPC-based.
+- New MCP tool `get_latest_frame(participant_id)` — calls into the
+  provider, converts the returned `FrameData` to RGB, writes a PNG to
+  `out_dir`, returns `{path, width, height, timestamp_us, track_id}`.
+- New MCP tool `get_frame_at_time(participant_id, timestamp_us)` —
+  finds the chunk covering the timestamp, decodes it with NVDEC via
+  PyNvVideoCodec, picks the frame closest to the timestamp by linear
+  interpolation across the chunk, encodes PNG, returns `{path, width,
+  height, timestamp_us, chunk_path}`.
+- video-mcp gains `xr-ai-agent`, `PyNvVideoCodec`, `Pillow`, and
+  `numpy` runtime deps. mcp-agent's composed `mcp_server` adopts the
+  same model — owns its own `ProcessorEndpoint` and lifecycle.
+
+**Why:** disk IO was wasted overhead for chunks that almost always get
+evicted within minutes; `/dev/shm` cuts the IO cost to RAM bandwidth
+without changing the file-based interface that the video-mcp uses for
+historical queries. Live frames bypass the chunk store entirely — the
+hub already has the most recent SHM slot held open per (pid, track),
+so a `request_frame()` is a single zero-copy memcpy at the hub plus a
+pixel-format conversion at the consumer.
 
 ### 2026-04-29 — MCP servers go pure FastMCP
 
