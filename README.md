@@ -113,6 +113,20 @@ To use your own certificate, set `cert_file` and `key_file` in
 
 ---
 
+### Android client
+
+See [`client-samples/android/README.md`](client-samples/android/README.md) for
+full setup. Quick steps:
+
+1. Open `client-samples/android/` in Android Studio (Hedgehog or later).
+2. Let Gradle sync finish — it downloads the LiveKit Android SDK automatically.
+3. Run on a device or emulator (API 24+).
+4. Enter the server IP, port (`7880`), and paste the printed token.
+
+Permissions (`RECORD_AUDIO`, `CAMERA`) are requested at runtime on first use.
+
+---
+
 ### iOS / visionOS client
 
 See [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)

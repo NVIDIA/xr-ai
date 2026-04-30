@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Window-level theme used before Compose takes over. NoActionBar prevents
+        a duplicate title bar from appearing behind the Compose scaffold.
+    -->
+    <style name="Theme.StreamKitSample" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+</resources>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple vector launcher icon — replace with a proper icon before publishing. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- NVIDIA green background -->
+    <path
+        android:fillColor="#76B900"
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z" />
+    <!-- White "SK" initials -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,32 L28,76 L38,76 L38,58 L52,76 L64,76 L47,55 L63,32 L51,32 L38,50 L38,32 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,32 L66,76 L76,76 L76,32 Z" />
+</vector>

@@ -1,0 +1,239 @@
+package com.nvidia.xrai.streamkitsample
+
+import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
+import com.nvidia.xrai.streamkitsample.streamkit.StreamSession
+import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
+import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
+import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A message received from the agent or other remote participants. */
+data class ReceivedMessage(
+    val id: String = UUID.randomUUID().toString(),
+    val text: String,
+    val timestamp: Long = System.currentTimeMillis(),
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Observable state shared across the sample app.
+ *
+ * Mirrors AppModel.swift and app.js field-for-field. All mutable state is
+ * exposed as Compose [androidx.compose.runtime.State] so the UI recomposes
+ * automatically.
+ */
+class AppViewModel(application: Application) : AndroidViewModel(application) {
+
+    // ── Connection settings ────────────────────────────────────────────────────
+
+    var host by mutableStateOf("192.168.1.100")
+    var port by mutableStateOf("7880")
+    /** When true, the token endpoint is fetched over HTTPS (not the LiveKit port). */
+    var secure by mutableStateOf(false)
+    /** Pre-signed JWT token (alternative to tokenServerURL). */
+    var tokenInput by mutableStateOf("")
+    /** Token server URL. Defaults to http(s)://<host>:8080/token when blank. */
+    var tokenServerURL by mutableStateOf("")
+    var identity by mutableStateOf("android-client")
+
+    // ── Audio settings ─────────────────────────────────────────────────────────
+
+    var audioMode by mutableStateOf(AudioConfig.MicrophoneMode.VOICE_PROCESSING)
+
+    // ── Camera settings ────────────────────────────────────────────────────────
+
+    var cameraFacing by mutableStateOf(CameraConfig.CameraFacing.BACK)
+
+    // ── Live state ─────────────────────────────────────────────────────────────
+
+    var connectionState by mutableStateOf(ConnectionState.DISCONNECTED)
+        private set
+    var agentStatus by mutableStateOf<String?>(null)
+        private set
+    var isAudioActive by mutableStateOf(false)
+        private set
+    var isCameraActive by mutableStateOf(false)
+        private set
+    var isConnecting by mutableStateOf(false)
+        private set
+    val receivedMessages = mutableStateListOf<ReceivedMessage>()
+    var lastError by mutableStateOf<String?>(null)
+        private set
+
+    // ── Private ────────────────────────────────────────────────────────────────
+
+    private var session: StreamSession? = null
+
+    // ── Connect / disconnect ──────────────────────────────────────────────────
+
+    fun connect() {
+        if (isConnecting || connectionState != ConnectionState.DISCONNECTED) return
+        viewModelScope.launch {
+            isConnecting = true
+            lastError = null
+            receivedMessages.clear()
+
+            try {
+                val portNumber = port.toIntOrNull() ?: 7880
+                val trimmedToken = tokenInput.trim()
+                val tokenScheme = if (secure) "https" else "http"
+                val resolvedTokenURL = tokenServerURL.trim().ifEmpty {
+                    // Default mirrors AppModel.swift: http(s)://<host>:8080/token
+                    "$tokenScheme://$host:8080/token"
+                }
+
+                // LiveKit always runs on plain ws:// in this deployment — TLS is
+                // terminated at the web-server layer. The `secure` flag only affects
+                // the token endpoint URL scheme. Matches AppModel.swift comment exactly.
+                val lkConfig = LiveKitConfig(
+                    host = host,
+                    port = portNumber,
+                    secure = false,
+                    token = trimmedToken.ifEmpty { null },
+                    tokenURL = resolvedTokenURL,
+                )
+
+                val newSession = StreamSession(
+                    BackendConfiguration.LiveKit(lkConfig),
+                    getApplication(),
+                )
+
+                // Wire callbacks before connecting — same ordering as iOS/web.
+                newSession.onConnectionStateChanged = { state ->
+                    connectionState = state
+                    if (state == ConnectionState.DISCONNECTED) {
+                        isAudioActive = false
+                        isCameraActive = false
+                        agentStatus = null
+                    }
+                }
+                newSession.onAgentStatus = { status ->
+                    agentStatus = status
+                }
+                newSession.onDataReceived = { topic, data ->
+                    val body = try {
+                        String(data, Charsets.UTF_8)
+                    } catch (_: Exception) {
+                        "[${data.size} bytes binary]"
+                    }
+                    val text = if (topic.isEmpty()) body else "[$topic] $body"
+                    receivedMessages.add(0, ReceivedMessage(text = text))
+                }
+
+                session = newSession
+                newSession.connect(SessionConfig(identity = identity))
+
+            } catch (e: Exception) {
+                lastError = e.message ?: "Connection failed"
+                session?.disconnect()
+                session = null
+                connectionState = ConnectionState.DISCONNECTED
+            } finally {
+                isConnecting = false
+            }
+        }
+    }
+
+    fun disconnect() {
+        viewModelScope.launch {
+            session?.disconnect()
+            session = null
+            connectionState = ConnectionState.DISCONNECTED
+            agentStatus = null
+            isAudioActive = false
+            isCameraActive = false
+        }
+    }
+
+    // ── Audio ──────────────────────────────────────────────────────────────────
+
+    fun startAudio() {
+        viewModelScope.launch {
+            try {
+                session?.startAudio(AudioConfig(mode = audioMode))
+                isAudioActive = true
+            } catch (e: Exception) {
+                lastError = e.message
+            }
+        }
+    }
+
+    fun stopAudio() {
+        viewModelScope.launch {
+            try {
+                session?.stopAudio()
+            } catch (e: Exception) {
+                lastError = e.message
+            }
+            isAudioActive = false
+        }
+    }
+
+    // ── Camera ─────────────────────────────────────────────────────────────────
+
+    fun startCamera() {
+        viewModelScope.launch {
+            try {
+                session?.startCamera(CameraConfig(facing = cameraFacing))
+                isCameraActive = true
+            } catch (e: Exception) {
+                lastError = e.message
+            }
+        }
+    }
+
+    fun stopCamera() {
+        viewModelScope.launch {
+            try {
+                session?.stopCamera()
+            } catch (e: Exception) {
+                lastError = e.message
+            }
+            isCameraActive = false
+        }
+    }
+
+    // ── Data channel ──────────────────────────────────────────────────────────
+
+    fun sendPing() {
+        viewModelScope.launch {
+            try {
+                val payload = "ping:${System.currentTimeMillis() / 1000.0}"
+                    .toByteArray(Charsets.UTF_8)
+                session?.send(payload)
+            } catch (e: Exception) {
+                lastError = e.message
+            }
+        }
+    }
+
+    fun sendCustom(text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            try {
+                session?.send(text.toByteArray(Charsets.UTF_8))
+            } catch (e: Exception) {
+                lastError = e.message
+            }
+        }
+    }
+
+    // ── Error ──────────────────────────────────────────────────────────────────
+
+    fun clearError() {
+        lastError = null
+    }
+}
