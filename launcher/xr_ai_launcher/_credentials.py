@@ -32,10 +32,22 @@ from pathlib import Path
 _CREDS_FILE   = Path.home() / ".config" / "xr-ai" / "credentials.json"
 _HF_TOKEN_FILE = Path.home() / ".cache" / "huggingface" / "token"
 
-# Human-readable label + reference URL for each known token.
-_KNOWN: dict[str, tuple[str, str]] = {
-    "HF_TOKEN":    ("HuggingFace token", "https://huggingface.co/settings/tokens"),
-    "NGC_API_KEY": ("NGC API key",       "https://ngc.nvidia.com/setup/api-key"),
+# Per-token prompt info: (label, signup URL, "why this matters" blurb).
+# The blurb is shown to the user so they understand the consequence of
+# skipping. Skipping is still allowed — see ensure_credentials().
+_KNOWN: dict[str, tuple[str, str, str]] = {
+    "HF_TOKEN": (
+        "HuggingFace token",
+        "https://huggingface.co/settings/tokens",
+        "Without HF_TOKEN, requests to the HuggingFace Hub are unauthenticated "
+        "— rate limits are lower, downloads are slower, and gated models will "
+        "fail to download.",
+    ),
+    "NGC_API_KEY": (
+        "NGC API key",
+        "https://ngc.nvidia.com/setup/api-key",
+        "Some NGC-hosted models and containers require authentication to download.",
+    ),
 }
 
 
@@ -121,10 +133,13 @@ def ensure_credentials(*names: str) -> None:
                 updated                = True
                 continue
 
-        label, url = _KNOWN.get(name, (name, ""))
-        hint = f"\n  Get one at: {url}" if url else ""
-        print(f"\n[credentials] {label} not found.{hint}", file=sys.stderr)
-        value = getpass.getpass(f"  {label}: ").strip()
+        label, url, why = _KNOWN.get(name, (name, "", ""))
+        print(f"\n[credentials] {label} not found.", file=sys.stderr)
+        if why:
+            print(f"  {why}", file=sys.stderr)
+        if url:
+            print(f"  Get one at: {url}", file=sys.stderr)
+        value = getpass.getpass(f"  {label} (press Enter to skip): ").strip()
         if not value:
             print(f"[credentials] Skipping {name} — left unset.", file=sys.stderr)
             continue

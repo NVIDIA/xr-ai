@@ -106,8 +106,9 @@ def run() -> None:
     asyncio.run(run_stack(PROCESSES, _BASE))
 ```
 
-Supported tokens: `HF_TOKEN`, `NGC_API_KEY`.  The user is shown a one-line
-prompt (password-style, no echo) with a link to generate the token.  Pressing
+Supported tokens: `HF_TOKEN`, `NGC_API_KEY`.  The user is shown a prompt
+(password-style, no echo) that explains what the token is for and the
+consequence of skipping it, alongside a link to generate one.  Pressing
 Enter without typing skips the token (left unset, not saved).
 
 ### Automatic injection
