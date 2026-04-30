@@ -1,34 +1,21 @@
 """
 Composed MCP server for the mcp-agent example.
 
-Demonstrates FastMCP composition: reads a ``skills`` block from YAML and
-mounts the requested sub-servers into a single FastMCP instance.
-
-Available skills
-----------------
-  transcript — stores and queries timestamped speech transcripts
-  video      — queries NVENC-recorded H.264 video chunks from disk
+Pure FastMCP — mounts two sub-servers (transcript, video) into a single
+FastMCP instance and serves the StreamableHTTP transport at /mcp. There
+are no REST endpoints; workers use ``fastmcp.Client``.
 
 Config (mcp_server.yaml)
 -------------------------
-    host:  0.0.0.0
-    port:  8200
+    host: 0.0.0.0
+    port: 8200
 
-    skills:
-      transcript:
-        transcripts_dir: /tmp/xr_transcripts/mcp-agent
-      video:
-        recordings_dir:  /tmp/xr_recordings/mcp-agent   # must match hub out_dir
-        out_dir:         /tmp/xr_video_queries/mcp-agent
+    transcript:
+      transcripts_dir: /tmp/xr_transcripts/mcp-agent
 
-HTTP endpoints
---------------
-  POST /ingest                       — worker pushes transcripts (requires transcript skill)
-  GET  /transcript/stats/{pid}       — transcript stats for worker (requires transcript skill)
-  GET  /video/stats/{pid}            — video stats for worker     (requires video skill)
-  GET  /health
-
-MCP endpoint (StreamableHTTP): /mcp
+    video:
+      recordings_dir:  /tmp/xr_recordings/mcp-agent   # must match hub out_dir
+      out_dir:         /tmp/xr_video_queries/mcp-agent
 """
 from __future__ import annotations
 
@@ -38,90 +25,30 @@ import pathlib
 
 import uvicorn
 import yaml
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from fastmcp import FastMCP
-from pydantic import BaseModel
 
 from transcript_mcp_server import TranscriptStore, build_mcp as build_transcript_mcp
-from video_mcp_server import ChunkStore, build_mcp as build_video_mcp
+from video_mcp_server      import ChunkStore,      build_mcp as build_video_mcp
 
 log = logging.getLogger("mcp_server")
 
 
-class IngestRequest(BaseModel):
-    participant_id: str
-    timestamp_us:   int
-    text:           str
+def build_app(cfg: dict):
+    """Compose transcript + video MCP servers into one FastMCP and return its
+    ASGI app, served at /mcp."""
+    transcripts_dir = pathlib.Path(cfg.get("transcript", {}).get("transcripts_dir", "/tmp/xr_transcripts"))
+    recordings_dir  = pathlib.Path(cfg.get("video",      {}).get("recordings_dir",  "/tmp/xr_recordings"))
+    out_dir         = pathlib.Path(cfg.get("video",      {}).get("out_dir",         "/tmp/xr_video_queries"))
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-
-def build_app(cfg: dict) -> FastAPI:
-    skills = cfg.get("skills", {})
-
-    # ── skill: transcript ─────────────────────────────────────────────────────
-
-    transcript_store: TranscriptStore | None = None
-    if "transcript" in skills:
-        skill_cfg = skills["transcript"]
-        transcript_store = TranscriptStore(
-            skill_cfg.get("transcripts_dir", "/tmp/xr_transcripts")
-        )
-        log.info("skill transcript  dir=%s", skill_cfg.get("transcripts_dir"))
-
-    # ── skill: video ──────────────────────────────────────────────────────────
-
-    chunk_store: ChunkStore | None = None
-    if "video" in skills:
-        skill_cfg = skills["video"]
-        recordings_dir = pathlib.Path(skill_cfg.get("recordings_dir", "/tmp/xr_recordings"))
-        out_dir        = pathlib.Path(skill_cfg.get("out_dir",        "/tmp/xr_video_queries"))
-        out_dir.mkdir(parents=True, exist_ok=True)
-        chunk_store = ChunkStore(recordings_dir)
-        log.info("skill video  recordings=%s", recordings_dir)
-
-    # ── FastMCP composition ───────────────────────────────────────────────────
+    transcripts = TranscriptStore(str(transcripts_dir))
+    chunks      = ChunkStore(recordings_dir)
 
     mcp = FastMCP("xr-mcp")
-    if transcript_store is not None:
-        mcp.mount(build_transcript_mcp(transcript_store), namespace="transcript")
-    if chunk_store is not None:
-        mcp.mount(build_video_mcp(chunk_store, out_dir), namespace="video")
+    mcp.mount(build_transcript_mcp(transcripts),  namespace="transcript")
+    mcp.mount(build_video_mcp(chunks, out_dir),   namespace="video")
 
-    # ── FastAPI wrapper ───────────────────────────────────────────────────────
-
-    app = FastAPI(title="XR MCP Server", docs_url=None, redoc_url=None)
-
-    @app.get("/health")
-    async def health() -> dict:
-        return {"status": "ok", "skills": list(skills)}
-
-    if transcript_store is not None:
-        @app.post("/ingest")
-        async def ingest(req: IngestRequest) -> JSONResponse:
-            if not req.text.strip():
-                raise HTTPException(400, "text must not be empty")
-            transcript_store.append(req.participant_id, req.timestamp_us, req.text)
-            log.info("ingest  pid=%r  ts=%d  %r",
-                     req.participant_id, req.timestamp_us, req.text[:80])
-            return JSONResponse({"ok": True})
-
-        @app.get("/transcript/stats/{participant_id}")
-        async def transcript_stats(participant_id: str) -> JSONResponse:
-            result = transcript_store.stats(participant_id)
-            if result is None:
-                raise HTTPException(404, f"No transcripts for {participant_id!r}")
-            return JSONResponse(result)
-
-    if chunk_store is not None:
-        @app.get("/video/stats/{participant_id}")
-        async def video_stats(participant_id: str) -> JSONResponse:
-            result = chunk_store.stats(participant_id)
-            if result is None:
-                raise HTTPException(404, f"No video chunks for {participant_id!r}")
-            return JSONResponse(result)
-
-    app.mount("/mcp", mcp.http_app())
-    return app
+    return mcp.http_app(path="/mcp")
 
 
 def run() -> None:
@@ -140,9 +67,8 @@ def run() -> None:
     host = cfg.get("host", "0.0.0.0")
     port = int(cfg.get("port", 8200))
 
-    app = build_app(cfg)
-    log.info("xr-mcp-server  skills=%s  port=%d", list(cfg.get("skills", {})), port)
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    log.info("xr-mcp-server  port=%d", port)
+    uvicorn.run(build_app(cfg), host=host, port=port, log_level="warning")
 
 
 if __name__ == "__main__":

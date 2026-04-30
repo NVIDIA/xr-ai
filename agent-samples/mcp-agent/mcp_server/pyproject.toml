@@ -10,7 +10,6 @@ dependencies = [
     "transcript-mcp-server",
     "video-mcp-server",
     "fastmcp>=0.4",
-    "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "pyyaml>=6.0",
 ]

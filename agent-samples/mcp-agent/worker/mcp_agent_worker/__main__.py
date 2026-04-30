@@ -9,14 +9,16 @@ What it does
 1. Listens for audio from XR clients via the hub IPC.
 2. Runs VAD to detect speech boundaries (same logic as echo-agent).
 3. At end of each utterance, runs STT on the full audio buffer.
-4. POSTs the resulting transcript (with participant ID and timestamp)
-   to the transcript-mcp-server HTTP ingest endpoint.
-5. On any data-channel message, queries the transcript-mcp-server and
-   video-mcp-server for stats and sends them back on topic "mcp.stats".
+4. Calls the ``transcript_add_transcript`` MCP tool on the composed
+   mcp-server to record the utterance.
+5. On any data-channel message, calls the ``transcript_get_transcript_stats``
+   and ``video_get_video_stats`` MCP tools and sends a summary back on
+   topic ``mcp.stats``.
 
-The transcript-mcp-server and video-mcp-server are separate FastMCP
-processes started by the orchestrator.  An LLM agent can connect to
-either at their /mcp endpoints to call tools directly.
+The composed mcp-server is a pure-FastMCP process at /mcp (no REST). It
+mounts the transcript and video sub-servers under their respective
+namespaces. External LLM agents can connect to the same /mcp to call
+tools directly.
 
 Config (mcp_agent_worker.yaml)
 -------------------------------
@@ -41,6 +43,7 @@ from dataclasses import dataclass, field
 import httpx
 import numpy as np
 import yaml
+from fastmcp import Client as McpClient
 
 from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent, ProcessorEndpoint
 
@@ -97,10 +100,8 @@ class McpAgent:
         self._ep.on_participant(self._on_participant)
 
         mcp_base = cfg.get("mcp_server", "http://localhost:8200").rstrip("/")
-        self._stt_url              = cfg.get("stt_server", "http://localhost:8103").rstrip("/") + "/v1/audio/transcriptions"
-        self._transcript_url       = mcp_base + "/ingest"
-        self._transcript_stats_url = mcp_base + "/transcript/stats"
-        self._video_stats_url      = mcp_base + "/video/stats"
+        self._stt_url = cfg.get("stt_server", "http://localhost:8103").rstrip("/") + "/v1/audio/transcriptions"
+        self._mcp_url = mcp_base + "/mcp"
 
         self._vad_threshold = float(cfg.get("silence_threshold", 0.01))
         self._vad_silence_s = float(cfg.get("silence_duration",  0.8))
@@ -161,38 +162,38 @@ class McpAgent:
 
     async def _on_data(self, msg: DataMessage) -> None:
         pid = msg.participant_id
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            t_resp, v_resp = await asyncio.gather(
-                client.get(f"{self._transcript_stats_url}/{pid}"),
-                client.get(f"{self._video_stats_url}/{pid}"),
+        async with McpClient(self._mcp_url) as mcp:
+            t_res, v_res = await asyncio.gather(
+                mcp.call_tool("transcript_get_transcript_stats", {"participant_id": pid}),
+                mcp.call_tool("video_get_video_stats",           {"participant_id": pid}),
                 return_exceptions=True,
             )
 
-        lines = [f"=== stats for {pid} ==="]
+        def _payload(r):
+            if isinstance(r, Exception):
+                return None
+            return r.data if hasattr(r, "data") else r.structured_content
 
-        if isinstance(t_resp, Exception) or t_resp.is_error:
+        t = _payload(t_res)
+        v = _payload(v_res)
+        lines = [f"=== stats for {pid} ==="]
+        if t is None or "error" in t:
             lines.append("transcripts: unavailable")
         else:
-            t = t_resp.json()
             lines.append(
                 f"transcripts: {t.get('count', 0)} utterances  "
                 f"{t.get('total_chars', 0)} chars  "
                 f"earliest={t.get('earliest_us', 0)}  latest={t.get('latest_us', 0)}"
             )
-
-        if isinstance(v_resp, Exception) or v_resp.is_error:
+        if v is None or "error" in v:
             lines.append("video: unavailable")
         else:
-            v = v_resp.json()
-            if "error" in v:
-                lines.append(f"video: {v['error']}")
-            else:
-                lines.append(
-                    f"video: {v.get('num_chunks', 0)} chunks  "
-                    f"{v.get('total_bytes', 0) // 1024} KB total  "
-                    f"avg {v.get('avg_chunk_bytes', 0) // 1024} KB/chunk  "
-                    f"earliest={v.get('earliest_us', 0)}  latest={v.get('latest_us', 0)}"
-                )
+            lines.append(
+                f"video: {v.get('num_chunks', 0)} chunks  "
+                f"{v.get('total_bytes', 0) // 1024} KB total  "
+                f"avg {v.get('avg_chunk_bytes', 0) // 1024} KB/chunk  "
+                f"earliest={v.get('earliest_us', 0)}  latest={v.get('latest_us', 0)}"
+            )
 
         report = "\n".join(lines)
         log.info("%s", report)
@@ -222,13 +223,14 @@ class McpAgent:
             return resp.json().get("text", "")
 
     async def _post_transcript(self, pid: str, timestamp_us: int, text: str) -> None:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                self._transcript_url,
-                json={"participant_id": pid, "timestamp_us": timestamp_us, "text": text},
-            )
-            if resp.is_error:
-                log.error("transcript ingest %s: %s", resp.status_code, resp.text[:200])
+        try:
+            async with McpClient(self._mcp_url) as mcp:
+                await mcp.call_tool(
+                    "transcript_add_transcript",
+                    {"participant_id": pid, "timestamp_us": timestamp_us, "text": text},
+                )
+        except Exception as exc:
+            log.error("transcript add failed: %s", exc)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -242,22 +244,37 @@ class McpAgent:
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
+async def _probe_stt(url: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(url)
+            return r.is_success
+    except httpx.HTTPError:
+        return False
+
+
+async def _probe_mcp(url: str) -> bool:
+    """Pure-MCP readiness check — connect and list tools."""
+    try:
+        async with McpClient(url) as mcp:
+            await mcp.list_tools()
+            return True
+    except Exception:
+        return False
+
+
 async def _wait_for_services(cfg: dict) -> None:
-    services = {
-        "STT": cfg.get("stt_server",  "http://localhost:8103").rstrip("/") + "/health",
-        "MCP": cfg.get("mcp_server",  "http://localhost:8200").rstrip("/") + "/health",
-    }
-    pending = set(services)
+    stt_url = cfg.get("stt_server", "http://localhost:8103").rstrip("/") + "/health"
+    mcp_url = cfg.get("mcp_server", "http://localhost:8200").rstrip("/") + "/mcp"
+    probes  = {"STT": (_probe_stt, stt_url), "MCP": (_probe_mcp, mcp_url)}
+
+    pending = set(probes)
     while pending:
         for name in list(pending):
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    r = await client.get(services[name])
-                    if r.is_success:
-                        log.info("%s ready", name)
-                        pending.discard(name)
-            except httpx.ConnectError:
-                pass
+            probe, url = probes[name]
+            if await probe(url):
+                log.info("%s ready", name)
+                pending.discard(name)
         if pending:
             log.info("still waiting for: %s", ", ".join(sorted(pending)))
             await asyncio.sleep(5.0)

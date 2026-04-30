@@ -1,23 +1,25 @@
 """
 Transcript MCP server.
 
-Two interfaces on a single port:
+Pure FastMCP — every operation is an MCP tool at /mcp. There are no REST
+endpoints. Workers use ``fastmcp.Client`` (or any MCP client) to ingest
+transcripts and query stats.
 
-  HTTP ingest (non-MCP)
-  ─────────────────────
-  POST /ingest
-      Body: {"participant_id": "...", "timestamp_us": 1234, "text": "..."}
-      Returns 200 {"ok": true}.
-      Called by the mcp-agent worker after each STT transcription.
-
-  MCP (FastMCP, mounted at /mcp)
-  ──────────────────────────────
-  Tool: query_transcripts(participant_id, start_us, end_us) → list[Transcript]
-      Returns all stored transcript segments for *participant_id* whose
+Tools (FastMCP, mounted at /mcp)
+────────────────────────────────
+  query_transcripts(participant_id, start_us, end_us) → list[dict]
+      Return all stored transcript segments for *participant_id* whose
       timestamp falls within [start_us, end_us] (Unix microseconds).
 
-  Tool: list_participants() → list[str]
-      Returns all participant IDs that have at least one transcript stored.
+  add_transcript(participant_id, timestamp_us, text) → dict
+      Append a transcript segment for *participant_id*. Returns
+      ``{"ok": true}`` or ``{"error": ...}`` if *text* is empty.
+
+  list_participants() → list[str]
+      All participant IDs that have at least one stored transcript.
+
+  get_transcript_stats(participant_id) → dict
+      Summary statistics (count, total_chars, earliest_us, latest_us).
 
 Storage
 ───────
@@ -40,30 +42,12 @@ import argparse
 import json
 import logging
 import pathlib
-import time
 
 import uvicorn
 import yaml
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from fastmcp import FastMCP
-from pydantic import BaseModel
 
 log = logging.getLogger("transcript_mcp_server")
-
-
-# ── data models ───────────────────────────────────────────────────────────────
-
-class IngestRequest(BaseModel):
-    participant_id: str
-    timestamp_us:   int
-    text:           str
-
-
-class Transcript(BaseModel):
-    participant_id: str
-    timestamp_us:   int
-    text:           str
 
 
 # ── storage ───────────────────────────────────────────────────────────────────
@@ -137,36 +121,6 @@ class TranscriptStore:
 
 # ── server ────────────────────────────────────────────────────────────────────
 
-def build_app(store: TranscriptStore) -> FastAPI:
-    app = FastAPI(title="Transcript MCP Server", docs_url=None, redoc_url=None)
-
-    # ── HTTP ingest endpoint ──────────────────────────────────────────────────
-
-    @app.post("/ingest")
-    async def ingest(req: IngestRequest) -> JSONResponse:
-        if not req.text.strip():
-            raise HTTPException(400, "text must not be empty")
-        store.append(req.participant_id, req.timestamp_us, req.text)
-        log.info("ingest  pid=%r  ts=%d  %r", req.participant_id, req.timestamp_us, req.text[:80])
-        return JSONResponse({"ok": True})
-
-    @app.get("/health")
-    async def health() -> dict:
-        return {"status": "ok"}
-
-    @app.get("/stats/{participant_id}")
-    async def stats(participant_id: str) -> JSONResponse:
-        result = store.stats(participant_id)
-        if result is None:
-            raise HTTPException(404, f"No transcripts for {participant_id!r}")
-        return JSONResponse(result)
-
-    mcp = build_mcp(store)
-    app.mount("/mcp", mcp.http_app())
-
-    return app
-
-
 def build_mcp(store: TranscriptStore) -> "FastMCP":
     """Return a composed FastMCP server with all transcript tools bound to *store*."""
     mcp = FastMCP("transcript-mcp")
@@ -189,6 +143,20 @@ def build_mcp(store: TranscriptStore) -> "FastMCP":
         return results
 
     @mcp.tool()
+    def add_transcript(participant_id: str, timestamp_us: int, text: str) -> dict:
+        """
+        Append a transcript segment for *participant_id* at *timestamp_us*
+        (Unix microseconds). Used by ingest workers.
+
+        Returns ``{"ok": true}`` on success, or an error dict if *text* is empty.
+        """
+        if not text.strip():
+            return {"error": "text must not be empty"}
+        store.append(participant_id, timestamp_us, text)
+        log.info("add_transcript  pid=%r  ts=%d  %r", participant_id, timestamp_us, text[:80])
+        return {"ok": True}
+
+    @mcp.tool()
     def list_participants() -> list[str]:
         """Return all participant IDs that have stored transcripts."""
         return store.list_participants()
@@ -208,6 +176,11 @@ def build_mcp(store: TranscriptStore) -> "FastMCP":
         return result
 
     return mcp
+
+
+def build_app(store: TranscriptStore):
+    """Return the ASGI app serving the FastMCP HTTP transport at /mcp."""
+    return build_mcp(store).http_app(path="/mcp")
 
 
 def run() -> None:
@@ -232,10 +205,8 @@ def run() -> None:
     store = TranscriptStore(transcripts_dir)
     app   = build_app(store)
 
-    log.info(
-        "transcript-mcp-server  ingest=POST /ingest  mcp=/mcp  port=%d  dir=%s",
-        port, transcripts_dir,
-    )
+    log.info("transcript-mcp-server  mcp=/mcp  port=%d  dir=%s",
+             port, transcripts_dir)
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

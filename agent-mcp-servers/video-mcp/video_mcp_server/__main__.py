@@ -4,6 +4,9 @@ Video MCP server.
 Reads the video recording directory written by the XR-Media-Hub recorder
 directly from disk — no HTTP dependency on the hub at runtime.
 
+Pure FastMCP — every operation is an MCP tool at /mcp. There are no REST
+endpoints. Use ``fastmcp.Client`` (or any MCP client) to query.
+
 On-disk layout (written by the hub's VideoRecorder):
     <recordings_dir>/<participant_id>/
         <start_us>.264   — raw H.264 Annex B, starts with IDR
@@ -11,20 +14,15 @@ On-disk layout (written by the hub's VideoRecorder):
 
 MCP tools (FastMCP, StreamableHTTP on /mcp)
 ───────────────────────────────────────────
-  get_video_stats(participant_id)
-      Summary: num_chunks, total_bytes, avg_chunk_bytes, earliest_us, latest_us.
-
-  query_video(participant_id, start_us, end_us)
-      Concatenate all chunks that overlap [start_us, end_us], write to a file,
-      return the path and metadata.
-
-  list_recording_participants()
+  list_recording_participants() → list[str]
       Participant IDs that have at least one chunk on disk.
 
-HTTP endpoints
-──────────────
-  GET /stats/{participant_id}   — same data as get_video_stats, for workers
-  GET /health
+  get_video_stats(participant_id) → dict
+      Summary: num_chunks, total_bytes, avg_chunk_bytes, earliest_us, latest_us.
+
+  query_video(participant_id, start_us, end_us) → dict
+      Concatenate all chunks that overlap [start_us, end_us], write to a file,
+      return the path and metadata.
 
 Config (video_mcp_server.yaml)
 ───────────────────────────────
@@ -42,8 +40,6 @@ import pathlib
 
 import uvicorn
 import yaml
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse, Response
 from fastmcp import FastMCP
 
 log = logging.getLogger("video_mcp_server")
@@ -121,26 +117,7 @@ class ChunkStore:
         return b"".join(p.read_bytes() for p in selected)
 
 
-# ── app ───────────────────────────────────────────────────────────────────────
-
-def build_app(store: ChunkStore, out_dir: pathlib.Path) -> FastAPI:
-    app = FastAPI(title="Video MCP Server", docs_url=None, redoc_url=None)
-
-    @app.get("/health")
-    async def health() -> dict:
-        return {"status": "ok", "recordings_dir": str(store._root)}
-
-    @app.get("/stats/{participant_id}")
-    async def http_stats(participant_id: str) -> JSONResponse:
-        result = store.stats(participant_id)
-        if result is None:
-            raise HTTPException(404, f"No video chunks for {participant_id!r}")
-        return JSONResponse(result)
-
-    mcp = build_mcp(store, out_dir)
-    app.mount("/mcp", mcp.http_app())
-    return app
-
+# ── server ────────────────────────────────────────────────────────────────────
 
 def build_mcp(store: ChunkStore, out_dir: pathlib.Path) -> "FastMCP":
     """Return a composed FastMCP server with all video tools bound to *store*."""
@@ -185,6 +162,11 @@ def build_mcp(store: ChunkStore, out_dir: pathlib.Path) -> "FastMCP":
         return {"path": str(out_path), "size": len(data), "start_us": start_us, "end_us": end_us}
 
     return mcp
+
+
+def build_app(store: ChunkStore, out_dir: pathlib.Path):
+    """Return the ASGI app serving the FastMCP HTTP transport at /mcp."""
+    return build_mcp(store, out_dir).http_app(path="/mcp")
 
 
 def run() -> None:

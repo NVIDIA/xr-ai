@@ -5,12 +5,12 @@ What this starts
 ----------------
   hub     — XR-Media-Hub (video recording enabled via xr_media_hub.yaml)
   stt     — STT server (parakeet-tdt-0.6b-v3)
-  mcp     — Composed MCP server: mounts transcript + video skills into one
-            FastMCP instance (skills selected via mcp_server.yaml)
-  worker  — mcp_agent_worker: VAD → STT → POST /ingest → mcp server
+  mcp     — Composed pure-FastMCP server: mounts transcript + video sub-servers
+            into one FastMCP instance at /mcp (no REST endpoints)
+  worker  — mcp_agent_worker: VAD → STT → MCP transcript_add_transcript
 
 MCP endpoint: http://localhost:8200/mcp
-  Tools: transcript_*, video_* (whichever skills are enabled in mcp_server.yaml)
+  Tools: transcript_*, video_*
 
 How to run (from agent-samples/mcp-agent/):
     uv sync && uv run mcp_agent

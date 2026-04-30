@@ -32,17 +32,18 @@ xr-media-hub  (server-runtime/)
     PyNvVideoCodec >=1.0 (NVENC H.264 encoder; used when video_recording.enabled: true)
 
 transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
-    └── fastapi >=0.111
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
     └── pyyaml >=6.0
-    Storage: JSONL files per participant in configurable transcripts_dir
+    Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
+    Storage: JSONL files per participant in configurable transcripts_dir.
 
 video-mcp-server  (agent-mcp-servers/video-mcp/)
+    └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
-    └── httpx >=0.27
     └── pyyaml >=6.0
-    Wraps the hub video HTTP API (GET /video) as an MCP tool
+    Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
+    Reads NVENC chunks written by the hub directly from disk.
 
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
@@ -120,8 +121,8 @@ piper-tts-server  (tts/piper/)
 | `stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
-| `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | JSONL storage + FastMCP |
-| `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP → hub video API |
+| `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
+| `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -168,10 +169,13 @@ Continuous STT → transcript ingest + MCP-accessible transcript and video query
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `mcp-agent` | `xr-ai-launcher` | — |
-| Worker | `mcp-agent-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, pyyaml >=6.0 |
+| Worker | `mcp-agent-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
+| MCP server | `mcp-server` | `transcript-mcp-server`, `video-mcp-server` | fastmcp >=0.4, uvicorn[standard] >=0.29, pyyaml >=6.0 |
 
-Uses stt-server (8103), transcript-mcp-server (8200), video-mcp-server (8210).
-Hub video recording requires `PyNvVideoCodec` (dep of xr-media-hub; included in `uv sync`).
+Composed pure-FastMCP server at port 8200 mounts `transcript_*` and `video_*`
+tools at `/mcp`. Worker reaches it via `fastmcp.Client`; uses STT (8103) for
+transcription. Hub video recording requires `PyNvVideoCodec` (dep of
+`xr-media-hub`; included in `uv sync`).
 
 ---
 

@@ -235,13 +235,13 @@ async with httpx.AsyncClient() as client:
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
 - **tts/piper** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
-- **transcript-mcp-server** exposes two interfaces on port 8200:
-  - `POST /ingest` — non-MCP HTTP endpoint for workers to push timestamped transcripts.
-  - `/mcp` — FastMCP StreamableHTTP endpoint with tools `query_transcripts` and
-    `list_participants`.  Transcripts persist as JSONL files across server restarts.
-- **video-mcp-server** wraps the hub video query HTTP API (port 8090) as an MCP tool
-  (`query_video`) on port 8210.  Requires hub video recording to be enabled via
-  `video_recording.enabled: true` in `xr_media_hub.yaml`.
+- **transcript-mcp-server** is pure FastMCP at `/mcp` on port 8200. Tools:
+  `query_transcripts`, `add_transcript` (worker ingest), `list_participants`,
+  `get_transcript_stats`. Transcripts persist as JSONL files across restarts.
+- **video-mcp-server** is pure FastMCP at `/mcp` on port 8210. Tools:
+  `list_recording_participants`, `get_video_stats`, `query_video`. Reads the
+  hub's NVENC chunks directly from disk — requires hub video recording
+  enabled via `video_recording.enabled: true` in `xr_media_hub.yaml`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship with `cloudxr-agent` or `mcp-agent` as examples.
   Copy them to other sample roots and adjust `model_cache` (`../../models` resolves
@@ -607,6 +607,32 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-29 — MCP servers go pure FastMCP
+
+`transcript-mcp-server`, `video-mcp-server`, and the composed `mcp-server`
+in `agent-samples/mcp-agent/` no longer wrap a FastAPI app. Each runs the
+`FastMCP.http_app(path="/mcp")` Starlette app directly under uvicorn.
+
+- All worker ingress is now an MCP tool call. Transcript ingest is the new
+  `transcript_add_transcript` tool (replaces `POST /ingest`); stats fetches
+  use the existing `transcript_get_transcript_stats` / `video_get_video_stats`
+  tools (replace the `/transcript/stats/{pid}` and `/video/stats/{pid}` REST
+  routes).
+- The composed `mcp-server` no longer reads a `skills:` config block — both
+  sub-servers are always mounted; their per-server config lives at the top
+  level of `mcp_server.yaml` under `transcript:` and `video:`.
+- `/health` is gone. The mcp-agent worker's readiness probe now uses
+  `fastmcp.Client.list_tools()` against `/mcp` to confirm the server is
+  serving (a stronger guarantee than a 200 from `/health` ever was).
+- Drops the `fastapi` and `pydantic` runtime dependencies on transcript-mcp,
+  video-mcp, and the composed mcp-server. Worker gains a `fastmcp>=0.4`
+  dependency.
+
+**Why:** the dual REST + MCP surface had no value once workers got an MCP
+client. Two interfaces meant two contracts to keep in sync, two error-
+handling paths, and two readiness checks. Pure FastMCP is one contract,
+one error model, and a stronger readiness check via `list_tools()`.
 
 ### 2026-04-29 — Participant-keyed agent subscriptions
 
