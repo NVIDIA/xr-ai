@@ -87,9 +87,10 @@ final class AppModel {
             guard let self, self.session === newSession else { return }
             self.agentStatus = status
         }
-        newSession.onDataReceived = { [weak self, weak newSession] data in
+        newSession.onDataReceived = { [weak self, weak newSession] topic, data in
             guard let self, self.session === newSession else { return }
-            let text = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
+            let body = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
+            let text = topic.isEmpty ? body : "[\(topic)] \(body)"
             self.receivedMessages.insert(ReceivedMessage(text: text), at: 0)
         }
 

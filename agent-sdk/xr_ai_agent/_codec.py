@@ -14,7 +14,8 @@ from typing import Any, Callable
 import msgpack
 
 from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
-                     FrameData, FrameRequest, FrameSignal, MsgType, ParticipantEvent, PixelFormat)
+                     FrameData, FrameRequest, FrameSignal, MsgType, ParticipantEvent,
+                     PixelFormat, ReturnAudioFlush, RosterRequest)
 
 _TYPE_HDR = struct.Struct("=B")
 
@@ -93,3 +94,9 @@ register_encoder(MsgType.FRAME_DATA,
 register_decoder(MsgType.FRAME_DATA,
                  lambda p: FrameData(p[0], p[1], p[2], p[3], PixelFormat(p[4]),
                                      bytes(p[5]), p[6], p[7]))
+
+register_encoder(MsgType.RETURN_AUDIO_FLUSH, lambda m: [m.participant_id])
+register_decoder(MsgType.RETURN_AUDIO_FLUSH, lambda p: ReturnAudioFlush(p[0]))
+
+register_encoder(MsgType.ROSTER_REQUEST, lambda _m: [])
+register_decoder(MsgType.ROSTER_REQUEST, lambda _p: RosterRequest())

@@ -89,7 +89,7 @@
  * `StreamSession` sets this property before calling `connect()`.
  *
  * @name StreamingBackend#onDataReceived
- * @type {((data: ArrayBuffer | Uint8Array) => void) | null}
+ * @type {((topic: string, data: Uint8Array) => void) | null}
  */
 
 /**

@@ -345,7 +345,7 @@ async function connect() {
     render();
   };
 
-  newSession.onDataReceived = (data) => {
+  newSession.onDataReceived = (topic, data) => {
     const text = (() => {
       try {
         return new TextDecoder().decode(data);
@@ -355,7 +355,7 @@ async function connect() {
     })();
     model.receivedMessages.unshift({
       id:        crypto.randomUUID(),
-      text,
+      text:      topic ? `[${topic}] ${text}` : text,
       timestamp: new Date(),
     });
     render();

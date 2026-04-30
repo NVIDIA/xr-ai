@@ -8,9 +8,28 @@ RETURN_AUDIO, and FRAME_REQUEST back to the hub.
 Works for any downstream processing workload — analytics, ML inference,
 transcription, echo, recording — not just agentic pipelines.
 
-A single ProcessorEndpoint instance serves all participants simultaneously.
-It maintains its own connected-participant set so processors always know
-who is present without having to track participant events manually.
+Subscription model
+------------------
+Participants are the unit of subscription. By default the endpoint
+subscribes to every participant who joins (and unsubscribes on leave),
+giving each agent the full inbound stream — data, audio, and video — for
+every client. Two knobs control this:
+
+* ``filter`` — a :class:`Subscribe` flag that drops whole categories
+  (``DATA`` / ``AUDIO`` / ``VIDEO``) at the ZMQ kernel level for
+  efficiency. Default is ``Subscribe.ALL``. Set to e.g.
+  ``Subscribe.DATA | Subscribe.AUDIO`` to skip video frames.
+* ``auto_subscribe`` — when ``True`` (default), the endpoint installs an
+  internal participant handler that calls ``subscribe(pid)`` on join and
+  ``unsubscribe(pid)`` on leave. Set to ``False`` for agents that only
+  service a fixed set of participants — call ``subscribe(pid)`` yourself.
+
+Endpoints created mid-session use a roster request to learn about
+participants who joined before they did. The hub re-publishes
+``PARTICIPANT_EVENT(joined=True)`` for every current pid, so already-
+connected pids are auto-subscribed retroactively. The replays go on the
+regular ``participant`` topic; keep your ``on_participant`` callbacks
+idempotent.
 
 Video frame access is two-step:
   1. on_frame callback receives FrameSignal metadata (always, at full rate).
@@ -33,6 +52,7 @@ import json
 import logging
 import os
 import time
+from enum import Flag, auto
 from typing import Awaitable, Callable
 
 import zmq
@@ -40,7 +60,8 @@ import zmq.asyncio
 
 from ._codec import decode, encode
 from ._types import (AudioChunk, DataMessage, FrameData, FrameRequest,
-                     FrameSignal, MsgType, ParticipantEvent)
+                     FrameSignal, MsgType, ParticipantEvent, ReturnAudioFlush,
+                     RosterRequest)
 
 log = logging.getLogger(__name__)
 
@@ -50,46 +71,112 @@ AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
 DataCallback        = Callable[[DataMessage],      Awaitable[None]]
 ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
 
-_DEFAULT_TOPICS: tuple[bytes, ...] = (
-    b"video", b"video_data", b"audio", b"data", b"participant", b"control",
-)
-
 # Reserved topic for internal SDK status messages — not forwarded to app callbacks.
 AGENT_STATUS_TOPIC = "_agent.status"
 
 _FRAME_REQUEST_TIMEOUT = 1.0  # seconds before request_frame() gives up
+
+# Always-on global topics. ``participant`` is required for auto-subscribe to
+# work at all; ``control`` carries hub control messages and is cheap.
+_GLOBAL_TOPICS: tuple[bytes, ...] = (b"participant", b"control")
+
+
+class Subscribe(Flag):
+    """Per-participant message-category filter.
+
+    Each flag corresponds to a class of pid-scoped ZMQ topics on the hub
+    PUB socket. ``Subscribe.ALL`` (the default) gets every category for
+    each subscribed participant; combine flags with ``|`` to scope down.
+
+    Example
+    -------
+    ::
+
+        # Audio-only processor; ignores data + video on every pid.
+        ep = ProcessorEndpoint(..., filter=Subscribe.AUDIO)
+
+        # Per-pid override at subscribe time:
+        ep.subscribe("alice", filter=Subscribe.DATA)
+    """
+    DATA  = auto()  # `data.{pid}.*`
+    AUDIO = auto()  # `audio.{pid}.*`
+    VIDEO = auto()  # `video.{pid}.*` AND `video_data.{pid}.*` (signal + pixels)
+    ALL   = DATA | AUDIO | VIDEO
+
+
+# Topic-prefix categories used by the subscription machinery. Each Subscribe
+# flag maps to one or more pid-scoped ZMQ topic prefixes; the trailing
+# ``.{pid}.`` is appended at subscribe time so e.g. ``data.alice`` does not
+# accidentally match ``data.alice2.chat``.
+_PREFIXES_BY_FLAG: dict["Subscribe", tuple[bytes, ...]] = {
+    Subscribe.DATA:  (b"data",),
+    Subscribe.AUDIO: (b"audio",),
+    Subscribe.VIDEO: (b"video", b"video_data"),
+}
+
+
+def _prefixes(filter_: Subscribe, pid: str) -> list[bytes]:
+    """Return the pid-scoped ZMQ topic prefixes implied by ``filter_``."""
+    prefixes: list[bytes] = []
+    pid_bytes = pid.encode()
+    for flag, categories in _PREFIXES_BY_FLAG.items():
+        if filter_ & flag:
+            for cat in categories:
+                prefixes.append(cat + b"." + pid_bytes + b".")
+    return prefixes
 
 
 class ProcessorEndpoint:
     """
     Downstream IPC endpoint for data processors.
 
-    Receives video signals, audio, data, and participant events from the hub.
-    Maintains a live set of connected participants updated automatically as
-    join/leave events arrive. Can send return data, audio, and frame requests
-    back to the hub via the PUSH socket.
+    See the module docstring for the subscription model.
+
+    ::
 
         ep = ProcessorEndpoint(
             sub_addr="ipc:///tmp/xr_hub_pub",
             push_addr="ipc:///tmp/xr_hub_in",
         )
-        ep.on_frame(handle_frame_signal)
         ep.on_audio(handle_audio)
         ep.on_data(handle_data)
         ep.on_participant(handle_participant)  # optional — set is auto-maintained
         await ep.run()
+
+    Audio-only processor that ignores video frames at the kernel level::
+
+        ep = ProcessorEndpoint(..., filter=Subscribe.AUDIO | Subscribe.DATA)
+
+    Single-client agent — opt out of auto-subscribe and pin one pid::
+
+        ep = ProcessorEndpoint(..., auto_subscribe=False)
+        ep.subscribe("alice")  # may be called before alice has joined
     """
 
-    def __init__(self, sub_addr: str, push_addr: str) -> None:
+    def __init__(
+        self,
+        sub_addr:        str,
+        push_addr:       str,
+        *,
+        auto_subscribe:  bool = True,
+        filter:          Subscribe = Subscribe.ALL,
+    ) -> None:
         ctx = zmq.asyncio.Context.instance()
 
         self._sub: zmq.asyncio.Socket = ctx.socket(zmq.SUB)
         self._sub.connect(sub_addr)      # ZMQ retries until the hub binds — startup order is irrelevant
-        for t in _DEFAULT_TOPICS:
+        for t in _GLOBAL_TOPICS:
             self._sub.setsockopt(zmq.SUBSCRIBE, t)
 
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
         self._push.connect(push_addr)    # same — outbound messages queue until hub is ready
+
+        self._auto_subscribe = auto_subscribe
+        self._default_filter = filter
+
+        # pid → currently-applied filter. Tracks which subscriptions are
+        # live on the SUB socket so subscribe()/unsubscribe() are idempotent.
+        self._subscribed: dict[str, Subscribe] = {}
 
         self._participants: set[str] = set()
 
@@ -113,6 +200,57 @@ class ProcessorEndpoint:
         """Participant IDs currently connected to the hub, auto-updated."""
         return frozenset(self._participants)
 
+    @property
+    def subscribed_participants(self) -> frozenset[str]:
+        """Participant IDs this endpoint currently has live SUBSCRIBEs for.
+
+        With ``auto_subscribe=True`` this tracks ``connected_participants``.
+        With ``auto_subscribe=False`` it reflects whatever the caller has
+        explicitly subscribed to via :meth:`subscribe`.
+        """
+        return frozenset(self._subscribed)
+
+    # ── subscription primitives ──────────────────────────────────────────────
+
+    def subscribe(self, participant_id: str,
+                  *, filter: Subscribe | None = None) -> None:
+        """Subscribe to (a subset of) traffic for *participant_id*.
+
+        Idempotent. Calling with a different ``filter`` than a previous
+        call updates the live subscriptions — the diff is unsubscribed
+        and the new categories are subscribed. Subscribing to a pid who
+        is not yet connected is fine; ZMQ holds the SUBSCRIBE until
+        matching traffic arrives.
+
+        Parameters
+        ----------
+        participant_id :
+            Target participant.
+        filter :
+            Categories to receive. Defaults to the constructor ``filter``.
+        """
+        new_filter = filter if filter is not None else self._default_filter
+        old_filter = self._subscribed.get(participant_id, Subscribe(0))
+
+        added   = new_filter & ~old_filter
+        removed = old_filter & ~new_filter
+
+        for pre in _prefixes(removed, participant_id):
+            self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
+        for pre in _prefixes(added, participant_id):
+            self._sub.setsockopt(zmq.SUBSCRIBE, pre)
+
+        if new_filter:
+            self._subscribed[participant_id] = new_filter
+        else:
+            self._subscribed.pop(participant_id, None)
+
+    def unsubscribe(self, participant_id: str) -> None:
+        """Drop every subscription for *participant_id*. Idempotent."""
+        old = self._subscribed.pop(participant_id, Subscribe(0))
+        for pre in _prefixes(old, participant_id):
+            self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
+
     # ── callback registration ─────────────────────────────────────────────────
 
     def on_frame(self,       cb: FrameSignalCallback) -> None: self._frame_cbs.append(cb)
@@ -128,6 +266,32 @@ class ProcessorEndpoint:
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
         await self._push.send(encode(MsgType.RETURN_AUDIO, chunk))
+
+    async def flush_return_audio(self, participant_id: str) -> None:
+        """
+        Drop any return audio currently queued at the hub for *participant_id*.
+
+        Use to cleanly interrupt the agent's own audio playback (e.g. when
+        cancelling an in-flight TTS response on a new user query). Audio that
+        has already left the hub for the client may still play out for the
+        duration of the client's jitter buffer (~100 ms).
+        """
+        await self._push.send(encode(
+            MsgType.RETURN_AUDIO_FLUSH,
+            ReturnAudioFlush(participant_id=participant_id),
+        ))
+
+    async def request_roster(self) -> None:
+        """
+        Ask the hub to re-publish ``PARTICIPANT_EVENT(joined=True)`` for
+        every currently-connected participant.
+
+        Useful when starting up mid-session so the auto-subscribe handler
+        can pick up clients who joined before this endpoint connected.
+        Called automatically once at the start of :meth:`run` when
+        ``auto_subscribe=True``.
+        """
+        await self._push.send(encode(MsgType.ROSTER_REQUEST, RosterRequest()))
 
     async def set_status(self, status: str,
                          participant_id: str | None = None) -> None:
@@ -203,9 +367,23 @@ class ProcessorEndpoint:
 
     # ── receive loop ──────────────────────────────────────────────────────────
 
+    # Time to wait for the SUB↔PUB handshake to complete before sending
+    # the first roster request. ZMQ drops PUB messages whose topic has no
+    # registered SUBSCRIBE yet (the slow-joiner problem); without this
+    # window, an endpoint started mid-session can miss the roster replay
+    # for ``participant`` events.
+    _ROSTER_HANDSHAKE_WAIT = 0.1
+
     async def run(self) -> None:
         """Receive and dispatch messages until stop() is called."""
         self._running = True
+
+        # Ask the hub to replay PARTICIPANT_EVENTs for already-connected
+        # pids so the auto-subscribe handler can scoop them up. Safe even
+        # when there are none: the hub responds with zero events.
+        if self._auto_subscribe:
+            asyncio.create_task(self._catch_up_roster())
+
         while self._running:
             try:
                 _topic, raw = await self._sub.recv_multipart()
@@ -221,6 +399,17 @@ class ProcessorEndpoint:
                 await self._dispatch(type_id, msg)
             except Exception:
                 log.exception("Error dispatching message")
+
+    async def _catch_up_roster(self) -> None:
+        """Send a roster request after the SUB↔PUB handshake settles."""
+        try:
+            await asyncio.sleep(self._ROSTER_HANDSHAKE_WAIT)
+            if self._running:
+                await self.request_roster()
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            log.exception("roster catch-up failed")
 
     async def _dispatch(self, type_id: int, msg) -> None:
         if type_id == MsgType.FRAME_SIGNAL:
@@ -243,11 +432,17 @@ class ProcessorEndpoint:
             for cb in self._data_cbs:
                 self._spawn(cb(msg))
         elif type_id == MsgType.PARTICIPANT_EVENT:
-            # Update participant set before spawning callbacks.
+            # Update participant set + auto-subscribe state synchronously
+            # before spawning user callbacks so callbacks observe a
+            # consistent roster / subscription view.
             if msg.joined:
                 self._participants.add(msg.participant_id)
+                if self._auto_subscribe:
+                    self.subscribe(msg.participant_id)
             else:
                 self._participants.discard(msg.participant_id)
+                if self._auto_subscribe:
+                    self.unsubscribe(msg.participant_id)
             for cb in self._participant_cbs:
                 self._spawn(cb(msg))
         else:

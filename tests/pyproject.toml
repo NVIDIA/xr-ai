@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-tests"
+version = "0.1.0"
+description = "Multi-client / multi-agent integration tests for xr-ai."
+requires-python = ">=3.11"
+dependencies = [
+    # Pulled in via editable installs of the workspace packages.
+    "xr-ai-agent",
+    "xr-media-hub",
+    # Test runner.
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "numpy>=1.24",
+]
+
+[tool.uv.sources]
+xr-ai-agent  = { path = "../agent-sdk",      editable = true }
+xr-media-hub = { path = "../server-runtime", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths    = ["."]

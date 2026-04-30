@@ -13,12 +13,20 @@ cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in per samp
 ai-services/        # OpenAI-compatible AI inference servers (VLM, STT, TTS)
 agent-mcp-servers/  # MCP adapters: oxr, render, client, xr-media, transcript, video
 agent-samples/      # End-to-end agent demos
+tests/              # Multi-client / multi-agent integration tests
 docs/               # Design docs
 ```
 
 Key design decisions:
+- **One hub, many clients, many agents.** A single hub instance fans the
+  inbound stream out to every connected ``ProcessorEndpoint`` (agent) and
+  routes return traffic back to the originating client only — never to peers.
 - **XR-Media-Hub** is transport-agnostic at its IPC boundary. Agents connect via IPC only.
 - **LiveKit** is an internal transport detail — not exposed to the agent layer.
+  When LiveKit is the transport, return audio is published as one track per
+  participant (`xr-hub-return-{pid}`) with subscribe permissions restricted to
+  that participant; return data uses ``destination_identities`` for the same
+  reason. Agents never need to know.
 - **`agent-sdk/`** (`xr-ai-agent`) contains only the agent-facing IPC layer. Its sole
   runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI, or uvicorn.
 - MCP servers are the agent's only interface to XR data and rendering.
@@ -386,6 +394,7 @@ import signal
 
 from xr_ai_agent import (          # ← import only what you use
     AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint,
+    Subscribe,                     # ← only needed when scoping subscriptions
 )
 
 log = logging.getLogger("<snake_name>")
@@ -598,6 +607,71 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-29 — Participant-keyed agent subscriptions
+
+`ProcessorEndpoint` now models subscriptions as **participants**, not topic
+prefixes. The unit of opt-in is "I want everything for participant X";
+categories (data / audio / video) are an opt-out filter inside that.
+
+- New `Subscribe` flag enum (`DATA`, `AUDIO`, `VIDEO`, `ALL`) replaces the
+  prior raw-bytes `topics=` parameter.
+- `ProcessorEndpoint(auto_subscribe=True, filter=Subscribe.ALL)` is the
+  default. The endpoint installs an internal participant handler that
+  calls `subscribe(pid)` on join and `unsubscribe(pid)` on leave —
+  agents see every client's full inbound stream out of the box.
+- `ep.subscribe(pid, filter=...)` and `ep.unsubscribe(pid)` are the
+  primitives. Idempotent. Calling subscribe with a different filter
+  diffs the active subscriptions. Subscribing before the pid joins is
+  fine — ZMQ holds the SUBSCRIBE.
+- `auto_subscribe=False` is the escape hatch for single-client agents:
+  the agent only sees `participant` + `control` until it explicitly
+  subscribes. Use `ep.subscribed_participants` to introspect live state.
+- New `ROSTER_REQUEST` IPC type (`MsgType.ROSTER_REQUEST = 12`).
+  `request_roster()` (called automatically once at the start of
+  `run()` when auto-subscribe is on) makes the hub re-publish
+  `PARTICIPANT_EVENT(joined=True)` for every current pid so endpoints
+  started mid-session catch up. Replays go on the regular `participant`
+  topic, so other endpoints' `on_participant` callbacks may fire again
+  for known pids — keep them idempotent.
+- Topic prefixes always include the trailing `.` so `data.alice.` does
+  not bleed into `data.alice2.chat`. The helper centralises this so
+  individual agents never type the prefix themselves.
+
+**Why:** the previous bytes-tuple `topics=` parameter forced agents to
+know hub-internal topic conventions, made per-pid scoping awkward
+(write your own join handler, remember the trailing dot), and didn't
+solve the mid-session catch-up problem. The new model treats the
+participant as the unit of subscription, which is what every real
+agent actually wants — most just take the default broadcast; the few
+that need scoping flip `auto_subscribe=False` and call `subscribe`.
+
+### 2026-04-29 — Multi-client / multi-agent isolation; topic surface; tests
+
+The hub formally supports many clients and many agents at once. The IPC and
+LiveKit transport layers were extended so:
+
+- **Per-participant return audio** — `RoomClient` now publishes one
+  `xr-hub-return-{pid}` audio track per active participant, with subscribe
+  permissions restricted via `set_track_subscription_permissions` so a
+  participant can only hear their own return audio. Tracks are unpublished
+  on participant leave.
+- **Targeted return data** — `RoomClient.send_return_data` passes
+  `destination_identities=[participant_id]` so return text/binary is no
+  longer broadcast to other participants in the room.
+- **`ReturnAudioFlush` control message** (`MsgType.RETURN_AUDIO_FLUSH = 11`)
+  added to `xr-ai-agent`. `ProcessorEndpoint.flush_return_audio(pid)`
+  routes through the hub on `return_audio_flush.<pid>` to the connector,
+  which calls `AudioSource.clear_queue()` for that pid only. Used to
+  cleanly interrupt agent TTS playback when a new query arrives.
+- **StreamKit `onDataReceived(topic, data)`** — the previously dropped
+  data-channel `topic` is now surfaced to the application across web and
+  iOS/visionOS. The reserved `_agent.status` topic is still intercepted
+  internally and never reaches `onDataReceived`.
+- **`tests/` top-level suite** — multi-client / multi-agent coverage over
+  the real IPC layer (no Docker / LiveKit needed). CI workflow at
+  `.github/workflows/tests.yml` runs the suite on every push and PR
+  across Python 3.11 and 3.12.
 
 ### 2026-04-28 — llm-server added (pure-text LLM)
 

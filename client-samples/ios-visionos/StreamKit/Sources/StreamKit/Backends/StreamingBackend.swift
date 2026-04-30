@@ -36,7 +36,7 @@ import Foundation
 /// final class MyBackend: StreamingBackend {
 ///
 ///     var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
-///     var onDataReceived: (@Sendable (Data) -> Void)?
+///     var onDataReceived: (@Sendable (_ topic: String, _ data: Data) -> Void)?
 ///     var onAgentStatus: (@Sendable (String) -> Void)?
 ///
 ///     func connect(config: SessionConfig) async throws {
@@ -63,7 +63,7 @@ public protocol StreamingBackend: AnyObject, Sendable {
     var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)? { get set }
 
     /// Fired when binary data arrives from the remote end.
-    var onDataReceived: (@Sendable (Data) -> Void)? { get set }
+    var onDataReceived: (@Sendable (_ topic: String, _ data: Data) -> Void)? { get set }
 
     /// Fired when an agent publishes a status update.
     /// Common values: `"idle"`, `"processing"`.

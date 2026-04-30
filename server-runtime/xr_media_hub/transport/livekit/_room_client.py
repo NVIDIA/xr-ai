@@ -20,7 +20,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 from livekit import rtc
 
-from xr_media_hub.ipc import AudioChunk, ConnectorEndpoint, DataMessage, PixelFormat
+from xr_media_hub.ipc import (
+    AudioChunk,
+    ConnectorEndpoint,
+    DataMessage,
+    PixelFormat,
+    ReturnAudioFlush,
+)
 
 from ._token import make_client_token
 from .config import LiveKitConnectorConfig
@@ -49,7 +55,10 @@ class RoomClient:
         # track SID → streaming task; lets us cancel exactly the right task on unsubscribe.
         self._track_tasks: dict[str, asyncio.Task] = {}
         self._stop = asyncio.Event()
-        self._return_audio_source: rtc.AudioSource | None = None
+        # Per-participant return audio: pid → (AudioSource, LocalTrackPublication).
+        # Lazy-published on first send_return_audio for a pid; subscribe permissions
+        # restrict each track so only the target participant can hear it.
+        self._return_audio: dict[str, tuple[rtc.AudioSource, rtc.LocalTrackPublication]] = {}
 
         # ── room event handlers ───────────────────────────────────────────────
 
@@ -156,35 +165,34 @@ class RoomClient:
             t.cancel()
         await asyncio.gather(*self._track_tasks.values(), return_exceptions=True)
         self._track_tasks.clear()
-        if self._return_audio_source is not None:
-            self._return_audio_source = None
+        self._return_audio.clear()
         await self._room.disconnect()
 
     async def send_return_data(self, msg: DataMessage) -> None:
-        """Publish data back to all room participants via LiveKit data channel."""
+        """Publish data to the target participant via LiveKit data channel."""
         if not self._room:
             return
         try:
             await self._room.local_participant.publish_data(
-                msg.data, reliable=True, topic=msg.topic or ""
+                msg.data,
+                reliable=True,
+                topic=msg.topic or "",
+                destination_identities=[msg.participant_id],
             )
         except Exception:
             log.exception("send_return_data failed")
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
-        """Push return audio into the LiveKit room via a shared AudioSource."""
+        """Push return audio into the participant's dedicated return track."""
         if not self._room:
             return
-        if self._return_audio_source is None:
-            self._return_audio_source = rtc.AudioSource(
-                sample_rate=chunk.sample_rate,
-                num_channels=chunk.channels,
-            )
-            track = rtc.LocalAudioTrack.create_audio_track(
-                "xr-hub-return", self._return_audio_source
-            )
-            await self._room.local_participant.publish_track(track)
-            log.info("Return audio track published to room")
+        pid   = chunk.participant_id
+        entry = self._return_audio.get(pid)
+        if entry is None:
+            entry = await self._publish_return_track(pid, chunk.sample_rate, chunk.channels)
+            self._return_audio[pid] = entry
+            self._refresh_return_track_permissions()
+        src, _pub = entry
 
         pcm_f32 = np.frombuffer(chunk.data, dtype=np.float32)
         pcm_i16 = (np.clip(pcm_f32, -1.0, 1.0) * 32767).astype(np.int16)
@@ -194,7 +202,42 @@ class RoomClient:
             sample_rate=chunk.sample_rate,
             num_channels=chunk.channels,
         )
-        await self._return_audio_source.capture_frame(frame)
+        await src.capture_frame(frame)
+
+    async def flush_return_audio(self, flush: ReturnAudioFlush) -> None:
+        """Drop any audio queued in *flush.participant_id*'s return AudioSource."""
+        entry = self._return_audio.get(flush.participant_id)
+        if entry is None:
+            return
+        src, _pub = entry
+        src.clear_queue()
+
+    async def _publish_return_track(
+        self, pid: str, sample_rate: int, channels: int,
+    ) -> tuple[rtc.AudioSource, rtc.LocalTrackPublication]:
+        src   = rtc.AudioSource(sample_rate=sample_rate, num_channels=channels)
+        track = rtc.LocalAudioTrack.create_audio_track(f"xr-hub-return-{pid}", src)
+        pub   = await self._room.local_participant.publish_track(track)
+        log.info("Return audio track published: pid=%r  sid=%r", pid, pub.sid)
+        return src, pub
+
+    def _refresh_return_track_permissions(self) -> None:
+        """
+        Each participant may subscribe only to their own return track.
+        Recomputed whenever the per-pid track set changes.
+        """
+        perms = [
+            rtc.ParticipantTrackPermission(
+                participant_identity=pid,
+                allow_all=False,
+                allowed_track_sids=[pub.sid],
+            )
+            for pid, (_src, pub) in self._return_audio.items()
+        ]
+        self._room.local_participant.set_track_subscription_permissions(
+            allow_all_participants=False,
+            participant_permissions=perms,
+        )
 
     # ── participant events ────────────────────────────────────────────────────
 
@@ -205,6 +248,14 @@ class RoomClient:
     async def _handle_left(self, participant: rtc.RemoteParticipant) -> None:
         log.info("Participant left: %r", participant.identity)
         await self._ep.notify_participant_left(participant.identity, _now_us())
+        entry = self._return_audio.pop(participant.identity, None)
+        if entry is not None:
+            _src, pub = entry
+            try:
+                await self._room.local_participant.unpublish_track(pub.sid)
+            except Exception:
+                log.exception("unpublish_track failed for %r", participant.identity)
+            self._refresh_return_track_permissions()
 
     # ── media streams ─────────────────────────────────────────────────────────
 

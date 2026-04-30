@@ -22,7 +22,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     // MARK: StreamingBackend hooks
 
     public var onConnectionStateChanged: (@Sendable (ConnectionState) -> Void)?
-    public var onDataReceived: (@Sendable (Data) -> Void)?
+    public var onDataReceived: (@Sendable (_ topic: String, _ data: Data) -> Void)?
     public var onAgentStatus: (@Sendable (String) -> Void)?
 
     // MARK: Private constants
@@ -523,8 +523,7 @@ extension LiveKitBackend: RoomDelegate {
             }
             return
         }
-        // TODO: surface topic to the app alongside data so clients can filter by topic
-        onDataReceived?(data)
+        onDataReceived?(topic, data)
     }
 }
 

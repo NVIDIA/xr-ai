@@ -54,9 +54,10 @@ export class StreamSession {
   onConnectionStateChanged = null;
 
   /**
-   * Called whenever binary data is received from the remote end.
+   * Called whenever data is received from the remote end.
+   * `topic` identifies the logical channel; `data` is the raw payload.
    *
-   * @type {((data: Uint8Array) => void) | null}
+   * @type {((topic: string, data: Uint8Array) => void) | null}
    */
   onDataReceived = null;
 
@@ -219,8 +220,8 @@ export class StreamSession {
       this.onConnectionStateChanged?.(state);
     };
 
-    this.#backend.onDataReceived = (data) => {
-      this.onDataReceived?.(data);
+    this.#backend.onDataReceived = (topic, data) => {
+      this.onDataReceived?.(topic, data);
     };
 
     this.#backend.onAgentStatus = (status) => {

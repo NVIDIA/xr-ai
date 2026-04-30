@@ -12,6 +12,7 @@ within the CloudXR ecosystem.
 | Launcher | `launcher/` | stdlib-only process manager used by samples |
 | Agent interfaces | `agent-mcp-servers/` | MCP adapters for XR data & rendering |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
+| Tests | `tests/` | Multi-client / multi-agent integration tests |
 
 Each sample is self-contained: running it starts the hub and every other
 required process automatically. No separate server launch step.
@@ -161,6 +162,26 @@ sudo firewall-cmd --reload
 ```
 
 ---
+
+## Tests
+
+`tests/` contains the multi-client / multi-agent integration suite. The
+core IPC tests run without Docker or LiveKit — they spin up real
+`HubEndpoint` / `ConnectorEndpoint` / `ProcessorEndpoint` instances over
+`ipc://` sockets and verify routing, isolation, and the new
+`ReturnAudioFlush` control path.
+
+```bash
+cd xr-ai/tests
+uv sync
+uv run pytest -v
+```
+
+See [`tests/README.md`](tests/README.md) for the full breakdown.
+
+CI runs the suite on every push and pull request via
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml) on Python
+3.11 and 3.12.
 
 ## Design
 

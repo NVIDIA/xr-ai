@@ -48,6 +48,15 @@ cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
     └── pyyaml
 
+xr-ai-tests  (tests/)
+    └── xr-ai-agent   [editable: ../agent-sdk]
+    └── xr-media-hub  [editable: ../server-runtime]
+    └── pytest >=8.0
+    └── pytest-asyncio >=0.23
+    └── numpy >=1.24
+    Multi-client / multi-agent integration tests over the IPC layer.
+    Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
+
 vlm-server  (vlm-server/)
     └── torch >=2.2
     └── torchvision >=0.17
