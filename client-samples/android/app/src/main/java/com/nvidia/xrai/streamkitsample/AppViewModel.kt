@@ -41,7 +41,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     var host by mutableStateOf("192.168.1.100")
     var port by mutableStateOf("7880")
-    /** When true, use `wss://` for LiveKit and `https://` for the default token URL. */
+    /**
+     * When true, the default token URL uses `https://`. Has no effect on the
+     * LiveKit signaling socket — that is always plain `ws://` in the reference
+     * deployment.
+     */
     var secure by mutableStateOf(false)
     /** Pre-signed JWT token (alternative to tokenServerURL). */
     var tokenInput by mutableStateOf("")

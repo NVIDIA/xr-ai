@@ -53,9 +53,13 @@ data class LiveKitConfig(
     val port: Int = 7880,
 
     /**
-     * Use `wss://` for the LiveKit signaling WebSocket and `https://` for the
-     * default token endpoint. Set `false` for local / LAN connections that
-     * speak plain `ws://` and `http://`.
+     * Use `https://` for the default token endpoint. Set `false` when the
+     * token server speaks plain `http://`.
+     *
+     * The LiveKit signaling socket is **always** plain `ws://` in the xr-ai
+     * reference deployment (port 7880) — TLS terminates at the web/token
+     * server, not at LiveKit. This flag therefore does not affect the
+     * signaling URL.
      */
     val secure: Boolean = false,
 

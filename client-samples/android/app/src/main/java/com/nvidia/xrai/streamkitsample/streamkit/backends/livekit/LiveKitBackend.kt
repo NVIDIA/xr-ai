@@ -73,8 +73,10 @@ internal class LiveKitBackend(
 
         if (config.host.isBlank()) throw StreamError.InvalidHost(config.host)
 
-        val scheme = if (config.secure) "wss" else "ws"
-        val wsUrl = "$scheme://${config.host}:${config.port}"
+        // LiveKit signaling on port 7880 is plain ws:// in the xr-ai reference
+        // deployment — TLS only terminates at the web/token server. The
+        // `secure` flag therefore controls the token URL scheme only, not this.
+        val wsUrl = "ws://${config.host}:${config.port}"
 
         val token = when {
             !config.token.isNullOrBlank() -> config.token

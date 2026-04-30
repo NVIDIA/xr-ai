@@ -296,9 +296,9 @@ private fun ConnectionSection(vm: AppViewModel) {
             keyboardType = KeyboardType.Number,
             placeholder = "7880",
         )
-        // TLS toggle — controls both wss:// for LiveKit and https:// for the
-        // default token endpoint. Off for plain LAN deployments, on for any
-        // server reached over the public internet or a TLS-terminated proxy.
+        // HTTPS toggle for the default token endpoint. The LiveKit signaling
+        // socket on 7880 is always plain ws:// in the xr-ai reference
+        // deployment, so this only flips http:// ↔ https:// for the token URL.
         CardRow {
             Box(modifier = Modifier.alpha(fieldAlpha)) {
                 Row(
@@ -306,7 +306,7 @@ private fun ConnectionSection(vm: AppViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Use TLS",
+                        "HTTPS token",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.weight(1f))
