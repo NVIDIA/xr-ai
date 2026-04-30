@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 name = "xr-ai-tests"
 version = "0.1.0"
 description = "Multi-client / multi-agent integration tests for xr-ai."
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-agent",

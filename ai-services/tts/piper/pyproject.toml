@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 [project]
 name = "piper-tts-server"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "piper-tts>=1.4.0",
     "huggingface-hub>=0.22",

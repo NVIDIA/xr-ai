@@ -12,6 +12,19 @@
 
 ---
 
+## Python version
+
+Every `pyproject.toml` in this repo pins `requires-python = ">=3.11,<3.13"`.
+The upper bound exists because `PyNvVideoCodec` (used by `xr-media-hub` and
+`video-mcp-server` for NVENC encode / NVDEC decode) does not yet publish wheels
+for Python 3.13. With the cap in place, `uv sync` will pick 3.12 even on a host
+where 3.13 is also installed. Loosen the upper bound only after
+`PyNvVideoCodec` ships 3.13 wheels.
+
+CI matrix: 3.11 and 3.12 (`.github/workflows/tests.yml`).
+
+---
+
 ## Internal packages
 
 ```

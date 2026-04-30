@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 [project]
 name = "nemotron3-nano-llm-server"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     # vLLM provides the OpenAI-compatible HTTP server, the Qwen3-coder
     # tool-call parser, the nano_v3 reasoning parser plugin, and the
