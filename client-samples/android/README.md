@@ -10,7 +10,7 @@ Identical to the web client:
 |---|---|
 | Connection | Host / IP, port, JWT token or token-server URL, participant identity |
 | Audio | Start / stop microphone; three modes (Voice Processing, Software AEC, Raw) |
-| Camera | Start / stop camera; front / back selector |
+| Camera | Start / stop camera; selector auto-populated from Camera2 (front, back, any extra lens, USB cameras) |
 | Agent status | Live badge (`idle` / `processing`) driven by the `_agent.status` channel |
 | Data channel | Send Ping, send arbitrary UTF-8 messages |
 | Received messages | Scrollable list with per-message timestamps |

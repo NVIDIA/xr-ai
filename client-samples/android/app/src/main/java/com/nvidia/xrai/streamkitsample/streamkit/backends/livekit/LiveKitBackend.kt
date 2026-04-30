@@ -142,8 +142,14 @@ internal class LiveKitBackend(
             CameraConfig.CameraFacing.BACK  -> CameraPosition.BACK
         }
         // setCameraEnabled() reads the current videoTrackCaptureDefaults when it
-        // creates the track. Mutate the position there before flipping it on.
-        lp.videoTrackCaptureDefaults = lp.videoTrackCaptureDefaults.copy(position = position)
+        // creates the track. Apply both deviceId (if pinned) and position there
+        // before flipping it on. Per LocalVideoTrackOptions docs, deviceId is
+        // preferred — position is only the fallback when deviceId is null or
+        // not found.
+        lp.videoTrackCaptureDefaults = lp.videoTrackCaptureDefaults.copy(
+            deviceId = config.deviceId,
+            position = position,
+        )
         lp.setCameraEnabled(true)
     }
 

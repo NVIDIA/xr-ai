@@ -59,7 +59,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Camera settings ────────────────────────────────────────────────────────
 
-    var cameraFacing by mutableStateOf(CameraConfig.CameraFacing.BACK)
+    /** All cameras visible to Camera2 on this device. Populated at construction. */
+    val availableCameras: List<CameraInfo> = enumerateCameras(application.applicationContext)
+
+    /**
+     * Currently selected Camera2 id. Defaults to the first back-facing camera
+     * if any, else the first camera, else null (device has no camera).
+     */
+    var selectedCameraId by mutableStateOf(
+        availableCameras.firstOrNull { it.facing == CameraConfig.CameraFacing.BACK }?.id
+            ?: availableCameras.firstOrNull()?.id
+    )
 
     // ── Live state ─────────────────────────────────────────────────────────────
 
@@ -188,7 +198,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun startCamera() {
         viewModelScope.launch {
             try {
-                session?.startCamera(CameraConfig(facing = cameraFacing))
+                val info = availableCameras.firstOrNull { it.id == selectedCameraId }
+                val facing = info?.facing ?: CameraConfig.CameraFacing.BACK
+                session?.startCamera(CameraConfig(deviceId = selectedCameraId, facing = facing))
                 isCameraActive = true
             } catch (e: Exception) {
                 lastError = e.message

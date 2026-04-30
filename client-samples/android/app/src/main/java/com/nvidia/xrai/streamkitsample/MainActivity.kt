@@ -79,7 +79,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
-import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -489,11 +488,13 @@ private fun MediaSection(vm: AppViewModel) {
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
         }
 
-        // Camera facing selector — hidden while camera is active
-        if (!vm.isCameraActive) {
-            CameraFacingRow(
-                facing = vm.cameraFacing,
-                onFacingChange = { vm.cameraFacing = it },
+        // Camera selector — auto-populated from CameraManager. Hidden while
+        // camera is active and when the device exposes no cameras.
+        if (!vm.isCameraActive && vm.availableCameras.isNotEmpty()) {
+            CameraSelectorRow(
+                cameras = vm.availableCameras,
+                selectedId = vm.selectedCameraId,
+                onSelect = { vm.selectedCameraId = it },
                 enabled = isConnected,
             )
         }
@@ -594,17 +595,14 @@ private fun AudioModeRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CameraFacingRow(
-    facing: CameraConfig.CameraFacing,
-    onFacingChange: (CameraConfig.CameraFacing) -> Unit,
+private fun CameraSelectorRow(
+    cameras: List<CameraInfo>,
+    selectedId: String?,
+    onSelect: (String) -> Unit,
     enabled: Boolean,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val options = listOf(
-        CameraConfig.CameraFacing.BACK to "Back (main)",
-        CameraConfig.CameraFacing.FRONT to "Front (selfie)",
-    )
-    val selectedLabel = options.firstOrNull { it.first == facing }?.second ?: "—"
+    val selectedLabel = cameras.firstOrNull { it.id == selectedId }?.displayName ?: "—"
 
     CardRow {
         Text(
@@ -632,11 +630,11 @@ private fun CameraFacingRow(
                 expanded = expanded && enabled,
                 onDismissRequest = { expanded = false },
             ) {
-                options.forEach { (facingOption, label) ->
+                cameras.forEach { camera ->
                     DropdownMenuItem(
-                        text = { Text(label) },
+                        text = { Text(camera.displayName) },
                         onClick = {
-                            onFacingChange(facingOption)
+                            onSelect(camera.id)
                             expanded = false
                         },
                     )

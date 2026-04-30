@@ -17,6 +17,15 @@ package com.nvidia.xrai.streamkitsample.streamkit.config
 data class CameraConfig(
     val enabled: Boolean = true,
     val facing: CameraFacing = CameraFacing.BACK,
+    /**
+     * Optional Camera2 camera id (e.g. `"0"`, `"1"`). When non-null, the
+     * backend pins capture to that exact camera and ignores [facing]. When
+     * null, the backend picks any camera matching [facing].
+     *
+     * Use this to choose between multiple cameras on the same side
+     * (e.g. wide vs. ultra-wide vs. telephoto on the back).
+     */
+    val deviceId: String? = null,
 ) {
 
     /**
