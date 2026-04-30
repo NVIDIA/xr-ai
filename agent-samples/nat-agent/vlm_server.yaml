@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# vlm-server configuration for nat-agent.
+# Auto-discovered by the launcher and passed as --config to vlm_server.
+#
+# vlm-server is reached only by vlm-mcp (port 8220) — the worker has no
+# direct VLM HTTP client. Swap the model here to swap the agent's vision
+# backend without touching any other component.
+
+model:       nvidia/Cosmos-Reason1-7B
+port:        8100
+model_cache: ../../models

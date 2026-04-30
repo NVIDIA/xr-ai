@@ -153,6 +153,7 @@ reasoning / hardware trade-offs documented below.
 | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 | vLLM (execvp shim) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → hub |
+| `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8220 | — | FastMCP → vlm-server (path → answer) |
 
 All model weights land in `models/` at the repo root (gitignored, shared across all
 servers).  Each YAML configures `model_cache` — resolved relative to the YAML file.
@@ -297,6 +298,13 @@ async with httpx.AsyncClient() as client:
   `get_frame_at_time` decodes via NVDEC and returns a PNG path.
   Requires hub video recording enabled via
   `video_recording.enabled: true` in `xr_media_hub.yaml`.
+- **vlm-mcp-server** is pure FastMCP at `/mcp` on port 8220 with one tool:
+  `ask_image(question, image_path)`. Reads a local PNG path, base64-encodes
+  it as JPEG, POSTs to vlm-server's OpenAI chat-completions endpoint, and
+  returns the model's answer text. Has **no** hub coupling and **no**
+  `xr-ai-agent` dep — image acquisition is the LLM's responsibility
+  (typically by calling `video-mcp.get_latest_frame` first and passing
+  the returned `path` into `ask_image`). Used by `nat-agent`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship with `mcp-agent` as examples.
   Copy them to other sample roots and adjust `model_cache` (`../../models` resolves
@@ -735,6 +743,74 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-30 — nat-agent: NAT tool-calling agent + path-based vlm-mcp
+
+Two changes that together add a NAT-driven voice + vision agent with a
+clean MCP separation of concerns.
+
+`agent-mcp-servers/vlm-mcp/` — new pure-FastMCP server at port 8220 with
+one tool: `ask_image(question, image_path)`. Reads a local PNG path,
+base64-encodes as JPEG, POSTs to vlm-server. **No** hub IPC subscription
+and **no** `xr-ai-agent` dep. Image acquisition is the LLM's job (typically
+by calling `video-mcp.get_latest_frame` first and passing the returned
+`path` into `ask_image`). The vlm-mcp on the Desktop reference
+(`pipecat-nat-nemotron3nano`) coupled to the hub directly via a FrameCache
++ ProcessorEndpoint and exposed `ask_camera(question)` — that's gone here.
+
+`agent-samples/nat-agent/` — new sample using NAT 1.6's `tool_calling_agent`
+workflow against the local nemotron3_nano LLM (port 8107). The full set of
+seven MCP tools (`ask_image` + six video-mcp tools) is exposed to the LLM
+verbatim via two `mcp_client` function groups (`vlm`, `vid`) — `tool_names`
+in NAT 1.6 accepts a `FunctionGroupRef` which expands to every accessible
+tool in the group, so no NAT-side `@register_function` wrappers are needed.
+participant_id flows into video-mcp tool calls via a per-turn
+`[Live participant_id: <pid>]` preamble that the worker prepends to the
+user message; the LLM reads it and passes it through.
+
+Pipecat handles full-duplex audio (STT → NAT → TTS) outside the agentic
+loop. Echo cancellation (TTS-into-mic feedback) is handled at the client
+audio input device, not the worker — the new sample drops `STTMuteFrame`
+plumbing, `set_muted`, and the playback-tail wait that pipecat-nat carried.
+Pipecat's `allow_interruptions=True` is kept for user-driven barge-in.
+
+Worker layout follows the AGENTS.md flat-module convention (no nested
+package, no `__init__.py`/`__main__.py`, absolute imports). The 13-file
+nested package from the Desktop reference is consolidated to 8 flat files:
+`nat_agent_worker.py`, `agent.py`, `audio.py`, `config.py`, `nat_backend.py`,
+`processors.py`, `services.py`, `transport.py`.
+
+NAT version pin: `nvidia-nat[langchain,mcp]>=1.6` (the prior `~=1.3` from
+the Desktop reference resolves to 1.6 in practice but the pin is now
+explicit). Note: `mcp_tool_wrapper` from the NAT 1.2 docs no longer
+exists in 1.6 — it was replaced by `mcp_client` function groups
+(NeMo-Agent-Toolkit PR #814, Sept 2025).
+
+**Why decouple vlm-mcp from the hub:** the agentic contract is "the LLM
+chooses how to bridge tools". Letting vlm-mcp pull its own frames hides
+that decision from the LLM, prevents past-frame queries (you'd need
+to add a separate `ask_image_at_time` tool to vlm-mcp), and tangles the
+two MCPs into a single conceptual unit. Path-based hand-off keeps the
+LLM in the driver's seat and lets vlm-mcp stay tiny (one tool, no IPC,
+no `xr-ai-agent` dep, ~150 LoC).
+
+**Why expose every MCP tool:** the LLM should pick the right one for the
+turn. `query_video` is included for completeness but the system prompt
+warns it returns H.264 the VLM can't read. The richer tool surface lets
+the LLM answer "what was on screen 30 s ago?" by chaining
+`get_video_stats` → `get_frame_at_time` → `ask_image` without any
+worker-side code path.
+
+**Why `tool_names: [vlm, vid]` (group expansion) over per-tool listing:**
+NAT 1.6's `WorkflowBuilder.get_tools` checks `_function_groups` first
+when resolving a `tool_names` entry; finding a group there expands to
+every accessible function in the group (controlled by `include`/`exclude`).
+Listing each underlying tool would still work but adds maintenance cost
+when video-mcp grows new tools.
+
+Root `README.md` is intentionally NOT updated to mention nat-agent —
+`cloudxr-agent` and `mcp-agent` aren't there either; the README only
+highlights `simple-vlm-example` as the canonical quickstart.
 
 ### 2026-04-30 — Unified MCP IDs: identity sidecars, live vs recorded splits, transcript source_id
 

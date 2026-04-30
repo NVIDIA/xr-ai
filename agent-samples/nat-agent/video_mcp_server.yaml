@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Video MCP server configuration for nat-agent.
+# Auto-discovered by the launcher and passed as --config to video_mcp_server.
+#
+# recordings_dir MUST match xr_media_hub.yaml's video_recording.out_dir.
+# The MCP server reads NVENC H.264 chunks from this directory for the
+# get_frame_at_time / query_video tools, and connects to the hub as a
+# ProcessorEndpoint for live frames (get_latest_frame).
+
+recordings_dir: /dev/shm/xr-ai/recordings    # must match xr_media_hub.yaml
+out_dir:        /tmp/xr_video_queries        # PNGs returned by get_*_frame land here
+hub_pub:        ipc:///tmp/xr_hub_pub
+hub_push:       ipc:///tmp/xr_hub_in
+host:           0.0.0.0
+port:           8210
+gpu_id:         0

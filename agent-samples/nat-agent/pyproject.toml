@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nat-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["xr-ai-launcher"]
+
+[tool.uv.sources]
+xr-ai-launcher = { path = "../../launcher", editable = true }
+
+[project.scripts]
+nat_agent = "nat_agent:run"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["nat_agent.py"]

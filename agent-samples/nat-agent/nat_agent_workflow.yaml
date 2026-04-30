@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# NAT workflow configuration for the nat-agent sample.
+#
+# Loaded by NatBackend at startup. Placeholders (${...}) are substituted
+# from WorkerConfig at load time — see worker/config.py's
+# ``load_nat_workflow_dict()``.
+#
+# Architecture (NAT 1.6+):
+#   tool_calling_agent (NAT + LangChain + LangGraph)
+#       │
+#       ├── vlm    (mcp_client function group → vlm-mcp :8220)
+#       │       └── ask_image
+#       │
+#       └── vid    (mcp_client function group → video-mcp :8210)
+#               ├── ask_image                — wait, no
+#               ├── get_latest_frame
+#               ├── get_frame_at_time
+#               ├── get_video_stats
+#               ├── query_video
+#               ├── list_live_participants
+#               └── list_recorded_participants
+#
+# ``tool_names`` lists each function GROUP — NAT 1.6's ``builder.get_tools``
+# expands a ``FunctionGroupRef`` to every accessible function in that group
+# (controlled by ``include`` / ``exclude``). No NAT-side wrappers are needed:
+# the LLM sees every MCP tool by its underlying name. The participant_id that
+# video tools require travels in a per-turn ``[Live participant_id: <pid>]``
+# preamble that the worker prepends to the user message.
+
+llms:
+  local_llm:
+    _type: openai
+    model_name: llm
+    base_url: ${llm_base_url}
+    api_key: EMPTY
+    temperature: ${llm_temperature}
+    top_p: ${llm_top_p}
+    request_timeout: ${llm_request_timeout_s}
+    max_tokens: ${llm_max_tokens}
+    # Tool-calling streaming via the OpenAI client + nemotron3_nano + vLLM
+    # has corner cases around partial JSON; the reference samples use this
+    # flag for the same reason.
+    disable_streaming: tool_calling
+
+function_groups:
+  # vlm-mcp — pure path-based VLM Q&A. Single tool: ask_image.
+  # Tool descriptions seen by the LLM are the docstrings on the MCP
+  # server's @mcp.tool() functions, picked up automatically via the
+  # streamable-http list_tools handshake. Do NOT override them here.
+  vlm:
+    _type: mcp_client
+    server:
+      transport: streamable-http
+      url: ${vlm_mcp_url}
+    tool_call_timeout: 60
+
+  # video-mcp — full tool surface (live + recorded frames + roster + stats).
+  vid:
+    _type: mcp_client
+    server:
+      transport: streamable-http
+      url: ${video_mcp_url}
+    tool_call_timeout: 30
+
+workflow:
+  _type: tool_calling_agent
+  llm_name: local_llm
+  # Listing a function-group name expands to every accessible tool in that
+  # group — see nat.builder.workflow_builder.WorkflowBuilder.get_tools.
+  tool_names:
+    - vlm
+    - vid
+  system_prompt: ${llm_system_prompt}
+  # Roomy enough for: roster query -> get frame -> ask_image -> retry.
+  max_iterations: 6
+  max_history: 8

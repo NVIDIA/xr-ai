@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# vlm-mcp server configuration for nat-agent.
+# Auto-discovered by the launcher and passed as --config to vlm_mcp_server.
+#
+# Pure FastMCP wrapper around vlm-server. Single tool: ask_image(question,
+# image_path). The LLM is responsible for sourcing image_path (typically by
+# calling video-mcp.get_latest_frame first); vlm-mcp itself has no hub
+# coupling.
+#
+# Endpoint: http://<host>:<port>/mcp  (no trailing slash — see vlm-mcp's
+# reference YAML for the rationale).
+
+host:                  0.0.0.0
+port:                  8220
+
+# URL of the vlm-server (ai-services/vlm-server/).
+vlm_server:            http://localhost:8100
+
+# httpx timeout applied to each POST /v1/chat/completions call to vlm-server.
+vlm_request_timeout_s: 60.0

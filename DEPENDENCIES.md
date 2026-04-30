@@ -67,6 +67,17 @@ transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
     Storage: JSONL files per participant in configurable transcripts_dir.
 
+vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    └── httpx >=0.27
+    └── Pillow >=10.0
+    Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
+    Single tool ask_image(question, image_path): reads a local PNG path,
+    base64-encodes as JPEG, POSTs to vlm-server. Has no hub coupling and
+    no xr-ai-agent dep — image acquisition is the LLM's job (via video-mcp).
+
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
@@ -210,6 +221,7 @@ piper-tts-server  (tts/piper/)
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
+| `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8220 | — | Pure FastMCP wrapper for vlm-server (path → answer) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
 
 All model weights are cached under `models/` at the repo root (gitignored except
@@ -295,6 +307,24 @@ forwarding.
 Uses cloudxr-runtime, render-mcp-server (8220), oxr-mcp-server (8230),
 stt-server (8103), llm-server (8101). Web client must be a build that
 includes the bundled CloudXR JS SDK (see `client-samples/web-xr-build/`).
+
+### nat-agent  (agent-samples/nat-agent/)
+
+Voice + vision agent driven by NeMo Agent Toolkit's `tool_calling_agent`.
+The local nemotron3_nano LLM (port 8107) chooses video-mcp + vlm-mcp tool
+calls per turn; no NAT-side wrappers, every MCP tool is exposed verbatim
+via `mcp_client` function groups expanded into the agent's `tool_names`.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `nat-agent` | `xr-ai-launcher` | — |
+| Worker | `nat-agent-worker` | `xr-ai-agent` | numpy >=1.24, scipy >=1.11, httpx >=0.27, pyyaml >=6.0, fastmcp >=0.4, pipecat-ai, nvidia-nat[langchain,mcp] >=1.6, langchain-openai >=0.1 |
+
+Worker speaks to stt-server (8103), piper-tts-server (8105), nemotron3_nano
+LLM (8107), vlm-mcp (8220), video-mcp (8210). vlm-server (8100) is reached
+only through vlm-mcp; the worker has no direct VLM HTTP client. Hub video
+recording is enabled (matches mcp-agent's pattern) so `get_frame_at_time`
+and `query_video` work on past frames.
 
 ---
 

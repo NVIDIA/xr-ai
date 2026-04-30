@@ -52,6 +52,12 @@ class _AsrBackend:
         self._cache      = model_cache
         self._model      = None
         self._lock       = threading.Lock()
+        # NeMo ASR's ``transcribe()`` is NOT thread-safe — it freezes/unfreezes
+        # the encoder around each call as shared state. Concurrent calls from
+        # the FastAPI threadpool corrupt that state and surface as
+        # ``ValueError: Cannot unfreeze partially without first freezing the
+        # module with freeze()``. Serialise here so any client mix is safe.
+        self._infer_lock = threading.Lock()
 
     def _ensure_loaded(self) -> None:
         if self._model is not None:
@@ -76,10 +82,10 @@ class _AsrBackend:
             print("[stt_server] ASR model ready.")
 
     def transcribe(self, audio_path: str) -> str:
-        """Synchronous. Call from a thread pool."""
+        """Synchronous. Call from a thread pool. Serialised internally."""
         self._ensure_loaded()
         import torch
-        with torch.inference_mode():
+        with self._infer_lock, torch.inference_mode():
             results = self._model.transcribe([audio_path])
         # NeMo returns a list of strings (or Hypothesis objects).
         if not results:

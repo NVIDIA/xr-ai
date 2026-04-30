@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# nat-agent worker configuration.
+# Auto-discovered by the launcher and passed as --config to nat_agent_worker.
+
+# ── Service endpoints (default ports match the service YAMLs) ────────────────
+stt_server:    http://localhost:8103
+tts_server:    http://localhost:8105       # Piper — matches piper_tts_server.yaml
+llm_server:    http://localhost:8107       # Nemotron-3-Nano — matches nemotron3_nano_llm_server.yaml
+
+# ── MCP endpoints ────────────────────────────────────────────────────────────
+# vlm-mcp (port 8220) and video-mcp (port 8210) are reached through NAT's
+# mcp_client function group. The workflow YAML wires every MCP tool from both
+# servers directly into the LLM's tool list.
+#
+# Both servers run pure FastMCP via ``mcp.http_app(path="/mcp")`` under
+# uvicorn, so the canonical URL is ``/mcp`` with NO trailing slash. NAT's
+# streamable-http MCP client treats Starlette's 307 redirect (`/mcp/` ->
+# `/mcp`) as an error, so the trailing slash MUST be omitted.
+vlm_mcp_url:   http://localhost:8220/mcp
+video_mcp_url: http://localhost:8210/mcp
+
+# ── LLM prompt and generation knobs ──────────────────────────────────────────
+# Leave llm_system_prompt blank to use the multi-line default in
+# worker/config.py — it's tuned for the seven-tool surface this sample
+# exposes (ask_image + 6 video-mcp tools) and the per-turn participant_id
+# preamble. Override here only if you want to change the agent's persona
+# or tool-routing instructions.
+llm_system_prompt: ""
+
+# Nemotron-3-Nano emits a <think>…</think> reasoning preamble before each
+# tool call or answer. The block alone commonly consumes 150-500 tokens, so
+# the budget needs comfortable headroom; 2048 is well within the server's
+# max_model_len: 32768. vLLM's nano_v3 reasoning parser strips the think
+# block server-side, so message.content stays clean for TTS.
+llm_max_tokens: 2048
+
+# Tool-calling sampling per the model card — temperature=0.6, top_p=0.95.
+# Higher diversity hurts tool-call routing (wrong tool > sampled-noisy tool).
+llm_temperature: 0.6
+llm_top_p:       0.95
+
+# Per-turn LLM timeout (seconds). Each tool-calling round can issue an MCP
+# call (frame fetch or VLM inference); NatBackend.infer multiplies this by
+# max_iterations + headroom for the overall turn budget.
+llm_request_timeout_s: 60.0
+
+# ── VAD + streaming STT warm-up ──────────────────────────────────────────────
+# silence_threshold: float32 RMS below which audio is silence
+# silence_duration : seconds of silence that ends an utterance
+# min_speech       : minimum seconds of speech before streaming STT fires
+# stream_interval  : seconds between streaming STT calls during speech.
+#                    These passes keep the STT model warm but are NOT shown
+#                    to the client — only the final full transcript is
+#                    published on topic 'stt.transcript'.
+silence_threshold: 0.015
+silence_duration:  0.5
+min_speech:        0.3
+stream_interval:   0.8
