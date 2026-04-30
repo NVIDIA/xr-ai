@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "llm-server"
+name = "mistral-minitron-llm-server"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-llm_server = "llm_server.__main__:run"
+mistral_minitron_llm_server = "mistral_minitron_llm_server.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["llm_server"]
+packages = ["mistral_minitron_llm_server"]

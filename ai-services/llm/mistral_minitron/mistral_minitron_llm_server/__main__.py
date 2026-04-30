@@ -1,5 +1,6 @@
 """
-llm_server — OpenAI-compatible LLM HTTP server.
+mistral_minitron_llm_server — OpenAI-compatible LLM HTTP server
+(Mistral-NeMo-Minitron-8B).
 
 Loads nvidia/Mistral-NeMo-Minitron-8B-Instruct (or any HuggingFace causal LM)
 in-process and serves an OpenAI-compatible API:
@@ -103,7 +104,7 @@ class _LlmBackend:
             cache = str(self._model_cache)
             dtype = _get_torch_dtype(self._dtype_str)
 
-            print(f"[llm_server] Loading {self._model_id}  cache={cache}  dtype={self._dtype_str}")
+            print(f"[mistral_minitron_llm_server] Loading {self._model_id}  cache={cache}  dtype={self._dtype_str}")
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(
                     self._model_id, cache_dir=cache, local_files_only=True,
@@ -116,7 +117,7 @@ class _LlmBackend:
                     local_files_only=True,
                 ).eval()
             except OSError:
-                print(f"[llm_server] Downloading {self._model_id}…")
+                print(f"[mistral_minitron_llm_server] Downloading {self._model_id}…")
                 self._tokenizer = AutoTokenizer.from_pretrained(
                     self._model_id, cache_dir=cache,
                 )
@@ -128,7 +129,7 @@ class _LlmBackend:
                 ).eval()
 
             dev = next(self._model.parameters()).device
-            print(f"[llm_server] Model ready on {dev}")
+            print(f"[mistral_minitron_llm_server] Model ready on {dev}")
 
     def infer(
         self,
@@ -144,9 +145,26 @@ class _LlmBackend:
 
         self._ensure_loaded()
 
+        # Merge the server's system prompt into the message list without
+        # producing two adjacent system messages (which strict chat templates
+        # like Llama 3.1 reject). If the request already has a system
+        # message, prepend our content to its content; otherwise prepend a
+        # new system message.
         full_messages = list(messages)
         if self._system_prompt:
-            full_messages = [{"role": "system", "content": self._system_prompt}] + full_messages
+            for i, m in enumerate(full_messages):
+                if m.get("role") == "system":
+                    existing = m.get("content", "")
+                    full_messages[i] = {
+                        "role": "system",
+                        "content": f"{self._system_prompt}\n\n{existing}".strip(),
+                    }
+                    break
+            else:
+                full_messages = (
+                    [{"role": "system", "content": self._system_prompt}]
+                    + full_messages
+                )
 
         prompt = self._tokenizer.apply_chat_template(
             full_messages, tokenize=False, add_generation_prompt=True,
@@ -300,7 +318,7 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     import uvicorn
 
     if not cfg.get("model"):
-        print("[llm_server] 'model' is required in config", file=sys.stderr)
+        print("[mistral_minitron_llm_server] 'model' is required in config", file=sys.stderr)
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
@@ -320,9 +338,9 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    print(f"[llm_server] Ready  →  http://localhost:{port}/v1")
+    print(f"[mistral_minitron_llm_server] Ready  →  http://localhost:{port}/v1")
     await server.serve()
-    print("[llm_server] Stopped.")
+    print("[mistral_minitron_llm_server] Stopped.")
 
 
 def run() -> None:

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nemotron3-nano-llm-server"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    # vLLM provides the OpenAI-compatible HTTP server, the Qwen3-coder
+    # tool-call parser, the nano_v3 reasoning parser plugin, and the
+    # FlashInfer NVFP4 MoE kernels.  0.12.0 is the minimum the model
+    # card (nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4) calls for.
+    "vllm>=0.12.0",
+    "pyyaml>=6.0",
+    # hf-transfer speeds up weight download on first run.
+    "hf-transfer>=0.1.4",
+]
+
+[project.scripts]
+nemotron3_nano_llm_server = "nemotron3_nano_llm_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nemotron3_nano_llm_server"]
