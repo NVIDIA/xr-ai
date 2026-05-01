@@ -27,7 +27,7 @@ struct ContentView: View {
                     messagesSection
                 }
             }
-            .navigationTitle("StreamKit Sample")
+            .navigationTitle("NVIDIA XR-AI Sample")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
             .scrollDismissesKeyboard(.interactively)

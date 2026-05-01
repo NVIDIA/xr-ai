@@ -140,7 +140,7 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("StreamKit Sample", style = MaterialTheme.typography.titleLarge) },
+                title = { Text("NVIDIA XR-AI Sample", style = MaterialTheme.typography.titleLarge) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = ColorPageBg,
                 ),
