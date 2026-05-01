@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Run `pre-commit install` once after cloning to enable these hooks.
+# See AGENTS.md § License headers for the exact SPDX text and the
+# language-by-language comment-syntax mapping the hook enforces.
+
+repos:
+  - repo: local
+    hooks:
+      - id: check-spdx-headers
+        name: check SPDX headers
+        description: >
+          Every source file must start with the NVIDIA SPDX header in the
+          comment syntax for its language (see AGENTS.md § License headers).
+        entry: python3 scripts/check_spdx_headers.py
+        language: system
+        pass_filenames: true
+        # Restrict to the file types the script knows how to handle, so
+        # pre-commit doesn't shell out for every random binary asset.
+        types_or:
+          - python
+          - yaml
+          - toml
+          - shell
+          - swift
+          - kotlin
+          - javascript
+          - ts
+          - tsx
+          - xml
+          - html
+          - markdown
+        exclude: |
+          (?x)^(
+            LICENSE
+            | gradlew(\.bat)?
+            | gradle/wrapper/gradle-wrapper\.properties
+          )$

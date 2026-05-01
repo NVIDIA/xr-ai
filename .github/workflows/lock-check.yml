@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: lock-check
+
+# Runs `uv lock` on every pyproject.toml in the repo to prove that each
+# project's declared dependencies resolve across the full `requires-python`
+# range stated in that pyproject. uv resolves universally across the range,
+# so a single `uv lock` per project covers every supported interpreter
+# without needing a Python-version matrix here.
+#
+# This is the repo-wide check on Python-version + dependency consistency:
+# a project bumping `requires-python` (or pinning a dep that drops a
+# Python version) only passes if the constraints stay jointly satisfiable.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: lock-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  uv-lock:
+    name: uv lock (every project)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Resolve every pyproject.toml
+        run: |
+          set -uo pipefail
+          failed=()
+          while IFS= read -r -d '' pp; do
+            dir=$(dirname "$pp")
+            echo ""
+            echo "::group::uv lock -- $dir"
+            if uv lock --project "$dir"; then
+              echo "ok"
+            else
+              echo "::error file=$pp::uv lock failed in $dir"
+              failed+=("$dir")
+            fi
+            echo "::endgroup::"
+          done < <(find . -name pyproject.toml \
+                          -not -path './.venv/*' \
+                          -not -path '*/.venv/*' \
+                          -not -path '*/node_modules/*' \
+                          -not -path '*/.git/*' \
+                          -print0)
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo ""
+            echo "::error::uv lock failed in ${#failed[@]} project(s):"
+            for d in "${failed[@]}"; do
+              echo "  - $d"
+            done
+            exit 1
+          fi

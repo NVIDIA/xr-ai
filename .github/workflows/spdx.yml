@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: spdx
+
+# Backstop for the SPDX header convention from AGENTS.md § License headers.
+# The same check runs locally as a pre-commit hook (see
+# `.pre-commit-config.yaml`); this workflow catches contributors who haven't
+# installed the hook.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: spdx-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check SPDX headers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run SPDX header check
+        run: python3 scripts/check_spdx_headers.py

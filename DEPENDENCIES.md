@@ -14,14 +14,25 @@
 
 ## Python version
 
-Every `pyproject.toml` in this repo pins `requires-python = ">=3.11,<3.13"`.
-The upper bound exists because `PyNvVideoCodec` (used by `xr-media-hub` and
-`video-mcp-server` for NVENC encode / NVDEC decode) does not yet publish wheels
-for Python 3.13. With the cap in place, `uv sync` will pick 3.12 even on a host
-where 3.13 is also installed. Loosen the upper bound only after
-`PyNvVideoCodec` ships 3.13 wheels.
+Every `pyproject.toml` in this repo pins `requires-python = ">=3.11,<3.13"` by
+convention. The upper bound exists because `PyNvVideoCodec` (used by
+`xr-media-hub` and `video-mcp-server` for NVENC encode / NVDEC decode) does not
+yet publish wheels for Python 3.13. With the cap in place, `uv sync` will pick
+3.12 even on a host where 3.13 is also installed. Loosen the upper bound only
+after `PyNvVideoCodec` ships 3.13 wheels.
 
-CI matrix: 3.11 and 3.12 (`.github/workflows/tests.yml`).
+A project may state a different range when its dependencies require it; the
+constraints stay honest because `.github/workflows/lock-check.yml` runs
+`uv lock` on every `pyproject.toml` in the repo on every push and PR. `uv lock`
+resolves universally across the full `requires-python` range stated in each
+file, so a single invocation per project proves the declared range is
+satisfiable end-to-end. Drift between `requires-python` and what the dep graph
+actually supports fails CI.
+
+CI matrices:
+- `.github/workflows/tests.yml` — pytest across Python 3.11 and 3.12.
+- `.github/workflows/lock-check.yml` — `uv lock` per project (no Python matrix
+  needed; uv covers the range internally).
 
 ---
 
