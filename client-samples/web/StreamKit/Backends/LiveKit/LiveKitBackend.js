@@ -215,6 +215,17 @@ export class LiveKitBackend {
       }
     });
 
+    // Mute remote audio while the local participant is speaking so the browser's
+    // AEC pipeline doesn't suppress the user's voice as if it were echo.  Without
+    // this, when echo cancellation is enabled the agent's outgoing audio can mask
+    // the user's barge-in, making it impossible for the STT to detect "stop".
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      const localSpeaking = speakers.some(p => p === room.localParticipant);
+      for (const el of this.#audioElements.values()) {
+        el.muted = localSpeaking;
+      }
+    });
+
     // ── Connect ───────────────────────────────────────────────────────────────
     await room.connect(wsURL, token);
   }
