@@ -298,7 +298,7 @@ async with httpx.AsyncClient() as client:
   Requires hub video recording enabled via
   `video_recording.enabled: true` in `xr_media_hub.yaml`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
-- **Sample YAMLs** for each service ship with `cloudxr-agent` or `mcp-agent` as examples.
+- **Sample YAMLs** for each service ship with `mcp-agent` as examples.
   Copy them to other sample roots and adjust `model_cache` (`../../models` resolves
   to `xr-ai/models/` from any `agent-samples/<name>/` directory).
 
@@ -309,7 +309,7 @@ async with httpx.AsyncClient() as client:
 ### Naming conventions
 
 Choose a kebab-case sample name (e.g. `simple-vlm-example`,
-`cloudxr-agent`).  Derive all other names from it mechanically:
+`mcp-agent`).  Derive all other names from it mechanically:
 
 | Thing | Convention | Example |
 |---|---|---|
@@ -945,6 +945,60 @@ Dependency fan-out stays contained: only `llama_nemotron` pulls
 `lm-format-enforcer`, only `nemotron3_nano` pulls `vllm>=0.12.0`. Mistral
 Minitron remains a plain FastAPI + transformers box.
 
+### 2026-04-29 — render-mcp + oxr-mcp added; xr-render-demo as integration
+
+Two new MCP servers under `agent-mcp-servers/`, port-per-server, no LiveKit
+dep. oxr-mcp is pure FastMCP; render-mcp mixes one streaming HTTP route
+with FastMCP tools.
+
+**render-mcp** (`agent-mcp-servers/render-mcp/`, port 8220) — owns the LOVR
+child (the OpenXR rendering app) and is the only process that pushes ops
+onto LOVR's `scene_socket` (msgpack over ZMQ PUSH).
+
+- **`POST /sphere/radius` is a plain FastAPI route**, not an MCP tool.
+  The worker hits it ~50 Hz from the audio path; routing a streaming
+  control signal through FastMCP's per-request dispatch + JSON-RPC
+  envelope is the wrong shape and makes the server log unreadably chatty.
+  The discrete operations (`start_xr`, `set_sphere_color`, …) stay on
+  `/mcp` where an LLM agent can discover and drive them.
+
+- **`xr.session.started` gates LOVR spawn.** CloudXR returns
+  `XR_ERROR_FORM_FACTOR_UNAVAILABLE` from `xrGetSystem` until a streaming
+  client has actually connected. Spawning LOVR at process start lands it
+  in the desktop simulator forever. The caller is expected to call
+  `start_xr` only after seeing the streaming client come up.
+- **`start_xr` returns immediately; caller polls `get_health.lovr_started`.**
+  The cloudxr readiness wait can take a minute; matching a single tool
+  call's timeout to it would couple two unrelated knobs. render-mcp spawns
+  LOVR + waits for cloudxr in a background task, caches terminal failures
+  so retries fail fast, and exposes progress through `get_health`.
+
+**oxr-mcp** (`agent-mcp-servers/oxr-mcp/`, port 8230) — exposes head pose
+through a `get_head_pose()` MCP tool.
+
+- **Two OpenXR sessions, one CloudXR.** LOVR holds the rendering session;
+  oxr-mcp opens a SECOND headless session (`XR_MND_HEADLESS`) for pose
+  only. Verified empirically: pos/quat update from the headset while LOVR
+  keeps streaming pixels, no contention. Session opens lazily on first
+  `/pose` request, so it doesn't fight CloudXR's startup either.
+
+**Shared infra** — `launcher/_cloudxr_env.py`. Both MCPs need to wait for
+`cloudxr.env`, source it, and wait for `runtime_started` before opening
+their OpenXR sessions; the launcher (which already manages the cloudxr
+child) is the natural home.
+
+**xr-render-demo** (`agent-samples/xr-render-demo/`) — integration sample.
+Web client streams mic audio; the worker computes RMS → sphere radius
+continuously and runs VAD → STT → LLM whose JSON action list it translates
+into render-mcp HTTP calls.
+
+- **User-frame coordinates with worker-side transform.** The LLM emits
+  user-frame coordinates (`+x` user's right, `-z` in front of the user).
+  The worker fetches head pose from oxr-mcp once per utterance, rotates by
+  yaw + translates by head position before forwarding to render-mcp.
+  Putting the transform in the worker keeps render-mcp transport-agnostic
+  and means the LLM never has to learn vector math.
+
 ### 2026-04-28 — llm-server added (pure-text LLM)
 
 Fourth AI inference server added under `ai-services/llm-server/`, filling the
@@ -1035,7 +1089,7 @@ Shared model cache: all weights land in `models/` at the repo root (gitignored).
 Each YAML configures `model_cache` (resolved relative to the YAML file) so the
 same physical directory is used regardless of which sample root the YAML is in.
 
-Sample YAMLs for all four services ship with `cloudxr-agent` as a template.
+Sample YAMLs for all four services ship with `mcp-agent` as a template.
 
 OpenAI-compatible APIs chosen so workers never need to know backend details —
 swap models by changing the YAML only.

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "render-mcp"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    # Process management for the LOVR child.
+    "xr-ai-launcher",
+    "pyyaml>=6.0",
+    # FastAPI hosts the high-rate /sphere/radius route alongside the FastMCP
+    # tool surface (mounted at /mcp) for the discrete tools.
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "fastmcp>=0.4",
+    # render-mcp → LOVR uses ZMQ PUSH/PULL with msgpack-encoded {op, ...} frames.
+    "pyzmq>=26",
+    "msgpack>=1.0",
+]
+
+[tool.uv.sources]
+xr-ai-launcher = { path = "../../launcher", editable = true }
+
+[project.scripts]
+render_mcp = "render_mcp.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["render_mcp"]

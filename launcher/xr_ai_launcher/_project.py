@@ -6,6 +6,7 @@ ProjectLauncher — runs any uv project as a managed subprocess.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from contextlib import asynccontextmanager
@@ -32,9 +33,14 @@ async def ProjectLauncher(project: str | Path, command: str, *args: str, name: s
     project = Path(project).resolve()
     if name is None:
         name = command.rsplit(".", 1)[-1]
+    env: dict[str, str] | None = None
+
     if shutil.which("uv"):
         cmd = ["uv", "run", "--project", str(project), command, *args]
+        # Drop any inherited VIRTUAL_ENV so uv doesn't warn about a mismatch
+        # between the parent shell's active venv and *project*'s own.
+        env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     else:
         cmd = [sys.executable, "-m", command, *args]
-    async with ManagedProcess(name, cmd) as proc:
+    async with ManagedProcess(name, cmd, env=env) as proc:
         yield proc

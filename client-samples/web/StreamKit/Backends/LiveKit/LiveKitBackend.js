@@ -323,10 +323,14 @@ export class LiveKitBackend {
    * @param {string | ArrayBuffer | Uint8Array} data
    * @param {object}  [opts]
    * @param {boolean} [opts.reliable=true]
+   * @param {string}  [opts.topic]    LiveKit topic — surfaces as `DataMessage.topic`
+   *                                  on the agent side. Used by processors that
+   *                                  multiplex multiple semantics over the data
+   *                                  channel (e.g. `xr.session.started`).
    * @returns {Promise<void>}
    * @throws {StreamError} `notConnected` if not connected.
    */
-  async send(data, { reliable = true } = {}) {
+  async send(data, { reliable = true, topic } = {}) {
     if (!this.#room || this.#room.state !== 'connected') {
       throw StreamError.notConnected();
     }
@@ -341,7 +345,13 @@ export class LiveKitBackend {
       bytes = new Uint8Array(data);
     }
 
-    await this.#room.localParticipant.publishData(bytes, { reliable });
+    // LiveKit's publishData ignores `topic: undefined` cleanly, so we don't
+    // need to branch — but we explicitly forbid the reserved internal topic
+    // so app code can't impersonate the SDK status channel.
+    if (topic === LiveKitBackend.#STATUS_TOPIC) {
+      throw new Error(`topic '${topic}' is reserved for internal SDK use`);
+    }
+    await this.#room.localParticipant.publishData(bytes, { reliable, topic });
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oxr-mcp"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "xr-ai-launcher",
+    "pyyaml>=6.0",
+    "uvicorn[standard]>=0.29",
+    "fastmcp>=0.4",
+    # Headless OpenXR session + HeadTracker. Lives in the same wheel as the
+    # cloudxr-runtime launcher; we pin it explicitly here so this package
+    # builds standalone.
+    "isaacteleop",
+]
+
+[tool.uv.sources]
+xr-ai-launcher = { path = "../../launcher", editable = true }
+
+[project.scripts]
+oxr_mcp_server = "oxr_mcp_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["oxr_mcp_server"]

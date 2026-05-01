@@ -22,6 +22,12 @@ Advanced usage — compose with custom async logic::
         await my_loop()
 """
 
+from ._cloudxr_env import (
+    XR_RUNTIME_VAR,
+    load_cloudxr_env,
+    wait_for_cloudxr_env,
+    wait_for_cloudxr_runtime_started,
+)
 from ._credentials import ensure_credentials, load_credentials
 from ._processes import ManagedProcess
 from ._project import ProjectLauncher
@@ -29,7 +35,9 @@ from ._hub import HubLauncher
 from ._stack import Process, StackLauncher, run_stack
 
 __all__ = [
+    "XR_RUNTIME_VAR",
     "ensure_credentials", "load_credentials",
+    "load_cloudxr_env", "wait_for_cloudxr_env", "wait_for_cloudxr_runtime_started",
     "ManagedProcess", "ProjectLauncher", "HubLauncher",
     "Process", "StackLauncher", "run_stack",
 ]

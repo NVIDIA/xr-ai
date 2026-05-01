@@ -1,0 +1,19 @@
+{
+  "name": "xr-ai-web-vendor-bundle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Produces /client-samples/web/vendor/{cloudxr-sdk,livekit-client}.esm.mjs. Output is gitignored; run on the host before serving any web sample.",
+  "scripts": {
+    "build": "webpack --mode production"
+  },
+  "dependencies": {
+    "@nvidia/cloudxr": "file:./sdk.tgz",
+    "gl-matrix": "^3.4.3",
+    "long": "^5.3.2",
+    "livekit-client": "^2.0.0"
+  },
+  "devDependencies": {
+    "webpack": "^5.97.0",
+    "webpack-cli": "^6.0.0"
+  }
+}
