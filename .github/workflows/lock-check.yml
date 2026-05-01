@@ -36,6 +36,11 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+          # Lockfiles are gitignored repo-wide, so the default `**/uv.lock`
+          # cache-dependency-glob matches nothing in CI. Key the cache off
+          # every committed pyproject.toml instead.
+          cache-dependency-glob: |
+            **/pyproject.toml
 
       - name: Resolve every pyproject.toml
         run: |
