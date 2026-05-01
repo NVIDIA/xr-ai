@@ -105,7 +105,7 @@ Edit `nemotron3_nano_llm_server.yaml`:
 
 ```yaml
 model: nvidia/Nemotron-Nano-3-30B-A3B          # BF16 unquantized
-# model: nvidia/Nemotron-Nano-3-30B-A3B-FP8    # FP8 (Hopper-compatible)
+# model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8    # FP8 (Hopper-compatible)
 ```
 
 Any NVIDIA Nemotron-3 family variant works because they share the same chat

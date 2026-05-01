@@ -167,7 +167,12 @@ class ShmRingBuffer:
 
     def close(self) -> None:
         self._buf.release()
-        self._shm.close()
+        try:
+            self._shm.close()
+        except BufferError:
+            # A SlotView memoryview is still live (unreleased slot during abnormal
+            # shutdown).  The OS reclaims the segment once all views are GC'd.
+            pass
 
     def unlink(self) -> None:
         """Remove the underlying shared memory segment. Call once from the owner (Hub)."""

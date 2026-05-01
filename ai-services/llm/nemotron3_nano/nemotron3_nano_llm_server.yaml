@@ -13,7 +13,7 @@
 # actual answer in message.content is never polluted — this is what keeps
 # voice TTS from reading the reasoning aloud.
 
-model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
 
 host: "0.0.0.0"
 port: 8107
@@ -24,19 +24,20 @@ hf_token: ""
 # ai-services write their weights).
 model_cache: ../../models
 
-# vLLM server knobs.  Defaults are conservative for single-GPU Blackwell
-# (B200 192GB or RTX PRO 6000 96GB) running one concurrent voice agent.
+# vLLM server knobs.
+#
+# On Blackwell (B200 / RTX PRO 6000 96 GB): NVFP4 weights ~20 GB; keep
+# gpu_memory_utilization at 0.6 to share the single GPU with vlm-server
+# (~14 GB) and stt-server (~1.5 GB).
+#
+# On Ada Lovelace (RTX 6000 Ada 48 GB): FP8 weights ~30 GB; run the LLM
+# on a dedicated GPU and keep the vlm-server + stt-server on the second GPU.
+# With LLM alone on a 48 GB card, 0.85 (~41 GB) gives ~11 GB for KV cache.
 max_num_seqs:         8
 tensor_parallel_size: 1
 max_model_len:        32768
 
-# Fraction of total GPU memory vLLM reserves at startup (weights + KV
-# cache + activations).  vLLM's own default is 0.92 — we lower it to
-# 0.6 because this LLM shares the GPU with vlm-server (Cosmos-Reason1-7B,
-# ~14 GB BF16) and stt-server (parakeet, ~1.5 GB) in the
-# pipecat-nat-nemotron3nano sample.  Bump back toward 0.85-0.92 if you
-# run this service on a dedicated GPU with no other tenants.
-gpu_memory_utilization: 0.6
+gpu_memory_utilization: 0.85
 
 # Skip CUDA graph capture + FlashInfer MoE autotune at startup.  For
 # NemotronH-30B-A3B-NVFP4 those two phases are silent (no log output)

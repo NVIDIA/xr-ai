@@ -554,15 +554,14 @@ def build_pipeline(
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
-            allow_interruptions=True,
             enable_metrics=True,
-            # ``None`` disables the idle timer outright. Setting it to 0 (a
-            # mistake the first version of this file made) means
-            # ``asyncio.wait_for(..., timeout=0)`` raises ``TimeoutError``
-            # immediately and the pipeline cancels every time we go quiet —
-            # which kills the agent in the middle of NAT inference.
-            idle_timeout_secs=None,
         ),
+        # None disables the idle timer outright.  Setting it to 0 means
+        # asyncio.wait_for(..., timeout=0) raises TimeoutError immediately and
+        # the pipeline cancels every time we go quiet — which kills the agent
+        # mid-inference.  In Pipecat 1.1.0 this is a PipelineTask kwarg, not a
+        # PipelineParams field; PipelineParams silently ignored it before.
+        idle_timeout_secs=None,
     )
 
     return pipeline, task

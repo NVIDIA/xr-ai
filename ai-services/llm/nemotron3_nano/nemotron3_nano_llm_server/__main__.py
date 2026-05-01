@@ -123,6 +123,60 @@ def _ensure_reasoning_parser(model_cache: Path) -> Path:
     return path
 
 
+def _clear_stale_flashinfer_cache(correct_cuda_home: str) -> None:
+    """Delete FlashInfer JIT cache dirs whose build.ninja uses a different nvcc.
+
+    FlashInfer generates a build.ninja with the nvcc path baked in.  If a
+    previous run used the wrong nvcc (e.g. /usr/bin/nvcc = CUDA 11.5) and
+    compilation failed, the stale build.ninja persists and ninja keeps using it
+    even after CUDA_HOME is corrected.  This function removes those dirs so
+    FlashInfer regenerates them with the correct nvcc on the next start.
+
+    Safe to call on every startup: a no-op once the cache was compiled with
+    the right nvcc (correct_nvcc will be present in the new build.ninja).
+    """
+    import shutil
+    correct_nvcc = (Path(correct_cuda_home) / "bin" / "nvcc").as_posix().encode()
+    fi_cache = Path.home() / ".cache" / "flashinfer"
+    if not fi_cache.exists():
+        return
+    cleared = 0
+    for ninja_path in fi_cache.rglob("build.ninja"):
+        try:
+            content = ninja_path.read_bytes()
+        except OSError:
+            continue
+        if b"/bin/nvcc" in content and correct_nvcc not in content:
+            shutil.rmtree(ninja_path.parent, ignore_errors=True)
+            cleared += 1
+    if cleared:
+        print(
+            f"[nemotron3_nano_llm_server] Cleared {cleared} stale FlashInfer JIT "
+            f"cache dir(s) (wrong nvcc — will recompile on first inference)",
+            flush=True,
+        )
+
+
+def _cuda_compute_capability() -> str:
+    """Return 'major.minor' for the first visible CUDA device, or '?.?' on error."""
+    try:
+        import torch
+        major, minor = torch.cuda.get_device_capability(0)
+        return f"{major}.{minor}"
+    except Exception:
+        return "?.?"
+
+
+def _is_blackwell() -> bool:
+    """Return True if the first CUDA device is Blackwell (SM100, compute cap >= 10.0)."""
+    try:
+        import torch
+        major, _ = torch.cuda.get_device_capability(0)
+        return major >= 10
+    except Exception:
+        return False
+
+
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
@@ -159,12 +213,43 @@ def run() -> None:
     # alongside the llama_nemotron download, not in ~/.cache/huggingface.
     os.environ["HF_HOME"] = str(model_cache)
 
-    # Blackwell FP4 MoE kernels via FlashInfer — required to unlock the
-    # NVFP4 quantization's efficiency; on non-Blackwell hardware vLLM will
-    # either fall back silently (emulated FP4, slower) or refuse to start
-    # depending on the FlashInfer build.
-    os.environ["VLLM_USE_FLASHINFER_MOE_FP4"] = "1"
-    os.environ["VLLM_FLASHINFER_MOE_BACKEND"] = "throughput"
+    # FlashInfer uses CUDA_HOME to find nvcc for JIT kernel compilation.
+    # PyTorch's cpp_extension sets it to /usr, which resolves to /usr/bin/nvcc
+    # (CUDA 11.5 on this system) — too old to compile SM89 (Ada, added in 11.8).
+    # Prefer a versioned installation that matches the PyTorch CUDA build.
+    _CUDA_HOME_CANDIDATES = [
+        "/usr/local/cuda-13.0",
+        "/usr/local/cuda-13",
+        "/usr/local/cuda-12.6",
+        "/usr/local/cuda-12",
+        "/usr/local/cuda",
+    ]
+    for _cuda_home in _CUDA_HOME_CANDIDATES:
+        if (Path(_cuda_home) / "bin" / "nvcc").exists():
+            os.environ["CUDA_HOME"] = _cuda_home
+            print(
+                f"[nemotron3_nano_llm_server] CUDA_HOME → {_cuda_home} "
+                "(overrides /usr to avoid CUDA 11.5 nvcc for FlashInfer JIT)",
+                flush=True,
+            )
+            _clear_stale_flashinfer_cache(_cuda_home)
+            break
+
+    # NVFP4 FlashInfer MoE kernels only work on Blackwell (SM100+).
+    # On Ada / Hopper / Ampere, setting these env vars causes vLLM to crash
+    # with "kernel does not support current device cuda".  Detect the
+    # compute capability at runtime and skip them on pre-Blackwell GPUs.
+    if _is_blackwell():
+        os.environ["VLLM_USE_FLASHINFER_MOE_FP4"] = "1"
+        os.environ["VLLM_FLASHINFER_MOE_BACKEND"] = "throughput"
+    else:
+        cc = _cuda_compute_capability()
+        print(
+            f"[nemotron3_nano_llm_server] GPU compute capability {cc} — "
+            "skipping NVFP4 FlashInfer env vars (Blackwell/SM100+ required). "
+            "Using FP8 model variant instead.",
+            flush=True,
+        )
 
     parser_path = _ensure_reasoning_parser(model_cache)
 
@@ -178,12 +263,19 @@ def run() -> None:
         "--tool-call-parser", "qwen3_coder",
         "--reasoning-parser-plugin", str(parser_path),
         "--reasoning-parser", "nano_v3",
-        "--kv-cache-dtype", "fp8",
         "--max-num-seqs", str(max_num_seqs),
         "--tensor-parallel-size", str(tp_size),
         "--max-model-len", str(max_model_len),
         "--gpu-memory-utilization", str(gpu_mem_util),
     ]
+    if _is_blackwell():
+        # FP8 KV cache requires FlashInfer to JIT-compile for the target SM via
+        # the system nvcc.  On Ada (SM89) the system CUDA toolkit is often older
+        # than 11.8 and nvcc rejects compute_89, crashing at startup.  Blackwell
+        # (SM100) ships with a recent toolkit and the compiled wheels, so this is
+        # safe there.  On Ada, vLLM defaults to auto (BF16 KV cache), which is
+        # correct and avoids any JIT compilation.
+        argv.extend(["--kv-cache-dtype", "fp8"])
     if enforce_eager:
         argv.append("--enforce-eager")
 

@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+.claudelearnings
+
 # AI model weights — every models/ subtree is gitignored; only .gitkeep is tracked
 **/models/**
 !**/models/.gitkeep

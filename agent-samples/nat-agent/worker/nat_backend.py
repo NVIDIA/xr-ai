@@ -36,7 +36,6 @@ Targets ``nvidia-nat>=1.3``:
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import pathlib
 import threading
@@ -67,11 +66,16 @@ class NatBackend:
 
     def __init__(self, cfg: WorkerConfig) -> None:
         self._cfg = cfg
-        self._from_config_cm: Any = None
         self._workflow: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._loop_thread: threading.Thread | None = None
-        self._ready = threading.Event()
+        self._loop_ready = threading.Event()
+        # _lifecycle task coordination (all accessed only after _init_lock)
+        self._workflow_stop_event: asyncio.Event | None = None
+        self._workflow_ready = threading.Event()  # set when workflow built or failed
+        self._workflow_done = threading.Event()   # set when _lifecycle task exits
+        self._workflow_error: BaseException | None = None
+        self._init_lock = threading.Lock()
         # Serialise concurrent infer() calls. NAT 1.6's tool_calling_agent
         # builds a single bound LLM (``llm.bind_tools(tools)``) at workflow
         # build time and reuses it across calls; running multiple turns
@@ -87,14 +91,14 @@ class NatBackend:
         def _run() -> None:
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
-            self._ready.set()
+            self._loop_ready.set()
             self._loop.run_forever()
 
         self._loop_thread = threading.Thread(
             target=_run, name="nat-backend-loop", daemon=True,
         )
         self._loop_thread.start()
-        self._ready.wait()
+        self._loop_ready.wait()
 
     def _wait_for_llm_server(
         self, timeout_s: float = 600.0, interval_s: float = 2.0,
@@ -127,10 +131,18 @@ class NatBackend:
             f"{timeout_s:.0f}s — check the 'llm' process logs."
         )
 
-    async def _ensure_loaded_async(self) -> None:
-        if self._workflow is not None:
-            return
+    # ── workflow lifecycle ────────────────────────────────────────────────────
 
+    async def _lifecycle(self) -> None:
+        """Own the WorkflowBuilder context from __aenter__ to __aexit__ in one task.
+
+        anyio cancel scopes require that __aexit__ runs in the same asyncio Task
+        as __aenter__.  Submitting __aexit__ as a separate coroutine via
+        run_coroutine_threadsafe creates a new Task and breaks that invariant,
+        causing "Attempted to exit cancel scope in a different task than it was
+        entered in".  By holding the ``async with`` open here and waiting for
+        _workflow_stop_event, both enter and exit happen in this single task.
+        """
         _ensure_nat_plugins()
 
         from nat.builder.workflow_builder import WorkflowBuilder
@@ -139,39 +151,62 @@ class NatBackend:
         workflow_dict = load_nat_workflow_dict(self._cfg, _WORKFLOW_YAML)
         config = Config(**workflow_dict)
 
-        cm = WorkflowBuilder.from_config(config)
         try:
-            builder = await cm.__aenter__()
-            workflow = await builder.build()
-        except BaseException:
-            with contextlib.suppress(Exception):
-                await cm.__aexit__(None, None, None)
+            async with WorkflowBuilder.from_config(config) as builder:
+                self._workflow = await builder.build()
+                log.info(
+                    "NAT tool_calling_agent workflow built  llm_server=%s  "
+                    "vlm_mcp=%s  video_mcp=%s",
+                    self._cfg.llm_server, self._cfg.vlm_mcp_url, self._cfg.video_mcp_url,
+                )
+                self._workflow_ready.set()
+                await self._workflow_stop_event.wait()
+        except BaseException as exc:
+            self._workflow_error = exc
             raise
-
-        self._from_config_cm = cm
-        self._workflow = workflow
-        log.info(
-            "NAT tool_calling_agent workflow built  llm_server=%s  "
-            "vlm_mcp=%s  video_mcp=%s",
-            self._cfg.llm_server, self._cfg.vlm_mcp_url, self._cfg.video_mcp_url,
-        )
+        finally:
+            self._workflow = None
+            self._workflow_ready.set()  # unblock ensure_loaded() even on failure
+            self._workflow_done.set()
 
     def ensure_loaded(self) -> None:
         """Block until the LLM server is reachable and the workflow is built.
 
-        Safe to call multiple times — second call is a no-op once loaded.
+        Safe to call multiple times — subsequent calls are no-ops once loaded.
         Designed to run from a thread pool executor (e.g. via
         ``loop.run_in_executor``) so it doesn't block the asyncio loop.
         """
-        if self._loop is None:
-            self._start_worker_loop()
-        if self._workflow is not None:
+        if self._workflow_ready.is_set():
+            if self._workflow_error is not None:
+                raise RuntimeError(
+                    "NAT workflow failed to initialize — check logs"
+                ) from self._workflow_error
             return
-        self._wait_for_llm_server()
-        fut = asyncio.run_coroutine_threadsafe(
-            self._ensure_loaded_async(), self._loop,
-        )
-        fut.result()
+
+        with self._init_lock:
+            # Double-checked: another thread may have completed init while we waited.
+            if self._workflow_ready.is_set():
+                if self._workflow_error is not None:
+                    raise RuntimeError(
+                        "NAT workflow failed to initialize — check logs"
+                    ) from self._workflow_error
+                return
+
+            if self._loop is None:
+                self._start_worker_loop()
+            self._wait_for_llm_server()
+
+            async def _start() -> None:
+                self._workflow_stop_event = asyncio.Event()
+                self._loop.create_task(self._lifecycle(), name="nat-lifecycle")
+
+            asyncio.run_coroutine_threadsafe(_start(), self._loop).result()
+
+        self._workflow_ready.wait()
+        if self._workflow_error is not None:
+            raise RuntimeError(
+                "NAT workflow failed to initialize — check logs"
+            ) from self._workflow_error
 
     # ── inference ─────────────────────────────────────────────────────────────
 
@@ -233,16 +268,14 @@ class NatBackend:
             return fut.result(timeout=timeout)
 
     async def close(self) -> None:
-        if self._from_config_cm is not None and self._loop is not None:
-            fut = asyncio.run_coroutine_threadsafe(
-                self._from_config_cm.__aexit__(None, None, None), self._loop,
+        if self._workflow_stop_event is not None and self._loop is not None:
+            # Signal _lifecycle to exit the WorkflowBuilder context.  The context
+            # exits inside _lifecycle's own task — the same task that entered it.
+            self._loop.call_soon_threadsafe(self._workflow_stop_event.set)
+            outer_loop = asyncio.get_running_loop()
+            await outer_loop.run_in_executor(
+                None, lambda: self._workflow_done.wait(timeout=5.0),
             )
-            try:
-                fut.result(timeout=5.0)
-            except Exception:
-                log.exception("NAT workflow teardown failed")
-            self._from_config_cm = None
-            self._workflow = None
         if self._loop is not None:
             self._loop.call_soon_threadsafe(self._loop.stop)
             if self._loop_thread:

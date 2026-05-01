@@ -21,12 +21,12 @@ _BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
     Process("hub",       "../../server-runtime",                  "xr_media_hub"),
-    Process("stt",       "../../ai-services/stt-server",          "stt_server"),
+    Process("stt",       "../../ai-services/stt-server",          "stt_server",                        gpu="1"),
     Process("tts",       "../../ai-services/tts/piper",           "piper_tts_server"),
-    Process("vlm",       "../../ai-services/vlm-server",          "vlm_server"),
+    Process("vlm",       "../../ai-services/vlm-server",          "vlm_server",                        gpu="1"),
     Process("vlm-mcp",   "../../agent-mcp-servers/vlm-mcp",       "vlm_mcp_server"),
     Process("video-mcp", "../../agent-mcp-servers/video-mcp",     "video_mcp_server"),
-    Process("llm",       "../../ai-services/llm/nemotron3_nano",  "nemotron3_nano_llm_server"),
+    Process("llm",       "../../ai-services/llm/nemotron3_nano",  "nemotron3_nano_llm_server",          gpu="0"),
     Process("worker",    "worker",                                "nat_agent_worker"),
 ]
 

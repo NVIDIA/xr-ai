@@ -210,7 +210,10 @@ class NatAgent:
                 await self._respond(pid, answer)
         finally:
             if announced_pid:
-                await self._transport.endpoint.set_status("idle", announced_pid)
+                try:
+                    await self._transport.endpoint.set_status("idle", announced_pid)
+                except Exception:
+                    pass  # transport already closed during pipeline shutdown
 
     async def _respond(self, pid: str, text: str) -> None:
         """Publish *text* as both a data message and TTS audio."""
