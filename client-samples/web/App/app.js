@@ -23,11 +23,6 @@ import {
   LiveKitConfig,
 } from '/StreamKit/index.js';
 
-const dbg = (typeof window !== 'undefined' && window.__dbg) || {
-  info: () => {}, warn: () => {}, err: () => {},
-};
-dbg.info('app.js module loaded');
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera enumeration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,19 +71,10 @@ async function enumerateCameras() {
 // Model state  (mirrors AppModel.swift field-for-field)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// When the page is served over HTTPS the hub proxies LiveKit signaling at
-// wss://<host>:<page-port>/rtc — same origin as the page itself. Over plain
-// HTTP the browser connects directly to ws://<host>:7880.
-const _pageIsSecure = window.location.protocol === 'https:';
-const _defaultPort  = _pageIsSecure
-  ? Number(window.location.port) || 443
-  : 7880;
-
 const model = {
   // Connection settings
   host:           window.location.hostname || 'localhost',
-  port:           _defaultPort,
-  secure:         _pageIsSecure,
+  port:           7880,
   tokenServerURL: '',       // defaults to /token relative to origin when blank
   token:          '',       // pre-signed JWT — alternative to tokenServerURL
   identity:       'web-client',
@@ -300,20 +286,16 @@ function escapeHtml(s) {
 
 let _toastTimer = null;
 
-function _hideToast() {
-  const toast = $('error-toast');
-  toast.classList.remove('visible');
-  toast.textContent = '';
-  model.lastError = null;
-}
-
 function showError(message) {
   model.lastError = message;
   const toast = $('error-toast');
   toast.textContent = message;
   toast.classList.add('visible');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(_hideToast, 4000);
+  _toastTimer = setTimeout(() => {
+    toast.classList.remove('visible');
+    model.lastError = null;
+  }, 4000);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -342,15 +324,9 @@ async function connect() {
   model.lastError = null;
   model.receivedMessages = [];
 
-  const scheme = model.secure ? 'wss' : 'ws';
-  dbg.info('connect() ' + scheme + '://' + model.host + ':' + model.port +
-           ' identity=' + model.identity +
-           ' tokenURL=' + (model.token.trim() ? '(inline token)' : resolvedTokenURL()));
-
   const lkConfig = new LiveKitConfig({
     host:     model.host,
     port:     Number(model.port),
-    secure:   model.secure,
     token:    model.token.trim()   || null,
     tokenURL: model.token.trim()   ? null : resolvedTokenURL(),
   });
@@ -358,9 +334,7 @@ async function connect() {
   let newSession;
   try {
     newSession = await StreamSession.create(BackendConfiguration.liveKit(lkConfig));
-    dbg.info('StreamSession.create() ok');
   } catch (err) {
-    dbg.err('StreamSession.create failed: ' + (err && err.stack ? err.stack : err));
     showError(err instanceof StreamError ? err.message : String(err));
     render();
     return;
@@ -422,9 +396,7 @@ async function connect() {
 
   try {
     await newSession.connect(sessionConfig);
-    dbg.info('session.connect() ok');
   } catch (err) {
-    dbg.err('session.connect failed: ' + (err && err.stack ? err.stack : err));
     showError(err instanceof StreamError ? err.message : String(err));
     model.session = null;
     model.connectionState = ConnectionState.DISCONNECTED;
@@ -449,19 +421,10 @@ async function disconnect() {
 }
 
 async function startAudio() {
-  if (!navigator.mediaDevices) {
-    const msg = window.isSecureContext
-      ? 'mediaDevices API unavailable in this browser'
-      : 'Mic/camera require a secure context. Use https:// or add this origin to chrome://flags "Insecure origins treated as secure".';
-    dbg.err('startAudio blocked: ' + msg);
-    showError(msg);
-    return;
-  }
   try {
     await model.session?.startAudio(new AudioConfig({ mode: model.audioMode }));
     model.isAudioActive = true;
   } catch (err) {
-    dbg.err('startAudio failed: ' + (err && err.stack ? err.stack : err));
     showError(err instanceof StreamError ? err.message : String(err));
   }
   render();
@@ -484,14 +447,6 @@ async function stopAudio() {
  * @returns {Promise<void>}
  */
 async function startCamera() {
-  if (!navigator.mediaDevices) {
-    const msg = window.isSecureContext
-      ? 'mediaDevices API unavailable in this browser'
-      : 'Mic/camera require a secure context. Use https:// or add this origin to chrome://flags "Insecure origins treated as secure".';
-    dbg.err('startCamera blocked: ' + msg);
-    showError(msg);
-    return;
-  }
   // Enumerate first (triggers permission prompt if needed) so the selector
   // is populated with real device names before the camera goes active.
   await enumerateCameras();
@@ -593,7 +548,6 @@ function wireEvents() {
 
   // Connect / disconnect button — toggles based on state
   $('connect-btn').addEventListener('click', () => {
-    dbg.info('connect-btn clicked (state=' + model.connectionState + ')');
     if (model.connectionState === ConnectionState.DISCONNECTED) {
       connect();
     } else {
@@ -656,13 +610,5 @@ function wireEvents() {
 // Bootstrap
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Defer until the DOM is parsed so that wireEvents() can grab elements by id.
-// In practice index.html ships this as a `<script type="module" defer>` (which
-// already implies post-parse execution), but a stray `<script>` without
-// `defer` would race the body — the guard makes the contract explicit.
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => { wireEvents(); render(); });
-} else {
-  wireEvents();
-  render();
-}
+wireEvents();
+render();

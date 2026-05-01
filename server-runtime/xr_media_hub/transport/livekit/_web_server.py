@@ -148,7 +148,7 @@ def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
         await ws.close(1001)
 
     if cfg.web_client_dir:
-        app.mount("/", StaticFiles(directory=cfg.web_client_dir, html=True), name="static")
+        app.mount("/", StaticFiles(directory=cfg.web_client_dir, html=True, follow_symlink=True), name="static")
 
     return app
 

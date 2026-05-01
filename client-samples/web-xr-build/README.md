@@ -5,7 +5,7 @@
 
 # web-xr-build — web vendor bundles
 
-Produces the vendor bundles for both web clients into `../web/vendor/`:
+Produces the vendor bundles for `../web-xr/vendor/`:
 
 - `cloudxr-sdk.esm.mjs`   — webpack-bundled from the @nvidia/cloudxr NGC tarball.
 - `livekit-client.esm.mjs` — copied from npm's prebuilt ESM.
@@ -14,11 +14,8 @@ The bundles are gitignored — fetched/built per host. The browser loads
 them same-origin, so XR headsets and offline LANs work after the host
 has run this script once.
 
-`../web-xr/vendor` is a symlink → `../web/vendor`, so running this build
-once populates vendor files for both clients:
-
-- `../web/` (basic sample) — uses `livekit-client` only.
-- `../web-xr/` (XR render demo) — uses both bundles.
+`../web/` (the basic sample) loads LiveKit directly from CDN and requires
+no build step. Only `../web-xr/` (the XR render demo) needs this build.
 
 ## Usage
 
@@ -62,4 +59,4 @@ cd client-samples/web-xr-build
   `experiments.outputModule`.
 - `src/index.js` — re-exports the CloudXR symbols the page uses.
 - `sdk.tgz`, `node_modules/`, `package-lock.json` — gitignored.
-- `../web/vendor/*.esm.mjs` — gitignored (output of this script; also accessible via `../web-xr/vendor/` symlink).
+- `../web-xr/vendor/*.esm.mjs` — gitignored (output of this script).

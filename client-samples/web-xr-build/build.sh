@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Produce ../web/vendor/{cloudxr-sdk,livekit-client}.esm.mjs so the page
-# loads both same-origin (works on headsets / offline LANs). Output files
-# are gitignored — run this once on the host that serves the sample.
+# Produce ../web-xr/vendor/{cloudxr-sdk,livekit-client}.esm.mjs so the
+# XR render demo page loads both same-origin (works on headsets / offline LANs).
+# Output files are gitignored — run this once on the host that serves the demo.
 #
 #   cloudxr-sdk.esm.mjs    — webpack-bundled from @nvidia/cloudxr (NGC tarball)
 #   livekit-client.esm.mjs — copied from npm's prebuilt ESM
@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 VERSION="$(tr -d '[:space:]' < .sdk-version)"
 SDK_FILE="nvidia-cloudxr-${VERSION}.tgz"
 LOCAL_TARBALL="sdk.tgz"
-VENDOR_DIR="../web/vendor"
+VENDOR_DIR="../web-xr/vendor"
 OUT_CLOUDXR="${VENDOR_DIR}/cloudxr-sdk.esm.mjs"
 OUT_LIVEKIT="${VENDOR_DIR}/livekit-client.esm.mjs"
 

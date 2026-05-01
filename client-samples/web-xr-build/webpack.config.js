@@ -7,7 +7,7 @@ const path = require('path');
  * Bundles @nvidia/cloudxr (CommonJS) into a single ESM file so the browser
  * can load it directly via <script type="module"> + import map.
  *
- * Output: ../web/vendor/cloudxr-sdk.esm.mjs  (committed)
+ * Output: ../web-xr/vendor/cloudxr-sdk.esm.mjs
  */
 module.exports = {
   entry: './src/index.js',
@@ -19,7 +19,7 @@ module.exports = {
   },
 
   output: {
-    path: path.resolve(__dirname, '..', 'web', 'vendor'),
+    path: path.resolve(__dirname, '..', 'web-xr', 'vendor'),
     filename: 'cloudxr-sdk.esm.mjs',
     library: { type: 'module' },
     module: true,
