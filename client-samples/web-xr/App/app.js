@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * @fileoverview Sample application — JavaScript equivalent of AppModel.swift + ContentView.swift.
+ * @fileoverview XR render demo application — extends the base StreamKit sample
+ * with CloudXR streaming via the XR Stream panel.
  *
  * Wires observable model state to DOM elements using vanilla JS (no framework).
  * All model fields and action names mirror AppModel.swift exactly; DOM bindings
@@ -22,6 +23,7 @@ import {
   BackendConfiguration,
   LiveKitConfig,
 } from '/StreamKit/index.js';
+import { CloudXRStream } from '/App/cloudxr.js';
 
 const dbg = (typeof window !== 'undefined' && window.__dbg) || {
   info: () => {}, warn: () => {}, err: () => {},
@@ -116,7 +118,19 @@ const model = {
   receivedMessages: [],
   /** @type {string|null} */
   lastError:       null,
+
+  // ── CloudXR state ──────────────────────────────────────────────────────
+  xrHost:  window.location.hostname || 'localhost',
+  xrPort:  48322,
+  /** @type {'idle'|'connecting'|'streaming'|'stopping'|'error'} */
+  xrState: 'idle',
+  /** @type {string|null} */
+  xrError: null,
 };
+
+// Singleton CloudXR wrapper — created after DOM is ready in wireEvents().
+/** @type {CloudXRStream|null} */
+let xrStream = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOM helpers
@@ -264,6 +278,82 @@ function render() {
     agentLabel.textContent = 'Unknown';
   }
 
+  // ── XR Stream ──────────────────────────────────────────────────────────────
+  const xrDot       = $('xr-state-dot');
+  const xrLabel     = $('xr-state-label');
+  const xrLaunchBtn = $('xr-launch-btn');
+  const xrHostInput = $('xr-host-input');
+  const xrPortInput = $('xr-port-input');
+
+  xrDot.className = 'state-dot';
+  switch (model.xrState) {
+    case 'idle':
+      xrDot.classList.add('disconnected');
+      xrLabel.textContent = 'Idle';
+      break;
+    case 'connecting':
+      xrDot.classList.add('connecting');
+      xrLabel.textContent = 'Connecting…';
+      break;
+    case 'streaming':
+      xrDot.classList.add('connected');
+      xrLabel.textContent = 'Streaming';
+      break;
+    case 'stopping':
+      xrDot.classList.add('reconnecting');
+      xrLabel.textContent = 'Stopping…';
+      break;
+    case 'error':
+      xrDot.classList.add('disconnected');
+      xrLabel.textContent = 'Error';
+      break;
+  }
+
+  const xrBusy   = model.xrState === 'connecting' || model.xrState === 'stopping';
+  const xrActive = model.xrState === 'streaming';
+  const xrInputsDisabled = xrActive || xrBusy;
+  xrHostInput.disabled = xrInputsDisabled;
+  xrPortInput.disabled = xrInputsDisabled;
+  xrHostInput.closest('.field-row')?.classList.toggle('dimmed', xrInputsDisabled);
+  xrPortInput.closest('.field-row')?.classList.toggle('dimmed', xrInputsDisabled);
+
+  // Cert-accept link tracks the host/port inputs so user can tap it to
+  // accept the cloudxr-runtime self-signed cert before clicking Launch XR.
+  const xrCertLink = $('xr-cert-link');
+  if (xrCertLink) {
+    const certHost = (model.xrHost || '').trim() || window.location.hostname || 'localhost';
+    const certPort = Number(model.xrPort) || 48322;
+    const url = `https://${certHost}:${certPort}/`;
+    if (xrCertLink.href !== url) {
+      xrCertLink.href = url;
+      // Reset the accepted state whenever the URL changes; verifyCert()
+      // will re-flip it to green if the new URL's cert is also trusted.
+      _setCertAccepted(false);
+      verifyCert(url);
+    }
+  }
+
+  if (xrActive) {
+    // The 2D page can't meaningfully exit XR — the user is inside the
+    // headset at this point. Show a disabled "Connected" state; the session
+    // ends when the user exits via the headset UI or takes the headset off.
+    xrLaunchBtn.textContent = 'Connected';
+    xrLaunchBtn.className   = 'btn btn-secondary btn-full';
+    xrLaunchBtn.disabled    = true;
+  } else if (xrBusy) {
+    xrLaunchBtn.textContent = model.xrState === 'connecting' ? 'Connecting…' : 'Stopping…';
+    xrLaunchBtn.className   = 'btn btn-secondary btn-full';
+    xrLaunchBtn.disabled    = true;
+  } else if (!model.isAudioActive) {
+    xrLaunchBtn.textContent = 'Launch XR (start mic first)';
+    xrLaunchBtn.className   = 'btn btn-secondary btn-full';
+    xrLaunchBtn.disabled    = true;
+  } else {
+    xrLaunchBtn.textContent = 'Launch XR';
+    xrLaunchBtn.className   = 'btn btn-primary btn-full';
+    xrLaunchBtn.disabled    = false;
+  }
+
   // ── Data channel ───────────────────────────────────────────────────────────
   $('ping-btn').disabled = !isConnected;
   $('send-btn').disabled = !isConnected || $('message-input').value.trim() === '';
@@ -292,6 +382,46 @@ function escapeHtml(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CloudXR cert-accept verification
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Mirrors the cloudxr-js/examples/simple cert-acceptance pattern: probe the
+// WSS proxy URL with fetch(mode='no-cors'). If the fetch resolves without
+// throwing, the browser has accepted the cert and we flip the hint to a
+// green "✓ accepted" state. If it throws (TypeError on cert reject) we
+// leave the hint blue so the user can tap the link to accept it.
+
+let _certAcceptedUrl = null;     // URL whose cert is currently believed accepted
+let _certVerifyAbort = null;     // AbortController for the in-flight probe
+
+function _setCertAccepted(accepted) {
+  const hint = $('xr-cert-hint');
+  const link = $('xr-cert-link');
+  if (!hint || !link) return;
+  if (accepted) {
+    hint.classList.add('cert-accepted');
+    link.textContent = '✓ CloudXR cert accepted';
+  } else {
+    hint.classList.remove('cert-accepted');
+    link.textContent = 'accept the CloudXR cert';
+  }
+}
+
+async function verifyCert(url) {
+  if (_certVerifyAbort) _certVerifyAbort.abort();
+  _certVerifyAbort = new AbortController();
+  try {
+    await fetch(url, { mode: 'no-cors', signal: _certVerifyAbort.signal });
+    _certAcceptedUrl = url;
+    _setCertAccepted(true);
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    if (_certAcceptedUrl === url) _certAcceptedUrl = null;
+    _setCertAccepted(false);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -559,11 +689,53 @@ async function sendCustom(text) {
   }
 }
 
+/**
+ * Launch (or exit) a CloudXR streaming session. The LiveKit room is
+ * untouched — entering XR does not drop the agent connection.
+ *
+ * The always-visible "accept the CloudXR cert" link in the XR panel handles
+ * the first-time self-signed-cert prompt; on failure we just surface the
+ * error to the panel state and the dbg log.
+ */
+async function startXR() {
+  if (!xrStream) return;
+  model.xrError = null;
+  const host = model.xrHost.trim() || window.location.hostname || 'localhost';
+  const port = Number(model.xrPort) || 48322;
+
+  dbg.info(`startXR() ${host}:${port}`);
+  try {
+    await xrStream.startXR(host, port);
+  } catch (err) {
+    dbg.err('startXR failed: ' + (err && err.stack ? err.stack : err));
+    model.xrError = String(err?.message ?? err);
+    model.xrState = 'error';
+    render();
+  }
+}
+
+async function stopXR() {
+  if (!xrStream) return;
+  dbg.info('stopXR()');
+  try {
+    await xrStream.stopXR();
+  } catch (err) {
+    dbg.err('stopXR failed: ' + (err && err.stack ? err.stack : err));
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Event wiring
 // ─────────────────────────────────────────────────────────────────────────────
 
 function wireEvents() {
+  // Re-verify CloudXR cert when the user returns from accepting it in the
+  // new tab — flips the hint to green without requiring a Launch XR attempt.
+  window.addEventListener('focus', () => {
+    const link = $('xr-cert-link');
+    if (link && link.href) verifyCert(link.href);
+  });
+
   // Config inputs — sync to model on change
   $('host-input').addEventListener('input', (e) => { model.host = e.target.value; });
   $('port-input').addEventListener('input', (e) => { model.port = Number(e.target.value) || 7880; });
@@ -649,6 +821,60 @@ function wireEvents() {
     sendCustom(text);
     msgInput.value = '';
     render();
+  });
+
+  // ── XR Stream ──────────────────────────────────────────────────────────────
+  const xrHostInput = $('xr-host-input');
+  const xrPortInput = $('xr-port-input');
+  xrHostInput.value = model.xrHost;
+  xrPortInput.value = model.xrPort;
+
+  xrHostInput.addEventListener('input', (e) => {
+    model.xrHost = e.target.value;
+  });
+  xrPortInput.addEventListener('input', (e) => {
+    model.xrPort = Number(e.target.value) || 48322;
+  });
+
+  xrStream = new CloudXRStream({
+    canvasId: 'xr-canvas',
+    dbg,
+    onStateChange: (state, detail) => {
+      model.xrState = state;
+      if (state === 'error') model.xrError = detail ?? null;
+      if (state === 'idle')  model.xrError = null;
+      dbg.info(`xr state → ${state}${detail ? ': ' + detail : ''}`);
+
+      // Notify the agent stack that an XR client is now connected to CloudXR.
+      // OpenXR apps (e.g. LOVR scenes hosted by render-mcp) cannot succeed
+      // `xrGetSystem` until a streaming client is present — CloudXR returns
+      // XR_ERROR_FORM_FACTOR_UNAVAILABLE otherwise. We send xr.session.started
+      // on streaming-start so render-mcp gates its LOVR launch correctly.
+      // Failure is swallowed: it's an optional coordination signal and some
+      // sessions may not have an agent peer (StreamError.notConnected).
+      //
+      // We deliberately do NOT publish a corresponding xr.session.stopped:
+      // no peer subscribes to it today (the worker only listens for the
+      // start), and shipping unused topics into the LiveKit signalling
+      // bandwidth just makes the protocol surface harder to reason about.
+      // If a peer ever needs the stop signal, add the publish here and
+      // document the matching subscriber.
+      if (state === 'streaming') {
+        model.session?.send(new Uint8Array(0), { topic: 'xr.session.started' })
+          .catch((err) => dbg.warn('xr.session.started publish failed: ' + err));
+      }
+
+      render();
+    },
+  });
+
+  $('xr-launch-btn').addEventListener('click', () => {
+    dbg.info('xr-launch-btn clicked (state=' + model.xrState + ')');
+    if (model.xrState === 'streaming') {
+      stopXR();
+    } else if (model.xrState === 'idle' || model.xrState === 'error') {
+      startXR();
+    }
   });
 }
 

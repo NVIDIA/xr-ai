@@ -16,7 +16,8 @@
   <script type="importmap">
   {
     "imports": {
-      "livekit-client": "/vendor/livekit-client.esm.mjs"
+      "livekit-client":   "/vendor/livekit-client.esm.mjs",
+      "@nvidia/cloudxr":  "/vendor/cloudxr-sdk.esm.mjs"
     }
   }
   </script>
@@ -522,6 +523,67 @@
       </div>
     </section>
 
+    <!-- ── XR Stream section ──────────────────────────────────────────── -->
+    <section class="section">
+      <h2 class="section-header">XR Stream</h2>
+      <div class="card">
+
+        <!-- XR status -->
+        <div class="labeled-row">
+          <span class="row-label">State</span>
+          <div class="state-badge">
+            <span id="xr-state-dot"   class="state-dot disconnected"></span>
+            <span id="xr-state-label">Idle</span>
+          </div>
+        </div>
+
+        <!-- XR host -->
+        <div class="field-row">
+          <label class="field-label" for="xr-host-input">Host / IP</label>
+          <input
+            id="xr-host-input"
+            class="field-input"
+            type="text"
+            placeholder="Same as page host"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          >
+        </div>
+
+        <!-- XR port (CloudXR WSS proxy default: 48322) -->
+        <div class="field-row">
+          <label class="field-label" for="xr-port-input">Port</label>
+          <input
+            id="xr-port-input"
+            class="field-input"
+            type="number"
+            min="1"
+            max="65535"
+            placeholder="48322"
+          >
+        </div>
+
+        <!-- Launch / Exit -->
+        <div class="btn-row">
+          <button id="xr-launch-btn" class="btn btn-primary btn-full">Launch XR</button>
+        </div>
+
+        <!-- Cert-accept hint. cloudxr-runtime serves the WSS proxy with a
+             self-signed cert; the browser must accept it once before Launch
+             XR can complete. The link opens in a new tab; on returning
+             (window focus) we re-fetch the cert URL and flip the label to
+             a green "accepted" state if it now succeeds. Mirrors the
+             cloudxr-js/examples/simple cert-acceptance pattern. -->
+        <p id="xr-cert-hint" class="field-hint">
+          First-time setup:
+          <a id="xr-cert-link" target="_blank" rel="noopener noreferrer">accept the CloudXR cert</a>
+          once, then come back and Launch XR.
+        </p>
+
+      </div>
+    </section>
+
     <!-- ── Data channel section ───────────────────────────────────────── -->
     <section class="section">
       <h2 class="section-header">Data Channel</h2>
@@ -540,7 +602,7 @@
             id="message-input"
             class="text-input"
             type="text"
-            placeholder="Custom message\u2026"
+            placeholder="Custom message&#x2026;"
             autocomplete="off"
             autocorrect="off"
             spellcheck="false"
@@ -575,6 +637,11 @@
     </section>
 
   </div><!-- /.page-content -->
+
+  <!-- Canvas consumed by WebXR / CloudXR.  Intentionally unstyled — WebXR
+       renders into XRWebGLLayer's framebuffer and IWER (in desktop dev) drives
+       the on-page presentation through this element.  Don't add CSS here. -->
+  <canvas id="xr-canvas"></canvas>
 
   <!-- Error toast -->
   <div id="error-toast" role="alert" aria-live="assertive"></div>
