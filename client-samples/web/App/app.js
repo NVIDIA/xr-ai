@@ -343,6 +343,10 @@ function render() {
     xrLaunchBtn.textContent = model.xrState === 'connecting' ? 'Connecting\u2026' : 'Stopping\u2026';
     xrLaunchBtn.className   = 'btn btn-secondary btn-full';
     xrLaunchBtn.disabled    = true;
+  } else if (!model.isAudioActive) {
+    xrLaunchBtn.textContent = 'Launch XR (start mic first)';
+    xrLaunchBtn.className   = 'btn btn-secondary btn-full';
+    xrLaunchBtn.disabled    = true;
   } else {
     xrLaunchBtn.textContent = 'Launch XR';
     xrLaunchBtn.className   = 'btn btn-primary btn-full';
