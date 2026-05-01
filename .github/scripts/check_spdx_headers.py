@@ -15,8 +15,8 @@ directives (``#!`` shebang, ``<?xml ?>``, ``<!DOCTYPE>``, Swift's
 
 Usage
 -----
-    python3 scripts/check_spdx_headers.py [paths...]            # check
-    python3 scripts/check_spdx_headers.py --fix [paths...]      # insert missing headers
+    python3 .github/scripts/check_spdx_headers.py [paths...]            # check
+    python3 .github/scripts/check_spdx_headers.py --fix [paths...]      # insert missing headers
 
 With no paths, walks the repo. Designed for ``pre-commit`` with
 ``pass_filenames: true``.
@@ -115,7 +115,7 @@ _SKIP_PATH_SUFFIXES = (
 # ── Walk pruning ────────────────────────────────────────────────────────────
 _PRUNE_DIRS = {".git", ".venv", "node_modules", "models", "__pycache__", ".cache"}
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def comment_style(path: Path) -> str | None:

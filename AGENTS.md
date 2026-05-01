@@ -675,10 +675,11 @@ Skip files that can't carry comments or aren't ours to license: `LICENSE`,
 Xcode-managed files (`*.pbxproj`, `*.xcworkspacedata`), and third-party Gradle
 wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.properties`).
 
-Enforced locally by `scripts/check_spdx_headers.py`, wired into `.pre-commit-config.yaml`.
-Run `pre-commit install` once after cloning to enable it; `python3
-scripts/check_spdx_headers.py` audits the whole tree at any time.
-The same check runs in CI as a backstop: `.github/workflows/spdx.yml`.
+Enforced locally by `.github/scripts/check_spdx_headers.py`, wired into
+`.pre-commit-config.yaml`. Run `pre-commit install` once after cloning to
+enable it; `python3 .github/scripts/check_spdx_headers.py` audits the whole
+tree at any time. The same check runs in CI as a backstop:
+`.github/workflows/spdx.yml`.
 
 ## Dependency discipline
 
