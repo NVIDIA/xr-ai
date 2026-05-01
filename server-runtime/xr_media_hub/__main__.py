@@ -13,9 +13,11 @@ import asyncio
 import collections
 import logging
 import signal
+import sys
 import time
 
 from xr_media_hub._config_loader import load_config
+from xr_media_hub._errors import StartupError
 from xr_media_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
 from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
 
@@ -139,7 +141,13 @@ async def main() -> None:
 
 
 def run() -> None:
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except StartupError as e:
+        # The message is a pre-formatted banner; print it as-is and exit
+        # cleanly so the operator isn't buried under a traceback.
+        print(str(e), file=sys.stderr, flush=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,8 @@ import logging
 import os
 import sys
 
+from xr_media_hub._errors import StartupError
+
 log = logging.getLogger(__name__)
 
 _SKIP_ENV = "XR_AI_SKIP_HWCODEC_CHECK"
@@ -156,4 +158,4 @@ def _fail(platform: str, missing: list[str], hint: str) -> None:
         f"  {hint}",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
-    raise RuntimeError("\n".join(lines))
+    raise StartupError("\n".join(lines))
