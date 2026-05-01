@@ -113,7 +113,15 @@ _SKIP_PATH_SUFFIXES = (
 )
 
 # ── Walk pruning ────────────────────────────────────────────────────────────
-_PRUNE_DIRS = {".git", ".venv", "node_modules", "models", "__pycache__", ".cache"}
+# Explicit set rather than "any dotted directory" — we want to scan `.github/`
+# (workflows + this very script live there).
+_PRUNE_DIRS = {
+    ".git", ".venv", ".cache",
+    ".idea", ".vscode",
+    ".mypy_cache", ".pytest_cache",
+    ".tox", ".nox",
+    "node_modules", "models", "__pycache__",
+}
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -274,7 +282,12 @@ def discover(root: Path) -> list[Path]:
     def _walk(d: Path) -> None:
         for entry in sorted(d.iterdir()):
             if entry.is_dir():
-                if entry.name in _PRUNE_DIRS or entry.name.startswith("."):
+                if entry.name in _PRUNE_DIRS:
+                    continue
+                # Skip virtualenvs regardless of directory name — the
+                # `.venv` convention is common but not universal, so look
+                # for the marker file the venv module always writes.
+                if (entry / "pyvenv.cfg").is_file():
                     continue
                 _walk(entry)
             elif entry.is_file():
