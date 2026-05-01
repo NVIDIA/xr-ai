@@ -86,6 +86,11 @@ class TranscriptStore:
 
     # ── path resolution ──────────────────────────────────────────────
 
+    def _check(self, path: pathlib.Path) -> pathlib.Path:
+        if not path.resolve().is_relative_to(self._dir.resolve()):
+            raise ValueError(f"Path escapes transcript directory: {path}")
+        return path
+
     def _resolve_or_create(self, source_id: str) -> pathlib.Path:
         """Resolve *source_id* to ``<dir>/<stem>.jsonl``, creating the
         ``.identity`` sidecar on first use. Disambiguates collisions
@@ -98,16 +103,16 @@ class TranscriptStore:
             jsonl = self._dir / f"{stem}.jsonl"
             if not ident.exists() and not jsonl.exists():
                 ident.write_text(source_id, encoding="utf-8")
-                return jsonl
+                return self._check(jsonl)
             if ident.exists() and ident.read_text(encoding="utf-8") == source_id:
-                return jsonl
+                return self._check(jsonl)
             # Legacy pre-sidecar: jsonl exists, no sidecar, raw == safe.
             if (
                 not ident.exists() and jsonl.exists()
                 and source_id == safe and suffix == 1
             ):
                 ident.write_text(source_id, encoding="utf-8")
-                return jsonl
+                return self._check(jsonl)
             suffix += 1
 
     def _resolve_existing(self, source_id: str) -> pathlib.Path | None:
@@ -122,14 +127,14 @@ class TranscriptStore:
         if canonical_jsonl.exists():
             if canonical_ident.exists():
                 if canonical_ident.read_text(encoding="utf-8") == source_id:
-                    return canonical_jsonl
+                    return self._check(canonical_jsonl)
             elif source_id == safe:
-                return canonical_jsonl
+                return self._check(canonical_jsonl)
         # Slow path: scan sidecars.
         for ident in sorted(self._dir.glob("*.identity")):
             if ident.read_text(encoding="utf-8") == source_id:
                 jsonl = ident.with_suffix(".jsonl")
-                return jsonl if jsonl.exists() else None
+                return self._check(jsonl) if jsonl.exists() else None
         return None
 
     # ── operations ───────────────────────────────────────────────────

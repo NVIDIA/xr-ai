@@ -90,6 +90,11 @@ class ChunkStore:
     def __init__(self, recordings_dir: pathlib.Path) -> None:
         self._root = recordings_dir
 
+    def _check(self, path: pathlib.Path) -> pathlib.Path:
+        if not path.resolve().is_relative_to(self._root.resolve()):
+            raise ValueError(f"Path escapes recordings directory: {path}")
+        return path
+
     def _pid_dir(self, pid: str) -> pathlib.Path | None:
         """Return the existing dir whose ``.identity`` matches *pid*, or
         ``None`` if no recordings exist for that participant."""
@@ -103,16 +108,16 @@ class ChunkStore:
             sidecar = canonical / ".identity"
             if sidecar.exists():
                 if sidecar.read_text(encoding="utf-8") == pid:
-                    return canonical
+                    return self._check(canonical)
             elif pid == safe:
-                return canonical
+                return self._check(canonical)
         # Slow path: scan all dirs (covers collision-bumped suffixes).
         for d in sorted(self._root.iterdir()):
             if not d.is_dir():
                 continue
             sidecar = d / ".identity"
             if sidecar.exists() and sidecar.read_text(encoding="utf-8") == pid:
-                return d
+                return self._check(d)
         return None
 
     def list_participants(self) -> list[str]:

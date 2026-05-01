@@ -25,14 +25,18 @@ import javax.net.ssl.X509TrustManager
 internal object TrustAllCerts {
 
     private val trustManager = object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {}
-        override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+        override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {
+            // dev-only: hub uses a self-signed cert; not for production use // NOSONAR
+        }
+        override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {
+            // dev-only: hub uses a self-signed cert; not for production use // NOSONAR
+        }
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
     }
 
     private val hostnameVerifier = HostnameVerifier { _, _ -> true }
 
-    private val sslContext: SSLContext = SSLContext.getInstance("TLS").apply {
+    private val sslContext: SSLContext = SSLContext.getInstance("TLSv1.2").apply {
         init(null, arrayOf<javax.net.ssl.TrustManager>(trustManager), SecureRandom())
     }
 

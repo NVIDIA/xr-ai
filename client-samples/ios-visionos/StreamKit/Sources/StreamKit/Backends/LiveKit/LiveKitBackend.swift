@@ -592,11 +592,13 @@ private final class TrustingSessionDelegate: NSObject, URLSessionDelegate, @unch
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
+        #if DEBUG
         if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
            let trust = challenge.protectionSpace.serverTrust {
             completionHandler(.useCredential, URLCredential(trust: trust))
-        } else {
-            completionHandler(.performDefaultHandling, nil)
+            return
         }
+        #endif
+        completionHandler(.performDefaultHandling, nil)
     }
 }
