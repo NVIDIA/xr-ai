@@ -108,6 +108,10 @@ async def wait_for_subscribed(*processors, pids) -> None:
     await wait_for(lambda: all(
         ep.subscribed_participants >= expected for ep in processors
     ))
+    # setsockopt(SUBSCRIBE) updates Python state synchronously but the ZMQ
+    # subscription message still propagates to the PUB over ipc://; without
+    # this settle, data pushed immediately after can race the subscription.
+    await asyncio.sleep(0.05)
 
 
 def silence(pid: str, *, pts_us: int = 0, sample_rate: int = 48_000,
