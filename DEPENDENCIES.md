@@ -89,8 +89,8 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
     Reads NVENC H.264 chunks written by the hub from disk for historical
     queries; connects to the hub as a ProcessorEndpoint to fetch live
-    frames for `get_latest_frame`. Decodes chunks via NVDEC and
-    re-encodes selected frames as PNG via Pillow.
+    frames for `get_frame_from_time(..., second_ago=0)`. Decodes chunks
+    via NVDEC and re-encodes selected frames as PNG via Pillow.
 
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
@@ -323,8 +323,9 @@ via `mcp_client` function groups expanded into the agent's `tool_names`.
 Worker speaks to stt-server (8103), piper-tts-server (8105), nemotron3_nano
 LLM (8107), vlm-mcp (8220), video-mcp (8210). vlm-server (8100) is reached
 only through vlm-mcp; the worker has no direct VLM HTTP client. Hub video
-recording is enabled (matches mcp-agent's pattern) so `get_frame_at_time`
-and `query_video` work on past frames.
+recording is enabled (matches mcp-agent's pattern) so
+`get_frame_from_time(..., second_ago=N>0)` and `query_video` work on past
+frames.
 
 ---
 

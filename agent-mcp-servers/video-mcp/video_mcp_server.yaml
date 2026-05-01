@@ -8,8 +8,9 @@
 # in xr_media_hub.yaml — the server reads chunk files directly from disk.
 #
 # hub_pub / hub_push are the hub IPC sockets used to fetch live frames
-# (the `get_latest_frame` tool). They must match the hub's PUB / PULL
-# bindings. Defaults below match xr_media_hub's defaults.
+# (the `get_frame_from_time(..., second_ago=0)` tool). They must match
+# the hub's PUB / PULL bindings. Defaults below match xr_media_hub's
+# defaults.
 #
 # MCP endpoint: http://localhost:8210/mcp  (StreamableHTTP transport)
 

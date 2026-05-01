@@ -288,22 +288,30 @@ async with httpx.AsyncClient() as client:
   when sanitized filenames collide.
 - **video-mcp-server** is pure FastMCP at `/mcp` on port 8210. Tools:
   `list_live_participants`, `list_recorded_participants`,
-  `get_video_stats`, `query_video`, `get_latest_frame`,
-  `get_frame_at_time`. `list_live_participants` returns the hub's IPC
-  roster (the only pids `get_latest_frame` will succeed for);
-  `list_recorded_participants` returns raw identities recovered from
-  per-pid `.identity` sidecars in the recordings directory. Reads
-  NVENC chunks from disk for historical queries; connects to the hub
-  as a `ProcessorEndpoint` (`Subscribe.VIDEO`) for live frames.
-  `get_frame_at_time` decodes via NVDEC and returns a PNG path.
-  Requires hub video recording enabled via
-  `video_recording.enabled: true` in `xr_media_hub.yaml`.
+  `get_video_stats`, `query_video`, `get_frame_from_time`.
+  `get_frame_from_time(participant_id, second_ago, reference_time_us=0)`
+  returns a PNG path. The target instant is
+  `reference_time_us - second_ago * 1e6`; `reference_time_us=0` falls back
+  to the wall clock. The unanchored zero-zero case (`reference_time_us=0,
+  second_ago=0`) shortcuts to the live IPC path (most recent frame the
+  hub has); every other combination — including any anchored call —
+  reads the recorded NVENC chunk store and decodes via NVDEC. LLM-driven
+  agents must always pass `reference_time_us` (= the user's
+  user_asked_at_us preamble value) so the returned frame matches when
+  the user spoke, not when the LLM finished thinking; otherwise lookups
+  drift 5-15 s thanks to LLM thinking latency. (Replaces the deprecated
+  `get_latest_frame` and `get_frame_at_time` tools, whose bodies remain
+  commented in `__main__.py` for reference.) `list_live_participants`
+  returns the hub's IPC roster; `list_recorded_participants` returns raw
+  identities recovered from per-pid `.identity` sidecars. Past-frame
+  queries — and all anchored queries — require hub video recording
+  enabled via `video_recording.enabled: true` in `xr_media_hub.yaml`.
 - **vlm-mcp-server** is pure FastMCP at `/mcp` on port 8220 with one tool:
   `ask_image(question, image_path)`. Reads a local PNG path, base64-encodes
   it as JPEG, POSTs to vlm-server's OpenAI chat-completions endpoint, and
   returns the model's answer text. Has **no** hub coupling and **no**
   `xr-ai-agent` dep — image acquisition is the LLM's responsibility
-  (typically by calling `video-mcp.get_latest_frame` first and passing
+  (typically by calling `video-mcp.get_frame_from_time` first and passing
   the returned `path` into `ask_image`). Used by `nat-agent`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship with `mcp-agent` as examples.
@@ -743,6 +751,152 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-04-30 — nat-agent: latency cuts via reasoning-off + latest-only utterance queue
+
+End-to-end voice turn latency was ~40 s on Nemotron-3-Nano-30B-A3B-NVFP4
+(eager mode), broken down roughly as: 8-28 s LLM call to pick the first
+tool, ~0.5 s `get_frame_from_time`, 8-12 s LLM call to pick the second
+tool, 0.3-3 s VLM, 3-6 s LLM call to compose the final answer. Three
+LLM round-trips per visual turn, each dominated by a 600-1500 token
+`<think>...</think>` reasoning preamble that vLLM strips server-side
+via the `nano_v3` reasoning parser (so it never reaches the worker but
+still costs decode time). Compounding: TranscriptionFrames piled up
+through `NatBackend._infer_lock`, so an utterance that arrived while the
+agent was thinking sat behind earlier (sometimes phantom / echo-induced)
+ones for minutes.
+
+Two coupled changes:
+
+- **Reasoning OFF for tool calling.** `nat_agent_workflow.yaml`'s
+  `llms.local_llm` now passes
+  `extra_body: {chat_template_kwargs: {enable_thinking: false}}`. NAT's
+  `OpenAIModelConfig` has `extra="allow"`, so this field flows through
+  `model_dump` → LangChain `ChatOpenAI(extra_body=...)` → OpenAI Python
+  client → vLLM, which the `nano_v3` chat template reads to suppress the
+  `<think>` block. Each LLM call drops to prefill + ~50-200 generated
+  tokens (≈ 2-5 s on this deployment). Tool-selection accuracy under
+  this toggle is not benchmarked publicly for Nemotron-3-Nano (the
+  53.76% BFCL v4 score in the technical report was measured with
+  reasoning ON, no head-to-head OFF number is published); the
+  architecturally similar Qwen3 family shows reasoning-off **improves**
+  tool execution reliability while occasionally **over-triggering** on
+  simple non-visual queries. Mitigated by the system prompt's explicit
+  "skip every tool" instruction for non-visual questions. NVIDIA's own
+  recommendation of `temperature=0.6, top_p=0.95` (already our
+  defaults) is the model card's tool-calling preset.
+
+- **Latest-only-replace utterance queue.** Both `NatProcessor` (voice
+  path, in `worker/processors.py`) and `NatAgent._on_data` (data
+  channel, in `worker/agent.py`) now hold a single `_pending` slot
+  protected by an `asyncio.Lock`, drained by a single task. New
+  transcripts overwrite a pending one rather than queueing behind it.
+  After each `nat.infer` returns, the drain task re-checks `_pending`
+  and *discards* its just-computed answer if a newer transcript exists,
+  letting the loop re-run on the fresher text. Bounded depth: one
+  in-flight + one pending. The in-flight LLM call is **not**
+  hard-cancelled — implementing real cancellation would require plumbing
+  through NAT → LangChain → OpenAI client → httpx → vLLM, which is
+  invasive. Wasting at most one LLM call's worth of decode is the
+  trade-off; in exchange the user's latest intent always wins and the
+  queue can never grow long enough to trip Pipecat's idle-timer
+  watchdog. Voice-path log line `NAT pending REPLACED — older
+  transcript dropped` makes drops observable.
+
+### 2026-04-30 — video-mcp: anchor frame lookups to user-speech time via `reference_time_us`
+
+`get_frame_from_time(participant_id, second_ago)` defined `second_ago`
+relative to wall-clock at tool-fire time. STT finalisation (~0.5-1 s)
+plus eager-mode vLLM thinking (~5-15 s on Nemotron-3-Nano-30B) made
+that interval consistently 5-15 s late. Even when the LLM correctly
+mapped "five seconds ago" → `second_ago=5`, the actual lookup point
+was 5 + ~10 s = ~15 s before the user spoke. In voice-agent traces
+this manifested as the VLM confidently describing a different frame
+than the user was asking about ("the box is white" when the user had
+already lowered the red box and the latest visible white object was a
+desk).
+
+Changes:
+
+- **`get_frame_from_time` gains an optional `reference_time_us`
+  parameter.** The target instant is `reference_time_us - second_ago *
+  1_000_000`; when `reference_time_us = 0` (the default) the tool
+  falls back to wall clock, preserving prior behaviour for external
+  MCP clients that don't know about the new field. The unanchored
+  `reference_time_us=0, second_ago=0` case still short-circuits to the
+  live IPC path; every other combination — anchored or not — goes
+  through the recorded NVENC chunk store + NVDEC. This means anchored
+  agents *always* hit the chunk store, so video recording must be
+  enabled for the sample.
+- **The nat-agent worker captures `user_asked_at_us`** at
+  end-of-speech (voice path: `_now_us() - silence_duration *
+  1e6` inside `SttProcessor._finalize`, smuggled forward via
+  `TranscriptionFrame.timestamp` which Pipecat otherwise leaves
+  empty) or at the data-message timestamp (data path:
+  `msg.pts_us`).
+- **`NatBackend.infer` carries the timestamp** through to the user-
+  message preamble, which is now `[Live participant_id: <pid>;
+  user_asked_at_us: <int>]`. The system prompt instructs the LLM to
+  copy that 16-digit integer verbatim into every
+  `get_frame_from_time` call as `reference_time_us`.
+
+**Why a user-message preamble, not a contextvar / local wrapper.**
+A worker-side wrapper that auto-injects `reference_time_us` from a
+`contextvars.ContextVar` would be more bullet-proof (no LLM
+cooperation needed), but defining new NAT functions and replacing the
+auto-discovered `mcp_client` tools is ~30 lines of NAT-specific glue
+and hides a real value the LLM could otherwise reason about. The
+preamble approach is observable in plaintext logs (`augmented` user
+message and tool-call args are both visible) and adds 1 line of code
+in three places. If a future smaller model proves unable to copy the
+integer reliably, the wrapper approach remains a clean fallback.
+
+**Diagnostics.** video-mcp's chunk-lookup log line now reports both
+the wall-clock age of the returned frame and (when anchored) the
+anchor's age, e.g. `~12.34s ago wall, anchored=True, anchor=8.10s
+ago`. A growing gap between the two confirms the LLM-thinking-
+latency drift the anchor is meant to eliminate.
+
+### 2026-04-30 — video-mcp: collapse `get_latest_frame` + `get_frame_at_time` into `get_frame_from_time(second_ago)`
+
+The two original frame-fetch tools forced the LLM to (a) know the current
+Unix timestamp, (b) convert "5 seconds ago" into `timestamp_us = now -
+5_000_000`, and (c) pick `get_frame_at_time` over `get_latest_frame`. The
+nemotron3_nano LLM consistently failed at (c) even with explicit prompt
+guidance — observed in nat-agent traces where temporal queries like "what
+was the box 5 seconds ago?" picked `get_latest_frame` and returned the
+wrong frame.
+
+Replaced both tools with a single `get_frame_from_time(participant_id,
+second_ago)` in `agent-mcp-servers/video-mcp/video_mcp_server/__main__.py`:
+
+- `second_ago == 0` reuses the live-IPC code path from `get_latest_frame`
+  (calls `provider.fetch_latest`).
+- `second_ago > 0` reuses the recorded-chunk + NVDEC code path from
+  `get_frame_at_time`, computing `target_us = now - second_ago * 1_000_000`
+  internally so the LLM never sees Unix microseconds.
+- Returns `{path, width, height, timestamp_us, second_ago, actual_second_ago}`.
+  `actual_second_ago` lets the LLM detect when the returned frame is
+  outside the recording window (`actual_second_ago < second_ago`).
+
+The original two functions remain in `__main__.py` as comment blocks (with
+their `@mcp.tool()` decorators commented out so FastMCP doesn't register
+them) for future reference — `get_frame_from_time` directly inlines both
+of their bodies.
+
+nat-agent's system prompt and tool block (in
+`agent-samples/nat-agent/worker/config.py`) updated verbatim from the new
+docstring; vlm-mcp's `ask_image` docstring updated to reference
+`get_frame_from_time` instead of the deprecated tools so the prompt and
+the MCP-side tool schema stay aligned.
+
+No NAT workflow YAML changes — `mcp_client` discovers tools at workflow
+build time, so the LLM's tool schema updates automatically.
+
+**Why:** the LLM thinks naturally in seconds, not Unix microseconds, and
+having two near-identical tools was a constant source of routing errors.
+A single tool with an integer parameter cuts the tool surface from
+7 → 6 and removes the wrong-tool failure mode entirely.
 
 ### 2026-04-30 — nat-agent: NAT tool-calling agent + path-based vlm-mcp
 

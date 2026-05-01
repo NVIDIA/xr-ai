@@ -235,6 +235,17 @@ class SttProcessor(FrameProcessor):
         self._speech_s = 0.0
         self._finalizing = True
 
+        # Estimate the wall-clock instant the user finished speaking.
+        # _finalize is called at silence-detection time, which is the
+        # moment of the last non-voice chunk plus ``silence_duration``
+        # of accumulated silence. Subtracting that window back gets us
+        # close to true end-of-speech — within a frame or two of error.
+        # This timestamp is forwarded to NatBackend.infer via the
+        # TranscriptionFrame.timestamp field so the LLM can anchor
+        # video-mcp lookups to when the user actually spoke instead of
+        # to wall-clock-at-tool-fire-time (which is 5-15 s later).
+        user_asked_at_us = _now_us() - int(self._silence_duration * 1_000_000)
+
         dur_s = len(audio_bytes) // 2 / max(cfg.SAMPLE_RATE, 1)
         log.info("Transcribing %.1fs of audio (final)…", dur_s)
 
@@ -271,8 +282,14 @@ class SttProcessor(FrameProcessor):
                 log.info("Unusable transcript (filler/noise) — not forwarding to LLM")
                 return
 
+            # Smuggle the user_asked_at_us timestamp through the otherwise-
+            # unused ``timestamp`` field. NatProcessor parses it back out.
+            # Pipecat treats it as opaque metadata.
             await self.push_frame(
-                TranscriptionFrame(text=text, user_id="", timestamp=""),
+                TranscriptionFrame(
+                    text=text, user_id="",
+                    timestamp=str(user_asked_at_us),
+                ),
                 FrameDirection.DOWNSTREAM,
             )
         finally:
@@ -311,12 +328,36 @@ class SttProcessor(FrameProcessor):
 
 class NatProcessor(FrameProcessor):
     """
-    On a ``TranscriptionFrame``:
-      1. Set agent status = processing.
-      2. Run ``NatBackend.infer(transcript, pid)`` in the default executor.
-      3. Publish the answer on topic ``agent.response``.
-      4. Push a ``TextFrame`` downstream so TTS speaks it.
-      5. Restore agent status = idle.
+    Latest-only-replace queue in front of ``NatBackend.infer``.
+
+    Behaviour
+    ---------
+    * Every incoming ``TranscriptionFrame`` becomes the *pending* transcript,
+      overwriting any prior pending one. A single drain task processes one
+      transcript at a time.
+    * When inference completes, the drain task checks whether a newer
+      transcript was enqueued in the meantime; if so the just-computed answer
+      is **discarded** and the loop runs again with the newer text. This
+      means the user's *latest* utterance always wins — earlier transcripts
+      are never spoken back when a newer one exists.
+    * The currently running ``nat.infer`` call is *not* hard-cancelled (the
+      vLLM completion runs to the end on the worker thread) — but its result
+      is simply dropped. We accept the wasted compute as the price of not
+      plumbing per-request cancellation through NAT/LangChain/httpx/vLLM.
+
+    Why
+    ---
+    Pre-fix, every TranscriptionFrame queued behind the previous one through
+    NatBackend's ``_infer_lock``. With ~40 s LLM turns, three rapid utterances
+    (e.g. echo from TTS playback + a real query) translated into a 2-minute
+    serialised backlog before the user got any response — and Pipecat's idle
+    timer eventually killed the pipeline mid-backlog. Latest-only replace
+    bounds the queue at one in-flight + one pending, so a real user query
+    never sits behind a phantom one.
+
+    Status (``processing`` / ``idle``) is reported around the whole drain
+    phase rather than per-inference; that way the client sees a single
+    "thinking" state during a flurry of utterances rather than flickering.
     """
 
     def __init__(
@@ -329,26 +370,94 @@ class NatProcessor(FrameProcessor):
         self._nat = nat
         self._transport = transport
 
+        # Pending = (text, pid, ref_us). Replaced wholesale on each new
+        # TranscriptionFrame. Set under _lock; cleared by the drain task
+        # immediately after it picks the value up.
+        self._pending: tuple[str, str, int] | None = None
+        self._lock = asyncio.Lock()
+        self._drain_task: asyncio.Task | None = None
+
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, TranscriptionFrame):
-            transcript = frame.text.strip()
-            if not transcript:
-                return
+            await self._enqueue(frame)
+            return
 
-            pid = self._transport.target_participant
-            if pid:
-                await self._transport.endpoint.set_status("processing", pid)
+        await self.push_frame(frame, direction)
 
-            log.info("NAT inference  pid=%r  transcript=%r", pid, transcript[:80])
+    async def _enqueue(self, frame: TranscriptionFrame) -> None:
+        text = frame.text.strip()
+        if not text:
+            return
 
-            try:
-                loop = asyncio.get_running_loop()
-                answer = await loop.run_in_executor(
-                    None, self._nat.infer, transcript, pid,
+        pid = self._transport.target_participant
+
+        # SttProcessor smuggles the end-of-speech wall-clock timestamp
+        # through the unused ``timestamp`` string field. Fall back to
+        # "now" if it's missing.
+        try:
+            ref_us = int(frame.timestamp) if frame.timestamp else _now_us()
+        except (TypeError, ValueError):
+            ref_us = _now_us()
+
+        async with self._lock:
+            superseded = self._pending is not None
+            self._pending = (text, pid, ref_us)
+            if superseded:
+                log.info("NAT pending REPLACED — older transcript dropped, "
+                         "new=%r", text[:80])
+            else:
+                log.info("NAT queued  %r", text[:80])
+
+            if self._drain_task is None or self._drain_task.done():
+                self._drain_task = asyncio.create_task(
+                    self._drain(), name="nat-drain",
                 )
-                log.info("NAT response  %d chars  text=%r", len(answer), answer[:200])
+
+    async def _drain(self) -> None:
+        loop = asyncio.get_running_loop()
+        announced_pid: str | None = None
+        try:
+            while True:
+                async with self._lock:
+                    if self._pending is None:
+                        return
+                    text, pid, ref_us = self._pending
+                    self._pending = None
+
+                # Announce 'processing' once when a drain run begins; only
+                # re-announce if the participant changes mid-drain.
+                if pid and pid != announced_pid:
+                    await self._transport.endpoint.set_status("processing", pid)
+                    announced_pid = pid
+
+                log.info(
+                    "NAT inference START  pid=%r  ref=%d  transcript=%r",
+                    pid, ref_us, text[:80],
+                )
+                try:
+                    answer = await loop.run_in_executor(
+                        None, self._nat.infer, text, pid, ref_us,
+                    )
+                except Exception:
+                    log.exception("NAT inference failed  text=%r", text[:80])
+                    continue
+
+                # If a newer transcript came in while the LLM was running,
+                # discard this answer — the next loop iteration will run on
+                # the fresher text. The user's latest intent wins.
+                async with self._lock:
+                    if self._pending is not None:
+                        log.info(
+                            "NAT result DISCARDED — newer transcript "
+                            "pending  stale_text=%r",
+                            text[:80],
+                        )
+                        continue
+
+                log.info("NAT response  %d chars  text=%r",
+                         len(answer), answer[:200])
                 if pid and answer:
                     await self._transport.send_return_data(DataMessage(
                         participant_id=pid,
@@ -356,15 +465,12 @@ class NatProcessor(FrameProcessor):
                         pts_us=_now_us(),
                         data=answer.encode(),
                     ))
-                await self.push_frame(TextFrame(text=answer), FrameDirection.DOWNSTREAM)
-            except Exception:
-                log.exception("NAT inference failed")
-            finally:
-                if pid:
-                    await self._transport.endpoint.set_status("idle", pid)
-            return
-
-        await self.push_frame(frame, direction)
+                await self.push_frame(
+                    TextFrame(text=answer), FrameDirection.DOWNSTREAM,
+                )
+        finally:
+            if announced_pid:
+                await self._transport.endpoint.set_status("idle", announced_pid)
 
 
 # ── TtsProcessor ─────────────────────────────────────────────────────────────

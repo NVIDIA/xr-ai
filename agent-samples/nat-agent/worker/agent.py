@@ -74,6 +74,18 @@ class NatAgent:
         self._prewarm_task: asyncio.Task | None = None
         self._runner_task: asyncio.Task | None = None
 
+        # Latest-only-replace queue for data-channel queries — same shape as
+        # NatProcessor's voice queue but in this object's loop. Without
+        # this, rapid pings (each fires a 5-15 s NAT turn) all serialise
+        # through NatBackend's _infer_lock and pile up unbounded; the user
+        # can never get fresh results because the queue head is always
+        # stale. Bounded at one in-flight + one pending; a newer ping
+        # replaces the pending one and the in-flight result is dropped if
+        # superseded.
+        self._data_pending: tuple[str, str, int] | None = None
+        self._data_lock = asyncio.Lock()
+        self._data_drain_task: asyncio.Task | None = None
+
     # ── target participant lazy bind ──────────────────────────────────────────
 
     def _set_target_if_absent(self, pid: str) -> None:
@@ -129,20 +141,76 @@ class NatAgent:
         else:
             log.info("data  pid=%r  query=%r", pid, query[:80])
 
-        await self._transport.endpoint.set_status("processing", pid)
+        # ``msg.pts_us`` is the moment the data message was sent — the
+        # closest analogue we have to "when the user asked" on this path.
+        # Fall back to a fresh wall-clock reading when the producer didn't
+        # populate it (legacy or non-pipecat clients).
+        ref_us = msg.pts_us if msg.pts_us > 0 else _now_us()
+
+        async with self._data_lock:
+            superseded = self._data_pending is not None
+            self._data_pending = (query, pid, ref_us)
+            if superseded:
+                log.info("data pending REPLACED — older query dropped, "
+                         "new=%r", query[:80])
+            else:
+                log.info("data queued  %r", query[:80])
+
+            if self._data_drain_task is None or self._data_drain_task.done():
+                self._data_drain_task = asyncio.create_task(
+                    self._data_drain(), name="nat-data-drain",
+                )
+
+    async def _data_drain(self) -> None:
+        """Process queued data-channel queries one at a time, latest-wins.
+
+        Mirrors NatProcessor._drain (same pattern; see processors.py for the
+        full rationale). The currently running NAT inference is not
+        cancelled — its result is silently discarded if a newer query
+        arrives in the meantime.
+        """
+        loop = asyncio.get_running_loop()
+        announced_pid: str | None = None
         try:
-            loop = asyncio.get_running_loop()
-            answer = await loop.run_in_executor(
-                None, self._nat.infer, query, pid,
-            )
-            log.info("data response  pid=%r  %d chars  text=%r",
-                     pid, len(answer), answer[:200])
-            await self._respond(pid, answer)
-        except Exception:
-            log.exception("data inference failed")
-            await self._respond(pid, "Sorry, something went wrong.")
+            while True:
+                async with self._data_lock:
+                    if self._data_pending is None:
+                        return
+                    query, pid, ref_us = self._data_pending
+                    self._data_pending = None
+
+                if pid and pid != announced_pid:
+                    await self._transport.endpoint.set_status("processing", pid)
+                    announced_pid = pid
+
+                log.info(
+                    "data inference START  pid=%r  ref=%d  query=%r",
+                    pid, ref_us, query[:80],
+                )
+                try:
+                    answer = await loop.run_in_executor(
+                        None, self._nat.infer, query, pid, ref_us,
+                    )
+                except Exception:
+                    log.exception("data inference failed  query=%r", query[:80])
+                    await self._respond(pid, "Sorry, something went wrong.")
+                    continue
+
+                async with self._data_lock:
+                    if self._data_pending is not None:
+                        log.info(
+                            "data result DISCARDED — newer query "
+                            "pending  stale_query=%r",
+                            query[:80],
+                        )
+                        continue
+
+                log.info("data response  pid=%r  %d chars  text=%r",
+                         pid, len(answer), answer[:200])
+                await self._respond(pid, answer)
         finally:
-            await self._transport.endpoint.set_status("idle", pid)
+            if announced_pid:
+                await self._transport.endpoint.set_status("idle", announced_pid)
 
     async def _respond(self, pid: str, text: str) -> None:
         """Publish *text* as both a data message and TTS audio."""
@@ -197,6 +265,8 @@ class NatAgent:
             self._prewarm_task.cancel()
         if self._runner_task and not self._runner_task.done():
             self._runner_task.cancel()
+        if self._data_drain_task and not self._data_drain_task.done():
+            self._data_drain_task.cancel()
         # Schedule async tear-down without blocking the signal handler.
         try:
             loop = asyncio.get_running_loop()

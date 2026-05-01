@@ -6,7 +6,7 @@
 #
 # Pure FastMCP wrapper around vlm-server. Single tool: ask_image(question,
 # image_path). The LLM is responsible for sourcing image_path (typically by
-# calling video-mcp.get_latest_frame first); vlm-mcp itself has no hub
+# calling video-mcp.get_frame_from_time first); vlm-mcp itself has no hub
 # coupling.
 #
 # Endpoint: http://<host>:<port>/mcp  (no trailing slash — see vlm-mcp's

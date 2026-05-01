@@ -12,9 +12,10 @@ encodes it as a JPEG data URL, and POSTs to vlm-server's OpenAI-compatible
 ``/v1/chat/completions`` endpoint. The model's answer is returned verbatim.
 
 Image acquisition is the **LLM's** responsibility — typically by calling
-``video-mcp.get_latest_frame`` or ``video-mcp.get_frame_at_time`` first
-and then passing the returned ``path`` into ``ask_image``. vlm-mcp itself
-knows nothing about participants, the hub, or the frame source.
+``video-mcp.get_frame_from_time`` first (with ``second_ago=0`` for the
+live frame, or ``second_ago=N`` for a frame from N seconds ago) and then
+passing the returned ``path`` into ``ask_image``. vlm-mcp itself knows
+nothing about participants, the hub, or the frame source.
 
 Tool (FastMCP, mounted at /mcp)
 ────────────────────────────────
@@ -104,8 +105,9 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
         """
         Ask the vision-language model about a local image file.
 
-        Use after calling ``video_mcp.get_latest_frame`` or
-        ``video_mcp.get_frame_at_time`` to obtain *image_path*.
+        Use after calling ``video_mcp.get_frame_from_time`` to obtain
+        *image_path* (with ``second_ago=0`` for the live frame, or
+        ``second_ago=N`` for a frame from N seconds ago).
 
         Parameters
         ----------
@@ -125,7 +127,7 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
             The vision-language model's answer text. Trimmed.
         """
         if not image_path:
-            return "ask_image: image_path is empty — call video_mcp.get_latest_frame first."
+            return "ask_image: image_path is empty — call video_mcp.get_frame_from_time first."
         path = pathlib.Path(image_path)
         if not path.exists():
             return f"ask_image: file not found at {image_path!r}."

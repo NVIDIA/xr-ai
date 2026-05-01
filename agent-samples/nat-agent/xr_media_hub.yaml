@@ -24,10 +24,11 @@ web_server_tls:    true
 enable_token_server: true
 
 # ── NVENC video recording ─────────────────────────────────────────────────────
-# Required so video-mcp's ``get_frame_at_time`` and ``query_video`` tools can
-# resolve past-frame queries from disk. ``get_latest_frame`` uses the live
-# IPC path and would work without this, but the LLM has access to the full
-# video tool surface, so we enable recording for completeness.
+# Required so video-mcp's ``get_frame_from_time`` (with second_ago > 0) and
+# ``query_video`` tools can resolve past-frame queries from disk.
+# ``get_frame_from_time(..., second_ago=0)`` uses the live IPC path and
+# would work without this, but the LLM has access to the full video tool
+# surface, so we enable recording for completeness.
 #
 # out_dir lives on tmpfs (RAM-backed); must match video_mcp_server.yaml's
 # recordings_dir. Eviction is FIFO once total chunk size exceeds the cap.

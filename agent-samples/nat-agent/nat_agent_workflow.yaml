@@ -14,9 +14,7 @@
 #       │       └── ask_image
 #       │
 #       └── vid    (mcp_client function group → video-mcp :8210)
-#               ├── ask_image                — wait, no
-#               ├── get_latest_frame
-#               ├── get_frame_at_time
+#               ├── get_frame_from_time
 #               ├── get_video_stats
 #               ├── query_video
 #               ├── list_live_participants
@@ -43,6 +41,28 @@ llms:
     # has corner cases around partial JSON; the reference samples use this
     # flag for the same reason.
     disable_streaming: tool_calling
+    # Disable Nemotron-3-Nano's <think>...</think> reasoning preamble.
+    # The model card recommends temperature=0.6, top_p=0.95 (already set
+    # above) for tool calling specifically — and reasoning OFF for tool
+    # calling specifically — because the reasoning preamble adds 600-1500
+    # generated tokens per LLM call. At the ~30 tok/s decode rate of this
+    # eager-mode FP4 deployment, that is the difference between a 5 s and
+    # a 25 s tool-selection round-trip.
+    #
+    # Mechanism: vLLM reads ``chat_template_kwargs.enable_thinking`` from
+    # the request body via the model's chat template. NAT's OpenAI config
+    # has ``extra="allow"`` so this extra_body field passes through into
+    # LangChain's ChatOpenAI(...) and then into the OpenAI Python client,
+    # which forwards it as additional JSON in /v1/chat/completions.
+    #
+    # Re-enable (set to true, or remove the block) if you observe the LLM
+    # over-triggering tools on simple non-visual queries — that is the
+    # known failure mode of reasoning-off in this model family. The
+    # system prompt's "skip every tool" instruction for non-visual
+    # questions mitigates but does not eliminate it.
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
 
 function_groups:
   # vlm-mcp — pure path-based VLM Q&A. Single tool: ask_image.

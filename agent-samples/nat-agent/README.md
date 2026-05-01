@@ -66,9 +66,10 @@ Client (web/iOS/visionOS)
 
 A typical visual turn — "describe what you see":
 
-1. STT → text → `NatAgent.infer("describe what you see", pid="alice-xyz")`.
-2. Worker prepends `[Live participant_id: alice-xyz]\nUser: describe what you see` and runs the NAT `tool_calling_agent` workflow.
-3. LLM emits a tool call: `get_latest_frame(participant_id="alice-xyz")` → returns `{"path": "/tmp/xr_video_queries/alice-xyz_latest_…png", ...}`.
+1. STT → text → `NatAgent.infer("describe what you see", pid="alice-xyz", reference_time_us=1777601631000000)`.
+   The `reference_time_us` is captured at end-of-speech (voice path) or at the data-message timestamp (data path); without it, every visual frame would be 5-15 seconds out of date because of LLM thinking latency.
+2. Worker prepends `[Live participant_id: alice-xyz; user_asked_at_us: 1777601631000000]\nUser: describe what you see` and runs the NAT `tool_calling_agent` workflow.
+3. LLM emits a tool call: `get_frame_from_time(participant_id="alice-xyz", second_ago=0, reference_time_us=1777601631000000)` → video-mcp looks up the recorded chunk covering that instant and returns `{"path": "/tmp/xr_video_queries/alice-xyz_ago0_…png", ...}`. The frame matches when the user spoke, not when the tool fires.
 4. LLM emits a second tool call: `ask_image(question="Describe the scene in detail.", image_path="/tmp/...")` — note the LLM is free to rephrase, expand, or invent its own follow-up question.
 5. vlm-mcp reads the PNG, POSTs to vlm-server, returns the answer.
 6. LLM composes the final reply.
@@ -96,7 +97,7 @@ Connect a browser at `http://localhost:8080` (or `https://localhost:8443` if `we
 ## Requirements
 
 - **Blackwell GPU** for the NVFP4 LLM (B200, RTX PRO 6000, Jetson Thor, DGX Spark). FlashInfer FP4 MoE kernels target Blackwell. Swap to `nvidia/Nemotron-Nano-3-30B-A3B` (BF16, ~60 GB VRAM) on Hopper/Ampere.
-- **NVENC + NVDEC** for hub video recording and `get_frame_at_time` decoding.
+- **NVENC + NVDEC** for hub video recording and `get_frame_from_time` past-frame decoding.
 - **VRAM budget**: vLLM (~57 GB at default `gpu_memory_utilization: 0.6` on a 96 GB card), vlm-server (~14 GB), stt-server (~1.5 GB).
 
 ## Ports
@@ -121,8 +122,7 @@ Every MCP tool from both servers is exposed verbatim in `nat_agent_workflow.yaml
 | Tool                           | From      | Purpose                                            |
 |--------------------------------|-----------|----------------------------------------------------|
 | `ask_image`                    | vlm-mcp   | Question + PNG path → answer text                  |
-| `get_latest_frame`             | video-mcp | Most recent live frame for a participant           |
-| `get_frame_at_time`            | video-mcp | Past frame near a given Unix-µs timestamp          |
+| `get_frame_from_time`          | video-mcp | Frame at `reference_time_us − N s`. Pass `reference_time_us` from the turn's preamble so the frame matches when the user spoke. |
 | `get_video_stats`              | video-mcp | Chunk count/byte total/earliest/latest µs          |
 | `query_video`                  | video-mcp | H.264 video clip (LLM rarely uses; VLM can't read) |
 | `list_live_participants`       | video-mcp | Hub IPC roster                                     |
@@ -153,21 +153,32 @@ loads the workflow YAML at startup and substitutes `${...}` placeholders
 worker YAML to change ports/timeouts/prompts; edit the workflow YAML to
 restructure the agent itself.
 
-## How this differs from `pipecat-nat-nemotron3nano`
 
-The reference sample at `Desktop/xr-ai/agent-samples/pipecat-nat-nemotron3nano/`
-ships the same LLM but a fundamentally different agentic design:
+## Latency knobs
 
-| | `pipecat-nat-nemotron3nano` | `nat-agent` (this sample) |
+The default config is tuned for **low-latency, single-user voice**:
+
+| Knob | Where | What it does |
 |---|---|---|
-| MCP tool surface | One tool: `ask_camera(question)` | All seven tools verbatim |
-| Frame source | vlm-mcp owns hub IPC, pulls frames itself | video-mcp owns hub IPC; LLM bridges via PNG path |
-| `participant_id` | Hidden via NAT-side `_PidProvider` wrapper | Exposed in user-message preamble; LLM passes it through |
-| LLM agency | Routes to vlm or doesn't | Picks the frame source, crafts its own VLM question |
-| Custom NAT functions | 1 (`mcp_ask_camera`) | 0 |
-| vlm-mcp deps | `xr-ai-agent`, numpy, FastAPI | None of those — pure FastMCP + httpx + Pillow |
-| Echo handling | `STTMuteFrame` + playback-tail wait in worker | Dropped; client AEC handles it |
-| Past-frame access | Not available | `get_frame_at_time` + recorded chunks |
+| `extra_body.chat_template_kwargs.enable_thinking: false` | `nat_agent_workflow.yaml` (LLM block) | Suppresses Nemotron-3-Nano's `<think>...</think>` reasoning preamble. Each LLM call drops from 8-28 s to 2-5 s on this NVFP4 + eager-mode deployment. Set to `true` if you observe the LLM picking the wrong tool — that is the known failure mode of reasoning-off in this model family. NVIDIA's published recommendation is reasoning OFF for tool calling specifically. |
+| `temperature: 0.6, top_p: 0.95` | same | NVIDIA model card's recommended sampling preset for tool-calling. Reasoning tasks use `1.0/1.0`. |
+| `enforce_eager: true` | `nemotron3_nano_llm_server.yaml` | Disables CUDA graph capture + FlashInfer FP4 MoE autotune, trading 10-20 % per-token decode for a 5 s startup instead of 3-8 min. Flip to `false` if you want maximum decode throughput and can tolerate the cold-start. |
+| `max_iterations: 6` | `nat_agent_workflow.yaml` (workflow block) | Cap on tool-call rounds per turn. Lower it if you want tighter worst-case latency; raise it if you want the LLM to chain more sub-queries. |
+
+### Queue behavior under voice spam
+
+Both the voice and data paths use a **latest-only-replace queue**: at most
+one NAT inference runs at a time, with at most one pending behind it. When
+a new utterance arrives while the previous one is still processing, it
+replaces the pending one (and discards the in-flight result if it lands
+after the newer utterance). Logged as `NAT pending REPLACED — older
+transcript dropped`. This bounds the queue depth so phantom transcripts
+(echo from TTS, background conversation) and rapid user repeats can't pile
+up indefinitely.
+
+The currently running LLM call is *not* hard-cancelled — its result is
+silently dropped if superseded. So the worst case after a "spam" burst is
+one wasted in-flight call, not an unbounded backlog.
 
 ## Swap models / TTS engine
 

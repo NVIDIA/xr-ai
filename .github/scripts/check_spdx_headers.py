@@ -161,15 +161,10 @@ def _strip_directives(lines: list[str], style: str) -> list[str]:
     return lines
 
 
-def _read_head(path: Path, max_bytes: int = 4096) -> str | None:
+def _read_head(path: Path) -> str | None:
     try:
-        with path.open("rb") as f:
-            raw = f.read(max_bytes)
-    except OSError:
-        return None
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
         return None
 
 

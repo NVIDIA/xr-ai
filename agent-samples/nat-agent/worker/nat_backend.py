@@ -11,13 +11,12 @@ Architecture
                  -> tool_calling_agent (NAT + LangChain + LangGraph)
                     | LLM decides: 0 or more tool calls
                     v
-              MCP tools registered as mcp_tool_wrapper functions:
-                ask_image                 (vlm-mcp)
-                get_latest_frame          (video-mcp)
-                get_frame_at_time         (video-mcp)
-                get_video_stats           (video-mcp)
-                query_video               (video-mcp)
-                list_live_participants    (video-mcp)
+              MCP tools auto-discovered via mcp_client function groups:
+                ask_image                  (vlm-mcp)
+                get_frame_from_time        (video-mcp)
+                get_video_stats            (video-mcp)
+                query_video                (video-mcp)
+                list_live_participants     (video-mcp)
                 list_recorded_participants (video-mcp)
 
 Concurrency
@@ -183,24 +182,45 @@ class NatBackend:
             result = await runner.result(to_type=str)
         return str(result).strip()
 
-    def infer(self, user: str, participant_id: str) -> str:
+    def infer(
+        self,
+        user:              str,
+        participant_id:    str,
+        reference_time_us: int = 0,
+    ) -> str:
         """Synchronous one-turn inference.
 
         Call via ``loop.run_in_executor`` from asyncio code so the main loop
         is not blocked by the round-trip to the LLM + MCP tools.
 
-        The participant_id is prepended to the user message so the LLM has
-        it in context and can pass it into video-mcp tool calls. Per-call
-        state lives entirely in the augmented user message; the only shared
-        state across calls is the workflow itself, which we guard with
-        ``self._infer_lock`` (see __init__).
+        Per-turn state travels in the augmented user message preamble:
+
+            [Live participant_id: <pid>; user_asked_at_us: <int>]
+            User: <user text>
+
+        The LLM forwards both fields verbatim into video-mcp tool calls
+        (``participant_id`` and ``reference_time_us`` respectively). Without
+        the timestamp anchor, every ``get_frame_from_time`` lookup would be
+        offset by the LLM's own thinking latency (5-15 s on eager-mode
+        vLLM), which is exactly the kind of "the box is white" hallucination
+        we hit in the v1 trace — by the time the tool fires, the live frame
+        no longer matches what the user was asking about.
+
+        ``reference_time_us`` is a Unix-microseconds wall clock value. The
+        worker captures it at the moment the user finishes speaking (voice
+        path) or the data message arrives (data path). ``0`` means "no
+        anchor" and falls back to wall clock at tool-fire time.
+
+        The only shared state across calls is the workflow itself, which we
+        guard with ``self._infer_lock`` (see ``__init__``).
         """
         self.ensure_loaded()
         if participant_id:
-            augmented = (
-                f"[Live participant_id: {participant_id}]\n"
-                f"User: {user}"
+            preamble = (
+                f"[Live participant_id: {participant_id}; "
+                f"user_asked_at_us: {reference_time_us}]"
             )
+            augmented = f"{preamble}\nUser: {user}"
         else:
             augmented = user
         # Allow up to several tool round-trips (each capped by NAT's
