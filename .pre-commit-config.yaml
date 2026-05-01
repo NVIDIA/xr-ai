@@ -13,7 +13,9 @@ repos:
         description: >
           Every source file must start with the NVIDIA SPDX header in the
           comment syntax for its language (see AGENTS.md § License headers).
-        entry: python3 scripts/check_spdx_headers.py
+          Missing headers are auto-inserted; pre-commit then aborts the
+          commit so the operator reviews + re-stages the change.
+        entry: python3 scripts/check_spdx_headers.py --fix
         language: system
         pass_filenames: true
         # Restrict to the file types the script knows how to handle, so

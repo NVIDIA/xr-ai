@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # STT server configuration — nvidia/parakeet-tdt-0.6b-v3.
 # Auto-discovered by xr-ai-launcher and passed as --config to stt_server.
 # OpenAI-compatible API at http://localhost:8103/v1

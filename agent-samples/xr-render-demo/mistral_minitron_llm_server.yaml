@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # llm-server reference configuration.
 # `model_cache: ../../models` resolves to the shared weight cache at the repo
 # root (xr-ai/models/) regardless of whether this YAML is invoked from here

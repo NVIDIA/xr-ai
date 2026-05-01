@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Produce ../web/vendor/{cloudxr-sdk,livekit-client}.esm.mjs so the page
 # loads both same-origin (works on headsets / offline LANs). Output files
 # are gitignored — run this once on the host that serves the sample.

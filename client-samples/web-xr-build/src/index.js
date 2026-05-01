@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Re-exports the pieces of @nvidia/cloudxr needed by /client-samples/web/.
  * Everything else in the SDK is still tree-shaken into the bundle because

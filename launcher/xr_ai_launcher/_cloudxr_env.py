@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 CloudXR environment helpers — wait for cloudxr-runtime's ``cloudxr.env`` file,
 source it into ``os.environ``, and wait for its ``runtime_started`` lock file

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # XR Media Hub configuration for the xr-render-demo sample.
 # Paths are relative to this file's directory.
 # See server-runtime/xr_media_hub.yaml for all available options.
