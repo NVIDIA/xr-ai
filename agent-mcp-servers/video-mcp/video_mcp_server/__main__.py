@@ -429,101 +429,6 @@ def build_mcp(
         return {"path": str(out_path), "size": len(data),
                 "start_us": start_us, "end_us": end_us}
 
-    # ── DEPRECATED: replaced by get_frame_from_time below. ────────────────────
-    # Bodies kept (with @mcp.tool() decorators commented out so FastMCP no
-    # longer registers them) as a reference for the two code paths
-    # get_frame_from_time delegates to: live IPC for second_ago=0 and
-    # recorded-chunk + NVDEC decode for second_ago>0.
-    #
-    # @mcp.tool()
-    # async def get_latest_frame(participant_id: str) -> dict:
-    #     """
-    #     Fetch the most recent frame the hub has for *participant_id*,
-    #     encode to PNG, return the file path.
-    #
-    #     Keys: path, width, height, timestamp_us, track_id.
-    #     Returns an error dict if no live frame is available yet.
-    #     """
-    #     frame = await provider.fetch_latest(participant_id)
-    #     if frame is None:
-    #         return {"error": f"No live frame available for {participant_id!r}"}
-    #     try:
-    #         rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
-    #     except ValueError as exc:
-    #         return {"error": str(exc)}
-    #     safe     = _safe_name(participant_id)
-    #     out_path = out_dir / f"{safe}_latest_{frame.pts_us}.png"
-    #     _save_png(rgb, out_path)
-    #     log.info("get_latest_frame  pid=%r  %dx%d  ts=%d → %s",
-    #              participant_id, frame.width, frame.height, frame.pts_us, out_path)
-    #     return {
-    #         "path":         str(out_path),
-    #         "width":        frame.width,
-    #         "height":       frame.height,
-    #         "timestamp_us": frame.pts_us,
-    #         "track_id":     frame.track_id,
-    #     }
-    #
-    # @mcp.tool()
-    # def get_frame_at_time(participant_id: str, timestamp_us: int) -> dict:
-    #     """
-    #     Decode the H.264 chunk covering *timestamp_us* (Unix µs) for
-    #     *participant_id*, pick the frame closest to that timestamp,
-    #     encode to PNG, return the file path.
-    #
-    #     Keys: path, width, height, timestamp_us (the actual frame ts,
-    #     approximated by linear interpolation within the chunk), chunk_path.
-    #     Returns an error dict if no chunks cover the request.
-    #     """
-    #     found = store.find_chunk_at(participant_id, timestamp_us)
-    #     if found is None:
-    #         return {"error": f"No video chunks recorded for {participant_id!r}"}
-    #     chunk_path, meta = found
-    #     try:
-    #         frames = _decode_chunk_to_nv12_frames(chunk_path.read_bytes(), gpu_id=gpu_id)
-    #     except Exception as exc:
-    #         log.exception("decode failed  chunk=%s", chunk_path)
-    #         return {"error": f"Decode failed: {exc}"}
-    #     if not frames:
-    #         return {"error": f"Chunk {chunk_path.name} decoded zero frames"}
-    #
-    #     start_us   = int(meta.get("start_us", int(chunk_path.stem)))
-    #     end_us     = int(meta.get("end_us",   start_us))
-    #     num_frames = int(meta.get("num_frames", len(frames)))
-    #     width      = int(meta.get("width",  frames[0].shape[1]))
-    #     height_nv  = frames[0].shape[0]
-    #     height     = int(meta.get("height", height_nv * 2 // 3))
-    #
-    #     # Linear interpolation: which frame index is closest to ts_us?
-    #     if num_frames <= 1 or end_us <= start_us:
-    #         idx = 0
-    #     else:
-    #         ratio = (timestamp_us - start_us) / (end_us - start_us)
-    #         idx   = max(0, min(num_frames - 1, round(ratio * (num_frames - 1))))
-    #     idx = min(idx, len(frames) - 1)
-    #
-    #     nv12     = frames[idx]
-    #     rgb      = _nv12_to_rgb(nv12, width, height)
-    #     safe     = _safe_name(participant_id)
-    #     out_path = out_dir / f"{safe}_at_{timestamp_us}.png"
-    #     _save_png(rgb, out_path)
-    #
-    #     # Approximate frame timestamp (uniform spacing inside the chunk).
-    #     frame_ts = (
-    #         start_us + idx * (end_us - start_us) // max(num_frames - 1, 1)
-    #         if num_frames > 1 else start_us
-    #     )
-    #     log.info("get_frame_at_time  pid=%r  ts=%d  frame=%d/%d → %s",
-    #              participant_id, timestamp_us, idx, num_frames, out_path)
-    #     return {
-    #         "path":         str(out_path),
-    #         "width":        width,
-    #         "height":       height,
-    #         "timestamp_us": frame_ts,
-    #         "chunk_path":   str(chunk_path),
-    #     }
-    # ── end deprecated ────────────────────────────────────────────────────────
-
     @mcp.tool()
     async def get_frame_from_time(
         participant_id:    str,
@@ -542,7 +447,7 @@ def build_mcp(
         - ``reference_time_us = 0`` (omitted) ⇒ anchor = wall clock
           ``time.time()``. With ``second_ago = 0`` you get the latest live
           IPC frame; with ``second_ago > 0`` a recorded chunk near
-          ``now − N s``.
+          ``now - N s``.
 
         - ``reference_time_us > 0`` ⇒ anchor = that timestamp. ALL lookups
           go through the recorded-chunk path (live IPC is bypassed) so the
