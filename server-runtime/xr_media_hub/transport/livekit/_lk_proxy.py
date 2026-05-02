@@ -91,4 +91,6 @@ async def pump_rtc_ws(client_ws: WebSocket, lk_internal_ws: str) -> None:
         try:
             await client_ws.close()
         except Exception:
+            # Best-effort cleanup: client may already be closed/disconnected.
+            # Intentionally ignore close-time errors in shutdown path.
             pass
