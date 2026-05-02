@@ -31,7 +31,7 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Used to stream the camera feed.</string>
-	<key>NSEnterpriseMCAMUsageDescription</key>
+	<key>NSMainCameraUsageDescription</key>
 	<string>Used to stream the main passthrough camera via ARKit.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Used to stream microphone audio.</string>

@@ -736,6 +736,28 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-01 — visionOS Enterprise license bundling
+
+Apple Vision Pro main-camera passthrough
+(`com.apple.developer.arkit.main-camera-access.allow`) requires the entitlement
+signed into the binary **and** a per-team `Enterprise.license` file bundled
+into the `.app`. Without the license the API is a silent no-op
+(`CameraVideoFormat.supportedVideoFormats(...)` returns `[]`, LiveKit AR camera
+publish fails with `LiveKitError.invalidState`). visionOS auto-loads the file
+from the app bundle.
+
+The license file is per-team and Apple's terms restrict redistribution, so it
+is gitignored (`**/Enterprise.license`) rather than committed. A placeholder
+`App/Enterprise.license.sample` documents the path for new contributors. An
+Xcode "Copy Enterprise.license" build phase copies the file into the `.app`
+at build time; if missing, the build succeeds with a warning and the camera
+path no-ops at runtime (audio + data + simulator GIF feed are unaffected).
+Symlinks at the expected path are supported and still gitignored.
+
+The sample's display name (`StreamKitSample`) is intentionally decoupled from
+its Bundle ID (`com.nvidia.xr-ai-example`) so a fork that renames the Bundle
+ID still ships under the same on-device app name.
+
 ### 2026-04-30 — Unified MCP IDs: identity sidecars, live vs recorded splits, transcript source_id
 
 The MCP servers had two consistency gaps: (1) `list_*` tools returned

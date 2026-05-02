@@ -5,6 +5,10 @@ import Foundation
 import Observation
 import StreamKit
 
+#if os(visionOS)
+import ARKit
+#endif
+
 // MARK: - AppModel
 
 /// Observable state shared across the sample app.
@@ -20,26 +24,87 @@ final class AppModel {
     var immersiveSpaceIsOpen = false
     #endif
 
-    // MARK: - Connection settings
+    // MARK: - Connection settings (persisted across launches via UserDefaults)
 
-    var host: String = "192.168.1.100"
-    var port: String = "7880"
-    var secure: Bool = false
+    var host: String = AppModel.defaults.string(forKey: Keys.host) ?? "192.168.1.100" {
+        didSet { AppModel.defaults.set(host, forKey: Keys.host) }
+    }
+    var port: String = AppModel.defaults.string(forKey: Keys.port) ?? "7880" {
+        didSet { AppModel.defaults.set(port, forKey: Keys.port) }
+    }
+    // Default `false`: `bool(forKey:)` returns `false` for missing keys.
+    // To change the default to `true`, switch to `object(forKey:) as? Bool ?? true`.
+    var secure: Bool = AppModel.defaults.bool(forKey: Keys.secure) {
+        didSet { AppModel.defaults.set(secure, forKey: Keys.secure) }
+    }
+    /// Bearer token bypass — intentionally not persisted.
     var token: String = ""
-    var tokenServerURL: String = ""
-    var identity: String = "ios-client"
+    var tokenServerURL: String = AppModel.defaults.string(forKey: Keys.tokenServerURL) ?? "" {
+        didSet { AppModel.defaults.set(tokenServerURL, forKey: Keys.tokenServerURL) }
+    }
+    var identity: String = AppModel.defaults.string(forKey: Keys.identity) ?? "ios-client" {
+        didSet { AppModel.defaults.set(identity, forKey: Keys.identity) }
+    }
 
-    // MARK: - Audio settings
+    // MARK: - Audio settings (persisted)
 
-    var audioMode: AudioConfig.MicrophoneMode = .voiceProcessing
+    var audioMode: AudioConfig.MicrophoneMode = AppModel.loadAudioMode() {
+        didSet { AppModel.defaults.set(AppModel.encode(audioMode), forKey: Keys.audioMode) }
+    }
 
-    // MARK: - Camera settings
+    // MARK: - Camera settings (persisted)
 
-    var cameraPosition: CameraConfig.Position = .front
+    var cameraPosition: CameraConfig.Position = AppModel.loadCameraPosition() {
+        didSet { AppModel.defaults.set(AppModel.encode(cameraPosition), forKey: Keys.cameraPosition) }
+    }
     /// When `true`, ``clientControl`` startCamera/stopCamera messages from
     /// the agent are honoured.  When `false` (default — always-on), they are
     /// ignored and the camera button is the sole control.
-    var cameraOnDemand: Bool = false
+    /// (Default `false`; see note on `secure` for `bool(forKey:)` semantics.)
+    var cameraOnDemand: Bool = AppModel.defaults.bool(forKey: Keys.cameraOnDemand) {
+        didSet { AppModel.defaults.set(cameraOnDemand, forKey: Keys.cameraOnDemand) }
+    }
+
+    // MARK: - Persistence helpers
+
+    private static let defaults = UserDefaults.standard
+
+    private enum Keys {
+        static let host           = "settings.host"
+        static let port           = "settings.port"
+        static let secure         = "settings.secure"
+        static let tokenServerURL = "settings.tokenServerURL"
+        static let identity       = "settings.identity"
+        static let audioMode      = "settings.audioMode"
+        static let cameraPosition = "settings.cameraPosition"
+        static let cameraOnDemand = "settings.cameraOnDemand"
+    }
+
+    private static func encode(_ mode: AudioConfig.MicrophoneMode) -> String {
+        switch mode {
+        case .voiceProcessing:    return "voiceProcessing"
+        case .softwareProcessing: return "softwareProcessing"
+        case .raw:                return "raw"
+        case .disabled:           return "disabled"
+        }
+    }
+    private static func loadAudioMode() -> AudioConfig.MicrophoneMode {
+        switch defaults.string(forKey: Keys.audioMode) {
+        case "softwareProcessing": return .softwareProcessing
+        case "raw":                return .raw
+        case "disabled":           return .disabled
+        default:                   return .voiceProcessing
+        }
+    }
+    private static func encode(_ pos: CameraConfig.Position) -> String {
+        switch pos {
+        case .front: return "front"
+        case .back:  return "back"
+        }
+    }
+    private static func loadCameraPosition() -> CameraConfig.Position {
+        defaults.string(forKey: Keys.cameraPosition) == "back" ? .back : .front
+    }
 
     // MARK: - Live state
 
@@ -167,10 +232,30 @@ final class AppModel {
     // MARK: - Camera
 
     func startCamera() async {
+        #if os(visionOS)
+        // Surface a friendly message when main-camera access is permanently
+        // denied. Without this probe the user sees `LiveKitError.deviceAccessDenied`
+        // from StreamKit's internal ARCameraCapturer.
+        let result = await ARKitSession().requestAuthorization(for: [.cameraAccess])
+        guard result[.cameraAccess] == .allowed else {
+            lastError = "Main camera access was not granted. Enable it in Settings → Apps → StreamKitSample."
+            return
+        }
+        #endif
+
         do {
             try await session?.startCamera(config: CameraConfig(position: cameraPosition))
             isCameraActive = true
         } catch {
+            #if DEBUG
+            // `error.localizedDescription` strips domain/code/underlying cause.
+            let ns = error as NSError
+            print("startCamera failed: \(type(of: error)) \(ns.domain) #\(ns.code) — \(error)")
+            print("  userInfo: \(ns.userInfo)")
+            if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+                print("  underlying: \(underlying.domain) #\(underlying.code) — \(underlying.userInfo)")
+            }
+            #endif
             lastError = error.localizedDescription
         }
     }
