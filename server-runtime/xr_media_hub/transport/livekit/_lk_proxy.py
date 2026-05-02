@@ -82,6 +82,9 @@ async def pump_rtc_ws(client_ws: WebSocket, lk_internal_ws: str) -> None:
                         else:
                             await client_ws.send_text(frame)
                 except Exception:
+                    # Either side closing the websocket during teardown can
+                    # raise here; suppression is intentional to let shutdown
+                    # complete without noisy expected-disconnect errors.
                     pass
 
             await asyncio.gather(c2l(), l2c(), return_exceptions=True)
