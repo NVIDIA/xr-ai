@@ -123,19 +123,12 @@ entitlement.
 > and is unchanged. `UserDefaults` are keyed by Bundle ID, so saved settings
 > reset on first launch after a rename.
 
-#### Requesting the entitlement (one-time, per Apple team)
-
-1. <https://developer.apple.com/contact/> → Distribution → Enterprise APIs →
-   request **Main Camera Access** (`com.apple.developer.arkit.main-camera-access.allow`).
-   Apple issues a team-wide license valid for any Bundle ID your team signs.
-   License expires yearly.
-2. In the developer portal, enable **Main Camera Access** on the App ID.
-
 #### Bundling `Enterprise.license`
 
-The license is per-team and Apple's terms restrict redistribution, so it is
-**gitignored** (`**/Enterprise.license`) and never committed. A placeholder at
-`App/Enterprise.license.sample` documents the location.
+The Enterprise license is issued by Apple, per team. Apple's terms restrict
+redistribution, so it is **gitignored** (`**/Enterprise.license`) and never
+committed. A placeholder at `App/Enterprise.license.sample` documents the
+location.
 
 Place your team's license at:
 
