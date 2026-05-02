@@ -83,11 +83,14 @@ class TranscriptStore:
     def __init__(self, transcripts_dir: str) -> None:
         self._dir = pathlib.Path(transcripts_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
+        # Resolve once at construction so the safe root can't be swapped
+        # for a symlink (TOCTOU) between subsequent _check calls.
+        self._root = self._dir.resolve()
 
     # ── path resolution ──────────────────────────────────────────────
 
     def _check(self, path: pathlib.Path) -> pathlib.Path:
-        if not path.resolve().is_relative_to(self._dir.resolve()):
+        if not path.resolve().is_relative_to(self._root):
             raise ValueError(f"Path escapes transcript directory: {path}")
         return path
 

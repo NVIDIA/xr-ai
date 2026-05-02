@@ -88,10 +88,12 @@ def _safe_name(s: str) -> str:
 
 class ChunkStore:
     def __init__(self, recordings_dir: pathlib.Path) -> None:
-        self._root = recordings_dir
+        # Resolve once at construction so the safe root can't be swapped
+        # for a symlink (TOCTOU) between subsequent _check calls.
+        self._root = recordings_dir.resolve()
 
     def _check(self, path: pathlib.Path) -> pathlib.Path:
-        if not path.resolve().is_relative_to(self._root.resolve()):
+        if not path.resolve().is_relative_to(self._root):
             raise ValueError(f"Path escapes recordings directory: {path}")
         return path
 
