@@ -126,13 +126,13 @@ class TranscriptStore:
         canonical_ident = self._dir / f"{safe}.identity"
         if canonical_jsonl.exists():
             if canonical_ident.exists():
-                if canonical_ident.read_text(encoding="utf-8") == source_id:
+                if canonical_ident.read_text(encoding="utf-8").strip() == source_id.strip():
                     return self._check(canonical_jsonl)
             elif source_id == safe:
                 return self._check(canonical_jsonl)
         # Slow path: scan sidecars.
         for ident in sorted(self._dir.glob("*.identity")):
-            if ident.read_text(encoding="utf-8") == source_id:
+            if ident.read_text(encoding="utf-8").strip() == source_id.strip():
                 jsonl = ident.with_suffix(".jsonl")
                 return self._check(jsonl) if jsonl.exists() else None
         return None

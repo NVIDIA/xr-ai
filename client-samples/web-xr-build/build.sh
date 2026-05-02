@@ -34,7 +34,7 @@ echo "CloudXR SDK version: ${VERSION}"
 # NGC and only the .sdk-version pin is committed; the npm install + webpack
 # build will fail loudly on a corrupt tarball, so this only protects against
 # the silent "previous run was interrupted" failure mode.
-if [ -f "${LOCAL_TARBALL}" ]; then
+if [[ -f "${LOCAL_TARBALL}" ]]; then
     echo "Using existing ${LOCAL_TARBALL}"
 else
     PARTIAL="${LOCAL_TARBALL}.partial"
@@ -42,7 +42,7 @@ else
     # Convenience fallback: if IsaacTeleop has already downloaded the same
     # version, reuse it instead of hitting the network.
     ISAAC_COPY="${HOME}/hub/IsaacTeleop/deps/cloudxr/${SDK_FILE}"
-    if [ -f "${ISAAC_COPY}" ]; then
+    if [[ -f "${ISAAC_COPY}" ]]; then
         echo "Copying from IsaacTeleop: ${ISAAC_COPY}"
         cp "${ISAAC_COPY}" "${PARTIAL}"
     else
@@ -73,14 +73,14 @@ npm install --no-audit --no-fund --legacy-peer-deps
 echo "Bundling CloudXR…"
 npm run build
 
-if [ ! -f "${OUT_CLOUDXR}" ]; then
+if [[ ! -f "${OUT_CLOUDXR}" ]]; then
     echo "error: expected ${OUT_CLOUDXR} was not produced" >&2
     exit 1
 fi
 
 # ── 4. Copy the prebuilt livekit-client ESM ──────────────────────────────────
 LIVEKIT_SRC="node_modules/livekit-client/dist/livekit-client.esm.mjs"
-if [ ! -f "${LIVEKIT_SRC}" ]; then
+if [[ ! -f "${LIVEKIT_SRC}" ]]; then
     echo "error: ${LIVEKIT_SRC} not found after npm install" >&2
     exit 1
 fi

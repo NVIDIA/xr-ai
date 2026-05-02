@@ -141,7 +141,7 @@ class ChunkStore:
         pid_dir = self._pid_dir(pid)
         if pid_dir is None:
             return []
-        return sorted(pid_dir.glob("*.264"), key=lambda p: int(p.stem))
+        return [self._check(p) for p in sorted(pid_dir.glob("*.264"), key=lambda p: int(p.stem))]
 
     def _load_meta(self, h264: pathlib.Path) -> dict:
         meta_path = h264.with_suffix(".json")
@@ -191,7 +191,7 @@ class ChunkStore:
         if not selected:
             return None
 
-        return b"".join(p.read_bytes() for p in selected)
+        return b"".join(self._check(p).read_bytes() for p in selected)
 
     def find_chunk_at(self, pid: str, ts_us: int) -> tuple[pathlib.Path, dict] | None:
         """Return the chunk whose [start_us, end_us] window contains
@@ -203,10 +203,10 @@ class ChunkStore:
         metas = [(c, self._load_meta(c)) for c in chunks]
         for c, m in metas:
             if m.get("start_us", int(c.stem)) <= ts_us <= m.get("end_us", int(c.stem)):
-                return c, m
+                return self._check(c), m
         # Fall through: pick the chunk whose start is closest.
         best = min(metas, key=lambda cm: abs(cm[1].get("start_us", int(cm[0].stem)) - ts_us))
-        return best
+        return self._check(best[0]), best[1]
 
 
 # ── live frame provider (ProcessorEndpoint) ───────────────────────────────────
