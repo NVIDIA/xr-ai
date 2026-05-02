@@ -26,14 +26,14 @@ import logging
 
 import httpx
 import uvicorn
-import websockets
 from fastapi import FastAPI, Query, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
-from livekit.api import AccessToken, VideoGrants
 
+from . import _lk_proxy
 from ._tls import ensure_self_signed_cert
+from ._token import make_client_token
 from .config import LiveKitConnectorConfig
 
 log = logging.getLogger(__name__)
@@ -69,13 +69,7 @@ def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
             lk_url = f"wss://{host}:{cfg.web_server_port}"
         else:
             lk_url = f"ws://{host}:{cfg.lk_port_ws}"
-        token = (
-            AccessToken(cfg.api_key, cfg.api_secret)
-            .with_identity(identity)
-            .with_name(identity)
-            .with_grants(VideoGrants(room_join=True, room=cfg.room_name))
-            .to_jwt()
-        )
+        token = make_client_token(cfg, identity=identity, ttl=None)
         return {"token": token, "room": cfg.room_name, "url": lk_url}
 
     # ── LiveKit signaling proxy (only useful when web_server_tls is true) ────
@@ -83,63 +77,11 @@ def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
 
     @app.get("/rtc/validate")
     async def rtc_validate(request: Request) -> Response:
-        qs = str(request.url.query)
-        r = await proxy_client.get(f"{lk_internal_http}/rtc/validate?{qs}")
-        return Response(
-            content=r.content,
-            status_code=r.status_code,
-            media_type=r.headers.get("content-type", "text/plain"),
-        )
+        return await _lk_proxy.proxy_validate(proxy_client, lk_internal_http, request)
 
     @app.websocket("/rtc")
     async def rtc_ws_proxy(client_ws: WebSocket) -> None:
-        qs = client_ws.scope.get("query_string", b"").decode()
-        target = f"{lk_internal_ws}/rtc?{qs}"
-        await client_ws.accept()
-        try:
-            async with websockets.connect(target, max_size=None) as lk_ws:
-
-                async def c2l() -> None:
-                    try:
-                        while True:
-                            msg = await client_ws.receive()
-                            msg_type = msg.get("type")
-                            if msg_type == "websocket.disconnect":
-                                break
-                            # Only websocket.receive carries data — any other
-                            # event type (lifespan ack, ping/pong) shouldn't
-                            # land here, but skip explicitly so a future ASGI
-                            # change doesn't accidentally forward control
-                            # frames upstream as bogus payload.
-                            if msg_type != "websocket.receive":
-                                continue
-                            if msg.get("bytes"):
-                                await lk_ws.send(msg["bytes"])
-                            elif msg.get("text"):
-                                await lk_ws.send(msg["text"])
-                    except Exception:
-                        pass
-                    finally:
-                        await lk_ws.close()
-
-                async def l2c() -> None:
-                    try:
-                        async for frame in lk_ws:
-                            if isinstance(frame, bytes):
-                                await client_ws.send_bytes(frame)
-                            else:
-                                await client_ws.send_text(frame)
-                    except Exception:
-                        pass
-
-                await asyncio.gather(c2l(), l2c(), return_exceptions=True)
-        except Exception as exc:
-            log.debug("WS proxy /rtc error: %s", exc)
-        finally:
-            try:
-                await client_ws.close()
-            except Exception:
-                pass
+        await _lk_proxy.pump_rtc_ws(client_ws, lk_internal_ws)
 
     # StaticFiles asserts scope["type"] == "http" and crashes on WebSocket upgrades.
     # Catch any remaining WebSocket paths and close them before the mount sees them.

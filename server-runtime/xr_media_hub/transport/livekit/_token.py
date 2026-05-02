@@ -14,7 +14,7 @@ from .config import LiveKitConnectorConfig
 def make_client_token(
     cfg: LiveKitConnectorConfig,
     identity: str = "client",
-    ttl: int = 3600 * 24,   # 24 h — long enough for dev
+    ttl: int | None = 3600 * 24,   # 24 h — long enough for dev; None → SDK default
 ) -> str:
     """
     Generate a signed LiveKit JWT for a browser or mobile client.
@@ -24,12 +24,16 @@ def make_client_token(
 
         token = make_client_token(cfg, identity="alice")
         # hand token + ws://10.x.x.x:7880 to the browser client
+
+    Pass ``ttl=None`` to skip the explicit lifetime and use the LiveKit SDK's
+    default token TTL — used by short-lived per-session web tokens.
     """
-    return (
+    builder = (
         AccessToken(cfg.api_key, cfg.api_secret)
         .with_identity(identity)
         .with_name(identity)
         .with_grants(VideoGrants(room_join=True, room=cfg.room_name))
-        .with_ttl(timedelta(seconds=ttl))
-        .to_jwt()
     )
+    if ttl is not None:
+        builder = builder.with_ttl(timedelta(seconds=ttl))
+    return builder.to_jwt()
