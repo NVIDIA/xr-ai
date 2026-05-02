@@ -69,8 +69,10 @@ async def pump_rtc_ws(client_ws: WebSocket, lk_internal_ws: str) -> None:
                             await lk_ws.send(msg["bytes"])
                         elif msg.get("text"):
                             await lk_ws.send(msg["text"])
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # Client-side receive/send can fail during normal disconnect
+                    # races; keep teardown best-effort but retain debug visibility.
+                    log.debug("WS proxy /rtc c2l ended with error: %s", exc)
                 finally:
                     await lk_ws.close()
 
