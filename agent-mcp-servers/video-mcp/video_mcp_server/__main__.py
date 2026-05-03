@@ -199,6 +199,12 @@ class ChunkStore:
 
         return b"".join(self._check(p).read_bytes() for p in selected)
 
+    def read_chunk(self, chunk_path: pathlib.Path) -> bytes:
+        """Read a chunk's bytes, re-validating the path stays inside the
+        recordings root. Use this instead of ``chunk_path.read_bytes()``
+        so the read is co-located with the trust boundary."""
+        return self._check(chunk_path).read_bytes()
+
     def find_chunk_at(self, pid: str, ts_us: int) -> tuple[pathlib.Path, dict] | None:
         """Return the chunk whose [start_us, end_us] window contains
         *ts_us*, or the chunk whose start is closest to *ts_us* if none
@@ -533,7 +539,7 @@ def build_mcp(
             return {"error": f"No recorded video for {participant_id!r}. Recording may be disabled."}
         chunk_path, meta = found
         try:
-            frames = _decode_chunk_to_nv12_frames(chunk_path.read_bytes(), gpu_id=gpu_id)
+            frames = _decode_chunk_to_nv12_frames(store.read_chunk(chunk_path), gpu_id=gpu_id)
         except Exception as exc:
             log.exception("decode failed  chunk=%s", chunk_path)
             return {"error": f"Decode failed: {exc}"}
