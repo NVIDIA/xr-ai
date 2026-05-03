@@ -23,3 +23,10 @@ vlm_server:            http://localhost:8100
 
 # httpx timeout applied to each POST /v1/chat/completions call to vlm-server.
 vlm_request_timeout_s: 60.0
+
+# Whether to let the VLM produce chain-of-thought reasoning before answering.
+# false (default) — suppresses <think> generation entirely; faster responses,
+#                   better for real-time captioning and voice loops.
+# true             — enables full reasoning; more accurate on complex queries
+#                   but adds several seconds of latency per request.
+enable_thinking: false

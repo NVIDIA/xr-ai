@@ -28,8 +28,8 @@ system_prompt: |
     stop." and say nothing else.
 
 # Camera on demand — tune timing for your network/device combination.
-frame_max_age_s:      2.0   # frame older than this is considered stale; agent requests camera
-camera_on_timeout_s: 15.0   # give up waiting for a fresh frame after this many seconds
+frame_max_age_s:      5.0   # frame older than this is considered stale; agent requests camera
+camera_on_timeout_s: 30.0   # give up waiting for a fresh frame after this many seconds
 camera_grace_s:       5.0   # keep camera on this long after a query (avoids restart on follow-ups)
 
 # Voice Activity Detection — tune if STT triggers too early or misses speech.

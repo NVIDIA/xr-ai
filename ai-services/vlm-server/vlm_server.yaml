@@ -1,29 +1,29 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# VLM server configuration — nvidia/Cosmos-Reason1-7B.
-# Auto-discovered by xr-ai-launcher and passed as --config to vlm_server.
-# OpenAI-compatible API at http://localhost:8100/v1 (accepts image_url in messages)
+# vlm-server — vLLM configuration for Cosmos-Reason1-7B.
+# OpenAI-compatible API at http://localhost:8100/v1  (served-model-name: "vlm")
+# Accepts image_url content blocks (base64 data URLs or HTTP URLs).
 
-# HuggingFace model ID — any Qwen2.5-VL-compatible model is supported.
-# nvidia/Cosmos-Reason1-7B   — NVIDIA VLM; Apache 2.0 + NVIDIA Open Model License;
-#                              no HF login required; ~16 GB VRAM at BF16
-# nvidia/Cosmos-Reason2-8B   — stronger reasoning; gated — requires HF login + license
 model: nvidia/Cosmos-Reason1-7B
 
-# HuggingFace token — required for gated models (e.g. Cosmos-Reason2-8B).
-# Accept license at https://huggingface.co/nvidia/Cosmos-Reason2-8B first.
-# !! Do not commit this file with a real token !!
+host: "0.0.0.0"
+port: 8100
 hf_token: ""
 
-port: 8100
-host: "0.0.0.0"
-
-# Optional system prompt — leave empty for Cosmos-Reason1 (no system prompt needed).
-system_prompt: ""
-
-# Max tokens to generate per request (reasoning models emit <think> blocks).
-max_new_tokens: 4096
-
-# HuggingFace weight cache — resolved relative to this YAML file.
+# Shared weight cache — resolves relative to this YAML.
 model_cache: ../models
+
+# Pin to a specific GPU (or comma-separated list for multi-GPU).
+# Unset to use all GPUs visible to the process.
+# cuda_visible_devices: "0"
+
+# vLLM knobs — VLMs are more memory-intensive than text-only LLMs.
+max_num_seqs:           4
+tensor_parallel_size:   1
+max_model_len:          8192
+gpu_memory_utilization: 0.85
+enforce_eager:          false
+
+# Max images accepted per request. Increase if multi-image queries are needed.
+max_images_per_prompt:  1

@@ -24,6 +24,11 @@ hf_token: ""
 # ai-services write their weights).
 model_cache: ../../models
 
+# Pin to a specific GPU (or comma-separated list for multi-GPU).
+# Also controls which GPU _gpu_compute_major() queries for model selection.
+# Unset to use all GPUs visible to the process.
+# cuda_visible_devices: "0"
+
 # vLLM server knobs.
 #
 # On Blackwell (B200 / RTX PRO 6000 96 GB): NVFP4 weights ~20 GB; keep

@@ -10,13 +10,9 @@ name = "mistral-minitron-llm-server"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "torch>=2.2",
-    "transformers>=4.49",
-    "accelerate>=0.30",
-    "fastapi>=0.111",
-    "uvicorn[standard]>=0.29",
-    "hf-transfer>=0.1.4",
+    "vllm>=0.12.0",
     "pyyaml>=6.0",
+    "hf-transfer>=0.1.4",
 ]
 
 [project.scripts]

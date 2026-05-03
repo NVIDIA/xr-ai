@@ -1,34 +1,30 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# llama-nemotron-llm-server reference configuration.
-# OpenAI-compatible API at http://localhost:8106/v1
-#
-# `model_cache: ../../../models` resolves to the shared weight cache at the
-# repo root (xr-ai/models/) regardless of whether this YAML is invoked from
-# here or copied into a sample directory — so all inference servers share one
-# cache.  See AGENTS.md "AI inference servers" section.
-#
-# Copy to your sample root as `llama_nemotron_llm_server.yaml` and edit as needed.
+# llama-nemotron-llm-server — vLLM configuration.
+# OpenAI-compatible API at http://localhost:8106/v1  (served-model-name: "llm")
 
-# HuggingFace model ID — any AutoModelForCausalLM-compatible model with a
-# Llama-3.1-style chat template is supported.
-# nvidia/Llama-3.1-Nemotron-Nano-8B-v1 — NVIDIA Open Model License +
-#                                         Llama 3.1 Community License;
-#                                         native tool-calling + reasoning toggle;
-#                                         ~16 GB VRAM at BF16.
 model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
 
+host: "0.0.0.0"
 port: 8106
-host: 0.0.0.0
 hf_token: ""
 
-# Reasoning control is per-turn via a system or user message containing
-# "detailed thinking on" or "detailed thinking off". The server default is
-# no toggle. Samples can set "detailed thinking off" here to bias toward
-# fast, non-reasoning replies by default.
-system_prompt: ""
-
-max_new_tokens: 1024
-dtype: bfloat16
+# Shared weight cache — resolves relative to this YAML.
 model_cache: ../../../models
+
+# Pin to a specific GPU (or comma-separated list for multi-GPU).
+# Unset to use all GPUs visible to the process.
+# cuda_visible_devices: "0"
+
+# vLLM knobs.
+max_num_seqs:           8
+tensor_parallel_size:   1
+max_model_len:          32768
+gpu_memory_utilization: 0.85
+enforce_eager:          false
+
+# Tool calling via vLLM's built-in Llama-3 parser.
+# Set enable_tool_choice: false to disable tool calling entirely.
+enable_tool_choice: true
+tool_call_parser:   llama3_json

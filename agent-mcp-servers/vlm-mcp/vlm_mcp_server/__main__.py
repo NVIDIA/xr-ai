@@ -43,6 +43,7 @@ import base64
 import io
 import logging
 import pathlib
+import re
 from contextlib import asynccontextmanager
 
 import httpx
@@ -59,12 +60,13 @@ log = logging.getLogger("vlm_mcp_server")
 class VlmClient:
     """Thin async client for vlm-server's OpenAI-compatible chat endpoint."""
 
-    def __init__(self, base_url: str, timeout: float) -> None:
+    def __init__(self, base_url: str, timeout: float, enable_thinking: bool = False) -> None:
         self._url = base_url.rstrip("/") + "/v1/chat/completions"
+        self._enable_thinking = enable_thinking
         self._client = httpx.AsyncClient(timeout=timeout)
 
     async def ask(self, image_data_url: str, question: str) -> str:
-        payload = {
+        payload: dict = {
             "model": "vlm",
             "messages": [{
                 "role": "user",
@@ -74,9 +76,16 @@ class VlmClient:
                 ],
             }],
         }
+        if not self._enable_thinking:
+            # Suppresses <think>…</think> generation entirely for lower latency.
+            # Qwen2.5-VL (Cosmos-Reason1-7B) honours this template argument.
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
         resp = await self._client.post(self._url, json=payload)
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        content = data["choices"][0]["message"].get("content") or ""
+        # Belt-and-suspenders: strip any <think> that leaked through anyway.
+        return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -205,8 +214,9 @@ async def _serve(cfg: dict) -> None:
     port                  = int(cfg.get("port", 8220))
     vlm_server            = cfg.get("vlm_server", "http://localhost:8100")
     vlm_request_timeout_s = float(cfg.get("vlm_request_timeout_s", 60.0))
+    enable_thinking       = bool(cfg.get("enable_thinking", False))
 
-    vlm = VlmClient(vlm_server, timeout=vlm_request_timeout_s)
+    vlm = VlmClient(vlm_server, timeout=vlm_request_timeout_s, enable_thinking=enable_thinking)
     mcp = build_mcp(vlm)
     app = mcp.http_app(path="/mcp")
 

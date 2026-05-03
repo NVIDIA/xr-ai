@@ -59,15 +59,17 @@ log = logging.getLogger("simple_vlm_example")
 
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are an XR assistant looking at the user's live camera feed. "
-    "Help them understand what they see in their environment.\n"
+    "You are an XR assistant speaking directly to the person wearing the headset. "
+    "You can see their live camera feed and help them understand their environment.\n"
     "\n"
     "Style:\n"
+    "- Speak directly to me in second person: 'You are looking at…', 'I can see…', "
+    "'In front of you there is…'. Never refer to 'the user' in the third person.\n"
     "- Reply in plain conversational English — never JSON, code, or markdown.\n"
-    "- Keep replies to 10-15 words by default. Only go longer when the user "
-    "explicitly asks for detail (e.g. 'describe in detail', 'tell me more', "
+    "- Keep replies to 10-15 words by default. Only go longer when I "
+    "explicitly ask for detail (e.g. 'describe in detail', 'tell me more', "
     "'elaborate', 'explain').\n"
-    "- If the user says 'stop', tells you to be quiet, or asks you to stop "
+    "- If I say 'stop', ask you to be quiet, or ask you to stop "
     "talking, just acknowledge briefly with something like 'Okay, I will stop.' "
     "and say nothing else."
 )
@@ -227,8 +229,11 @@ class SimpleVlmAgent:
             sig = self._latest_signal(pid)
             if not (sig and self._is_fresh(sig)):
                 await self._ensure_camera_on(pid)
-                sig = await self._wait_for_fresh_frame(pid, self._camera_on_timeout)
+                sig = await self._wait_for_camera_frame(pid, self._camera_on_timeout)
                 if sig is None:
+                    # Reset so the next query re-sends startCamera rather than
+                    # treating the camera as already on when it never delivered frames.
+                    self._camera_on[pid] = False
                     await self._say(pid, "Camera unavailable, please try again.", pts_us)
                     return
 
@@ -342,32 +347,66 @@ class SimpleVlmAgent:
     async def _ensure_camera_on(self, pid: str) -> None:
         """Send startCamera if we haven't already (idempotent)."""
         if not self._camera_on.get(pid, False):
-            log.info("camera.on → pid=%r", pid)
-            await self._client_control(pid, "startCamera")
+            # Claim the flag before the first await so concurrent callers
+            # (speculative _on_audio + _handle_query) can't both see False
+            # and each send startCamera.
             self._camera_on[pid] = True
+            try:
+                log.info("camera.on → pid=%r", pid)
+                await self._client_control(pid, "startCamera")
+            except Exception:
+                self._camera_on[pid] = False  # rollback so next call retries
+                raise
 
-    async def _wait_for_fresh_frame(
+    async def _wait_for_camera_frame(
         self, pid: str, timeout: float,
     ) -> FrameSignal | None:
-        """Wait up to ``timeout`` seconds for a fresh (non-stale) frame."""
+        """Wait up to ``timeout`` seconds for any new FrameSignal for ``pid``.
+
+        During the camera-start wait, age doesn't matter — any arriving frame
+        proves the camera is streaming.  The ``_is_fresh`` check is only for
+        the initial shortcut (skip camera start when already streaming).
+        """
         ev = self._frame_events.setdefault(pid, asyncio.Event())
-        deadline = asyncio.get_event_loop().time() + timeout
+        t0 = asyncio.get_event_loop().time()
+        deadline = t0 + timeout
+
+        # TOCTOU: clear event, then re-check before blocking.
+        ev.clear()
+        sig = self._latest_signal(pid)
+        if sig is not None:
+            log.info("camera frame pid=%r  track=%s  age_ms=%.0f  (immediate)",
+                     pid, sig.track_id, (now_us() - sig.pts_us) / 1_000)
+            return sig
+
         while True:
-            sig = self._latest_signal(pid)
-            if sig is not None and self._is_fresh(sig):
-                return sig
-            # Clear, then re-check to close the TOCTOU race between check and wait.
-            ev.clear()
-            sig = self._latest_signal(pid)
-            if sig is not None and self._is_fresh(sig):
-                return sig
             remaining = deadline - asyncio.get_event_loop().time()
             if remaining <= 0:
+                sig = self._latest_signal(pid)
+                log.warning(
+                    "camera timeout pid=%r  waited=%.1fs  "
+                    "latest_frame_age_ms=%s  tracks_seen=%d",
+                    pid, timeout,
+                    f"{(now_us() - sig.pts_us) / 1_000:.0f}" if sig else "none",
+                    len([k for k in self._latest if k[0] == pid]),
+                )
                 return None
             try:
-                await asyncio.wait_for(ev.wait(), timeout=remaining)
+                await asyncio.wait_for(ev.wait(), timeout=min(remaining, 5.0))
             except asyncio.TimeoutError:
-                return None
+                log.info("still waiting for camera pid=%r  elapsed=%.1fs",
+                         pid, asyncio.get_event_loop().time() - t0)
+                ev.clear()
+                continue
+
+            # Event fired — a new FrameSignal arrived.
+            sig = self._latest_signal(pid)
+            if sig is not None:
+                log.info("camera frame pid=%r  track=%s  age_ms=%.0f  after %.1fs",
+                         pid, sig.track_id, (now_us() - sig.pts_us) / 1_000,
+                         asyncio.get_event_loop().time() - t0)
+                return sig
+            ev.clear()
 
     def _is_fresh(self, sig: FrameSignal) -> bool:
         return now_us() - sig.pts_us < self._frame_max_age_us
@@ -418,8 +457,14 @@ class SimpleVlmAgent:
     # ── frame tracking ────────────────────────────────────────────────────────
 
     async def _on_frame(self, sig: FrameSignal) -> None:
+        prev = self._latest.get((sig.participant_id, sig.track_id))
         self._latest[(sig.participant_id, sig.track_id)] = sig
-        # Wake any waiter in _wait_for_fresh_frame.
+        # Log the very first frame per track so we can confirm signals arrive.
+        if prev is None:
+            log.info("first frame signal  pid=%r  track=%s  age_ms=%.0f",
+                     sig.participant_id, sig.track_id,
+                     (now_us() - sig.pts_us) / 1_000)
+        # Wake any waiter in _wait_for_camera_frame.
         ev = self._frame_events.get(sig.participant_id)
         if ev is not None:
             ev.set()
@@ -428,7 +473,10 @@ class SimpleVlmAgent:
         candidates = [v for k, v in self._latest.items() if k[0] == pid]
         if not candidates:
             return None
-        return max(candidates, key=lambda s: s.seq)
+        # Use pts_us (real Unix timestamp) not seq (per-track counter).
+        # seq restarts from 1 on each camera restart, so the old track's
+        # stale entry wins max(seq) for hundreds of frames on the new track.
+        return max(candidates, key=lambda s: s.pts_us)
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if event.joined:

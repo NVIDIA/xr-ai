@@ -1,31 +1,25 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# mistral-minitron-llm-server reference configuration.
-# OpenAI-compatible API at http://localhost:8101/v1
-#
-# `model_cache: ../../../models` resolves to the shared weight cache at the
-# repo root (xr-ai/models/) regardless of whether this YAML is invoked from
-# here or copied into a sample directory — so all inference servers share one
-# cache.  See AGENTS.md "AI inference servers" section.
-#
-# Copy to your sample root as `mistral_minitron_llm_server.yaml` and edit as needed.
+# mistral-minitron-llm-server — vLLM configuration.
+# OpenAI-compatible API at http://localhost:8101/v1  (served-model-name: "llm")
 
-# HuggingFace model ID — any AutoModelForCausalLM-compatible model is supported.
-# nvidia/Mistral-NeMo-Minitron-8B-Instruct — NVIDIA Open Model License;
-#                                            ~16 GB VRAM at BF16.
 model: nvidia/Mistral-NeMo-Minitron-8B-Instruct
 
+host: "0.0.0.0"
 port: 8101
-host: 0.0.0.0
 hf_token: ""
-system_prompt: ""
-max_new_tokens: 1024
-model_cache: ../../../models
-dtype: bfloat16
 
-# Default stop sequences for Mistral-NeMo-Minitron-8B's chat template.
-# Applied server-side if the request doesn't provide its own stop list.
-stop:
-  - "<extra_id_1>"
-  - "<extra_id_0>"
+# Shared weight cache — resolves relative to this YAML.
+model_cache: ../../../models
+
+# Pin to a specific GPU (or comma-separated list for multi-GPU).
+# Unset to use all GPUs visible to the process.
+# cuda_visible_devices: "0"
+
+# vLLM knobs.
+max_num_seqs:           8
+tensor_parallel_size:   1
+max_model_len:          32768
+gpu_memory_utilization: 0.85
+enforce_eager:          false
