@@ -93,18 +93,25 @@ def start_service():
 
 
 def wait_ready() -> bool:
-    print(f"Waiting for Docker Model Runner at {BASE_URL} (up to {TIMEOUT}s)…")
+    # Two-phase wait:
+    #   1. Docker Model Runner daemon starts (endpoint responds but models list is empty).
+    #   2. docker model pull + docker model run completes (model appears in the list).
+    # We wait for phase 2 — an empty models list means the pull is still in progress.
+    print(f"Waiting for model to load at {BASE_URL} (up to {TIMEOUT}s — pull may take a while)…")
     deadline = time.time() + TIMEOUT
     while time.time() < deadline:
         if _proc and _proc.poll() is not None:
             print(f"{RED}Service process exited early (rc={_proc.returncode}){RESET}")
             return False
         try:
-            urllib.request.urlopen(f"{BASE_URL}/models", timeout=3)
-            print(f"{GREEN}Ready.{RESET}")
-            return True
+            with urllib.request.urlopen(f"{BASE_URL}/models", timeout=3) as r:
+                data = json.loads(r.read())
+            if data.get("data"):
+                print(f"{GREEN}Ready — model loaded.{RESET}")
+                return True
         except Exception:
-            time.sleep(3)
+            pass
+        time.sleep(5)
     return False
 
 
