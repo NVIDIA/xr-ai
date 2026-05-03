@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# VLM server — Docker Model Runner variant.
+# Replaces vlm_server (transformers in-process) with Docker Model Runner.
+#
+# API endpoint: http://localhost:12434/engines/llama.cpp/v1
+# Model name in API requests: the value of `model` below.
+#
+# To use this with vlm-mcp, set vlm_mcp_server.yaml to:
+#   vlm_server:     http://localhost:12434/engines/llama.cpp
+#   vlm_model_name: hf.co/nvidia/Cosmos-Reason1-7B
+
+model: hf.co/nvidia/Cosmos-Reason1-7B

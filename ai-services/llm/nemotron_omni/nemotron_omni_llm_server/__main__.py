@@ -1,0 +1,166 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""
+nemotron_omni_llm_server — vLLM launcher for the Nemotron-3-Nano-Omni
+real-time conversational / voice-entry LLM.
+
+Selects the FP8 or NVFP4 model variant based on GPU compute capability,
+downloads the nano_v3 reasoning-parser plugin once, and execs into
+``vllm serve`` so the launcher owns the subprocess.
+
+Config keys (nemotron_omni_llm_server.yaml)
+-------------------------------------------
+    model_blackwell:         str    HuggingFace model ID for Blackwell (SM100+).
+    model_ada:               str    HuggingFace model ID for Ada / Hopper / Ampere.
+    host:                    str    Bind address (default: "0.0.0.0").
+    port:                    int    HTTP port (default: 8107).
+    hf_token:                str    HuggingFace token (leave empty — model is ungated).
+    model_cache:             str    Weight + plugin cache dir, relative to this YAML.
+    max_num_seqs:            int    vLLM --max-num-seqs (default: 8).
+    tensor_parallel_size:    int    vLLM --tensor-parallel-size (default: 1).
+    max_model_len:           int    vLLM --max-model-len (default: 32768).
+    gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
+    enforce_eager:           bool   Skip CUDA graph capture (default: true).
+    parser_url:              str    URL to fetch nano_v3_reasoning_parser.py.
+                                    Defaults to the NVFP4 model's HuggingFace page.
+"""
+import argparse
+import os
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+
+import yaml
+
+_MODEL_BLACKWELL = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4"
+_MODEL_ADA       = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8"
+
+_DEFAULT_PORT      = 8107
+_DEFAULT_HOST      = "0.0.0.0"
+_DEFAULT_SEQS      = 8
+_DEFAULT_TP        = 1
+_DEFAULT_CTX       = 32768
+_DEFAULT_GPU_MEM   = 0.85
+_DEFAULT_EAGER     = True
+
+_PARSER_FILENAME = "nano_v3_reasoning_parser.py"
+# Shared across the Nemotron-3-Nano family; hosted on the NVFP4 model page.
+_PARSER_URL_DEFAULT = (
+    "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
+    f"/resolve/main/{_PARSER_FILENAME}"
+)
+
+
+def _gpu_compute_major() -> int:
+    """Return the compute-capability major version of GPU 0 via nvidia-smi."""
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"],
+            text=True, stderr=subprocess.DEVNULL,
+        ).strip().splitlines()
+        if out:
+            return int(out[0].split(".")[0])
+    except Exception:
+        pass
+    return 0
+
+
+def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
+    raw = cfg.get("model_cache", "../../models")
+    p = Path(raw)
+    if not p.is_absolute():
+        p = (yaml_dir / p).resolve()
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _ensure_reasoning_parser(model_cache: Path, url: str) -> Path:
+    path = model_cache / _PARSER_FILENAME
+    if not path.exists():
+        print(f"[nemotron_omni] Downloading {_PARSER_FILENAME}…", flush=True)
+        try:
+            with urllib.request.urlopen(url) as resp:
+                path.write_bytes(resp.read())
+        except Exception as exc:
+            raise RuntimeError(f"Failed to download reasoning parser from {url}: {exc}") from exc
+    return path
+
+
+def run() -> None:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--config", type=Path, default=None)
+    ns, _ = p.parse_known_args()
+
+    cfg: dict = {}
+    yaml_dir = Path.cwd()
+    if ns.config and ns.config.exists():
+        yaml_dir = ns.config.parent.resolve()
+        with open(ns.config) as f:
+            cfg = yaml.safe_load(f) or {}
+
+    major = _gpu_compute_major()
+    if major >= 10:
+        model = cfg.get("model_blackwell", _MODEL_BLACKWELL)
+        print(f"[nemotron_omni] Blackwell (SM{major}0) → {model}", flush=True)
+    else:
+        model = cfg.get("model_ada", _MODEL_ADA)
+        arch  = f"SM{major}0" if major > 0 else "unknown GPU"
+        print(f"[nemotron_omni] Pre-Blackwell ({arch}) → {model}", flush=True)
+
+    host         = cfg.get("host", _DEFAULT_HOST)
+    port         = int(cfg.get("port", _DEFAULT_PORT))
+    max_seqs     = int(cfg.get("max_num_seqs", _DEFAULT_SEQS))
+    tp_size      = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
+    max_ctx      = int(cfg.get("max_model_len", _DEFAULT_CTX))
+    gpu_mem      = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
+    enforce_eager = bool(cfg.get("enforce_eager", _DEFAULT_EAGER))
+    parser_url   = cfg.get("parser_url", _PARSER_URL_DEFAULT)
+
+    model_cache = _resolve_model_cache(cfg, yaml_dir)
+
+    if hf_token := (cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")):
+        os.environ["HF_TOKEN"] = hf_token
+    os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+    os.environ["HF_HOME"] = str(model_cache)
+
+    # NVFP4 FlashInfer MoE kernels are Blackwell-only.
+    if major >= 10 and "NVFP4" in model:
+        os.environ["VLLM_USE_FLASHINFER_MOE_FP4"] = "1"
+        os.environ["VLLM_FLASHINFER_MOE_BACKEND"]  = "throughput"
+
+    parser_path = _ensure_reasoning_parser(model_cache, parser_url)
+
+    argv = [
+        "vllm", "serve", model,
+        "--served-model-name", "llm",
+        "--host", host,
+        "--port", str(port),
+        "--trust-remote-code",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser", "qwen3_coder",
+        "--reasoning-parser-plugin", str(parser_path),
+        "--reasoning-parser", "nano_v3",
+        "--max-num-seqs", str(max_seqs),
+        "--tensor-parallel-size", str(tp_size),
+        "--max-model-len", str(max_ctx),
+        "--gpu-memory-utilization", str(gpu_mem),
+    ]
+    if major >= 10:
+        argv.extend(["--kv-cache-dtype", "fp8"])
+    if enforce_eager:
+        argv.append("--enforce-eager")
+
+    print(
+        f"[nemotron_omni] Launching vLLM  http://{host}:{port}/v1  model={model}",
+        flush=True,
+    )
+    os.execvp(argv[0], argv)
+
+
+if __name__ == "__main__":
+    run()

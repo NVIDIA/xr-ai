@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron-3-Nano-Omni conversational / voice-entry LLM — vLLM configuration.
+# OpenAI-compatible API at http://localhost:8107/v1  (served-model-name: "llm")
+#
+# Model is auto-selected based on GPU compute capability:
+#   Blackwell (SM100+)  → model_blackwell  (NVFP4, ~20 GB VRAM)
+#   Ada / Hopper / etc. → model_ada        (FP8,   ~30 GB VRAM)
+#
+# This service is the real-time voice entry point. Workers should set their
+# llm_server to http://localhost:8107/v1 and use model: "llm".
+
+model_blackwell: nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4
+model_ada:       nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8
+
+host: "0.0.0.0"
+port: 8107
+
+# HuggingFace token — not required for these models (Apache 2.0 + NVIDIA Open
+# Model License, no gating). Leave empty.
+hf_token: ""
+
+# Weight + reasoning-parser cache, relative to this YAML.
+model_cache: ../../models
+
+# vLLM knobs — tune based on available VRAM and co-tenants.
+max_num_seqs:         8
+tensor_parallel_size: 1
+max_model_len:        32768
+gpu_memory_utilization: 0.85
+
+# Skip CUDA graph capture on first start (3-8 min for MoE + Mamba-2 layers).
+# Set to false for maximum throughput once startup time is acceptable.
+enforce_eager: true

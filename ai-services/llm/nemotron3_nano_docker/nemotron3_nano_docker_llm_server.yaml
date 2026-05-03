@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron-3-Nano tool-calling LLM — Docker Model Runner variant.
+# Replaces nemotron3_nano_llm_server (vLLM) with Docker Model Runner.
+#
+# API endpoint: http://localhost:12434/engines/llama.cpp/v1
+# Model name in API requests: the selected model image (e.g. model_ada below).
+#
+# GPU auto-selection:
+#   Blackwell (SM100+)  → model_blackwell  (NVFP4, ~20 GB VRAM)
+#   Ada / Hopper / etc. → model_ada        (FP8,   ~30 GB VRAM)
+#   Any (use_small)     → model_small      (FP8,   ~10 GB VRAM)
+
+use_small: false
+
+model_blackwell: hf.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+model_ada:       hf.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+model_small:     hf.co/nvidia/NVIDIA-Nemotron-Nano-9B-v2-FP8
