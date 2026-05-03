@@ -11,13 +11,14 @@ Two data paths:
 
 * **Historical chunks** — reads the H.264 Annex B chunks the hub recorder
   writes to (tmpfs by default). Used by ``query_video``,
-  ``get_video_stats``, ``list_recorded_participants``,
-  ``get_frame_at_time``.
+  ``get_video_stats``, ``list_recorded_participants``, and
+  ``get_frame_from_time`` when ``second_ago > 0``.
 
 * **Live frames** — connects to the hub as a ``ProcessorEndpoint``,
   tracks the most recent ``FrameSignal`` per participant, and pulls
   pixels on demand via ``request_frame``. Used by
-  ``list_live_participants`` and ``get_latest_frame``.
+  ``list_live_participants`` and ``get_frame_from_time`` when
+  ``second_ago == 0``.
 
 All tools accept and return raw LiveKit identities; sanitization happens
 internally for filesystem paths and is recovered via ``.identity``
@@ -38,14 +39,15 @@ Tools (FastMCP, mounted at /mcp)
       Concatenate H.264 chunks overlapping the window, write to a file,
       return the path. Result is raw H.264 starting with an IDR.
 
-  get_latest_frame(participant_id) → dict
-      Fetch the most recent frame the hub has for *participant_id*,
-      encode to PNG, return the file path. Uses the live IPC path —
-      independent of disk chunk timing.
-
-  get_frame_at_time(participant_id, timestamp_us) → dict
-      Decode the chunk covering *timestamp_us*, pick the frame closest
-      to that timestamp, encode to PNG, return the file path.
+  get_frame_from_time(participant_id, second_ago, reference_time_us=0) → dict
+      Frame at ``anchor − second_ago s`` where the anchor is either the
+      wall clock (``reference_time_us = 0``, default) or an explicit
+      Unix-microseconds timestamp. The anchored mode (typical for LLM
+      agents that pass the user's speech timestamp) always reads from
+      the recorded NVENC chunk store and decodes via NVDEC; only the
+      unanchored ``second_ago = 0`` short-circuits to the live IPC path.
+      Returns a PNG file path. Replaces the deprecated
+      ``get_latest_frame`` and ``get_frame_at_time`` tools.
 
 Config (video_mcp_server.yaml)
 ───────────────────────────────
@@ -60,9 +62,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ctypes
 import json
 import logging
 import pathlib
+import time
 
 import numpy as np
 import uvicorn
@@ -311,6 +315,22 @@ def _save_png(rgb: np.ndarray, out_path: pathlib.Path) -> None:
 
 # ── H.264 decode (PyNvVideoCodec) ────────────────────────────────────────────
 
+def _decoded_frame_to_nv12(frame) -> np.ndarray:
+    """Copy a ``DecodedFrame`` (host memory, NV12) into an owned numpy array.
+
+    PyNvVideoCodec 2.x ``DecodedFrame`` no longer implements the numpy
+    array interface, so ``np.array(frame, copy=True)`` returns an opaque
+    object array. Read the host-memory plane pointer via
+    ``GetPtrToPlane(0)`` and copy the bytes out as a contiguous uint8
+    buffer of shape ``(H*3//2, W)`` — the canonical NV12 layout the
+    encoder also consumes.
+    """
+    nbytes = frame.shape[0] * frame.shape[1]
+    buf_t  = ctypes.c_uint8 * nbytes
+    view   = buf_t.from_address(frame.GetPtrToPlane(0))
+    return np.ctypeslib.as_array(view).reshape(frame.shape).copy()
+
+
 def _decode_chunk_to_nv12_frames(annex_b: bytes, gpu_id: int = 0) -> list[np.ndarray]:
     """Decode an H.264 Annex B chunk into a list of NV12 numpy arrays.
 
@@ -319,15 +339,34 @@ def _decode_chunk_to_nv12_frames(annex_b: bytes, gpu_id: int = 0) -> list[np.nda
     fallback.
     """
     import PyNvVideoCodec as nvc
+    # PyNvVideoCodec >= 2.x dropped the string-form ``codec=`` argument and
+    # the raw-bytes form of ``Decode``. Pass the ``cudaVideoCodec`` enum
+    # and wrap the bitstream in a ``PacketData`` whose ``bsl_data`` points
+    # into a numpy buffer that outlives the call.
     decoder = nvc.CreateDecoder(
-        gpuid=gpu_id, codec="h264", cudacontext=0, cudastream=0,
+        gpuid=gpu_id, codec=nvc.cudaVideoCodec.H264, cudacontext=0, cudastream=0,
         usedevicememory=False,
     )
+
+    src = np.frombuffer(annex_b, dtype=np.uint8)
+    pkt = nvc.PacketData()
+    pkt.bsl      = int(src.size)
+    pkt.bsl_data = int(src.ctypes.data)
+
     frames: list[np.ndarray] = []
-    for frame in decoder.Decode(annex_b):
-        # `frame` exposes the NumPy buffer protocol; copy out so it
-        # outlives the decoder's internal slot.
-        frames.append(np.array(frame, copy=True))
+    for f in decoder.Decode(pkt):
+        frames.append(_decoded_frame_to_nv12(f))
+
+    # NVDEC keeps the last few frames in its reorder buffer until it sees
+    # an end-of-stream marker. Without this drain pass we silently drop
+    # ~7 of 30 frames per chunk.
+    eos = nvc.PacketData()
+    eos.bsl         = 0
+    eos.bsl_data    = 0
+    eos.decode_flag = int(nvc.VideoPacketFlag.ENDOFSTREAM)
+    for f in decoder.Decode(eos):
+        frames.append(_decoded_frame_to_nv12(f))
+
     return frames
 
 
@@ -346,7 +385,8 @@ def build_mcp(
     def list_live_participants() -> list[str]:
         """Return raw participant identities currently connected to the
         hub. Drawn from the live IPC roster — these are the only pids
-        for which ``get_latest_frame`` will return a frame."""
+        for which ``get_frame_from_time(..., second_ago=0)`` will return
+        a live frame."""
         return sorted(provider.connected_participants())
 
     @mcp.tool()
@@ -392,48 +432,105 @@ def build_mcp(
                 "start_us": start_us, "end_us": end_us}
 
     @mcp.tool()
-    async def get_latest_frame(participant_id: str) -> dict:
+    async def get_frame_from_time(
+        participant_id:    str,
+        second_ago:        int,
+        reference_time_us: int = 0,
+    ) -> dict:
         """
-        Fetch the most recent frame the hub has for *participant_id*,
-        encode to PNG, return the file path.
+        Retrieve a camera frame for *participant_id* near a chosen instant in
+        time, encode to PNG, and return the file path.
 
-        Keys: path, width, height, timestamp_us, track_id.
-        Returns an error dict if no live frame is available yet.
-        """
-        frame = await provider.fetch_latest(participant_id)
-        if frame is None:
-            return {"error": f"No live frame available for {participant_id!r}"}
-        try:
-            rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
-        except ValueError as exc:
-            return {"error": str(exc)}
-        safe     = _safe_name(participant_id)
-        out_path = out_dir / f"{safe}_latest_{frame.pts_us}.png"
-        _save_png(rgb, out_path)
-        log.info("get_latest_frame  pid=%r  %dx%d  ts=%d → %s",
-                 participant_id, frame.width, frame.height, frame.pts_us, out_path)
-        return {
-            "path":         str(out_path),
-            "width":        frame.width,
-            "height":       frame.height,
-            "timestamp_us": frame.pts_us,
-            "track_id":     frame.track_id,
-        }
+        Time anchor
+        -----------
+        ``reference_time_us`` is the "now" anchor in Unix microseconds. The
+        target instant is ``anchor - second_ago * 1_000_000``.
 
-    @mcp.tool()
-    def get_frame_at_time(participant_id: str, timestamp_us: int) -> dict:
-        """
-        Decode the H.264 chunk covering *timestamp_us* (Unix µs) for
-        *participant_id*, pick the frame closest to that timestamp,
-        encode to PNG, return the file path.
+        - ``reference_time_us = 0`` (omitted) ⇒ anchor = wall clock
+          ``time.time()``. With ``second_ago = 0`` you get the latest live
+          IPC frame; with ``second_ago > 0`` a recorded chunk near
+          ``now - N s``.
 
-        Keys: path, width, height, timestamp_us (the actual frame ts,
-        approximated by linear interpolation within the chunk), chunk_path.
-        Returns an error dict if no chunks cover the request.
+        - ``reference_time_us > 0`` ⇒ anchor = that timestamp. ALL lookups
+          go through the recorded-chunk path (live IPC is bypassed) so the
+          returned frame matches the user's reference frame in time, not
+          the wall clock at the moment this tool fires.
+
+        Why the anchor matters
+        ----------------------
+        LLM thinking + STT finalisation introduce 5-15 s of delay between
+        the user speaking and this tool being called. Without an anchor,
+        ``second_ago = 0`` returns a frame from "now" — i.e. seconds AFTER
+        the user finished asking. Workers that know when the user spoke
+        should pass that timestamp here.
+
+        Parameters
+        ----------
+        participant_id
+            Raw LiveKit identity; same value as in the hub's IPC roster.
+        second_ago
+            Seconds before the anchor. ``0`` means at the anchor; positive
+            means in the past relative to it. Negative values are an error.
+        reference_time_us
+            Optional Unix-microseconds anchor. ``0`` (default) means use
+            the wall clock and (for ``second_ago = 0``) the live IPC frame.
+
+        Returns
+        -------
+        dict
+            Keys: ``path``, ``width``, ``height``, ``timestamp_us`` (Unix
+            µs of the actual frame returned), ``second_ago`` (echoes the
+            request), ``actual_second_ago`` (how many seconds before the
+            wall clock the returned frame actually is — useful for
+            telemetry; may be negative if the chunk is newer than the
+            anchor).
+
+        Returns ``{"error": "..."}`` when no frame is available
+        (participant not connected for live, or recording disabled /
+        requested time outside the eviction window for chunk lookup).
         """
-        found = store.find_chunk_at(participant_id, timestamp_us)
+        if second_ago < 0:
+            return {"error": f"second_ago must be >= 0, got {second_ago}"}
+        if reference_time_us < 0:
+            return {"error": f"reference_time_us must be >= 0, got {reference_time_us}"}
+
+        now_us    = int(time.time() * 1_000_000)
+        anchor_us = reference_time_us if reference_time_us > 0 else now_us
+
+        # Live IPC path is taken ONLY when the caller wants "right now,
+        # wall clock" — i.e. no anchor provided AND no past offset. As
+        # soon as the caller anchors to an explicit timestamp (typically
+        # the user's speech time), we always go through the recorded
+        # chunk store so the returned frame matches that instant rather
+        # than the wall clock at tool-fire time.
+        if reference_time_us == 0 and second_ago == 0:
+            frame = await provider.fetch_latest(participant_id)
+            if frame is None:
+                return {"error": f"No live frame available for {participant_id!r}"}
+            try:
+                rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
+            except ValueError as exc:
+                return {"error": str(exc)}
+            safe     = _safe_name(participant_id)
+            out_path = out_dir / f"{safe}_ago0_{frame.pts_us}.png"
+            _save_png(rgb, out_path)
+            actual = (now_us - frame.pts_us) / 1_000_000
+            log.info("get_frame_from_time(0)  pid=%r  %dx%d  ts=%d (~%.2fs ago, live) → %s",
+                     participant_id, frame.width, frame.height, frame.pts_us, actual, out_path)
+            return {
+                "path":              str(out_path),
+                "width":             frame.width,
+                "height":            frame.height,
+                "timestamp_us":      frame.pts_us,
+                "second_ago":        0,
+                "actual_second_ago": actual,
+            }
+
+        # Anchored chunk lookup.
+        target_us = anchor_us - second_ago * 1_000_000
+        found = store.find_chunk_at(participant_id, target_us)
         if found is None:
-            return {"error": f"No video chunks recorded for {participant_id!r}"}
+            return {"error": f"No recorded video for {participant_id!r}. Recording may be disabled."}
         chunk_path, meta = found
         try:
             frames = _decode_chunk_to_nv12_frames(chunk_path.read_bytes(), gpu_id=gpu_id)
@@ -450,33 +547,40 @@ def build_mcp(
         height_nv  = frames[0].shape[0]
         height     = int(meta.get("height", height_nv * 2 // 3))
 
-        # Linear interpolation: which frame index is closest to ts_us?
         if num_frames <= 1 or end_us <= start_us:
             idx = 0
         else:
-            ratio = (timestamp_us - start_us) / (end_us - start_us)
+            ratio = (target_us - start_us) / (end_us - start_us)
             idx   = max(0, min(num_frames - 1, round(ratio * (num_frames - 1))))
         idx = min(idx, len(frames) - 1)
 
         nv12     = frames[idx]
         rgb      = _nv12_to_rgb(nv12, width, height)
         safe     = _safe_name(participant_id)
-        out_path = out_dir / f"{safe}_at_{timestamp_us}.png"
+        out_path = out_dir / f"{safe}_ago{second_ago}_{target_us}.png"
         _save_png(rgb, out_path)
 
-        # Approximate frame timestamp (uniform spacing inside the chunk).
-        frame_ts = (
+        frame_ts  = (
             start_us + idx * (end_us - start_us) // max(num_frames - 1, 1)
             if num_frames > 1 else start_us
         )
-        log.info("get_frame_at_time  pid=%r  ts=%d  frame=%d/%d → %s",
-                 participant_id, timestamp_us, idx, num_frames, out_path)
+        actual    = (now_us - frame_ts)    / 1_000_000
+        anchored  = bool(reference_time_us > 0)
+        anchor_dt = (now_us - anchor_us)   / 1_000_000 if anchored else 0.0
+        log.info(
+            "get_frame_from_time(%d)  pid=%r  ts=%d (~%.2fs ago wall, anchored=%s%s)"
+            "  frame=%d/%d → %s",
+            second_ago, participant_id, frame_ts, actual,
+            anchored, f", anchor={anchor_dt:.2f}s ago" if anchored else "",
+            idx, num_frames, out_path,
+        )
         return {
-            "path":         str(out_path),
-            "width":        width,
-            "height":       height,
-            "timestamp_us": frame_ts,
-            "chunk_path":   str(chunk_path),
+            "path":              str(out_path),
+            "width":             width,
+            "height":            height,
+            "timestamp_us":      frame_ts,
+            "second_ago":        second_ago,
+            "actual_second_ago": actual,
         }
 
     return mcp
