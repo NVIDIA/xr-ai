@@ -41,6 +41,8 @@ class Process:
     name    — label used in log output.
     project — path to the uv project (relative to the sample root, or absolute).
     command — entry-point script to run inside the project's venv.
+    gpu     — optional CUDA_VISIBLE_DEVICES value (e.g. "0", "1", "0,1").
+              Omit to inherit the parent's GPU visibility.
 
     Config convention: ``run_stack`` looks for ``<command>.yaml`` in the
     sample root and passes it as ``--config <abs-path>`` if it exists.
@@ -49,6 +51,7 @@ class Process:
     name:    str
     project: str | Path
     command: str
+    gpu:     str | None = None
 
 
 def _config_args(command: str, base: Path) -> list[str]:
@@ -73,7 +76,7 @@ async def StackLauncher(processes: Sequence[Process], base: Path):
             project = (base / p.project).resolve()
             extra   = _config_args(p.command, base)
             proc    = await stack.enter_async_context(
-                ProjectLauncher(project, p.command, *extra, name=p.name)
+                ProjectLauncher(project, p.command, *extra, name=p.name, gpu=p.gpu)
             )
             procs[p.name] = proc
         yield procs
