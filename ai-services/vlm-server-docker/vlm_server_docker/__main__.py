@@ -29,6 +29,29 @@ import yaml
 _DEFAULT_MODEL = "hf.co/nvidia/Cosmos-Reason1-7B"
 
 
+def _require_docker_model_runner() -> None:
+    """Exit with a clear message if the Docker Model Runner plugin is not installed."""
+    result = subprocess.run(
+        ["docker", "model", "version"],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        print(
+            "[vlm_server_docker] ERROR: Docker Model Runner plugin not found.\n"
+            "\n"
+            "Install it on Linux:\n"
+            "  sudo apt-get install docker-model-plugin\n"
+            "\n"
+            "Or follow the official guide:\n"
+            "  https://docs.docker.com/model-runner/\n"
+            "\n"
+            "Alternatively, use the in-process VLM server:\n"
+            "  ai-services/vlm-server/",
+            flush=True,
+        )
+        sys.exit(1)
+
+
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
@@ -41,6 +64,8 @@ def run() -> None:
     if ns.config and ns.config.exists():
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    _require_docker_model_runner()
 
     model = cfg.get("model", _DEFAULT_MODEL)
 

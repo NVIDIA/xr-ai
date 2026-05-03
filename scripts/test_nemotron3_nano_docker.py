@@ -54,7 +54,26 @@ def _stop():
 atexit.register(_stop)
 
 
+
+def _check_docker_model_runner():
+    """Fail fast with install instructions if the plugin is missing."""
+    import shutil
+    if not shutil.which("docker"):
+        print(f"{RED}docker not found on PATH.{RESET}")
+        sys.exit(1)
+    result = subprocess.run(["docker", "model", "version"], capture_output=True)
+    if result.returncode != 0:
+        print(f"{RED}Docker Model Runner plugin not installed.{RESET}")
+        print()
+        print("Install on Linux:")
+        print("  sudo apt-get install docker-model-plugin")
+        print()
+        print("Official guide: https://docs.docker.com/model-runner/")
+        sys.exit(1)
+
+
 def start_service():
+    _check_docker_model_runner()
     global _proc
     # Override use_small via a temp config if requested.
     if os.environ.get("USE_SMALL"):

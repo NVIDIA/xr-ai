@@ -37,6 +37,29 @@ _MODEL_ADA       = "hf.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
 _MODEL_SMALL     = "hf.co/nvidia/NVIDIA-Nemotron-Nano-9B-v2-FP8"
 
 
+def _require_docker_model_runner() -> None:
+    """Exit with a clear message if the Docker Model Runner plugin is not installed."""
+    result = subprocess.run(
+        ["docker", "model", "version"],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        print(
+            "[nemotron3_nano_docker] ERROR: Docker Model Runner plugin not found.\n"
+            "\n"
+            "Install it on Linux:\n"
+            "  sudo apt-get install docker-model-plugin\n"
+            "\n"
+            "Or follow the official guide:\n"
+            "  https://docs.docker.com/model-runner/\n"
+            "\n"
+            "Alternatively, use the vLLM-based service instead:\n"
+            "  ai-services/llm/nemotron3_nano/",
+            flush=True,
+        )
+        sys.exit(1)
+
+
 def _gpu_compute_major() -> int:
     try:
         out = subprocess.check_output(
@@ -62,6 +85,8 @@ def run() -> None:
     if ns.config and ns.config.exists():
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    _require_docker_model_runner()
 
     if cfg.get("use_small", False):
         model = cfg.get("model_small", _MODEL_SMALL)
