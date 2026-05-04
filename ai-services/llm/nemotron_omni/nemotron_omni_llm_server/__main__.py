@@ -62,6 +62,8 @@ def _gpu_compute_major() -> int:
         if out:
             return int(out[0].split(".")[0])
     except Exception:
+        # Detection is best-effort; if nvidia-smi is unavailable or parsing fails,
+        # fall back to 0 (unknown capability) so caller can select a safe default.
         pass
     return 0
 
