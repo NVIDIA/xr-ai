@@ -347,6 +347,12 @@ async function connect() {
       model.isAudioActive  = false;
       model.isCameraActive = false;
       model.agentStatus    = null;
+    } else if (state === ConnectionState.RECONNECTING) {
+      // Stop the camera when the connection drops so the server and client
+      // both start from a known-off state after reconnect. The server starts
+      // fresh with _camera_on=false; if the camera stayed "on" here the UI
+      // and server would be out of sync until the next clientControl message.
+      if (model.isCameraActive) stopCamera();
     }
     render();
   };
