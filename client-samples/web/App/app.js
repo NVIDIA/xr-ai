@@ -80,7 +80,7 @@ const model = {
   identity:       'web-client',
 
   // Media settings
-  audioMode:      MicrophoneMode.RAW,
+  audioMode:      MicrophoneMode.VOICE_PROCESSING,
 
   // Live state
   /** @type {StreamSession|null} */
@@ -216,7 +216,7 @@ function render() {
   const selectRow = $('camera-select-row');
   const camSelect = $('camera-select');
 
-  if (model.cameras.length > 1) {
+  if (model.cameras.length >= 1) {
     selectRow.style.display = '';
     // Rebuild options only when the list has changed.
     const currentIds = [...camSelect.options].map(o => o.value).join(',');
@@ -343,7 +343,11 @@ async function connect() {
   // Wire callbacks before connecting (mirrors iOS ordering).
   newSession.onConnectionStateChanged = (state) => {
     model.connectionState = state;
-    if (state === ConnectionState.DISCONNECTED) {
+    if (state === ConnectionState.CONNECTED) {
+      // Enumerate cameras on connect so the selector is populated before the
+      // user starts the camera for the first time.
+      enumerateCameras();
+    } else if (state === ConnectionState.DISCONNECTED) {
       model.isAudioActive  = false;
       model.isCameraActive = false;
       model.agentStatus    = null;
