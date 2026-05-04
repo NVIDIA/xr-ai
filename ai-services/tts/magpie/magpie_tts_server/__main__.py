@@ -80,6 +80,10 @@ class _TtsBackend:
             self._model = model
             print("[magpie_tts_server] TTS model ready.")
 
+    @property
+    def ready(self) -> bool:
+        return self._model is not None
+
     def synthesize(self, text: str) -> bytes:
         """Synthesize text → WAV bytes. Synchronous — call from a thread pool."""
         import io as _io
@@ -124,6 +128,9 @@ def _build_app(cfg: dict, model_cache: Path):
 
     @app.get("/health")
     def health():
+        if not backend.ready:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=503, detail="model not loaded")
         return {"status": "ok"}
 
     @app.get("/v1/models")

@@ -110,6 +110,10 @@ class _PiperBackend:
                   f"sample_rate={self._voice.config.sample_rate}")
 
     @property
+    def ready(self) -> bool:
+        return self._voice is not None
+
+    @property
     def sample_rate(self) -> int:
         self._ensure_loaded()
         return self._voice.config.sample_rate
@@ -145,6 +149,9 @@ def _build_app(cfg: dict, model_cache: Path):
 
     @app.get("/health")
     def health():
+        if not backend.ready:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=503, detail="model not loaded")
         return {"status": "ok"}
 
     @app.get("/v1/models")
