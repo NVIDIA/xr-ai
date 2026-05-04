@@ -75,6 +75,10 @@ class _AsrBackend:
             self._model = model
             print("[stt_server] ASR model ready.")
 
+    @property
+    def ready(self) -> bool:
+        return self._model is not None
+
     def transcribe(self, audio_path: str) -> str:
         """Synchronous. Call from a thread pool."""
         self._ensure_loaded()
@@ -101,6 +105,9 @@ def _build_app(cfg: dict, model_cache: Path):
 
     @app.get("/health")
     def health():
+        if not backend.ready:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=503, detail="model not loaded")
         return {"status": "ok"}
 
     @app.get("/v1/models")
