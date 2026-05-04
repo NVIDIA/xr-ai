@@ -425,8 +425,10 @@ class SimpleVlmAgent:
             try:
                 await asyncio.sleep(self._camera_grace_s)
                 if pid not in self._camera_held:
-                    await self._client_control(pid, "stopCamera")
+                    # Claim before the await so no concurrent _ensure_camera_on
+                    # can see True and skip sending startCamera after we stop.
                     self._camera_on[pid] = False
+                    await self._client_control(pid, "stopCamera")
             except asyncio.CancelledError:
                 pass
 

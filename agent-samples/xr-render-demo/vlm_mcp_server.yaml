@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# VLM MCP server reference configuration.
+# Copy to your agent sample root as vlm_mcp_server.yaml and edit.
+#
+# This server is a pure FastMCP wrapper around vlm-server (ai-services/vlm-server/).
+# It exposes one MCP tool — ask_image(question, image_path) — that reads a local
+# image file and POSTs it to vlm-server's OpenAI-compatible chat-completions
+# endpoint. There is no hub IPC subscription and no `xr-ai-agent` dependency.
+#
+# The MCP endpoint is served at http://<host>:<port>/mcp via StreamableHTTP.
+# Use the URL WITHOUT a trailing slash — Starlette's strict path matching
+# replies with 307 redirect on /mcp/, which NAT's streamable-http MCP client
+# treats as an error.
+
+host:                  0.0.0.0
+port:                  8240   # 8220 is render-mcp; 8240 is vlm-mcp
+
+# URL of the vlm-server (ai-services/vlm-server/). The MCP tool forwards the
+# loaded image + the LLM's question to this service over HTTP.
+vlm_server:            http://localhost:8100
+
+# httpx timeout applied to each POST /v1/chat/completions call to vlm-server.
+vlm_request_timeout_s: 60.0

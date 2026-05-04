@@ -45,13 +45,18 @@ from xr_ai_launcher import Process, run_stack
 _BASE = Path(__file__).resolve().parents[1]  # agent-samples/xr-render-demo/
 
 PROCESSES = [
-    Process("hub",        "../../server-runtime",                "xr_media_hub"),
-    Process("cloudxr",    "../../cloudxr-runtime",               "cloudxr_runtime"),
-    Process("stt",        "../../ai-services/stt-server",        "stt_server"),
-    Process("llm",        "../../ai-services/llm/mistral_minitron", "mistral_minitron_llm_server"),
-    Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),
-    Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server"),
-    Process("worker",     "worker",                              "xr_render_demo_worker"),
+    Process("hub",        "../../server-runtime",                   "xr_media_hub"),
+    Process("cloudxr",    "../../cloudxr-runtime",                  "cloudxr_runtime"),
+    Process("stt",        "../../ai-services/stt-server",           "stt_server"),
+    Process("tts",        "../../ai-services/tts/piper",            "piper_tts_server"),
+    Process("vlm",        "../../ai-services/vlm-server",           "vlm_server"),
+    Process("llm",        "../../ai-services/llm/llama_nemotron",   "llama_nemotron_llm_server"),
+    Process("agent-llm",  "../../ai-services/llm/nemotron3_nano",   "nemotron3_nano_llm_server"),
+    Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",        "vlm_mcp_server"),
+    Process("video-mcp",  "../../agent-mcp-servers/video-mcp",      "video_mcp_server"),
+    Process("render-mcp", "../../agent-mcp-servers/render-mcp",     "render_mcp"),
+    Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",        "oxr_mcp_server"),
+    Process("worker",     "worker",                                 "xr_render_demo_worker"),
 ]
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.

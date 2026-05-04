@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron-3-Nano LLM server configuration —
+# nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4.
+# Auto-discovered by xr-ai-launcher (filename matches the
+# 'nemotron3_nano_llm_server' process command) and passed as --config.
+# Exposes an OpenAI-compatible API at http://localhost:8107/v1 via vLLM.
+#
+# Reasoning mode: the model's chat template defaults to
+# ``enable_thinking=True``.  vLLM's ``--reasoning-parser nano_v3`` splits
+# the resulting ``<think>…</think>`` into message.reasoning_content so the
+# actual answer in message.content is never polluted — this is what keeps
+# voice TTS from reading the reasoning aloud.
+
+model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+
+host: "0.0.0.0"
+port: 8107
+hf_token: ""
+
+# Shared weight + reasoning-parser cache.  Resolves relative to this YAML;
+# ../../models lands in the repo-root models/ dir (same place the other
+# ai-services write their weights).
+model_cache: ../../models
+
+# vLLM server knobs.
+#
+# On Blackwell (B200 / RTX PRO 6000 96 GB): NVFP4 weights ~20 GB; keep
+# gpu_memory_utilization at 0.6 to share the single GPU with vlm-server
+# (~14 GB) and stt-server (~1.5 GB).
+#
+# On Ada Lovelace (RTX 6000 Ada 48 GB): FP8 weights ~30 GB; run the LLM
+# on a dedicated GPU and keep the vlm-server + stt-server on the second GPU.
+# With LLM alone on a 48 GB card, 0.85 (~41 GB) gives ~11 GB for KV cache.
+max_num_seqs:         8
+tensor_parallel_size: 1
+max_model_len:        32768
+
+# Dedicated GPU (cuda:1) — STT + Llama-Nemotron + VLM stay on cuda:0.
+# 0.78 (~36.9 GiB) leaves ~3 GiB headroom for CUDA graph residue from
+# the previous run, preventing OOM on fast restarts.
+cuda_visible_devices: "1"
+gpu_memory_utilization: 0.78
+
+# Skip CUDA graph capture + FlashInfer MoE autotune at startup.  For
+# NemotronH-30B-A3B-NVFP4 those two phases are silent (no log output)
+# and take 3-8 min on first run — bad UX for a voice agent where the
+# user is waiting for the server to become healthy.  Eager mode starts
+# in ~5 s after weight load and is 10-20% slower per token, which is
+# imperceptible for this workload (<250 tokens per turn, STT+VAD+TTS
+# already dominate turn latency).  Set to ``false`` if you want
+# maximum throughput and can wait for graph capture to finish.
+# Set to true for fast startup during development (skips 3-8 min CUDA graph
+# capture). Set to false in production for ~2x inference speed (~50 tok/s
+# vs 26 tok/s), which cuts per-turn latency from ~90s to ~45s.
+enforce_eager: false

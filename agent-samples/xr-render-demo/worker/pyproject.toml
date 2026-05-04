@@ -11,19 +11,28 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
+    "xr-ai-pipecat",
     "numpy>=1.24",
+    "scipy>=1.11",
     "pyyaml>=6.0",
-    # STT + LLM are OpenAI-compatible REST.
     "httpx>=0.27",
-    # render-mcp + oxr-mcp are pure FastMCP.
     "fastmcp>=0.4",
+    "pipecat-ai>=0.0.46",
+    # Neural VAD — ONNX backend, no PyTorch required in this venv.
+    "silero-vad>=5.1",
 ]
 
 [tool.uv.sources]
-xr-ai-agent = { path = "../../../agent-sdk", editable = true }
+xr-ai-agent   = { path = "../../../agent-sdk",   editable = true }
+xr-ai-pipecat = { path = "../../../agent-sdk/xr-ai-pipecat", editable = true }
 
 [project.scripts]
-xr_render_demo_worker = "xr_render_demo_worker.__main__:run"
+xr_render_demo_worker = "xr_render_demo_worker:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["xr_render_demo_worker"]
+only-include = [
+    "xr_render_demo_worker.py",
+    "agent.py",
+    "processors.py",
+    "config.py",
+]

@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# llama-nemotron-llm-server reference configuration.
+# OpenAI-compatible API at http://localhost:8106/v1
+#
+# `model_cache: ../../../models` resolves to the shared weight cache at the
+# repo root (xr-ai/models/) regardless of whether this YAML is invoked from
+# here or copied into a sample directory — so all inference servers share one
+# cache.  See AGENTS.md "AI inference servers" section.
+#
+# Copy to your sample root as `llama_nemotron_llm_server.yaml` and edit as needed.
+
+# HuggingFace model ID — any AutoModelForCausalLM-compatible model with a
+# Llama-3.1-style chat template is supported.
+# nvidia/Llama-3.1-Nemotron-Nano-8B-v1 — NVIDIA Open Model License +
+#                                         Llama 3.1 Community License;
+#                                         native tool-calling + reasoning toggle;
+#                                         ~16 GB VRAM at BF16.
+model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+cuda_visible_devices: "0"   # share GPU 0 with STT + VLM; Nemotron-3-Nano stays on GPU 1
+
+port: 8106
+host: 0.0.0.0
+hf_token: ""
+
+model_cache: ../../../models
+
+# Shared GPU: STT (~5 GiB) + LLM weights (~15 GiB) + VLM are all on GPU 0.
+# 0.45 × 47 = 21 GiB budget for this server.  KV cache for max_model_len=4096
+# at BF16 8B is ~0.5 GiB — well within what remains after model weights load.
+gpu_memory_utilization: 0.45
+# Quick-ack prompts are short (system + 4 history turns + transcript ≈ 1-2 K).
+# 4096 reduces the required KV cache from 4 GiB to ~0.5 GiB, making it fit.
+max_model_len: 4096
+
+# enforce_eager=true skips the 3-8 min CUDA graph compile.  This is the
+# quick-ack / think-classification model (max 40 tokens per call) — eager
+# is fast enough and makes startup match the other services.
+enforce_eager: true
+
+# Tool calling via vLLM's llama3_json parser (replaces the old LMFE approach).
+tool_call_parser: llama3_json
