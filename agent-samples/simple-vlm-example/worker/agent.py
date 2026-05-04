@@ -480,6 +480,12 @@ class SimpleVlmAgent:
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if event.joined:
+            # Reset the client's camera state on every (re)connect so we start
+            # from a known-off position regardless of what the previous session
+            # left behind.  The agent's _camera_on is already False for a new
+            # participant, and this makes the client match.
+            log.info("participant joined — resetting camera state  pid=%r", event.participant_id)
+            await self._client_control(event.participant_id, "stopCamera")
             return
         pid = event.participant_id
         vs  = self._voice.pop(pid, None)
