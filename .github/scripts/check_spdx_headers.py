@@ -161,16 +161,30 @@ def _strip_directives(lines: list[str], style: str) -> list[str]:
     return lines
 
 
-def _read_head(path: Path, max_bytes: int = 4096) -> str | None:
+def _read_head(path: Path, max_bytes: int = 8192) -> str | None:
+    """Read the first *max_bytes* bytes of *path* and return them as a string.
+
+    Returns ``None`` only for genuine binary files (null bytes present) or
+    unreadable files.  Multi-byte sequences split at the chunk boundary are
+    replaced with the Unicode replacement character (U+FFFD) rather than
+    raising — the SPDX header lines are always ASCII and are never near the
+    boundary.  A UTF-8 BOM is stripped if present.
+    """
     try:
         with path.open("rb") as f:
             raw = f.read(max_bytes)
     except OSError:
         return None
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
+
+    # Binary-file heuristic: null bytes don't appear in text source files.
+    if b"\x00" in raw:
         return None
+
+    # Strip UTF-8 BOM so the decoded text starts cleanly with the first char.
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+
+    return raw.decode("utf-8", errors="replace")
 
 
 def check(path: Path) -> tuple[bool, str]:
