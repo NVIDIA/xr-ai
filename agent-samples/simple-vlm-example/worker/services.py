@@ -38,10 +38,11 @@ class SttClient:
 class VlmClient:
     """OpenAI-compatible /v1/chat/completions client (SSE streaming)."""
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, model_name: str = "vlm") -> None:
         base = base_url.rstrip("/")
         self.health_url = base + "/health"
         self.chat_url   = base + "/v1/chat/completions"
+        self._model     = model_name
 
     async def stream(
         self,
@@ -59,7 +60,7 @@ class VlmClient:
             {"type": "text",      "text": query},
         ]})
         payload = {
-            "model": "vlm",
+            "model": self._model,
             "stream": True,
             "messages": messages,
         }

@@ -60,8 +60,20 @@ async def main(cfg: dict) -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
+    # VLM backend selection.
+    # "cosmos" → vlm-server on port 8100 (Cosmos-Reason1-7B, model="vlm")
+    # "omni"   → nemotron_omni on port 8108 (Nemotron-Omni-30B, model="llm")
+    backend = cfg.get("vlm_backend", "cosmos")
+    if backend == "omni":
+        vlm_default_url   = "http://localhost:8108"
+        vlm_default_model = "llm"
+    else:
+        vlm_default_url   = "http://localhost:8100"
+        vlm_default_model = "vlm"
+
     stt = SttClient(cfg.get("stt_server", "http://localhost:8103"))
-    vlm = VlmClient(cfg.get("vlm_server", "http://localhost:8100"))
+    vlm = VlmClient(cfg.get("vlm_server", vlm_default_url),
+                    model_name=cfg.get("vlm_model_name", vlm_default_model))
     tts = TtsClient(cfg.get("tts_server", "http://localhost:8105"))
     await wait_for_health({
         "STT": stt.health_url,
