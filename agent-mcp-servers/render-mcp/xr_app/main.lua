@@ -1,53 +1,28 @@
--- render-mcp scene.
+-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- render-mcp scene — generic primitive renderer.
 --
--- Renders a sphere at a fixed world-space position, whose appearance is driven
--- by scene commands arriving from render-mcp (Python) over a ZMQ PULL socket.
---
--- Wire format: msgpack-encoded Lua tables. Recognised ops:
---   { op = "sphere.radius",   value = <number, metres>   }   -- voice-loudness driven
---   { op = "sphere.color",    value = { r, g, b }        }   -- 0..1 floats; speech-driven
---   { op = "sphere.position", value = { x, y, z }        }   -- world-space metres; LLM-driven
---   { op = "sphere.reset"                                 }   -- return colour + position to defaults
---
--- Bridge endpoint comes from the RENDER_SCENE_SOCKET env var (set by render-mcp
--- before it spawns LOVR); a sensible default is used if unset so the file still
--- runs standalone for offline tweaking.
+-- Wire ops (msgpack-encoded tables):
+--   { op="scene.add",    value={ id, type, position={x,y,z}, color={r,g,b}, scale } }
+--   { op="scene.update", value={ id, [position=…], [color=…], [scale=…] } }
+--   { op="scene.remove", value={ id } }
+--   { op="scene.scale",  value={ id, scale } }    -- high-frequency audio path
 
 print("[render-mcp-scene] main.lua: top of file")
 
 local zmq = require("lib.zmq")
 local mp  = require("lib.msgpack")
-print("[render-mcp-scene] main.lua: lib.zmq + lib.msgpack loaded")
+print("[render-mcp-scene] lib.zmq + lib.msgpack loaded")
 
 -- ── Scene state ───────────────────────────────────────────────────────────────
 
--- Target radius is what render-mcp tells us we should be at; current radius
--- tracks it with a soft-follow lerp so the visual stays smooth even when
--- commands arrive in bursts.
-local target_radius  = 0.05
-local current_radius = target_radius
+local primitives      = {}
+local scale_warned    = {}   -- set of ids for which the "unknown scale" warning was printed
 
--- Defaults — the canonical look of the sphere at session start. ``sphere.reset``
--- restores these. Keep colour and position in module-local tables so the reset
--- op doesn't need to know magic numbers.
-local DEFAULT_COLOR = { 0.2, 0.9, 1.0 }   -- pleasant cyan
-local DEFAULT_POS   = { 0.0, 1.6, -1.5 }
-
--- Same dual-state pattern for colour: the agent emits discrete colour
--- commands (e.g. on STT match), and we ease toward the target so the change
--- looks like a wash rather than a flash.
-local target_color  = { DEFAULT_COLOR[1], DEFAULT_COLOR[2], DEFAULT_COLOR[3] }
-local current_color = { target_color[1], target_color[2], target_color[3] }
-
--- Same dual-state pattern for position. Default anchors the sphere at roughly
--- head-height, 1.5 m in front of the origin so a default-posed headset sees it
--- on first connect.
-local target_pos  = { DEFAULT_POS[1], DEFAULT_POS[2], DEFAULT_POS[3] }
-local current_pos = { target_pos[1], target_pos[2], target_pos[3] }
-
-local radius_lerp = 8.0    -- how fast current_radius follows target_radius
-local color_lerp  = 6.0    -- how fast current_color  follows target_color
-local pos_lerp    = 6.0    -- how fast current_pos    follows target_pos
+local pos_lerp   = 6.0
+local color_lerp = 6.0
+local scale_lerp = 8.0
 
 -- ── IPC ───────────────────────────────────────────────────────────────────────
 
@@ -55,58 +30,129 @@ local socket_addr = os.getenv("RENDER_SCENE_SOCKET") or "ipc:///tmp/xr_render_sc
 local scene_sock  = nil
 local recv_err    = nil
 
--- Try to connect to the scene bridge.  We keep running even if this fails so
--- the sphere still renders at its default size (makes offline debugging sane).
 local ok, err = pcall(function()
     scene_sock = zmq.new_pull_socket(socket_addr)
 end)
 if not ok then
     recv_err = tostring(err)
-    print(string.format("[render-mcp-scene] warning: %s", recv_err))
+    print("[render-mcp-scene] ZMQ error: " .. recv_err)
+end
+
+-- ── Helpers ───────────────────────────────────────────────────────────────────
+
+local function lerp(a, b, k) return a + (b - a) * k end
+
+local function read_vec3(v, dx, dy, dz)
+    return tonumber(v and (v[1] or v.x)) or dx,
+           tonumber(v and (v[2] or v.y)) or dy,
+           tonumber(v and (v[3] or v.z)) or dz
+end
+
+local function make_primitive(ptype, px, py, pz, cr, cg, cb, scale)
+    return {
+        type          = ptype or "sphere",
+        target_pos    = { px, py, pz },
+        current_pos   = { px, py, pz },
+        target_color  = { cr, cg, cb },
+        current_color = { cr, cg, cb },
+        target_scale  = scale,
+        current_scale = scale,
+    }
+end
+
+local function count_primitives()
+    local n = 0
+    for _ in pairs(primitives) do n = n + 1 end
+    return n
+end
+
+-- ── Op handlers ───────────────────────────────────────────────────────────────
+
+local function handle_scene_add(v)
+    local id = v.id
+    if not id then
+        print("[render-mcp-scene] scene.add: missing id — dropping")
+        return
+    end
+    local ptype      = v.type or "sphere"
+    local px, py, pz = read_vec3(v.position, 0, 1.6, -1.5)
+    local cr, cg, cb = read_vec3(v.color, 0.2, 0.9, 1.0)
+    local size       = tonumber(v.size) or 0.1
+    primitives[id]   = make_primitive(ptype, px, py, pz, cr, cg, cb, size)
+    scale_warned[id] = nil   -- clear so the id can warn again if it goes missing
+    print(string.format(
+        "[render-mcp-scene] scene.add  id=%s type=%s pos=(%.2f,%.2f,%.2f) color=(%.2f,%.2f,%.2f) size=%.3fm  total=%d",
+        id, ptype, px, py, pz, cr, cg, cb, size, count_primitives()))
+end
+
+local function handle_scene_update(v)
+    local id  = v.id
+    local obj = id and primitives[id]
+    if not obj then
+        print(string.format("[render-mcp-scene] scene.update: unknown id=%s", tostring(id)))
+        return
+    end
+    local changed = {}
+    if v.position then
+        local px, py, pz = read_vec3(v.position, obj.target_pos[1], obj.target_pos[2], obj.target_pos[3])
+        obj.target_pos[1], obj.target_pos[2], obj.target_pos[3] = px, py, pz
+        changed[#changed+1] = string.format("pos=(%.2f,%.2f,%.2f)", px, py, pz)
+    end
+    if v.color then
+        local cr, cg, cb = read_vec3(v.color, obj.target_color[1], obj.target_color[2], obj.target_color[3])
+        obj.target_color[1], obj.target_color[2], obj.target_color[3] = cr, cg, cb
+        changed[#changed+1] = string.format("color=(%.2f,%.2f,%.2f)", cr, cg, cb)
+    end
+    if v.size then
+        local s = tonumber(v.size)
+        if s then
+            obj.target_scale = s
+            changed[#changed+1] = string.format("size=%.3fm", s)
+        end
+    end
+    print(string.format("[render-mcp-scene] scene.update id=%s  %s",
+                        id, #changed > 0 and table.concat(changed, "  ") or "(nothing changed)"))
+end
+
+local function handle_scene_remove(v)
+    local id = v.id
+    if id and primitives[id] then
+        primitives[id] = nil
+        print(string.format("[render-mcp-scene] scene.remove id=%s  remaining=%d", id, count_primitives()))
+    elseif id then
+        print(string.format("[render-mcp-scene] scene.remove: unknown id=%s", id))
+    end
+end
+
+local function handle_scene_scale(v)
+    local id  = v.id
+    local obj = id and primitives[id]
+    if obj then
+        local s = tonumber(v.size)
+        if s then obj.target_scale = s end
+    elseif id and not scale_warned[id] then
+        -- Log exactly once per unknown id so it doesn't drown other output.
+        scale_warned[id] = true
+        print(string.format("[render-mcp-scene] scene.scale: unknown id=%s (logged once)", tostring(id)))
+    end
 end
 
 -- ── LOVR callbacks ────────────────────────────────────────────────────────────
 
 function lovr.load()
-    -- alpha=0 so the OpenXR runtime composites our framebuffer over the real
-    -- environment (passthrough on a real headset, transparent over the page
-    -- under IWER) instead of filling the void with black. Requires both:
-    --   1) WebXR client requests immersive-ar (so CloudXR exposes ALPHA_BLEND)
-    --   2) we explicitly opt into passthrough below — LOVR otherwise picks
-    --      blendModes[0], which on CloudXR is OPAQUE.
-    lovr.graphics.setBackgroundColor(0.0, 0.0, 0.0, 0.0)
+    lovr.graphics.setBackgroundColor(0, 0, 0, 0)
     lovr.headset.setClipDistance(0.1, 256.0)
-    print(string.format("[render-mcp-scene] listening on %s", socket_addr))
-    -- Confirm OpenXR session actually came up. A printed `isActive=false` here
-    -- means LOVR fell back to the desktop simulator (boot.lua:150-155), which
-    -- means CloudXR never sees any frames — that's the failure mode we hit.
+    print("[render-mcp-scene] lovr.load  socket=" .. socket_addr)
+
     local ok_a, active = pcall(lovr.headset.isActive)
     local ok_d, name   = pcall(lovr.headset.getDriver)
-    local ok_s, w, h   = pcall(lovr.headset.getDisplayDimensions)
-    print(string.format(
-        "[render-mcp-scene] headset: active=%s driver=%s display=%s",
+    print(string.format("[render-mcp-scene] headset: active=%s driver=%s",
         ok_a and tostring(active) or "<err>",
-        ok_d and tostring(name)   or "<err>",
-        ok_s and string.format("%sx%s", tostring(w), tostring(h)) or "<err>"
-    ))
+        ok_d and tostring(name)   or "<err>"))
 
-    -- Enumerate + opt into passthrough. Logging both makes it obvious in the
-    -- terminal whether the runtime advertised ALPHA_BLEND at all (problem on
-    -- the WebXR/CloudXR side) vs. advertised it but rejected our request
-    -- (problem on the LOVR/Vulkan side).
-    local ok_m, modes = pcall(lovr.headset.getPassthroughModes)
-    if ok_m and type(modes) == "table" then
-        local parts = {}
-        for k, v in pairs(modes) do parts[#parts + 1] = string.format("%s=%s", k, tostring(v)) end
-        print("[render-mcp-scene] passthrough modes: " .. table.concat(parts, " "))
-    else
-        print("[render-mcp-scene] passthrough modes: <err>")
-    end
     local ok_p, applied = pcall(lovr.headset.setPassthrough, "blend")
-    print(string.format(
-        "[render-mcp-scene] setPassthrough('blend') ok=%s result=%s active=%s",
-        tostring(ok_p), tostring(applied), tostring(lovr.headset.getPassthrough())
-    ))
+    print(string.format("[render-mcp-scene] setPassthrough('blend') ok=%s applied=%s",
+        tostring(ok_p), tostring(applied)))
 end
 
 local function drain_commands()
@@ -114,75 +160,91 @@ local function drain_commands()
     while true do
         local raw = scene_sock:recv_nonblocking()
         if not raw then break end
+
         local okd, decoded = pcall(mp.decode, raw)
-        if not okd or type(decoded) ~= "table" then goto continue end
+        if not okd then
+            print("[render-mcp-scene] msgpack decode error: " .. tostring(decoded))
+            goto continue
+        end
+        if type(decoded) ~= "table" then
+            print("[render-mcp-scene] unexpected message type: " .. type(decoded))
+            goto continue
+        end
 
-        if decoded.op == "sphere.radius" then
-            local v = tonumber(decoded.value)
-            if v then target_radius = v end
+        local op = decoded.op
+        local v  = decoded.value or {}
 
-        elseif decoded.op == "sphere.color" then
-            local v = decoded.value
-            -- Accept arrays {r,g,b} (msgpack-pythonic) and tables {r=…,g=…,b=…}.
-            local r = tonumber(v and (v[1] or v.r))
-            local g = tonumber(v and (v[2] or v.g))
-            local b = tonumber(v and (v[3] or v.b))
-            if r and g and b then
-                target_color[1] = r
-                target_color[2] = g
-                target_color[3] = b
-            end
+        -- Wrap each handler in pcall so one bad message can't crash lovr.update.
+        local ok_h, herr
+        if     op == "scene.add"    then ok_h, herr = pcall(handle_scene_add,    v)
+        elseif op == "scene.update" then ok_h, herr = pcall(handle_scene_update, v)
+        elseif op == "scene.remove" then ok_h, herr = pcall(handle_scene_remove, v)
+        elseif op == "scene.scale"  then ok_h, herr = pcall(handle_scene_scale,  v)
+        elseif op ~= nil then
+            print("[render-mcp-scene] unknown op=" .. tostring(op))
+        else
+            print("[render-mcp-scene] message missing 'op' field")
+        end
 
-        elseif decoded.op == "sphere.position" then
-            local v = decoded.value
-            -- Same dual-shape acceptance as sphere.color.
-            local x = tonumber(v and (v[1] or v.x))
-            local y = tonumber(v and (v[2] or v.y))
-            local z = tonumber(v and (v[3] or v.z))
-            if x and y and z then
-                target_pos[1] = x
-                target_pos[2] = y
-                target_pos[3] = z
-            end
-
-        elseif decoded.op == "sphere.reset" then
-            -- Restore colour + position to their session-start values. Radius
-            -- isn't reset because it's recomputed every audio chunk anyway —
-            -- it'll converge on its own once the user goes silent.
-            target_color[1], target_color[2], target_color[3] =
-                DEFAULT_COLOR[1], DEFAULT_COLOR[2], DEFAULT_COLOR[3]
-            target_pos[1], target_pos[2], target_pos[3] =
-                DEFAULT_POS[1], DEFAULT_POS[2], DEFAULT_POS[3]
+        if ok_h == false then
+            print(string.format("[render-mcp-scene] handler error (op=%s): %s",
+                                tostring(op), tostring(herr)))
         end
 
         ::continue::
     end
 end
 
+local heartbeat_t = 0.0
+
 function lovr.update(dt)
     drain_commands()
 
-    -- Smooth the radius a touch so we don't get stutter when commands drop.
-    current_radius = current_radius + (target_radius - current_radius) * math.min(1.0, radius_lerp * dt)
-
+    local ks = math.min(1.0, scale_lerp * dt)
     local kc = math.min(1.0, color_lerp * dt)
-    current_color[1] = current_color[1] + (target_color[1] - current_color[1]) * kc
-    current_color[2] = current_color[2] + (target_color[2] - current_color[2]) * kc
-    current_color[3] = current_color[3] + (target_color[3] - current_color[3]) * kc
+    local kp = math.min(1.0, pos_lerp   * dt)
 
-    local kp = math.min(1.0, pos_lerp * dt)
-    current_pos[1] = current_pos[1] + (target_pos[1] - current_pos[1]) * kp
-    current_pos[2] = current_pos[2] + (target_pos[2] - current_pos[2]) * kp
-    current_pos[3] = current_pos[3] + (target_pos[3] - current_pos[3]) * kp
+    for _, obj in pairs(primitives) do
+        obj.current_scale    = lerp(obj.current_scale,    obj.target_scale,    ks)
+        obj.current_color[1] = lerp(obj.current_color[1], obj.target_color[1], kc)
+        obj.current_color[2] = lerp(obj.current_color[2], obj.target_color[2], kc)
+        obj.current_color[3] = lerp(obj.current_color[3], obj.target_color[3], kc)
+        obj.current_pos[1]   = lerp(obj.current_pos[1],   obj.target_pos[1],   kp)
+        obj.current_pos[2]   = lerp(obj.current_pos[2],   obj.target_pos[2],   kp)
+        obj.current_pos[3]   = lerp(obj.current_pos[3],   obj.target_pos[3],   kp)
+    end
+
+    heartbeat_t = heartbeat_t + dt
+    if heartbeat_t >= 5.0 then
+        heartbeat_t = 0.0
+        local n = count_primitives()
+        if n == 0 then
+            print("[render-mcp-scene] heartbeat: scene empty")
+        else
+            for id, obj in pairs(primitives) do
+                print(string.format(
+                    "[render-mcp-scene] heartbeat: id=%s type=%s pos=(%.2f,%.2f,%.2f) size=%.3fm",
+                    id, obj.type,
+                    obj.current_pos[1], obj.current_pos[2], obj.current_pos[3],
+                    obj.current_scale))
+            end
+        end
+    end
 end
 
 function lovr.draw(pass)
-    pass:setColor(current_color[1], current_color[2], current_color[3], 0.95)
-    pass:sphere(current_pos[1], current_pos[2], current_pos[3], current_radius)
+    for _, obj in pairs(primitives) do
+        pass:setColor(obj.current_color[1], obj.current_color[2], obj.current_color[3], 0.95)
+        local p, s = obj.current_pos, obj.current_scale
+        if obj.type == "box" then
+            pass:box(p[1], p[2], p[3], s, s, s)
+        else
+            pass:sphere(p[1], p[2], p[3], s)
+        end
+    end
     pass:setColor(1, 1, 1, 1)
-
     if recv_err then
-        pass:text("render-mcp: " .. recv_err, 0, 2.0, -1.2, 0.06)
+        pass:text("ZMQ error: " .. recv_err, 0, 2.0, -1.2, 0.06)
     end
 end
 

@@ -6,28 +6,32 @@ oxr-mcp — OpenXR tracking MCP adapter.
 
 Pure FastMCP. Opens a SECOND OpenXR session against CloudXR in headless mode
 (XR_MND_HEADLESS) so the rendering OpenXR client (e.g. LOVR via render-mcp)
-keeps full ownership of frame submission while we read pose. Both sessions
-co-exist because the headless one never submits frames.
+keeps full ownership of frame submission while we read pose.
 
 Tools (FastMCP, mounted at /mcp)
 ────────────────────────────────
   get_head_pose() → dict
-      ``{is_valid, position, orientation, ts, error?}``. Position is metres
-      in world space (OpenXR Y-up); orientation is a unit quaternion
-      (qx, qy, qz, qw). ``is_valid: false`` (with optional ``error`` reason)
-      until tracking is established — callers should retry rather than
-      treat it as a hard failure.
+      LLM-friendly pose with derived spatial vectors — no raw quaternions.
+      Fields: is_valid, position {x,y,z}, forward {x,y,z}, right {x,y,z},
+      up {x,y,z}, yaw_deg, pitch_deg, ts.
+
+  position_ahead(distance) → dict {x,y,z}
+      World position 'distance' metres along the user's gaze direction.
+
+  position_relative(forward, right, up) → dict {x,y,z}
+      Convert head-relative offsets (metres) to world-space position.
+      forward>0 = ahead, right>0 = right, up>0 = above eye level.
 
   get_health() → dict
-      ``{status, session_open, open_attempts, last_open_error}``.
+      {status, session_open, open_attempts, last_open_error}.
 
-Pose is fetched fresh per request via xrLocateSpace; no background polling,
-no staleness.
+Pose is fetched fresh per request via xrLocateSpace; no background polling.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import math
 import logging
 import sys
 import threading
@@ -51,6 +55,23 @@ from xr_ai_launcher import (
 log = logging.getLogger("oxr_mcp_server")
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "oxr_mcp_server.yaml"
+
+
+# ── Quaternion helpers ────────────────────────────────────────────────────────
+
+def _rotate_vec(
+    q: tuple[float, float, float, float],
+    v: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    """Rotate vector *v* by unit quaternion *q* = (qx, qy, qz, qw)."""
+    qx, qy, qz, qw = q
+    vx, vy, vz = v
+    tx = 2.0 * (qy * vz - qz * vy)
+    ty = 2.0 * (qz * vx - qx * vz)
+    tz = 2.0 * (qx * vy - qy * vx)
+    return (vx + qw * tx + qy * tz - qz * ty,
+            vy + qw * ty + qz * tx - qx * tz,
+            vz + qw * tz + qx * ty - qy * tx)
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -174,35 +195,57 @@ class PoseSource:
                 self._oxr_session = None
 
     def get_pose(self) -> dict:
-        """Pose snapshot. Returns ``is_valid=False`` (with optional ``error``)
-        when the session can't open yet, so callers can distinguish "no pose
-        yet" from a real failure."""
+        """Pose snapshot with derived spatial vectors — no raw quaternions.
+
+        Returns ``is_valid=False`` (with optional ``error``) when the session
+        can't open yet so callers can distinguish "not ready" from failure.
+        """
         with self._lock:
             if self._dev_session is None:
                 err = self._try_open()
                 if err is not None:
                     return {
-                        "is_valid":    False,
-                        "position":    [0.0, 0.0, 0.0],
-                        "orientation": [0.0, 0.0, 0.0, 1.0],
-                        "ts":          int(time.time() * 1000),
-                        "error":       f"session_not_ready: {err}",
+                        "is_valid":  False,
+                        "position":  {"x": 0.0, "y": 1.6, "z": 0.0},
+                        "forward":   {"x": 0.0, "y": 0.0, "z": -1.0},
+                        "right":     {"x": 1.0, "y": 0.0, "z": 0.0},
+                        "up":        {"x": 0.0, "y": 1.0, "z": 0.0},
+                        "yaw_deg":   0.0,
+                        "pitch_deg": 0.0,
+                        "ts":        int(time.time() * 1000),
+                        "error":     f"session_not_ready: {err}",
                     }
             self._dev_session.update()
             tracked = self._tracker.get_head(self._dev_session)
             data = tracked.data
             pose = data.pose
-            return {
-                "is_valid":    bool(data.is_valid),
-                "position":    [float(pose.position.x),
-                                float(pose.position.y),
-                                float(pose.position.z)],
-                "orientation": [float(pose.orientation.x),
-                                float(pose.orientation.y),
-                                float(pose.orientation.z),
-                                float(pose.orientation.w)],
-                "ts":          int(time.time() * 1000),
-            }
+            px = float(pose.position.x)
+            py = float(pose.position.y)
+            pz = float(pose.position.z)
+            qx = float(pose.orientation.x)
+            qy = float(pose.orientation.y)
+            qz = float(pose.orientation.z)
+            qw = float(pose.orientation.w)
+
+        fwd = _rotate_vec((qx, qy, qz, qw), (0.0,  0.0, -1.0))
+        rgt = _rotate_vec((qx, qy, qz, qw), (1.0,  0.0,  0.0))
+        up  = _rotate_vec((qx, qy, qz, qw), (0.0,  1.0,  0.0))
+        yaw   = math.degrees(math.atan2(
+            2.0 * (qw * qy + qx * qz),
+            1.0 - 2.0 * (qy * qy + qz * qz)))
+        pitch = math.degrees(math.asin(
+            max(-1.0, min(1.0, 2.0 * (qw * qx - qy * qz)))))
+
+        return {
+            "is_valid":  bool(data.is_valid),
+            "position":  {"x": round(px, 3), "y": round(py, 3), "z": round(pz, 3)},
+            "forward":   {"x": round(fwd[0], 3), "y": round(fwd[1], 3), "z": round(fwd[2], 3)},
+            "right":     {"x": round(rgt[0], 3), "y": round(rgt[1], 3), "z": round(rgt[2], 3)},
+            "up":        {"x": round(up[0],  3), "y": round(up[1],  3), "z": round(up[2],  3)},
+            "yaw_deg":   round(yaw,   1),
+            "pitch_deg": round(pitch, 1),
+            "ts":        int(time.time() * 1000),
+        }
 
 
 # ── MCP tool surface ──────────────────────────────────────────────────────────
@@ -212,32 +255,84 @@ def build_mcp(source: PoseSource) -> FastMCP:
 
     @mcp.tool()
     async def get_head_pose() -> dict:
-        """
-        Return the user's current head pose as observed by CloudXR.
+        """Return the user's head position and orientation as human-readable vectors.
 
-        Result shape::
+        Fields (all world-space, OpenXR Y-up, +x right, +y up, -z forward):
+          is_valid  — False until tracking is established; retry, don't fail hard
+          position  — {x, y, z} head position in metres
+          forward   — {x, y, z} unit vector in the direction the user is looking
+          right     — {x, y, z} unit vector pointing to the user's right
+          up        — {x, y, z} unit vector pointing up from the user's head
+          yaw_deg   — horizontal rotation in degrees (0 = facing -z, 90 = facing +x)
+          pitch_deg — vertical tilt in degrees (positive = looking up)
+          ts        — ms since Unix epoch
 
-            {
-              "is_valid":    bool,
-              "position":    [x, y, z],         # metres, world-space
-              "orientation": [qx, qy, qz, qw],  # unit quaternion
-              "ts":          <ms since Unix epoch>,
-              "error":       str                # ONLY on failure paths
-            }
-
-        Coordinate convention is OpenXR's right-handed Y-up world: +x right,
-        +y up, -z forward. ``is_valid`` is False when the headset has not
-        yet established tracking (CloudXR still spinning up, or headset off).
-        Treat that as "wait and retry", not a hard failure — the optional
-        ``error`` field carries a short reason string.
+        No raw quaternions — use forward/right/up for spatial reasoning.
         """
         return await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
 
     @mcp.tool()
+    async def position_ahead(distance: float = 1.5) -> dict:
+        """Compute the world position *distance* metres in front of the user.
+
+        Use for: "in front of me", "where I'm looking", "ahead of me".
+
+        Returns {x, y, z} world-space position, or {error: "pose unavailable"} if
+        tracking is not yet established — in that case do not use any position
+        values; retry after a short delay.
+        """
+        pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
+        if not pose.get("is_valid"):
+            return {"error": "pose unavailable"}
+        p = pose["position"]
+        f = pose["forward"]
+        return {
+            "x": round(p["x"] + f["x"] * distance, 3),
+            "y": round(p["y"] + f["y"] * distance, 3),
+            "z": round(p["z"] + f["z"] * distance, 3),
+        }
+
+    @mcp.tool()
+    async def position_relative(
+        forward: float = 0.0,
+        right:   float = 0.0,
+        up:      float = 0.0,
+    ) -> dict:
+        """Compute a world position from head-relative offsets (metres).
+
+        forward > 0 = in front of user   (use for "ahead", "in front of me")
+        forward < 0 = behind user
+        right   > 0 = to the user's right
+        right   < 0 = to the user's left
+        up      > 0 = above eye level
+        up      < 0 = below eye level
+
+        Examples:
+          "1m to my right"   → right=1.0
+          "2m ahead and left"→ forward=2.0, right=-0.5
+          "at arm's length"  → forward=0.7
+
+        Returns {x, y, z} world-space position, or {error: "pose unavailable"} if
+        tracking is not yet established — do not use any position values in
+        that case; retry after a short delay.
+        """
+        pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
+        if not pose.get("is_valid"):
+            return {"error": "pose unavailable"}
+        p = pose["position"]
+        f = pose["forward"]
+        r = pose["right"]
+        u = pose["up"]
+        return {
+            "x": round(p["x"] + f["x"]*forward + r["x"]*right + u["x"]*up, 3),
+            "y": round(p["y"] + f["y"]*forward + r["y"]*right + u["y"]*up, 3),
+            "z": round(p["z"] + f["z"]*forward + r["z"]*right + u["z"]*up, 3),
+        }
+
+    @mcp.tool()
     async def get_health() -> dict:
         """Server status. ``session_open`` is True once the headless OpenXR
-        session has been established — typically once the first ``get_head_pose``
-        call after the streaming client connects."""
+        session has been established."""
         return source.health_snapshot()
 
     return mcp

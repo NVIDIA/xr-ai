@@ -2,16 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-render-mcp — OpenXR rendering MCP adapter.
+render-mcp — generic OpenXR rendering MCP adapter.
 
-Spawns LOVR (the OpenXR rendering app) on demand and forwards scene ops to
-it as msgpack over ZMQ PUSH (``scene_socket``).
+Manages a scene of typed 3D primitives and forwards state changes to LOVR
+(the OpenXR rendering app) as msgpack over ZMQ PUSH (``scene_socket``).
 
-  POST /sphere/radius   {"value": F}        per-audio-chunk volume → radius
   /mcp/start_xr                              spawn LOVR (idempotent)
-  /mcp/set_sphere_color(r, g, b)             RGB floats in [0, 1]
-  /mcp/set_sphere_position(x, y, z)          world-space, metres (OpenXR Y-up)
-  /mcp/reset_sphere                          restore default colour + position
+  /mcp/add_primitive(...)                    add a new primitive; returns assigned id
+  /mcp/update_primitive(id, ...)             partially update an existing primitive
+  /mcp/remove_primitive(id)                  remove a primitive from the scene
+  /mcp/get_scene_state                       current state of all scene objects
   /mcp/get_health                            {status, lovr_started, spawn_error, render_drops}
 
 LOVR can't be spawned at process start because CloudXR returns
@@ -38,9 +38,7 @@ import uvicorn
 import yaml
 import zmq
 import zmq.asyncio
-from fastapi import FastAPI
 from fastmcp import FastMCP
-from pydantic import BaseModel
 
 from xr_ai_launcher import (
     ManagedProcess,
@@ -130,11 +128,16 @@ def _find_bundled_libzmq() -> Path | None:
     return None
 
 
-# ── Sphere dispatcher ─────────────────────────────────────────────────────────
+# ── Scene dispatcher ──────────────────────────────────────────────────────────
 
-class SphereDispatcher:
-    """ZMQ PUSH to LOVR + the LOVR child lifecycle. All tools funnel through
-    ``forward(op, value)``; ops are dropped until ``start_lovr_once`` has run."""
+class SceneDispatcher:
+    """ZMQ PUSH to LOVR + LOVR child lifecycle + in-memory scene state.
+
+    Scene state is mirrored in ``_objects`` so ``get_scene_state()`` answers
+    immediately without a round-trip to LOVR. All scene mutations go through
+    ``add`` / ``update`` / ``remove`` for state bookkeeping and then through
+    ``forward()`` to push the op to LOVR.
+    """
 
     def __init__(self, cfg: Config, stack: contextlib.AsyncExitStack) -> None:
         self._cfg   = cfg
@@ -142,19 +145,23 @@ class SphereDispatcher:
 
         ctx = zmq.asyncio.Context.instance()
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
-        # 8 = enough headroom for a single LLM-round-trip burst (colour +
-        # position + radius), small enough that anything beyond a burst is
-        # correctly classified as a stall and dropped via NOBLOCK.
-        self._push.setsockopt(zmq.SNDHWM, 8)
+        # 8 = enough headroom for a single LLM-round-trip burst, small enough
+        # that anything beyond a burst is dropped via NOBLOCK rather than queued.
+        # 256 = room for ~5 s of 50 Hz scale messages while LOVR starts up,
+        # plus command messages. The old value of 8 let scale messages crowd
+        # out scene.add before LOVR connected.
+        self._push.setsockopt(zmq.SNDHWM, 256)
         self._push.bind(cfg.scene_socket)
         log.info("render-mcp: bound PUSH on %s", cfg.scene_socket)
 
         self._lovr_started: bool = False
         self._spawn_lock: asyncio.Lock = asyncio.Lock()
         self._render_drops: int = 0
-        # Set once on a terminal cloudxr-readiness timeout so retries fail
-        # fast instead of re-running the multi-minute wait.
         self._spawn_error: str | None = None
+
+        # Scene state: { id → { type, position, color, scale } }
+        self._objects: dict[str, dict] = {}
+        self._id_counters: dict[str, int] = {}
 
     async def start_lovr_once(self) -> dict:
         """Spawn LOVR if not already running. Idempotent. Failures are cached."""
@@ -203,13 +210,73 @@ class SphereDispatcher:
 
             async def _watch() -> None:
                 rc = await lovr_proc.wait()
-                log.warning("render-mcp: LOVR child exited (rc=%s)", rc)
+                log.warning("render-mcp: LOVR child exited (rc=%s) — "
+                            "resetting lovr_started so next start_xr respawns it", rc)
+                self._lovr_started = False
 
             asyncio.create_task(_watch(), name="lovr-watch")
 
             self._lovr_started = True
             log.info("render-mcp: LOVR spawned (xr.start handled)")
+            # Resync current scene state into LOVR's ZMQ receive buffer so any
+            # previously-added primitives survive a LOVR restart.
+            await self._resync_scene()
             return {"status": "started"}
+
+    async def _resync_scene(self) -> None:
+        """Push scene.add for every known primitive into LOVR's ZMQ buffer.
+        Called after LOVR (re)starts so primitives added in a previous session
+        are visible immediately when LOVR connects."""
+        for obj_id, obj in list(self._objects.items()):
+            pos = obj["position"]
+            col = obj["color"]
+            await self.forward("scene.add", {
+                "id":       obj_id,
+                "type":     obj["type"],
+                "position": [pos["x"], pos["y"], pos["z"]],
+                "color":    [col["r"], col["g"], col["b"]],
+                "size":    obj["size"],
+            })
+            log.info("render-mcp: resync  id=%s", obj_id)
+
+    # ── scene state ───────────────────────────────────────────────────────────
+
+    def _make_id(self, prim_type: str) -> str:
+        n = self._id_counters.get(prim_type, 0)
+        self._id_counters[prim_type] = n + 1
+        return f"{prim_type}-{n}"
+
+    def add(self, prim_type: str, position: dict, color: dict,
+            size: float) -> str:
+        """Add a new object; return its server-assigned id."""
+        obj_id = self._make_id(prim_type)
+        self._objects[obj_id] = {
+            "type":     prim_type,
+            "position": dict(position),
+            "color":    dict(color),
+            "size":     size,
+        }
+        return obj_id
+
+    def get_object(self, obj_id: str) -> dict | None:
+        """Return the stored object for *obj_id*, or None if not found."""
+        return self._objects.get(obj_id)
+
+    def update(self, obj_id: str, props: dict) -> bool:
+        """Partially merge *props* into an existing object. Returns False if
+        the id is unknown."""
+        obj = self._objects.get(obj_id)
+        if obj is None:
+            return False
+        for k, v in props.items():
+            if isinstance(v, dict) and isinstance(obj.get(k), dict):
+                obj[k].update(v)
+            else:
+                obj[k] = v
+        return True
+
+    def remove(self, obj_id: str) -> bool:
+        return self._objects.pop(obj_id, None) is not None
 
     def health_snapshot(self) -> dict:
         return {
@@ -219,13 +286,21 @@ class SphereDispatcher:
             "render_drops": self._render_drops,
         }
 
+    def scene_snapshot(self) -> dict:
+        return {
+            "objects": [{"id": obj_id, **obj} for obj_id, obj in self._objects.items()]
+        }
+
+    # ── wire ──────────────────────────────────────────────────────────────────
+
     async def forward(self, op: str, value: Any) -> dict:
-        """msgpack-encode ``{op, value}`` and PUSH to LOVR. Drops until xr.start."""
+        """msgpack-encode ``{op, value}`` and PUSH to LOVR. Drops until
+        ``start_xr`` has succeeded."""
         if not self._lovr_started:
             self._render_drops += 1
             if self._render_drops % 200 == 1:
                 log.debug(
-                    "render-mcp: dropping render op %r (LOVR not started yet) — drops=%d",
+                    "render-mcp: dropping op %r (LOVR not started) — drops=%d",
                     op, self._render_drops,
                 )
             return {"ok": False, "reason": "not_started"}
@@ -244,22 +319,19 @@ class SphereDispatcher:
 
 # ── MCP tool surface ──────────────────────────────────────────────────────────
 
-def build_mcp(disp: SphereDispatcher) -> FastMCP:
+def build_mcp(disp: SceneDispatcher) -> FastMCP:
     mcp = FastMCP("render-mcp")
 
     @mcp.tool()
     async def start_xr() -> dict:
-        """
-        Spawn LOVR (the OpenXR rendering app) if it hasn't been started.
+        """Spawn LOVR (the OpenXR rendering app) if it hasn't been started.
 
-        Idempotent — calling again after success returns
-        ``{"status": "already_started"}``. Returns immediately; the
-        cloudxr-runtime readiness wait + LOVR launch happen in a background
-        task. Poll ``get_health`` until ``lovr_started`` flips before sending
-        render ops you can't tolerate dropping.
+        Idempotent — returns ``{"status": "already_started"}`` if already up.
+        Returns immediately; the CloudXR readiness wait and LOVR launch run in
+        a background task. Poll ``get_health`` until ``lovr_started`` flips
+        before sending scene ops you can't tolerate dropping.
 
-        Failure (cloudxr never became ready) is cached: every subsequent
-        call returns the same error rather than re-running the wait.
+        Terminal failures are cached so retries fail fast.
         """
         snap = disp.health_snapshot()
         if snap["lovr_started"]:
@@ -277,20 +349,152 @@ def build_mcp(disp: SphereDispatcher) -> FastMCP:
         return {"status": "starting"}
 
     @mcp.tool()
-    async def set_sphere_color(r: float, g: float, b: float) -> dict:
-        """Set sphere RGB. Components in [0, 1]."""
-        return await disp.forward("sphere.color", [float(r), float(g), float(b)])
+    async def add_primitive(
+        prim_type: str,
+        x: float = 0.0, y: float = 1.6, z: float = -1.5,
+        r: float = 0.2, g: float = 0.9, b: float = 1.0,
+        size: float = 0.1,
+    ) -> dict:
+        """Add a new primitive to the scene. Returns its server-assigned id.
+
+        Supported types: sphere, box (others fall back to sphere).
+        Position is world-space metres (OpenXR Y-up).
+        size is in METRES: radius for spheres, edge half-length for boxes.
+          0.05 m = 5 cm (tiny)   0.1 m = 10 cm (default)
+          0.3 m = 30 cm          1.0 m = 1 metre (large)
+
+        COLOR — ALWAYS specify all three components together, never partial:
+          red    r=1, g=0, b=0      green   r=0, g=0.8, b=0
+          blue   r=0, g=0.4, b=1    yellow  r=1, g=1,   b=0
+          white  r=1, g=1,   b=1    orange  r=1, g=0.5, b=0
+          cyan   r=0, g=0.9, b=1    purple  r=0.6, g=0, b=1
+        Omitting any of r/g/b uses the default (0.2/0.9/1.0 = cyan).
+        Example: 'red sphere' → r=1.0, g=0.0, b=0.0  (all three required)
+
+        Examples:
+          "add a red sphere"     prim_type="sphere", r=1, g=0, b=0
+          "add a green cube"     prim_type="box",    r=0, g=0.8, b=0
+          "add a blue sphere"    prim_type="sphere", r=0, g=0.4, b=1
+        """
+        position = {"x": float(x), "y": float(y), "z": float(z)}
+        color    = {"r": float(r), "g": float(g), "b": float(b)}
+        obj_id   = disp.add(prim_type, position, color, float(size))
+        result   = await disp.forward("scene.add", {
+            "id": obj_id, "type": prim_type,
+            "position": [x, y, z],
+            "color":    [r, g, b],
+            "size":     size,
+        })
+        log.info("render-mcp: add_primitive id=%s type=%s", obj_id, prim_type)
+        return {"id": obj_id, **result}
 
     @mcp.tool()
-    async def set_sphere_position(x: float, y: float, z: float) -> dict:
-        """Set sphere world-space position in metres (OpenXR Y-up; default
-        anchor is (0, 1.6, -1.5) — head height, 1.5 m in front of origin)."""
-        return await disp.forward("sphere.position", [float(x), float(y), float(z)])
+    async def update_primitive(
+        obj_id: str,
+        prim_type: str | None = None,
+        x: float | None = None, y: float | None = None, z: float | None = None,
+        r: float | None = None, g: float | None = None, b: float | None = None,
+        size: float | None = None,
+    ) -> dict:
+        """Update one or more properties of an existing primitive (partial update).
+
+        Only the fields you pass change; omitted fields keep their current values.
+        All coordinates are world-space metres (OpenXR Y-up).
+
+        TYPE CHANGE: pass prim_type="box" or prim_type="sphere" to convert a
+        primitive to a different shape while keeping its position, color, and size.
+          "change the sphere to a cube" → obj_id=<id>, prim_type="box"
+          "convert the box to a sphere" → obj_id=<id>, prim_type="sphere"
+
+        COLOR: when changing color, ALWAYS pass all three of r, g, b together.
+          "make it red"   → r=1.0, g=0.0, b=0.0  (all three required)
+          "make it green" → r=0.0, g=0.8, b=0.0
+
+        Examples:
+          "change to a cube"       obj_id=<id>, prim_type="box"
+          "make it red"            obj_id=<id>, r=1.0, g=0.0, b=0.0
+          "move it up 1m"          obj_id=<id>, y=<current_y + 1.0>
+          "make it twice as big"   obj_id=<id>, size=<current_size * 2>
+        """
+        obj = disp.get_object(obj_id)
+        if obj is None:
+            return {"ok": False, "reason": "not_found"}
+
+        # Apply scalar-property updates first.
+        props: dict = {}
+        if any(v is not None for v in (x, y, z)):
+            props["position"] = {k: v for k, v in (("x", x), ("y", y), ("z", z)) if v is not None}
+        if any(v is not None for v in (r, g, b)):
+            props["color"] = {k: v for k, v in (("r", r), ("g", g), ("b", b)) if v is not None}
+        if size is not None:
+            props["size"] = float(size)
+        if props:
+            disp.update(obj_id, props)
+
+        if prim_type is not None and prim_type != obj["type"]:
+            # Type change: remove old, re-add with new type preserving merged state.
+            merged = disp.get_object(obj_id)
+            p, c = merged["position"], merged["color"]
+            disp.remove(obj_id)
+            await disp.forward("scene.remove", {"id": obj_id})
+            new_id = disp.add(prim_type, p, c, merged["size"])
+            result = await disp.forward("scene.add", {
+                "id": new_id, "type": prim_type,
+                "position": [p["x"], p["y"], p["z"]],
+                "color":    [c["r"], c["g"], c["b"]],
+                "size":     merged["size"],
+            })
+            log.info("render-mcp: type change %s → %s  new_id=%s", obj_id, prim_type, new_id)
+            return {"ok": result.get("ok", True), "new_id": new_id}
+
+        if not props:
+            return {"ok": True}   # no-op
+
+        # Build wire payload for property-only updates.
+        obj  = disp.get_object(obj_id)
+        wire: dict = {"id": obj_id}
+        if "position" in props:
+            p = obj["position"]
+            wire["position"] = [p["x"], p["y"], p["z"]]
+        if "color" in props:
+            c = obj["color"]
+            wire["color"] = [c["r"], c["g"], c["b"]]
+        if "size" in props:
+            wire["size"] = obj["size"]
+        return await disp.forward("scene.update", wire)
 
     @mcp.tool()
-    async def reset_sphere() -> dict:
-        """Restore default sphere colour + position. Radius keeps tracking voice."""
-        return await disp.forward("sphere.reset", None)
+    async def remove_primitive(obj_id: str) -> dict:
+        """Remove a primitive from the scene by id.
+
+        Example: "remove the sphere" → obj_id=<id from get_scene_state>
+        """
+        if not disp.remove(obj_id):
+            return {"ok": False, "reason": "not_found"}
+        return await disp.forward("scene.remove", {"id": obj_id})
+
+    @mcp.tool()
+    async def get_scene_state() -> dict:
+        """Return the current state of all scene objects.
+
+        Response shape::
+
+            {
+              "objects": [
+                {
+                  "id":       "<string>",
+                  "type":     "<string>",
+                  "position": {"x": float, "y": float, "z": float},
+                  "color":    {"r": float, "g": float, "b": float},
+                  "size":    float
+                },
+                ...
+              ]
+            }
+
+        All coordinates are world-space metres (OpenXR Y-up).
+        """
+        return disp.scene_snapshot()
 
     @mcp.tool()
     async def get_health() -> dict:
@@ -301,26 +505,9 @@ def build_mcp(disp: SphereDispatcher) -> FastMCP:
     return mcp
 
 
-# ── Streaming HTTP route ──────────────────────────────────────────────────────
-
-class _RadiusBody(BaseModel):
-    value: float
-
-
-def build_app(disp: SphereDispatcher) -> FastAPI:
-    """FastAPI app hosting POST /sphere/radius plus the FastMCP tool
-    surface mounted at /mcp. The outer app inherits the inner FastMCP
-    app's lifespan so its session-store startup hooks run."""
-    mcp_app = build_mcp(disp).http_app(path="/mcp")
-    app = FastAPI(title="render-mcp", docs_url=None, redoc_url=None,
-                  lifespan=mcp_app.lifespan)
-
-    @app.post("/sphere/radius")
-    async def sphere_radius(body: _RadiusBody) -> dict:
-        return await disp.forward("sphere.radius", body.value)
-
-    app.mount("/", mcp_app)
-    return app
+def build_app(disp: SceneDispatcher):
+    """Pure FastMCP app — no REST routes, all ops via MCP tools."""
+    return build_mcp(disp).http_app(path="/mcp")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -335,12 +522,12 @@ async def _serve(cfg: Config) -> None:
         log.warning("render-mcp: no bundled libzmq found — LOVR will try the system copy")
 
     async with contextlib.AsyncExitStack() as stack:
-        disp = SphereDispatcher(cfg, stack)
+        disp = SceneDispatcher(cfg, stack)
         try:
             app = build_app(disp)
             uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="warning")
             server = uvicorn.Server(uv_cfg)
-            log.info("render-mcp  http=/sphere/radius  mcp=/mcp  port=%d  scene_socket=%s",
+            log.info("render-mcp  mcp=/mcp  port=%d  scene_socket=%s",
                      cfg.port, cfg.scene_socket)
             await server.serve()
         finally:

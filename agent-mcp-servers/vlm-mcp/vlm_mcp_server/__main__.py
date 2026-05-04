@@ -172,6 +172,9 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
 
         Notes
         -----
+        - ``image_path`` MUST be the ``path`` value returned by a prior call to
+          ``get_frame_from_time`` or ``get_latest_frame``.  Never invent or guess
+          a path — the tool will return an error and the task will fail.
         - Image I/O runs in a thread pool so the asyncio event loop is never
           blocked even for large frames.
         - The tool does NOT maintain conversation history. Each call is
