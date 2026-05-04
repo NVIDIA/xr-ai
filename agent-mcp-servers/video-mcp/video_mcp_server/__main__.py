@@ -65,6 +65,7 @@ import asyncio
 import ctypes
 import json
 import logging
+import os
 import pathlib
 import time
 
@@ -81,6 +82,21 @@ log = logging.getLogger("video_mcp_server")
 
 _DEFAULT_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _DEFAULT_HUB_PUSH = "ipc:///tmp/xr_hub_in"
+
+
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
 
 
 def _safe_name(s: str) -> str:
@@ -651,8 +667,11 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
     asyncio.run(_serve(cfg))
 
 

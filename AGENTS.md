@@ -579,6 +579,7 @@ if __name__ == "__main__":
 - [ ] `agent-samples/<name>/<snake_name>.py` — exact orchestrator boilerplate
 - [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` — entry point + (optional) split helpers next to it
 - [ ] `agent-samples/<name>/xr_media_hub.yaml` — hub config (copy from `server-runtime/xr_media_hub.yaml`)
+- [ ] every per-process YAML in the new sample has `log_level: INFO` (already in the reference YAMLs you copy from, but verify after copying)
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
 - [ ] `README.md` updated — architecture table and quickstart section
 
@@ -705,6 +706,44 @@ Paths inside the YAML (e.g. `web_client_dir`) resolve relative to the YAML
 file's own directory, not CWD. `HubLauncher` finds the YAML automatically by
 searching upward from CWD when the orchestrator runs.
 
+### Logging (per-process + env-var fallback)
+
+Each `<command>.yaml` sets its own `log_level: INFO` (PRIMARY source). When
+the field is removed/commented, the subprocess falls back to the
+`XR_AI_LOG_LEVEL` env var, then to hardcoded INFO. Valid values: `DEBUG`,
+`INFO`, `WARNING`, `ERROR`, `CRITICAL`.
+
+To change one process only: edit that process's `<command>.yaml`. For a
+one-shot global override (e.g., debugging a single run):
+`XR_AI_LOG_LEVEL=DEBUG uv run <orchestrator>`. For a persistent global
+override, add the env var to your shell rc.
+
+Each subprocess `__main__.py` inlines a 10-line `_resolve_log_level(cfg)`
+helper that reads `cfg["log_level"]` from its own YAML, then the env var,
+then defaults to INFO. The launcher's `run_stack` inlines an equivalent
+~7-line `basicConfig` block (no YAML reading at the launcher level —
+launcher stays stdlib-only per the dependency rules).
+
+**NeMo and vLLM log levels (separate per-process YAML knobs).** Two noise
+sources live outside Python's standard logging hierarchy and need their
+own knobs:
+
+- **`nemo_log_level: WARNING`** in `stt_server.yaml` and
+  `magpie_tts_server.yaml` — drives `nemo.utils.logging.setLevel(...)` for
+  NeMo's custom Logger class. NeMo's `[NeMo I/W ...]` lines won't quiet
+  via the standard Python `logging` setup because NeMo's logger doesn't
+  propagate to root.
+- **`vllm_log_level: WARNING`** in `vlm_server.yaml` and the four
+  `*_llm_server.yaml` files — exported as `VLLM_LOGGING_LEVEL` env var
+  BEFORE `os.execvp` so vLLM picks it up across the process replacement.
+  Controls vLLM's `(APIServer|EngineCore pid=...) INFO` lines during
+  cold start.
+
+Both fields default to `WARNING` in the YAMLs we ship. Removing the field
+falls back to `INFO`. They are independent of the main `log_level` field —
+`XR_AI_LOG_LEVEL` does NOT affect them. To debug just NeMo or just vLLM,
+edit the relevant YAML and flip back to `INFO` (or `DEBUG`).
+
 ### Known limitations
 
 **LiveKit always uses plain `ws://` (no TLS)**
@@ -735,6 +774,153 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-05-04 — NeMo and vLLM per-process log-level YAML knobs
+
+Two new per-process YAML fields target noise sources outside Python's
+standard logging hierarchy:
+
+- **`nemo_log_level: WARNING`** (default in shipped YAMLs, fallback `INFO`)
+  drives `nemo.utils.logging.setLevel(...)` for NeMo's custom logger.
+  Quiets the `[NeMo I ...]` model-loading and training/validation-config
+  dump lines from the STT and Magpie TTS startup. Implemented as
+  `_resolve_nemo_log_level(cfg)` inline helper in `stt-server` +
+  `magpie-tts-server` `__main__.py`, applied via a `try/except` around
+  `from nemo.utils import logging as nemo_logging`. The `try/except`
+  swallows `ImportError` (NeMo not installed) and `AttributeError` (NeMo
+  upgrade renaming `setLevel`); in either case the YAML field becomes a
+  no-op until the helper is updated.
+
+- **`vllm_log_level: WARNING`** (default in shipped YAMLs, fallback
+  `INFO`) is exported as `VLLM_LOGGING_LEVEL` env var BEFORE `os.execvp`
+  in the 5 vLLM-based AI services (`vlm-server`,
+  `mistral_minitron_llm_server`, `llama_nemotron_llm_server`,
+  `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`). Quiets vLLM's
+  `(APIServer|EngineCore pid=...) INFO` lines across the process
+  replacement; covers both the API server and EngineCore worker.
+  Implemented as `_resolve_vllm_log_level(cfg)` inline helper in the 5
+  execvp shims.
+
+Both fields are independent of the main `log_level` field and are
+unaffected by `XR_AI_LOG_LEVEL`. Per-sample override works the same way:
+edit the per-process YAML to flip back to `INFO`/`DEBUG` when
+investigating that one service.
+
+CLAUDE.md compliance: no `pyproject.toml` changes (`DEPENDENCIES.md`
+unchanged); no new files (SPDX rule N/A); `AGENTS.md` and per-process
+YAML edits land in the same commit per the Documentation rule.
+
+### 2026-05-04 — Per-process log level via YAML (Option Y — env-var fallback)
+
+Each per-process YAML (`xr_media_hub.yaml`, `vlm_server.yaml`,
+`<worker>_worker.yaml`, etc.) now sets its own `log_level: INFO|DEBUG|...`
+field — this is the PRIMARY source of log level configuration. The
+`XR_AI_LOG_LEVEL` env var serves as a fallback when a per-process YAML
+omits the field; INFO is the hardcoded last resort.
+
+**Resolution per subprocess**: per-process YAML's `log_level` >
+`XR_AI_LOG_LEVEL` env var (inherited from the user's shell) > hardcoded
+INFO.
+
+**Why Option Y** (env-var fallback) was chosen over Option X (project-wide
+`xr_ai.yaml` at the repo root) and Option Z (overload
+`server-runtime/xr_media_hub.yaml`): zero new files, no launcher-side YAML
+reading, and the per-process YAML is always populated so a YAML-hosted
+fallback would be rarely triggered in practice. For one-shot global
+override: `XR_AI_LOG_LEVEL=DEBUG uv run simple_vlm_example`.
+
+**Mechanism**: launcher's `_stack.py:run_stack()` inlines a ~7-line
+`logging.basicConfig` block that reads `XR_AI_LOG_LEVEL` from the
+environment (no YAML reading; launcher stays stdlib-only). Each
+subprocess `__main__.py` inlines a ~10-line `_resolve_log_level(cfg)`
+helper to satisfy the workers-can't-import-from-`xr_ai_launcher` rule
+from DEPENDENCIES.md. 31 YAMLs across `agent-samples/`,
+`server-runtime/`, `ai-services/`, `agent-mcp-servers/` got a
+`log_level: INFO` field. The hub's `LiveKitConnectorConfig` dataclass
+gained a `log_level` attribute so the existing field-filtering YAML
+loader picks it up.
+
+**Compliance**: launcher stays stdlib-only (no `import yaml`). Workers
+don't import from `xr_ai_launcher`. No new files. No `pyproject.toml`
+changes. No `DEPENDENCIES.md` updates needed.
+
+**Out of scope**: vLLM (post-execvp in `nemotron3_nano` etc.) controls
+its own verbosity via `--log-level` CLI; not wired to
+`XR_AI_LOG_LEVEL`.
+
+### 2026-05-03 — print → log standardization in AI services + cloudxr-runtime; AGENT READY banner
+
+AI services (`vlm-server`, `stt-server`, `tts/piper`, `tts/magpie`,
+`llm/mistral_minitron`, `llm/llama_nemotron`, `llm/nemotron3_nano`) and
+`cloudxr-runtime` now use Python `logging` instead of `print()`. Each entry
+point installs a minimal `logging.basicConfig(level=INFO,
+format="%(asctime)s %(name)s %(levelname)s %(message)s")` at the top of
+`run()` (before any `log.*` call) and a module-level
+`log = logging.getLogger("<entry-point-name>")`.
+
+**Universal conversion rule:** `print(file=sys.stderr)` → `log.error`;
+`print(...)` (stdout) → `log.info`. Narrow exceptions kept as `print` for
+technical/UX reasons:
+
+- `launcher/_processes.py:_forward()` — relays subprocess stdout that is
+  already log-formatted; converting would double-prefix every line.
+- `launcher/_credentials.py` interactive prompts — runs pre-`run_stack` (no
+  logger configured) and is interactive UI where `asctime/level/name`
+  prefixes look wrong on a "type your token now" line.
+- `xr-render-demo` orchestrator setup prints (LOVR download `\r` progress,
+  web vendor `_ensure_web_vendor()` setup, etc.) — runs pre-`run_stack`,
+  so `log.info` would be silently dropped (Python's default level is
+  WARNING when no `basicConfig` has run). `\r` carriage-return overwrite
+  would also break under `logging`.
+- `nemotron3_nano` pre-`os.execvp` banners (`Launching vLLM…`, `argv=…`) —
+  `print(flush=True)` flushes the file object before returning, which
+  `log.info` (queueing through handlers) does not guarantee before
+  `os.execvp` replaces the Python image.
+- `server-runtime` `StartupError` banner at the top of the `run()`
+  exception handler — happens before `logging.basicConfig` would fire if
+  startup fails very early.
+- `llama_nemotron` per-request "request with tools=…" lines — `log.debug`
+  (not the universal `log.info`) so they stay hidden at default INFO
+  display level but appear when the user sets `log_level=DEBUG`.
+- Hub LiveKit URL banner (`server-runtime/xr_media_hub/__main__.py:113`) —
+  collapsed from 5 separate `print()` calls into ONE multi-line `log.info`
+  so the asctime/level/name prefix appears only on the first line and the
+  rest stays visually scannable for operators copy-pasting URL/Token to
+  clients.
+
+`simple-vlm-example` worker now emits a 3-line `AGENT READY` banner via
+`log.info` immediately after `wait_for_health(...)` confirms STT, VLM, and
+TTS are loaded. `mcp-agent` and `xr-render-demo` workers do NOT get a
+banner (out of scope for this change).
+
+**Log level rebalance** — two per-second internal-mechanic lines moved
+from `log.info` to `log.debug` so a default-INFO terminal stays focused on
+per-turn agent dialogue and the 5s `stats ─` throughput summary (the
+runtime performance signal the user actually needs):
+
+- `server-runtime/xr_media_hub/video/_recorder.py:220` `recorder chunk %s`
+  — fired ~1 Hz per recording participant (one chunk per second of video)
+  with no per-turn value; throughput is already exposed by the `stats ─`
+  line in `__main__.py:80`. Now DEBUG.
+- `agent-samples/xr-render-demo/worker/.../__main__.py:446` `vad pid=%r
+  max_rms=…` — fired ~1 Hz per audio-streaming participant regardless of
+  whether the user is speaking; useful only when tuning
+  `silence_threshold` in `xr_render_demo_worker.yaml`. Per-turn signals
+  are still at INFO via the adjacent `vad speech START`/`speech END`/
+  `stt transcript=…` lines. Now DEBUG.
+
+General convention: per-second / per-frame / per-chunk internal mechanics
+belong at DEBUG; lifecycle, per-turn dialogue, and periodic throughput
+summaries belong at INFO.
+
+**Future work** (deferred — preserved in
+`logs/<plan-id>.plan.md`): a shared `setup_logging` helper, per-sample YAML
+`log_level` field, env-var propagation, per-run `logs/<run_id>/` folder
+capture with `combined.log` + per-process `<name>.log` files. Requires
+resolving the worker `xr_ai_launcher` import constraint first — workers
+must never import from `xr_ai_launcher` per the dependency rules below, so
+the helper has to live in either `xr-ai-agent` or a new `xr-ai-common`
+package, or be inlined per-worker.
 
 ### 2026-05-01 — visionOS Enterprise license bundling
 

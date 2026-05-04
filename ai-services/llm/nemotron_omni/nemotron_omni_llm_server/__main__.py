@@ -29,6 +29,7 @@ Config keys (nemotron_omni_llm_server.yaml)
 """
 import argparse
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -51,6 +52,35 @@ _DEFAULT_EAGER   = False
 _DEFAULT_PRUNE   = 0.5
 _DEFAULT_FPS     = 2
 _DEFAULT_FRAMES  = 256
+
+
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
+
+
+def _resolve_vllm_log_level(cfg: dict) -> str:
+    """Per-process YAML vllm_log_level > INFO. vLLM honors VLLM_LOGGING_LEVEL
+    env var at startup; we set it BEFORE os.execvp so vLLM's logger inherits
+    it across the process replacement (and propagates to vLLM's child
+    APIServer + EngineCore workers). Independent of the main `log_level`
+    field — that one is gone after execvp."""
+    val = cfg.get("vllm_log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    return "INFO"
 
 
 def _gpu_compute_major() -> int:
@@ -92,6 +122,12 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
+    logging.basicConfig(
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
+
     # Model selection
     if cfg.get("use_bf16", False):
         model = cfg.get("model_bf16", _MODEL_BF16)
@@ -129,6 +165,7 @@ def run() -> None:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ["HF_HOME"] = str(model_cache)
+    os.environ["VLLM_LOGGING_LEVEL"] = _resolve_vllm_log_level(cfg)
 
     media_io_kwargs = json.dumps({"video": {"fps": video_fps, "num_frames": video_frames}})
 

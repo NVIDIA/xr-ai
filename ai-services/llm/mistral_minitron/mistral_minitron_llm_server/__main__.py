@@ -24,6 +24,7 @@ Config keys
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
 """
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -39,6 +40,35 @@ _DEFAULT_TP          = 1
 _DEFAULT_CTX         = 32768
 _DEFAULT_GPU_MEM     = 0.85
 _DEFAULT_EAGER       = False
+
+
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
+
+
+def _resolve_vllm_log_level(cfg: dict) -> str:
+    """Per-process YAML vllm_log_level > INFO. vLLM honors VLLM_LOGGING_LEVEL
+    env var at startup; we set it BEFORE os.execvp so vLLM's logger inherits
+    it across the process replacement (and propagates to vLLM's child
+    APIServer + EngineCore workers). Independent of the main `log_level`
+    field — that one is gone after execvp."""
+    val = cfg.get("vllm_log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    return "INFO"
 
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
@@ -65,6 +95,12 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
+    logging.basicConfig(
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
+
     model         = cfg.get("model",               _DEFAULT_MODEL)
     host          = cfg.get("host",                 _DEFAULT_HOST)
     port          = int(cfg.get("port",             _DEFAULT_PORT))
@@ -83,6 +119,7 @@ def run() -> None:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ["HF_HOME"] = str(model_cache)
+    os.environ["VLLM_LOGGING_LEVEL"] = _resolve_vllm_log_level(cfg)
 
     argv = [
         "vllm", "serve", model,

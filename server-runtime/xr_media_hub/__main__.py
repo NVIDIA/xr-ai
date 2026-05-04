@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import logging
+import os
 import signal
 import sys
 import time
@@ -21,8 +22,26 @@ from xr_media_hub._errors import StartupError
 from xr_media_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
 from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
 
-logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
+
+
+def _resolve_log_level(cfg) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md). Accepts either a dict or a
+    dataclass-style object with a log_level attribute."""
+    if isinstance(cfg, dict):
+        val = cfg.get("log_level")
+    else:
+        val = getattr(cfg, "log_level", None)
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
 
 PULL_ADDR      = "ipc:///tmp/xr_hub_in"
 PUB_ADDR       = "ipc:///tmp/xr_hub_pub"
@@ -83,13 +102,19 @@ async def _stats_loop() -> None:
 async def main() -> None:
     global _recorder
 
+    cfg = load_config()
+    logging.basicConfig(
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
+
     hub = HubEndpoint(pull_addr=PULL_ADDR, pub_addr=PUB_ADDR)
     hub.on_frame(on_frame)
     hub.on_audio(on_audio)
     hub.on_data(on_data)
     hub.on_participant(on_participant)
 
-    cfg = load_config()
     connector = LiveKitConnector(cfg)
     await connector.start()
 
@@ -110,14 +135,20 @@ async def main() -> None:
 
     token = make_client_token(cfg, identity="ios-client")
     web_scheme = "https" if cfg.web_server_tls else "http"
-    print(f"\n  LiveKit URL : ws://0.0.0.0:{cfg.lk_port_ws}  (plain ws — no TLS)", flush=True)
-    print(f"  Room        : {cfg.room_name}", flush=True)
-    print(f"  Token       : {token}", flush=True)
+    # Connection info banner — emitted as ONE multi-line log record so the
+    # asctime/level/name prefix appears only once and the field column stays
+    # visually scannable (operators copy-paste the URL/Token to clients).
+    banner_lines = [
+        "Connection info:",
+        f"  LiveKit URL : ws://0.0.0.0:{cfg.lk_port_ws}  (plain ws — no TLS)",
+        f"  Room        : {cfg.room_name}",
+        f"  Token       : {token}",
+    ]
     if cfg.enable_web_server:
-        print(f"  Web client  : {web_scheme}://localhost:{cfg.web_server_port}", flush=True)
+        banner_lines.append(f"  Web client  : {web_scheme}://localhost:{cfg.web_server_port}")
     if _recorder is not None:
-        print(f"  Recording   : {rc.out_dir}", flush=True)
-    print(flush=True)
+        banner_lines.append(f"  Recording   : {rc.out_dir}")
+    log.info("\n".join(banner_lines))
 
     stop = asyncio.Event()
     loop = asyncio.get_event_loop()

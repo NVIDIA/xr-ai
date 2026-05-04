@@ -31,3 +31,9 @@ enable_token_server: true
 video_recording:
   enabled: true
   out_dir:  /tmp/xr_recordings/xr-render-demo   # must match video_mcp_server.yaml recordings_dir
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO

@@ -27,6 +27,7 @@ Config keys
     parser_url:              str    URL to fetch nano_v3_reasoning_parser.py.
 """
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -51,6 +52,35 @@ _PARSER_URL_DEFAULT = (
     "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
     f"/resolve/main/{_PARSER_FILENAME}"
 )
+
+
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
+
+
+def _resolve_vllm_log_level(cfg: dict) -> str:
+    """Per-process YAML vllm_log_level > INFO. vLLM honors VLLM_LOGGING_LEVEL
+    env var at startup; we set it BEFORE os.execvp so vLLM's logger inherits
+    it across the process replacement (and propagates to vLLM's child
+    APIServer + EngineCore workers). Independent of the main `log_level`
+    field — that one is gone after execvp."""
+    val = cfg.get("vllm_log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    return "INFO"
 
 
 def _gpu_compute_major() -> int:
@@ -99,6 +129,12 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
+    logging.basicConfig(
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
+
     # Set before _gpu_compute_major() so nvidia-smi queries the right device.
     if cuda_devices := cfg.get("cuda_visible_devices"):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
@@ -127,6 +163,7 @@ def run() -> None:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ["HF_HOME"] = str(model_cache)
+    os.environ["VLLM_LOGGING_LEVEL"] = _resolve_vllm_log_level(cfg)
 
     parser_path = _ensure_reasoning_parser(model_cache, parser_url)
 

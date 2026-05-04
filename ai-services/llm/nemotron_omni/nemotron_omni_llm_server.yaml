@@ -39,3 +39,18 @@ enforce_eager:          false
 video_pruning_rate: 0.5   # fraction of redundant video tokens to drop
 video_fps:          2     # FPS for video sampling
 video_num_frames:   256   # max frames per video clip
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO
+
+# ── vLLM logging ─────────────────────────────────────────────────────────────
+# Level for vLLM's logger (the (APIServer|EngineCore pid=...) INFO lines
+# during cold start). Exported as VLLM_LOGGING_LEVEL env var BEFORE
+# os.execvp into `vllm serve`, so it controls vLLM's own logger across the
+# process replacement. Independent of the main `log_level` field above.
+# If removed/commented, falls back to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+vllm_log_level: WARNING

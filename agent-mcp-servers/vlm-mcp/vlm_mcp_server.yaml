@@ -30,3 +30,9 @@ vlm_request_timeout_s: 60.0
 # true             — enables full reasoning; more accurate on complex queries
 #                   but adds several seconds of latency per request.
 enable_thinking: false
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO

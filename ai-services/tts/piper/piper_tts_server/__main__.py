@@ -29,6 +29,8 @@ Config keys
 """
 import argparse
 import io
+import logging
+import os
 import sys
 import threading
 import wave
@@ -36,8 +38,25 @@ from pathlib import Path
 
 import yaml
 
+log = logging.getLogger("piper_tts_server")
+
 _DEFAULT_PORT   = 8105
 _HF_REPO        = "rhasspy/piper-voices"
+
+
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
 
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
@@ -74,10 +93,10 @@ def _ensure_voice(voice: str, cache_dir: Path) -> tuple[Path, Path]:
     hf_cache = cache_dir / "piper"
     hf_cache.mkdir(parents=True, exist_ok=True)
     onnx_hf, json_hf = _hf_path_for_voice(voice)
-    print(f"[piper_tts_server] Resolving voice {voice!r} from {_HF_REPO}…")
+    log.info("Resolving voice %r from %s…", voice, _HF_REPO)
     onnx_path = Path(hf_hub_download(_HF_REPO, onnx_hf, cache_dir=str(hf_cache)))
     json_path = Path(hf_hub_download(_HF_REPO, json_hf, cache_dir=str(hf_cache)))
-    print(f"[piper_tts_server] Voice files ready")
+    log.info("Voice files ready")
     return onnx_path, json_path
 
 
@@ -100,14 +119,13 @@ class _PiperBackend:
             from piper import PiperVoice
 
             onnx_path, json_path = _ensure_voice(self._voice_name, self._cache_dir)
-            print(f"[piper_tts_server] Loading voice {self._voice_name!r}…")
+            log.info("Loading voice %r…", self._voice_name)
             self._voice = PiperVoice.load(
                 str(onnx_path),
                 config_path=str(json_path),
                 use_cuda=self._use_cuda,
             )
-            print(f"[piper_tts_server] Voice ready  "
-                  f"sample_rate={self._voice.config.sample_rate}")
+            log.info("Voice ready  sample_rate=%d", self._voice.config.sample_rate)
 
     @property
     def ready(self) -> bool:
@@ -181,7 +199,7 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     import uvicorn
 
     if not cfg.get("voice"):
-        print("[piper_tts_server] 'voice' is required in config", file=sys.stderr)
+        log.error("'voice' is required in config")
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
@@ -196,9 +214,9 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    print(f"[piper_tts_server] Ready  →  http://localhost:{port}/v1")
+    log.info("Ready  →  http://localhost:%d/v1", port)
     await server.serve()
-    print("[piper_tts_server] Stopped.")
+    log.info("Stopped")
 
 
 def run() -> None:
@@ -217,6 +235,12 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    logging.basicConfig(
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
 
     asyncio.run(_run(cfg, yaml_dir))
 

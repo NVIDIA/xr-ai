@@ -42,6 +42,7 @@ import asyncio
 import base64
 import io
 import logging
+import os
 import pathlib
 import re
 from contextlib import asynccontextmanager
@@ -53,6 +54,21 @@ from fastmcp import FastMCP
 from PIL import Image
 
 log = logging.getLogger("vlm_mcp_server")
+
+
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
 
 
 # ── VLM HTTP client ───────────────────────────────────────────────────────────
@@ -263,8 +279,9 @@ def run() -> None:
             cfg = yaml.safe_load(f) or {}
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
     )
     asyncio.run(_serve(cfg))
 

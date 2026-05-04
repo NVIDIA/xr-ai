@@ -21,3 +21,9 @@ cloudxr_env:
 # ── Network ports (CloudXR owns these — do not conflict with LiveKit) ─────────
 # CloudXR native service:  localhost:49100  (internal, not exposed)
 # WSS proxy (TLS):         0.0.0.0:48322   (XR clients connect here)
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO

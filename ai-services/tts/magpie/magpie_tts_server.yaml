@@ -21,3 +21,17 @@ sample_rate: 22050
 
 # NeMo + HuggingFace weight cache — resolved relative to this YAML file.
 model_cache: ../models
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO
+
+# ── NeMo logging ─────────────────────────────────────────────────────────────
+# Level for NeMo's custom logger (the [NeMo I/W ...] lines emitted during
+# model loading). Independent of the main `log_level` field above. NeMo's
+# logger doesn't propagate to Python's root logger, so it needs a separate
+# knob. If removed/commented, falls back to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+nemo_log_level: WARNING

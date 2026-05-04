@@ -217,8 +217,8 @@ class VideoRecorder:
             "height":     enc.height,
             "size_bytes": len(data),
         }))
-        log.info("recorder  chunk  %s  %d frames  %d bytes",
-                 h264_path.name, enc.chunk_frames, len(data))
+        log.debug("recorder  chunk  %s  %d frames  %d bytes",
+                  h264_path.name, enc.chunk_frames, len(data))
         enc.chunk_buf.clear()
         self._prune_by_total_bytes()
 

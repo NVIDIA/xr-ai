@@ -36,3 +36,9 @@ video_recording:
   sample_fps:      30.0
   bitrate:         4000000               # VBR target bitrate in bps
   gpu_id:          0
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO

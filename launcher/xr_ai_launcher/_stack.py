@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -100,6 +101,15 @@ async def run_stack(processes: Sequence[Process], base: Path) -> None:
         def run() -> None:
             asyncio.run(run_stack(PROCESSES, _BASE))
     """
+    _level_name = os.environ.get("XR_AI_LOG_LEVEL", "INFO").upper()
+    if _level_name not in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        _level_name = "INFO"
+    logging.basicConfig(
+        level=getattr(logging, _level_name, logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
+
     load_credentials()  # inject any saved tokens before spawning child processes
     async with StackLauncher(processes, base) as procs:
         loop = asyncio.get_running_loop()

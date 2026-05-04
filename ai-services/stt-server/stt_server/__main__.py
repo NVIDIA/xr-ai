@@ -23,6 +23,7 @@ Config keys
 """
 import argparse
 import asyncio
+import logging
 import os
 import sys
 import tempfile
@@ -31,7 +32,37 @@ from pathlib import Path
 
 import yaml
 
+log = logging.getLogger("stt_server")
+
 _DEFAULT_PORT = 8103
+
+
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
+
+
+def _resolve_nemo_log_level(cfg: dict) -> str:
+    """Per-process YAML nemo_log_level > INFO. Independent of the main
+    `log_level` field — controls NeMo's CUSTOM logger only (NeMo's logger
+    doesn't propagate to Python's root logger so the standard
+    XR_AI_LOG_LEVEL/log_level chain doesn't reach it)."""
+    val = cfg.get("nemo_log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    return "INFO"
 
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
@@ -66,14 +97,14 @@ class _AsrBackend:
             if device == "auto":
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            print(f"[stt_server] Loading NeMo ASR {self._model_name!r} on {device}…")
+            log.info("Loading NeMo ASR %r on %s…", self._model_name, device)
             # from_pretrained resolves the correct model subclass automatically.
             model = nemo_asr.models.ASRModel.from_pretrained(self._model_name)
             model.eval()
             if device == "cuda":
                 model = model.cuda()
             self._model = model
-            print("[stt_server] ASR model ready.")
+            log.info("ASR model ready")
 
     @property
     def ready(self) -> bool:
@@ -152,7 +183,7 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     import uvicorn
 
     if not cfg.get("model"):
-        print("[stt_server] 'model' is required in config", file=sys.stderr)
+        log.error("'model' is required in config")
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
@@ -174,9 +205,9 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    print(f"[stt_server] Ready  →  http://localhost:{port}/v1")
+    log.info("Ready  →  http://localhost:%d/v1", port)
     await server.serve()
-    print("[stt_server] Stopped.")
+    log.info("Stopped")
 
 
 def run() -> None:
@@ -193,6 +224,21 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    logging.basicConfig(
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
+
+    # NeMo uses a custom Logger class that doesn't propagate to root.
+    # Best-effort: try its native setLevel API. If NeMo isn't installed or
+    # the API changes, the YAML field becomes a no-op (documented in AGENTS.md).
+    try:
+        from nemo.utils import logging as nemo_logging
+        nemo_logging.setLevel(_resolve_nemo_log_level(cfg))
+    except (ImportError, AttributeError):
+        pass
 
     asyncio.run(_run(cfg, yaml_dir))
 

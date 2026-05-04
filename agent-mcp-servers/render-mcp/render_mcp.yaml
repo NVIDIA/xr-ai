@@ -32,3 +32,9 @@ scene_socket: ipc:///tmp/xr_render_scene
 # child's environment so it picks up XR_RUNTIME_JSON etc. Missing file is OK
 # (useful when cloudxr-runtime is off and LOVR should use the system OpenXR).
 cloudxr_env_file: ~/.cloudxr/run/cloudxr.env
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO

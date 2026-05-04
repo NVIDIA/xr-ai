@@ -22,3 +22,9 @@ port: 8230
 # environment so it picks up XR_RUNTIME_JSON before opening the OpenXR session.
 # Same convention as render_mcp.yaml.
 cloudxr_env_file: ~/.cloudxr/run/cloudxr.env
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO

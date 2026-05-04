@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import pathlib
 import signal
 
@@ -54,10 +55,26 @@ _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
+
+
 async def main(cfg: dict) -> None:
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
     )
 
     # VLM backend selection.
@@ -80,6 +97,11 @@ async def main(cfg: dict) -> None:
         "VLM": vlm.health_url,
         "TTS": tts.health_url,
     })
+
+    # AGENT READY banner — emitted only after STT + VLM + TTS all report healthy.
+    log.info("=" * 80)
+    log.info("  AGENT READY — simple-vlm-example  (STT, VLM, TTS loaded)")
+    log.info("=" * 80)
 
     ep    = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     agent = SimpleVlmAgent(

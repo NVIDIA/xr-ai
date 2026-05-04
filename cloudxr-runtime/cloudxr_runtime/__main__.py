@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import multiprocessing
 import os
 import signal
@@ -33,6 +34,23 @@ from isaacteleop.cloudxr.runtime import (
 )
 from isaacteleop.cloudxr.wss import run as wss_run
 
+log = logging.getLogger("cloudxr_runtime")
+
+
+def _resolve_log_level(cfg: dict) -> str:
+    """Per-process YAML log_level > XR_AI_LOG_LEVEL env > INFO. Inlined to
+    keep workers stdlib-only and to avoid importing from xr_ai_launcher
+    (forbidden for workers per AGENTS.md)."""
+    val = cfg.get("log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    env = os.environ.get("XR_AI_LOG_LEVEL", "").upper()
+    if env in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+        return env
+    return "INFO"
+
 
 async def _wait_with_progress(
     runtime_proc: multiprocessing.Process,
@@ -50,7 +68,7 @@ async def _wait_with_progress(
         if lock_file.exists():
             return True
         if elapsed > 0 and elapsed % 10 == 0:
-            print(f"  [{elapsed}s] still waiting for CloudXR runtime…")
+            log.info("[%ds] still waiting for CloudXR runtime…", elapsed)
         await asyncio.sleep(1)
         elapsed += 1
     return False
@@ -88,8 +106,8 @@ async def _run(cfg: dict) -> None:
     runtime_proc.start()
 
     cxr_ver = runtime_version()
-    print(f"Isaac Teleop {isaacteleop_version}  CloudXR {cxr_ver}")
-    print("Waiting for CloudXR runtime…")
+    log.info("Isaac Teleop %s  CloudXR %s", isaacteleop_version, cxr_ver)
+    log.info("Waiting for CloudXR runtime…")
 
     try:
         ready = await _wait_with_progress(runtime_proc, stop)
@@ -97,23 +115,23 @@ async def _run(cfg: dict) -> None:
             if stop.done():
                 return  # cancelled by signal — clean exit
             if not runtime_proc.is_alive() and runtime_proc.exitcode != 0:
-                print(
-                    f"CloudXR runtime exited (code {runtime_proc.exitcode}).\n"
+                log.error(
+                    "CloudXR runtime exited (code %s).\n"
                     "  Check for leftover containers: docker ps --filter name=cloudxr\n"
-                    f"  Native log: {latest_runtime_log() or logs_dir}",
-                    file=sys.stderr,
+                    "  Native log: %s",
+                    runtime_proc.exitcode, latest_runtime_log() or logs_dir,
                 )
                 sys.exit(runtime_proc.exitcode or 1)
-            print(
+            log.error(
                 "CloudXR runtime did not become ready within 120 s.\n"
-                f"  Native log: {latest_runtime_log() or logs_dir}",
-                file=sys.stderr,
+                "  Native log: %s",
+                latest_runtime_log() or logs_dir,
             )
             sys.exit(1)
 
         cxr_log = latest_runtime_log() or logs_dir
-        print(f"CloudXR runtime:   ready  log: {cxr_log}")
-        print(f"Activate CloudXR environment: source {env_cfg.env_filepath()}")
+        log.info("CloudXR runtime:   ready  log: %s", cxr_log)
+        log.info("Activate CloudXR environment: source %s", env_cfg.env_filepath())
 
         from datetime import datetime, timezone
         ts      = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
@@ -121,16 +139,16 @@ async def _run(cfg: dict) -> None:
         try:
             await wss_run(log_file_path=wss_log, stop_future=stop)
         except RuntimeError as exc:
-            print(
-                f"CloudXR WSS proxy failed: {exc}\n"
+            log.error(
+                "CloudXR WSS proxy failed: %s\n"
                 "  If another process owns port 48322, stop it first:\n"
                 "    sudo fuser -k 48322/tcp",
-                file=sys.stderr,
+                exc,
             )
     finally:
         terminate_or_kill_runtime(runtime_proc)
 
-    print("Stopped.")
+    log.info("Stopped")
 
 
 def run() -> None:
@@ -144,6 +162,12 @@ def run() -> None:
     cfg: dict = {}
     if our_ns.config:
         cfg = _load_config(our_ns.config)
+
+    logging.basicConfig(
+        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,
+    )
 
     asyncio.run(_run(cfg))
 

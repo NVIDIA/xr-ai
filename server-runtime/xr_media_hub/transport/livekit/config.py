@@ -66,3 +66,9 @@ class LiveKitConnectorConfig:
     # Frames are encoded via NVENC (pynvvideocodec) and written as H.264
     # Annex B chunks to video_recording.out_dir.
     video_recording: Any = field(default=None)
+
+    # ── Logging ───────────────────────────────────────────────────────────────
+    # Per-process log level. PRIMARY source of log level for this process.
+    # Falls back to XR_AI_LOG_LEVEL env var, then to "INFO".
+    # Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+    log_level: str = "INFO"

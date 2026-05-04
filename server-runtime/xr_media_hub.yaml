@@ -56,3 +56,9 @@ enable_token_server: true
 #   sample_fps:      30.0                        # recording frame rate (subsample if lower)
 #   bitrate:         4000000                     # VBR target bitrate in bps
 #   gpu_id:          0                           # NVENC GPU device index
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO

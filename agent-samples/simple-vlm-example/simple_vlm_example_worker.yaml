@@ -46,3 +46,9 @@ camera_grace_s:       5.0   # keep camera on this long after a query (avoids res
 silence_threshold: 0.01   # float32 RMS below this is considered silence
 silence_duration:  0.8    # seconds of silence that ends an utterance
 min_speech:        0.3    # minimum seconds of speech before STT is called
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Per-process log level. PRIMARY source. If this field is removed/commented,
+# the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.
+# Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+log_level: INFO
