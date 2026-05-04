@@ -15,16 +15,28 @@ passes it as ``--config <path>``.  No separate launcher config file exists.
 
 All processes start concurrently — no ordering is required or expressed.
 Every process must tolerate its peers not being ready at startup.
+
+Per-run log files
+-----------------
+``run_stack`` creates a per-run folder ``<repo_root>/logs/<run_id>/`` (or
+``<XR_AI_LOG_DIR_ROOT>/<run_id>/`` if the env var is set) and exports
+``XR_AI_LOG_DIR`` so subprocesses know where to write their FileHandler
+output.  ``run_id = "<ISO-timestamp>_<sample>"``.  The launcher itself
+writes ``launcher.log`` and ``combined.log`` in that folder; subprocesses
+write ``<name>.log`` (managed by ``ManagedProcess`` in ``_processes.py``).
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import signal
+import socket
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
@@ -32,6 +44,185 @@ from ._credentials import load_credentials
 from ._project import ProjectLauncher
 
 log = logging.getLogger(__name__)
+
+_VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}
+_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
+
+
+# ── per-source level filters ─────────────────────────────────────────────────
+#
+# Above-threshold accepts records the StreamHandler should DISPLAY (terminal).
+# Below-threshold accepts records the FileHandler should CAPTURE for postmortem
+# (records the StreamHandler dropped).  Their union is every record; their
+# intersection is empty — so file gets DEBUG-level capture without duplicates.
+
+class _AboveThresholdFilter(logging.Filter):
+    """Pass records at level >= per-source threshold (terminal display)."""
+
+    def __init__(self, default: int, sources: dict[str, int] | None = None) -> None:
+        super().__init__()
+        self.default = default
+        self.sources = sources or {}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        for prefix, thr in self.sources.items():
+            if record.name.startswith(prefix):
+                return record.levelno >= thr
+        return record.levelno >= self.default
+
+
+class _BelowThresholdFilter(logging.Filter):
+    """Pass records at level < per-source threshold (file capture for the
+    levels the StreamHandler dropped)."""
+
+    def __init__(self, default: int, sources: dict[str, int] | None = None) -> None:
+        super().__init__()
+        self.default = default
+        self.sources = sources or {}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        for prefix, thr in self.sources.items():
+            if record.name.startswith(prefix):
+                return record.levelno < thr
+        return record.levelno < self.default
+
+
+def _resolve_launcher_log_level() -> int:
+    name = os.environ.get("XR_AI_LOG_LEVEL", "INFO").upper()
+    if name not in _VALID_LEVELS:
+        name = "INFO"
+    return getattr(logging, name, logging.INFO)
+
+
+def _setup_logging_launcher(log_dir: Path | None) -> None:
+    """Configure the launcher's own root logger.  StreamHandler writes to
+    stderr at the user level; FileHandlers (only when ``log_dir`` is set)
+    capture DEBUG to ``launcher.log`` and ``combined.log`` for postmortem.
+
+    Replaces any prior basicConfig output.  Idempotent — clears existing
+    handlers before re-installing."""
+    user_level = _resolve_launcher_log_level()
+    formatter = logging.Formatter(_FORMAT)
+
+    root = logging.getLogger()
+    for h in root.handlers[:]:
+        root.removeHandler(h)
+        try:
+            h.close()
+        except Exception:
+            pass
+    root.setLevel(logging.DEBUG)
+
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.DEBUG)  # filter does the user-level work
+    sh.setFormatter(formatter)
+    sh.addFilter(_AboveThresholdFilter(user_level))
+    root.addHandler(sh)
+
+    if log_dir is not None:
+        for path in (log_dir / "launcher.log", log_dir / "combined.log"):
+            fh = logging.FileHandler(path, mode="a")
+            fh.setLevel(logging.DEBUG)
+            fh.setFormatter(formatter)
+            fh.addFilter(_BelowThresholdFilter(user_level))
+            root.addHandler(fh)
+
+
+# ── run-folder bookkeeping ───────────────────────────────────────────────────
+
+def _find_repo_root(base: Path) -> Path:
+    """Walk up from *base* looking for the xr-ai repo root.  A directory is
+    the repo root if it contains BOTH ``AGENTS.md`` and ``DEPENDENCIES.md``.
+    Falls back to ``base.parents[1]`` (the conventional layout
+    ``<repo>/agent-samples/<sample>/``) if no marker is found."""
+    for d in (base, *base.parents):
+        if (d / "AGENTS.md").exists() and (d / "DEPENDENCIES.md").exists():
+            return d
+    return base.parents[1] if len(base.parents) >= 2 else base
+
+
+def _compute_run_id(base: Path) -> str:
+    """Per-run folder name: ``<ISO-timestamp>_<sample>``.  Uses ``T``/`-`
+    separators so the name is filesystem-safe across platforms."""
+    ts = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    return f"{ts}_{base.name}"
+
+
+def _create_log_dir(base: Path) -> Path | None:
+    """Create the per-run log folder and return its path.  Honors the env
+    override ``XR_AI_LOG_DIR_ROOT``.  Returns ``None`` if creation fails
+    (logging falls back to terminal-only)."""
+    try:
+        root_dir = os.environ.get("XR_AI_LOG_DIR_ROOT")
+        if root_dir:
+            root_path = Path(root_dir).expanduser().resolve()
+        else:
+            root_path = _find_repo_root(base) / "logs"
+        log_dir = root_path / _compute_run_id(base)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir
+    except OSError:
+        return None
+
+
+def _write_manifest(log_dir: Path, base: Path, processes: Sequence[Process]) -> Path:
+    """Write a starting manifest.  Caller updates it on exit with end-of-run
+    fields via ``_finalize_manifest``."""
+    path = log_dir / "manifest.json"
+    payload = {
+        "sample":     base.name,
+        "started_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "host":       socket.gethostname(),
+        "processes":  [{"name": p.name, "project": str(p.project), "command": p.command}
+                       for p in processes],
+        "exit_codes": {},
+        "ended_at":   None,
+    }
+    try:
+        path.write_text(json.dumps(payload, indent=2) + "\n")
+    except OSError:
+        pass
+    return path
+
+
+def _finalize_manifest(path: Path,
+                       procs: dict[str, asyncio.subprocess.Process]) -> None:
+    """Update the run's ``manifest.json`` with ``ended_at`` and per-process
+    ``exit_codes``.  Best-effort; never raises."""
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return
+    payload["ended_at"]   = datetime.now().astimezone().isoformat(timespec="seconds")
+    payload["exit_codes"] = {name: proc.returncode for name, proc in procs.items()}
+    try:
+        path.write_text(json.dumps(payload, indent=2) + "\n")
+    except OSError:
+        pass
+
+
+# ── SIGQUIT handler ──────────────────────────────────────────────────────────
+#
+# Python's default SIGQUIT (Ctrl+\\) action is "core dump + exit", losing any
+# unflushed buffer.  We override with a handler that flushes Python's logging
+# system (FileHandler.emit already flushes per-record, but logging.shutdown
+# closes any cached handles) and exits cleanly.  ``signal.signal`` is used
+# instead of ``loop.add_signal_handler`` so the handler runs even when the
+# asyncio loop is wedged.
+
+def _install_sigquit_handler() -> None:
+    def _on_sigquit(signum: int, frame) -> None:  # pragma: no cover — signal path
+        try:
+            logging.shutdown()
+        except Exception:
+            pass
+        os._exit(128 + signum)
+
+    try:
+        signal.signal(signal.SIGQUIT, _on_sigquit)
+    except (AttributeError, ValueError):
+        # SIGQUIT may not be available on Windows; ignore.
+        pass
 
 
 @dataclass(frozen=True)
@@ -101,14 +292,19 @@ async def run_stack(processes: Sequence[Process], base: Path) -> None:
         def run() -> None:
             asyncio.run(run_stack(PROCESSES, _BASE))
     """
-    _level_name = os.environ.get("XR_AI_LOG_LEVEL", "INFO").upper()
-    if _level_name not in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
-        _level_name = "INFO"
-    logging.basicConfig(
-        level=getattr(logging, _level_name, logging.INFO),
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-        force=True,
-    )
+    log_dir = _create_log_dir(base)
+    if log_dir is not None:
+        os.environ["XR_AI_LOG_DIR"] = str(log_dir)
+        os.environ["XR_AI_LOG_NAME"] = "launcher"
+
+    _setup_logging_launcher(log_dir)
+    _install_sigquit_handler()
+
+    if log_dir is not None:
+        log.info("stack: per-run log folder %s", log_dir)
+        manifest_path = _write_manifest(log_dir, base, processes)
+    else:
+        manifest_path = None
 
     load_credentials()  # inject any saved tokens before spawning child processes
     async with StackLauncher(processes, base) as procs:
@@ -140,3 +336,5 @@ async def run_stack(processes: Sequence[Process], base: Path) -> None:
         finally:
             watcher.cancel()
             await asyncio.gather(watcher, return_exceptions=True)
+            if manifest_path is not None:
+                _finalize_manifest(manifest_path, procs)

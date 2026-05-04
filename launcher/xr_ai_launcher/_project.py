@@ -52,6 +52,13 @@ async def ProjectLauncher(
     if gpu is not None:
         env["CUDA_VISIBLE_DEVICES"] = gpu
 
+    # Inform the child where to write its per-process log file.  The matching
+    # XR_AI_LOG_DIR is exported once by run_stack; the child reads both env
+    # vars and attaches a FileHandler to <XR_AI_LOG_DIR>/<XR_AI_LOG_NAME>.log
+    # (and combined.log).  When XR_AI_LOG_DIR is unset, the subprocess
+    # _setup_logging() helper degrades to terminal-only.
+    env["XR_AI_LOG_NAME"] = name
+
     if shutil.which("uv"):
         cmd = ["uv", "run", "--project", str(project), command, *args]
     else:

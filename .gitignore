@@ -11,6 +11,12 @@
 **/deps/**
 !**/deps/.gitkeep
 
+# Per-run log folder (created by xr_ai_launcher.run_stack on each
+# `uv run <orchestrator>` invocation). Holds combined.log, <name>.log per
+# subprocess, and an optional manifest.json. Cleaned up manually:
+#     find logs -type d -mtime +14 | xargs rm -rf
+logs/
+
 # macOS
 .DS_Store
 

@@ -724,9 +724,9 @@ then defaults to INFO. The launcher's `run_stack` inlines an equivalent
 ~7-line `basicConfig` block (no YAML reading at the launcher level —
 launcher stays stdlib-only per the dependency rules).
 
-**NeMo and vLLM log levels (separate per-process YAML knobs).** Two noise
-sources live outside Python's standard logging hierarchy and need their
-own knobs:
+**NeMo, vLLM, and HTTP log levels (separate per-process YAML knobs).**
+Three noise sources live outside the main `log_level` and need their own
+knobs:
 
 - **`nemo_log_level: WARNING`** in `stt_server.yaml` and
   `magpie_tts_server.yaml` — drives `nemo.utils.logging.setLevel(...)` for
@@ -738,11 +738,82 @@ own knobs:
   BEFORE `os.execvp` so vLLM picks it up across the process replacement.
   Controls vLLM's `(APIServer|EngineCore pid=...) INFO` lines during
   cold start.
+- **`http_log_level: WARNING`** in worker YAMLs and any subprocess that
+  uses `httpx` (`simple_vlm_example_worker.yaml`,
+  `mcp_agent_worker.yaml`, `xr_render_demo_worker.yaml`,
+  `vlm_mcp_server.yaml`, `mcp_server.yaml`) — controls the
+  per-HTTP-request `INFO HTTP Request: POST ...` lines emitted by `httpx`
+  + `httpcore`. These are standard Python loggers, so unlike NeMo/vLLM
+  the file capture is unaffected (DEBUG always); the YAML field only
+  bounds what's shown on the terminal via the source-aware StreamHandler
+  filter. Flipping to `INFO` makes per-request logging visible without
+  logger-level `setLevel` (which would also drop records before the
+  FileHandler).
 
-Both fields default to `WARNING` in the YAMLs we ship. Removing the field
-falls back to `INFO`. They are independent of the main `log_level` field —
-`XR_AI_LOG_LEVEL` does NOT affect them. To debug just NeMo or just vLLM,
-edit the relevant YAML and flip back to `INFO` (or `DEBUG`).
+All three fields default to `WARNING` in the YAMLs we ship. Removing the
+field falls back to the in-code default (`INFO` for `nemo_log_level` and
+`vllm_log_level`; `WARNING` for `http_log_level`). They are independent
+of the main `log_level` field — `XR_AI_LOG_LEVEL` does NOT affect them.
+To debug just NeMo or just vLLM or just httpx, edit the relevant YAML
+and flip back to `INFO` (or `DEBUG`).
+
+### File logging (per-run logs/ folder)
+
+Every `uv run <orchestrator>` invocation writes a per-run folder
+`<repo_root>/logs/<ISO-timestamp>_<sample>/` containing:
+
+- `combined.log` — chronological merge of every record produced during
+  the run (launcher's own records + every subprocess's stdout/stderr,
+  prefixed with `[name]`).
+- `<name>.log` per managed subprocess (`hub.log`, `vlm.log`, …) —
+  full DEBUG-level capture of that subprocess's Python `logging`
+  records, plus everything that landed on its stdout/stderr.
+- Optional `manifest.json` — sample, started_at, host, processes
+  (name + project + command), ended_at, exit_codes per process.
+
+**Terminal != file.** Each subprocess sets its root logger to DEBUG
+(permissive), then partitions records between an above-threshold
+StreamHandler (records ≥ user_level → terminal via launcher PIPE tee)
+and below-threshold FileHandlers (records < user_level → file
+directly). Their union is every record; the routing is exclusive, so
+no duplicates end up in the file.
+
+The above/below filters are **source-aware**: NeMo records are
+filtered at `nemo_log_level` while xr-ai records use `log_level`. So
+`nemo_log_level: WARNING` keeps `[NeMo I …]` out of the terminal but
+the file still has them.
+
+**vLLM is the lone exception**: it runs post-`os.execvp` and emits to
+a single stdout stream, so its file capture is bounded by
+`vllm_log_level` (same as the terminal). To investigate vLLM at
+DEBUG, temporarily flip `vllm_log_level: DEBUG` in the YAML and
+rerun.
+
+**Other emitters that bypass Python logging** — `print()` calls,
+PyNvVideoCodec C++ writes, vLLM's tqdm progress bars, and similar —
+land in `<name>.log` and `combined.log` via the launcher's PIPE tee
+(verbatim, no level filter).
+
+**Signal handling**: `Ctrl+C` (SIGINT) and `SIGTERM` already trigger
+graceful shutdown via `run_stack`'s asyncio handlers. `Ctrl+\\`
+(SIGQUIT) is intercepted by an explicit handler that calls
+`logging.shutdown()` before exit, so the per-process FileHandler
+output is fully flushed; the kernel-pipe buffer's last few hundred
+bytes may still be lost between the subprocess and the launcher's
+`_forward` task — documented limitation.
+
+**Folder location override**: set `XR_AI_LOG_DIR_ROOT=/some/path`
+before `uv run …` to redirect logs (e.g., to a tmpfs in CI). The
+launcher creates `<XR_AI_LOG_DIR_ROOT>/<run_id>/` instead of the
+default `<repo_root>/logs/<run_id>/`.
+
+**Pre-`run_stack` orchestrator output is NOT captured** —
+`ensure_credentials` interactive prompts and `xr-render-demo`'s LOVR
+download progress fire before the run folder exists. Documented
+limitation.
+
+**Cleanup**: `logs/` is gitignored. Manual cleanup:
+`find logs -type d -mtime +14 | xargs rm -rf`.
 
 ### Known limitations
 
@@ -774,6 +845,73 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-05-04 — `http_log_level` per-process YAML (httpx + httpcore terminal silencer)
+
+Added a third per-process logging knob alongside `nemo_log_level` and
+`vllm_log_level`: `http_log_level: WARNING` (default) in worker YAMLs
+and other subprocesses that use `httpx`. Controls the noisy
+per-HTTP-request `INFO HTTP Request: POST ...` lines from the
+`httpx` and `httpcore` standard-library-style loggers.
+
+Mechanism mirrors the existing source-aware filter pattern: each
+subprocess's `_setup_logging(...)` call now passes
+`sources={"httpx": http_level, "httpcore": http_level}` so the
+StreamHandler's `_AboveThresholdFilter` and the FileHandler's
+`_BelowThresholdFilter` route records by source. Unlike NeMo/vLLM, this
+keeps the file capture at DEBUG: terminal silencing happens at the
+**handler** level, so records still reach the FileHandler even when
+suppressed on stdout. We deliberately removed the inline
+`logging.getLogger("httpx").setLevel(WARNING)` calls in
+`xr-render-demo` — those drop records at the **logger** level, before
+any handler sees them, which would have broken file's DEBUG capture.
+
+Subprocesses without `httpx` traffic still gain the helper + sources
+entry (defaulting to WARNING in code) so adding the YAML field later
+requires no code change.
+
+### 2026-05-04 — Per-run logs/ folder (combined.log + per-process .log at DEBUG)
+
+Every `uv run <orchestrator>` invocation now writes a per-run folder at
+`<repo_root>/logs/<ISO-timestamp>_<sample>/` (overridable via
+`XR_AI_LOG_DIR_ROOT`).  The folder contains:
+
+- `combined.log` — chronological merge across all processes.
+- `<name>.log` per managed subprocess (`hub`, `vlm`, `stt`, `tts`, `worker`,
+  …) — full DEBUG capture of that subprocess's Python `logging` records
+  plus its stdout/stderr verbatim.
+- Optional `manifest.json` with `started_at`, `ended_at`, host, sample,
+  processes, and per-process `exit_codes`.
+
+**Terminal != file**: each subprocess's root logger is at DEBUG (most
+permissive); a StreamHandler with an `_AboveThresholdFilter` emits records
+≥ user_level to stderr (terminal via launcher PIPE tee), while
+FileHandlers with the inverse `_BelowThresholdFilter` emit records <
+user_level directly to file.  Their union is every record; routing is
+exclusive so the file has no duplicates with the launcher's PIPE tee.
+
+The filters are source-aware: NeMo records are filtered at
+`nemo_log_level`, xr-ai records at `log_level`.  So a startup with
+`log_level: INFO` and `nemo_log_level: WARNING` shows xr-ai INFO+ and
+NeMo WARNING+ on the terminal, while the file captures everything at
+DEBUG.
+
+vLLM (post-`os.execvp`) is the documented exception: file capture
+bounded by `vllm_log_level`, since vLLM emits to a single stdout stream.
+Workaround: flip `vllm_log_level: DEBUG` in the YAML for postmortem.
+
+`Ctrl+\\` (SIGQUIT) is intercepted by an explicit handler in
+`run_stack` that calls `logging.shutdown()` before exit; per-process
+FileHandler output is fully flushed.  A few hundred bytes of in-flight
+kernel-pipe data may be lost from `combined.log` if SIGQUIT lands
+mid-drain — documented.
+
+CLAUDE.md compliance: no `pyproject.toml` changes (no `DEPENDENCIES.md`
+update); no new files (no SPDX headers needed); AGENTS.md updated in
+the same commit per the Documentation rule.  `launcher/` stays
+stdlib-only (Python `logging`, `os`, `pathlib`, `signal`, `datetime`,
+`json`, `socket`).  Workers' helpers are inlined per-subprocess; no
+cross-package imports added.
 
 ### 2026-05-04 — NeMo and vLLM per-process log-level YAML knobs
 

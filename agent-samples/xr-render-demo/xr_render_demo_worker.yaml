@@ -69,3 +69,12 @@ silero_threshold:  0.3
 # Valid: DEBUG, INFO, WARNING, ERROR, CRITICAL.
 log_level: INFO
 
+# ── HTTP client logging ──────────────────────────────────────────────────────
+# Level for httpx + httpcore loggers (the per-HTTP-request "POST ... 200 OK"
+# lines emitted by these libraries).  Default WARNING — at INFO they fire
+# per HTTP call, which floods the terminal during normal use (TTS sentence
+# rate, /health probes, etc.).  File still captures everything at DEBUG.
+# Independent of `log_level` and `nemo_log_level`. Valid: DEBUG, INFO,
+# WARNING, ERROR, CRITICAL.
+http_log_level: WARNING
+

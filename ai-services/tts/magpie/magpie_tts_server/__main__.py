@@ -69,6 +69,87 @@ def _resolve_nemo_log_level(cfg: dict) -> str:
     return "INFO"
 
 
+def _resolve_http_log_level(cfg: dict) -> str:
+    """Per-process YAML http_log_level > WARNING. Controls httpx + httpcore
+    loggers (per-HTTP-request noise). Independent of the main `log_level`
+    field; file capture is unaffected (DEBUG always)."""
+    val = cfg.get("http_log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    return "WARNING"
+
+
+# ── per-source level filters (file gets DEBUG always; terminal at user level) ─
+
+class _AboveThresholdFilter(logging.Filter):
+    """Pass records at level >= per-source threshold (terminal display)."""
+    def __init__(self, default: int, sources: dict | None = None) -> None:
+        super().__init__()
+        self.default = default
+        self.sources = sources or {}
+    def filter(self, record: logging.LogRecord) -> bool:
+        for prefix, thr in self.sources.items():
+            if record.name.startswith(prefix):
+                return record.levelno >= thr
+        return record.levelno >= self.default
+
+
+class _BelowThresholdFilter(logging.Filter):
+    """Pass records at level < per-source threshold (file capture for the
+    levels the StreamHandler dropped)."""
+    def __init__(self, default: int, sources: dict | None = None) -> None:
+        super().__init__()
+        self.default = default
+        self.sources = sources or {}
+    def filter(self, record: logging.LogRecord) -> bool:
+        for prefix, thr in self.sources.items():
+            if record.name.startswith(prefix):
+                return record.levelno < thr
+        return record.levelno < self.default
+
+
+def _setup_logging(cfg: dict, sources: dict | None = None) -> None:
+    """Multi-handler setup: terminal at user level (per-source-aware via
+    AboveThresholdFilter), file at DEBUG via FileHandlers with the inverse
+    BelowThresholdFilter — exclusive routing, no duplicates with the
+    launcher's PIPE tee.  Reads XR_AI_LOG_DIR + XR_AI_LOG_NAME env vars
+    (set by the launcher) to pick file paths; degrades to terminal-only
+    when unset."""
+    user_level = getattr(logging, _resolve_log_level(cfg), logging.INFO)
+    sources = sources or {}
+    formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+
+    root = logging.getLogger()
+    for h in root.handlers[:]:
+        root.removeHandler(h)
+        try:
+            h.close()
+        except Exception:
+            pass
+    root.setLevel(logging.DEBUG)
+
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.DEBUG)
+    sh.setFormatter(formatter)
+    sh.addFilter(_AboveThresholdFilter(user_level, sources))
+    root.addHandler(sh)
+
+    log_dir  = os.environ.get("XR_AI_LOG_DIR")
+    log_name = os.environ.get("XR_AI_LOG_NAME")
+    if log_dir and log_name:
+        for path in (f"{log_dir}/{log_name}.log", f"{log_dir}/combined.log"):
+            try:
+                fh = logging.FileHandler(path, mode="a")
+            except OSError:
+                continue
+            fh.setLevel(logging.DEBUG)
+            fh.setFormatter(formatter)
+            fh.addFilter(_BelowThresholdFilter(user_level, sources))
+            root.addHandler(fh)
+
+
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
     raw = cfg.get("model_cache", "../models")
     p   = Path(raw)
@@ -230,18 +311,25 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    logging.basicConfig(
-        level=getattr(logging, _resolve_log_level(cfg), logging.INFO),
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-        force=True,
-    )
+    nemo_level = getattr(logging, _resolve_nemo_log_level(cfg), logging.INFO)
+    http_level = getattr(logging, _resolve_http_log_level(cfg), logging.WARNING)
+    _setup_logging(cfg, sources={
+        "nemo":     nemo_level,
+        "httpx":    http_level,
+        "httpcore": http_level,
+    })
 
-    # NeMo uses a custom Logger class that doesn't propagate to root.
-    # Best-effort: try its native setLevel API. If NeMo isn't installed or
-    # the API changes, the YAML field becomes a no-op (documented in AGENTS.md).
+    # NeMo uses a custom Logger class that doesn't propagate to root by
+    # default.  Pin it at DEBUG (most permissive) and turn on propagate so
+    # NeMo records flow through root's handlers — the source-aware
+    # _AboveThresholdFilter on the StreamHandler then enforces
+    # nemo_log_level for terminal display, and the BelowThresholdFilter on
+    # the FileHandlers captures the rest.  Best-effort: NeMo upgrades may
+    # rename the API; falls back to the YAML-bound behaviour.
     try:
         from nemo.utils import logging as nemo_logging
-        nemo_logging.setLevel(_resolve_nemo_log_level(cfg))
+        nemo_logging.setLevel(logging.DEBUG)
+        nemo_logging.propagate = True
     except (ImportError, AttributeError):
         pass
 

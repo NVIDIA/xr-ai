@@ -68,6 +68,87 @@ def _resolve_log_level(cfg: dict) -> str:
     return "INFO"
 
 
+def _resolve_http_log_level(cfg: dict) -> str:
+    """Per-process YAML http_log_level > WARNING. Controls httpx + httpcore
+    loggers (per-HTTP-request noise). Independent of the main `log_level`
+    field; file capture is unaffected (DEBUG always)."""
+    val = cfg.get("http_log_level")
+    if val and isinstance(val, str):
+        v = val.upper()
+        if v in {"DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"}:
+            return v
+    return "WARNING"
+
+
+# ── per-source level filters (file gets DEBUG always; terminal at user level) ─
+
+class _AboveThresholdFilter(logging.Filter):
+    """Pass records at level >= per-source threshold (terminal display)."""
+    def __init__(self, default: int, sources: dict | None = None) -> None:
+        super().__init__()
+        self.default = default
+        self.sources = sources or {}
+    def filter(self, record: logging.LogRecord) -> bool:
+        for prefix, thr in self.sources.items():
+            if record.name.startswith(prefix):
+                return record.levelno >= thr
+        return record.levelno >= self.default
+
+
+class _BelowThresholdFilter(logging.Filter):
+    """Pass records at level < per-source threshold (file capture for the
+    levels the StreamHandler dropped)."""
+    def __init__(self, default: int, sources: dict | None = None) -> None:
+        super().__init__()
+        self.default = default
+        self.sources = sources or {}
+    def filter(self, record: logging.LogRecord) -> bool:
+        for prefix, thr in self.sources.items():
+            if record.name.startswith(prefix):
+                return record.levelno < thr
+        return record.levelno < self.default
+
+
+def _setup_logging(cfg: dict, sources: dict | None = None) -> None:
+    """Multi-handler setup: terminal at user level (per-source-aware via
+    AboveThresholdFilter), file at DEBUG via FileHandlers with the inverse
+    BelowThresholdFilter — exclusive routing, no duplicates with the
+    launcher's PIPE tee.  Reads XR_AI_LOG_DIR + XR_AI_LOG_NAME env vars
+    (set by the launcher) to pick file paths; degrades to terminal-only
+    when unset."""
+    user_level = getattr(logging, _resolve_log_level(cfg), logging.INFO)
+    sources = sources or {}
+    formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+
+    root = logging.getLogger()
+    for h in root.handlers[:]:
+        root.removeHandler(h)
+        try:
+            h.close()
+        except Exception:
+            pass
+    root.setLevel(logging.DEBUG)
+
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.DEBUG)
+    sh.setFormatter(formatter)
+    sh.addFilter(_AboveThresholdFilter(user_level, sources))
+    root.addHandler(sh)
+
+    log_dir  = os.environ.get("XR_AI_LOG_DIR")
+    log_name = os.environ.get("XR_AI_LOG_NAME")
+    if log_dir and log_name:
+        for path in (f"{log_dir}/{log_name}.log", f"{log_dir}/combined.log"):
+            try:
+                fh = logging.FileHandler(path, mode="a")
+            except OSError:
+                continue
+            fh.setLevel(logging.DEBUG)
+            fh.setFormatter(formatter)
+            fh.addFilter(_BelowThresholdFilter(user_level, sources))
+            root.addHandler(fh)
+
+
 # ── Config ─────────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -564,11 +645,8 @@ def run() -> None:
         sys.exit(f"render-mcp: config file not found: {yaml_path}")
     raw = _load_raw(yaml_path)
 
-    logging.basicConfig(
-        level=getattr(logging, _resolve_log_level(raw), logging.INFO),
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-        force=True,
-    )
+    http_level = getattr(logging, _resolve_http_log_level(raw), logging.WARNING)
+    _setup_logging(raw, sources={"httpx": http_level, "httpcore": http_level})
 
     cfg = _build_config(yaml_path, raw)
 
