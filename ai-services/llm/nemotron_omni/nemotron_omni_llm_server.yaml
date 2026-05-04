@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron-3-Nano-Omni — vLLM configuration.
+# Omni multimodal model supporting text + video input.
+# OpenAI-compatible API at http://localhost:8108/v1  (served-model-name: "llm")
+#
+# GPU auto-selection:
+#   Blackwell (SM100+) → model_blackwell  (NVFP4, --kv-cache-dtype fp8)
+#   Ada / Hopper       → model_ada        (FP8,   --kv-cache-dtype fp8)
+#   use_bf16: true     → model_bf16       (BF16,  no kv-cache quantisation)
+
+model_blackwell: nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4
+model_ada:       nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8
+model_bf16:      nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16
+
+# Set to true to force BF16 regardless of GPU (highest quality, most VRAM).
+use_bf16: false
+
+host: "0.0.0.0"
+port: 8108
+hf_token: ""
+
+# Weight cache — resolves relative to this YAML.
+model_cache: ../../models
+
+# Pin to a specific GPU (or comma-separated list for multi-GPU).
+# Unset to use all GPUs visible to the process.
+# cuda_visible_devices: "0"
+
+# vLLM knobs.
+max_num_seqs:           384
+tensor_parallel_size:   1
+max_model_len:          131072
+gpu_memory_utilization: 0.85
+enforce_eager:          false
+
+# Video input — controls how video frames are sampled and pruned.
+video_pruning_rate: 0.5   # fraction of redundant video tokens to drop
+video_fps:          2     # FPS for video sampling
+video_num_frames:   256   # max frames per video clip
