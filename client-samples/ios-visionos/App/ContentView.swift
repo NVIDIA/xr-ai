@@ -74,6 +74,7 @@ struct ContentView: View {
             if model.connectionState == .disconnected {
                 TextField("Host / IP", text: $m.host)
                     .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
                     #if os(iOS)
                     .keyboardType(.decimalPad)
                     #endif
@@ -87,6 +88,7 @@ struct ContentView: View {
 
                 TextField("Token server URL (e.g. http://host/token)", text: $m.tokenServerURL)
                     .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
                     .onSubmit {}
                     #if os(iOS)
                     .keyboardType(.URL)
@@ -94,6 +96,7 @@ struct ContentView: View {
 
                 TextField("Identity", text: $m.identity)
                     .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
                     .onSubmit {}
 
                 Button(model.isConnecting ? "Connecting…" : "Connect") {

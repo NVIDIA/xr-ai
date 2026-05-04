@@ -1,0 +1,25 @@
+This file is a placeholder showing where the real Enterprise.license belongs.
+
+The Apple Vision Pro main camera (com.apple.developer.arkit.main-camera-access.allow)
+requires a per-team enterprise license file at runtime. Without it the camera
+APIs are silent no-ops, even when the entitlement is signed and authorization
+is granted.
+
+To enable main camera access:
+
+1. Request the Main Camera Access entitlement from Apple at:
+   https://developer.apple.com/contact/   (Distribution → Enterprise APIs)
+   Apple issues your team a `.license` file (CMS-signed plist; ~450 bytes).
+
+2. Place it at this path with the real filename:
+       client-samples/ios-visionos/App/Enterprise.license
+   The `**/Enterprise.license` rule in the repo `.gitignore` keeps it out
+   of git so it cannot be accidentally committed.
+
+3. Build & run. The Xcode build phase "Copy Enterprise.license" copies the
+   file into StreamKitSample.app/Enterprise.license; visionOS auto-loads it
+   from the app bundle.
+
+If the file is absent, the build still succeeds with a warning and every
+feature except main-camera passthrough works (audio, data channel, simulator
+GIF feed, etc.).

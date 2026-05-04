@@ -95,47 +95,60 @@ target's **Info** tab):
 <key>NSCameraUsageDescription</key>
 <string>Used to stream the camera feed.</string>
 
-<!-- visionOS passthrough camera — requires Apple enterprise entitlement -->
-<key>NSEnterpriseMCAMUsageDescription</key>
+<!-- visionOS passthrough camera — requires Apple enterprise entitlement (see §6) -->
+<key>NSMainCameraUsageDescription</key>
 <string>Used to stream the main passthrough camera via ARKit.</string>
 ```
 
-### 6. Entitlements file (visionOS passthrough camera — device only)
+### 6. visionOS passthrough camera — device only
 
-> **Enterprise license required.**  
-> Access to the Apple Vision Pro main passthrough camera is an Apple enterprise API.
-> You must request the entitlement from Apple before it will work on a physical device.
-> All other features — audio, data channel, and the visionOS simulator — work without it.
+Access to the Apple Vision Pro main passthrough camera is an Apple **enterprise** API.
+Two things are required; without both the camera APIs are silent no-ops at
+runtime (`CameraVideoFormat.supportedVideoFormats(...)` returns `[]`). All
+other features — audio, data channel, and the visionOS simulator — work
+without any of this.
 
-#### Requesting the entitlement
+| # | What | Where |
+|---|---|---|
+| 1 | Entitlement key in the signed binary | `App/StreamKitSample.entitlements` declares `com.apple.developer.arkit.main-camera-access.allow`; wired in via the project's `CODE_SIGN_ENTITLEMENTS` build setting |
+| 2 | The team's `Enterprise.license` bundled into the `.app` | See below |
 
-1. Visit <https://developer.apple.com/contact/request/visionos-enterprise-api/> and
-   submit a request for the **Main Camera Access** enterprise entitlement.
-2. Apple will review your use case and, if approved, add the entitlement to your
-   App ID in the developer portal.
-3. Regenerate your provisioning profile after it is granted.
+Xcode's automatic signing works for development builds. App Store / TestFlight
+distribution requires a manually-issued provisioning profile that grants the
+entitlement.
 
-#### Adding it to the project
+> **Bundle ID note**: this sample's Bundle ID is `com.nvidia.xr-ai-example`.
+> If you fork it, change the ID under Signing & Capabilities to one your team
+> owns. The display name (`StreamKitSample`) is independent of the Bundle ID
+> and is unchanged. `UserDefaults` are keyed by Bundle ID, so saved settings
+> reset on first launch after a rename.
 
-An entitlements file is already provided at `App/StreamKitSample.entitlements`:
+#### Bundling `Enterprise.license`
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.developer.arkit.main-camera-access.allow</key>
-    <true/>
-</dict>
-</plist>
+The Enterprise license is issued by Apple, per team. Apple's terms restrict
+redistribution, so it is **gitignored** (`**/Enterprise.license`) and never
+committed. A placeholder at `App/Enterprise.license.sample` documents the
+location.
+
+Place your team's license at:
+
+```
+client-samples/ios-visionos/App/Enterprise.license
 ```
 
-Verify that **Build Settings → Code Signing Entitlements** for the visionOS target
-points at this file. Without a matching provisioning profile from Apple the build will
-succeed but `startCamera()` will throw an access-denied error at runtime on device.
+A "Copy Enterprise.license" build phase copies it into the `.app` at build
+time; visionOS auto-loads it from the bundle. If the file is missing, the
+build still succeeds with a warning and every feature except main-camera
+passthrough works.
 
-The visionOS simulator does **not** require this entitlement and will always use the
+If you prefer to keep the file outside the repo, symlink it (the gitignore
+rule still matches):
+
+```bash
+ln -s ~/wherever/Enterprise.license client-samples/ios-visionos/App/Enterprise.license
+```
+
+The visionOS simulator does **not** require any of this and will always use the
 GIF-based camera feed regardless.
 
 ### 7. Build and run

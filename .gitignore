@@ -20,6 +20,11 @@ xcuserdata/
 .build/
 livekit-client-sdk-swift/
 
+# Apple visionOS Enterprise API license — per-team file, never commit
+# Issued from developer.apple.com to the team account holder; expires yearly.
+# Required at runtime for com.apple.developer.arkit.main-camera-access.allow.
+**/Enterprise.license
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

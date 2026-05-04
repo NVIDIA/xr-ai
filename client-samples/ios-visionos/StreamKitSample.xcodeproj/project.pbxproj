@@ -86,6 +86,7 @@
 				AA000100000000000000EE01 /* Sources */,
 				AA000100000000000000EE02 /* Frameworks */,
 				AA000100000000000000EE03 /* Resources */,
+				AA000100000000000000EE04 /* Copy Enterprise.license */,
 			);
 			buildRules = (
 			);
@@ -145,6 +146,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		AA000100000000000000EE04 /* Copy Enterprise.license */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/App/Enterprise.license",
+			);
+			name = "Copy Enterprise.license";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Enterprise.license",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "# Bundle App/Enterprise.license into the .app for the\n# com.apple.developer.arkit.main-camera-access.allow entitlement. The file is\n# per-team and gitignored. See client-samples/ios-visionos/README.md.\n\nset -e\n\nLICENSE_PATH=\"$SRCROOT/App/Enterprise.license\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Enterprise.license\"\n\nif [ -f \"$LICENSE_PATH\" ]; then\n    mkdir -p \"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\n    cp -f \"$LICENSE_PATH\" \"$DEST\"\nelse\n    rm -f \"$DEST\"\n    echo \"warning: Enterprise.license not found at $LICENSE_PATH \u2014 main camera access will be a no-op at runtime. See README.\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA000100000000000000EE01 /* Sources */ = {
@@ -300,8 +325,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nvidia.StreamKitSample;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=xros*]" = com.nvidia.streamkitsample;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.nvidia.xr-ai-example";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -328,8 +352,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nvidia.StreamKitSample;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=xros*]" = com.nvidia.streamkitsample;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.nvidia.xr-ai-example";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
