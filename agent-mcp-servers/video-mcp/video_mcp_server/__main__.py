@@ -667,7 +667,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
 
     ep_task = asyncio.create_task(ep.run(), name="video_mcp_processor")
     log.info("video-mcp-server  recordings_dir=%s  port=%d  hub_pub=%s",
-             recordings_dir, port, hub_pub)
+             recordings_dir_raw, port, hub_pub)
     if ready_file:
         ready_file.touch()
     try:

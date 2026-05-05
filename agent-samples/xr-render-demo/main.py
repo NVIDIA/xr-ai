@@ -39,7 +39,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from xr_ai_launcher import Process, run_stack
+from xr_ai_launcher import Parallel, Process, run_stack
 
 _BASE = Path(__file__).resolve().parent
 
@@ -132,6 +132,7 @@ _AI      = f"yaml/{_GPU_CFG}"
 # runs with the full GPU free.  The compiled kernels are cached after the
 # first run.  On ADA, nemotron3_nano is pinned to cuda:1 so this order has
 # no downside there either.
+# fmt: off
 PROCESSES = [
     Process("hub",        "../../server-runtime",                 "xr_media_hub",
             config="yaml/xr_media_hub.yaml"),
@@ -157,6 +158,38 @@ PROCESSES = [
     Process("worker",     "worker",                               "xr_render_demo_worker",
             config="yaml/xr_render_demo_worker.yaml"),
 ]
+# fmt: on
+
+# Parallel launch (re-enable once serial debugging is complete):
+# PROCESSES = [
+#     Process("hub",     "../../server-runtime",  "xr_media_hub",
+#             config="yaml/xr_media_hub.yaml"),
+#     Process("cloudxr", "../../cloudxr-runtime", "cloudxr_runtime",
+#             config="yaml/cloudxr_runtime.yaml"),
+#     Parallel([
+#         Process("stt",       "../../ai-services/stt-server",         "stt_server",
+#                 config=f"{_AI}/stt_server.yaml"),
+#         Process("tts",       "../../ai-services/tts/piper",          "piper_tts_server",
+#                 config=f"{_AI}/piper_tts_server.yaml"),
+#         Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+#                 config=f"{_AI}/nemotron3_nano_llm_server.yaml"),
+#         Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
+#                 config=f"{_AI}/vlm_server.yaml"),
+#         Process("llm",       "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
+#                 config=f"{_AI}/llama_nemotron_llm_server.yaml"),
+#     ]),
+#     Parallel([
+#         Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",    "vlm_mcp_server",
+#                 config="yaml/vlm_mcp_server.yaml"),
+#         Process("video-mcp",  "../../agent-mcp-servers/video-mcp",  "video_mcp_server",
+#                 config="yaml/video_mcp_server.yaml"),
+#         Process("render-mcp", "../../agent-mcp-servers/render-mcp", "render_mcp"),
+#         Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",    "oxr_mcp_server",
+#                 config="yaml/oxr_mcp_server.yaml"),
+#     ]),
+#     Process("worker", "worker", "xr_render_demo_worker",
+#             config="yaml/xr_render_demo_worker.yaml"),
+# ]
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.
 _LOVR_BIN_LINE = re.compile(r"^\s*lovr_bin\s*:\s*\S")

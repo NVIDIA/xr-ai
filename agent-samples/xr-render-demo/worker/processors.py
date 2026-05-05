@@ -251,13 +251,13 @@ class SttProcessor(FrameProcessor):
         finally:
             self._stt_busy = False
         if not text:
-            log.info("STT returned empty (%.1fs audio) — VAD may have caught noise", dur_s)
+            log.debug("STT returned empty (%.1fs audio) — VAD may have caught noise", dur_s)
             return
         log.info("transcript: %r", text)
         _trace_log.info("USER  %s", text)
         lower = text.lower().strip().rstrip(string.punctuation).strip()
         if _is_filler(lower):
-            log.info("filler — skipping")
+            log.debug("filler — skipping")
             return
         await self.push_frame(
             TranscriptionFrame(text=text, user_id="", timestamp=str(_now_us())),
@@ -379,10 +379,6 @@ class RenderSceneProcessor(FrameProcessor):
             if ack and ack_pid:
                 await self._send(ack_pid, ack, topic=_AGENT_PROGRESS_TOPIC)
                 if needs_thinking:
-                    # Speak the ack only when thinking is on — that's when the
-                    # user has to wait 5-10 s and needs to know we heard them.
-                    # For fast (non-thinking) turns the real response arrives
-                    # within ~1 s so speaking an ack would just add noise.
                     await self.push_frame(TextFrame(text=ack), FrameDirection.DOWNSTREAM)
 
             # Start a "still working" timer — fires if reasoning takes >5s.

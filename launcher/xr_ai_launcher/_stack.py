@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Sequential stack launcher with per-process readiness files.
+Stack launcher with per-process readiness files.
 
 Design
 ------
@@ -10,8 +10,15 @@ Every launchable sub-project is self-describing: it exposes an entry-point
 command and accepts ``--config <path>.yaml`` (auto-discovered) and
 ``--ready-file <path>`` (injected by the launcher).
 
-Processes start **one at a time** in declaration order.  For each process
-the launcher:
+The stack is declared as a sequence of ``Process`` or ``Parallel`` items:
+
+* ``Process`` — started alone; the launcher waits for it to signal ready
+  before moving on.
+* ``Parallel([p1, p2, ...])`` — all processes in the group are started at
+  once; the launcher waits for *every* member to signal ready before the
+  next item in the sequence begins.
+
+For each process the launcher:
 
   1. Resolves the project directory and YAML config from the sample root.
   2. Spawns ``uv run --project <dir> <command> --config <yaml> --ready-file <f>``.
@@ -36,7 +43,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Union
 
 from ._credentials import load_credentials
 
@@ -62,6 +69,29 @@ class Process:
     command: str
     config:  str | Path | None = None
     gpu:     str | None = None
+
+
+@dataclass(frozen=True)
+class Parallel:
+    """
+    A group of processes that start simultaneously.
+
+    The launcher spawns every member at once and waits for *all* of them to
+    signal readiness before advancing to the next item in the stack sequence.
+    If any member exits before signaling ready the launcher shuts everything
+    down, just as it would for a serial process.
+
+    Example::
+
+        Parallel([
+            Process("stt", "../../ai-services/stt-server", "stt_server"),
+            Process("tts", "../../ai-services/tts/piper",  "piper_tts_server"),
+        ])
+    """
+    processes: tuple[Process, ...]
+
+    def __init__(self, processes: Sequence[Process]) -> None:
+        object.__setattr__(self, "processes", tuple(processes))
 
 
 # ── subprocess helpers ─────────────────────────────────────────────────────────
@@ -125,6 +155,33 @@ def _wait_ready(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
         time.sleep(0.5)
 
 
+_ReadyEntry = tuple[str, Path, subprocess.Popen]
+
+def _wait_ready_parallel(group: list[_ReadyEntry]) -> None:
+    """Wait for all processes in *group* concurrently; raise if any fails."""
+    failed: list[SystemExit] = []
+    lock = threading.Lock()
+
+    def _one(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
+        try:
+            _wait_ready(name, ready_file, proc)
+        except SystemExit as exc:
+            with lock:
+                failed.append(exc)
+
+    threads = [
+        threading.Thread(target=_one, args=entry, daemon=True)
+        for entry in group
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    if failed:
+        raise failed[0]
+
+
 # ── monitor + shutdown ─────────────────────────────────────────────────────────
 
 def _monitor(procs: dict[str, subprocess.Popen]) -> None:
@@ -186,10 +243,14 @@ def _shutdown(procs: dict[str, subprocess.Popen]) -> None:
 
 # ── public API ─────────────────────────────────────────────────────────────────
 
-def run_stack(processes: Sequence[Process], base: Path) -> None:
+def run_stack(processes: Sequence[Union[Process, Parallel]], base: Path) -> None:
     """
-    Start *processes* sequentially, waiting for each to signal readiness
-    before launching the next.
+    Start *processes* in declaration order, waiting for each item to signal
+    readiness before advancing to the next.
+
+    Each item is either a single ``Process`` (started and awaited alone) or a
+    ``Parallel`` group (all members started at once; the launcher waits for
+    *every* member before moving on).
 
     Each process receives ``--ready-file <path>``.  When fully initialized
     it must ``Path(ready_file).touch()`` to signal the launcher.  Progress
@@ -207,7 +268,11 @@ def run_stack(processes: Sequence[Process], base: Path) -> None:
         PROCESSES = [
             Process("hub",    "../../server-runtime", "xr_media_hub",
                     config="yaml/xr_media_hub.yaml"),
-            Process("worker", "worker",               "my_worker",
+            Parallel([
+                Process("stt", "../../ai-services/stt-server", "stt_server"),
+                Process("tts", "../../ai-services/tts/piper",  "piper_tts_server"),
+            ]),
+            Process("worker", "worker", "my_worker",
                     config="yaml/my_worker.yaml"),
         ]
 
@@ -221,10 +286,20 @@ def run_stack(processes: Sequence[Process], base: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
         tmpdir = Path(_tmpdir)
         try:
-            for proc in processes:
-                ready_file = tmpdir / f"{proc.name}.ready"
-                launched[proc.name] = _spawn(proc, base, ready_file)
-                _wait_ready(proc.name, ready_file, launched[proc.name])
+            for item in processes:
+                if isinstance(item, Parallel):
+                    group: list[_ReadyEntry] = []
+                    for proc in item.processes:
+                        ready_file = tmpdir / f"{proc.name}.ready"
+                        launched[proc.name] = _spawn(proc, base, ready_file)
+                        group.append((proc.name, ready_file, launched[proc.name]))
+                    names = ", ".join(p.name for p in item.processes)
+                    print(f"  [parallel] starting: {names}", flush=True)
+                    _wait_ready_parallel(group)
+                else:
+                    ready_file = tmpdir / f"{item.name}.ready"
+                    launched[item.name] = _spawn(item, base, ready_file)
+                    _wait_ready(item.name, ready_file, launched[item.name])
 
             print("\n  All processes ready.\n", flush=True)
             _monitor(launched)

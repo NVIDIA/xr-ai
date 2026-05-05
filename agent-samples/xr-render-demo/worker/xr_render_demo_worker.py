@@ -137,7 +137,10 @@ def _build_prompt(render_tools: list, oxr_tools: list,
         "4. SIZE in metres — radius for spheres, half-edge for boxes:\n"
         "   tiny=0.05  small=0.08  default=0.1  medium=0.2  large=0.5  huge=1.0\n"
         "   Resize: new_size = current_size × factor  (e.g. '3× bigger' → ×3, 'half' → ×0.5)\n"
-        "5. After completing the task respond with ONE short sentence confirming what was done.\n"
+        "5. NEVER ask the user for clarification. If a detail is missing, pick a sensible default "
+        "and act immediately: unspecified type → white sphere; unspecified position → 1.5 m ahead; "
+        "unspecified color → white; unspecified size → default (0.1 m).\n"
+        "6. After completing the task respond with ONE short sentence confirming what was done.\n"
     )
 
 
