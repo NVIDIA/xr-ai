@@ -20,7 +20,7 @@ port: 8100
 host: "0.0.0.0"
 cuda_visible_devices: "0"   # share GPU 0 with STT + Llama-Nemotron; Nemotron-3-Nano on GPU 1
 
-model_cache: ../models
+model_cache: ../../models
 
 # GPU 0 budget after STT (~5 GiB) and Llama-Nemotron (~21 GiB): ~21 GiB free.
 # 0.43 × 47 = 20.2 GiB budget: ~15 GiB model weights + ~5 GiB KV cache.
