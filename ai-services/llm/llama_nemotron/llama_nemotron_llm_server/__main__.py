@@ -50,6 +50,38 @@ _DEFAULT_TOOL_CALL_PARSER  = "llama3_json"
 _DEFAULT_ENABLE_TOOL_CHOICE = True
 
 
+def _idle_until_stopped(health_url: str, poll_s: float = 5.0) -> None:
+    """Block until the health endpoint stops responding or a signal arrives.
+
+    Used when reusing an already-running vLLM instance so the launcher sees a
+    live process. Exits cleanly on SIGTERM/SIGINT without touching vLLM.
+    """
+    stopped = [False]
+    orig_term = signal.getsignal(signal.SIGTERM)
+    orig_int  = signal.getsignal(signal.SIGINT)
+
+    def _on_signal(sig, _frame):
+        stopped[0] = True
+
+    signal.signal(signal.SIGTERM, _on_signal)
+    signal.signal(signal.SIGINT,  _on_signal)
+    try:
+        while not stopped[0]:
+            try:
+                with urllib.request.urlopen(health_url, timeout=2) as r:
+                    if r.status != 200:
+                        print("[llama_nemotron] existing vLLM stopped responding — exiting",
+                              flush=True)
+                        return
+            except Exception:
+                print("[llama_nemotron] existing vLLM unreachable — exiting", flush=True)
+                return
+            time.sleep(poll_s)
+    finally:
+        signal.signal(signal.SIGTERM, orig_term)
+        signal.signal(signal.SIGINT,  orig_int)
+
+
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
     raw = cfg.get("model_cache", "../../../models")
     p = Path(raw)
@@ -112,16 +144,27 @@ def run() -> None:
     if enforce_eager:
         argv.append("--enforce-eager")
 
-    print(f"[llama_nemotron] Launching vLLM  http://{host}:{port}/v1  model={model}", flush=True)
-    proc = subprocess.Popen(argv)
-
-    def _fwd(sig, _frame):
-        proc.send_signal(sig)
-
-    signal.signal(signal.SIGTERM, _fwd)
-    signal.signal(signal.SIGINT,  _fwd)
-
     health_url = f"http://127.0.0.1:{port}/health"
+
+    # Reuse an already-running vLLM instance (e.g. survived a worker crash).
+    try:
+        with urllib.request.urlopen(health_url, timeout=3) as r:
+            already_up = r.status == 200
+    except Exception:
+        already_up = False
+
+    if already_up:
+        print(f"[llama_nemotron] vLLM already running on port {port} — reusing", flush=True)
+        if ns.ready_file:
+            ns.ready_file.touch()
+        _idle_until_stopped(health_url)
+        return
+
+    print(f"[llama_nemotron] Launching vLLM  http://{host}:{port}/v1  model={model}", flush=True)
+    # start_new_session=True puts vLLM in its own process group so the
+    # launcher's killpg() does not reach it when shutting down the wrapper.
+    proc = subprocess.Popen(argv, start_new_session=True)
+
     while True:
         if proc.poll() is not None:
             sys.exit(proc.returncode or 1)

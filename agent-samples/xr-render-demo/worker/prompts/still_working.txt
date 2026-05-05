@@ -1,0 +1,9 @@
+The AI assistant is mid-task and needs to reassure the user it is still working.
+Output ONE short present-tense phrase (4-8 words, no period).
+If reasoning context is provided, use it to name the specific step being worked on
+(e.g. object being resolved, coordinate being computed, decision being made).
+Use action verbs that match what is actually happening:
+'Still computing …', 'Working out the position …',
+'Figuring out which object …', 'Calculating the offset …',
+'Resolving the reference …'.
+NEVER use 'examining', 'exploring', or 'looking at' — those imply observation, not action.

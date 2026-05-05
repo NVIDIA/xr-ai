@@ -29,6 +29,7 @@ import json
 import logging
 import string
 import time
+from pathlib import Path
 
 import httpx
 import numpy as np
@@ -297,14 +298,14 @@ class RenderSceneProcessor(FrameProcessor):
 
     def __init__(
         self,
-        transport:      XRMediaHubTransport,
-        cfg:            WorkerConfig,
-        render:         McpClient,
-        oxr:            McpClient,
-        vlm:            McpClient,
-        video:          McpClient,
-        actions_prompt: str,
-        tools_openai:   list,   # OpenAI tool definitions built from MCP discovery
+        transport:   XRMediaHubTransport,
+        cfg:         WorkerConfig,
+        render:      McpClient,
+        oxr:         McpClient,
+        vlm:         McpClient,
+        video:       McpClient,
+        prompt_path: Path,
+        tools_openai: list,   # OpenAI tool definitions built from MCP discovery
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -314,8 +315,16 @@ class RenderSceneProcessor(FrameProcessor):
         self._oxr            = oxr
         self._vlm            = vlm
         self._video          = video
-        self._prompt         = actions_prompt
-        self._tools_openai   = tools_openai
+        self._prompt_path      = prompt_path
+        self._prompt_cache     = prompt_path.read_text(encoding="utf-8").strip()
+        _prompts               = prompt_path.parent
+        self._quick_ack_path   = _prompts / "quick_ack.txt"
+        self._still_work_path  = _prompts / "still_working.txt"
+        self._validate_path    = _prompts / "validate.txt"
+        self._quick_ack_cache  = self._quick_ack_path.read_text(encoding="utf-8").strip()
+        self._still_work_cache = self._still_work_path.read_text(encoding="utf-8").strip()
+        self._validate_cache   = self._validate_path.read_text(encoding="utf-8").strip()
+        self._tools_openai     = tools_openai
         self._http           = httpx.AsyncClient(timeout=180.0)
 
         self._pending:    tuple[str, str, int] | None = None  # (text, pid, ref_us)
@@ -327,6 +336,15 @@ class RenderSceneProcessor(FrameProcessor):
         self._history:    list[tuple[str, str]] = []
         self._history_max = 4
 
+
+    def _read_prompt(self, path: Path, cache_attr: str) -> str:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+            setattr(self, cache_attr, text)
+            return text
+        except OSError:
+            log.warning("prompt file unreadable: %s — using cache", path.name)
+            return getattr(self, cache_attr)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -455,27 +473,8 @@ class RenderSceneProcessor(FrameProcessor):
         body = {
             "model": "llm",
             "messages": [
-                {"role": "system", "content": (
-                    'Output ONLY one JSON object: {"ack": "<spoken phrase>", "think": false}\n'
-                    "ack: a SHORT natural spoken acknowledgment (3-6 words, no period). "
-                    "Sound like a human assistant about to START the task. "
-                    "ALWAYS use present or future tense — the task is NOT done yet. "
-                    "NEVER use past tense ('moved', 'added', 'done'). "
-                    "Examples: 'Sure, on it.' / 'Let me work on that.' / 'Got it.' / "
-                    "'Working on the placement.' / 'Let me figure that out.' / 'On it!' "
-                    "Use previous turn context to interpret corrections like 'try it again'.\n"
-                    "think: true when the task requires multi-step reasoning before acting — "
-                    "i.e. the model must figure out WHAT or WHERE before it can call a tool:\n"
-                    "  • Spatial math: moving/displacing an existing object in any direction; "
-                    "placing a new object relative to an existing scene object as an anchor\n"
-                    "  • Visual lookup: the user references something in the real world that "
-                    "cannot be known without seeing it — what they are holding, pointing at, "
-                    "or looking at; a real-world color, shape, or object\n"
-                    "  • Correction/undo: fixing or reverting a previous action\n"
-                    "think: false when the action is direct and needs no intermediate reasoning: "
-                    "add an object near the user with no existing-object anchor, remove an object, "
-                    "change a color or size to a named value, resize by a given factor."
-                )},
+                {"role": "system", "content": self._read_prompt(
+                    self._quick_ack_path, "_quick_ack_cache")},
                 {"role": "user", "content": context + transcript},
             ],
             "max_tokens": 40,
@@ -536,23 +535,11 @@ class RenderSceneProcessor(FrameProcessor):
         if thinking:
             user_content += f"\n\nWhat the AI is currently reasoning through:\n{thinking}"
 
+        base = self._read_prompt(self._still_work_path, "_still_work_cache")
         body = {
             "model": "llm",
             "messages": [
-                {"role": "system", "content": (
-                    "The AI assistant is mid-task and needs to reassure the user it is "
-                    "still working. Output ONE short present-tense phrase (4-8 words, "
-                    "no period). If reasoning context is provided, use it to name the "
-                    "specific step being worked on (e.g. object being resolved, "
-                    "coordinate being computed, decision being made). "
-                    "Use action verbs that match what is actually happening: "
-                    "'Still computing …', 'Working out the position …', "
-                    "'Figuring out which object …', 'Calculating the offset …', "
-                    "'Resolving the reference …'. "
-                    "NEVER use 'examining', 'exploring', or 'looking at' — "
-                    "those imply observation, not action."
-                    + avoid
-                )},
+                {"role": "system", "content": base + avoid},
                 {"role": "user", "content": user_content},
             ],
             "max_tokens": 24,
@@ -604,12 +591,8 @@ class RenderSceneProcessor(FrameProcessor):
         body = {
             "model": "llm",
             "messages": [
-                {"role": "system", "content": (
-                    'Output ONLY JSON: {"ok": true} or {"ok": false, "issue": "<short reason>"}\n'
-                    "ok=true  if the current scene state plausibly matches the request.\n"
-                    "ok=false if the task clearly failed (nothing added when it should have been, "
-                    "wrong color, wrong object modified, etc.)."
-                )},
+                {"role": "system", "content": self._read_prompt(
+                    self._validate_path, "_validate_cache")},
                 {"role": "user", "content": (
                     f"Request: {transcript}\n"
                     f"Current scene: {json.dumps(post_scene or {})}"
@@ -733,7 +716,12 @@ class RenderSceneProcessor(FrameProcessor):
         log.info("pre-fetched context for turn")
         _trace_log.info("CTX   %s", context.replace("\n", " | "))
 
-        system_content = self._prompt
+        try:
+            system_content = self._prompt_path.read_text(encoding="utf-8").strip()
+            self._prompt_cache = system_content
+        except OSError:
+            log.warning("prompt file unreadable — using cached version")
+            system_content = self._prompt_cache
         if needs_thinking:
             system_content = (
                 "Use your private <think> block to work through these steps. "

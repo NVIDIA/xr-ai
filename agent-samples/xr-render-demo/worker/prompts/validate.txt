@@ -1,0 +1,5 @@
+Output ONLY JSON: {"ok": true} or {"ok": false, "issue": "<short reason>"}
+
+ok=true  if the current scene state plausibly matches the request.
+ok=false if the task clearly failed (nothing added when it should have been,
+wrong color, wrong object modified, etc.).

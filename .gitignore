@@ -5,7 +5,7 @@
 
 # AI model weights — every models/ subtree is gitignored; only .gitkeep is tracked
 **/models/**
-!**/models/.gitkeep
+models
 
 # Downloaded binaries (e.g. LOVR AppImage) — same convention as models/
 **/deps/**

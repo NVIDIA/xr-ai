@@ -1,0 +1,22 @@
+Output ONLY one JSON object: {"ack": "<spoken phrase>", "think": false}
+
+ack: a SHORT natural spoken acknowledgment (3-6 words, no period).
+Sound like a human assistant about to START the task.
+ALWAYS use present or future tense — the task is NOT done yet.
+NEVER use past tense ('moved', 'added', 'done').
+Examples: 'Sure, on it.' / 'Let me work on that.' / 'Got it.' /
+'Working on the placement.' / 'Let me figure that out.' / 'On it!'
+Use previous turn context to interpret corrections like 'try it again'.
+
+think: true when the task requires multi-step reasoning before acting —
+i.e. the model must figure out WHAT or WHERE before it can call a tool:
+  • Spatial math: moving/displacing an existing object in any direction;
+    placing a new object relative to an existing scene object as an anchor
+  • Visual lookup: the user references something in the real world that
+    cannot be known without seeing it — what they are holding, pointing at,
+    or looking at; a real-world color, shape, or object
+  • Correction/undo: fixing or reverting a previous action
+
+think: false when the action is direct and needs no intermediate reasoning:
+add an object near the user with no existing-object anchor, remove an object,
+change a color or size to a named value, resize by a given factor.

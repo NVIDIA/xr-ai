@@ -11,6 +11,8 @@ import asyncio
 import logging
 import time
 
+from pathlib import Path
+
 from fastmcp import Client as McpClient
 from pipecat.pipeline.runner import PipelineRunner
 
@@ -34,7 +36,7 @@ def _now_us() -> int:
 class RenderDemoAgent:
     def __init__(self, cfg: WorkerConfig, render: McpClient, oxr: McpClient,
                  vlm: McpClient, video: McpClient,
-                 actions_prompt: str, tools_openai: list) -> None:
+                 prompt_path: Path, tools_openai: list) -> None:
         self._cfg    = cfg
         self._render = render
         self._oxr    = oxr
@@ -48,7 +50,7 @@ class RenderDemoAgent:
 
         self._scene = RenderSceneProcessor(
             self._transport, cfg, render, oxr, vlm, video,
-            actions_prompt, tools_openai=tools_openai,
+            prompt_path, tools_openai=tools_openai,
         )
         stt = SttClient(cfg.stt_server)
         tts = TtsClient(cfg.tts_server)

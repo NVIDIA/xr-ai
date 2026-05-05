@@ -30,12 +30,15 @@ WebXR DevUI on desktop). Speak; the sphere tracks your voice in the headset.
 
 The CloudXR EULA is accepted via cloudxr_runtime.yaml (see ``accept_eula``).
 """
+import argparse
 import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -307,9 +310,96 @@ def _ensure_web_vendor() -> None:
     print("\n  [setup] Web vendor bundle ready.\n")
 
 
+# ── Model cleanup (--stop) ────────────────────────────────────────────────────
+
+# vLLM-backed servers that survive stack shutdown (start_new_session=True).
+# Ports match the defaults in each server's YAML; override here if you change them.
+_PERSISTENT_SERVERS: list[tuple[str, int]] = [
+    ("vlm",       8100),
+    ("llm",       8106),
+    ("agent-llm", 8107),
+]
+
+
+def _pid_on_port(port: int) -> int | None:
+    """Return the PID of the process listening on *port*, or None."""
+    # Try ss first (iproute2, always present on modern Linux).
+    try:
+        out = subprocess.check_output(
+            ["ss", "-tlnpH", f"sport = :{port}"],
+            text=True, stderr=subprocess.DEVNULL,
+        )
+        m = re.search(r"pid=(\d+)", out)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    # Fallback: lsof.
+    try:
+        out = subprocess.check_output(
+            ["lsof", "-ti", f"tcp:{port}"],
+            text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+        if out:
+            return int(out.splitlines()[0])
+    except Exception:
+        pass
+    return None
+
+
+def _stop_models() -> None:
+    """Send SIGTERM to any persisted vLLM processes, wait, then SIGKILL if needed."""
+    found = False
+    for name, port in _PERSISTENT_SERVERS:
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/health", timeout=2
+            ) as r:
+                if r.status != 200:
+                    continue
+        except Exception:
+            continue
+
+        pid = _pid_on_port(port)
+        if pid is None:
+            print(f"  [{name}] running on :{port} but could not find PID — "
+                  f"kill manually", flush=True)
+            found = True
+            continue
+
+        print(f"  [{name}] stopping (pid={pid}, port={port})…", flush=True)
+        found = True
+        try:
+            os.kill(pid, signal.SIGTERM)
+            for _ in range(40):          # wait up to 20 s
+                time.sleep(0.5)
+                try:
+                    os.kill(pid, 0)      # still alive?
+                except ProcessLookupError:
+                    print(f"  [{name}] stopped", flush=True)
+                    break
+            else:
+                print(f"  [{name}] force-killing", flush=True)
+                os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            print(f"  [{name}] already gone", flush=True)
+
+    if not found:
+        print("  No persistent model servers found running.", flush=True)
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def run() -> None:
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--stop", action="store_true",
+                   help="Stop any persisted vLLM model servers and exit.")
+    ns, _ = p.parse_known_args()
+
+    if ns.stop:
+        _stop_models()
+        return
+
     _ensure_web_vendor()
     _ensure_lovr_bin()
     run_stack(PROCESSES, _BASE)

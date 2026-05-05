@@ -256,6 +256,34 @@ async with httpx.AsyncClient() as client:
     answer = resp.json()["choices"][0]["message"]["content"]
 ```
 
+### vLLM model persistence
+
+The three vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+`nemotron3_nano_llm_server`) **survive stack restarts by design**.  Each wrapper
+script checks its health endpoint before spawning vLLM:
+
+- **Already running** → touch the ready file immediately, then idle.  Stack is
+  ready in seconds; no model reload.
+- **Not running** → spawn vLLM normally, wait for `/health`, touch ready file.
+
+vLLM is spawned with `start_new_session=True` so the launcher's `killpg()` does
+not reach it on shutdown.  The wrapper exits cleanly; vLLM keeps running.
+
+**Stopping the persisted servers** — run from the sample directory:
+
+```bash
+uv run xr_render_demo --stop
+```
+
+This hits each model server's `/health` endpoint, finds the listening PID via
+`ss` (or `lsof`), sends `SIGTERM`, and waits up to 20 s before `SIGKILL`.  It
+is safe to run while the stack is down — processes that are not running are
+silently skipped.
+
+The target ports are defined in `_PERSISTENT_SERVERS` in `main.py` and match the
+defaults in the per-profile YAML files.  Update that list if you change the port
+in a YAML.
+
 ### Notes
 
 - **vlm-server** loads Cosmos-Reason1-7B in-process via HuggingFace transformers.
@@ -783,6 +811,26 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-05-05 — vLLM model persistence across stack restarts
+
+vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+`nemotron3_nano_llm_server`) now survive stack shutdowns so model weights stay
+loaded across worker crashes and debug restarts.
+
+**Mechanism:** each wrapper checks its own `/health` endpoint before spawning
+vLLM.  If already healthy the wrapper signals ready immediately and idles (exits
+cleanly on SIGTERM without touching vLLM).  If not healthy it spawns vLLM
+normally.  vLLM itself is started with `start_new_session=True` so the
+launcher's `killpg()` does not reach it.
+
+**Cleanup:** `uv run xr_render_demo --stop` from the sample directory hits each
+server's `/health`, finds the PID via `ss`/`lsof`, and sends SIGTERM (escalates
+to SIGKILL after 20 s).
+
+**Why this approach over launcher-level `persistent=` flag:** keeps `main.py`
+and `_stack.py` unchanged; persistence is a detail of each service's own
+startup script, not the orchestrator.
 
 ### 2026-05-01 — visionOS Enterprise license bundling
 
