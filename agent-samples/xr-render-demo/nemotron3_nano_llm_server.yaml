@@ -25,23 +25,38 @@ hf_token: ""
 model_cache: ../../models
 
 # vLLM server knobs.
-#
-# On Blackwell (B200 / RTX PRO 6000 96 GB): NVFP4 weights ~20 GB; keep
-# gpu_memory_utilization at 0.6 to share the single GPU with vlm-server
-# (~14 GB) and stt-server (~1.5 GB).
-#
-# On Ada Lovelace (RTX 6000 Ada 48 GB): FP8 weights ~30 GB; run the LLM
-# on a dedicated GPU and keep the vlm-server + stt-server on the second GPU.
-# With LLM alone on a 48 GB card, 0.85 (~41 GB) gives ~11 GB for KV cache.
 max_num_seqs:         8
 tensor_parallel_size: 1
 max_model_len:        32768
 
-# Dedicated GPU (cuda:1) — STT + Llama-Nemotron + VLM stay on cuda:0.
-# 0.78 (~36.9 GiB) leaves ~3 GiB headroom for CUDA graph residue from
-# the previous run, preventing OOM on fast restarts.
-cuda_visible_devices: "1"
-gpu_memory_utilization: 0.78
+# agent-llm is THIRD (last) in the load order: vlm → llm → agent-llm.
+# vLLM 0.20+ added a startup pre-flight check (request_memory in
+# vllm/v1/worker/utils.py:403) that requires:
+#
+#   free_GPU_memory_at_startup  >=  gpu_memory_utilization × total_GPU
+#
+# Importantly, this fraction is THIS PROCESS's EXCLUSIVE cap — peer
+# vLLMs' residence is OUTSIDE the budget, not absorbed by it.  So each
+# subsequent vLLM's fraction must fit in WHAT'S CURRENTLY FREE on the
+# GPU at its startup.
+#
+# Math when agent-llm starts (after sequential vlm + llm load):
+#   total                          = 95 GiB
+#   vlm steady residence           ≈ 19 GiB   (cap 0.20)
+#   llm steady residence           ≈ 24 GiB   (cap 0.25)
+#   STT + hub + cloudxr            ≈ 10 GiB
+#   free_at_startup                ≈ 95 − 53  ≈ 42 GiB
+#   max gpu_memory_utilization     = 42 / 95   ≈ 0.44
+#
+# 0.40 × 95 = 38 GiB cap (with ~4 GiB pre-flight margin).  Inside that:
+#   own weights (FP8 30B)          ≈ 30 GiB
+#   own activations (B=4, ctx=32K) ≈  3 GiB
+#   →  Available KV  ≈ 38 − 30 − 3  ≈  5 GiB     (or ~15 GiB if NVFP4)
+#
+# Bump to 0.42-0.44 if you need more KV concurrency, but stay below the
+# free-memory ceiling above or the pre-flight check fails fast.
+cuda_visible_devices: "0"
+gpu_memory_utilization: 0.40
 
 # Skip CUDA graph capture + FlashInfer MoE autotune at startup.  For
 # NemotronH-30B-A3B-NVFP4 those two phases are silent (no log output)
@@ -54,4 +69,4 @@ gpu_memory_utilization: 0.78
 # Set to true for fast startup during development (skips 3-8 min CUDA graph
 # capture). Set to false in production for ~2x inference speed (~50 tok/s
 # vs 26 tok/s), which cuts per-turn latency from ~90s to ~45s.
-enforce_eager: false
+enforce_eager: true

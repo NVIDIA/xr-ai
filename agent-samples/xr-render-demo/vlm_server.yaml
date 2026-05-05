@@ -18,12 +18,27 @@ hf_token: ""
 
 port: 8100
 host: "0.0.0.0"
-cuda_visible_devices: "0"   # share GPU 0 with STT + Llama-Nemotron; Nemotron-3-Nano on GPU 1
+cuda_visible_devices: "0"   # all three vLLMs share GPU 0; sequenced by launcher health_url
 
 model_cache: ../models
 
-# GPU 0 budget after STT (~5 GiB) and Llama-Nemotron (~21 GiB): ~21 GiB free.
-# 0.43 × 47 = 20.2 GiB budget: ~15 GiB model weights + ~5 GiB KV cache.
-# Single-image queries have short context so the KV budget is adequate.
-gpu_memory_utilization: 0.43
+# Single GPU shared by three vLLMs.  The orchestrator declares ``health_url``
+# on each so the launcher serializes their cold-start memory profile pass —
+# vlm loads first and profiles alone, then llm, then agent-llm.
+#
+# vLLM 0.20+ enforces a startup pre-flight check (request_memory in
+# vllm/v1/worker/utils.py:403):
+#
+#   free_GPU_memory_at_startup  >=  gpu_memory_utilization × total_GPU
+#
+# This fraction is THIS PROCESS's EXCLUSIVE cap — peers' residence is
+# OUTSIDE the budget, not absorbed.  So each subsequent vLLM's fraction
+# must fit in CURRENTLY FREE memory at its startup, which is why
+# sequential loading matters: agent-llm needs to know how much vlm + llm
+# already consumed (deterministic only with serialized startup).
+#
+# vlm is FIRST in load order, so free_at_startup is ~95 GiB.  0.20 × 95
+# = 19 GiB cap holds Cosmos-Reason1-7B (~16 GiB BF16 weights) plus ~3
+# GiB KV for short-context single-image queries.
+gpu_memory_utilization: 0.20
 enforce_eager: true

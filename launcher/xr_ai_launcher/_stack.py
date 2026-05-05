@@ -34,6 +34,8 @@ import logging
 import os
 import signal
 import socket
+import urllib.error
+import urllib.request
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -230,20 +232,36 @@ class Process:
     """
     Declares one process in the stack.
 
-    name    — label used in log output.
-    project — path to the uv project (relative to the sample root, or absolute).
-    command — entry-point script to run inside the project's venv.
-    gpu     — optional CUDA_VISIBLE_DEVICES value (e.g. "0", "1", "0,1").
-              Omit to inherit the parent's GPU visibility.
+    name           — label used in log output.
+    project        — path to the uv project (relative to the sample root, or absolute).
+    command        — entry-point script to run inside the project's venv.
+    gpu            — optional CUDA_VISIBLE_DEVICES value (e.g. "0", "1", "0,1").
+                     Omit to inherit the parent's GPU visibility.
+    health_url     — optional readiness URL.  When set, the launcher polls
+                     ``GET <health_url>`` after spawning this process and
+                     **blocks the spawn loop** until it returns 200 OK (or
+                     ``health_timeout`` elapses, or the process exits).
+                     Used to serialize vLLM startup so the cold-start KV
+                     profile pass for one model doesn't race with another's
+                     weight load — a memory race that vLLM's
+                     ``gpu_memory_utilization`` cannot disambiguate (see
+                     AGENTS.md "Process model").  Non-gated peers continue
+                     to start concurrently.
+    health_timeout — seconds to wait for ``health_url`` before failing the
+                     stack.  Defaults to 600 because vLLM cold-start with
+                     CUDA-graph capture or FlashInfer MoE autotune can take
+                     3-8 min on first run.
 
     Config convention: ``run_stack`` looks for ``<command>.yaml`` in the
     sample root and passes it as ``--config <abs-path>`` if it exists.
     Processes with no YAML start with no extra arguments.
     """
-    name:    str
-    project: str | Path
-    command: str
-    gpu:     str | None = None
+    name:           str
+    project:        str | Path
+    command:        str
+    gpu:            str | None = None
+    health_url:     str | None = None
+    health_timeout: float       = 600.0
 
 
 def _config_args(command: str, base: Path) -> list[str]:
@@ -251,10 +269,74 @@ def _config_args(command: str, base: Path) -> list[str]:
     return ["--config", str(cfg)] if cfg.exists() else []
 
 
+# ── readiness gate for sequential vLLM startup ───────────────────────────────
+#
+# vLLM's ``--gpu-memory-utilization`` is a fraction of TOTAL device memory and
+# subtracts ALL non-this-process GPU usage from the budget at profile time.
+# When two vLLMs profile concurrently, each one's measurement includes the
+# other's still-loading weights — a moving target that depends on disk speed
+# and is impossible to budget around (every "Available KV cache memory: −X
+# GiB" failure is a symptom of this race).  Sequential startup turns the
+# target into a stable one: each vLLM sees only previous peers' fully-loaded
+# steady state.  The gate is opt-in via ``Process.health_url``.
+
+_HEALTH_POLL_INTERVAL = 2.0  # seconds between probes
+_HEALTH_PROBE_TIMEOUT = 2.0  # per-probe HTTP timeout
+
+
+async def _wait_for_health(
+    name: str,
+    url: str,
+    timeout: float,
+    proc: asyncio.subprocess.Process,
+) -> None:
+    """Poll ``GET url`` until 200 OK, or *proc* exits early, or *timeout*
+    seconds elapse.  Stdlib only (``urllib.request``).  Each probe runs in
+    the default thread executor so the launcher's asyncio loop is never
+    blocked.
+
+    Raises ``RuntimeError`` if *proc* exits before becoming healthy and
+    ``TimeoutError`` if no successful probe occurs within *timeout*.
+    Either propagates out of ``StackLauncher`` to trigger fail-fast
+    teardown of every already-spawned peer."""
+    log.info("[%s] waiting for health: %s (timeout=%.0fs)", name, url, timeout)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+
+    def _probe() -> int | None:
+        try:
+            with urllib.request.urlopen(url, timeout=_HEALTH_PROBE_TIMEOUT) as resp:
+                return resp.status
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+            return None
+
+    while loop.time() < deadline:
+        if proc.returncode is not None:
+            raise RuntimeError(
+                f"[{name}] exited rc={proc.returncode} before becoming healthy"
+            )
+        status = await loop.run_in_executor(None, _probe)
+        if status is not None and 200 <= status < 300:
+            log.info("[%s] healthy", name)
+            return
+        await asyncio.sleep(_HEALTH_POLL_INTERVAL)
+
+    raise TimeoutError(
+        f"[{name}] not healthy at {url} within {timeout:.0f}s"
+    )
+
+
 @asynccontextmanager
 async def StackLauncher(processes: Sequence[Process], base: Path):
     """
-    Start *processes* concurrently, resolving paths and configs from *base*.
+    Start *processes* in declared order, resolving paths and configs from
+    *base*.  Processes are spawned concurrently by default; if a process
+    declares ``health_url``, the spawn loop **blocks** on that URL
+    returning 200 OK before spawning the next process.
+
+    Sequencing is opt-in per process — non-gated peers continue to start
+    concurrently, with the gated ones interleaved at their list position.
+    See ``_wait_for_health`` for the rationale.
 
     *base* is the sample root directory — where the YAML configs live and
     relative project paths are anchored.
@@ -271,6 +353,8 @@ async def StackLauncher(processes: Sequence[Process], base: Path):
                 ProjectLauncher(project, p.command, *extra, name=p.name, gpu=p.gpu)
             )
             procs[p.name] = proc
+            if p.health_url:
+                await _wait_for_health(p.name, p.health_url, p.health_timeout, proc)
         yield procs
 
 

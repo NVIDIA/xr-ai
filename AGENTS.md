@@ -71,13 +71,31 @@ def run() -> None:
 ```
 
 Rules:
-- **All processes start concurrently** — no ordering is required or expressed.
-  Every process must tolerate its peers not being ready at startup.
-  ZMQ reconnects automatically; `ProcessorEndpoint` works regardless of hub startup order.
+- **All processes start concurrently by default** — no ordering is required or
+  expressed.  Every process must tolerate its peers not being ready at
+  startup.  ZMQ reconnects automatically; `ProcessorEndpoint` works
+  regardless of hub startup order.
+- **Exception — health-gated processes**: a `Process` may declare
+  `health_url=...` to mark itself as health-gated.  The launcher polls
+  `GET <health_url>` after spawning the process and **blocks the spawn
+  loop** until it returns 200 OK before spawning the next process.
+  Used to serialize vLLM cold-start: vLLM 0.20+ enforces a startup
+  pre-flight check (`free_GPU >= gpu_memory_utilization × total_GPU`)
+  with `gpu_memory_utilization` as this process's exclusive cap, so
+  two vLLMs starting concurrently both pass pre-flight before either
+  has loaded weights, then one runs out of physical memory mid-load.
+  Sequential startup means each vLLM measures `free_at_startup` after
+  the previous is in a stable steady state, giving deterministic
+  budgets.  See `agent-samples/xr-render-demo` for the canonical
+  multi-vLLM example; `simple-vlm-example` and `mcp-agent` only run
+  one vLLM each and can remain ungated.  Non-gated peers continue to
+  start concurrently.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
 - The worker never imports anything from `server-runtime` or `launcher/`.
 - Process management lives in `launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast: if any process exits, the rest are terminated.
+  This includes processes that fail to become healthy within
+  `health_timeout` (default 600 s).
 
 ## Credentials
 
@@ -845,6 +863,64 @@ but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
 Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
+
+### 2026-05-04 — Sequential vLLM startup via `health_url` gate
+
+Added an opt-in `health_url` field to `Process` and a stdlib-only
+`_wait_for_health` poller in `launcher/xr_ai_launcher/_stack.py`.  When
+set, `StackLauncher` blocks the spawn loop on `GET <health_url>`
+returning 200 OK before spawning the next process.  Non-gated processes
+continue to start concurrently.  Default `health_timeout: 600.0` covers
+vLLM's 3-8 min CUDA-graph + FlashInfer MoE autotune cold-start path.
+
+**Why this exists**: vLLM 0.20.1 added a startup pre-flight check
+(`request_memory` in `vllm/v1/worker/utils.py:403`) that requires
+`free_GPU_memory_at_startup >= gpu_memory_utilization × total_GPU`.
+The fraction is interpreted as THIS PROCESS's exclusive cap — peer
+vLLMs' residence is OUTSIDE the budget, not absorbed by it.
+
+When two vLLMs start concurrently, both measure "free" before either
+has loaded weights, both think they have plenty of room, and both pass
+their pre-flight.  But once both start allocating, total GPU usage
+exceeds either's individual cap and one runs out of physical memory
+mid-load — manifesting as either OOM during weight load or, in pre-
+0.20 vLLM, the now-removed "Available KV cache memory: −X GiB" error
+during the profile pass (we hit deficits ranging from −2 to −25 GiB
+across runs with similar configs, depending purely on disk-speed
+variance).
+
+Sequential startup eliminates the race by serializing the pre-flight
+checks.  Each vLLM measures `free_at_startup` only after the previous
+one has fully loaded into a known-stable steady state.  Budgets become
+deterministic and tunable: each fraction needs to fit in
+`(total − everything_already_loaded)`.
+
+**Mechanism**: poller uses `urllib.request.urlopen` (stdlib, no new deps),
+runs each probe in the default thread executor so the asyncio loop is
+never blocked, polls every 2 s, with a 2 s per-probe HTTP timeout.
+Detects early process exit so a vLLM that crashes during weight load
+fails the whole stack immediately rather than blocking until timeout.
+
+**Per-YAML budget rebalance for `xr-render-demo`** (each fraction is
+this process's exclusive cap and must fit in CURRENTLY FREE memory at
+its startup; with sequential loading the predecessors' steady-state
+residence has already been subtracted from "free"):
+
+- `vlm_server.yaml`                : 0.20 (free ~95 GiB → 19 GiB cap)
+- `llama_nemotron_llm_server.yaml` : 0.25 (free ~75 GiB → 24 GiB cap)
+- `nemotron3_nano_llm_server.yaml` : 0.40 (free ~42 GiB → 38 GiB cap)
+
+Sum 0.85, with ~14 GiB headroom on a 96 GiB card for STT (~5 GiB) +
+hub/cloudxr (~5 GiB) + driver overhead.  These are interpreted as
+EXCLUSIVE per-process caps, not cumulative ceilings.
+
+`simple-vlm-example`, `mcp-agent`, and `echo-agent` only run one vLLM
+each (no race) so they remain ungated and unchanged.
+
+**Compliance**: launcher stays stdlib-only (`urllib.request` is stdlib);
+no `pyproject.toml` changes (no `DEPENDENCIES.md` update); no new files
+(no SPDX header concerns); AGENTS.md updated in the same commit per
+the Documentation rule.
 
 ### 2026-05-04 — `http_log_level` per-process YAML (httpx + httpcore terminal silencer)
 

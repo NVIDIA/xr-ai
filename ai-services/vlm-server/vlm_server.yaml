@@ -28,6 +28,13 @@ enforce_eager:          false
 # Max images accepted per request. Increase if multi-image queries are needed.
 max_images_per_prompt:  1
 
+# Max video items accepted per request. Default 0 (disabled).
+# Qwen2.5-VL-class models reserve activation memory at startup for the maximum
+# video feature size, which can cost tens of GiB even if no caller ever sends
+# a video. Leave at 0 unless your worker actually sends video; raise to enable
+# `video_url` content blocks in chat-completion requests.
+max_videos_per_prompt:  0
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 # Per-process log level. PRIMARY source. If this field is removed/commented,
 # the subprocess falls back to the XR_AI_LOG_LEVEL env var, then to INFO.

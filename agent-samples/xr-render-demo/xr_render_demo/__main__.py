@@ -44,14 +44,24 @@ from xr_ai_launcher import Process, run_stack
 
 _BASE = Path(__file__).resolve().parents[1]  # agent-samples/xr-render-demo/
 
+# vLLM cold-start memory profile is interpreted against TOTAL GPU residence,
+# not "this process's exclusive share" — so two vLLMs profiling concurrently
+# fight over the same memory and one ends up reporting "Available KV cache
+# memory: −X GiB".  ``health_url`` makes the launcher serialize the spawn of
+# these three: each waits for the previous to return 200 OK on /v1/models
+# before its own profile pass starts.  Per-YAML ``gpu_memory_utilization``
+# fractions assume this load order — see the yaml comments for the math.
 PROCESSES = [
     Process("hub",        "../../server-runtime",                   "xr_media_hub"),
     Process("cloudxr",    "../../cloudxr-runtime",                  "cloudxr_runtime"),
     Process("stt",        "../../ai-services/stt-server",           "stt_server"),
     Process("tts",        "../../ai-services/tts/piper",            "piper_tts_server"),
-    Process("vlm",        "../../ai-services/vlm-server",           "vlm_server"),
-    Process("llm",        "../../ai-services/llm/llama_nemotron",   "llama_nemotron_llm_server"),
-    Process("agent-llm",  "../../ai-services/llm/nemotron3_nano",   "nemotron3_nano_llm_server"),
+    Process("vlm",        "../../ai-services/vlm-server",           "vlm_server",
+            health_url="http://localhost:8100/v1/models"),
+    Process("llm",        "../../ai-services/llm/llama_nemotron",   "llama_nemotron_llm_server",
+            health_url="http://localhost:8106/v1/models"),
+    Process("agent-llm",  "../../ai-services/llm/nemotron3_nano",   "nemotron3_nano_llm_server",
+            health_url="http://localhost:8107/v1/models"),
     Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",        "vlm_mcp_server"),
     Process("video-mcp",  "../../agent-mcp-servers/video-mcp",      "video_mcp_server"),
     Process("render-mcp", "../../agent-mcp-servers/render-mcp",     "render_mcp"),

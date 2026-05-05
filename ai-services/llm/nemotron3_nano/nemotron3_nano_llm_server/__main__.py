@@ -218,13 +218,13 @@ def run() -> None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
 
     major = _gpu_compute_major()
-    if major >= 10:
-        model = cfg.get("model_blackwell", _MODEL_BLACKWELL)
-        print(f"[nemotron3_nano] Blackwell (SM{major}0) → {model}", flush=True)
-    else:
-        model = cfg.get("model_ada", _MODEL_ADA)
-        arch  = f"SM{major}0" if major > 0 else "unknown GPU"
-        print(f"[nemotron3_nano] Pre-Blackwell ({arch}) → {model}", flush=True)
+    # if major >= 10:
+    #     model = cfg.get("model_blackwell", _MODEL_BLACKWELL)
+    #     print(f"[nemotron3_nano] Blackwell (SM{major}0) → {model}", flush=True)
+    # else:
+    model = cfg.get("model_ada", _MODEL_ADA)
+    arch  = f"SM{major}0" if major > 0 else "unknown GPU"
+    print(f"[nemotron3_nano] Pre-Blackwell ({arch}) → {model}", flush=True)
 
     host          = cfg.get("host",               _DEFAULT_HOST)
     port          = int(cfg.get("port",            _DEFAULT_PORT))

@@ -165,6 +165,14 @@ async def main(cfg: WorkerConfig) -> None:
         "video-mcp": mcp_probe(cfg.video_mcp.rstrip("/")  + "/mcp"),
     })
 
+    # AGENT READY banner — emitted only after STT, TTS, LLM, agent-LLM, VLM
+    # and all MCPs report healthy.  Mirrors simple-vlm-example's banner;
+    # printed via log.info so it lands in both terminal and combined.log.
+    log.info("=" * 80)
+    log.info("  AGENT READY — xr-render-demo  (STT, TTS, LLM, agent-LLM, VLM, MCPs loaded)")
+    log.info("  Open the hub's 'Web client' URL in your browser to start")
+    log.info("=" * 80)
+
     async with (
         McpClient(cfg.render_mcp.rstrip("/") + "/mcp") as render,
         McpClient(cfg.oxr_mcp.rstrip("/")    + "/mcp") as oxr,

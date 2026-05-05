@@ -42,7 +42,7 @@ max_num_seqs:         8
 tensor_parallel_size: 1
 max_model_len:        32768
 
-gpu_memory_utilization: 0.85
+gpu_memory_utilization: 0.55
 
 # Skip CUDA graph capture + FlashInfer MoE autotune at startup.  For
 # NemotronH-30B-A3B-NVFP4 those two phases are silent (no log output)

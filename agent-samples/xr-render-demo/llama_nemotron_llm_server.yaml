@@ -18,7 +18,7 @@
 #                                         native tool-calling + reasoning toggle;
 #                                         ~16 GB VRAM at BF16.
 model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
-cuda_visible_devices: "0"   # share GPU 0 with STT + VLM; Nemotron-3-Nano stays on GPU 1
+cuda_visible_devices: "0"   # all three vLLMs share GPU 0; sequenced by launcher health_url
 
 port: 8106
 host: 0.0.0.0
@@ -26,10 +26,26 @@ hf_token: ""
 
 model_cache: ../../../models
 
-# Shared GPU: STT (~5 GiB) + LLM weights (~15 GiB) + VLM are all on GPU 0.
-# 0.45 × 47 = 21 GiB budget for this server.  KV cache for max_model_len=4096
-# at BF16 8B is ~0.5 GiB — well within what remains after model weights load.
-gpu_memory_utilization: 0.45
+# llm is SECOND in load order (after vlm, before agent-llm).  vLLM 0.20+
+# enforces a startup pre-flight check (request_memory in
+# vllm/v1/worker/utils.py:403):
+#
+#   free_GPU_memory_at_startup  >=  gpu_memory_utilization × total_GPU
+#
+# Importantly, the fraction is THIS PROCESS's EXCLUSIVE cap — vlm's
+# residence is OUTSIDE the budget, not absorbed.
+#
+# When llm starts: free_at_startup ≈ 95 − 19 (vlm residence) − some
+# (STT loading) ≈ 75 GiB.  0.25 × 95 = 23.7 GiB cap.  Inside that:
+#   own weights                     ≈ 15 GiB
+#   own activations (B=4, ctx=4K)   ≈  1 GiB
+#   →  Available KV  ≈ 23.7 − 15 − 1  ≈  7-8 GiB    (matches log)
+#
+# This is the quick-ack model (max 40 tokens per call); 7 GiB KV at
+# max_model_len=4096 holds ~16 sequences in flight, far above the
+# max_num_seqs=4 we actually allow.
+gpu_memory_utilization: 0.25
+max_num_seqs:           8
 # Quick-ack prompts are short (system + 4 history turns + transcript ≈ 1-2 K).
 # 4096 reduces the required KV cache from 4 GiB to ~0.5 GiB, making it fit.
 max_model_len: 4096

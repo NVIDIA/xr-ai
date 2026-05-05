@@ -26,6 +26,11 @@ Config keys
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
     max_images_per_prompt:   int    Max images per request (default: 1).
+    max_videos_per_prompt:   int    Max video items per request (default: 0).
+                                    Set >0 only if your worker actually sends
+                                    video; 0 lets vLLM skip video activation
+                                    profiling, which saves tens of GiB of GPU
+                                    memory for Qwen2.5-VL-class models.
 """
 import argparse
 import json
@@ -46,6 +51,7 @@ _DEFAULT_CTX         = 8192
 _DEFAULT_GPU_MEM     = 0.85
 _DEFAULT_EAGER       = False
 _DEFAULT_MAX_IMAGES  = 1
+_DEFAULT_MAX_VIDEOS  = 0
 
 
 def _resolve_log_level(cfg: dict) -> str:
@@ -195,6 +201,7 @@ def run() -> None:
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
     enforce_eager = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
     max_images    = int(cfg.get("max_images_per_prompt", _DEFAULT_MAX_IMAGES))
+    max_videos    = int(cfg.get("max_videos_per_prompt", _DEFAULT_MAX_VIDEOS))
 
     if cuda_devices := cfg.get("cuda_visible_devices"):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
@@ -216,7 +223,7 @@ def run() -> None:
         "--tensor-parallel-size", str(tp_size),
         "--max-model-len", str(max_ctx),
         "--gpu-memory-utilization", str(gpu_mem),
-        "--limit-mm-per-prompt", json.dumps({"image": max_images}),
+        "--limit-mm-per-prompt", json.dumps({"image": max_images, "video": max_videos}),
     ]
     if enforce_eager:
         argv.append("--enforce-eager")
