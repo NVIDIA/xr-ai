@@ -145,9 +145,6 @@ Any HuggingFace `AutoModelForCausalLM`-compatible model with a Llama 3.1-style
 chat template works. Adjust `max_new_tokens`, `dtype`, and `stop` as needed
 for the new model.
 
-For a smaller chat-only alternative without reasoning or tool calling, see the
-sibling [../mistral_minitron/](../mistral_minitron/) (`nvidia/Mistral-NeMo-Minitron-8B-Instruct`).
-
 ## Notes
 
 - **No continuous batching.** FastAPI + raw transformers is simpler but slower

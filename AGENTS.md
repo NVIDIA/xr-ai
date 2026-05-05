@@ -145,7 +145,6 @@ reasoning / hardware trade-offs documented below.
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
 | `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
-| `ai-services/llm/mistral_minitron/` | `mistral_minitron_llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
 | `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `ai-services/tts/magpie/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
@@ -166,10 +165,9 @@ PROCESSES = [
     Process("hub",    "../../server-runtime",                     "xr_media_hub"),
     Process("vlm",    "../../ai-services/vlm-server",             "vlm_server"),   # ← add as needed
     # Pick ONE LLM backend per sample — they bind different default ports
-    # (8101 / 8106 / 8107) so running more than one at once is allowed but
+    # (8106 / 8107) so running more than one at once is allowed but
     # usually unnecessary.
-    Process("llm",    "../../ai-services/llm/mistral_minitron",   "mistral_minitron_llm_server"),
-    # Process("llm",  "../../ai-services/llm/llama_nemotron",     "llama_nemotron_llm_server"),
+    Process("llm",    "../../ai-services/llm/llama_nemotron",     "llama_nemotron_llm_server"),
     # Process("llm",  "../../ai-services/llm/nemotron3_nano",     "nemotron3_nano_llm_server"),
     Process("stt",    "../../ai-services/stt-server",             "stt_server"),
     # Pick one TTS server
@@ -189,8 +187,7 @@ multilingual) when GPU is available; swap the `Process` row and YAML.
 ```bash
 cp ../../ai-services/vlm-server/vlm_server.yaml ./vlm_server.yaml
 # Pick ONE LLM YAML — copy the one matching the Process you picked above.
-cp ../../ai-services/llm/mistral_minitron/mistral_minitron_llm_server.yaml ./mistral_minitron_llm_server.yaml
-# cp ../../ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml ./llama_nemotron_llm_server.yaml
+cp ../../ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml ./llama_nemotron_llm_server.yaml
 # cp ../../ai-services/llm/nemotron3_nano/nemotron3_nano_llm_server.yaml ./nemotron3_nano_llm_server.yaml
 cp ../../ai-services/stt-server/stt_server.yaml ./stt_server.yaml
 cp ../../ai-services/tts/piper/piper_tts_server.yaml ./piper_tts_server.yaml
@@ -238,12 +235,12 @@ async with httpx.AsyncClient() as client:
     answer = resp.json()["choices"][0]["message"]["content"]
 
 # LLM — POST JSON (pure-text chat completion)
-# Ports: 8101 mistral_minitron | 8106 llama_nemotron | 8107 nemotron3_nano.
-# The HTTP contract is identical across all three; swap the port to swap
+# Ports: 8106 llama_nemotron | 8107 nemotron3_nano.
+# The HTTP contract is identical across both; swap the port to swap
 # backends with no worker-side code changes.
 async with httpx.AsyncClient() as client:
     resp = await client.post(
-        "http://localhost:8101/v1/chat/completions",
+        "http://localhost:8106/v1/chat/completions",
         json={"model": "llm", "messages": [
             {"role": "user", "content": "Say OK"},
         ], "max_tokens": 16},
@@ -255,10 +252,6 @@ async with httpx.AsyncClient() as client:
 
 - **vlm-server** loads Cosmos-Reason1-7B in-process via HuggingFace transformers.
   Model warms up at startup; strips `<think>…</think>` blocks automatically.
-- **llm/mistral_minitron** loads Mistral-NeMo-Minitron-8B-Instruct in-process via
-  HuggingFace transformers. Pure-text `/v1/chat/completions` only — no tool
-  calling, no reasoning preamble. Default stop list handles Minitron's
-  `<extra_id_*>` chat-template tokens. Swap models via `mistral_minitron_llm_server.yaml`.
 - **llm/llama_nemotron** loads Llama-3.1-Nemotron-Nano-8B-v1 via HuggingFace
   transformers (no `trust_remote_code`). Native Llama-3.1 tool calling —
   `tools=[...]` in the request is rendered via the model's chat template and
@@ -298,8 +291,8 @@ async with httpx.AsyncClient() as client:
   Requires hub video recording enabled via
   `video_recording.enabled: true` in `xr_media_hub.yaml`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
-- **Sample YAMLs** for each service ship with `mcp-agent` as examples.
-  Copy them to other sample roots and adjust `model_cache` (`../../models` resolves
+- **Sample YAMLs** for each service ship in their own service directory.
+  Copy them to your sample root and adjust `model_cache` (`../../models` resolves
   to `xr-ai/models/` from any `agent-samples/<name>/` directory).
 
 ---
@@ -308,8 +301,8 @@ async with httpx.AsyncClient() as client:
 
 ### Naming conventions
 
-Choose a kebab-case sample name (e.g. `simple-vlm-example`,
-`mcp-agent`).  Derive all other names from it mechanically:
+Choose a kebab-case sample name (e.g. `simple-vlm-example`).
+Derive all other names from it mechanically:
 
 | Thing | Convention | Example |
 |---|---|---|
@@ -347,7 +340,7 @@ When the worker is small (≲ 100 lines) keep it as a single file —
 the file makes the agent logic harder to read; aim for a few focused
 modules over one monolith *or* a swarm of tiny files.
 
-Suggested split (used by `simple-vlm-example` and `mcp-agent`):
+Suggested split (used by `simple-vlm-example`):
 
 | File | Responsibility |
 |---|---|
@@ -928,26 +921,23 @@ LiveKit transport layers were extended so:
 
 ### 2026-04-30 — LLM servers reorganized into per-model packages
 
-`ai-services/llm-server/` (single package, single model) is split into three
+`ai-services/llm-server/` (single package, single model) is split into two
 sibling packages under `ai-services/llm/`, each with its own entry-point
 command, YAML, default port, and dependency set. This lets a sample pick the
 LLM that matches its tool-calling / reasoning / hardware requirements without
 dragging in the dependencies of the others (notably vLLM and
-`lm-format-enforcer`, neither of which the Minitron backend needs).
+`lm-format-enforcer`).
 
 | New package | Command | Port | Model | Backend |
 |---|---|---|---|---|
-| `llm/mistral_minitron/` | `mistral_minitron_llm_server` | 8101 | `nvidia/Mistral-NeMo-Minitron-8B-Instruct` | HF transformers (in-process) — chat only |
 | `llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | `nvidia/Llama-3.1-Nemotron-Nano-8B-v1` | HF transformers + `lm-format-enforcer` — native tool calls, reasoning toggle |
 | `llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4` | vLLM (execvp shim) — Blackwell FP4 MoE |
 
-- **HTTP contract is identical** across all three (OpenAI-compatible
+- **HTTP contract is identical** across both (OpenAI-compatible
   `GET /health`, `GET /v1/models`, `POST /v1/chat/completions`). Workers point
   at a different port to swap backends — no worker-side code changes.
-- **Ports** chosen to be non-overlapping so two LLM backends can coexist in
+- **Ports** chosen to be non-overlapping so both LLM backends can coexist in
   the same stack if a sample actually wants that (unusual; typically pick one).
-  8101 slot is kept for Mistral-Minitron to preserve wire compatibility with
-  the previous `llm-server` deployment.
 - **`llama_nemotron`** adds grammar-constrained tool-call decoding via
   `lm-format-enforcer`. When `tools=[...]` is present in the request, a
   `UnionParser([tool_call_grammar, free_text])` is fed as
@@ -970,8 +960,7 @@ dragging in the dependencies of the others (notably vLLM and
   (imperceptible at <250 tokens/turn where STT+VAD+TTS already dominate).
 
 Dependency fan-out stays contained: only `llama_nemotron` pulls
-`lm-format-enforcer`, only `nemotron3_nano` pulls `vllm>=0.12.0`. Mistral
-Minitron remains a plain FastAPI + transformers box.
+`lm-format-enforcer`, only `nemotron3_nano` pulls `vllm>=0.12.0`.
 
 ### 2026-04-29 — render-mcp + oxr-mcp added; xr-render-demo as integration
 
@@ -1026,34 +1015,6 @@ into render-mcp HTTP calls.
   yaw + translates by head position before forwarding to render-mcp.
   Putting the transform in the worker keeps render-mcp transport-agnostic
   and means the LLM never has to learn vector math.
-
-### 2026-04-28 — llm-server added (pure-text LLM)
-
-Fourth AI inference server added under `ai-services/llm-server/`, filling the
-pure-text LLM gap alongside the existing VLM / STT / TTS servers.
-
-- **Model**: `nvidia/Mistral-NeMo-Minitron-8B-Instruct` (HuggingFace causal LM,
-  ~16 GB VRAM at BF16) loaded in-process via `AutoModelForCausalLM` +
-  `AutoTokenizer`. Any `AutoModelForCausalLM`-compatible HF model works — swap
-  by editing `llm_server.yaml` (`model`, `max_new_tokens`, `dtype`, `stop`).
-- **API**: OpenAI-compatible `GET /health`, `GET /v1/models`,
-  `POST /v1/chat/completions` on default port **8101** (avoiding the VLM 8100
-  and the STT/TTS 8103/8104 slots). Pure-text messages only — multi-modal
-  content blocks are flattened to text (non-`text` blocks are dropped).
-- **No strict Pydantic schema** on the request body — the endpoint parses
-  raw JSON. This sidesteps FastAPI/Pydantic v2 ForwardRef issues with
-  closure-defined models and tolerates the many optional fields OpenAI
-  clients send (`n`, `frequency_penalty`, `seed`, `reasoning_effort`, …).
-- **Stop handling**: the request's `stop` list is honored; if absent, the
-  YAML's `stop` default is used. For Minitron-8B this defaults to
-  `["<extra_id_1>", "<extra_id_0>"]` so chat-template tokens don't leak
-  into replies. A `StringStopCriteria` hook also halts generation mid-stream
-  once a stop string appears in decoded output.
-- **Threading**: blocking `generate()` runs in the default thread pool
-  executor via `loop.run_in_executor` so the asyncio loop is never blocked.
-  The backend is loaded lazily under a lock (warmed at startup from `_run`).
-- **No continuous batching.** Single-user voice-agent workloads only; for
-  higher concurrency swap in vLLM behind the same HTTP contract.
 
 ### 2026-04-27 — MCP example: transcript + video MCP servers; NVENC recording in hub
 

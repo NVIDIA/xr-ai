@@ -151,17 +151,6 @@ magpie-tts-server  (tts/magpie/)
     └── pyyaml >=6.0
     Model: nvidia/magpie_tts_multilingual_357m (NeMo TTS, in-process)
 
-mistral-minitron-llm-server  (ai-services/llm/mistral_minitron/)
-    └── torch >=2.2
-    └── transformers >=4.49
-    └── accelerate >=0.30
-    └── fastapi >=0.111
-    └── uvicorn[standard] >=0.29
-    └── hf-transfer >=0.1.4
-    └── pyyaml >=6.0
-    Model: nvidia/Mistral-NeMo-Minitron-8B-Instruct (HuggingFace transformers, in-process)
-    Chat-only; no tool calling, no reasoning preamble.
-
 llama-nemotron-llm-server  (ai-services/llm/llama_nemotron/)
     └── torch >=2.2
     └── transformers >=4.49
@@ -201,7 +190,6 @@ piper-tts-server  (tts/piper/)
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
 | `vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
-| `llm/mistral_minitron/` | `mistral-minitron-llm-server` | `mistral_minitron_llm_server` | 8101 | Mistral-NeMo-Minitron-8B-Instruct | transformers in-process |
 | `stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
@@ -265,21 +253,6 @@ the latest video frame via streaming VLM and replies with both
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP — no model weights loaded in-process.
 
-### mcp-agent  (agent-samples/mcp-agent/)
-
-Continuous STT → transcript ingest + MCP-accessible transcript and video query.
-
-| Sub-project | Package | Internal deps | External deps |
-|---|---|---|---|
-| Orchestrator | `mcp-agent` | `xr-ai-launcher` | — |
-| Worker | `mcp-agent-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
-| MCP server | `mcp-server` | `transcript-mcp-server`, `video-mcp-server` | fastmcp >=0.4, uvicorn[standard] >=0.29, pyyaml >=6.0 |
-
-Composed pure-FastMCP server at port 8200 mounts `transcript_*` and `video_*`
-tools at `/mcp`. Worker reaches it via `fastmcp.Client`; uses STT (8103) for
-transcription. Hub video recording requires `PyNvVideoCodec` (dep of
-`xr-media-hub`; included in `uv sync`).
-
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
@@ -293,8 +266,9 @@ forwarding.
 | Worker | `xr-render-demo-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
 
 Uses cloudxr-runtime, render-mcp-server (8220), oxr-mcp-server (8230),
-stt-server (8103), llm-server (8101). Web client must be a build that
-includes the bundled CloudXR JS SDK (see `client-samples/web-xr-build/`).
+stt-server (8103), llama-nemotron-llm-server (8106), nemotron3-nano-llm-server (8107).
+Web client must be a build that includes the bundled CloudXR JS SDK
+(see `client-samples/web-xr-build/`).
 
 ---
 
