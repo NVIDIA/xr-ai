@@ -22,7 +22,7 @@ hf_token: ""
 # Shared weight + reasoning-parser cache.  Resolves relative to this YAML;
 # ../../models lands in the repo-root models/ dir (same place the other
 # ai-services write their weights).
-model_cache: ../../models
+model_cache: ../../../models
 
 # vLLM server knobs.
 #

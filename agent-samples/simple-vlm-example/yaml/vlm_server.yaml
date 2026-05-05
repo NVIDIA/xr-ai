@@ -6,4 +6,4 @@
 
 model:       nvidia/Cosmos-Reason1-7B
 port:        8100
-model_cache: ../../models
+model_cache: ../../../models

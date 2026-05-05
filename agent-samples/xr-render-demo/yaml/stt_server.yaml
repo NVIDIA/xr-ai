@@ -17,4 +17,4 @@ port: 8103
 host: "0.0.0.0"
 
 # NeMo + HuggingFace weight cache — resolved relative to this YAML file.
-model_cache: ../../models
+model_cache: ../../../models

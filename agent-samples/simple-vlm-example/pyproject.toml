@@ -18,7 +18,7 @@ dependencies = [
 xr-ai-launcher = { path = "../../launcher", editable = true }
 
 [project.scripts]
-simple_vlm_example = "simple_vlm_example:run"
+simple_vlm_example = "main:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["simple_vlm_example.py"]
+only-include = ["main.py"]

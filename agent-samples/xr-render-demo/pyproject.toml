@@ -17,7 +17,7 @@ dependencies = [
 xr-ai-launcher = { path = "../../launcher", editable = true }
 
 [project.scripts]
-xr_render_demo = "xr_render_demo.__main__:run"
+xr_render_demo = "main:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["xr_render_demo"]
+only-include = ["main.py"]

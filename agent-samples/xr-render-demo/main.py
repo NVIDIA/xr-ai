@@ -41,21 +41,32 @@ from pathlib import Path
 
 from xr_ai_launcher import Process, run_stack
 
-_BASE = Path(__file__).resolve().parents[1]  # agent-samples/xr-render-demo/
+_BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
-    Process("hub",        "../../server-runtime",                   "xr_media_hub"),
-    Process("cloudxr",    "../../cloudxr-runtime",                  "cloudxr_runtime"),
-    Process("stt",        "../../ai-services/stt-server",           "stt_server"),
-    Process("tts",        "../../ai-services/tts/piper",            "piper_tts_server"),
-    Process("vlm",        "../../ai-services/vlm-server",           "vlm_server"),
-    Process("llm",        "../../ai-services/llm/llama_nemotron",   "llama_nemotron_llm_server"),
-    Process("agent-llm",  "../../ai-services/llm/nemotron3_nano",   "nemotron3_nano_llm_server"),
-    Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",        "vlm_mcp_server"),
-    Process("video-mcp",  "../../agent-mcp-servers/video-mcp",      "video_mcp_server"),
-    Process("render-mcp", "../../agent-mcp-servers/render-mcp",     "render_mcp"),
-    Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",        "oxr_mcp_server"),
-    Process("worker",     "worker",                                 "xr_render_demo_worker"),
+    Process("hub",        "../../server-runtime",                 "xr_media_hub",
+            config="yaml/xr_media_hub.yaml"),
+    Process("cloudxr",    "../../cloudxr-runtime",                "cloudxr_runtime",
+            config="yaml/cloudxr_runtime.yaml"),
+    Process("stt",        "../../ai-services/stt-server",         "stt_server",
+            config="yaml/stt_server.yaml"),
+    Process("tts",        "../../ai-services/tts/piper",          "piper_tts_server",
+            config="yaml/piper_tts_server.yaml"),
+    Process("vlm",        "../../ai-services/vlm-server",         "vlm_server",
+            config="yaml/vlm_server.yaml"),
+    Process("llm",        "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
+            config="yaml/llama_nemotron_llm_server.yaml"),
+    Process("agent-llm",  "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+            config="yaml/nemotron3_nano_llm_server.yaml"),
+    Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",      "vlm_mcp_server",
+            config="yaml/vlm_mcp_server.yaml"),
+    Process("video-mcp",  "../../agent-mcp-servers/video-mcp",    "video_mcp_server",
+            config="yaml/video_mcp_server.yaml"),
+    Process("render-mcp", "../../agent-mcp-servers/render-mcp",   "render_mcp"),
+    Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",      "oxr_mcp_server",
+            config="yaml/oxr_mcp_server.yaml"),
+    Process("worker",     "worker",                               "xr_render_demo_worker",
+            config="yaml/xr_render_demo_worker.yaml"),
 ]
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.

@@ -49,21 +49,26 @@ Each sample has **two sub-projects**:
 | `<sample>/` | Orchestrator — declares process list in code, launches all | `xr-ai-launcher` only (stdlib) |
 | `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-agent`, numpy, etc. |
 
-**Launchable convention** — every sub-project that can be run is self-describing:
-it has an entry-point command and optionally a YAML config named `<command>.yaml`
-that lives in the sample root.  The launcher discovers the YAML automatically
-and passes it as `--config`.  No separate launcher config file exists.
+**Config convention** — the YAML config path for each process is declared
+explicitly in the orchestrator's `PROCESSES` list via the `config=` field of
+`Process`.  The launcher passes it as `--config <path>` to the subprocess.
+All sample configs live in the `yaml/` directory.  Omit `config=` for
+processes that use their own internal defaults.
 
 The orchestrator declares the process sequence in code:
 ```python
 _BASE = Path(__file__).resolve().parent   # sample root
 
 PROCESSES = [
-    Process("hub",     "../../server-runtime",  "xr_media_hub"),
-    Process("worker",  "worker",                "my_agent_worker"),
+    Process("hub",    "../../server-runtime", "xr_media_hub",
+            config="yaml/xr_media_hub.yaml"),
+    Process("worker", "worker",               "my_agent_worker",
+            config="yaml/my_agent_worker.yaml"),
     # Optional shared components — add as needed:
-    # Process("cloudxr", "../../cloudxr-runtime",         "cloudxr_runtime"),
-    # Process("mcp",     "../../agent-mcp-servers/oxr",   "oxr_mcp"),
+    # Process("cloudxr", "../../cloudxr-runtime",       "cloudxr_runtime",
+    #         config="yaml/cloudxr_runtime.yaml"),
+    # Process("mcp",     "../../agent-mcp-servers/oxr", "oxr_mcp_server",
+    #         config="yaml/oxr_mcp_server.yaml"),
 ]
 
 def run() -> None:
@@ -184,24 +189,25 @@ TTS — it runs on CPU with ~100 ms/sentence latency and avoids the NeMo
 dep tree.  Magpie is still a supported option (better voice quality,
 multilingual) when GPU is available; swap the `Process` row and YAML.
 
-**2 — Copy the reference YAML to your sample root:**
+**2 — Copy the reference YAML to your sample's `yaml/` directory:**
 
 ```bash
-cp ../../ai-services/vlm-server/vlm_server.yaml ./vlm_server.yaml
+mkdir -p yaml
+cp ../../ai-services/vlm-server/vlm_server.yaml ./yaml/vlm_server.yaml
 # Pick ONE LLM YAML — copy the one matching the Process you picked above.
-cp ../../ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml ./llama_nemotron_llm_server.yaml
-# cp ../../ai-services/llm/nemotron3_nano/nemotron3_nano_llm_server.yaml ./nemotron3_nano_llm_server.yaml
-cp ../../ai-services/stt-server/stt_server.yaml ./stt_server.yaml
-cp ../../ai-services/tts/piper/piper_tts_server.yaml ./piper_tts_server.yaml
+cp ../../ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml ./yaml/llama_nemotron_llm_server.yaml
+# cp ../../ai-services/llm/nemotron3_nano/nemotron3_nano_llm_server.yaml ./yaml/nemotron3_nano_llm_server.yaml
+cp ../../ai-services/stt-server/stt_server.yaml ./yaml/stt_server.yaml
+cp ../../ai-services/tts/piper/piper_tts_server.yaml ./yaml/piper_tts_server.yaml
 # Or for Magpie (multilingual, GPU, ~2-5 s/sentence):
-cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./magpie_tts_server.yaml
+cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./yaml/magpie_tts_server.yaml
 # MCP servers:
-cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./transcript_mcp_server.yaml
-cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./video_mcp_server.yaml
+cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./yaml/transcript_mcp_server.yaml
+cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./yaml/video_mcp_server.yaml
 ```
 
 Edit the YAML as needed (model, port, device, etc.).  The launcher auto-discovers
-`<command>.yaml` in the sample root and passes it as `--config`.
+`yaml/<command>.yaml` in the sample root and passes it as `--config`.
 
 ### Calling the servers from a worker
 
@@ -328,8 +334,11 @@ venv.
 ```
 agent-samples/<name>/
 ├── pyproject.toml                  ← orchestrator project
-├── xr_media_hub.yaml               ← hub config for this sample
-├── <snake_name>.py                 ← orchestrator (declare PROCESSES, call run_stack)
+├── main.py                         ← orchestrator (declare PROCESSES, call run_stack)
+├── yaml/                           ← all YAML configs for this sample
+│   ├── xr_media_hub.yaml
+│   ├── <command>.yaml              ← one per launchable process
+│   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
     ├── <snake_name>_worker.py      ← entry point: parses config, runs main loop
@@ -370,10 +379,10 @@ dependencies = ["xr-ai-launcher"]
 xr-ai-launcher = { path = "../../launcher", editable = true }
 
 [project.scripts]
-<snake_name> = "<snake_name>:run"
+<snake_name> = "main:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["<snake_name>.py"]
+only-include = ["main.py"]
 ```
 
 ### Worker `pyproject.toml`
@@ -413,7 +422,7 @@ When the worker is a single file, drop the extra entries:
 only-include = ["<snake_name>_worker.py"]
 ```
 
-### Orchestrator `<snake_name>.py`
+### Orchestrator `main.py`
 
 Exact boilerplate — do not add logic here:
 
@@ -578,9 +587,10 @@ if __name__ == "__main__":
 
 - [ ] `agent-samples/<name>/pyproject.toml` — orchestrator, deps: `xr-ai-launcher` only
 - [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-agent` + task libs (list every `.py` in `only-include`)
-- [ ] `agent-samples/<name>/<snake_name>.py` — exact orchestrator boilerplate
+- [ ] `agent-samples/<name>/main.py` — exact orchestrator boilerplate
 - [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` — entry point + (optional) split helpers next to it
-- [ ] `agent-samples/<name>/xr_media_hub.yaml` — hub config (copy from `server-runtime/xr_media_hub.yaml`)
+- [ ] `agent-samples/<name>/yaml/xr_media_hub.yaml` — hub config (copy from `server-runtime/xr_media_hub.yaml`)
+- [ ] `agent-samples/<name>/yaml/<command>.yaml` — one per process that needs config
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
 - [ ] `README.md` updated — architecture table and quickstart section
 
@@ -699,9 +709,9 @@ Hard rules (also documented in `DEPENDENCIES.md`):
 
 ## Config
 
-Each sample provides its own `xr_media_hub.yaml` in its project directory
-(e.g. `agent-samples/simple-vlm-example/xr_media_hub.yaml`). `server-runtime/` also
-contains a reference copy documenting all available fields.
+Each sample provides its own `xr_media_hub.yaml` in its `yaml/` directory
+(e.g. `agent-samples/simple-vlm-example/yaml/xr_media_hub.yaml`). `server-runtime/`
+also contains a reference copy documenting all available fields.
 
 Paths inside the YAML (e.g. `web_client_dir`) resolve relative to the YAML
 file's own directory, not CWD. `HubLauncher` finds the YAML automatically by

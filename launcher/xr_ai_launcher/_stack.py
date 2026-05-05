@@ -52,11 +52,15 @@ class Process:
     name    — label used in log output.
     project — path to the uv project (relative to the sample root, or absolute).
     command — entry-point script to run inside the project's venv.
+    config  — path to the YAML config (relative to the sample root, or absolute).
+              Passed as ``--config <path>`` to the subprocess. Omit for processes
+              that take no config.
     gpu     — optional CUDA_VISIBLE_DEVICES value (e.g. ``"0"``, ``"0,1"``).
     """
     name:    str
     project: str | Path
     command: str
+    config:  str | Path | None = None
     gpu:     str | None = None
 
 
@@ -70,15 +74,14 @@ def _forward(stream, prefix: str) -> None:
 
 def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     project = (base / proc.project).resolve()
-    config  = base / f"{proc.command}.yaml"
 
     if shutil.which("uv"):
         cmd: list[str] = ["uv", "run", "--project", str(project), proc.command]
     else:
         cmd = [sys.executable, "-m", proc.command]
 
-    if config.exists():
-        cmd += ["--config", str(config)]
+    if proc.config is not None:
+        cmd += ["--config", str((base / proc.config).resolve())]
     cmd += ["--ready-file", str(ready_file)]
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
@@ -196,14 +199,16 @@ def run_stack(processes: Sequence[Process], base: Path) -> None:
     After all processes are ready the launcher monitors them: if any exits,
     all others are terminated and the launcher exits.
 
-    *base* is the sample root — YAML configs and relative project paths are
-    resolved against it::
+    *base* is the sample root — all relative paths in ``Process.project``
+    and ``Process.config`` are resolved against it::
 
         _BASE = Path(__file__).resolve().parent
 
         PROCESSES = [
-            Process("hub",    "../../server-runtime", "xr_media_hub"),
-            Process("worker", "worker",               "my_worker"),
+            Process("hub",    "../../server-runtime", "xr_media_hub",
+                    config="yaml/xr_media_hub.yaml"),
+            Process("worker", "worker",               "my_worker",
+                    config="yaml/my_worker.yaml"),
         ]
 
         def run() -> None:
