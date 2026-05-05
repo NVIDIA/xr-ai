@@ -681,6 +681,45 @@ enable it; `python3 .github/scripts/check_spdx_headers.py` audits the whole
 tree at any time. The same check runs in CI as a backstop:
 `.github/workflows/spdx.yml`.
 
+## Comments
+
+Write comments for the next person reading the code, not as a record of how
+the code came to exist. The two questions a comment must answer are
+"what non-obvious thing does this do?" or "why isn't the obvious version
+correct?". If a comment doesn't answer one of those, delete it.
+
+Concrete rules:
+
+- **No play-by-play.** Don't narrate the debugging journey, the things you
+  tried first, or the alternatives you ruled out. The current code is the
+  decision; the comment exists to make it readable, not to argue for it.
+- **No "we discussed" / "decided not to" / "for now" / "originally"**.
+  Future readers don't have your context and don't need it. If the
+  rationale is genuinely load-bearing, put one sentence stating the
+  invariant ("must be 2D — NVENC reads strides"), not a paragraph
+  reconstructing how you found out.
+- **No restating the code.** `// loop over participants` above a
+  `for pid in participants:` is noise.
+- **One sentence is usually enough.** Two sentences if the "why" needs
+  a concrete failure mode. A multi-paragraph block comment almost always
+  means the comment is doing the wrong job — either the code needs
+  refactoring or the content belongs in `AGENTS.md`'s changelog.
+- **Architectural rationale and historical context belong in
+  `AGENTS.md`'s "Decisions & change log" section**, not in source comments.
+  Source comments are read every time someone touches the line; the
+  changelog is read when someone needs the history.
+- **Same rules apply to docstrings and README sections** added by an
+  agent. Lead with the contract; don't recap the design conversation.
+
+When in doubt, prefer the shorter comment. A future reader can read the
+git log; they cannot un-read a wall of text wrapping a one-liner.
+
+**Scope**: apply this only to comments you are writing or to comments on
+lines you are already changing. Don't open existing files just to trim
+comments — that's out of scope for any task other than an explicit
+"clean up comments in <file>" request, and creates churn that obscures
+the real change in review.
+
 ## Dependency discipline
 
 **`DEPENDENCIES.md` at the repo root is the authoritative dependency map.**
