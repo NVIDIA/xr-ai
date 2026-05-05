@@ -61,7 +61,7 @@ def _load_config(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
-async def _run(cfg: dict) -> None:
+async def _run(cfg: dict, ready_file: Path | None = None) -> None:
     install_dir = str(Path(cfg.get("cloudxr_install_dir", "~/.cloudxr")).expanduser())
     env_file    = cfg.get("cloudxr_env_config")
 
@@ -114,6 +114,8 @@ async def _run(cfg: dict) -> None:
         cxr_log = latest_runtime_log() or logs_dir
         print(f"CloudXR runtime:   ready  log: {cxr_log}")
         print(f"Activate CloudXR environment: source {env_cfg.env_filepath()}")
+        if ready_file:
+            ready_file.touch()
 
         from datetime import datetime, timezone
         ts      = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
@@ -138,14 +140,15 @@ def run() -> None:
     sys.stderr.reconfigure(line_buffering=True)
 
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=Path, default=None)
+    p.add_argument("--config",     type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     our_ns, _ = p.parse_known_args()
 
     cfg: dict = {}
     if our_ns.config:
         cfg = _load_config(our_ns.config)
 
-    asyncio.run(_run(cfg))
+    asyncio.run(_run(cfg, ready_file=our_ns.ready_file))
 
 
 if __name__ == "__main__":

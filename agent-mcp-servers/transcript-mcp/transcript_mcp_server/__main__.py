@@ -279,7 +279,8 @@ def build_app(store: TranscriptStore):
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=pathlib.Path, default=None)
+    p.add_argument("--config",     type=pathlib.Path, default=None)
+    p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -298,6 +299,10 @@ def run() -> None:
 
     store = TranscriptStore(transcripts_dir)
     app   = build_app(store)
+
+    if ns.ready_file:
+        ready_path = ns.ready_file
+        app.add_event_handler("startup", lambda: ready_path.touch())
 
     log.info("transcript-mcp-server  mcp=/mcp  port=%d  dir=%s",
              port, transcripts_dir)

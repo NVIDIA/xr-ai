@@ -40,13 +40,7 @@ import zmq
 import zmq.asyncio
 from fastmcp import FastMCP
 
-from xr_ai_launcher import (
-    ManagedProcess,
-    XR_RUNTIME_VAR,
-    load_cloudxr_env,
-    wait_for_cloudxr_env,
-    wait_for_cloudxr_runtime_started,
-)
+from xr_ai_launcher import ManagedProcess, XR_RUNTIME_VAR, load_cloudxr_env
 
 log = logging.getLogger("render_mcp")
 
@@ -174,23 +168,13 @@ class SceneDispatcher:
             cfg = self._cfg
 
             if cfg.cloudxr_env_file:
-                log.info("render-mcp: waiting for cloudxr env file at %s", cfg.cloudxr_env_file)
-                if not await wait_for_cloudxr_env(
-                    cfg.cloudxr_env_file, log_prefix="render-mcp",
-                ):
-                    msg = (f"timed out waiting for {cfg.cloudxr_env_file} "
-                           f"({XR_RUNTIME_VAR} missing). cloudxr-runtime did not become ready.")
+                if not cfg.cloudxr_env_file.exists():
+                    msg = (f"cloudxr env file not found: {cfg.cloudxr_env_file}. "
+                           "Ensure cloudxr-runtime starts before render-mcp.")
                     self._spawn_error = msg
                     return {"status": "error", "error": msg}
                 load_cloudxr_env(cfg.cloudxr_env_file)
-
-                log.info("render-mcp: waiting for cloudxr runtime to be ready")
-                if not await wait_for_cloudxr_runtime_started(log_prefix="render-mcp"):
-                    msg = ("timed out waiting for cloudxr runtime_started. "
-                           "Check the cloudxr-runtime logs for startup errors.")
-                    self._spawn_error = msg
-                    return {"status": "error", "error": msg}
-                log.info("render-mcp: cloudxr OpenXR runtime is ready")
+                log.info("render-mcp: cloudxr env loaded from %s", cfg.cloudxr_env_file)
             else:
                 log.warning(
                     "render-mcp: no cloudxr_env_file configured — LOVR will use "
@@ -512,7 +496,7 @@ def build_app(disp: SceneDispatcher):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-async def _serve(cfg: Config) -> None:
+async def _serve(cfg: Config, ready_file: Path | None = None) -> None:
     os.environ["RENDER_SCENE_SOCKET"] = cfg.scene_socket
     bundled = _find_bundled_libzmq()
     if bundled:
@@ -529,6 +513,8 @@ async def _serve(cfg: Config) -> None:
             server = uvicorn.Server(uv_cfg)
             log.info("render-mcp  mcp=/mcp  port=%d  scene_socket=%s",
                      cfg.port, cfg.scene_socket)
+            if ready_file:
+                ready_file.touch()
             await server.serve()
         finally:
             disp.close()
@@ -538,7 +524,8 @@ async def _serve(cfg: Config) -> None:
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=Path, default=None)
+    p.add_argument("--config",     type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
     logging.basicConfig(
@@ -554,7 +541,7 @@ def run() -> None:
     raw = _load_raw(yaml_path)
     cfg = _build_config(yaml_path, raw)
 
-    asyncio.run(_serve(cfg))
+    asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":

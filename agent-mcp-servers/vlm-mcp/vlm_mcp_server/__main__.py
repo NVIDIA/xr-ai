@@ -212,7 +212,7 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
 
 # ── server ────────────────────────────────────────────────────────────────────
 
-async def _serve(cfg: dict) -> None:
+async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     host                  = cfg.get("host", "0.0.0.0")
     port                  = int(cfg.get("port", 8220))
     vlm_server            = cfg.get("vlm_server", "http://localhost:8100")
@@ -249,12 +249,15 @@ async def _serve(cfg: dict) -> None:
         "vlm-mcp-server  port=%d  vlm_server=%s  timeout=%.1fs",
         port, vlm_server, vlm_request_timeout_s,
     )
+    if ready_file:
+        ready_file.touch()
     await server.serve()
 
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=pathlib.Path, default=None)
+    p.add_argument("--config",     type=pathlib.Path, default=None)
+    p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -266,7 +269,7 @@ def run() -> None:
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
-    asyncio.run(_serve(cfg))
+    asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":

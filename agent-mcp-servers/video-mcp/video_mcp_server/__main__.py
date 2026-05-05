@@ -604,7 +604,7 @@ def build_app(
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
-async def _serve(cfg: dict) -> None:
+async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     recordings_dir = pathlib.Path(cfg.get("recordings_dir", "/dev/shm/xr-ai/recordings"))
     out_dir        = pathlib.Path(cfg.get("out_dir",        "/tmp/xr_video_queries"))
     hub_pub        = cfg.get("hub_pub",  _DEFAULT_HUB_PUB)
@@ -629,6 +629,8 @@ async def _serve(cfg: dict) -> None:
     ep_task = asyncio.create_task(ep.run(), name="video_mcp_processor")
     log.info("video-mcp-server  recordings_dir=%s  port=%d  hub_pub=%s",
              recordings_dir, port, hub_pub)
+    if ready_file:
+        ready_file.touch()
     try:
         await server.serve()
     finally:
@@ -643,7 +645,8 @@ async def _serve(cfg: dict) -> None:
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=pathlib.Path, default=None)
+    p.add_argument("--config",     type=pathlib.Path, default=None)
+    p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -653,7 +656,7 @@ def run() -> None:
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    asyncio.run(_serve(cfg))
+    asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":

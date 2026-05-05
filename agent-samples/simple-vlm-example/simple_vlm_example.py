@@ -18,7 +18,6 @@ Text in (data ch.)    → text query
 How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example
 """
-import asyncio
 from pathlib import Path
 
 import yaml
@@ -55,7 +54,7 @@ def _build_processes() -> list[Process]:
 
 def run() -> None:
     ensure_credentials("HF_TOKEN")
-    asyncio.run(run_stack(_build_processes(), _BASE))
+    run_stack(_build_processes(), _BASE)
 
 
 if __name__ == "__main__":

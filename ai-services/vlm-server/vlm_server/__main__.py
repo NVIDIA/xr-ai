@@ -30,7 +30,12 @@ Config keys
 import argparse
 import json
 import os
+import signal
+import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import yaml
@@ -61,7 +66,8 @@ def run() -> None:
     sys.stderr.reconfigure(line_buffering=True)
 
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=Path, default=None)
+    p.add_argument("--config",     type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -107,7 +113,31 @@ def run() -> None:
         argv.append("--enforce-eager")
 
     print(f"[vlm_server] Launching vLLM  http://{host}:{port}/v1  model={model}", flush=True)
-    os.execvp(argv[0], argv)
+    proc = subprocess.Popen(argv)
+
+    def _fwd(sig, _frame):
+        proc.send_signal(sig)
+
+    signal.signal(signal.SIGTERM, _fwd)
+    signal.signal(signal.SIGINT,  _fwd)
+
+    health_url = f"http://127.0.0.1:{port}/health"
+    while True:
+        if proc.poll() is not None:
+            sys.exit(proc.returncode or 1)
+        try:
+            with urllib.request.urlopen(health_url, timeout=2) as r:
+                if r.status == 200:
+                    break
+        except Exception:
+            pass
+        time.sleep(2)
+
+    print(f"[vlm_server] Ready  →  http://localhost:{port}/v1", flush=True)
+    if ns.ready_file:
+        ns.ready_file.touch()
+
+    proc.wait()
 
 
 if __name__ == "__main__":

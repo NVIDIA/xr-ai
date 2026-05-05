@@ -176,7 +176,7 @@ def _build_app(cfg: dict, model_cache: Path):
     return app, backend
 
 
-async def _run(cfg: dict, yaml_dir: Path) -> None:
+async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> None:
     import asyncio
     import uvicorn
 
@@ -197,6 +197,8 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     server = uvicorn.Server(config)
 
     print(f"[piper_tts_server] Ready  →  http://localhost:{port}/v1")
+    if ready_file:
+        ready_file.touch()
     await server.serve()
     print("[piper_tts_server] Stopped.")
 
@@ -208,7 +210,8 @@ def run() -> None:
     sys.stderr.reconfigure(line_buffering=True)
 
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=Path, default=None)
+    p.add_argument("--config",     type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -218,7 +221,7 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    asyncio.run(_run(cfg, yaml_dir))
+    asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":

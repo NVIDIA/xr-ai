@@ -30,7 +30,6 @@ WebXR DevUI on desktop). Speak; the sphere tracks your voice in the headset.
 
 The CloudXR EULA is accepted via cloudxr_runtime.yaml (see ``accept_eula``).
 """
-import asyncio
 import os
 import platform
 import re
@@ -180,7 +179,7 @@ def _ensure_web_vendor() -> None:
 def run() -> None:
     _ensure_web_vendor()
     _ensure_lovr_bin()
-    asyncio.run(run_stack(PROCESSES, _BASE))
+    run_stack(PROCESSES, _BASE)
 
 
 if __name__ == "__main__":

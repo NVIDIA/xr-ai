@@ -86,7 +86,7 @@ cloudxr-runtime  (cloudxr-runtime/)
     └── pyyaml
 
 render-mcp-server  (agent-mcp-servers/render-mcp/)
-    └── xr-ai-launcher  [editable: ../../launcher] (ManagedProcess + cloudxr-env helpers)
+    └── xr-ai-launcher  [editable: ../../launcher] (ManagedProcess + load_cloudxr_env)
     └── pyzmq >=26.0       (PUSH socket → LOVR; libzmq.so reused by LOVR FFI)
     └── msgpack >=1.0      (wire format for LOVR ops)
     └── pyyaml >=6.0
@@ -94,19 +94,18 @@ render-mcp-server  (agent-mcp-servers/render-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
     Spawns LOVR (the OpenXR rendering app) on the first start_xr call.
-    Mixed HTTP surface: POST /sphere/radius is a plain route for the
-    worker's per-audio-chunk firehose; /mcp hosts the discrete MCP tools
-    (start_xr, set_sphere_color, set_sphere_position, reset_sphere,
-    get_health) that an LLM agent or worker can drive.
+    cloudxr-runtime must start before render-mcp (serial launch order);
+    cloudxr.env is read synchronously via load_cloudxr_env at start_xr time.
 
 oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
-    └── xr-ai-launcher  [editable: ../../launcher] (cloudxr-env helpers)
+    └── xr-ai-launcher  [editable: ../../launcher] (load_cloudxr_env)
     └── isaacteleop                                (headless OpenXR + HeadTracker)
     └── pyyaml >=6.0
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
     Pure FastMCP at /mcp. Reads pose from CloudXR via a second (headless)
     OpenXR session; runs alongside LOVR's rendering session.
+    cloudxr-runtime must start before oxr-mcp (serial launch order).
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent   [editable: ../agent-sdk]

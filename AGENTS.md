@@ -56,7 +56,7 @@ and passes it as `--config`.  No separate launcher config file exists.
 
 The orchestrator declares the process sequence in code:
 ```python
-_BASE = Path(__file__).resolve().parents[1]   # sample root
+_BASE = Path(__file__).resolve().parent   # sample root
 
 PROCESSES = [
     Process("hub",     "../../server-runtime",  "xr_media_hub"),
@@ -67,13 +67,15 @@ PROCESSES = [
 ]
 
 def run() -> None:
-    asyncio.run(run_stack(PROCESSES, _BASE))
+    run_stack(PROCESSES, _BASE)
 ```
 
 Rules:
-- **All processes start concurrently** — no ordering is required or expressed.
-  Every process must tolerate its peers not being ready at startup.
-  ZMQ reconnects automatically; `ProcessorEndpoint` works regardless of hub startup order.
+- **Processes start serially** — each process must create its `--ready-file`
+  before the next one starts. Declare processes in dependency order (hub
+  before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).
+- **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
+  when it is fully initialized and ready to serve requests.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
 - The worker never imports anything from `server-runtime` or `launcher/`.
 - Process management lives in `launcher/`, not inside any process it manages.
@@ -95,15 +97,15 @@ file used by `huggingface-cli login`.  This means:
 
 ### Prompting for a token
 
-Call `ensure_credentials` **before** `asyncio.run(run_stack(...))` in any
-orchestrator that needs a token:
+Call `ensure_credentials` **before** `run_stack(...)` in any orchestrator
+that needs a token:
 
 ```python
 from xr_ai_launcher import ensure_credentials, run_stack
 
 def run() -> None:
     ensure_credentials("HF_TOKEN")          # prompts once, saves for future runs
-    asyncio.run(run_stack(PROCESSES, _BASE))
+    run_stack(PROCESSES, _BASE)
 ```
 
 Supported tokens: `HF_TOKEN`, `NGC_API_KEY`.  The user is shown a prompt
@@ -422,7 +424,6 @@ Exact boilerplate — do not add logic here:
 How to run (from agent-samples/<name>/):
     uv sync && uv run <snake_name>
 """
-import asyncio
 from pathlib import Path
 
 from xr_ai_launcher import Process, run_stack
@@ -436,7 +437,7 @@ PROCESSES = [
 
 
 def run() -> None:
-    asyncio.run(run_stack(PROCESSES, _BASE))
+    run_stack(PROCESSES, _BASE)
 
 
 if __name__ == "__main__":
@@ -468,9 +469,11 @@ Environment                         # ← include only if env vars are read
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
 import signal
+from pathlib import Path
 
 from xr_ai_agent import (          # ← import only what you use
     AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint,
@@ -510,7 +513,7 @@ class <CamelName>Agent:            # ← FILL IN agent logic
         self._ep.close()
 
 
-async def main() -> None:
+async def main(ready_file: Path | None = None) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
@@ -522,6 +525,9 @@ async def main() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, agent.shutdown)
 
+    if ready_file:
+        ready_file.touch()
+
     log.info("<snake_name> connecting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
     try:
         await agent.run()
@@ -530,7 +536,10 @@ async def main() -> None:
 
 
 def run() -> None:
-    asyncio.run(main())
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--ready-file", type=Path, default=None)
+    ns, _ = p.parse_known_args()
+    asyncio.run(main(ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":

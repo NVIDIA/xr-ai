@@ -46,11 +46,7 @@ from fastmcp import FastMCP
 import isaacteleop.deviceio as deviceio
 import isaacteleop.oxr as oxr
 
-from xr_ai_launcher import (
-    load_cloudxr_env,
-    wait_for_cloudxr_env,
-    wait_for_cloudxr_runtime_started,
-)
+from xr_ai_launcher import load_cloudxr_env
 
 log = logging.getLogger("oxr_mcp_server")
 
@@ -340,16 +336,14 @@ def build_mcp(source: PoseSource) -> FastMCP:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-async def _serve(cfg: Config) -> None:
+async def _serve(cfg: Config, ready_file: Path | None = None) -> None:
     if cfg.cloudxr_env_file:
-        log.info("oxr-mcp: waiting for cloudxr env file at %s", cfg.cloudxr_env_file)
-        if await wait_for_cloudxr_env(cfg.cloudxr_env_file, log_prefix="oxr-mcp"):
+        if cfg.cloudxr_env_file.exists():
             load_cloudxr_env(cfg.cloudxr_env_file)
-            log.info("oxr-mcp: waiting for cloudxr runtime to be ready")
-            if not await wait_for_cloudxr_runtime_started(log_prefix="oxr-mcp"):
-                log.error("oxr-mcp: cloudxr runtime never became ready — pose will be unavailable")
+            log.info("oxr-mcp: cloudxr env loaded from %s", cfg.cloudxr_env_file)
         else:
-            log.error("oxr-mcp: cloudxr env file timed out — pose will be unavailable")
+            log.error("oxr-mcp: cloudxr env file not found: %s — pose will be unavailable",
+                      cfg.cloudxr_env_file)
     else:
         log.warning("oxr-mcp: no cloudxr_env_file configured — using whatever XR_RUNTIME_JSON is set in env")
 
@@ -360,6 +354,8 @@ async def _serve(cfg: Config) -> None:
         uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="warning")
         server = uvicorn.Server(uv_cfg)
         log.info("oxr-mcp  mcp=/mcp  port=%d", cfg.port)
+        if ready_file:
+            ready_file.touch()
         await server.serve()
     finally:
         await asyncio.get_running_loop().run_in_executor(None, source.close)
@@ -368,7 +364,8 @@ async def _serve(cfg: Config) -> None:
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=Path, default=None)
+    p.add_argument("--config",     type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
     logging.basicConfig(
@@ -384,7 +381,7 @@ def run() -> None:
     raw = _load_raw(yaml_path)
     cfg = _build_config(yaml_path, raw)
 
-    asyncio.run(_serve(cfg))
+    asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":

@@ -9,12 +9,14 @@ Entry point for xr_media_hub.
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import collections
 import logging
 import signal
 import sys
 import time
+from pathlib import Path
 
 from xr_media_hub._config_loader import load_config
 from xr_media_hub._errors import StartupError
@@ -80,7 +82,7 @@ async def _stats_loop() -> None:
         log.info("stats ─ %s", " │ ".join(parts))
 
 
-async def main() -> None:
+async def main(ready_file: Path | None = None) -> None:
     global _recorder
 
     hub = HubEndpoint(pull_addr=PULL_ADDR, pub_addr=PUB_ADDR)
@@ -119,6 +121,9 @@ async def main() -> None:
         print(f"  Recording   : {rc.out_dir}", flush=True)
     print(flush=True)
 
+    if ready_file:
+        ready_file.touch()
+
     stop = asyncio.Event()
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -141,8 +146,11 @@ async def main() -> None:
 
 
 def run() -> None:
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--ready-file", type=Path, default=None)
+    ns, _ = p.parse_known_args()
     try:
-        asyncio.run(main())
+        asyncio.run(main(ready_file=ns.ready_file))
     except StartupError as e:
         # The message is a pre-formatted banner; print it as-is and exit
         # cleanly so the operator isn't buried under a traceback.

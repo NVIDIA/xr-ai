@@ -141,7 +141,7 @@ def _build_prompt(render_tools: list, oxr_tools: list,
     )
 
 
-async def main(cfg: WorkerConfig) -> None:
+async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
@@ -164,6 +164,9 @@ async def main(cfg: WorkerConfig) -> None:
         "vlm-mcp":   mcp_probe(cfg.vlm_mcp.rstrip("/")    + "/mcp"),
         "video-mcp": mcp_probe(cfg.video_mcp.rstrip("/")  + "/mcp"),
     })
+
+    if ready_file:
+        ready_file.touch()
 
     async with (
         McpClient(cfg.render_mcp.rstrip("/") + "/mcp") as render,
@@ -207,10 +210,11 @@ async def main(cfg: WorkerConfig) -> None:
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=pathlib.Path, default=None)
+    p.add_argument("--config",     type=pathlib.Path, default=None)
+    p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
     cfg = load_config(ns.config)
-    asyncio.run(main(cfg))
+    asyncio.run(main(cfg, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":

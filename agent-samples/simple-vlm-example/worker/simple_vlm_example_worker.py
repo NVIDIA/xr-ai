@@ -54,7 +54,7 @@ _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 
-async def main(cfg: dict) -> None:
+async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
@@ -80,6 +80,9 @@ async def main(cfg: dict) -> None:
         "VLM": vlm.health_url,
         "TTS": tts.health_url,
     })
+
+    if ready_file:
+        ready_file.touch()
 
     ep    = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     agent = SimpleVlmAgent(
@@ -108,7 +111,8 @@ async def main(cfg: dict) -> None:
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=pathlib.Path, default=None)
+    p.add_argument("--config",     type=pathlib.Path, default=None)
+    p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -116,7 +120,7 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    asyncio.run(main(cfg))
+    asyncio.run(main(cfg, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":
