@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import io
-import logging
 import wave
 from typing import Awaitable, Callable
 
 import httpx
 from fastmcp import Client as McpClient
-
-log = logging.getLogger("xr_ai_pipecat.services")
+from loguru import logger
 
 
 # ── STT ───────────────────────────────────────────────────────────────────────
@@ -39,7 +37,7 @@ class SttClient:
             data={"response_format": "json"},
         )
         if resp.is_error:
-            log.error("stt %s: %s", resp.status_code, resp.text[:300])
+            logger.error("stt {}: {}", resp.status_code, resp.text[:300])
         resp.raise_for_status()
         return resp.json().get("text", "")
 
@@ -74,7 +72,7 @@ class TtsClient:
             json={"input": text, "response_format": "wav"},
         )
         if resp.is_error:
-            log.error("tts %s: %s", resp.status_code, resp.text[:300])
+            logger.error("tts {}: {}", resp.status_code, resp.text[:300])
         resp.raise_for_status()
         return resp.content
 
@@ -120,8 +118,8 @@ async def wait_for_services(
     while pending:
         for name in list(pending):
             if await probes[name]():
-                log.info("%s ready", name)
+                logger.info("{} ready", name)
                 pending.discard(name)
         if pending:
-            log.info("still waiting for: %s", ", ".join(sorted(pending)))
+            logger.info("still waiting for: {}", ", ".join(sorted(pending)))
             await asyncio.sleep(poll_interval)

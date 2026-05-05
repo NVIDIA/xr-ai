@@ -33,6 +33,8 @@ import threading
 from pathlib import Path
 
 import yaml
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT        = 8104
 _DEFAULT_SAMPLE_RATE = 22050  # NeMo FastPitch/VITS native rate
@@ -72,13 +74,13 @@ class _TtsBackend:
             if device == "auto":
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            print(f"[magpie_tts_server] Loading NeMo TTS {self._model_name!r} on {device}…")
+            logger.info("Loading NeMo TTS {!r} on {}…", self._model_name, device)
             model = MagpieTTSModel.from_pretrained(self._model_name)
             model.eval()
             if device == "cuda":
                 model = model.cuda()
             self._model = model
-            print("[magpie_tts_server] TTS model ready.")
+            logger.info("TTS model ready.")
 
     @property
     def ready(self) -> bool:
@@ -159,7 +161,7 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     import uvicorn
 
     if not cfg.get("model"):
-        print("[magpie_tts_server] 'model' is required in config", file=sys.stderr)
+        logger.error("'model' is required in config")
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
@@ -179,14 +181,16 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    print(f"[magpie_tts_server] Ready  →  http://localhost:{port}/v1")
+    logger.info("Ready  →  http://localhost:{}/v1", port)
     await server.serve()
-    print("[magpie_tts_server] Stopped.")
+    logger.info("Stopped.")
 
 
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+
+    setup_logging("tts-magpie")
 
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config", type=Path, default=None)

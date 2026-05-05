@@ -12,19 +12,18 @@ from __future__ import annotations
 import argparse
 import asyncio
 import collections
-import logging
 import signal
 import sys
 import time
 from pathlib import Path
 
+from loguru import logger
+from xr_ai_logging import setup_logging
+
 from xr_media_hub._config_loader import load_config
 from xr_media_hub._errors import StartupError
 from xr_media_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
 from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
-
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger(__name__)
 
 PULL_ADDR      = "ipc:///tmp/xr_hub_in"
 PUB_ADDR       = "ipc:///tmp/xr_hub_pub"
@@ -50,13 +49,16 @@ async def on_audio(chunk: AudioChunk) -> None:
 
 async def on_data(msg: DataMessage) -> None:
     text = msg.data.decode("utf-8", errors="replace") if msg.data else ""
-    log.info("data  participant=%s  topic=%r  %r", msg.participant_id, msg.topic, text[:120])
+    logger.debug(
+        "data  participant={}  topic={!r}  {!r}",
+        msg.participant_id, msg.topic, text[:120],
+    )
     _data_counts[msg.participant_id] += 1
 
 
 async def on_participant(event: ParticipantEvent) -> None:
     action = "joined" if event.joined else "left"
-    log.info("participant %s %s", event.participant_id, action)
+    logger.info("participant {} {}", event.participant_id, action)
     if event.joined:
         _participants.add(event.participant_id)
     else:
@@ -79,11 +81,13 @@ async def _stats_loop() -> None:
             achps = _audio_counts.pop(pid, 0) / STATS_INTERVAL
             dps   = _data_counts.pop(pid, 0)  / STATS_INTERVAL
             parts.append(f"{pid}  video={fps:.1f}fps  audio={achps:.1f}ch/s  data={dps:.1f}msg/s")
-        log.info("stats ─ %s", " │ ".join(parts))
+        logger.info("stats ─ {}", " │ ".join(parts))
 
 
 async def main(ready_file: Path | None = None) -> None:
     global _recorder
+
+    setup_logging("hub")
 
     hub = HubEndpoint(pull_addr=PULL_ADDR, pub_addr=PUB_ADDR)
     hub.on_frame(on_frame)
@@ -108,18 +112,17 @@ async def main(ready_file: Path | None = None) -> None:
             gpu_id          = int(vr_cfg.get("gpu_id",          rc_defaults.gpu_id)),
         )
         _recorder = VideoRecorder(rc)
-        log.info("Video recording enabled  out_dir=%s", rc.out_dir)
+        logger.info("Video recording enabled  out_dir={}", rc.out_dir)
 
     token = make_client_token(cfg, identity="ios-client")
     web_scheme = "https" if cfg.web_server_tls else "http"
-    print(f"\n  LiveKit URL : ws://0.0.0.0:{cfg.lk_port_ws}  (plain ws — no TLS)", flush=True)
-    print(f"  Room        : {cfg.room_name}", flush=True)
-    print(f"  Token       : {token}", flush=True)
+    logger.info("LiveKit URL : ws://0.0.0.0:{}  (plain ws — no TLS)", cfg.lk_port_ws)
+    logger.info("Room        : {}", cfg.room_name)
+    logger.info("Token       : {}", token)
     if cfg.enable_web_server:
-        print(f"  Web client  : {web_scheme}://localhost:{cfg.web_server_port}", flush=True)
+        logger.info("Web client  : {}://localhost:{}", web_scheme, cfg.web_server_port)
     if _recorder is not None:
-        print(f"  Recording   : {rc.out_dir}", flush=True)
-    print(flush=True)
+        logger.info("Recording   : {}", rc.out_dir)
 
     if ready_file:
         ready_file.touch()
@@ -129,13 +132,13 @@ async def main(ready_file: Path | None = None) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
-    log.info("XR-Media-Hub running — press Ctrl-C to exit")
+    logger.info("XR-Media-Hub running — press Ctrl-C to exit")
     hub_task   = asyncio.create_task(hub.run(),       name="hub")
     conn_task  = asyncio.create_task(connector.run(), name="connector")
     stats_task = asyncio.create_task(_stats_loop(),   name="stats")
 
     await stop.wait()
-    log.info("Shutting down…")
+    logger.info("Shutting down…")
 
     stats_task.cancel()
     hub.stop()

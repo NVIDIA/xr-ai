@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-logging"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+# Single shared logging stack for the xr-ai monorepo.  Adds loguru as the
+# only runtime dep; consumers call ``setup_logging(name, namespace=...)``
+# at process startup to install the unified stderr + file sinks plus a
+# stdlib-to-loguru bridge.  See the package docstring for details.
+dependencies = [
+    "loguru>=0.7",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_logging"]

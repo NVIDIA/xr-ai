@@ -32,7 +32,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import math
-import logging
 import sys
 import threading
 import time
@@ -42,13 +41,13 @@ from pathlib import Path
 import uvicorn
 import yaml
 from fastmcp import FastMCP
+from loguru import logger
 
 import isaacteleop.deviceio as deviceio
 import isaacteleop.oxr as oxr
 
 from xr_ai_launcher import load_cloudxr_env
-
-log = logging.getLogger("oxr_mcp_server")
+from xr_ai_logging import setup_logging
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "oxr_mcp_server.yaml"
 
@@ -142,9 +141,11 @@ class PoseSource:
             dev.__enter__()
             self._oxr_session = sess
             self._dev_session = dev
-            log.info("oxr-mcp: OpenXR + DeviceIO sessions opened "
-                     "(attempt=%d, instance=%#x session=%#x)",
-                     self._open_attempts, handles.instance, handles.session)
+            logger.info(
+                "oxr-mcp: OpenXR + DeviceIO sessions opened "
+                "(attempt={}, instance={:#x} session={:#x})",
+                self._open_attempts, handles.instance, handles.session,
+            )
             self._last_open_error = None
             return None
         except Exception as exc:
@@ -163,9 +164,11 @@ class PoseSource:
             self._emit_open_failure_log(err)
 
     def _emit_open_failure_log(self, err: str) -> None:
-        log.warning("oxr-mcp: open attempt %d failed: %s "
-                    "(form factor not yet available — waiting for streaming client)",
-                    self._open_attempts, err)
+        logger.warning(
+            "oxr-mcp: open attempt {} failed: {} "
+            "(form factor not yet available — waiting for streaming client)",
+            self._open_attempts, err,
+        )
 
     def health_snapshot(self) -> dict:
         return {
@@ -181,13 +184,13 @@ class PoseSource:
                 try:
                     self._dev_session.__exit__(None, None, None)
                 except Exception:
-                    log.exception("oxr-mcp: error closing DeviceIOSession")
+                    logger.exception("oxr-mcp: error closing DeviceIOSession")
                 self._dev_session = None
             if self._oxr_session is not None:
                 try:
                     self._oxr_session.__exit__(None, None, None)
                 except Exception:
-                    log.exception("oxr-mcp: error closing OpenXRSession")
+                    logger.exception("oxr-mcp: error closing OpenXRSession")
                 self._oxr_session = None
 
     def get_pose(self) -> dict:
@@ -340,26 +343,30 @@ async def _serve(cfg: Config, ready_file: Path | None = None) -> None:
     if cfg.cloudxr_env_file:
         if cfg.cloudxr_env_file.exists():
             load_cloudxr_env(cfg.cloudxr_env_file)
-            log.info("oxr-mcp: cloudxr env loaded from %s", cfg.cloudxr_env_file)
+            logger.info("oxr-mcp: cloudxr env loaded from {}", cfg.cloudxr_env_file)
         else:
-            log.error("oxr-mcp: cloudxr env file not found: %s — pose will be unavailable",
-                      cfg.cloudxr_env_file)
+            logger.error(
+                "oxr-mcp: cloudxr env file not found: {} — pose will be unavailable",
+                cfg.cloudxr_env_file,
+            )
     else:
-        log.warning("oxr-mcp: no cloudxr_env_file configured — using whatever XR_RUNTIME_JSON is set in env")
+        logger.warning(
+            "oxr-mcp: no cloudxr_env_file configured — using whatever XR_RUNTIME_JSON is set in env",
+        )
 
     source = PoseSource()
-    log.info("oxr-mcp: ready to serve get_head_pose (session opens lazily on first request)")
+    logger.info("oxr-mcp: ready to serve get_head_pose (session opens lazily on first request)")
     try:
         app = build_mcp(source).http_app(path="/mcp")
         uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="warning")
         server = uvicorn.Server(uv_cfg)
-        log.info("oxr-mcp  mcp=/mcp  port=%d", cfg.port)
+        logger.info("oxr-mcp  mcp=/mcp  port={}", cfg.port)
         if ready_file:
             ready_file.touch()
         await server.serve()
     finally:
         await asyncio.get_running_loop().run_in_executor(None, source.close)
-        log.info("oxr-mcp: stopped")
+        logger.info("oxr-mcp: stopped")
 
 
 def run() -> None:
@@ -368,10 +375,7 @@ def run() -> None:
     p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    setup_logging("oxr-mcp")
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
 

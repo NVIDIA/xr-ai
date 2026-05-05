@@ -28,13 +28,12 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
-import logging
 import os
 import sys
 
-from xr_media_hub._errors import StartupError
+from loguru import logger
 
-log = logging.getLogger(__name__)
+from xr_media_hub._errors import StartupError
 
 _SKIP_ENV = "XR_AI_SKIP_HWCODEC_CHECK"
 
@@ -49,9 +48,9 @@ def require_nvidia_video_codecs() -> None:
     Set XR_AI_SKIP_HWCODEC_CHECK=1 to bypass (development only).
     """
     if os.environ.get(_SKIP_ENV):
-        log.warning(
+        logger.warning(
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "  %s is set — hardware codec check SKIPPED\n"
+            "  {} is set — hardware codec check SKIPPED\n"
             "  OpenH264 (royalty-bearing) may be used. DO NOT distribute.\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             _SKIP_ENV,

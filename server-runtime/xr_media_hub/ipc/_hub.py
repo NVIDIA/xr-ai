@@ -37,7 +37,7 @@ return — do not hold the view beyond the callback boundary.
 """
 from __future__ import annotations
 
-import logging
+from loguru import logger
 import time
 from typing import Awaitable, Callable
 
@@ -51,8 +51,6 @@ from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
-
-log = logging.getLogger(__name__)
 
 FrameCallback       = Callable[[SlotView],          Awaitable[None]]
 AudioCallback       = Callable[[AudioChunk],        Awaitable[None]]
@@ -137,8 +135,10 @@ class HubEndpoint:
         connected — the hub does not support cross-participant routing.
         """
         if not self._is_connected(chunk.participant_id):
-            log.warning("send_return_audio: participant %r not connected — dropped",
-                        chunk.participant_id)
+            logger.warning(
+                "send_return_audio: participant {!r} not connected — dropped",
+                chunk.participant_id,
+            )
             return
         topic = f"return_audio.{chunk.participant_id}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_AUDIO, chunk)])
@@ -151,8 +151,10 @@ class HubEndpoint:
         connected — the hub does not support cross-participant routing.
         """
         if not self._is_connected(msg.participant_id):
-            log.warning("send_return_data: participant %r not connected — dropped",
-                        msg.participant_id)
+            logger.warning(
+                "send_return_data: participant {!r} not connected — dropped",
+                msg.participant_id,
+            )
             return
         topic = f"return_data.{msg.participant_id}.{msg.topic}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_DATA, msg)])
@@ -164,8 +166,10 @@ class HubEndpoint:
         audio playback. No-op for unknown participants.
         """
         if not self._is_connected(flush.participant_id):
-            log.warning("send_return_audio_flush: participant %r not connected — dropped",
-                        flush.participant_id)
+            logger.warning(
+                "send_return_audio_flush: participant {!r} not connected — dropped",
+                flush.participant_id,
+            )
             return
         topic = f"return_audio_flush.{flush.participant_id}".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_AUDIO_FLUSH, flush)])
@@ -184,13 +188,13 @@ class HubEndpoint:
             except zmq.ZMQError as exc:
                 if not self._running:
                     break
-                log.error("ZMQ recv error: %s", exc)
+                logger.error("ZMQ recv error: {}", exc)
                 continue
             try:
                 type_id, msg = decode(raw)
                 await self._dispatch(type_id, msg)
             except Exception:
-                log.exception("Error dispatching message")
+                logger.exception("Error dispatching message")
 
     async def _dispatch(self, type_id: int, msg) -> None:
         if type_id == MsgType.CONNECTOR_REGISTER:
@@ -199,11 +203,11 @@ class HubEndpoint:
         elif type_id == MsgType.FRAME_SIGNAL:
             connector_id = self._participant_connector.get(msg.participant_id)
             if connector_id is None:
-                log.warning("Frame for unknown participant %s — dropped", msg.participant_id)
+                logger.warning("Frame for unknown participant {} — dropped", msg.participant_id)
                 return
             ring = self._ring_registry.get(connector_id)
             if ring is None:
-                log.warning("Ring buffer for connector %s not found — dropped", connector_id)
+                logger.warning("Ring buffer for connector {} not found — dropped", connector_id)
                 return
 
             key = (msg.participant_id, msg.track_id)
@@ -228,13 +232,16 @@ class HubEndpoint:
                 try:
                     await cb(view)
                 except Exception:
-                    log.exception("frame callback error")
+                    logger.exception("frame callback error")
 
         elif type_id == MsgType.FRAME_REQUEST:
             key = (msg.participant_id, msg.track_id)
             held = self._latest_slots.get(key)
             if held is None:
-                log.debug("FRAME_REQUEST for %s/%s — no frame held", msg.participant_id, msg.track_id)
+                logger.debug(
+                    "FRAME_REQUEST for {}/{} — no frame held",
+                    msg.participant_id, msg.track_id,
+                )
                 return
             _, view = held
             sig = view.signal
@@ -286,7 +293,7 @@ class HubEndpoint:
             await self._replay_roster()
 
         else:
-            log.warning("Unknown message type %d — ignored", type_id)
+            logger.warning("Unknown message type {} — ignored", type_id)
 
     async def _replay_roster(self) -> None:
         """Re-publish PARTICIPANT_EVENT(joined=True) for every connected pid.
@@ -308,15 +315,18 @@ class HubEndpoint:
 
     def _handle_registration(self, reg: ConnectorRegistration) -> None:
         if reg.connector_id in self._ring_registry:
-            log.warning("Connector %s re-registered — replacing ring buffer", reg.connector_id)
+            logger.warning("Connector {} re-registered — replacing ring buffer", reg.connector_id)
             self._ring_registry[reg.connector_id].close()
         try:
             self._ring_registry[reg.connector_id] = ShmRingBuffer(
                 name=reg.shm_name, create=False,
             )
-            log.info("Connector %s registered (shm=%s)", reg.connector_id, reg.shm_name)
+            logger.info("Connector {} registered (shm={})", reg.connector_id, reg.shm_name)
         except Exception:
-            log.exception("Failed to open shm %s for connector %s", reg.shm_name, reg.connector_id)
+            logger.exception(
+                "Failed to open shm {} for connector {}",
+                reg.shm_name, reg.connector_id,
+            )
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 

@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import string
 import time
 from pathlib import Path
@@ -34,6 +33,7 @@ from pathlib import Path
 import httpx
 import numpy as np
 from fastmcp import Client as McpClient
+from loguru import logger
 from pipecat.frames.frames import (
     Frame,
     InputAudioRawFrame,
@@ -58,21 +58,12 @@ from xr_ai_pipecat.transport import XRMediaHubTransport, SAMPLE_RATE
 
 from config import WorkerConfig
 
-log = logging.getLogger("xr_render_demo.processors")
-
-# Dedicated trace logger — writes clean session transcripts to a file.
+# Dedicated trace logger — writes a clean session transcript to a file.
 # Key events: user speech, pre-fetched context, think flag, tool calls +
-# results, agent response, validation.  Tail or paste the file to debug.
-_trace_log = logging.getLogger("xr_render_demo.trace")
-
-def _setup_trace_log(path: str = "/tmp/xr-agent-trace.log") -> None:
-    """Call once at worker startup to attach the trace file handler."""
-    h = logging.FileHandler(path, mode="w", encoding="utf-8")
-    h.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
-    _trace_log.addHandler(h)
-    _trace_log.setLevel(logging.DEBUG)
-    _trace_log.propagate = False
-    _trace_log.info("=== trace started ===")
+# results, agent response, validation.  Records bound with this binding
+# are routed to ``/tmp/xr-agent-trace.log`` by the sink installed in
+# ``xr_render_demo_worker.main()``; everything else is unaffected.
+_trace_log = logger.bind(trace=True)
 
 _SILERO_WINDOW  = 512    # 32 ms at 16 kHz
 _MAX_UTT_S      = 30.0
@@ -155,9 +146,9 @@ class SttProcessor(FrameProcessor):
         try:
             from silero_vad import load_silero_vad
             self._silero = load_silero_vad(onnx=True)
-            log.info("Silero VAD loaded")
+            logger.info("Silero VAD loaded")
         except Exception as exc:
-            log.warning("Silero VAD unavailable (%s) — using adaptive energy VAD", exc)
+            logger.warning("Silero VAD unavailable ({}) — using adaptive energy VAD", exc)
 
         self._silero_buf:  np.ndarray = np.zeros(0, np.float32)
         self._noise_floor: float = 0.001
@@ -196,7 +187,7 @@ class SttProcessor(FrameProcessor):
 
         if is_speech:
             if not self._speaking:
-                log.info("speech START")
+                logger.info("speech START")
                 self._speaking = True
                 # Prepend pre-roll so the first word's attack isn't clipped.
                 if self._pre_roll:
@@ -221,7 +212,7 @@ class SttProcessor(FrameProcessor):
 
         utt_s = self._buffer_samples / max(SAMPLE_RATE, 1)
         if self._speaking and utt_s > _MAX_UTT_S:
-            log.info("max utterance length — finalising")
+            logger.info("max utterance length — finalising")
             await self._finalize()
             return
 
@@ -243,22 +234,22 @@ class SttProcessor(FrameProcessor):
         self._speech_s  = 0.0
         self._stt_busy  = True
         dur_s = len(audio_bytes) // 2 / max(SAMPLE_RATE, 1)
-        log.info("transcribing %.1fs", dur_s)
+        logger.info("transcribing {:.1f}s", dur_s)
         try:
             text = await self._stt.transcribe(audio_bytes, SAMPLE_RATE)
         except Exception:
-            log.exception("STT failed")
+            logger.exception("STT failed")
             return
         finally:
             self._stt_busy = False
         if not text:
-            log.debug("STT returned empty (%.1fs audio) — VAD may have caught noise", dur_s)
+            logger.debug("STT returned empty ({:.1f}s audio) — VAD may have caught noise", dur_s)
             return
-        log.info("transcript: %r", text)
-        _trace_log.info("USER  %s", text)
+        logger.info("transcript: {!r}", text)
+        _trace_log.info("USER  {}", text)
         lower = text.lower().strip().rstrip(string.punctuation).strip()
         if _is_filler(lower):
-            log.debug("filler — skipping")
+            logger.debug("filler — skipping")
             return
         await self.push_frame(
             TranscriptionFrame(text=text, user_id="", timestamp=str(_now_us())),
@@ -343,7 +334,7 @@ class RenderSceneProcessor(FrameProcessor):
             setattr(self, cache_attr, text)
             return text
         except OSError:
-            log.warning("prompt file unreadable: %s — using cache", path.name)
+            logger.warning("prompt file unreadable: {} — using cache", path.name)
             return getattr(self, cache_attr)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -390,7 +381,7 @@ class RenderSceneProcessor(FrameProcessor):
             try:
                 ack, needs_thinking = await self._quick_ack(text)
             except Exception:
-                log.exception("quick ack failed")
+                logger.exception("quick ack failed")
                 ack, needs_thinking = "", False
 
             ack_pid = pid or self._transport.target_participant
@@ -424,15 +415,17 @@ class RenderSceneProcessor(FrameProcessor):
             try:
                 response = await self._agentic_task
             except asyncio.CancelledError:
-                log.info("agentic loop interrupted by new utterance")
+                logger.info("agentic loop interrupted by new utterance")
                 send_pid = pid or self._transport.target_participant
                 if send_pid:
                     try:
                         await self._transport.endpoint.flush_return_audio(send_pid)
                     except Exception:
-                        log.debug("flush_return_audio failed during cancellation", exc_info=True)
+                        logger.opt(exception=True).debug(
+                            "flush_return_audio failed during cancellation",
+                        )
             except Exception:
-                log.exception("agentic loop failed")
+                logger.exception("agentic loop failed")
                 response = "Something went wrong — please try again."
             finally:
                 self._agentic_task = None
@@ -496,15 +489,15 @@ class RenderSceneProcessor(FrameProcessor):
                         obj = json.loads(obj_text)
                         ack   = str(obj.get("ack", "")).strip()
                         think = bool(obj.get("think", False))
-                        log.info("quick-ack: %r  think=%s", ack, think)
-                        _trace_log.info("ACK   %s  [think=%s]", ack, think)
+                        logger.info("quick-ack: {!r}  think={}", ack, think)
+                        _trace_log.info("ACK   {}  [think={}]", ack, think)
                         return ack, think
                     except json.JSONDecodeError:
                         pass
                 # Fallback: treat raw text as ack, no thinking
                 return raw, False
         except Exception as exc:
-            log.warning("quick-ack failed: %s", exc)
+            logger.warning("quick-ack failed: {}", exc)
         return "", False
 
     # ── agentic loop (OpenAI tool calling + LMFE) ────────────────────────────
@@ -556,7 +549,7 @@ class RenderSceneProcessor(FrameProcessor):
             if not resp.is_error:
                 return resp.json()["choices"][0]["message"]["content"].strip()
         except Exception as exc:
-            log.debug("still-working message failed: %s", exc)
+            logger.debug("still-working message failed: {}", exc)
         return ""
 
     async def _still_working_loop(
@@ -616,10 +609,12 @@ class RenderSceneProcessor(FrameProcessor):
                     obj = json.loads(obj_text)
                     ok    = bool(obj.get("ok", True))
                     issue = str(obj.get("issue", ""))
-                    log.info("validation: ok=%s  issue=%r", ok, issue)
+                    logger.debug("validation: ok={}  issue={!r}", ok, issue)
                     return ok, issue
         except Exception:
-            log.debug("validation call failed — defaulting to ok", exc_info=True)
+            logger.opt(exception=True).debug(
+                "validation call failed — defaulting to ok",
+            )
         return True, ""
 
     async def _agentic_loop(self, transcript: str, pid: str, *,
@@ -713,14 +708,14 @@ class RenderSceneProcessor(FrameProcessor):
             ctx_parts.append("[Recent conversation]\n" + "\n".join(hist_lines))
 
         context = "\n".join(ctx_parts)
-        log.info("pre-fetched context for turn")
-        _trace_log.info("CTX   %s", context.replace("\n", " | "))
+        logger.info("pre-fetched context for turn")
+        _trace_log.info("CTX   {}", context.replace("\n", " | "))
 
         try:
             system_content = self._prompt_path.read_text(encoding="utf-8").strip()
             self._prompt_cache = system_content
         except OSError:
-            log.warning("prompt file unreadable — using cached version")
+            logger.warning("prompt file unreadable — using cached version")
             system_content = self._prompt_cache
         if needs_thinking:
             system_content = (
@@ -780,10 +775,10 @@ class RenderSceneProcessor(FrameProcessor):
                     json=body,
                 )
                 if resp.is_error:
-                    log.error("agent-llm %s: %s", resp.status_code, resp.text[:300])
+                    logger.error("agent-llm {}: {}", resp.status_code, resp.text[:300])
                     break
             except Exception:
-                log.exception("agent-llm call failed on iteration %d", iteration)
+                logger.exception("agent-llm call failed on iteration {}", iteration)
                 break
 
             choice  = resp.json()["choices"][0]
@@ -799,16 +794,18 @@ class RenderSceneProcessor(FrameProcessor):
             tool_calls = message.get("tool_calls") or []
             content    = (message.get("content") or "").strip()
 
-            log.info("agent-llm iter=%d  finish=%s  tool_calls=%d  content=%r",
-                     iteration, finish, len(tool_calls), content[:200])
+            logger.debug(
+                "agent-llm iter={}  finish={}  tool_calls={}  content={!r}",
+                iteration, finish, len(tool_calls), content[:200],
+            )
 
             if not tool_calls:
                 # Thinking filled the token budget without emitting a tool call.
                 # Turn off thinking and retry the same iteration so messages is
                 # unchanged and the model gets another chance.
                 if finish == "length" and needs_thinking:
-                    log.warning(
-                        "agent-llm iter=%d hit length limit during thinking — "
+                    logger.warning(
+                        "agent-llm iter={} hit length limit during thinking — "
                         "retrying without thinking", iteration,
                     )
                     needs_thinking = False
@@ -838,10 +835,10 @@ class RenderSceneProcessor(FrameProcessor):
                         except json.JSONDecodeError:
                             # Best-effort recovery: the plain-text fragment is not valid JSON —
                             # leave recovered=None and fall through to the no-tool-call path.
-                            log.debug("failed to decode recovered tool-call JSON: %r", obj_text)
+                            logger.debug("failed to decode recovered tool-call JSON: {!r}", obj_text)
 
                 if recovered:
-                    log.warning("text-format tool call %r — recovering", recovered["name"])
+                    logger.warning("text-format tool call {!r} — recovering", recovered["name"])
                     tool_calls = [{
                         "id":       f"call_{_uuid.uuid4().hex[:12]}",
                         "type":     "function",
@@ -852,7 +849,7 @@ class RenderSceneProcessor(FrameProcessor):
                     }]
                 else:
                     # Genuine final response.
-                    _trace_log.info("RESP  %s", content or "Done.")
+                    _trace_log.info("RESP  {}", content or "Done.")
                     return content or "Done."
 
             # Add the assistant's tool-call message to the conversation.
@@ -876,9 +873,11 @@ class RenderSceneProcessor(FrameProcessor):
                     # Data channel only — TTS is too spammy for per-tool updates.
                     await self._send(pid, progress, topic=_AGENT_PROGRESS_TOPIC)
 
-                log.info("tool call  iter=%d  tool=%s  args=%s", iteration, name, args)
-                _trace_log.info("TOOL  [%d] %s(%s)", iteration, name,
-                                ", ".join(f"{k}={v}" for k, v in args.items()))
+                logger.info("tool call  iter={}  tool={}  args={}", iteration, name, args)
+                _trace_log.info(
+                    "TOOL  [{}] {}({})", iteration, name,
+                    ", ".join(f"{k}={v}" for k, v in args.items()),
+                )
                 try:
                     result = await self._execute_tool(name, args)
                 except _SceneNotReadyError:
@@ -887,8 +886,8 @@ class RenderSceneProcessor(FrameProcessor):
                         "Please click 'Launch XR' to start the headset session first."
                     )
                 result_str = json.dumps(result, default=str)
-                log.info("tool result  tool=%s  %s", name, result_str[:200])
-                _trace_log.info("RES   [%d] %s → %s", iteration, name, result_str[:300])
+                logger.info("tool result  tool={}  {}", name, result_str[:200])
+                _trace_log.info("RES   [{}] {} → {}", iteration, name, result_str[:300])
 
                 messages.append({
                     "role":         "tool",
@@ -943,7 +942,7 @@ class RenderSceneProcessor(FrameProcessor):
             return data
         except Exception as exc:
             if not silent:
-                log.error("mcp %s failed: %s", tool, exc)
+                logger.error("mcp {} failed: {}", tool, exc)
             return {"error": str(exc)}
 
     # ── helpers ───────────────────────────────────────────────────────────────
@@ -957,7 +956,7 @@ class RenderSceneProcessor(FrameProcessor):
                 data=text.encode(),
             ))
         except Exception:
-            log.exception("send failed  topic=%s", topic)
+            logger.exception("send failed  topic={}", topic)
 
     async def close(self) -> None:
         await self._http.aclose()
@@ -996,7 +995,7 @@ class TtsProcessor(FrameProcessor):
                 self._transport.endpoint, self._tts.synthesize, text, pid,
             )
         except Exception:
-            log.exception("TTS failed  pid=%r", pid)
+            logger.exception("TTS failed  pid={!r}", pid)
         await self.push_frame(frame, direction)
 
 

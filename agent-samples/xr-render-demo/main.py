@@ -42,7 +42,9 @@ import time
 import urllib.request
 from pathlib import Path
 
-from xr_ai_launcher import Parallel, Process, run_stack
+from loguru import logger
+from xr_ai_launcher import Process, run_stack
+from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
@@ -68,8 +70,7 @@ def _detect_gpu_config() -> str:
             text=True, stderr=subprocess.DEVNULL,
         ).strip().splitlines()
     except Exception as exc:
-        print(f"[xr-render-demo] nvidia-smi unavailable ({exc}) — using dual_48G_ada",
-              flush=True)
+        logger.warning("nvidia-smi unavailable ({}) — using dual_48G_ada", exc)
         return "dual_48G_ada"
 
     # Known Spark GPU names (unified memory, no discrete memory.total).
@@ -96,8 +97,7 @@ def _detect_gpu_config() -> str:
         gpus.append((name.lower(), cap, mem))
 
     if not gpus:
-        print("[xr-render-demo] GPU detection returned no parseable data — "
-              "using dual_48G_ada", flush=True)
+        logger.warning("GPU detection returned no parseable data — using dual_48G_ada")
         return "dual_48G_ada"
 
     n_gpus       = len(gpus)
@@ -122,77 +122,50 @@ def _detect_gpu_config() -> str:
         cfg = "dual_48G_ada"
 
     mem_str = f"{total_mem_gb:.0f} GiB" if known_mem else "unified memory"
-    print(f"[xr-render-demo] GPU config: {cfg}  "
-          f"({n_gpus}× {gpus[0][0].upper()}, {mem_str}, SM{first_cap:.1f})",
-          flush=True)
+    logger.info(
+        "GPU config: {}  ({}x {}, {}, SM{:.1f})",
+        cfg, n_gpus, gpus[0][0].upper(), mem_str, first_cap,
+    )
     return cfg
 
-
-_GPU_CFG = _detect_gpu_config()
-_AI      = f"yaml/{_GPU_CFG}"
 
 # agent-llm (Nemotron-30B) loads first so its FlashInfer MoE JIT compilation
 # runs with the full GPU free.  The compiled kernels are cached after the
 # first run.  On ADA, nemotron3_nano is pinned to cuda:1 so this order has
 # no downside there either.
-# fmt: off
-PROCESSES = [
-    Process("hub",        "../../server-runtime",                 "xr_media_hub",
-            config="yaml/xr_media_hub.yaml"),
-    Process("cloudxr",    "../../cloudxr-runtime",                "cloudxr_runtime",
-            config="yaml/cloudxr_runtime.yaml"),
-    Process("stt",        "../../ai-services/stt-server",         "stt_server",
-            config=f"{_AI}/stt_server.yaml"),
-    Process("tts",        "../../ai-services/tts/piper",          "piper_tts_server",
-            config=f"{_AI}/piper_tts_server.yaml"),
-    Process("agent-llm",  "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
-            config=f"{_AI}/nemotron3_nano_llm_server.yaml"),
-    Process("vlm",        "../../ai-services/vlm-server",         "vlm_server",
-            config=f"{_AI}/vlm_server.yaml"),
-    Process("llm",        "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
-            config=f"{_AI}/llama_nemotron_llm_server.yaml"),
-    Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",      "vlm_mcp_server",
-            config="yaml/vlm_mcp_server.yaml"),
-    Process("video-mcp",  "../../agent-mcp-servers/video-mcp",    "video_mcp_server",
-            config="yaml/video_mcp_server.yaml"),
-    Process("render-mcp", "../../agent-mcp-servers/render-mcp",   "render_mcp"),
-    Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",      "oxr_mcp_server",
-            config="yaml/oxr_mcp_server.yaml"),
-    Process("worker",     "worker",                               "xr_render_demo_worker",
-            config="yaml/xr_render_demo_worker.yaml"),
-]
-# fmt: on
+def _build_processes() -> list[Process]:
+    """Detect the GPU profile and return the per-profile process list.
 
-# Parallel launch (re-enable once serial debugging is complete):
-# PROCESSES = [
-#     Process("hub",     "../../server-runtime",  "xr_media_hub",
-#             config="yaml/xr_media_hub.yaml"),
-#     Process("cloudxr", "../../cloudxr-runtime", "cloudxr_runtime",
-#             config="yaml/cloudxr_runtime.yaml"),
-#     Parallel([
-#         Process("stt",       "../../ai-services/stt-server",         "stt_server",
-#                 config=f"{_AI}/stt_server.yaml"),
-#         Process("tts",       "../../ai-services/tts/piper",          "piper_tts_server",
-#                 config=f"{_AI}/piper_tts_server.yaml"),
-#         Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
-#                 config=f"{_AI}/nemotron3_nano_llm_server.yaml"),
-#         Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
-#                 config=f"{_AI}/vlm_server.yaml"),
-#         Process("llm",       "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
-#                 config=f"{_AI}/llama_nemotron_llm_server.yaml"),
-#     ]),
-#     Parallel([
-#         Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",    "vlm_mcp_server",
-#                 config="yaml/vlm_mcp_server.yaml"),
-#         Process("video-mcp",  "../../agent-mcp-servers/video-mcp",  "video_mcp_server",
-#                 config="yaml/video_mcp_server.yaml"),
-#         Process("render-mcp", "../../agent-mcp-servers/render-mcp", "render_mcp"),
-#         Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",    "oxr_mcp_server",
-#                 config="yaml/oxr_mcp_server.yaml"),
-#     ]),
-#     Process("worker", "worker", "xr_render_demo_worker",
-#             config="yaml/xr_render_demo_worker.yaml"),
-# ]
+    Deferred to call time (rather than module import) so log calls inside
+    ``_detect_gpu_config`` happen after ``setup_logging`` has installed
+    loguru sinks.
+    """
+    ai = f"yaml/{_detect_gpu_config()}"
+    return [
+        Process("hub",        "../../server-runtime",                 "xr_media_hub",
+                config="yaml/xr_media_hub.yaml"),
+        Process("cloudxr",    "../../cloudxr-runtime",                "cloudxr_runtime",
+                config="yaml/cloudxr_runtime.yaml"),
+        Process("stt",        "../../ai-services/stt-server",         "stt_server",
+                config=f"{ai}/stt_server.yaml"),
+        Process("tts",        "../../ai-services/tts/piper",          "piper_tts_server",
+                config=f"{ai}/piper_tts_server.yaml"),
+        Process("agent-llm",  "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+                config=f"{ai}/nemotron3_nano_llm_server.yaml"),
+        Process("vlm",        "../../ai-services/vlm-server",         "vlm_server",
+                config=f"{ai}/vlm_server.yaml"),
+        Process("llm",        "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
+                config=f"{ai}/llama_nemotron_llm_server.yaml"),
+        Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",      "vlm_mcp_server",
+                config="yaml/vlm_mcp_server.yaml"),
+        Process("video-mcp",  "../../agent-mcp-servers/video-mcp",    "video_mcp_server",
+                config="yaml/video_mcp_server.yaml"),
+        Process("render-mcp", "../../agent-mcp-servers/render-mcp",   "render_mcp"),
+        Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",      "oxr_mcp_server",
+                config="yaml/oxr_mcp_server.yaml"),
+        Process("worker",     "worker",                               "xr_render_demo_worker",
+                config="yaml/xr_render_demo_worker.yaml"),
+    ]
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.
 _LOVR_BIN_LINE = re.compile(r"^\s*lovr_bin\s*:\s*\S")
@@ -210,6 +183,11 @@ _LOVR_ASSETS: dict[tuple[str, str], str] = {
 
 
 def _dl_progress(block_num: int, block_size: int, total_size: int) -> None:
+    # Carriage-return progress is intentionally still raw print() — loguru
+    # records are line-oriented and would emit a fresh line per update,
+    # defeating the in-place spinner.  The "downloading…" log line is
+    # emitted via logger before urlretrieve begins, providing the file-log
+    # context the spinner doesn't.
     if total_size > 0:
         pct = min(100, block_num * block_size * 100 // total_size)
         print(f"\r  [setup]   {pct}%   ", end="", flush=True)
@@ -254,21 +232,20 @@ def _ensure_lovr_bin() -> None:
     cached = _LOVR_CACHE / asset
     if not cached.exists():
         url = f"{_LOVR_BASE_URL}/{asset}"
-        print(f"\n  [setup] LOVR v{_LOVR_VERSION} not found — downloading …")
-        print(f"  [setup]   {url}")
+        logger.info("LOVR v{} not found — downloading from {}", _LOVR_VERSION, url)
         _LOVR_CACHE.mkdir(parents=True, exist_ok=True)
         partial = cached.with_suffix(cached.suffix + ".partial")
         try:
             urllib.request.urlretrieve(url, partial, _dl_progress)
-            print()  # end progress line
+            print()  # end progress line (paired with _dl_progress's \r updates)
             partial.rename(cached)
         except Exception as exc:
             partial.unlink(missing_ok=True)
             sys.exit(f"\n  [setup] LOVR download failed: {exc}\n")
         cached.chmod(cached.stat().st_mode | 0o111)
-        print(f"  [setup] LOVR saved to {cached}\n")
+        logger.info("LOVR saved to {}", cached)
     else:
-        print(f"  [setup] Using cached LOVR: {cached}")
+        logger.info("Using cached LOVR: {}", cached)
 
     os.environ["LOVR_BIN"] = str(cached)
 
@@ -289,7 +266,9 @@ def _ensure_web_vendor() -> None:
 
     build_sh = (_BASE / "../../client-samples/web-xr-build/build.sh").resolve()
     if not build_sh.exists():
-        print(f"  [setup] warning: web vendor bundle missing and {build_sh} not found — skipping")
+        logger.warning(
+            "web vendor bundle missing and {} not found — skipping", build_sh,
+        )
         return
 
     if not shutil.which("npm"):
@@ -299,15 +278,14 @@ def _ensure_web_vendor() -> None:
             f"    cd {build_sh.parent} && ./build.sh\n"
         )
 
-    print("\n  [setup] Web vendor bundle not found — running build.sh …")
-    print(f"  [setup]   {build_sh}\n")
+    logger.info("Web vendor bundle not found — running build.sh: {}", build_sh)
     result = subprocess.run([str(build_sh)], cwd=str(build_sh.parent))
     if result.returncode != 0:
         sys.exit(
             f"\n  [setup] build.sh failed (exit {result.returncode}).\n"
             f"  Check the output above, then re-run.\n"
         )
-    print("\n  [setup] Web vendor bundle ready.\n")
+    logger.info("Web vendor bundle ready")
 
 
 # ── Model cleanup (--stop) ────────────────────────────────────────────────────
@@ -391,6 +369,8 @@ def _stop_models() -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def run() -> None:
+    setup_logging("orchestrator", namespace="xr-render-demo")
+
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--stop", action="store_true",
                    help="Stop any persisted vLLM model servers and exit.")
@@ -402,7 +382,7 @@ def run() -> None:
 
     _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(PROCESSES, _BASE)
+    run_stack(_build_processes(), _BASE)
 
 
 if __name__ == "__main__":

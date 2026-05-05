@@ -21,19 +21,17 @@ The connector process only needs: pyzmq, msgpack (no CUDA, no GPU deps).
 """
 from __future__ import annotations
 
-import logging
 import uuid
 from collections import defaultdict
 from typing import Awaitable, Callable
 
 import zmq
 import zmq.asyncio
+from loguru import logger
 
 from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
                          DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat,
                          ReturnAudioFlush, ShmRingBuffer, decode, encode)
-
-log = logging.getLogger(__name__)
 
 ReturnAudioCallback      = Callable[[AudioChunk],        Awaitable[None]]
 ReturnDataCallback       = Callable[[DataMessage],       Awaitable[None]]
@@ -222,7 +220,7 @@ class ConnectorEndpoint:
             except zmq.ZMQError as exc:
                 if not self._running:
                     break
-                log.error("ZMQ recv error: %s", exc)
+                logger.error("ZMQ recv error: {}", exc)
                 continue
             try:
                 type_id, msg = decode(raw)
@@ -236,9 +234,9 @@ class ConnectorEndpoint:
                     for cb in self._return_audio_flush_cbs:
                         await cb(msg)
                 else:
-                    log.debug("Connector: unhandled return type %d", type_id)
+                    logger.debug("Connector: unhandled return type {}", type_id)
             except Exception:
-                log.exception("Error dispatching return message")
+                logger.exception("Error dispatching return message")
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 

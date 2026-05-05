@@ -41,7 +41,6 @@ import argparse
 import asyncio
 import base64
 import io
-import logging
 import pathlib
 import re
 from contextlib import asynccontextmanager
@@ -50,9 +49,10 @@ import httpx
 import uvicorn
 import yaml
 from fastmcp import FastMCP
+from loguru import logger
 from PIL import Image
 
-log = logging.getLogger("vlm_mcp_server")
+from xr_ai_logging import setup_logging
 
 
 # ── VLM HTTP client ───────────────────────────────────────────────────────────
@@ -192,17 +192,17 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
         try:
             data_url = await loop.run_in_executor(None, _load_jpeg_data_url, str(path))
         except Exception as exc:
-            log.exception("ask_image: failed to load %s", image_path)
+            logger.exception("ask_image: failed to load {}", image_path)
             return f"ask_image: failed to read image at {image_path!r}: {exc}"
 
         try:
             answer = await vlm.ask(data_url, question)
         except httpx.HTTPError as exc:
-            log.exception("ask_image: vlm-server HTTP error")
+            logger.exception("ask_image: vlm-server HTTP error")
             return f"ask_image: vlm-server request failed: {exc}"
 
-        log.info(
-            "ask_image  q=%r  image=%s  -> %d chars",
+        logger.debug(
+            "ask_image  q={!r}  image={}  -> {} chars",
             question[:80], path.name, len(answer),
         )
         return answer.strip()
@@ -245,8 +245,8 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    log.info(
-        "vlm-mcp-server  port=%d  vlm_server=%s  timeout=%.1fs",
+    logger.info(
+        "vlm-mcp-server  port={}  vlm_server={}  timeout={:.1f}s",
         port, vlm_server, vlm_request_timeout_s,
     )
     if ready_file:
@@ -265,10 +265,7 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    setup_logging("vlm-mcp")
     asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 

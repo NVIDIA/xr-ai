@@ -15,19 +15,17 @@ Runs programmatically via uvicorn so the caller can await start()/stop().
 from __future__ import annotations
 
 import asyncio
-import logging
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, Query, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from loguru import logger
 
 from . import _lk_proxy
 from ._token import make_client_token
 from .config import LiveKitConnectorConfig
-
-log = logging.getLogger(__name__)
 
 
 def build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
@@ -86,8 +84,8 @@ class TokenServer:
 
         self._server = uvicorn.Server(uvicorn.Config(**uv_cfg))
         self._task = asyncio.create_task(self._server.serve())
-        log.info(
-            "Token server → %s://%s:%d  room=%r",
+        logger.info(
+            "Token server → {}://{}:{}  room={!r}",
             scheme, self._cfg.token_server_host, self._cfg.token_server_port,
             self._cfg.room_name,
         )

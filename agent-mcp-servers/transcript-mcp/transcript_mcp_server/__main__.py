@@ -55,14 +55,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import pathlib
 
 import uvicorn
 import yaml
 from fastmcp import FastMCP
-
-log = logging.getLogger("transcript_mcp_server")
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 
 def _safe_name(s: str) -> str:
@@ -247,7 +246,10 @@ def build_mcp(store: TranscriptStore) -> "FastMCP":
         if not text.strip():
             return {"error": "text must not be empty"}
         store.append(source_id, timestamp_us, text)
-        log.info("add_transcript  source=%r  ts=%d  %r", source_id, timestamp_us, text[:80])
+        logger.debug(
+            "add_transcript  source={!r}  ts={}  {!r}",
+            source_id, timestamp_us, text[:80],
+        )
         return {"ok": True}
 
     @mcp.tool()
@@ -288,10 +290,7 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    setup_logging("transcript-mcp")
 
     transcripts_dir = cfg.get("transcripts_dir", "/tmp/xr_transcripts")
     host            = cfg.get("host", "0.0.0.0")
@@ -304,8 +303,7 @@ def run() -> None:
         ready_path = ns.ready_file
         app.add_event_handler("startup", lambda: ready_path.touch())
 
-    log.info("transcript-mcp-server  mcp=/mcp  port=%d  dir=%s",
-             port, transcripts_dir)
+    logger.info("transcript-mcp-server  mcp=/mcp  port={}  dir={}", port, transcripts_dir)
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

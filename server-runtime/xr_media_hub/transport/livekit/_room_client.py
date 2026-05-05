@@ -16,12 +16,12 @@ The client never publishes media — it is subscribe-only.
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from typing import TYPE_CHECKING
 
 import numpy as np
 from livekit import rtc
+from loguru import logger
 
 from xr_media_hub.ipc import (
     AudioChunk,
@@ -36,8 +36,6 @@ from .config import LiveKitConnectorConfig
 
 if TYPE_CHECKING:
     pass
-
-log = logging.getLogger(__name__)
 
 
 def _now_us() -> int:
@@ -87,7 +85,7 @@ class _ReturnAudioPipe:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                log.exception("capture_frame failed")
+                logger.exception("capture_frame failed")
 
     async def close(self) -> None:
         # Signal the drainer to exit cleanly; it finishes any frame mid-capture.
@@ -182,8 +180,8 @@ class RoomClient:
             make_client_token(self._cfg, identity=self._cfg.identity),
             options=rtc.RoomOptions(auto_subscribe=True, connect_timeout=15.0),
         )
-        log.info(
-            "Room client connected: url=%s  room=%r  identity=%r",
+        logger.info(
+            "Room client connected: url={}  room={!r}  identity={!r}",
             self._cfg.lk_internal_url, self._cfg.room_name, self._cfg.identity,
         )
 
@@ -249,7 +247,7 @@ class RoomClient:
                 destination_identities=[msg.participant_id],
             )
         except Exception:
-            log.exception("send_return_data failed")
+            logger.exception("send_return_data failed")
 
     async def send_return_audio(self, chunk: AudioChunk) -> None:
         """Hand a return-audio chunk to the participant's pacing pipe.
@@ -298,7 +296,7 @@ class RoomClient:
         track = rtc.LocalAudioTrack.create_audio_track(f"xr-hub-return-{pid}", src)
         pub   = await self._room.local_participant.publish_track(track)
         pipe  = _ReturnAudioPipe(src)
-        log.info("Return audio track published: pid=%r  sid=%r", pid, pub.sid)
+        logger.info("Return audio track published: pid={!r}  sid={!r}", pid, pub.sid)
         return src, pub, pipe
 
     def _refresh_return_track_permissions(self) -> None:
@@ -322,11 +320,11 @@ class RoomClient:
     # ── participant events ────────────────────────────────────────────────────
 
     async def _handle_joined(self, participant: rtc.RemoteParticipant) -> None:
-        log.info("Participant joined: %r", participant.identity)
+        logger.info("Participant joined: {!r}", participant.identity)
         await self._ep.notify_participant_joined(participant.identity, _now_us())
 
     async def _handle_left(self, participant: rtc.RemoteParticipant) -> None:
-        log.info("Participant left: %r", participant.identity)
+        logger.info("Participant left: {!r}", participant.identity)
         await self._ep.notify_participant_left(participant.identity, _now_us())
         entry = self._return_audio.pop(participant.identity, None)
         if entry is not None:
@@ -335,7 +333,7 @@ class RoomClient:
             try:
                 await self._room.local_participant.unpublish_track(pub.sid)
             except Exception:
-                log.exception("unpublish_track failed for %r", participant.identity)
+                logger.exception("unpublish_track failed for {!r}", participant.identity)
             self._refresh_return_track_permissions()
 
     # ── media streams ─────────────────────────────────────────────────────────
@@ -343,7 +341,7 @@ class RoomClient:
     async def _stream_video(
         self, track: rtc.Track, identity: str, track_id: str
     ) -> None:
-        log.info("Video stream started: participant=%r  track=%r", identity, track_id)
+        logger.info("Video stream started: participant={!r}  track={!r}", identity, track_id)
         video_stream = rtc.VideoStream(track, format=rtc.VideoBufferType.I420)
         try:
             async for event in video_stream:
@@ -359,21 +357,26 @@ class RoomClient:
                         track_id=track_id,
                     )
                 except RuntimeError:
-                    log.warning(
-                        "Ring buffer full — dropped frame from %r/%r", identity, track_id
+                    logger.warning(
+                        "Ring buffer full — dropped frame from {!r}/{!r}",
+                        identity, track_id,
                     )
         except asyncio.CancelledError:
             pass
         except Exception:
-            log.exception("Video stream error: participant=%r  track=%r", identity, track_id)
+            logger.exception(
+                "Video stream error: participant={!r}  track={!r}", identity, track_id,
+            )
         finally:
-            log.info("Video stream ended: participant=%r  track=%r", identity, track_id)
+            logger.info(
+                "Video stream ended: participant={!r}  track={!r}", identity, track_id,
+            )
             await video_stream.aclose()
 
     async def _stream_audio(
         self, track: rtc.Track, identity: str, track_id: str
     ) -> None:
-        log.info("Audio stream started: participant=%r  track=%r", identity, track_id)
+        logger.info("Audio stream started: participant={!r}  track={!r}", identity, track_id)
         audio_stream = rtc.AudioStream(track)
         try:
             async for event in audio_stream:
@@ -398,7 +401,11 @@ class RoomClient:
         except asyncio.CancelledError:
             pass
         except Exception:
-            log.exception("Audio stream error: participant=%r  track=%r", identity, track_id)
+            logger.exception(
+                "Audio stream error: participant={!r}  track={!r}", identity, track_id,
+            )
         finally:
-            log.info("Audio stream ended: participant=%r  track=%r", identity, track_id)
+            logger.info(
+                "Audio stream ended: participant={!r}  track={!r}", identity, track_id,
+            )
             await audio_stream.aclose()

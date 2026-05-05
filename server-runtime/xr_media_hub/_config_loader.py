@@ -14,14 +14,12 @@ regardless of where the process is started from.
 from __future__ import annotations
 
 import argparse
-import logging
 from pathlib import Path
 
 import yaml
+from loguru import logger
 
 from xr_media_hub.transport.livekit.config import LiveKitConnectorConfig
-
-log = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_NAME = "xr_media_hub.yaml"
 
@@ -48,10 +46,10 @@ def load_config() -> LiveKitConnectorConfig:
     if not config_path.exists():
         if args.config:
             raise FileNotFoundError(f"Config file not found: {config_path}")
-        log.debug("No %s found — using defaults", DEFAULT_CONFIG_NAME)
+        logger.debug("No {} found — using defaults", DEFAULT_CONFIG_NAME)
         return LiveKitConnectorConfig(enable_web_server=False, web_client_dir="")
 
-    log.info("Loading config from %s", config_path)
+    logger.info("Loading config from {}", config_path)
     base = config_path.parent
 
     with config_path.open() as f:
