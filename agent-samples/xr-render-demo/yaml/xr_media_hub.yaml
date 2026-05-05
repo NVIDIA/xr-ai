@@ -27,7 +27,8 @@ web_server_tls:    true
 # ── Optional: token server ────────────────────────────────────────────────────
 enable_token_server: true
 
-# ── Video recording (needed by video-mcp for visual queries) ──────────────────
+# ── Video recording ──────────────────────────────────────────────────────────
+# Disabled: xr-render-demo uses get_latest_frame (live IPC) for visual queries.
+# Enable and set recordings_dir in video_mcp_server.yaml to unlock historical tools.
 video_recording:
-  enabled: true
-  out_dir:  /tmp/xr_recordings/xr-render-demo   # must match video_mcp_server.yaml recordings_dir
+  enabled: false

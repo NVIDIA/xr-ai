@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron-3-Nano — DGX Spark (GB10).
+# NVFP4 model auto-selected for Blackwell (SM10+).
+#
+# agent-llm is FIRST in load order so FlashInfer MoE JIT compilation runs
+# with the full GPU free.  Compiled kernels are cached after the first run.
+#
+# GB10 has ~96 GiB of physical HBM (pinned).  The KV cache is pinned memory,
+# so caps must fit in physical HBM even though CUDA reports 119.67 GiB unified
+# virtual (which extends to CPU RAM).  At 0.35 cap the KV cache alone was
+# 21.93 GiB pinned, leaving too little physical HBM for the LLM CUDA context.
+#
+# 0.25 × 119.67 = 29.9 GiB cap: ~18.7 GiB NVFP4 weights + ~9 GiB KV cache.
+#
+# Physical budget:  agent-llm ~30 + vlm ~24 + llm ~19 + STT ~2 + overhead ~8
+#   ≈ 83 GiB of 96 GiB physical — leaves ~13 GiB headroom for LOVR/drivers.
+
+host: "0.0.0.0"
+port: 8107
+hf_token: ""
+model_cache: ../../../../models
+
+max_num_seqs:         8
+tensor_parallel_size: 1
+max_model_len:        32768
+
+gpu_memory_utilization: 0.25
+enforce_eager: true

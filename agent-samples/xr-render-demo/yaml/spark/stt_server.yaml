@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# STT server — DGX Spark (1× Blackwell, 128 GB).
+model: nvidia/parakeet-tdt-0.6b-v3
+device: auto
+port: 8103
+host: "0.0.0.0"
+model_cache: ../../../../models

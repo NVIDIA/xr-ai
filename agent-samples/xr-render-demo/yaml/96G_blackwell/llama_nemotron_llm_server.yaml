@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Llama-Nemotron LLM server — single Blackwell 96 GB.
+#
+# llm is THIRD in load order: agent-llm (33.6 GiB) → vlm (19.2 GiB) → llm.
+# free_at_startup ≈ 96 − 34 − 22 − 2 (STT) ≈ 38 GiB.
+#
+# 0.16 × 96 = 15.4 GiB cap: ~16 GiB weights + small KV for max_model_len=4096.
+# Tight on weights; if it fails the pre-flight raise to 0.18.
+
+model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+port: 8106
+host: "0.0.0.0"
+hf_token: ""
+model_cache: ../../../../models
+gpu_memory_utilization: 0.18
+max_model_len: 4096
+enforce_eager: true
+tool_call_parser: llama3_json

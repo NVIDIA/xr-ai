@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron-3-Nano — dual 48 GB ADA config.
+# Dedicated GPU 1 (cuda:1); STT + Llama-Nemotron + VLM stay on GPU 0.
+# FP8 model auto-selected by nemotron3_nano_llm_server for ADA (SM8.x).
+
+host: "0.0.0.0"
+port: 8107
+hf_token: ""
+model_cache: ../../../../models
+
+max_num_seqs:         8
+tensor_parallel_size: 1
+max_model_len:        32768
+
+# GPU 1 only — leave GPU 0 free for STT + VLM + Llama-Nemotron.
+cuda_visible_devices: "1"
+# FP8 weights ~30 GiB; 0.78 × 47 GiB ≈ 36.7 GiB leaves ~10 GiB for KV cache.
+gpu_memory_utilization: 0.78
+
+# enforce_eager: true for development — skips the 3-8 min CUDA graph compile.
+# Set to false in production for ~2× token throughput.
+enforce_eager: true

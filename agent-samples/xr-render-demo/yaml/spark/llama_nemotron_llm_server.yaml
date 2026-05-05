@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Llama-Nemotron LLM server — DGX Spark (GB10, ~120 GiB GPU-visible HBM).
+#
+# llm is THIRD in load order: agent-llm (42 GiB) → vlm (24 GiB) → llm.
+# free_at_startup ≈ 120 − 42 − 24 − 2 (STT) ≈ 52 GiB.
+#
+# Llama-3.1-8B weights are ~16 GiB at BF16.  With max_model_len=4096 the KV
+# cache is ~4 GiB (8 seqs × 4096 tokens × 128 KiB/token for GQA 8 heads).
+# 0.16 × 120 = 19.2 GiB cap covers weights + KV + activation headroom.
+# No need for a large cap on an 8B quick-ack model.
+
+model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+port: 8106
+host: "0.0.0.0"
+hf_token: ""
+model_cache: ../../../../models
+gpu_memory_utilization: 0.16
+max_model_len: 4096
+enforce_eager: true
+tool_call_parser: llama3_json

@@ -379,12 +379,20 @@ def _decode_chunk_to_nv12_frames(annex_b: bytes, gpu_id: int = 0) -> list[np.nda
 # ── server ────────────────────────────────────────────────────────────────────
 
 def build_mcp(
-    store:    ChunkStore,
+    store:    "ChunkStore | None",
     out_dir:  pathlib.Path,
     provider: FrameProvider,
     gpu_id:   int = 0,
 ) -> "FastMCP":
-    """Return a composed FastMCP server with all video tools bound."""
+    """Return a composed FastMCP server with video tools bound.
+
+    When *store* is ``None`` (recording disabled) only live tools are
+    registered: ``list_live_participants`` and ``get_frame_from_time``
+    (live-only path).  Historical tools — ``list_recorded_participants``,
+    ``get_video_stats``, ``query_video``, and the chunk-lookup path of
+    ``get_frame_from_time`` — are omitted entirely so the LLM never sees
+    them and cannot attempt to call them.
+    """
     mcp = FastMCP("video-mcp")
 
     @mcp.tool()
@@ -395,6 +403,36 @@ def build_mcp(
         a live frame."""
         return sorted(provider.connected_participants())
 
+    # ── recording disabled: live-only tool ───────────────────────────────────
+    if store is None:
+        @mcp.tool()
+        async def get_latest_frame(participant_id: str) -> dict:
+            """Return the current live camera frame for *participant_id* as a PNG.
+
+            Keys: path, width, height, timestamp_us.
+            Returns ``{"error": "..."}`` if the participant has no live frame.
+            """
+            frame = await provider.fetch_latest(participant_id)
+            if frame is None:
+                return {"error": f"No live frame available for {participant_id!r}"}
+            try:
+                rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
+            except ValueError as exc:
+                return {"error": str(exc)}
+            safe     = _safe_name(participant_id)
+            out_path = out_dir / f"{safe}_latest_{frame.pts_us}.png"
+            _save_png(rgb, out_path)
+            log.info("get_latest_frame  pid=%r  %dx%d  ts=%d → %s",
+                     participant_id, frame.width, frame.height, frame.pts_us, out_path)
+            return {
+                "path":         str(out_path),
+                "width":        frame.width,
+                "height":       frame.height,
+                "timestamp_us": frame.pts_us,
+            }
+        return mcp
+
+    # ── recording enabled: full historical tool set ───────────────────────────
     @mcp.tool()
     def list_recorded_participants() -> list[str]:
         """Return raw participant identities that have at least one
@@ -503,12 +541,7 @@ def build_mcp(
         now_us    = int(time.time() * 1_000_000)
         anchor_us = reference_time_us if reference_time_us > 0 else now_us
 
-        # Live IPC path is taken ONLY when the caller wants "right now,
-        # wall clock" — i.e. no anchor provided AND no past offset. As
-        # soon as the caller anchors to an explicit timestamp (typically
-        # the user's speech time), we always go through the recorded
-        # chunk store so the returned frame matches that instant rather
-        # than the wall clock at tool-fire time.
+        # Live IPC path: caller wants "right now, wall clock" (no anchor, no offset).
         if reference_time_us == 0 and second_ago == 0:
             frame = await provider.fetch_latest(participant_id)
             if frame is None:
@@ -532,7 +565,7 @@ def build_mcp(
                 "actual_second_ago": actual,
             }
 
-        # Anchored chunk lookup.
+        # Anchored chunk lookup (recording path).
         target_us = anchor_us - second_ago * 1_000_000
         found = store.find_chunk_at(participant_id, target_us)
         if found is None:
@@ -593,7 +626,7 @@ def build_mcp(
 
 
 def build_app(
-    store:    ChunkStore,
+    store:    "ChunkStore | None",
     out_dir:  pathlib.Path,
     provider: FrameProvider,
     gpu_id:   int = 0,
@@ -605,17 +638,23 @@ def build_app(
 # ── entry point ───────────────────────────────────────────────────────────────
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
-    recordings_dir = pathlib.Path(cfg.get("recordings_dir", "/dev/shm/xr-ai/recordings"))
-    out_dir        = pathlib.Path(cfg.get("out_dir",        "/tmp/xr_video_queries"))
-    hub_pub        = cfg.get("hub_pub",  _DEFAULT_HUB_PUB)
-    hub_push       = cfg.get("hub_push", _DEFAULT_HUB_PUSH)
-    host           = cfg.get("host", "0.0.0.0")
-    port           = int(cfg.get("port", 8210))
-    gpu_id         = int(cfg.get("gpu_id", 0))
+    recordings_dir_raw = cfg.get("recordings_dir", "")
+    out_dir            = pathlib.Path(cfg.get("out_dir", "/tmp/xr_video_queries"))
+    hub_pub            = cfg.get("hub_pub",  _DEFAULT_HUB_PUB)
+    hub_push           = cfg.get("hub_push", _DEFAULT_HUB_PUSH)
+    host               = cfg.get("host", "0.0.0.0")
+    port               = int(cfg.get("port", 8210))
+    gpu_id             = int(cfg.get("gpu_id", 0))
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    store    = ChunkStore(recordings_dir)
+    # store is None when recordings_dir is not configured; historical tools
+    # are hidden and only get_latest_frame is exposed.
+    store: ChunkStore | None = (
+        ChunkStore(pathlib.Path(recordings_dir_raw)) if recordings_dir_raw else None
+    )
+    if store is None:
+        log.info("video-mcp: recording disabled — historical tools hidden")
     ep       = ProcessorEndpoint(
         sub_addr=hub_pub, push_addr=hub_push,
         filter=Subscribe.VIDEO,

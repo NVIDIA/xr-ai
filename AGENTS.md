@@ -286,18 +286,15 @@ async with httpx.AsyncClient() as client:
   `get_transcript_stats`. Transcripts persist as JSONL alongside a
   `.identity` sidecar so list/query round-trip raw IDs cleanly even
   when sanitized filenames collide.
-- **video-mcp-server** is pure FastMCP at `/mcp` on port 8210. Tools:
-  `list_live_participants`, `list_recorded_participants`,
-  `get_video_stats`, `query_video`, `get_latest_frame`,
-  `get_frame_at_time`. `list_live_participants` returns the hub's IPC
-  roster (the only pids `get_latest_frame` will succeed for);
-  `list_recorded_participants` returns raw identities recovered from
-  per-pid `.identity` sidecars in the recordings directory. Reads
-  NVENC chunks from disk for historical queries; connects to the hub
-  as a `ProcessorEndpoint` (`Subscribe.VIDEO`) for live frames.
-  `get_frame_at_time` decodes via NVDEC and returns a PNG path.
-  Requires hub video recording enabled via
-  `video_recording.enabled: true` in `xr_media_hub.yaml`.
+- **video-mcp-server** is pure FastMCP at `/mcp` on port 8210.
+  Connects to the hub as a `ProcessorEndpoint` (`Subscribe.VIDEO`) for
+  live frames. Tools exposed depend on whether `recordings_dir` is set
+  in the YAML:
+  - **Always**: `list_live_participants`, `get_latest_frame` (live IPC frame, no recording needed).
+  - **Only when `recordings_dir` is configured**: `list_recorded_participants`,
+    `get_video_stats`, `query_video`, `get_frame_from_time` (historical
+    chunk lookup via NVDEC). Requires `video_recording.enabled: true`
+    in `xr_media_hub.yaml` with a matching `out_dir`.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample root and adjust `model_cache` (`../../models` resolves

@@ -4,7 +4,7 @@
 # llama-nemotron-llm-server reference configuration.
 # OpenAI-compatible API at http://localhost:8106/v1
 #
-# `model_cache: ../../models` resolves to the shared weight cache at the
+# `model_cache: ../../../../models` resolves to the shared weight cache at the
 # repo root (xr-ai/models/) regardless of whether this YAML is invoked from
 # here or copied into a sample directory — so all inference servers share one
 # cache.  See AGENTS.md "AI inference servers" section.
@@ -24,7 +24,7 @@ port: 8106
 host: 0.0.0.0
 hf_token: ""
 
-model_cache: ../../models
+model_cache: ../../../../models
 
 # Shared GPU: STT (~5 GiB) + LLM weights (~15 GiB) + VLM are all on GPU 0.
 # 0.45 × 47 = 21 GiB budget for this server.  KV cache for max_model_len=4096

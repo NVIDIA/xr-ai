@@ -132,6 +132,15 @@ def run() -> None:
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ["HF_HOME"] = str(model_cache)
 
+    # FlashInfer JIT-compiles CUTLASS MoE kernels on first run via nvcc.
+    # Ensure nvcc is on PATH (CUDA toolkit may not be in the login shell's PATH
+    # even when CUDA is installed) and cap ninja parallelism so concurrent nvcc
+    # processes don't exhaust RAM on unified-memory machines like DGX Spark.
+    _cuda_bin = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda")) / "bin"
+    if _cuda_bin.exists():
+        os.environ["PATH"] = str(_cuda_bin) + ":" + os.environ.get("PATH", "")
+    os.environ.setdefault("MAX_JOBS", "4")
+
     parser_path = _ensure_reasoning_parser(model_cache, parser_url)
 
     argv = [

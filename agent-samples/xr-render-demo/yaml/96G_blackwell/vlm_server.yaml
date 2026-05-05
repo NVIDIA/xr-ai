@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# VLM server — single Blackwell 96 GB.
+#
+# vlm is SECOND in load order: agent-llm → vlm → llm.
+# free_at_startup ≈ 96 − 34 (agent-llm) − 2 (STT) ≈ 60 GiB.
+# 0.20 × 96 = 19.2 GiB cap: ~16 GiB Cosmos-7B weights + ~3 GiB KV.
+
+model: nvidia/Cosmos-Reason1-7B
+hf_token: ""
+port: 8100
+host: "0.0.0.0"
+model_cache: ../../../../models
+gpu_memory_utilization: 0.20
+max_num_seqs: 4
+enforce_eager: true
+max_videos_per_prompt: 0

@@ -6,7 +6,8 @@
 #
 # MCP endpoint: http://localhost:8210/  (StreamableHTTP transport)
 
-recordings_dir: /tmp/xr_recordings/xr-render-demo   # must match xr_media_hub.yaml video_recording.out_dir
+# recordings_dir not set — historical tools hidden; only get_latest_frame exposed.
+# Set recordings_dir and enable video_recording in xr_media_hub.yaml to unlock them.
 out_dir:        /tmp/xr_video_queries/xr-render-demo
 host:          0.0.0.0
 port:          8210

@@ -43,21 +43,110 @@ from xr_ai_launcher import Process, run_stack
 
 _BASE = Path(__file__).resolve().parent
 
+
+def _detect_gpu_config() -> str:
+    """Return the GPU config profile by querying nvidia-smi.
+
+    Profiles
+    --------
+    dual_48G_ada   — 2× ADA 48 GB (default / current dev box)
+    spark          — 1× Blackwell GB10 (DGX Spark; ~96 GiB GPU-visible HBM)
+    96G_blackwell  — 1× Blackwell ~96 GB
+
+    Falls back to ``dual_48G_ada`` on any detection failure.
+    """
+    # Query name, compute_cap, and memory.total.
+    # Use only csv,noheader — nounits is not supported on all driver versions.
+    # Memory values arrive as "47940 MiB" or "Not Supported"; strip units below.
+    try:
+        raw = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=name,compute_cap,memory.total",
+             "--format=csv,noheader"],
+            text=True, stderr=subprocess.DEVNULL,
+        ).strip().splitlines()
+    except Exception as exc:
+        print(f"[xr-render-demo] nvidia-smi unavailable ({exc}) — using dual_48G_ada",
+              flush=True)
+        return "dual_48G_ada"
+
+    # Known Spark GPU names (unified memory, no discrete memory.total).
+    _SPARK_NAMES = {"gb10", "b10"}
+
+    gpus: list[tuple[str, float, float]] = []  # (name, compute_cap, mem_mib)
+    for line in raw:
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 3:
+            continue
+        name, cap_str, mem_str = parts[0], parts[1], parts[2]
+        try:
+            cap = float(cap_str)
+        except ValueError:
+            continue
+        # Memory: "47940 MiB", "N/A", "Not Supported" → extract number or 0
+        mem = 0.0
+        for tok in mem_str.split():
+            try:
+                mem = float(tok)
+                break
+            except ValueError:
+                pass
+        gpus.append((name.lower(), cap, mem))
+
+    if not gpus:
+        print("[xr-render-demo] GPU detection returned no parseable data — "
+              "using dual_48G_ada", flush=True)
+        return "dual_48G_ada"
+
+    n_gpus       = len(gpus)
+    first_name   = gpus[0][0]
+    first_cap    = gpus[0][1]
+    is_blackwell = first_cap >= 10.0
+    # Spark: name contains a known Spark identifier, OR all memory values are
+    # zero (unified memory) and the GPU is Blackwell.
+    is_spark     = any(s in first_name for s in _SPARK_NAMES)
+    known_mem    = [m for _, _, m in gpus if m > 0]
+    total_mem_gb = sum(known_mem) / 1024 if known_mem else 0.0
+
+    if is_blackwell and (is_spark or (not known_mem)):
+        cfg = "spark"
+    elif is_blackwell and total_mem_gb >= 120:
+        cfg = "spark"
+    elif is_blackwell:
+        cfg = "96G_blackwell"
+    elif n_gpus >= 2:
+        cfg = "dual_48G_ada"
+    else:
+        cfg = "dual_48G_ada"
+
+    mem_str = f"{total_mem_gb:.0f} GiB" if known_mem else "unified memory"
+    print(f"[xr-render-demo] GPU config: {cfg}  "
+          f"({n_gpus}× {gpus[0][0].upper()}, {mem_str}, SM{first_cap:.1f})",
+          flush=True)
+    return cfg
+
+
+_GPU_CFG = _detect_gpu_config()
+_AI      = f"yaml/{_GPU_CFG}"
+
+# agent-llm (Nemotron-30B) loads first so its FlashInfer MoE JIT compilation
+# runs with the full GPU free.  The compiled kernels are cached after the
+# first run.  On ADA, nemotron3_nano is pinned to cuda:1 so this order has
+# no downside there either.
 PROCESSES = [
     Process("hub",        "../../server-runtime",                 "xr_media_hub",
             config="yaml/xr_media_hub.yaml"),
     Process("cloudxr",    "../../cloudxr-runtime",                "cloudxr_runtime",
             config="yaml/cloudxr_runtime.yaml"),
     Process("stt",        "../../ai-services/stt-server",         "stt_server",
-            config="yaml/stt_server.yaml"),
+            config=f"{_AI}/stt_server.yaml"),
     Process("tts",        "../../ai-services/tts/piper",          "piper_tts_server",
-            config="yaml/piper_tts_server.yaml"),
-    Process("vlm",        "../../ai-services/vlm-server",         "vlm_server",
-            config="yaml/vlm_server.yaml"),
-    Process("llm",        "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
-            config="yaml/llama_nemotron_llm_server.yaml"),
+            config=f"{_AI}/piper_tts_server.yaml"),
     Process("agent-llm",  "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
-            config="yaml/nemotron3_nano_llm_server.yaml"),
+            config=f"{_AI}/nemotron3_nano_llm_server.yaml"),
+    Process("vlm",        "../../ai-services/vlm-server",         "vlm_server",
+            config=f"{_AI}/vlm_server.yaml"),
+    Process("llm",        "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
+            config=f"{_AI}/llama_nemotron_llm_server.yaml"),
     Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",      "vlm_mcp_server",
             config="yaml/vlm_mcp_server.yaml"),
     Process("video-mcp",  "../../agent-mcp-servers/video-mcp",    "video_mcp_server",
