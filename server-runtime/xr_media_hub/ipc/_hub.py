@@ -218,13 +218,17 @@ class HubEndpoint:
             view = ring.read_slot(msg)
             self._latest_slots[key] = (ring, view)
 
-            # Call hub-local frame callbacks while the slot is still held.
-            for cb in self._frame_cbs:
-                await cb(view)
-
             # Publish metadata so processors know a frame arrived.
             topic = f"video.{msg.participant_id}.{msg.track_id}".encode()
             await self._pub.send_multipart([topic, encode(MsgType.FRAME_SIGNAL, msg)])
+
+            # Call hub-local frame callbacks while the slot is still held.
+            # These must not prevent the ZMQ publish above from completing.
+            for cb in self._frame_cbs:
+                try:
+                    await cb(view)
+                except Exception:
+                    log.exception("frame callback error")
 
         elif type_id == MsgType.FRAME_REQUEST:
             key = (msg.participant_id, msg.track_id)

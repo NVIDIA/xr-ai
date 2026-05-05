@@ -112,11 +112,14 @@ class VideoRecorder:
         import asyncio
         sig  = view.signal
         data = bytes(view.data)
-        await asyncio.get_running_loop().run_in_executor(
-            None, self._encode_frame,
-            sig.participant_id, sig.track_id,
-            data, sig.width, sig.height, sig.fmt,
-        )
+        try:
+            await asyncio.get_running_loop().run_in_executor(
+                None, self._encode_frame,
+                sig.participant_id, sig.track_id,
+                data, sig.width, sig.height, sig.fmt,
+            )
+        except Exception as exc:
+            log.warning("recorder  encode error pid=%r: %s", sig.participant_id, exc)
 
     # ── encoding (runs in thread pool) ───────────────────────────────────────
 
@@ -141,8 +144,28 @@ class VideoRecorder:
             if width != enc.width or height != enc.height:
                 log.info("recorder  resolution change %dx%d → %dx%d  pid=%r",
                          enc.width, enc.height, width, height, pid)
+                # Drop the old encoder reference first so CPython's refcount
+                # hits zero and the destructor (NvEncDestroyEncoder) fires
+                # before CreateEncoder opens a new session.
+                old_encoder = enc.encoder
+                enc.encoder = None
+                try:
+                    flushed = old_encoder.EndEncode()
+                    if flushed:
+                        enc.chunk_buf.extend(flushed)
+                except Exception as e:
+                    log.warning("recorder  EndEncode error on resolution change pid=%r: %s", pid, e)
+                del old_encoder
                 self._flush_chunk(enc)
-                enc.encoder        = self._create_encoder(width, height)
+                try:
+                    enc.encoder = self._create_encoder(width, height)
+                except Exception as e:
+                    log.warning("recorder  CreateEncoder failed pid=%r %dx%d: %s — "
+                                "recording disabled for this track", pid, width, height, e)
+                    # Update dimensions so we don't retry on every frame.
+                    enc.width  = width
+                    enc.height = height
+                    return
                 enc.chunk_start_us = time.time_ns() // 1_000
                 enc.chunk_frames   = 0
                 enc.width          = width
