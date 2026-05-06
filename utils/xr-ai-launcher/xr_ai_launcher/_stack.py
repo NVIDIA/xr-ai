@@ -114,7 +114,8 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     project = (base / proc.project).resolve()
 
     if shutil.which("uv"):
-        cmd: list[str] = ["uv", "run", "--project", str(project), proc.command]
+        # --quiet drops "Installed/Uninstalled N package" pre-run chatter.
+        cmd: list[str] = ["uv", "run", "--quiet", "--project", str(project), proc.command]
     else:
         cmd = [sys.executable, "-m", proc.command]
 

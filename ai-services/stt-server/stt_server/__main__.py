@@ -27,7 +27,19 @@ import os
 import sys
 import tempfile
 import threading
+import warnings
 from pathlib import Path
+
+# Silence verbose third-party startup chatter that floods the launcher's
+# terminal and the per-run log file. Set before any import that pulls in
+# NeMo (which reads NEMO_LOGGING_LEVEL at import time), numexpr (reads
+# NUMEXPR_MAX_THREADS), or pydub (whose import-time ffmpeg probe emits a
+# RuntimeWarning). Users can override any of these via the env.
+os.environ.setdefault("NEMO_LOGGING_LEVEL",  "ERROR")
+os.environ.setdefault("NUMEXPR_MAX_THREADS", "16")
+warnings.filterwarnings(
+    "ignore", message="Couldn't find ffmpeg or avconv", category=RuntimeWarning,
+)
 
 import yaml
 from loguru import logger

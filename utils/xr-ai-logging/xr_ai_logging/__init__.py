@@ -50,16 +50,20 @@ __all__ = ["setup_logging"]
 
 _DEFAULT_LOG_ROOT = Path("/tmp")
 
-# Stdlib loggers that emit a lot of low-value INFO/DEBUG noise. Pinned to
-# WARNING so they don't drown the rest of the stream even in verbose mode.
-# ``mcp.server.lowlevel.server`` emits one INFO per inbound tool call; the
-# worker already logs the user-visible side via ``tool call`` / ``tool result``.
-_NOISY_LOGGERS = (
-    "httpx",
-    "httpcore",
-    "urllib3",
-    "asyncio",
-    "mcp.server.lowlevel.server",
+# Stdlib loggers that emit low-value INFO/DEBUG noise. Each entry is a
+# ``(logger_name, level)`` pair. ``mcp.server.lowlevel.server`` emits one
+# INFO per inbound tool call; the worker already logs the user-visible side
+# via ``tool call`` / ``tool result``. ``nv_one_logger`` is NeMo's telemetry
+# stub — even its WARNINGs (no exporter configured, default error strategy)
+# are not actionable for inference, so it's pinned to ERROR.
+_NOISY_LOGGERS: tuple[tuple[str, int], ...] = (
+    ("httpx",                      logging.WARNING),
+    ("httpcore",                   logging.WARNING),
+    ("urllib3",                    logging.WARNING),
+    ("asyncio",                    logging.WARNING),
+    ("mcp.server.lowlevel.server", logging.WARNING),
+    ("numexpr.utils",              logging.WARNING),
+    ("nv_one_logger",              logging.ERROR),
 )
 
 _TRUTHY = {"1", "true", "debug", "yes", "on"}
@@ -161,15 +165,28 @@ def setup_logging(name: str, *, namespace: str | None = None) -> Path:
     )
 
     logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
-    for noisy in _NOISY_LOGGERS:
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+    for noisy_name, noisy_level in _NOISY_LOGGERS:
+        logging.getLogger(noisy_name).setLevel(noisy_level)
 
     logger.debug(
         "logging initialised  name={}  namespace={}  verbose={}  file={}",
         name, ns, verbose, log_file,
     )
     if is_first_call:
-        # Single banner from the orchestrator so the user knows where every
-        # subprocess log file for this run will live.
-        logger.info("logs → {}", log_dir)
+        # Multi-line banner via raw stderr so the path stands out among the
+        # loguru-formatted lines that follow. The dim-grey ANSI is a TTY-only
+        # nudge — it degrades to plain text when piped to a file.
+        _print_log_dir_banner(log_dir)
     return log_file
+
+
+def _print_log_dir_banner(log_dir: Path) -> None:
+    bar = "─" * 78
+    is_tty = sys.stderr.isatty()
+    on  = "\x1b[1;36m" if is_tty else ""   # bright cyan, bold
+    dim = "\x1b[2m"    if is_tty else ""
+    off = "\x1b[0m"    if is_tty else ""
+    print(f"\n{dim}{bar}{off}",                                file=sys.stderr, flush=True)
+    print(f"  {on}Per-run logs:{off}  {log_dir}",              file=sys.stderr, flush=True)
+    print(f"  {dim}Tail all:      tail -F {log_dir}/*.log{off}", file=sys.stderr, flush=True)
+    print(f"{dim}{bar}{off}\n",                                file=sys.stderr, flush=True)
