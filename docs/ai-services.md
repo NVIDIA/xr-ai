@@ -23,8 +23,10 @@ based on the tool-calling / reasoning / hardware trade-offs documented below.
 | `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
 | `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | transformers in-process (+ LMFE) |
 | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 | vLLM (execvp shim) |
+| `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4 / FP8 / BF16, GPU-selected) | vLLM — multimodal (text + video) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → hub |
+| `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8220 | — | FastMCP → vlm-server (`ask_image` tool) |
 
 All model weights land in `models/` at the repo root (gitignored, shared across
 all servers). Each YAML configures `model_cache` — resolved relative to the
@@ -168,11 +170,18 @@ in a YAML.
   `NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4`. vLLM handles tool calling
   (`qwen3_coder` parser), reasoning extraction (`nano_v3` parser — auto-fetched
   into `model_cache`), and FlashInfer FP4 MoE kernels. Requires a Blackwell-class
-  GPU (B200 / RTX PRO 6000 / Jetson Thor) for native FP4; swap to the BF16 model
-  variant for Hopper/Ampere. `enforce_eager: true` by default to avoid the
-  silent 3–8 min CUDA graph + FlashInfer autotune on cold start. See
+  GPU (B200 / RTX PRO 6000) for native FP4; swap to the BF16 model variant for
+  Hopper/Ampere. `enforce_eager: true` by default to avoid the silent 3–8 min
+  CUDA graph + FlashInfer autotune on cold start. See
   [`ai-services/llm/nemotron3_nano/README.md`](../ai-services/llm/nemotron3_nano/README.md)
   for the vLLM flags it forwards and Blackwell prerequisites.
+- **llm/nemotron_omni** is a vLLM-backed multimodal LLM serving
+  `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.
+  The YAML auto-selects between three model variants by detected GPU compute
+  capability: NVFP4 on Blackwell (SM100+), FP8 on Ada/Hopper, BF16 forced via
+  `use_bf16: true` for highest quality at the largest VRAM cost. Same
+  OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
+  swap backends.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; `language` / `temperature` form fields are accepted but ignored.
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.

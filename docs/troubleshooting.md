@@ -10,10 +10,10 @@ it here in the same change that you understand it.
 
 ## Setup-time issues
 
-### Spark (Jetson Thor) — `uv sync` fails to build a wheel
+### DGX Spark — `uv sync` fails to build a wheel
 
-**Symptom:** `uv sync` fails on a Spark / Jetson Thor system while building
-NeMo or vLLM wheels with errors mentioning missing `Python.h` or development
+**Symptom:** `uv sync` fails on a DGX Spark system while building NeMo or
+vLLM wheels with errors mentioning missing `Python.h` or development
 headers.
 
 **Cause:** the system is missing CPython development headers.
@@ -26,7 +26,7 @@ sudo apt install python3-dev
 
 This applies to the `xr-render-demo/yaml/spark/` profile.
 
-### Blackwell GPUs (B200, RTX PRO 6000, Jetson Thor) — VLM fails to start
+### Blackwell GPUs (B200, RTX PRO 6000) — VLM fails to start
 
 **Symptom:** the VLM server logs FlashInfer or NVFP4 kernel errors and never
 becomes healthy on a Blackwell-class system.
@@ -86,7 +86,7 @@ proxy in front of LiveKit, or wait for native LiveKit TLS.
 
 ### Chrome — Immersive Web extension cannot be enabled
 
-**Symptom:** the Immersive Web Emulator extension for Chrome refuses to enable.
+**Symptom:** the Immersive Web extension for Chrome cannot be enabled.
 
 **Status:** known issue, no workaround currently.
 
@@ -98,13 +98,13 @@ the IWER emulator built into the web client itself for desktop dev.
 **Symptom:** `vlm_server` / `nemotron3_nano_llm_server` weight load is fast,
 but the server then sits silent for several minutes before becoming healthy.
 
-**Cause:** CUDA graph capture + FlashInfer FP4 MoE autotune happen lazily on
-first inference. They are silent.
+**Cause:** CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
+run after weight load. They are silent.
 
 **Fix:** the shipped YAMLs default to `enforce_eager: true` which avoids both.
 Eager mode is 10–20% slower per token but starts in ~5 s after weight load —
 imperceptible at <250 tokens/turn where STT+VAD+TTS dominate latency. Don't
-flip `enforce_eager: false` unless you measured a reason to.
+flip `enforce_eager: false` unless you have a measured reason.
 
 ### `xr_render_demo` exits but VRAM is still pinned
 
