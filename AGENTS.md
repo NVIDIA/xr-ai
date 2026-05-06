@@ -175,6 +175,7 @@ Read these on demand when the topic comes up:
 | `docs/process-model.md` | Touching `utils/xr-ai-launcher/`, orchestrators, ready-files, or adding a managed process type |
 | `docs/credentials.md` | Code that needs `HF_TOKEN` / `NGC_API_KEY` |
 | `docs/ai-services.md` | Adding, calling, or operating a VLM / STT / TTS / LLM server (incl. vLLM persistence) |
+| `docs/xr-render-demo.md` | Working inside `agent-samples/xr-render-demo/` — process stack, two-LLM split, agentic loop, XR lifecycle |
 | `docs/adding-a-sample.md` | Scaffolding a new sample — full boilerplate templates |
 | `docs/adding-cloudxr.md` | Wiring CloudXR into a sample |
 | `docs/spdx-headers.md` | SPDX comment styles, exceptions, enforcement |
