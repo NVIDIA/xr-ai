@@ -50,11 +50,11 @@ def run() -> None:
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
-- The worker never imports anything from `server-runtime` or `launcher/`.
-- Process management lives in `launcher/`, not inside any process it manages.
+- The worker never imports anything from `server-runtime` or `utils/xr-ai-launcher/`.
+- Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast: if any process exits, the rest are terminated.
 
 ## Adding a new managed process type
 
-Add `launcher/xr_ai_launcher/_<name>.py` following the pattern in `_hub.py`.
+Add `utils/xr-ai-launcher/xr_ai_launcher/_<name>.py` following the pattern in `_hub.py`.
 Use `ManagedProcess` as the base. Export from `__init__.py`.

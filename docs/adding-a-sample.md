@@ -77,7 +77,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = ["xr-ai-launcher"]
 
 [tool.uv.sources]
-xr-ai-launcher = { path = "../../launcher", editable = true }
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 
 [project.scripts]
 <snake_name> = "main:run"

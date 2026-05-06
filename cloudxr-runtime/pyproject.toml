@@ -19,7 +19,7 @@ dependencies = [
 cloudxr_runtime = "cloudxr_runtime.__main__:run"
 
 [tool.uv.sources]
-xr-ai-logging = { path = "../agent-sdk/xr-ai-logging", editable = true }
+xr-ai-logging = { path = "../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["cloudxr_runtime"]

@@ -11,9 +11,6 @@ models
 **/deps/**
 !**/deps/.gitkeep
 
-# Per-run loguru log files — one folder per run under <repo>/logs/.
-logs/
-
 # macOS
 .DS_Store
 

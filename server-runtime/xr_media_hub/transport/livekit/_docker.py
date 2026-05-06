@@ -155,8 +155,12 @@ class LiveKitDocker:
                     self._output.append(line)
                     self._output_size += len(line)
                 logger.debug("[livekit] {}", line.decode(errors="replace").rstrip())
+        except asyncio.CancelledError:
+            raise
         except Exception:
-            pass
+            logger.exception(
+                "LiveKit log drainer crashed — captured output may be truncated",
+            )
 
     async def _wait_ready(self, port: int) -> None:
         loop = asyncio.get_event_loop()

@@ -43,8 +43,11 @@ xr-ai-agent  (agent-sdk/)
     └── pyzmq >=26.0
     └── msgpack >=1.0
 
-xr-ai-launcher  (launcher/)
+xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
+
+xr-ai-logging  (utils/xr-ai-logging/)
+    └── loguru >=0.7
 
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]
@@ -86,7 +89,7 @@ cloudxr-runtime  (cloudxr-runtime/)
     └── pyyaml
 
 render-mcp-server  (agent-mcp-servers/render-mcp/)
-    └── xr-ai-launcher  [editable: ../../launcher] (ManagedProcess + load_cloudxr_env)
+    └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (ManagedProcess + load_cloudxr_env)
     └── pyzmq >=26.0       (PUSH socket → LOVR; libzmq.so reused by LOVR FFI)
     └── msgpack >=1.0      (wire format for LOVR ops)
     └── pyyaml >=6.0
@@ -98,7 +101,7 @@ render-mcp-server  (agent-mcp-servers/render-mcp/)
     cloudxr.env is read synchronously via load_cloudxr_env at start_xr time.
 
 oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
-    └── xr-ai-launcher  [editable: ../../launcher] (load_cloudxr_env)
+    └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (load_cloudxr_env)
     └── isaacteleop                                (headless OpenXR + HeadTracker)
     └── pyyaml >=6.0
     └── uvicorn[standard] >=0.29
@@ -280,11 +283,11 @@ updated in the same commit**.
 |---|---|
 | `agent-sdk/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
-| `launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
+| `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/cloudxr_runtime.yaml`, `AGENTS.md` CloudXR section |
-| `launcher/_cloudxr_env.py` API | render-mcp + oxr-mcp `__main__.py` imports, `AGENTS.md` cloudxr-env section |
+| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | render-mcp + oxr-mcp `__main__.py` imports, `AGENTS.md` cloudxr-env section |
 | render-mcp YAML config keys | `agent-mcp-servers/render-mcp/render_mcp.yaml`, sample copies, worker URL constants |
 | oxr-mcp YAML config keys | `agent-mcp-servers/oxr-mcp/oxr_mcp_server.yaml`, sample copies, worker URL constants |
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
@@ -295,7 +298,8 @@ updated in the same commit**.
 
 ## Dependency rules (enforced)
 
-- `launcher/` — zero runtime dependencies. Stdlib only.
+- `utils/xr-ai-launcher/` — zero runtime dependencies. Stdlib only.
+- `utils/xr-ai-logging/` — only `loguru`. Used by every process via `setup_logging()`.
 - `agent-sdk/` — only `pyzmq` + `msgpack`. No server-side packages.
 - Agent workers — `xr-ai-agent` + task-specific libs (numpy, torch, etc.).
   Must never import from `xr-media-hub` or `xr-ai-launcher`.

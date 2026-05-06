@@ -11,14 +11,15 @@ result is a single, unified logging stack:
 * **stderr sink** — level controlled by ``XR_AI_VERBOSE`` (DEBUG when
   truthy, INFO otherwise). What the user sees in their terminal.
 * **file sink** — always DEBUG. Path:
-  ``<repo>/logs/<namespace>_<YYYY-MM-DD_HH-MM-SS>/<name>.log`` where
-  ``<repo>`` is the xr-ai repo root (located by walking up from cwd
-  until ``AGENTS.md`` is found, with cwd as the fallback). One subfolder
-  per run holds every process's log file for that run. Loguru
-  ``retention="7 days"`` auto-prunes.
+  ``/tmp/log_<namespace>_<YYYY-MM-DD_HH-MM-SS>/<name>.log``
+  (tmpfs-backed on most distros, so logs are RAM-resident and clear on
+  reboot). One subfolder per run holds every process's log file for that
+  run; the ``log_`` prefix makes the run folders easy to spot in ``/tmp``
+  and to clean up with one ``rm`` glob. Loguru ``retention="7 days"``
+  auto-prunes.
 * **stdlib bridge** — a :class:`logging.Handler` (``_InterceptHandler``)
   routes any record emitted via ``logging.getLogger(...)`` into loguru.
-  This is how ``launcher/`` (stdlib-only by contract) and
+  This is how ``utils/xr-ai-launcher/`` (stdlib-only by contract) and
   ``agent-sdk/xr_ai_agent/`` (pyzmq+msgpack-only by contract) end up in
   the same file/stderr sinks even though they cannot import loguru.
 
@@ -30,9 +31,10 @@ same per-run subfolder:
 
 * ``XR_AI_LOG_NAMESPACE`` — sample/process group (e.g. ``xr-render-demo``).
 * ``XR_AI_LOG_TIMESTAMP`` — single ``YYYY-MM-DD_HH-MM-SS`` stamp per run.
-* ``XR_AI_LOG_ROOT`` — absolute path to the ``logs/`` root, resolved once
-  from the first process. Stamping pins children to the same root even
-  if their own cwd is unrelated to the repo (e.g. a sub-package dir).
+* ``XR_AI_LOG_ROOT`` — absolute path to the directory that holds the per-run
+  ``log_<namespace>_<timestamp>/`` folder. Defaults to ``/tmp``; set
+  explicitly (e.g. in CI or for a debug session) to redirect the whole stack
+  to a different root with one variable.
 """
 from __future__ import annotations
 
@@ -46,7 +48,7 @@ from loguru import logger
 
 __all__ = ["setup_logging"]
 
-_DEFAULT_LOG_DIR = "logs"
+_DEFAULT_LOG_ROOT = Path("/tmp")
 
 # Stdlib loggers that emit a lot of low-value INFO/DEBUG noise. Pinned to
 # WARNING so they don't drown the rest of the stream even in verbose mode.
@@ -87,27 +89,19 @@ def _is_verbose() -> bool:
 
 
 def _resolve_log_root() -> Path:
-    """Return the absolute log root, stamping ``XR_AI_LOG_ROOT`` for children.
+    """Return the directory that holds the per-run ``log_<ns>_<ts>/`` folder.
 
-    First call walks up from the current working directory looking for
-    ``AGENTS.md`` (the xr-ai repo-root marker) and uses that directory's
-    ``logs/``; if no marker is found, falls back to ``<cwd>/logs``. The
-    resolved path is stored in the env var so subprocesses (which may run
-    with a deeper cwd like ``agent-samples/<name>/worker``) inherit the
-    same root instead of recomputing it.
+    Defaults to ``/tmp`` (tmpfs on most distros, so logs are RAM-backed and
+    clear on reboot). The env var is stamped on first call so subprocesses
+    inherit the same path even if their cwd differs; explicit callers (CI,
+    a debug session) can set ``XR_AI_LOG_ROOT`` up-front to redirect the
+    whole stack to disk-backed storage.
     """
     cached = os.environ.get("XR_AI_LOG_ROOT")
     if cached:
         return Path(cached)
-    cwd = Path.cwd().resolve()
-    repo_root = cwd
-    for parent in (cwd, *cwd.parents):
-        if (parent / "AGENTS.md").is_file():
-            repo_root = parent
-            break
-    root = repo_root / _DEFAULT_LOG_DIR
-    os.environ["XR_AI_LOG_ROOT"] = str(root)
-    return root
+    os.environ["XR_AI_LOG_ROOT"] = str(_DEFAULT_LOG_ROOT)
+    return _DEFAULT_LOG_ROOT
 
 
 def setup_logging(name: str, *, namespace: str | None = None) -> Path:
@@ -133,7 +127,7 @@ def setup_logging(name: str, *, namespace: str | None = None) -> Path:
     ns = namespace or os.environ.get("XR_AI_LOG_NAMESPACE") or name
     os.environ["XR_AI_LOG_NAMESPACE"] = ns
 
-    log_dir = _resolve_log_root() / f"{ns}_{stamp}"
+    log_dir = _resolve_log_root() / f"log_{ns}_{stamp}"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{name}.log"
 

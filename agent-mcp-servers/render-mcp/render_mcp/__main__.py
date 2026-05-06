@@ -171,6 +171,7 @@ class SceneDispatcher:
                     msg = (f"cloudxr env file not found: {cfg.cloudxr_env_file}. "
                            "Ensure cloudxr-runtime starts before render-mcp.")
                     self._spawn_error = msg
+                    logger.error("render-mcp: {}", msg)
                     return {"status": "error", "error": msg}
                 load_cloudxr_env(cfg.cloudxr_env_file)
                 logger.info("render-mcp: cloudxr env loaded from {}", cfg.cloudxr_env_file)

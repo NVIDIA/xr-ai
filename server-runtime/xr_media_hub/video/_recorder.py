@@ -270,7 +270,10 @@ class VideoRecorder:
                     try:
                         chunks.append((int(c.stem), c))
                     except ValueError:
-                        continue
+                        logger.warning(
+                            "recorder  unexpected .264 filename in eviction sweep: {} "
+                            "(non-numeric stem; not counted toward size cap)", c,
+                        )
             chunks.sort()  # oldest first
             total = sum(c.stat().st_size for _, c in chunks)
             for _, c in chunks:

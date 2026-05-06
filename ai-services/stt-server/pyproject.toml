@@ -30,7 +30,7 @@ dependencies = [
 # `lightning` straight from the upstream tag — drop this source once
 # PyPI lifts the quarantine.
 lightning     = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
-xr-ai-logging = { path = "../../agent-sdk/xr-ai-logging", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 stt_server = "stt_server.__main__:run"

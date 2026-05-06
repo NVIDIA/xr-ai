@@ -9,6 +9,40 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-05 — Unified loguru stack; `launcher/` and `xr-ai-logging/` consolidated under `utils/`
+
+Two related infrastructure changes shipped together.
+
+**Loguru migration.** New `xr-ai-logging` package wraps loguru with a single
+`setup_logging(name, namespace=...)` entry point that every process calls
+once at startup. Installs a stderr sink (INFO by default, DEBUG when
+`XR_AI_VERBOSE` is truthy), an always-DEBUG file sink at
+`/tmp/log_<namespace>_<YYYY-MM-DD_HH-MM-SS>/<process>.log`, and a stdlib
+`logging` -> loguru bridge so `utils/xr-ai-launcher/` (stdlib-only by
+contract) and `agent-sdk/xr_ai_agent/` (pyzmq+msgpack-only by contract)
+participate without importing loguru. Subprocess coordination uses three
+stamped env vars (`XR_AI_LOG_NAMESPACE` / `XR_AI_LOG_TIMESTAMP` /
+`XR_AI_LOG_ROOT`). Stderr-vs-file split lets the user keep a quiet console
+while retaining full DEBUG history per run.
+
+The launcher's child-stdout/stderr forwarder also moved from raw `print()`
+to a level-aware `log.<level>(...)` (parses the loguru level from each
+captured line and re-emits at that level), so library banners (NeMo,
+OpenXR loader, LOVR Vulkan) stay out of the default console but are
+preserved in the file sink. ~16 INFO calls were demoted to DEBUG (per-data-
+message, per-NVENC-chunk, per-tool-call duplicates, per-VAD-false-positive,
+etc.) so INFO is now strictly lifecycle / once-per-utterance / periodic
+stats.
+
+**`utils/` consolidation.** Both `launcher/` and `agent-sdk/xr-ai-logging/`
+are pure infrastructure used by every process, not specific to agents.
+Moved to `utils/xr-ai-launcher/` and `utils/xr-ai-logging/` so the layout
+reflects actual scope. The `xr-ai-launcher` "stdlib-only" rule still
+applies — `utils/xr-ai-launcher/pyproject.toml` keeps `dependencies = []`.
+`utils/xr-ai-logging/` has its own pyproject (`loguru>=0.7`). Python import
+paths (`xr_ai_launcher`, `xr_ai_logging`) are unchanged; only filesystem
+paths in `[tool.uv.sources]` and doc references shifted.
+
 ### 2026-05-05 — vLLM model persistence across stack restarts
 
 vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,

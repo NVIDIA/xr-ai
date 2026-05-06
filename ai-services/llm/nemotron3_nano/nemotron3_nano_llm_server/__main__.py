@@ -66,8 +66,12 @@ def _gpu_compute_major() -> int:
         ).strip().splitlines()
         if out:
             return int(out[0].split(".")[0])
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "nemotron3_nano: nvidia-smi compute-cap query failed ({}) — "
+            "defaulting to pre-Blackwell model variant",
+            exc,
+        )
     return 0
 
 

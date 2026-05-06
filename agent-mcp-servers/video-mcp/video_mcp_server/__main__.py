@@ -153,8 +153,11 @@ class ChunkStore:
         if meta_path.exists():
             try:
                 return json.loads(meta_path.read_text())
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "video-mcp: corrupt meta sidecar {} ({}) — using filename-stem fallback",
+                    meta_path, exc,
+                )
         # Fall back to filename stem if sidecar is missing.
         return {"start_us": int(h264.stem), "end_us": int(h264.stem), "size_bytes": h264.stat().st_size}
 

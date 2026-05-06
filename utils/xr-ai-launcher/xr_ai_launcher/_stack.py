@@ -245,8 +245,11 @@ def _shutdown(procs: dict[str, subprocess.Popen]) -> None:
                 _killpg(p, signal.SIGKILL)
                 try:
                     p.wait(timeout=5.0)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log.warning(
+                        "[%s] wait() failed after SIGKILL: %s — process may be zombie",
+                        name, exc,
+                    )
 
 
 # ── public API ─────────────────────────────────────────────────────────────────

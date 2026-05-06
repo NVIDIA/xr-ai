@@ -153,6 +153,7 @@ class TranscriptStore:
         if path is None:
             return []
         results = []
+        skipped = 0
         with path.open() as f:
             for line in f:
                 line = line.strip()
@@ -163,7 +164,12 @@ class TranscriptStore:
                     if start_us <= rec["timestamp_us"] <= end_us:
                         results.append(rec)
                 except (json.JSONDecodeError, KeyError):
-                    continue
+                    skipped += 1
+        if skipped:
+            logger.warning(
+                "transcript-mcp: query  source={!r}  skipped {} corrupt line(s) in {}",
+                source_id, skipped, path,
+            )
         return results
 
     def list_sources(self) -> list[str]:
@@ -186,6 +192,7 @@ class TranscriptStore:
         if path is None:
             return None
         count = earliest = latest = total_chars = 0
+        skipped = 0
         with path.open() as f:
             for line in f:
                 line = line.strip()
@@ -201,7 +208,12 @@ class TranscriptStore:
                     if ts > latest:
                         latest = ts
                 except (json.JSONDecodeError, KeyError):
-                    continue
+                    skipped += 1
+        if skipped:
+            logger.warning(
+                "transcript-mcp: stats  source={!r}  skipped {} corrupt line(s) in {}",
+                source_id, skipped, path,
+            )
         return {
             "source_id":   source_id,
             "count":       count,

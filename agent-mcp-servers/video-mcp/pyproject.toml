@@ -23,7 +23,7 @@ dependencies = [
 
 [tool.uv.sources]
 xr-ai-agent   = { path = "../../agent-sdk", editable = true }
-xr-ai-logging = { path = "../../agent-sdk/xr-ai-logging", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 video_mcp_server = "video_mcp_server.__main__:run"

@@ -90,7 +90,8 @@ frames are dropped if it is closed.
 |---|---|---|
 | Clients | `client-samples/` | Android, iOS/visionOS, Web clients |
 | Server runtime | `server-runtime/` | XR-Media-Hub + LiveKit internal transport |
-| Launcher | `launcher/` | stdlib-only process manager used by samples |
+| Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
+| Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
 | Agent interfaces | `agent-mcp-servers/` | MCP adapters for XR data & rendering |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
