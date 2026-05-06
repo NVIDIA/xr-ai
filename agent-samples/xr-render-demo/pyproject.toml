@@ -12,14 +12,11 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
-    # Used by --stop to clean up persisted vLLM servers (pip and docker variants).
-    "xr-ai-vllm",
 ]
 
 [tool.uv.sources]
 xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
-xr-ai-vllm     = { path = "../../utils/xr-ai-vllm",    editable = true }
 
 [project.scripts]
 xr_render_demo = "main:run"

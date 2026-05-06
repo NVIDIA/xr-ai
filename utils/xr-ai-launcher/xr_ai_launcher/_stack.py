@@ -64,19 +64,32 @@ class Process:
     """
     Declares one process in the stack.
 
-    name    — label used in log output.
-    project — path to the uv project (relative to the sample root, or absolute).
-    command — entry-point script to run inside the project's venv.
-    config  — path to the YAML config (relative to the sample root, or absolute).
-              Passed as ``--config <path>`` to the subprocess. Omit for processes
-              that take no config.
-    gpu     — optional CUDA_VISIBLE_DEVICES value (e.g. ``"0"``, ``"0,1"``).
+    name        — label used in log output.
+    project     — path to the uv project (relative to the sample root, or absolute).
+    command     — entry-point script to run inside the project's venv.
+    config      — path to the YAML config (relative to the sample root, or absolute).
+                  Passed as ``--config <path>`` to the subprocess. Omit for processes
+                  that take no config.
+    gpu         — optional CUDA_VISIBLE_DEVICES value (e.g. ``"0"``, ``"0,1"``).
+    launch_mode — controls spawn + shutdown behaviour:
+    port        — optional service port, used to stop ``persist`` services.
+
+      ``"own"``     (default) — launcher spawns this process and kills it on shutdown.
+      ``"persist"`` — launcher spawns this process but leaves it running on shutdown.
+                      Use for heavy model servers that should survive stack restarts
+                      (e.g. vLLM containers).  Cleanup is the caller's responsibility.
+      ``"reuse"``   — launcher does NOT spawn this process; it is assumed to be already
+                      running (e.g. started by ``model-servers``).  The entry in the
+                      process list documents the dependency; the launcher skips it
+                      entirely and does not kill it on shutdown.
     """
-    name:    str
-    project: str | Path
-    command: str
-    config:  str | Path | None = None
-    gpu:     str | None = None
+    name:        str
+    project:     str | Path
+    command:     str
+    config:      str | Path | None = None
+    gpu:         str | None = None
+    launch_mode: str = "own"
+    port:        int | None = None
 
 
 @dataclass(frozen=True)
@@ -226,22 +239,35 @@ def _killpg(p: subprocess.Popen, sig: int) -> None:
         pass
 
 
-def _shutdown(procs: dict[str, subprocess.Popen]) -> None:
-    """Terminate all running processes; escalate to SIGKILL after the timeout."""
+def _shutdown(
+    procs: dict[str, subprocess.Popen],
+    no_kill: set[str] | None = None,
+) -> None:
+    """Terminate all running processes; escalate to SIGKILL after the timeout.
+
+    Processes whose names are in *no_kill* (launch_mode "persist" or "reuse")
+    are left running — their underlying service outlives this launcher.
+    """
+    skip = no_kill or set()
     for name, p in procs.items():
+        if name in skip:
+            log.info("[%s] keeping alive (launch_mode=persist)", name)
+            continue
         if p.poll() is None:
             log.info("[%s] stopping…", name)
             _killpg(p, signal.SIGTERM)
 
     deadline = time.monotonic() + _STOP_TIMEOUT
     for name, p in procs.items():
+        if name in skip:
+            continue
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
         if p.poll() is None:
             try:
                 p.wait(timeout=max(0.1, remaining))
-            except subprocess.TimeoutExpired:
+            except (subprocess.TimeoutExpired, KeyboardInterrupt):
                 log.warning("[%s] force-killing", name)
                 _killpg(p, signal.SIGKILL)
                 try:
@@ -255,7 +281,12 @@ def _shutdown(procs: dict[str, subprocess.Popen]) -> None:
 
 # ── public API ─────────────────────────────────────────────────────────────────
 
-def run_stack(processes: Sequence[Union[Process, Parallel]], base: Path) -> None:
+def run_stack(
+    processes: Sequence[Union[Process, Parallel]],
+    base: Path,
+    *,
+    exit_after_ready: bool = False,
+) -> None:
     """
     Start *processes* in declaration order, waiting for each item to signal
     readiness before advancing to the next.
@@ -270,7 +301,10 @@ def run_stack(processes: Sequence[Union[Process, Parallel]], base: Path) -> None
     remains visible.
 
     After all processes are ready the launcher monitors them: if any exits,
-    all others are terminated and the launcher exits.
+    all others are terminated and the launcher exits.  Pass
+    ``exit_after_ready=True`` to return immediately once everything is ready
+    instead — useful for launchers whose processes are all ``launch_mode="persist"``
+    and should outlive the orchestrator (e.g. ``model-servers``).
 
     *base* is the sample root — all relative paths in ``Process.project``
     and ``Process.config`` are resolved against it::
@@ -293,6 +327,15 @@ def run_stack(processes: Sequence[Union[Process, Parallel]], base: Path) -> None
     """
     load_credentials()
 
+    # "persist" and "reuse" processes are left running on shutdown.
+    # "reuse" processes are not spawned at all — assumed already running.
+    _no_kill: set[str] = {
+        p.name
+        for item in processes
+        for p in (item.processes if isinstance(item, Parallel) else [item])
+        if p.launch_mode in ("persist", "reuse")
+    }
+
     launched: dict[str, subprocess.Popen] = {}
 
     with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
@@ -300,23 +343,30 @@ def run_stack(processes: Sequence[Union[Process, Parallel]], base: Path) -> None
         try:
             for item in processes:
                 if isinstance(item, Parallel):
+                    to_spawn = [p for p in item.processes if p.launch_mode != "reuse"]
+                    if not to_spawn:
+                        continue
                     group: list[_ReadyEntry] = []
-                    for proc in item.processes:
+                    for proc in to_spawn:
                         ready_file = tmpdir / f"{proc.name}.ready"
                         launched[proc.name] = _spawn(proc, base, ready_file)
                         group.append((proc.name, ready_file, launched[proc.name]))
-                    names = ", ".join(p.name for p in item.processes)
-                    print(f"  [parallel] starting: {names}", flush=True)
+                    print(f"  [parallel] starting: {', '.join(p.name for p in to_spawn)}",
+                          flush=True)
                     _wait_ready_parallel(group)
                 else:
+                    if item.launch_mode == "reuse":
+                        continue
                     ready_file = tmpdir / f"{item.name}.ready"
                     launched[item.name] = _spawn(item, base, ready_file)
                     _wait_ready(item.name, ready_file, launched[item.name])
 
             log.info("All processes ready.")
+            if exit_after_ready:
+                return
             _monitor(launched)
 
         except (SystemExit, KeyboardInterrupt):
             pass
         finally:
-            _shutdown(launched)
+            _shutdown(launched, _no_kill)

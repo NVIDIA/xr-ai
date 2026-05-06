@@ -281,6 +281,21 @@ the latest video frame via streaming VLM and replies with both
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP — no model weights loaded in-process.
 
+### model-servers  (agent-samples/model-servers/)
+
+Standalone launcher that starts the four AI inference servers and keeps
+them alive across stack restarts.  No hub, worker, or agent involved —
+run this first to warm up model weights before starting any demo sample.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
+
+Starts stt-server (8103), nemotron3-nano-llm-server (8107, `persistent=True`),
+vlm-server (8100, `persistent=True`), llama-nemotron-llm-server (8106, `persistent=True`).
+The three vLLM servers survive launcher restarts; use `--stop` to shut them down.
+GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
+
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
@@ -290,11 +305,14 @@ forwarding.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
-| Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-vllm` (for `--stop`) | — |
+| Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | — |
 | Worker | `xr-render-demo-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
 
-Uses cloudxr-runtime, render-mcp-server (8220), oxr-mcp-server (8230),
-stt-server (8103), llama-nemotron-llm-server (8106), nemotron3-nano-llm-server (8107).
+Requires `model-servers` to be running first — model servers are declared as
+`launch_mode="reuse"` so the launcher skips spawning them but the dependency
+is explicit in the process list.
+Starts: hub, cloudxr-runtime, piper-tts (8105), vlm-mcp (8220),
+video-mcp (8210), render-mcp (8220), oxr-mcp (8230), worker.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
 

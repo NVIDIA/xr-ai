@@ -79,12 +79,17 @@ def serve(
     so caller-side flag construction is unchanged from the per-service
     wrappers' previous inline argv.
 
-    *persistent* picks the lifecycle:
+    *persistent* controls the pip-mode lifecycle only:
 
-    * ``True``  — survive wrapper restarts (vLLM in a new session group / a
-      detached docker container). Cleanup is via `stop_persistent_servers`.
-    * ``False`` — die with the wrapper. SIGTERM on the wrapper takes vLLM
-      with it.
+    * ``True``  — vLLM pip process starts in a new session so it survives
+      wrapper restarts.  Cleanup is via `stop_persistent_servers`.
+    * ``False`` — die with the wrapper.
+
+    For the docker backend *persistent* is ignored: the container always
+    runs foreground with ``start_new_session=True``, so it escapes the
+    launcher's process group regardless.  Use ``Process(persistent=True)``
+    in the orchestrator ``main.py`` to tell the launcher not to kill the
+    wrapper on shutdown.
 
     *container_name* is only consulted in docker mode. Use a stable,
     service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
@@ -128,27 +133,25 @@ def serve(
 
 
 def stop_persistent_servers(
-    services: list[tuple[str, int, str | None]],
+    services: list[tuple[str, int]],
 ) -> None:
-    """Stop persisted vLLM servers; safe to call when nothing is running.
+    """Stop persisted servers; safe to call when nothing is running.
 
-    *services* is a list of ``(label, port, container_name | None)`` tuples.
-    For each entry:
+    *services* is a list of ``(label, port)`` tuples.  For each entry:
 
     1. Probe ``http://127.0.0.1:<port>/health``. Skip if not reachable.
-    2. If *container_name* is given and that docker container exists,
-       ``docker stop`` it (escalates to ``docker kill`` after 20 s).
-    3. Otherwise (or if docker stop reports no such container), fall back
-       to the port → pid → SIGTERM → SIGKILL path used for pip-mode vLLM.
+    2. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
+       (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
+    3. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
+       in-process servers (e.g. STT).
 
-    Output is print-style with `[<label>] …` prefixes so it matches the
-    existing `--stop` UX.
+    Output is print-style with ``[<label>] …`` prefixes.
     """
     import signal
     import time
 
     found = False
-    for label, port, container_name in services:
+    for label, port in services:
         try:
             with urllib.request.urlopen(
                 f"http://127.0.0.1:{port}/health", timeout=2
@@ -160,9 +163,9 @@ def stop_persistent_servers(
 
         found = True
 
-        if container_name and _docker.container_exists(container_name):
-            print(f"  [{label}] stopping container {container_name} (port={port})…",
-                  flush=True)
+        container_name = _docker.container_on_port(port)
+        if container_name:
+            print(f"  [{label}] stopping container {container_name}…", flush=True)
             if _docker.stop_container(container_name):
                 print(f"  [{label}] stopped", flush=True)
             else:
@@ -193,7 +196,7 @@ def stop_persistent_servers(
             print(f"  [{label}] already gone", flush=True)
 
     if not found:
-        print("  No persistent vLLM servers found running.", flush=True)
+        print("  No persistent servers found running.", flush=True)
 
 
 __all__ = ["serve", "stop_persistent_servers", "DEFAULT_IMAGE"]

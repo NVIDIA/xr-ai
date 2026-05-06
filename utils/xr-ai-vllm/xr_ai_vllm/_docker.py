@@ -4,10 +4,11 @@
 """
 NGC docker container backend for vLLM.
 
-Runs `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` with the same flags
-the pip backend would pass to its locally-installed vLLM. Persistent mode
-runs detached + named so the container survives wrapper restarts; cleanup is
-via :func:`stop_container` (called from `xr_ai_vllm.stop_persistent_servers`).
+Runs `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` always in the
+foreground, with start_new_session=True so the container escapes the
+launcher's process group and survives stack restarts.  The vLLM process
+is visible to ss(8) on the host via --network host, so cleanup uses the
+same pid_on_port → SIGTERM path as pip mode.
 
 NGC auth: if the image is from `nvcr.io/` and `NGC_API_KEY` is in the
 environment, this module runs `docker login nvcr.io` once per process so the
@@ -20,6 +21,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -40,7 +42,7 @@ def build_run_argv(
     *,
     image: str,
     container_name: str,
-    detached: bool,
+    port: int,
     model_cache: Path,
     hf_token: str | None,
     cuda_visible_devices: str | None,
@@ -49,19 +51,18 @@ def build_run_argv(
 ) -> list[str]:
     """Build the `docker run …` argv that hosts vllm.
 
-    `--network host` and `--ipc host` mirror the LiveKit docker precedent
-    (`server-runtime/xr_media_hub/transport/livekit/_docker.py`) — both are
-    required for vLLM tensor-parallel workers and for binding the serving
-    port without docker-proxy.
-
-    The model cache is bind-mounted to the same path inside and outside so
-    `HF_HOME` does not need translation between the wrapper YAML and the
-    container.
+    Always foreground (no -d).  The caller spawns this with
+    start_new_session=True so the container escapes the launcher's process
+    group but remains stoppable via pid_on_port + SIGTERM — the same path
+    as pip-mode vLLM.  With --network host the vLLM process is visible to
+    ss(8) on the host, so no docker-specific stop logic is needed.
     """
-    argv: list[str] = ["docker", "run", "--rm"]
-    if detached:
-        argv.append("-d")
+    argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
+    # Label lets container_on_port find this container by port without the
+    # caller needing to know the container name — implementation detail stays
+    # inside this module.
+    argv += ["--label", f"xr-ai-vllm.port={port}"]
     argv += ["--network", "host"]
     # vLLM workers communicate via /dev/shm; the default 64 MiB tmpfs is too
     # small for the KV cache shards.  --ipc host gives them the host's larger
@@ -87,7 +88,10 @@ def build_run_argv(
     argv += ["-v", f"{model_cache}:{model_cache}"]
 
     argv.append(image)
-    argv += vllm_argv
+    # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
+    # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
+    argv += ["bash", "-c",
+             f"pip install -q hf_transfer && {shlex.join(vllm_argv)}"]
     return argv
 
 
@@ -321,7 +325,7 @@ def _append_post_mortem(container_name: str, log_path: Path | None, n: int = 200
 
 def run(
     *,
-    persistent: bool,
+    persistent: bool = True,  # accepted for backwards compat; docker always runs foreground
     image: str,
     container_name: str,
     log_prefix: str,
@@ -344,9 +348,10 @@ def run(
 
     health_url = _lifecycle.health_url(host, port)
 
-    if persistent and _lifecycle.health_ok(health_url):
+    # Reuse a container that survived a wrapper restart (weight persistence).
+    if _lifecycle.health_ok(health_url):
         print(
-            f"[{log_prefix}] vLLM container already healthy on port {port} — reusing",
+            f"[{log_prefix}] vLLM already running on port {port} — reusing",
             flush=True,
         )
         if ready_file:
@@ -355,20 +360,22 @@ def run(
         return
 
     if container_exists(container_name) and not container_running(container_name):
-        # Stale --rm container that exited mid-startup; clean up so docker run
-        # below does not collide on the name.
-        subprocess.run(
-            ["docker", "rm", "-f", container_name],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        # Stopped container already has hf_transfer installed — restart it
+        # rather than running a fresh image (avoids reinstalling every time).
+        print(
+            f"[{log_prefix}] Restarting stopped container {container_name}",
+            flush=True,
         )
-
-    if not container_running(container_name):
+        proc = subprocess.Popen(
+            ["docker", "start", "-a", container_name],
+            start_new_session=True,
+        )
+    else:
         _maybe_ngc_login(image)
         argv = build_run_argv(
             image=image,
             container_name=container_name,
-            detached=persistent,
+            port=port,
             model_cache=model_cache,
             hf_token=hf_token,
             cuda_visible_devices=cuda_visible_devices,
@@ -380,34 +387,15 @@ def run(
             f"container={container_name}  http://{host}:{port}/v1",
             flush=True,
         )
-        if persistent:
-            # `docker run -d` returns immediately after printing the container id.
-            result = subprocess.run(argv, capture_output=True, text=True)
-            if result.returncode != 0:
-                log.error(
-                    "docker run failed (rc=%d): %s",
-                    result.returncode,
-                    (result.stderr or "").strip(),
-                )
-                sys.exit(result.returncode)
-            proc: subprocess.Popen | None = None
-        else:
-            proc = subprocess.Popen(argv)
-    else:
-        proc = None
+        proc = subprocess.Popen(argv, start_new_session=True)
 
-    streamer_proc, log_path = (
-        _start_log_streamer(container_name) if persistent else (None, None)
-    )
+    streamer_proc, log_path = _start_log_streamer(container_name)
     try:
         _lifecycle.wait_until_healthy(
             health_url,
-            is_alive=lambda: (proc is None or proc.poll() is None)
-            and container_running(container_name),
+            is_alive=lambda: proc.poll() is None,
         )
     except SystemExit:
-        # Give the streamer a beat to flush, then append a tail explicitly in
-        # case it attached late or the container is already gone.
         time.sleep(0.5)
         _append_post_mortem(container_name, log_path)
         _stop_log_streamer(streamer_proc)
@@ -420,29 +408,43 @@ def run(
         ready_file.touch()
 
     try:
-        if persistent:
-            # Persistence parity with pip mode: wrapper exits cleanly without
-            # touching the container; cleanup happens via stop_persistent_servers.
-            _lifecycle.idle_until_stopped(health_url, log_prefix)
-        else:
-            assert proc is not None
-            rc = proc.wait()
-            # Foreground container is auto-removed by --rm; nothing else to clean up.
-            if rc != 0:
-                sys.exit(rc)
+        _lifecycle.idle_until_stopped(health_url, log_prefix)
     finally:
         _stop_log_streamer(streamer_proc)
 
 
-# ── port → pid (used by the docker-aware stop helper for the pip fallback) ──
+# ── port → container / pid (used by the stop helper) ────────────────────────
+
+_CONTAINER_PREFIX = "xr-ai-vllm-"
+
+
+def container_on_port(port: int) -> str | None:
+    """Return the name of a running xr-ai-vllm container serving *port*, or None.
+
+    ``docker ps --filter publish=<port>`` silently misses ``--network host``
+    containers.  We label each container with ``xr-ai-vllm.port=<port>`` at
+    run time and filter by that label here instead.
+    """
+    try:
+        out = subprocess.check_output(
+            ["docker", "ps",
+             f"--filter=label=xr-ai-vllm.port={port}",
+             "--format", "{{.Names}}"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        names = out.splitlines()
+        return names[0] if names else None
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
 
 
 def pid_on_port(port: int) -> int | None:
     """Return the pid listening on *port* (any v4/v6 socket), or None.
 
     Tries `ss` first (always present on modern Linux), falls back to `lsof`.
-    Used by the stop helper to send SIGTERM to a pip-mode vLLM after `docker
-    stop` reports no matching container.
+    Used by the stop helper to send SIGTERM to the vLLM process (pip or docker
+    with --network host — both are visible to ss(8) on the host).
     """
     try:
         out = subprocess.check_output(

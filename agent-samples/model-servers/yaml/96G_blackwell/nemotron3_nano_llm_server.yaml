@@ -23,7 +23,7 @@ tensor_parallel_size: 1
 max_model_len:        32768
 
 gpu_memory_utilization: 0.35
-enforce_eager: true
+enforce_eager: false
 
 # vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
 # See ai-services/llm/nemotron3_nano/nemotron3_nano_llm_server.yaml for full docs.

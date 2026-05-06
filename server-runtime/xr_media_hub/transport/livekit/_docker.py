@@ -28,6 +28,7 @@ import asyncio
 import atexit
 import os
 import signal
+import subprocess
 import tempfile
 from collections import deque
 from pathlib import Path
@@ -58,6 +59,8 @@ _READY_TIMEOUT = 30.0         # seconds to wait for the LiveKit port to open
 _OUTPUT_CAPTURE_BYTES = 4096  # how much subprocess output to retain for diagnostics
 _BANNER = "━" * 56
 
+_CONTAINER_NAME = "xr-ai-livekit-server"
+
 
 class LiveKitDocker:
     def __init__(self, cfg: LiveKitConnectorConfig) -> None:
@@ -78,10 +81,17 @@ class LiveKitDocker:
             api_secret  = self._cfg.api_secret,
         ))
 
+        # Remove any stale container from a previous crashed run.
+        subprocess.run(
+            ["docker", "rm", "-f", _CONTAINER_NAME],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
         logger.info("Starting LiveKit container (port {})…", self._cfg.lk_port_ws)
         try:
             self._proc = await asyncio.create_subprocess_exec(
                 "docker", "run", "--rm",
+                "--name", _CONTAINER_NAME,
                 "--network", "host",
                 "-v", f"{cfg_path}:/etc/livekit.yaml:ro",
                 "livekit/livekit-server:latest",
@@ -121,22 +131,28 @@ class LiveKitDocker:
             return
 
         logger.info("Stopping LiveKit container (pid={})…", proc.pid)
+        # docker stop sends SIGTERM to the container's PID 1 then waits;
+        # this is reliable even if the docker run process is also killed
+        # externally (e.g. by the launcher's killpg).
         try:
-            proc.send_signal(signal.SIGTERM)
-        except ProcessLookupError:
-            pass  # already gone
-
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=_STOP_TIMEOUT)
-            logger.info("LiveKit container stopped (rc={})", proc.returncode)
-        except asyncio.TimeoutError:
-            logger.warning("SIGTERM timed out after {:.0f}s — sending SIGKILL", _STOP_TIMEOUT)
+            await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ["docker", "stop", "--time", str(int(_STOP_TIMEOUT)), _CONTAINER_NAME],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                ),
+            )
+            logger.info("LiveKit container stopped")
+        except Exception:
+            logger.opt(exception=True).warning("docker stop failed — killing docker run directly")
             try:
                 proc.kill()
             except ProcessLookupError:
                 pass
-            await proc.wait()
-            logger.info("LiveKit container killed")
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+        except (asyncio.TimeoutError, Exception):
+            pass
 
         self._cleanup_tmpdir()
 
@@ -208,14 +224,14 @@ class LiveKitDocker:
             self._tmpdir = None
 
     def _atexit_kill(self) -> None:
-        """Last-resort synchronous kill registered with atexit."""
-        proc = self._proc
-        if proc is None or proc.returncode is not None:
+        """Last-resort synchronous stop registered with atexit."""
+        if self._proc is None or self._proc.returncode is not None:
             return
-        try:
-            os.kill(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        # docker stop is reliable even under SIGKILL to docker run itself.
+        subprocess.run(
+            ["docker", "stop", "--time", "5", _CONTAINER_NAME],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
 
 
 # ── error builders ───────────────────────────────────────────────────────────

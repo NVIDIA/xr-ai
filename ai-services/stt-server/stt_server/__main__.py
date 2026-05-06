@@ -98,7 +98,7 @@ class _AsrBackend:
         self._ensure_loaded()
         import torch
         with torch.inference_mode():
-            results = self._model.transcribe([audio_path])
+            results = self._model.transcribe([audio_path], verbose=False)
         # NeMo returns a list of strings (or Hypothesis objects).
         if not results:
             return ""
@@ -138,6 +138,7 @@ def _build_app(cfg: dict, model_cache: Path):
         # model / language / temperature accepted for API compatibility but not used:
         # parakeet-tdt is English-only and deterministic.
     ):
+        from fastapi import HTTPException
         audio_bytes = await file.read()
         suffix      = Path(file.filename or "audio.wav").suffix or ".wav"
         loop        = asyncio.get_running_loop()
@@ -153,13 +154,37 @@ def _build_app(cfg: dict, model_cache: Path):
                 if tmp_path:
                     os.unlink(tmp_path)
 
-        text = await loop.run_in_executor(None, _run)
+        try:
+            text = await loop.run_in_executor(None, _run)
+        except Exception as exc:
+            logger.exception("transcription failed: {}", exc)
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         if response_format == "text":
             return PlainTextResponse(text)
         return JSONResponse({"text": text})
 
     return app, backend
+
+
+def _health_ok(port: int) -> bool:
+    """Return True if an STT server is already answering /health on *port*."""
+    try:
+        import urllib.request
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+async def _idle_until_stopped(port: int) -> None:
+    """Return when /health stops responding (server shut down externally)."""
+    loop = asyncio.get_running_loop()
+    while True:
+        await asyncio.sleep(5.0)
+        alive = await loop.run_in_executor(None, _health_ok, port)
+        if not alive:
+            break
 
 
 async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> None:
@@ -171,6 +196,11 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
 
+    # GPU selection — set before any CUDA init.
+    cuda_vis = cfg.get("cuda_visible_devices")
+    if cuda_vis is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_vis)
+
     # Direct NeMo and HuggingFace to the shared model directory.
     os.environ["NEMO_CACHE_DIR"] = str(model_cache / "nemo")
     os.environ["HF_HOME"]        = str(model_cache / "huggingface")
@@ -178,6 +208,14 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
 
     port = int(cfg.get("port", _DEFAULT_PORT))
     host = cfg.get("host", "0.0.0.0")
+
+    # Reuse a server that survived a previous stack run (weight persistence).
+    if _health_ok(port):
+        logger.info("STT server already running on :{} — reusing", port)
+        if ready_file:
+            ready_file.touch()
+        await _idle_until_stopped(port)
+        return
 
     app, backend = _build_app(cfg, model_cache)
 
