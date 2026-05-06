@@ -238,7 +238,7 @@ final class AppModel {
         // from StreamKit's internal ARCameraCapturer.
         let result = await ARKitSession().requestAuthorization(for: [.cameraAccess])
         guard result[.cameraAccess] == .allowed else {
-            lastError = "Main camera access was not granted. Enable it in Settings → Apps → StreamKitSample."
+            lastError = "Main camera access was not granted. Enable it in Settings → Apps → NVIDIA XR-AI Sample."
             return
         }
         #endif
