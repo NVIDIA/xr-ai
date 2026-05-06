@@ -9,6 +9,89 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-05 — Docker backend option for vLLM-backed servers
+
+All four vLLM-backed services (`vlm_server`, `llama_nemotron_llm_server`,
+`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`) gained an opt-in
+`vllm_backend: docker` mode that hosts vLLM via the NVIDIA NGC container
+(`nvcr.io/nvidia/vllm:26.04-py3` by default) instead of the pip-installed
+`vllm` CLI. Goal: let users try NVIDIA's optimized vLLM build without
+disturbing the pip path that everything ships on.
+
+(Cleanup side-effect: `llama_nemotron` was already a vLLM launcher despite
+being described as "transformers in-process (+ LMFE)" in the docs — the
+description was stale from a prior implementation. `DEPENDENCIES.md`,
+`docs/ai-services.md`, and the service's `README.md` were corrected in the
+same change.)
+
+**Design.** Backend selection is per-server via a new YAML key:
+
+```yaml
+vllm_backend: pip       # default — today's behavior
+# or
+vllm_backend: docker
+vllm_image:   nvcr.io/nvidia/vllm:26.04-py3
+```
+
+The `Process(...)` declaration in each orchestrator stays identical; flipping
+backends is one YAML edit. Both modes honor the same `model:`, `port:`, and
+vLLM-flag config — only the runtime that interprets them differs.
+
+A new stdlib-only utility package `utils/xr-ai-vllm/` exposes `serve(...)`
+(dispatches pip vs docker) and `stop_persistent_servers(...)` (docker-aware
+cleanup that tries `docker stop <container_name>` first, falls back to the
+existing port → PID → SIGTERM/SIGKILL path for pip mode). Each of the four
+wrapper `__main__.py` files now reads YAML, builds its model-specific
+`extra_serve_args`, and calls `serve()` — the per-service logic
+(`_gpu_compute_major()` quant selection, nano_v3 parser fetch,
+`media_io_kwargs` for omni, `llama3_json` tool-call parser for
+llama_nemotron) stays in the wrapper because it is not runtime-agnostic.
+
+**Why a shared helper instead of triplicated logic.** Four concrete consumers
+justify the abstraction per the AGENTS.md rule. Keeping it stdlib-only matters
+because docker mode's whole point is to avoid pulling vllm/torch into the
+wrapper's venv when it is not actually used; the helper sits beside
+`xr-ai-launcher` (also stdlib-only) at `utils/xr-ai-vllm/`.
+
+**Why per-YAML toggle, not separate sibling packages.** The user-visible
+change is "the same vLLM, hosted differently". A YAML key matches that
+exactly; sibling packages would have meant duplicating every service's
+pyproject, README, and per-profile YAML for a runtime-only swap. The plain
+boolean `Process(...)` line stays unchanged.
+
+**Why detached docker containers (not foreground).** `vlm_server`,
+`llama_nemotron_llm_server`, and `nemotron3_nano_llm_server` already implement
+vLLM persistence in pip mode via `start_new_session=True` so the container
+survives wrapper restarts — loading 16–30 GB of weights every dev iteration
+would be a regression. Docker mode mirrors this with
+`docker run -d --rm --name xr-ai-vllm-<service>`; cleanup is via
+`xr_ai_vllm.stop_persistent_servers()` invoked from `xr_render_demo --stop`.
+`nemotron_omni_llm_server` was non-persistent in pip mode (used `os.execvp`)
+and is non-persistent in docker mode (foreground `docker run --rm`) — same
+shutdown semantics for both runtimes.
+
+**Why `--network host` + `--ipc host`.** Mirrors the LiveKit container in
+`server-runtime/xr_media_hub/transport/livekit/_docker.py` (the only other
+docker-managed subprocess in the repo) and gives vLLM workers the shared
+memory region they need for KV cache shards. Linux-only, which the repo
+already requires.
+
+**NGC auth.** The wrapper auto-runs `docker login nvcr.io --password-stdin`
+when `NGC_API_KEY` is in the environment (loaded by `load_credentials()` per
+`docs/credentials.md`) and no existing auth is found in `~/.docker/config.json`.
+Existing logins are not overwritten.
+
+**Side-effect bug fix.** `nemotron_omni_llm_server` previously used
+`os.execvp` which never touched the launcher's `--ready-file`. Routing it
+through `xr_ai_vllm.serve(persistent=False, ...)` adds the standard
+`/health` poll + ready-file touch path, so the launcher's `_wait_ready` no
+longer hangs when this service is selected.
+
+**As-was.** Defaults, ports, model IDs, `Process(...)` lines, persistence
+semantics, and the `--stop` UX are all unchanged for users who do not flip
+`vllm_backend:`. Existing pip-mode `model_cache` weights are reused by docker
+mode (mounted at the same path inside the container) and vice versa.
+
 ### 2026-05-05 — Unified loguru stack; `launcher/` and `xr-ai-logging/` consolidated under `utils/`
 
 Two related infrastructure changes shipped together.

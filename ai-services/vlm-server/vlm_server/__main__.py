@@ -4,8 +4,9 @@
 """
 vlm_server — vLLM launcher for Cosmos-Reason1-7B (or any Qwen2.5-VL-compatible VLM).
 
-Reads config, sets HuggingFace env vars, and execs into ``vllm serve``.
-vLLM handles the OpenAI-compatible HTTP API, image decoding, and weight loading.
+Reads config, builds vLLM serve flags, and dispatches through ``xr_ai_vllm.serve``
+to either the pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm``
+docker container — picked per-YAML via ``vllm_backend: pip|docker``.
 
 Images are passed as base64 data URLs in the ``image_url`` content block,
 same as the OpenAI vision API format.
@@ -31,21 +32,19 @@ Config keys
                                     0 skips vLLM's video activation profiling
                                     at startup, saving tens of GiB on
                                     Qwen2.5-VL-class models.
+    vllm_backend:            str    "pip" (default) or "docker".
+    vllm_image:              str    NGC image when vllm_backend=docker
+                                    (default: nvcr.io/nvidia/vllm:26.04-py3).
 """
 import argparse
 import json
 import os
-import signal
-import subprocess
 import sys
-import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 import yaml
-from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import DEFAULT_IMAGE, serve
 
 _DEFAULT_MODEL       = "nvidia/Cosmos-Reason1-7B"
 _DEFAULT_PORT        = 8100
@@ -59,33 +58,7 @@ _DEFAULT_EAGER       = False
 _DEFAULT_MAX_IMAGES  = 1
 _DEFAULT_MAX_VIDEOS  = 0
 
-
-def _idle_until_stopped(health_url: str, poll_s: float = 5.0) -> None:
-    """Block until the health endpoint stops responding or a signal arrives."""
-    stopped = [False]
-    orig_term = signal.getsignal(signal.SIGTERM)
-    orig_int  = signal.getsignal(signal.SIGINT)
-
-    def _on_signal(sig, _frame):
-        stopped[0] = True
-
-    signal.signal(signal.SIGTERM, _on_signal)
-    signal.signal(signal.SIGINT,  _on_signal)
-    try:
-        while not stopped[0]:
-            try:
-                with urllib.request.urlopen(health_url, timeout=2) as r:
-                    if r.status != 200:
-                        print("[vlm_server] existing vLLM stopped responding — exiting",
-                              flush=True)
-                        return
-            except Exception:
-                print("[vlm_server] existing vLLM unreachable — exiting", flush=True)
-                return
-            time.sleep(poll_s)
-    finally:
-        signal.signal(signal.SIGTERM, orig_term)
-        signal.signal(signal.SIGINT,  orig_int)
+_CONTAINER_NAME = "xr-ai-vllm-vlm-server"
 
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
@@ -115,7 +88,7 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    model         = cfg.get("model",               _DEFAULT_MODEL)
+    model         = cfg.get("model",                _DEFAULT_MODEL)
     host          = cfg.get("host",                 _DEFAULT_HOST)
     port          = int(cfg.get("port",             _DEFAULT_PORT))
     served_name   = cfg.get("served_model_name",    _DEFAULT_SERVED_NAME)
@@ -126,21 +99,24 @@ def run() -> None:
     enforce_eager = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
     max_images    = int(cfg.get("max_images_per_prompt", _DEFAULT_MAX_IMAGES))
     max_videos    = int(cfg.get("max_videos_per_prompt", _DEFAULT_MAX_VIDEOS))
+    backend       = cfg.get("vllm_backend",         "pip")
+    image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
 
-    if cuda_devices := cfg.get("cuda_visible_devices"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
+    cuda_devices = cfg.get("cuda_visible_devices")
+    if cuda_devices is not None:
+        cuda_devices = str(cuda_devices)
+        # Pip mode reads it from the env; docker mode forwards via --gpus.
+        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
-    if hf_token := (cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")):
+    hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
+    if hf_token:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ["HF_HOME"] = str(model_cache)
 
-    argv = [
-        "vllm", "serve", model,
+    extra_serve_args = [
         "--served-model-name", served_name,
-        "--host", host,
-        "--port", str(port),
         "--trust-remote-code",
         "--max-num-seqs", str(max_seqs),
         "--tensor-parallel-size", str(tp_size),
@@ -149,45 +125,23 @@ def run() -> None:
         "--limit-mm-per-prompt", json.dumps({"image": max_images, "video": max_videos}),
     ]
     if enforce_eager:
-        argv.append("--enforce-eager")
+        extra_serve_args.append("--enforce-eager")
 
-    health_url = f"http://127.0.0.1:{port}/health"
-
-    # Reuse an already-running vLLM instance (e.g. survived a worker crash).
-    try:
-        with urllib.request.urlopen(health_url, timeout=3) as r:
-            already_up = r.status == 200
-    except Exception:
-        already_up = False
-
-    if already_up:
-        print(f"[vlm_server] vLLM already running on port {port} — reusing", flush=True)
-        if ns.ready_file:
-            ns.ready_file.touch()
-        _idle_until_stopped(health_url)
-        return
-
-    print(f"[vlm_server] Launching vLLM  http://{host}:{port}/v1  model={model}", flush=True)
-    # start_new_session=True puts vLLM in its own process group so the
-    # launcher's killpg() does not reach it when shutting down the wrapper.
-    proc = subprocess.Popen(argv, start_new_session=True)
-
-    while True:
-        if proc.poll() is not None:
-            sys.exit(proc.returncode or 1)
-        try:
-            with urllib.request.urlopen(health_url, timeout=2) as r:
-                if r.status == 200:
-                    break
-        except Exception:
-            pass
-        time.sleep(2)
-
-    logger.info("Ready  →  http://localhost:{}/v1", port)
-    if ns.ready_file:
-        ns.ready_file.touch()
-
-    proc.wait()
+    serve(
+        backend=backend,
+        persistent=True,
+        image=image,
+        container_name=_CONTAINER_NAME,
+        log_prefix="vlm_server",
+        model=model,
+        extra_serve_args=extra_serve_args,
+        host=host,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token or None,
+        cuda_visible_devices=cuda_devices,
+        ready_file=ns.ready_file,
+    )
 
 
 if __name__ == "__main__":

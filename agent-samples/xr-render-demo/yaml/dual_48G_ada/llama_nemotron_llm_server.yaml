@@ -41,3 +41,8 @@ enforce_eager: true
 
 # Tool calling via vLLM's llama3_json parser (replaces the old LMFE approach).
 tool_call_parser: llama3_json
+
+# vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
+# See ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml for full docs.
+vllm_backend: docker
+vllm_image:   nvcr.io/nvidia/vllm:26.04-py3

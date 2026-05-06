@@ -48,6 +48,58 @@ sudo apt install nvidia-cuda-toolkit
 
 This applies to the `xr-render-demo/yaml/96G_blackwell/` profile.
 
+### `vllm_backend: docker` — image pull fails with "unauthorized" / "denied"
+
+**Symptom:** the wrapper logs `[<service>] Launching vLLM (docker)` and then
+`docker run` fails with one of:
+
+- `Error response from daemon: pull access denied for nvcr.io/nvidia/vllm`
+- `unauthorized: authentication required`
+- `denied: requested access to the resource is denied`
+
+**Cause:** docker is not authenticated to `nvcr.io`, so it cannot pull the
+NGC vLLM container.
+
+**Fix:** log in with your NGC API key once. Get a key from
+https://ngc.nvidia.com/setup/api-key and run:
+
+```bash
+docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY
+```
+
+The credential is cached in `~/.docker/config.json` and reused on subsequent
+runs. Alternatively, save the key into the xr-ai credential cache so the
+wrapper can auto-login:
+
+```bash
+python3 -c "
+import json, os, pathlib
+p = pathlib.Path.home() / '.config/xr-ai/credentials.json'
+d = json.loads(p.read_text()) if p.exists() else {}
+d['NGC_API_KEY'] = os.environ['NGC_API_KEY']
+p.parent.mkdir(parents=True, exist_ok=True)
+p.write_text(json.dumps(d, indent=2))
+"
+```
+
+The orchestrator's `load_credentials()` injects `NGC_API_KEY` into the
+environment before each wrapper runs; the docker backend uses it to run
+`docker login nvcr.io --password-stdin` when no existing auth is found.
+
+### `vllm_backend: docker` — `docker run` fails with `could not select device driver`
+
+**Symptom:** `docker run` exits with a message mentioning `nvidia-container-cli`
+or "could not select device driver "" with capabilities: [[gpu]]".
+
+**Cause:** the NVIDIA Container Toolkit is not installed (or the daemon was
+not restarted after install), so docker cannot honor `--gpus`.
+
+**Fix:** install the toolkit and restart docker:
+https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+
+Switch back to `vllm_backend: pip` in the service YAML if you only need the
+local install.
+
 ### Hub fails immediately with `RuntimeError: missing libnvcuvid.so / libnvidia-encode.so`
 
 **Cause:** NVDEC (`libnvcuvid.so`) and NVENC (`libnvidia-encode.so`) are
@@ -121,8 +173,10 @@ cd xr-ai/agent-samples/xr-render-demo
 uv run xr_render_demo --stop
 ```
 
-This sends `SIGTERM` to each persisted server, waits up to 20 s, then
-`SIGKILL`s. Safe to run while the stack is down.
+For pip-mode servers this sends `SIGTERM` to each persisted process, waits up
+to 20 s, then `SIGKILL`s. For docker-mode servers it runs
+`docker stop <container_name>` (escalating to `docker kill` after 20 s). Safe
+to run while the stack is down.
 
 ### First run downloads models silently
 
