@@ -14,7 +14,7 @@ historical decisions in `docs/changelog.md`.
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
-launcher/           # stdlib-only process manager (used by samples)
+utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
 ai-services/        # OpenAI-compatible inference servers (VLM, STT, TTS, LLM)
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, video, vlm
@@ -50,7 +50,7 @@ Each sample has two sub-projects:
   when ready.
 - `xr_media_hub` always runs as its own process — never embedded.
 - `run_stack` is fail-fast: any process exit terminates the stack.
-- Process management lives in `launcher/`, not inside any process it manages.
+- Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
 
 Full mechanics and the `Process(...)` declaration form: `docs/process-model.md`.
 
@@ -108,7 +108,8 @@ commit. A change is not complete until `DEPENDENCIES.md` reflects it.
 
 Hard rules (also in `DEPENDENCIES.md`):
 
-- `launcher/` has zero runtime dependencies — stdlib only. Keep it that way.
+- `utils/xr-ai-launcher/` has zero runtime dependencies — stdlib only. Keep it that way.
+- `utils/xr-ai-logging/` depends only on `loguru>=0.7`. Used by every process via `setup_logging()`.
 - `agent-sdk/` (`xr-ai-agent`) depends only on `pyzmq` + `msgpack`.
 - Agent workers import only from `xr_ai_agent` (and task-specific libs).
 - Agent workers must never import from `xr_media_hub` or `xr_ai_launcher`.
@@ -171,7 +172,7 @@ Read these on demand when the topic comes up:
 | File | When to read |
 |---|---|
 | `docs/architecture.md` | Working across module boundaries; understanding hub ↔ transport ↔ agent boundaries; LiveKit `ws://` limitation |
-| `docs/process-model.md` | Touching `launcher/`, orchestrators, ready-files, or adding a managed process type |
+| `docs/process-model.md` | Touching `utils/xr-ai-launcher/`, orchestrators, ready-files, or adding a managed process type |
 | `docs/credentials.md` | Code that needs `HF_TOKEN` / `NGC_API_KEY` |
 | `docs/ai-services.md` | Adding, calling, or operating a VLM / STT / TTS / LLM server (incl. vLLM persistence) |
 | `docs/adding-a-sample.md` | Scaffolding a new sample — full boilerplate templates |

@@ -15,7 +15,7 @@ design decisions see `docs/changelog.md`.
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
-launcher/           # stdlib-only process manager (used by samples)
+utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in per sample)
 ai-services/        # OpenAI-compatible AI inference servers (VLM, STT, TTS, LLM)
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, video, vlm

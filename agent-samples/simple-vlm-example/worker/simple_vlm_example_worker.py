@@ -37,28 +37,23 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import pathlib
 import signal
 
 import yaml
-
+from loguru import logger
 from xr_ai_agent import ProcessorEndpoint
+from xr_ai_logging import setup_logging
 
 from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmAgent
 from services import SttClient, TtsClient, VlmClient, wait_for_health
-
-log = logging.getLogger("simple_vlm_example")
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 
 async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    setup_logging("worker")
 
     # VLM backend selection.
     # "cosmos" → vlm-server on port 8100 (Cosmos-Reason1-7B, model="vlm")
@@ -101,12 +96,12 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, agent.shutdown)
 
-    log.info("simple-vlm-example connecting  sub=%s  push=%s", _HUB_PUB, _HUB_PUSH)
+    logger.info("simple-vlm-example connecting  sub={}  push={}", _HUB_PUB, _HUB_PUSH)
     try:
         await agent.run()
     finally:
         agent.shutdown()
-    log.info("simple-vlm-example stopped")
+    logger.info("simple-vlm-example stopped")
 
 
 def run() -> None:

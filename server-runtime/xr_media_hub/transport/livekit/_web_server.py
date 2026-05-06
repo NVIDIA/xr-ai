@@ -22,7 +22,6 @@ requiring LiveKit itself to terminate TLS.
 from __future__ import annotations
 
 import asyncio
-import logging
 
 import httpx
 import uvicorn
@@ -30,13 +29,12 @@ from fastapi import FastAPI, Query, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
+from loguru import logger
 
 from . import _lk_proxy
 from ._tls import ensure_self_signed_cert
 from ._token import make_client_token
 from .config import LiveKitConnectorConfig
-
-log = logging.getLogger(__name__)
 
 
 def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
@@ -111,7 +109,7 @@ class WebServer:
             key  = self._cfg.key_file  or None
             if not cert or not key:
                 cert, key = ensure_self_signed_cert()
-                log.info("TLS: using auto-generated self-signed cert  %s", cert)
+                logger.info("TLS: using auto-generated self-signed cert  {}", cert)
             ssl_kwargs = {"ssl_certfile": cert, "ssl_keyfile": key}
             scheme = "https"
 
@@ -124,8 +122,8 @@ class WebServer:
         )
         self._server = uvicorn.Server(uv_cfg)
         self._task = asyncio.create_task(self._serve_safe())
-        log.info(
-            "Web server → %s://%s:%d  client=%r",
+        logger.info(
+            "Web server → {}://{}:{}  client={!r}",
             scheme, self._cfg.web_server_host, self._cfg.web_server_port,
             self._cfg.web_client_dir or "<no static dir>",
         )
@@ -136,8 +134,8 @@ class WebServer:
         try:
             await self._server.serve()
         except SystemExit as exc:
-            log.error(
-                "Web server failed to start on port %d — is it already in use? (exit code %s)",
+            logger.error(
+                "Web server failed to start on port {} — is it already in use? (exit code {})",
                 self._cfg.web_server_port, exc.code,
             )
 

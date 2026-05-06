@@ -29,8 +29,9 @@ Usage
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Awaitable, Callable
+
+from loguru import logger
 
 from xr_media_hub.ipc import AudioChunk, ConnectorEndpoint, DataMessage
 
@@ -40,8 +41,6 @@ from ._room_client import RoomClient
 from ._token_server import TokenServer
 from ._web_server import WebServer
 from .config import LiveKitConnectorConfig
-
-log = logging.getLogger(__name__)
 
 ReturnAudioCallback = Callable[[AudioChunk],  Awaitable[None]]
 ReturnDataCallback  = Callable[[DataMessage], Awaitable[None]]
@@ -87,7 +86,7 @@ class LiveKitConnector:
         self._ep.on_return_data(self._room_client.send_return_data)
         self._ep.on_return_audio(self._room_client.send_return_audio)
         self._ep.on_return_audio_flush(self._room_client.flush_return_audio)
-        log.info("LiveKitConnector started — room=%r", self._cfg.room_name)
+        logger.info("LiveKitConnector started — room={!r}", self._cfg.room_name)
 
     async def run(self) -> None:
         """
@@ -115,11 +114,11 @@ class LiveKitConnector:
         for t in done:
             exc = t.exception()
             if exc:
-                log.error("Connector task %r raised: %s", t.get_name(), exc)
+                logger.error("Connector task {!r} raised: {}", t.get_name(), exc)
 
     async def stop(self) -> None:
         """Gracefully shut down all components in reverse-start order."""
-        log.info("LiveKitConnector stopping…")
+        logger.info("LiveKitConnector stopping…")
         # Start Docker shutdown immediately so it runs in parallel with the
         # other cleanup steps — docker compose down can take several seconds.
         docker_task = asyncio.create_task(self._docker.stop(), name="docker-stop")
@@ -132,4 +131,4 @@ class LiveKitConnector:
         if self._token:
             await self._token.stop()
         await docker_task
-        log.info("LiveKitConnector stopped")
+        logger.info("LiveKitConnector stopped")

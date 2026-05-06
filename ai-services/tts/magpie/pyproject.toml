@@ -21,6 +21,7 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "hf-transfer>=0.1.4",
     "pyyaml>=6.0",
+    "xr-ai-logging",
 ]
 
 [tool.uv.sources]
@@ -28,7 +29,8 @@ dependencies = [
 # blocking NeMo's [asr]/[tts] extras.  Pull `lightning` straight from the
 # upstream tag (it builds from the same Lightning AI mono-repo as
 # `pytorch-lightning`).  Drop this source once PyPI lifts the quarantine.
-lightning = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
+lightning     = { git = "https://github.com/Lightning-AI/pytorch-lightning", tag = "2.4.0" }
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 magpie_tts_server = "magpie_tts_server.__main__:run"

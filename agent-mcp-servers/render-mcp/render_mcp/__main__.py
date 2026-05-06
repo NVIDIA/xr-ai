@@ -26,7 +26,6 @@ import argparse
 import asyncio
 import contextlib
 import glob
-import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -39,10 +38,10 @@ import yaml
 import zmq
 import zmq.asyncio
 from fastmcp import FastMCP
+from loguru import logger
 
 from xr_ai_launcher import ManagedProcess, XR_RUNTIME_VAR, load_cloudxr_env
-
-log = logging.getLogger("render_mcp")
+from xr_ai_logging import setup_logging
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "render_mcp.yaml"
 
@@ -146,7 +145,7 @@ class SceneDispatcher:
         # out scene.add before LOVR connected.
         self._push.setsockopt(zmq.SNDHWM, 256)
         self._push.bind(cfg.scene_socket)
-        log.info("render-mcp: bound PUSH on %s", cfg.scene_socket)
+        logger.info("render-mcp: bound PUSH on {}", cfg.scene_socket)
 
         self._lovr_started: bool = False
         self._spawn_lock: asyncio.Lock = asyncio.Lock()
@@ -172,11 +171,12 @@ class SceneDispatcher:
                     msg = (f"cloudxr env file not found: {cfg.cloudxr_env_file}. "
                            "Ensure cloudxr-runtime starts before render-mcp.")
                     self._spawn_error = msg
+                    logger.error("render-mcp: {}", msg)
                     return {"status": "error", "error": msg}
                 load_cloudxr_env(cfg.cloudxr_env_file)
-                log.info("render-mcp: cloudxr env loaded from %s", cfg.cloudxr_env_file)
+                logger.info("render-mcp: cloudxr env loaded from {}", cfg.cloudxr_env_file)
             else:
-                log.warning(
+                logger.warning(
                     "render-mcp: no cloudxr_env_file configured — LOVR will use "
                     "whatever OpenXR runtime is registered on this machine"
                 )
@@ -187,21 +187,25 @@ class SceneDispatcher:
                 lovr_cmd.append("--appimage-extract-and-run")
             lovr_cmd.append(str(cfg.xr_app_dir))
 
-            log.info("render-mcp: starting LOVR  bin=%s  app=%s", cfg.lovr_bin, cfg.xr_app_dir)
+            logger.info(
+                "render-mcp: starting LOVR  bin={}  app={}", cfg.lovr_bin, cfg.xr_app_dir,
+            )
             lovr_proc = await self._stack.enter_async_context(
                 ManagedProcess("lovr", lovr_cmd, cwd=cfg.xr_app_dir)
             )
 
             async def _watch() -> None:
                 rc = await lovr_proc.wait()
-                log.warning("render-mcp: LOVR child exited (rc=%s) — "
-                            "resetting lovr_started so next start_xr respawns it", rc)
+                logger.warning(
+                    "render-mcp: LOVR child exited (rc={}) — "
+                    "resetting lovr_started so next start_xr respawns it", rc,
+                )
                 self._lovr_started = False
 
             asyncio.create_task(_watch(), name="lovr-watch")
 
             self._lovr_started = True
-            log.info("render-mcp: LOVR spawned (xr.start handled)")
+            logger.info("render-mcp: LOVR spawned (xr.start handled)")
             # Resync current scene state into LOVR's ZMQ receive buffer so any
             # previously-added primitives survive a LOVR restart.
             await self._resync_scene()
@@ -221,7 +225,7 @@ class SceneDispatcher:
                 "color":    [col["r"], col["g"], col["b"]],
                 "size":    obj["size"],
             })
-            log.info("render-mcp: resync  id=%s", obj_id)
+            logger.debug("render-mcp: resync  id={}", obj_id)
 
     # ── scene state ───────────────────────────────────────────────────────────
 
@@ -283,8 +287,8 @@ class SceneDispatcher:
         if not self._lovr_started:
             self._render_drops += 1
             if self._render_drops % 200 == 1:
-                log.debug(
-                    "render-mcp: dropping op %r (LOVR not started) — drops=%d",
+                logger.debug(
+                    "render-mcp: dropping op {!r} (LOVR not started) — drops={}",
                     op, self._render_drops,
                 )
             return {"ok": False, "reason": "not_started"}
@@ -327,7 +331,7 @@ def build_mcp(disp: SceneDispatcher) -> FastMCP:
             try:
                 await disp.start_lovr_once()
             except Exception:
-                log.exception("render-mcp: start_xr crashed")
+                logger.exception("render-mcp: start_xr crashed")
 
         asyncio.create_task(_spawn(), name="lovr-spawn")
         return {"status": "starting"}
@@ -369,7 +373,7 @@ def build_mcp(disp: SceneDispatcher) -> FastMCP:
             "color":    [r, g, b],
             "size":     size,
         })
-        log.info("render-mcp: add_primitive id=%s type=%s", obj_id, prim_type)
+        logger.debug("render-mcp: add_primitive id={} type={}", obj_id, prim_type)
         return {"id": obj_id, **result}
 
     @mcp.tool()
@@ -428,7 +432,7 @@ def build_mcp(disp: SceneDispatcher) -> FastMCP:
                 "color":    [c["r"], c["g"], c["b"]],
                 "size":     merged["size"],
             })
-            log.info("render-mcp: type change %s → %s  new_id=%s", obj_id, prim_type, new_id)
+            logger.debug("render-mcp: type change {} → {}  new_id={}", obj_id, prim_type, new_id)
             return {"ok": result.get("ok", True), "new_id": new_id}
 
         if not props:
@@ -501,9 +505,9 @@ async def _serve(cfg: Config, ready_file: Path | None = None) -> None:
     bundled = _find_bundled_libzmq()
     if bundled:
         os.environ["RENDER_ZMQ_LIB"] = str(bundled)
-        log.info("render-mcp: LOVR will load libzmq from %s", bundled)
+        logger.info("render-mcp: LOVR will load libzmq from {}", bundled)
     else:
-        log.warning("render-mcp: no bundled libzmq found — LOVR will try the system copy")
+        logger.warning("render-mcp: no bundled libzmq found — LOVR will try the system copy")
 
     async with contextlib.AsyncExitStack() as stack:
         disp = SceneDispatcher(cfg, stack)
@@ -511,15 +515,19 @@ async def _serve(cfg: Config, ready_file: Path | None = None) -> None:
             app = build_app(disp)
             uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="warning")
             server = uvicorn.Server(uv_cfg)
-            log.info("render-mcp  mcp=/mcp  port=%d  scene_socket=%s",
-                     cfg.port, cfg.scene_socket)
+            logger.info(
+                "render-mcp  mcp=/mcp  port={}  scene_socket={}",
+                cfg.port, cfg.scene_socket,
+            )
             if ready_file:
                 ready_file.touch()
             await server.serve()
         finally:
             disp.close()
-            log.info("render-mcp: stopped (render drops=%d)",
-                     disp.health_snapshot()["render_drops"])
+            logger.info(
+                "render-mcp: stopped (render drops={})",
+                disp.health_snapshot()["render_drops"],
+            )
 
 
 def run() -> None:
@@ -528,10 +536,7 @@ def run() -> None:
     p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    setup_logging("render-mcp")
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
 

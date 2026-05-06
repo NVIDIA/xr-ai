@@ -26,18 +26,17 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import logging
 import os
 import signal
 import tempfile
 from collections import deque
 from pathlib import Path
 
+from loguru import logger
+
 from xr_media_hub._errors import StartupError
 
 from .config import LiveKitConnectorConfig
-
-log = logging.getLogger(__name__)
 
 _LIVEKIT_YAML = """\
 port: {lk_port_ws}
@@ -79,7 +78,7 @@ class LiveKitDocker:
             api_secret  = self._cfg.api_secret,
         ))
 
-        log.info("Starting LiveKit container (port %d)…", self._cfg.lk_port_ws)
+        logger.info("Starting LiveKit container (port {})…", self._cfg.lk_port_ws)
         try:
             self._proc = await asyncio.create_subprocess_exec(
                 "docker", "run", "--rm",
@@ -105,8 +104,10 @@ class LiveKitDocker:
             # even though the lifecycle never completed.
             await self._teardown_failed_start()
             raise
-        log.info("LiveKit container ready on port %d  pid=%d",
-                 self._cfg.lk_port_ws, self._proc.pid)
+        logger.info(
+            "LiveKit container ready on port {}  pid={}",
+            self._cfg.lk_port_ws, self._proc.pid,
+        )
 
     async def stop(self) -> None:
         if self._proc is None:
@@ -115,11 +116,11 @@ class LiveKitDocker:
         self._proc = None
 
         if proc.returncode is not None:
-            log.info("LiveKit container already exited (rc=%d)", proc.returncode)
+            logger.info("LiveKit container already exited (rc={})", proc.returncode)
             self._cleanup_tmpdir()
             return
 
-        log.info("Stopping LiveKit container (pid=%d)…", proc.pid)
+        logger.info("Stopping LiveKit container (pid={})…", proc.pid)
         try:
             proc.send_signal(signal.SIGTERM)
         except ProcessLookupError:
@@ -127,15 +128,15 @@ class LiveKitDocker:
 
         try:
             await asyncio.wait_for(proc.wait(), timeout=_STOP_TIMEOUT)
-            log.info("LiveKit container stopped (rc=%d)", proc.returncode)
+            logger.info("LiveKit container stopped (rc={})", proc.returncode)
         except asyncio.TimeoutError:
-            log.warning("SIGTERM timed out after %.0fs — sending SIGKILL", _STOP_TIMEOUT)
+            logger.warning("SIGTERM timed out after {:.0f}s — sending SIGKILL", _STOP_TIMEOUT)
             try:
                 proc.kill()
             except ProcessLookupError:
                 pass
             await proc.wait()
-            log.info("LiveKit container killed")
+            logger.info("LiveKit container killed")
 
         self._cleanup_tmpdir()
 
@@ -153,9 +154,13 @@ class LiveKitDocker:
                 if self._output_size < _OUTPUT_CAPTURE_BYTES:
                     self._output.append(line)
                     self._output_size += len(line)
-                log.debug("[livekit] %s", line.decode(errors="replace").rstrip())
+                logger.debug("[livekit] {}", line.decode(errors="replace").rstrip())
+        except asyncio.CancelledError:
+            raise
         except Exception:
-            pass
+            logger.exception(
+                "LiveKit log drainer crashed — captured output may be truncated",
+            )
 
     async def _wait_ready(self, port: int) -> None:
         loop = asyncio.get_event_loop()

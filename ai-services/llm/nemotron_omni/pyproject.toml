@@ -13,10 +13,14 @@ dependencies = [
     "vllm>=0.8.0",
     "pyyaml>=6.0",
     "hf-transfer>=0.1.4",
+    "xr-ai-logging",
 ]
 
 [project.scripts]
 nemotron_omni_llm_server = "nemotron_omni_llm_server.__main__:run"
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["nemotron_omni_llm_server"]

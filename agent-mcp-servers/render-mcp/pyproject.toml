@@ -12,6 +12,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     # Process management for the LOVR child.
     "xr-ai-launcher",
+    "xr-ai-logging",
     "pyyaml>=6.0",
     # FastAPI hosts the high-rate /sphere/radius route alongside the FastMCP
     # tool surface (mounted at /mcp) for the discrete tools.
@@ -24,7 +25,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-launcher = { path = "../../launcher", editable = true }
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 render_mcp = "render_mcp.__main__:run"

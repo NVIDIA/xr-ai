@@ -42,7 +42,6 @@ to the hub as a ``ProcessorEndpoint`` and pulls live frames over IPC.
 from __future__ import annotations
 
 import json
-import logging
 import threading
 import time
 from dataclasses import dataclass, field
@@ -50,11 +49,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+from loguru import logger
 
 if TYPE_CHECKING:
     from xr_media_hub.ipc import SlotView
-
-log = logging.getLogger(__name__)
 
 
 # Default chunk root. /dev/shm is tmpfs on Linux (auto-mounted at boot),
@@ -119,7 +117,7 @@ class VideoRecorder:
                 data, sig.width, sig.height, sig.fmt,
             )
         except Exception as exc:
-            log.warning("recorder  encode error pid=%r: %s", sig.participant_id, exc)
+            logger.warning("recorder  encode error pid={!r}: {}", sig.participant_id, exc)
 
     # ── encoding (runs in thread pool) ───────────────────────────────────────
 
@@ -142,8 +140,10 @@ class VideoRecorder:
             enc.last_ts = now
 
             if width != enc.width or height != enc.height:
-                log.info("recorder  resolution change %dx%d → %dx%d  pid=%r",
-                         enc.width, enc.height, width, height, pid)
+                logger.info(
+                    "recorder  resolution change {}x{} → {}x{}  pid={!r}",
+                    enc.width, enc.height, width, height, pid,
+                )
                 # Drop the old encoder reference first so CPython's refcount
                 # hits zero and the destructor (NvEncDestroyEncoder) fires
                 # before CreateEncoder opens a new session.
@@ -154,14 +154,20 @@ class VideoRecorder:
                     if flushed:
                         enc.chunk_buf.extend(flushed)
                 except Exception as e:
-                    log.warning("recorder  EndEncode error on resolution change pid=%r: %s", pid, e)
+                    logger.warning(
+                        "recorder  EndEncode error on resolution change pid={!r}: {}",
+                        pid, e,
+                    )
                 del old_encoder
                 self._flush_chunk(enc)
                 try:
                     enc.encoder = self._create_encoder(width, height)
                 except Exception as e:
-                    log.warning("recorder  CreateEncoder failed pid=%r %dx%d: %s — "
-                                "recording disabled for this track", pid, width, height, e)
+                    logger.warning(
+                        "recorder  CreateEncoder failed pid={!r} {}x{}: {} — "
+                        "recording disabled for this track",
+                        pid, width, height, e,
+                    )
                     # Update dimensions so we don't retry on every frame.
                     enc.width  = width
                     enc.height = height
@@ -190,7 +196,7 @@ class VideoRecorder:
             if flushed:
                 enc.chunk_buf.extend(flushed)
         except Exception as e:
-            log.warning("recorder  EndEncode error pid=%r: %s", pid, e)
+            logger.warning("recorder  EndEncode error pid={!r}: {}", pid, e)
         self._flush_chunk(enc)
         enc.encoder        = self._create_encoder(enc.width, enc.height)
         enc.chunk_start_us = time.time_ns() // 1_000
@@ -199,8 +205,10 @@ class VideoRecorder:
     def _make_track(self, pid: str, tid: str, width: int, height: int) -> _TrackEncoder:
         out_dir = _resolve_or_create_subdir(self._out_dir, pid)
         encoder = self._create_encoder(width, height)
-        log.info("recorder  new track  pid=%r  dir=%s  track=%r  %dx%d  bitrate=%d",
-                 pid, out_dir.name, tid, width, height, self._cfg.bitrate)
+        logger.info(
+            "recorder  new track  pid={!r}  dir={}  track={!r}  {}x{}  bitrate={}",
+            pid, out_dir.name, tid, width, height, self._cfg.bitrate,
+        )
         return _TrackEncoder(
             encoder=encoder, out_dir=out_dir,
             width=width, height=height,
@@ -240,8 +248,10 @@ class VideoRecorder:
             "height":     enc.height,
             "size_bytes": len(data),
         }))
-        log.info("recorder  chunk  %s  %d frames  %d bytes",
-                 h264_path.name, enc.chunk_frames, len(data))
+        logger.debug(
+            "recorder  chunk  {}  {} frames  {} bytes",
+            h264_path.name, enc.chunk_frames, len(data),
+        )
         enc.chunk_buf.clear()
         self._prune_by_total_bytes()
 
@@ -260,7 +270,10 @@ class VideoRecorder:
                     try:
                         chunks.append((int(c.stem), c))
                     except ValueError:
-                        continue
+                        logger.warning(
+                            "recorder  unexpected .264 filename in eviction sweep: {} "
+                            "(non-numeric stem; not counted toward size cap)", c,
+                        )
             chunks.sort()  # oldest first
             total = sum(c.stat().st_size for _, c in chunks)
             for _, c in chunks:
@@ -285,7 +298,7 @@ class VideoRecorder:
                         if flushed:
                             enc.chunk_buf.extend(flushed)
                     except Exception as e:
-                        log.warning("recorder  flush error pid=%r: %s", pid, e)
+                        logger.warning("recorder  flush error pid={!r}: {}", pid, e)
                     self._flush_chunk(enc)
 
 
@@ -319,7 +332,7 @@ def _to_nv12(data: bytes, width: int, height: int, fmt: object) -> np.ndarray | 
         bgra = arr.reshape(height, width, 4)
         return _rgb24_to_nv12(bgra[:, :, [2, 1, 0]], width, height)
 
-    log.warning("recorder  unsupported pixel format: %r", fmt)
+    logger.warning("recorder  unsupported pixel format: {!r}", fmt)
     return None
 
 

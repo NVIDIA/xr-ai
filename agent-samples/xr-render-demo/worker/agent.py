@@ -8,22 +8,19 @@ lifecycle (start_xr, polling, render.ready ack).
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 
 from pathlib import Path
 
 from fastmcp import Client as McpClient
+from loguru import logger
 from pipecat.pipeline.runner import PipelineRunner
-
 from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent
 
 from config import WorkerConfig
 from processors import RenderSceneProcessor, _tool_payload, build_pipeline
 from xr_ai_pipecat.services import SttClient, TtsClient
 from xr_ai_pipecat.transport import XRMediaHubTransport
-
-log = logging.getLogger("xr_render_demo")
 
 _XR_SESSION_STARTED_TOPIC = "xr.session.started"
 _RENDER_READY_TOPIC       = "render.ready"
@@ -77,21 +74,21 @@ class RenderDemoAgent:
             ))
             return
 
-        log.info("%s from %s — calling start_xr", msg.topic, msg.participant_id)
+        logger.info("{} from {} — calling start_xr", msg.topic, msg.participant_id)
         start_res = await self._call_render("start_xr", {})
         if start_res is None:
-            log.warning("start_xr failed")
+            logger.warning("start_xr failed")
             return
         if start_res.get("status") == "error":
-            log.error("start_xr error: %s", start_res.get("error"))
+            logger.error("start_xr error: {}", start_res.get("error"))
             return
 
-        log.info("start_xr status=%s — polling lovr_started…", start_res.get("status"))
+        logger.info("start_xr status={} — polling lovr_started…", start_res.get("status"))
         if not await self._wait_lovr():
             return
         self._xr_started = True
 
-        log.info("render.ready — sending ack")
+        logger.info("render.ready — sending ack")
         await self._transport.send_return_data(DataMessage(
             participant_id=msg.participant_id,
             topic=_RENDER_READY_TOPIC,
@@ -106,10 +103,10 @@ class RenderDemoAgent:
                 if h.get("lovr_started"):
                     return True
                 if h.get("spawn_error"):
-                    log.error("spawn_error: %s", h["spawn_error"])
+                    logger.error("spawn_error: {}", h["spawn_error"])
                     return False
             await asyncio.sleep(0.5)
-        log.warning("lovr_started never true within %.0fs", timeout_s)
+        logger.warning("lovr_started never true within {:.0f}s", timeout_s)
         return False
 
     # ── participant tracking ───────────────────────────────────────────────────
@@ -134,12 +131,12 @@ class RenderDemoAgent:
             data = _tool_payload(res)
             if not isinstance(data, dict):
                 if not silent:
-                    log.error("render-mcp %s non-dict: %r", tool, data)
+                    logger.error("render-mcp {} non-dict: {!r}", tool, data)
                 return None
             return data
         except Exception as exc:
             if not silent:
-                log.error("render-mcp %s: %s", tool, exc)
+                logger.error("render-mcp {}: {}", tool, exc)
             return None
 
     # ── lifecycle ─────────────────────────────────────────────────────────────

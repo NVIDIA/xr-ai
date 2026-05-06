@@ -15,13 +15,15 @@ dependencies = [
     "pyyaml>=6.0",
     # Frame querying — connects to the hub via IPC and decodes H.264 chunks.
     "xr-ai-agent",
+    "xr-ai-logging",
     "PyNvVideoCodec>=1.0",
     "Pillow>=10.0",
     "numpy>=1.24",
 ]
 
 [tool.uv.sources]
-xr-ai-agent = { path = "../../agent-sdk", editable = true }
+xr-ai-agent   = { path = "../../agent-sdk", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 video_mcp_server = "video_mcp_server.__main__:run"

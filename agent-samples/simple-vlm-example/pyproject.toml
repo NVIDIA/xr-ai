@@ -11,11 +11,13 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-launcher",
+    "xr-ai-logging",
     "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
-xr-ai-launcher = { path = "../../launcher", editable = true }
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 simple_vlm_example = "main:run"

@@ -37,6 +37,8 @@ import urllib.request
 from pathlib import Path
 
 import yaml
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 _MODEL_BLACKWELL  = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
 _MODEL_ADA        = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
@@ -64,8 +66,12 @@ def _gpu_compute_major() -> int:
         ).strip().splitlines()
         if out:
             return int(out[0].split(".")[0])
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "nemotron3_nano: nvidia-smi compute-cap query failed ({}) — "
+            "defaulting to pre-Blackwell model variant",
+            exc,
+        )
     return 0
 
 
@@ -109,7 +115,7 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
 def _ensure_reasoning_parser(model_cache: Path, url: str) -> Path:
     path = model_cache / _PARSER_FILENAME
     if not path.exists():
-        print(f"[nemotron3_nano] Downloading {_PARSER_FILENAME}…", flush=True)
+        logger.info("Downloading {}…", _PARSER_FILENAME)
         with urllib.request.urlopen(url) as resp:
             path.write_bytes(resp.read())
     return path
@@ -118,6 +124,8 @@ def _ensure_reasoning_parser(model_cache: Path, url: str) -> Path:
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+
+    setup_logging("llm-nemotron3-nano")
 
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
@@ -138,11 +146,11 @@ def run() -> None:
     major = _gpu_compute_major()
     if major >= 10:
         model = cfg.get("model_blackwell", _MODEL_BLACKWELL)
-        print(f"[nemotron3_nano] Blackwell (SM{major}0) → {model}", flush=True)
+        logger.info("Blackwell (SM{}0) → {}", major, model)
     else:
         model = cfg.get("model_ada", _MODEL_ADA)
         arch  = f"SM{major}0" if major > 0 else "unknown GPU"
-        print(f"[nemotron3_nano] Pre-Blackwell ({arch}) → {model}", flush=True)
+        logger.info("Pre-Blackwell ({}) → {}", arch, model)
 
     host          = cfg.get("host",               _DEFAULT_HOST)
     port          = int(cfg.get("port",            _DEFAULT_PORT))
@@ -223,7 +231,7 @@ def run() -> None:
             pass
         time.sleep(2)
 
-    print(f"[nemotron3_nano] Ready  →  http://localhost:{port}/v1", flush=True)
+    logger.info("Ready  →  http://localhost:{}/v1", port)
     if ns.ready_file:
         ns.ready_file.touch()
 

@@ -11,6 +11,7 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
+    "xr-ai-logging",
     "pipecat-ai>=0.0.46",
     "numpy>=1.24",
     "scipy>=1.11",
@@ -19,7 +20,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-agent = { path = "..", editable = true }
+xr-ai-agent   = { path = "..", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_pipecat"]

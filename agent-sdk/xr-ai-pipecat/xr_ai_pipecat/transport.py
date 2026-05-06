@@ -14,10 +14,10 @@ Output — int16 PCM frames written by the TTS processor are converted back
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 
 import numpy as np
+from loguru import logger
 from pipecat.frames.frames import (
     CancelFrame,
     EndFrame,
@@ -29,8 +29,6 @@ from pipecat.transports.base_output import BaseOutputTransport
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 
 from xr_ai_agent import AudioChunk, DataMessage, ProcessorEndpoint, Subscribe
-
-log = logging.getLogger("xr_ai_pipecat.transport")
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -66,7 +64,7 @@ class XRMediaHubInputTransport(BaseInputTransport):
         await super().start(frame)
         self._started = True
         self._ep_task = asyncio.create_task(self._ep.run(), name="ep-run")
-        log.info("XRMediaHubInputTransport started")
+        logger.info("XRMediaHubInputTransport started")
 
     async def stop(self, frame: EndFrame):
         self._started = False

@@ -35,6 +35,8 @@ import sys
 from pathlib import Path
 
 import yaml
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 _MODEL_BLACKWELL = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4"
 _MODEL_ADA       = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8"
@@ -81,6 +83,8 @@ def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
 
+    setup_logging("llm-nemotron-omni")
+
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config", type=Path, default=None)
     ns, _ = p.parse_known_args()
@@ -96,18 +100,18 @@ def run() -> None:
     if cfg.get("use_bf16", False):
         model = cfg.get("model_bf16", _MODEL_BF16)
         use_kv_fp8 = False
-        print(f"[nemotron_omni] use_bf16=true → {model}", flush=True)
+        logger.info("use_bf16=true → {}", model)
     else:
         major = _gpu_compute_major()
         if major >= 10:
             model = cfg.get("model_blackwell", _MODEL_BLACKWELL)
             use_kv_fp8 = True
-            print(f"[nemotron_omni] Blackwell (SM{major}0) → {model}", flush=True)
+            logger.info("Blackwell (SM{}0) → {}", major, model)
         else:
             model = cfg.get("model_ada", _MODEL_ADA)
             use_kv_fp8 = True
             arch = f"SM{major}0" if major > 0 else "unknown GPU"
-            print(f"[nemotron_omni] Pre-Blackwell ({arch}) → {model}", flush=True)
+            logger.info("Pre-Blackwell ({}) → {}", arch, model)
 
     host          = cfg.get("host",                 _DEFAULT_HOST)
     port          = int(cfg.get("port",             _DEFAULT_PORT))
@@ -154,7 +158,7 @@ def run() -> None:
     if enforce_eager:
         argv.append("--enforce-eager")
 
-    print(f"[nemotron_omni] Launching vLLM  http://{host}:{port}/v1  model={model}", flush=True)
+    logger.info("Launching vLLM  http://{}:{}/v1  model={}", host, port, model)
     os.execvp(argv[0], argv)
 
 

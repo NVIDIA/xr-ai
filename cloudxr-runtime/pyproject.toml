@@ -12,10 +12,14 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "isaacteleop[cloudxr]",
     "pyyaml",
+    "xr-ai-logging",
 ]
 
 [project.scripts]
 cloudxr_runtime = "cloudxr_runtime.__main__:run"
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["cloudxr_runtime"]

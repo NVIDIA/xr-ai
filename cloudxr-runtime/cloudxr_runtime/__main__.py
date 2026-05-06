@@ -32,6 +32,8 @@ from isaacteleop.cloudxr.runtime import (
     wait_for_runtime_ready,
 )
 from isaacteleop.cloudxr.wss import run as wss_run
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 
 async def _wait_with_progress(
@@ -50,7 +52,7 @@ async def _wait_with_progress(
         if lock_file.exists():
             return True
         if elapsed > 0 and elapsed % 10 == 0:
-            print(f"  [{elapsed}s] still waiting for CloudXR runtime…")
+            logger.info("[{}s] still waiting for CloudXR runtime…", elapsed)
         await asyncio.sleep(1)
         elapsed += 1
     return False
@@ -88,8 +90,8 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
     runtime_proc.start()
 
     cxr_ver = runtime_version()
-    print(f"Isaac Teleop {isaacteleop_version}  CloudXR {cxr_ver}")
-    print("Waiting for CloudXR runtime…")
+    logger.info("Isaac Teleop {}  CloudXR {}", isaacteleop_version, cxr_ver)
+    logger.info("Waiting for CloudXR runtime…")
 
     try:
         ready = await _wait_with_progress(runtime_proc, stop)
@@ -97,23 +99,23 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
             if stop.done():
                 return  # cancelled by signal — clean exit
             if not runtime_proc.is_alive() and runtime_proc.exitcode != 0:
-                print(
-                    f"CloudXR runtime exited (code {runtime_proc.exitcode}).\n"
+                logger.error(
+                    "CloudXR runtime exited (code {}).\n"
                     "  Check for leftover containers: docker ps --filter name=cloudxr\n"
-                    f"  Native log: {latest_runtime_log() or logs_dir}",
-                    file=sys.stderr,
+                    "  Native log: {}",
+                    runtime_proc.exitcode, latest_runtime_log() or logs_dir,
                 )
                 sys.exit(runtime_proc.exitcode or 1)
-            print(
+            logger.error(
                 "CloudXR runtime did not become ready within 120 s.\n"
-                f"  Native log: {latest_runtime_log() or logs_dir}",
-                file=sys.stderr,
+                "  Native log: {}",
+                latest_runtime_log() or logs_dir,
             )
             sys.exit(1)
 
         cxr_log = latest_runtime_log() or logs_dir
-        print(f"CloudXR runtime:   ready  log: {cxr_log}")
-        print(f"Activate CloudXR environment: source {env_cfg.env_filepath()}")
+        logger.info("CloudXR runtime:   ready  log: {}", cxr_log)
+        logger.info("Activate CloudXR environment: source {}", env_cfg.env_filepath())
         if ready_file:
             ready_file.touch()
 
@@ -123,21 +125,23 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
         try:
             await wss_run(log_file_path=wss_log, stop_future=stop)
         except RuntimeError as exc:
-            print(
-                f"CloudXR WSS proxy failed: {exc}\n"
+            logger.error(
+                "CloudXR WSS proxy failed: {}\n"
                 "  If another process owns port 48322, stop it first:\n"
                 "    sudo fuser -k 48322/tcp",
-                file=sys.stderr,
+                exc,
             )
     finally:
         terminate_or_kill_runtime(runtime_proc)
 
-    print("Stopped.")
+    logger.info("Stopped.")
 
 
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+
+    setup_logging("cloudxr")
 
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)

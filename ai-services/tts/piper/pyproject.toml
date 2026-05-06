@@ -15,10 +15,14 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "pyyaml>=6.0",
+    "xr-ai-logging",
 ]
 
 [project.scripts]
 piper_tts_server = "piper_tts_server.__main__:run"
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["piper_tts_server"]

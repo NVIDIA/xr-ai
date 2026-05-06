@@ -43,8 +43,11 @@ xr-ai-agent  (agent-sdk/)
     └── pyzmq >=26.0
     └── msgpack >=1.0
 
-xr-ai-launcher  (launcher/)
+xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
+
+xr-ai-logging  (utils/xr-ai-logging/)
+    └── loguru >=0.7
 
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]
@@ -86,7 +89,7 @@ cloudxr-runtime  (cloudxr-runtime/)
     └── pyyaml
 
 render-mcp-server  (agent-mcp-servers/render-mcp/)
-    └── xr-ai-launcher  [editable: ../../launcher] (ManagedProcess + load_cloudxr_env)
+    └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (ManagedProcess + load_cloudxr_env)
     └── pyzmq >=26.0       (PUSH socket → LOVR; libzmq.so reused by LOVR FFI)
     └── msgpack >=1.0      (wire format for LOVR ops)
     └── pyyaml >=6.0
@@ -98,7 +101,7 @@ render-mcp-server  (agent-mcp-servers/render-mcp/)
     cloudxr.env is read synchronously via load_cloudxr_env at start_xr time.
 
 oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
-    └── xr-ai-launcher  [editable: ../../launcher] (load_cloudxr_env)
+    └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (load_cloudxr_env)
     └── isaacteleop                                (headless OpenXR + HeadTracker)
     └── pyyaml >=6.0
     └── uvicorn[standard] >=0.29
@@ -116,21 +119,15 @@ xr-ai-tests  (tests/)
     Multi-client / multi-agent integration tests over the IPC layer.
     Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
 
-vlm-server  (vlm-server/)
-    └── torch >=2.2
-    └── torchvision >=0.17
-    └── transformers >=4.49
-    └── accelerate >=0.30
-    └── qwen-vl-utils >=0.0.8
-    └── Pillow >=10.0
-    └── numpy >=1.24
-    └── fastapi >=0.111
-    └── uvicorn[standard] >=0.29
+vlm-server  (ai-services/vlm-server/)
+    └── vllm >=0.12.0
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
-    Model: nvidia/Cosmos-Reason1-7B (Qwen2.5-VL architecture, in-process)
+    Model: nvidia/Cosmos-Reason1-7B (Qwen2.5-VL architecture, served by vLLM).
+    Wrapper Popens `vllm serve` so the launcher's killpg() does not reach
+    vLLM — model survives stack restarts (see docs/changelog.md 2026-05-05).
 
-stt-server  (stt-server/)
+stt-server  (ai-services/stt-server/)
     └── nemo_toolkit[asr] >=2.5
     └── lightning >2.2.1,<=2.4.0    # routed to github.com/Lightning-AI/pytorch-lightning
     └── fastapi >=0.111
@@ -139,7 +136,7 @@ stt-server  (stt-server/)
     └── pyyaml >=6.0
     Model: nvidia/parakeet-tdt-0.6b-v3 (NeMo ASR, in-process)
 
-magpie-tts-server  (tts/magpie/)
+magpie-tts-server  (ai-services/tts/magpie/)
     └── nemo_toolkit[tts] >=2.5
     └── lightning >2.2.1,<=2.4.0    # routed to github.com/Lightning-AI/pytorch-lightning
     └── soundfile >=0.12
@@ -151,28 +148,36 @@ magpie-tts-server  (tts/magpie/)
     Model: nvidia/magpie_tts_multilingual_357m (NeMo TTS, in-process)
 
 llama-nemotron-llm-server  (ai-services/llm/llama_nemotron/)
-    └── torch >=2.2
-    └── transformers >=4.49
-    └── accelerate >=0.30
-    └── fastapi >=0.111
-    └── uvicorn[standard] >=0.29
+    └── vllm >=0.12.0
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
-    └── lm-format-enforcer >=0.11   # grammar-constrained tool-call JSON
-    Model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1 (HuggingFace transformers, in-process)
-    Native Llama-3.1 tool calling + per-turn reasoning toggle
-    ("detailed thinking on/off"). No `trust_remote_code`.
+    Model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1 (vLLM).
+    Tool calling via vLLM's llama3_json parser
+    (--enable-auto-tool-choice --tool-call-parser llama3_json).
 
 nemotron3-nano-llm-server  (ai-services/llm/nemotron3_nano/)
     └── vllm >=0.12.0
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
-    Model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 (vLLM, NVFP4 + FP8 KV)
-    Thin execvp wrapper around `vllm serve`; Blackwell-class GPU required
-    for native FP4 MoE kernels. Qwen3-Coder tool-call parser +
-    nano_v3 reasoning parser handled server-side by vLLM.
+    Model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4|FP8}
+           (auto-selected by GPU compute capability — Blackwell SM>=10
+           gets NVFP4 + FP8 KV cache, otherwise FP8 weights).
+    Popens `vllm serve` and reuses an already-running instance if /health
+    answers; survives stack restarts. Qwen3-Coder tool-call parser +
+    nano_v3 reasoning parser are handled server-side by vLLM (the parser
+    plugin is auto-fetched into model_cache on first run).
 
-piper-tts-server  (tts/piper/)
+nemotron-omni-llm-server  (ai-services/llm/nemotron_omni/)
+    └── vllm >=0.8.0
+    └── hf-transfer >=0.1.4
+    └── pyyaml >=6.0
+    Model: nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4|FP8|BF16}
+           (multimodal text + video; GPU-aware variant selection,
+            use_bf16: true forces BF16). True execvp into `vllm serve`
+           with --reasoning-parser nemotron_v3 and qwen3_coder tool-call
+           parser, plus video-pruning + media-io knobs.
+
+piper-tts-server  (ai-services/tts/piper/)
     └── piper-tts >=1.4.0
     └── huggingface-hub >=0.22
     └── fastapi >=0.111
@@ -188,12 +193,13 @@ piper-tts-server  (tts/piper/)
 
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
-| `vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
-| `stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
-| `tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
-| `tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
-| `llm/llama_nemotron/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | transformers in-process (+ LMFE) |
-| `llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 | vLLM (execvp shim) |
+| `ai-services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (Popen + reuse-on-restart) |
+| `ai-services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
+| `ai-services/tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `ai-services/tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `ai-services/llm/llama_nemotron/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (Popen + reuse-on-restart) |
+| `ai-services/llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 / -FP8 (GPU-selected) | vLLM (Popen + reuse-on-restart) |
+| `ai-services/llm/nemotron_omni/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning {NVFP4\|FP8\|BF16} | vLLM (true execvp, multimodal text+video) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
@@ -280,11 +286,11 @@ updated in the same commit**.
 |---|---|
 | `agent-sdk/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
-| `launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
+| `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/cloudxr_runtime.yaml`, `AGENTS.md` CloudXR section |
-| `launcher/_cloudxr_env.py` API | render-mcp + oxr-mcp `__main__.py` imports, `AGENTS.md` cloudxr-env section |
+| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | render-mcp + oxr-mcp `__main__.py` imports, `AGENTS.md` cloudxr-env section |
 | render-mcp YAML config keys | `agent-mcp-servers/render-mcp/render_mcp.yaml`, sample copies, worker URL constants |
 | oxr-mcp YAML config keys | `agent-mcp-servers/oxr-mcp/oxr_mcp_server.yaml`, sample copies, worker URL constants |
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
@@ -295,7 +301,8 @@ updated in the same commit**.
 
 ## Dependency rules (enforced)
 
-- `launcher/` — zero runtime dependencies. Stdlib only.
+- `utils/xr-ai-launcher/` — zero runtime dependencies. Stdlib only.
+- `utils/xr-ai-logging/` — only `loguru`. Used by every process via `setup_logging()`.
 - `agent-sdk/` — only `pyzmq` + `msgpack`. No server-side packages.
 - Agent workers — `xr-ai-agent` + task-specific libs (numpy, torch, etc.).
   Must never import from `xr-media-hub` or `xr-ai-launcher`.

@@ -44,6 +44,8 @@ import urllib.request
 from pathlib import Path
 
 import yaml
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 _DEFAULT_MODEL       = "nvidia/Cosmos-Reason1-7B"
 _DEFAULT_PORT        = 8100
@@ -98,6 +100,8 @@ def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+
+    setup_logging("vlm")
 
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
@@ -179,7 +183,7 @@ def run() -> None:
             pass
         time.sleep(2)
 
-    print(f"[vlm_server] Ready  →  http://localhost:{port}/v1", flush=True)
+    logger.info("Ready  →  http://localhost:{}/v1", port)
     if ns.ready_file:
         ns.ready_file.touch()
 

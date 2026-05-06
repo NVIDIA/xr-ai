@@ -33,6 +33,7 @@ the IPC socket connects, after the HTTP server starts listening, etc.
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import signal
@@ -49,6 +50,13 @@ from ._credentials import load_credentials
 
 _READY_INTERVAL = 5.0   # seconds between progress lines
 _STOP_TIMEOUT   = 20.0  # seconds before SIGKILL during shutdown
+
+# launcher/ stays stdlib-only per AGENTS.md, so this module uses
+# ``logging.getLogger`` rather than loguru. The orchestrator's
+# ``setup_logging()`` installs an InterceptHandler that routes these
+# stdlib records into loguru, so output ends up in the same sinks as
+# the rest of the stack.
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -140,16 +148,16 @@ def _wait_ready(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
         elapsed = time.monotonic() - t0
 
         if ready_file.exists():
-            print(f"  [{name}] ready ({elapsed:.0f}s)", flush=True)
+            log.info("[%s] ready (%.0fs)", name, elapsed)
             return
 
         rc = proc.poll()
         if rc is not None:
-            print(f"  [{name}] exited (rc={rc}) before signaling ready", flush=True)
+            log.error("[%s] exited (rc=%s) before signaling ready", name, rc)
             raise SystemExit(1)
 
         if elapsed - last_report >= _READY_INTERVAL:
-            print(f"  [{name}] waiting... ({elapsed:.0f}s)", flush=True)
+            log.info("[%s] waiting... (%.0fs)", name, elapsed)
             last_report = elapsed
 
         time.sleep(0.5)
@@ -201,7 +209,7 @@ def _monitor(procs: dict[str, subprocess.Popen]) -> None:
         while not stop.is_set():
             for name, p in procs.items():
                 if p.poll() is not None:
-                    print(f"  [{name}] exited (rc={p.returncode})", flush=True)
+                    log.warning("[%s] exited (rc=%s)", name, p.returncode)
                     return
             time.sleep(1.0)
     finally:
@@ -221,7 +229,7 @@ def _shutdown(procs: dict[str, subprocess.Popen]) -> None:
     """Terminate all running processes; escalate to SIGKILL after the timeout."""
     for name, p in procs.items():
         if p.poll() is None:
-            print(f"  [{name}] stopping…", flush=True)
+            log.info("[%s] stopping…", name)
             _killpg(p, signal.SIGTERM)
 
     deadline = time.monotonic() + _STOP_TIMEOUT
@@ -233,12 +241,15 @@ def _shutdown(procs: dict[str, subprocess.Popen]) -> None:
             try:
                 p.wait(timeout=max(0.1, remaining))
             except subprocess.TimeoutExpired:
-                print(f"  [{name}] force-killing", flush=True)
+                log.warning("[%s] force-killing", name)
                 _killpg(p, signal.SIGKILL)
                 try:
                     p.wait(timeout=5.0)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log.warning(
+                        "[%s] wait() failed after SIGKILL: %s — process may be zombie",
+                        name, exc,
+                    )
 
 
 # ── public API ─────────────────────────────────────────────────────────────────
@@ -301,7 +312,7 @@ def run_stack(processes: Sequence[Union[Process, Parallel]], base: Path) -> None
                     launched[item.name] = _spawn(item, base, ready_file)
                     _wait_ready(item.name, ready_file, launched[item.name])
 
-            print("\n  All processes ready.\n", flush=True)
+            log.info("All processes ready.")
             _monitor(launched)
 
         except (SystemExit, KeyboardInterrupt):

@@ -18,10 +18,14 @@ dependencies = [
     "pyyaml>=6.0",
     # hf-transfer speeds up weight download on first run.
     "hf-transfer>=0.1.4",
+    "xr-ai-logging",
 ]
 
 [project.scripts]
 nemotron3_nano_llm_server = "nemotron3_nano_llm_server.__main__:run"
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["nemotron3_nano_llm_server"]

@@ -64,7 +64,6 @@ import argparse
 import asyncio
 import ctypes
 import json
-import logging
 import pathlib
 import time
 
@@ -72,12 +71,12 @@ import numpy as np
 import uvicorn
 import yaml
 from fastmcp import FastMCP
+from loguru import logger
 from PIL import Image
 
 from xr_ai_agent import (FrameData, FrameSignal, PixelFormat,
                          ProcessorEndpoint, Subscribe)
-
-log = logging.getLogger("video_mcp_server")
+from xr_ai_logging import setup_logging
 
 _DEFAULT_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _DEFAULT_HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -154,8 +153,11 @@ class ChunkStore:
         if meta_path.exists():
             try:
                 return json.loads(meta_path.read_text())
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "video-mcp: corrupt meta sidecar {} ({}) — using filename-stem fallback",
+                    meta_path, exc,
+                )
         # Fall back to filename stem if sidecar is missing.
         return {"start_us": int(h264.stem), "end_us": int(h264.stem), "size_bytes": h264.stat().st_size}
 
@@ -422,8 +424,10 @@ def build_mcp(
             safe     = _safe_name(participant_id)
             out_path = out_dir / f"{safe}_latest_{frame.pts_us}.png"
             _save_png(rgb, out_path)
-            log.info("get_latest_frame  pid=%r  %dx%d  ts=%d → %s",
-                     participant_id, frame.width, frame.height, frame.pts_us, out_path)
+            logger.debug(
+                "get_latest_frame  pid={!r}  {}x{}  ts={} → {}",
+                participant_id, frame.width, frame.height, frame.pts_us, out_path,
+            )
             return {
                 "path":         str(out_path),
                 "width":        frame.width,
@@ -470,8 +474,10 @@ def build_mcp(
         safe = _safe_name(participant_id)
         out_path = out_dir / f"{safe}_{start_us}_{end_us}.264"
         out_path.write_bytes(data)
-        log.info("query_video  pid=%r  %d–%d  %d bytes → %s",
-                 participant_id, start_us, end_us, len(data), out_path)
+        logger.debug(
+            "query_video  pid={!r}  {}–{}  {} bytes → {}",
+            participant_id, start_us, end_us, len(data), out_path,
+        )
         return {"path": str(out_path), "size": len(data),
                 "start_us": start_us, "end_us": end_us}
 
@@ -554,8 +560,10 @@ def build_mcp(
             out_path = out_dir / f"{safe}_ago0_{frame.pts_us}.png"
             _save_png(rgb, out_path)
             actual = (now_us - frame.pts_us) / 1_000_000
-            log.info("get_frame_from_time(0)  pid=%r  %dx%d  ts=%d (~%.2fs ago, live) → %s",
-                     participant_id, frame.width, frame.height, frame.pts_us, actual, out_path)
+            logger.debug(
+                "get_frame_from_time(0)  pid={!r}  {}x{}  ts={} (~{:.2f}s ago, live) → {}",
+                participant_id, frame.width, frame.height, frame.pts_us, actual, out_path,
+            )
             return {
                 "path":              str(out_path),
                 "width":             frame.width,
@@ -574,7 +582,7 @@ def build_mcp(
         try:
             frames = _decode_chunk_to_nv12_frames(store.read_chunk(chunk_path), gpu_id=gpu_id)
         except Exception as exc:
-            log.exception("decode failed  chunk=%s", chunk_path)
+            logger.exception("decode failed  chunk={}", chunk_path)
             return {"error": f"Decode failed: {exc}"}
         if not frames:
             return {"error": f"Chunk {chunk_path.name} decoded zero frames"}
@@ -606,9 +614,9 @@ def build_mcp(
         actual    = (now_us - frame_ts)    / 1_000_000
         anchored  = bool(reference_time_us > 0)
         anchor_dt = (now_us - anchor_us)   / 1_000_000 if anchored else 0.0
-        log.info(
-            "get_frame_from_time(%d)  pid=%r  ts=%d (~%.2fs ago wall, anchored=%s%s)"
-            "  frame=%d/%d → %s",
+        logger.debug(
+            "get_frame_from_time({})  pid={!r}  ts={} (~{:.2f}s ago wall, anchored={}{})"
+            "  frame={}/{} → {}",
             second_ago, participant_id, frame_ts, actual,
             anchored, f", anchor={anchor_dt:.2f}s ago" if anchored else "",
             idx, num_frames, out_path,
@@ -654,7 +662,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         ChunkStore(pathlib.Path(recordings_dir_raw)) if recordings_dir_raw else None
     )
     if store is None:
-        log.info("video-mcp: recording disabled — historical tools hidden")
+        logger.info("video-mcp: recording disabled — historical tools hidden")
     ep       = ProcessorEndpoint(
         sub_addr=hub_pub, push_addr=hub_push,
         filter=Subscribe.VIDEO,
@@ -666,8 +674,10 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     server = uvicorn.Server(config)
 
     ep_task = asyncio.create_task(ep.run(), name="video_mcp_processor")
-    log.info("video-mcp-server  recordings_dir=%s  port=%d  hub_pub=%s",
-             recordings_dir_raw, port, hub_pub)
+    logger.info(
+        "video-mcp-server  recordings_dir={!r}  port={}  hub_pub={}",
+        recordings_dir_raw, port, hub_pub,
+    )
     if ready_file:
         ready_file.touch()
     try:
@@ -693,8 +703,7 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    setup_logging("video-mcp")
     asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 

@@ -12,6 +12,8 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     # Agent-SDK (IPC types, codec, SHM, ProcessorEndpoint)
     "xr-ai-agent",
+    # Shared loguru setup (setup_logging + stdlib InterceptHandler)
+    "xr-ai-logging",
     # IPC layer — server side uses ZMQ directly (connector + hub)
     "pyzmq>=26.0",
     # LiveKit transport
@@ -36,7 +38,8 @@ dependencies = [
 xr_media_hub = "xr_media_hub.__main__:run"
 
 [tool.uv.sources]
-xr-ai-agent = { path = "../agent-sdk", editable = true }
+xr-ai-agent   = { path = "../agent-sdk", editable = true }
+xr-ai-logging = { path = "../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_media_hub"]

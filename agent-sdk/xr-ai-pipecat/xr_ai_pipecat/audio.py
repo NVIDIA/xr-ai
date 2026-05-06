@@ -8,16 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import io
-import logging
 import re
 import time
 import wave
 
 import numpy as np
+from loguru import logger
 
 from xr_ai_agent import AudioChunk, ProcessorEndpoint
-
-log = logging.getLogger("xr_ai_pipecat.audio")
 
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 
@@ -104,7 +102,7 @@ async def stream_sentences_to_audio(
             try:
                 wav = await task
             except Exception:
-                log.exception("tts synth failed  pid=%r", participant_id)
+                logger.exception("tts synth failed  pid={!r}", participant_id)
                 continue
             if not wav:
                 continue
@@ -115,7 +113,7 @@ async def stream_sentences_to_audio(
                     if sample_rate == 0:
                         sample_rate = chunk.sample_rate
             except Exception:
-                log.exception("send_return_audio failed  pid=%r", participant_id)
+                logger.exception("send_return_audio failed  pid={!r}", participant_id)
 
     sender = asyncio.create_task(_sender(), name=f"tts-sender-{participant_id}")
     try:

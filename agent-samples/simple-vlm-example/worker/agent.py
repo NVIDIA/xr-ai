@@ -42,11 +42,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import re
 
 import httpx
-
+from loguru import logger
 from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
                           ParticipantEvent, ProcessorEndpoint)
 
@@ -54,8 +53,6 @@ from audio import chunks_to_wav, now_us, rms, wav_to_chunks
 from pixels import encode_image, frame_to_pil
 from services import SttClient, TtsClient, VlmClient
 from voice import VoiceState
-
-log = logging.getLogger("simple_vlm_example")
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -175,10 +172,10 @@ class SimpleVlmAgent:
             text = (await self._stt.transcribe(chunks_to_wav(chunks))).strip()
             if not text:
                 return
-            log.info("audio query  pid=%r  %r", pid, text[:80])
+            logger.info("audio query  pid={!r}  {!r}", pid, text[:80])
             await self._dispatch_query(pid, text, pts_us=now_us())
         except httpx.HTTPError as exc:
-            log.error("stt error pid=%r: %s", pid, exc)
+            logger.error("stt error pid={!r}: {}", pid, exc)
         finally:
             vs.transcribing = False
 
@@ -191,7 +188,7 @@ class SimpleVlmAgent:
             return
         if not text:
             return
-        log.info("data query  pid=%r  %r", msg.participant_id, text[:80])
+        logger.info("data query  pid={!r}  {!r}", msg.participant_id, text[:80])
         await self._dispatch_query(msg.participant_id, text, pts_us=msg.pts_us)
 
     # ── interruptable query dispatch ──────────────────────────────────────────
@@ -204,7 +201,7 @@ class SimpleVlmAgent:
         async with vs.dispatch_lock:
             old = vs.current_task
             if old is not None and not old.done():
-                log.info("interrupt pid=%r — cancelling in-flight response", pid)
+                logger.info("interrupt pid={!r} — cancelling in-flight response", pid)
                 old.cancel()
                 try:
                     await old
@@ -243,8 +240,10 @@ class SimpleVlmAgent:
                 return
 
             image_url = encode_image(frame_to_pil(frame))
-            log.info("vlm  pid=%r  %dx%d  query=%r",
-                     pid, frame.width, frame.height, query[:60])
+            logger.info(
+                "vlm  pid={!r}  {}x{}  query={!r}",
+                pid, frame.width, frame.height, query[:60],
+            )
 
             await self._ep.set_status("processing", pid)
             try:
@@ -283,7 +282,9 @@ class SimpleVlmAgent:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    log.error("tts audio error pid=%r: %s", pid, exc, exc_info=True)
+                    logger.opt(exception=True).error(
+                        "tts audio error pid={!r}: {}", pid, exc,
+                    )
 
         sender = asyncio.create_task(_audio_sender())
 
@@ -309,7 +310,7 @@ class SimpleVlmAgent:
                     pending_synth.append(t)
                     await tts_queue.put(t)
             except httpx.HTTPError as exc:
-                log.error("vlm-server error: %s", exc)
+                logger.error("vlm-server error: {}", exc)
                 await tts_queue.put(None)
                 await sender
                 await self._reply(pid, "VLM server unavailable — please retry.", fallback_pts_us)
@@ -318,11 +319,11 @@ class SimpleVlmAgent:
             await tts_queue.put(None)
             await sender
             full_response = full_response.strip()
-            log.info("vlm response  pid=%r  %d chars", pid, len(full_response))
+            logger.info("vlm response  pid={!r}  {} chars", pid, len(full_response))
             return full_response
 
         except asyncio.CancelledError:
-            log.info("response cancelled pid=%r", pid)
+            logger.info("response cancelled pid={!r}", pid)
             for t in pending_synth:
                 t.cancel()
             sender.cancel()
@@ -352,7 +353,7 @@ class SimpleVlmAgent:
             # and each send startCamera.
             self._camera_on[pid] = True
             try:
-                log.info("camera.on → pid=%r", pid)
+                logger.info("camera.on → pid={!r}", pid)
                 await self._client_control(pid, "startCamera")
             except Exception:
                 self._camera_on[pid] = False  # rollback so next call retries
@@ -375,17 +376,19 @@ class SimpleVlmAgent:
         ev.clear()
         sig = self._latest_signal(pid)
         if sig is not None:
-            log.info("camera frame pid=%r  track=%s  age_ms=%.0f  (immediate)",
-                     pid, sig.track_id, (now_us() - sig.pts_us) / 1_000)
+            logger.info(
+                "camera frame pid={!r}  track={}  age_ms={:.0f}  (immediate)",
+                pid, sig.track_id, (now_us() - sig.pts_us) / 1_000,
+            )
             return sig
 
         while True:
             remaining = deadline - asyncio.get_event_loop().time()
             if remaining <= 0:
                 sig = self._latest_signal(pid)
-                log.warning(
-                    "camera timeout pid=%r  waited=%.1fs  "
-                    "latest_frame_age_ms=%s  tracks_seen=%d",
+                logger.warning(
+                    "camera timeout pid={!r}  waited={:.1f}s  "
+                    "latest_frame_age_ms={}  tracks_seen={}",
                     pid, timeout,
                     f"{(now_us() - sig.pts_us) / 1_000:.0f}" if sig else "none",
                     len([k for k in self._latest if k[0] == pid]),
@@ -394,17 +397,21 @@ class SimpleVlmAgent:
             try:
                 await asyncio.wait_for(ev.wait(), timeout=min(remaining, 5.0))
             except asyncio.TimeoutError:
-                log.info("still waiting for camera pid=%r  elapsed=%.1fs",
-                         pid, asyncio.get_event_loop().time() - t0)
+                logger.debug(
+                    "still waiting for camera pid={!r}  elapsed={:.1f}s",
+                    pid, asyncio.get_event_loop().time() - t0,
+                )
                 ev.clear()
                 continue
 
             # Event fired — a new FrameSignal arrived.
             sig = self._latest_signal(pid)
             if sig is not None:
-                log.info("camera frame pid=%r  track=%s  age_ms=%.0f  after %.1fs",
-                         pid, sig.track_id, (now_us() - sig.pts_us) / 1_000,
-                         asyncio.get_event_loop().time() - t0)
+                logger.info(
+                    "camera frame pid={!r}  track={}  age_ms={:.0f}  after {:.1f}s",
+                    pid, sig.track_id, (now_us() - sig.pts_us) / 1_000,
+                    asyncio.get_event_loop().time() - t0,
+                )
                 return sig
             ev.clear()
 
@@ -454,7 +461,9 @@ class SimpleVlmAgent:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            log.error("tts error pid=%r: %s", pid, exc, exc_info=True)
+            logger.opt(exception=True).error(
+                "tts error pid={!r}: {}", pid, exc,
+            )
 
     # ── frame tracking ────────────────────────────────────────────────────────
 
@@ -463,9 +472,11 @@ class SimpleVlmAgent:
         self._latest[(sig.participant_id, sig.track_id)] = sig
         # Log the very first frame per track so we can confirm signals arrive.
         if prev is None:
-            log.info("first frame signal  pid=%r  track=%s  age_ms=%.0f",
-                     sig.participant_id, sig.track_id,
-                     (now_us() - sig.pts_us) / 1_000)
+            logger.info(
+                "first frame signal  pid={!r}  track={}  age_ms={:.0f}",
+                sig.participant_id, sig.track_id,
+                (now_us() - sig.pts_us) / 1_000,
+            )
         # Wake any waiter in _wait_for_camera_frame.
         ev = self._frame_events.get(sig.participant_id)
         if ev is not None:

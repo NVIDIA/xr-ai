@@ -13,19 +13,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import pathlib
 import signal
 from pathlib import Path
 
 from fastmcp import Client as McpClient
+from loguru import logger
+from xr_ai_logging import setup_logging
+from xr_ai_pipecat.services import http_probe, mcp_probe, wait_for_services
 
 from agent import RenderDemoAgent
 from config import WorkerConfig, load_config
-from processors import _setup_trace_log
-from xr_ai_pipecat.services import http_probe, mcp_probe, wait_for_services
 
-log = logging.getLogger("xr_render_demo")
+_TRACE_FILE = "/tmp/xr-agent-trace.log"
 
 # Tools the worker calls directly (control-plane). Excluded from the LLM tool
 # list so the model can't trigger them — the worker manages XR lifecycle.
@@ -69,13 +69,19 @@ _PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
 
 
 async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    setup_logging("worker")
+
+    # Curated session transcript — only records bound with extra={"trace": True}
+    # via ``logger.bind(trace=True)`` reach this sink.  Tail this file (or
+    # paste it) to see USER/CTX/TOOL/RES/RESP events without the full chatter.
+    logger.add(
+        _TRACE_FILE,
+        filter=lambda r: r["extra"].get("trace") is True,
+        format="{time:HH:mm:ss}  {message}",
+        mode="w",
+        level="INFO",
     )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    _setup_trace_log("/tmp/xr-agent-trace.log")
+    logger.bind(trace=True).info("=== trace started ===")
 
     await wait_for_services({
         "STT":       http_probe(cfg.stt_server.rstrip("/")       + "/health"),
@@ -111,12 +117,12 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
             try:
                 tools = await client.list_tools()
                 store(tools)
-                log.info("%s tools: %s", name, [t.name for t in tools])
+                logger.info("{} tools: {}", name, [t.name for t in tools])
             except Exception as exc:
-                log.warning("%s tool discovery failed: %s", name, exc)
+                logger.warning("{} tool discovery failed: {}", name, exc)
 
         tools_openai = _build_tools_openai(render_tools, oxr_tools, vlm_tools, video_tools)
-        log.info("tool-calling tools: %s", [t["function"]["name"] for t in tools_openai])
+        logger.info("tool-calling tools: {}", [t["function"]["name"] for t in tools_openai])
 
         agent = RenderDemoAgent(
             cfg, render, oxr, vlm, video, _PROMPT_FILE, tools_openai
@@ -126,12 +132,12 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, agent.shutdown)
 
-        log.info("xr_render_demo starting")
+        logger.info("xr_render_demo starting")
         try:
             await agent.run()
         finally:
             agent.shutdown()
-    log.info("xr_render_demo stopped")
+    logger.info("xr_render_demo stopped")
 
 
 def run() -> None:

@@ -21,8 +21,8 @@ How to run (from agent-samples/simple-vlm-example/):
 from pathlib import Path
 
 import yaml
-
 from xr_ai_launcher import Process, ensure_credentials, run_stack
+from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
@@ -58,6 +58,7 @@ def _build_processes() -> list[Process]:
 
 
 def run() -> None:
+    setup_logging("orchestrator", namespace="simple-vlm-example")
     ensure_credentials("HF_TOKEN")
     run_stack(_build_processes(), _BASE)
 

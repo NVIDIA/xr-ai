@@ -14,14 +14,12 @@ facing proxy logic does not.
 from __future__ import annotations
 
 import asyncio
-import logging
 
 import httpx
 import websockets
 from fastapi import Request, WebSocket
 from fastapi.responses import Response
-
-log = logging.getLogger(__name__)
+from loguru import logger
 
 
 async def proxy_validate(
@@ -72,7 +70,7 @@ async def pump_rtc_ws(client_ws: WebSocket, lk_internal_ws: str) -> None:
                 except Exception as exc:
                     # Client-side receive/send can fail during normal disconnect
                     # races; keep teardown best-effort but retain debug visibility.
-                    log.debug("WS proxy /rtc c2l ended with error: %s", exc)
+                    logger.debug("WS proxy /rtc c2l ended with error: {}", exc)
                 finally:
                     await lk_ws.close()
 
@@ -91,7 +89,7 @@ async def pump_rtc_ws(client_ws: WebSocket, lk_internal_ws: str) -> None:
 
             await asyncio.gather(c2l(), l2c(), return_exceptions=True)
     except Exception as exc:
-        log.debug("WS proxy /rtc error: %s", exc)
+        logger.debug("WS proxy /rtc error: {}", exc)
     finally:
         try:
             await client_ws.close()

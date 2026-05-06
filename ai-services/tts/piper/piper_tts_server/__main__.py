@@ -35,6 +35,8 @@ import wave
 from pathlib import Path
 
 import yaml
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT   = 8105
 _HF_REPO        = "rhasspy/piper-voices"
@@ -74,10 +76,10 @@ def _ensure_voice(voice: str, cache_dir: Path) -> tuple[Path, Path]:
     hf_cache = cache_dir / "piper"
     hf_cache.mkdir(parents=True, exist_ok=True)
     onnx_hf, json_hf = _hf_path_for_voice(voice)
-    print(f"[piper_tts_server] Resolving voice {voice!r} from {_HF_REPO}…")
+    logger.info("Resolving voice {!r} from {}…", voice, _HF_REPO)
     onnx_path = Path(hf_hub_download(_HF_REPO, onnx_hf, cache_dir=str(hf_cache)))
     json_path = Path(hf_hub_download(_HF_REPO, json_hf, cache_dir=str(hf_cache)))
-    print(f"[piper_tts_server] Voice files ready")
+    logger.info("Voice files ready")
     return onnx_path, json_path
 
 
@@ -100,14 +102,13 @@ class _PiperBackend:
             from piper import PiperVoice
 
             onnx_path, json_path = _ensure_voice(self._voice_name, self._cache_dir)
-            print(f"[piper_tts_server] Loading voice {self._voice_name!r}…")
+            logger.info("Loading voice {!r}…", self._voice_name)
             self._voice = PiperVoice.load(
                 str(onnx_path),
                 config_path=str(json_path),
                 use_cuda=self._use_cuda,
             )
-            print(f"[piper_tts_server] Voice ready  "
-                  f"sample_rate={self._voice.config.sample_rate}")
+            logger.info("Voice ready  sample_rate={}", self._voice.config.sample_rate)
 
     @property
     def ready(self) -> bool:
@@ -181,7 +182,7 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
     import uvicorn
 
     if not cfg.get("voice"):
-        print("[piper_tts_server] 'voice' is required in config", file=sys.stderr)
+        logger.error("'voice' is required in config")
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
@@ -196,11 +197,11 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    print(f"[piper_tts_server] Ready  →  http://localhost:{port}/v1")
+    logger.info("Ready  →  http://localhost:{}/v1", port)
     if ready_file:
         ready_file.touch()
     await server.serve()
-    print("[piper_tts_server] Stopped.")
+    logger.info("Stopped.")
 
 
 def run() -> None:
@@ -208,6 +209,8 @@ def run() -> None:
 
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+
+    setup_logging("tts-piper")
 
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)

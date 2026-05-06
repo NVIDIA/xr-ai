@@ -30,6 +30,8 @@ import threading
 from pathlib import Path
 
 import yaml
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 _DEFAULT_PORT = 8103
 
@@ -66,14 +68,14 @@ class _AsrBackend:
             if device == "auto":
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            print(f"[stt_server] Loading NeMo ASR {self._model_name!r} on {device}…")
+            logger.info("Loading NeMo ASR {!r} on {}…", self._model_name, device)
             # from_pretrained resolves the correct model subclass automatically.
             model = nemo_asr.models.ASRModel.from_pretrained(self._model_name)
             model.eval()
             if device == "cuda":
                 model = model.cuda()
             self._model = model
-            print("[stt_server] ASR model ready.")
+            logger.info("ASR model ready.")
 
     @property
     def ready(self) -> bool:
@@ -152,7 +154,7 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
     import uvicorn
 
     if not cfg.get("model"):
-        print("[stt_server] 'model' is required in config", file=sys.stderr)
+        logger.error("'model' is required in config")
         sys.exit(1)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
@@ -174,16 +176,18 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    print(f"[stt_server] Ready  →  http://localhost:{port}/v1")
+    logger.info("Ready  →  http://localhost:{}/v1", port)
     if ready_file:
         ready_file.touch()
     await server.serve()
-    print("[stt_server] Stopped.")
+    logger.info("Stopped.")
 
 
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+
+    setup_logging("stt")
 
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)

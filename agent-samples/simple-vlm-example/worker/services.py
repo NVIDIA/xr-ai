@@ -6,12 +6,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from typing import AsyncIterator
 
 import httpx
-
-log = logging.getLogger("simple_vlm_example.services")
+from loguru import logger
 
 
 class SttClient:
@@ -30,7 +28,7 @@ class SttClient:
                 data={"response_format": "json"},
             )
             if resp.is_error:
-                log.error("stt %s: %s", resp.status_code, resp.text[:300])
+                logger.error("stt {}: {}", resp.status_code, resp.text[:300])
             resp.raise_for_status()
             return resp.json().get("text", "")
 
@@ -67,7 +65,7 @@ class VlmClient:
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream("POST", self.chat_url, json=payload) as resp:
                 if resp.is_error:
-                    log.error("vlm-server %s", resp.status_code)
+                    logger.error("vlm-server {}", resp.status_code)
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
@@ -99,7 +97,7 @@ class TtsClient:
                 json={"input": text, "response_format": "wav"},
             )
             if resp.is_error:
-                log.error("tts %s: %s", resp.status_code, resp.text[:300])
+                logger.error("tts {}: {}", resp.status_code, resp.text[:300])
             resp.raise_for_status()
             return resp.content
 
@@ -112,10 +110,10 @@ async def wait_for_health(services: dict[str, str]) -> None:
             try:
                 async with httpx.AsyncClient(timeout=3.0) as client:
                     if (await client.get(services[name])).is_success:
-                        log.info("%s ready", name)
+                        logger.info("{} ready", name)
                         pending.discard(name)
             except httpx.ConnectError:
                 pass
         if pending:
-            log.info("still waiting for: %s", ", ".join(sorted(pending)))
+            logger.info("still waiting for: {}", ", ".join(sorted(pending)))
             await asyncio.sleep(5.0)
