@@ -199,6 +199,11 @@ On first run the orchestrator automatically downloads LOVR v0.18.0 to
 `deps/lovr/` inside the repo and builds the web vendor bundle (requires npm
 and network access). Both steps are skipped on subsequent runs.
 
+**DGX Spark (aarch64):** LOVR does not publish a prebuilt aarch64 Linux
+binary, so the auto-download is not available — build LOVR from source and
+export `LOVR_BIN`. See
+[`docs/troubleshooting.md`](docs/troubleshooting.md#dgx-spark--lovr-auto-download-is-not-supported).
+
 To use a custom LOVR build instead:
 
 ```bash

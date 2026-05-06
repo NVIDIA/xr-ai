@@ -26,6 +26,41 @@ sudo apt install python3-dev
 
 This applies to the `xr-render-demo/yaml/spark/` profile.
 
+### DGX Spark — LOVR auto-download is not supported
+
+**Symptom:** `uv run xr_render_demo` exits at startup with:
+
+```
+xr-render-demo: LOVR auto-download is not supported on linux/aarch64.
+```
+
+**Cause:** upstream LOVR releases do not ship a prebuilt aarch64 Linux binary,
+so the orchestrator cannot fetch one. Build LOVR from source on the Spark and
+point `LOVR_BIN` at it.
+
+**Fix:**
+
+```bash
+sudo apt install -y cmake build-essential \
+                    libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+                    libcurl4-openssl-dev libx11-xcb-dev
+
+git clone --recursive https://github.com/bjornbytes/lovr.git ~/lovr
+cd ~/lovr
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+
+export LOVR_BIN=~/lovr/build/bin/lovr
+```
+
+`export LOVR_BIN=…` only lasts for the current shell. To make it permanent,
+append the line to `~/.bashrc`, or set `lovr_bin: ~/lovr/build/bin/lovr` in
+`agent-mcp-servers/render-mcp/render_mcp.yaml` instead.
+
+If `git clone` was run without `--recursive`, run
+`git submodule update --init --recursive` inside `~/lovr` before `cmake ..`.
+
 ### Blackwell GPUs (B200, RTX PRO 6000) — VLM fails to start
 
 **Symptom:** the VLM server logs FlashInfer or NVFP4 kernel errors and never
