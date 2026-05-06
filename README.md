@@ -50,8 +50,8 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| simple-vlm-example | ~16 GB |
-| xr-render-demo | ~17 GB |
+| simple-vlm-example | ~23 GB |
+| xr-render-demo | ~70 GB |
 | Hub only | none |
 
 **Software**
