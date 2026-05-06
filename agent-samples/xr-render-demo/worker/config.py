@@ -15,7 +15,7 @@ class WorkerConfig:
     # Services
     stt_server:       str
     tts_server:       str
-    llm_server:       str   # quick-ack LLM (Llama-Nemotron, port 8106)
+    llm_server:       str   # quick-ack LLM (Nemotron-3-Nano, port 8107; thinking disabled)
     agent_llm_server: str   # tool-calling LLM (Nemotron-3-Nano, port 8107)
     render_mcp:       str   # base URL, e.g. http://localhost:8220
     oxr_mcp:          str   # base URL, e.g. http://localhost:8230

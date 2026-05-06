@@ -266,6 +266,13 @@ class SceneDispatcher:
     def remove(self, obj_id: str) -> bool:
         return self._objects.pop(obj_id, None) is not None
 
+    def clear(self) -> int:
+        """Remove all objects from in-memory state. Returns the count cleared."""
+        count = len(self._objects)
+        self._objects.clear()
+        self._id_counters.clear()
+        return count
+
     def health_snapshot(self) -> dict:
         return {
             "status":       "ok",
@@ -460,6 +467,21 @@ def build_mcp(disp: SceneDispatcher) -> FastMCP:
         if not disp.remove(obj_id):
             return {"ok": False, "reason": "not_found"}
         return await disp.forward("scene.remove", {"id": obj_id})
+
+    @mcp.tool()
+    async def clear_scene() -> dict:
+        """Remove all primitives from the scene, resetting it to empty.
+
+        Sends scene.remove for every known object so LOVR's state matches.
+        Also resets id counters so the next add_primitive starts from id 0.
+        Call this before start_xr when starting a fresh session to avoid
+        stale objects from a previous run appearing in LOVR.
+        """
+        for obj_id in list(disp._objects):
+            await disp.forward("scene.remove", {"id": obj_id})
+        count = disp.clear()
+        logger.info("render-mcp: cleared {} objects", count)
+        return {"ok": True, "cleared": count}
 
     @mcp.tool()
     async def get_scene_state() -> dict:

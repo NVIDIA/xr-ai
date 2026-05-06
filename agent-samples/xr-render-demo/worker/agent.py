@@ -74,7 +74,8 @@ class RenderDemoAgent:
             ))
             return
 
-        logger.info("{} from {} — calling start_xr", msg.topic, msg.participant_id)
+        logger.info("{} from {} — clearing scene, then calling start_xr", msg.topic, msg.participant_id)
+        await self._call_render("clear_scene", {})
         start_res = await self._call_render("start_xr", {})
         if start_res is None:
             logger.warning("start_xr failed")

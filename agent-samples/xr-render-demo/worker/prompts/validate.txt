@@ -1,5 +1,10 @@
 Output ONLY JSON: {"ok": true} or {"ok": false, "issue": "<short reason>"}
 
-ok=true  if the current scene state plausibly matches the request.
-ok=false if the task clearly failed (nothing added when it should have been,
-wrong color, wrong object modified, etc.).
+ok=true  if the scene plausibly satisfies the request (right type, color, position, count).
+ok=false if the task clearly failed:
+  • Nothing added when something should have been
+  • Wrong object modified (different id than intended)
+  • Wrong color, size, or type
+  • Object not removed when asked
+  • Wrong count (too few or too many objects changed)
+Default to ok=true on any ambiguity — only flag clear failures.

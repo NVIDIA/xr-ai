@@ -322,7 +322,21 @@ def run(
             sys.exit(rc)
 
 
-# ── port → pid (used by the docker-aware stop helper for the pip fallback) ──
+# ── port → container / pid (used by the stop helper) ────────────────────────
+
+
+def container_on_port(port: int) -> str | None:
+    """Return the name of a running docker container bound to *port*, or None."""
+    try:
+        out = subprocess.check_output(
+            ["docker", "ps", "--filter", f"publish={port}", "--format", "{{.Names}}"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        names = out.splitlines()
+        return names[0] if names else None
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
 
 
 def pid_on_port(port: int) -> int | None:

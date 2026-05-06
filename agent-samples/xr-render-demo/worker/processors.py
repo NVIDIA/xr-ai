@@ -275,9 +275,8 @@ class RenderSceneProcessor(FrameProcessor):
     """
     Multi-step agentic loop over render-mcp and oxr-mcp tools.
 
-    Uses Llama-Nemotron (port 8106) with OpenAI tool calling + LMFE for the
-    reasoning loop — guaranteed syntactically valid tool calls every iteration.
-    Uses Minitron (port 8101) for the parallel quick-ack (fast, cheap).
+    Uses Nemotron-3-Nano (port 8107) for both the reasoning loop (thinking on)
+    and the quick-ack/validation calls (thinking off, small max_tokens).
 
     On each utterance:
       1. Quick-ack fires immediately (parallel, max 25 tokens) → agent.progress
@@ -472,6 +471,7 @@ class RenderSceneProcessor(FrameProcessor):
             ],
             "max_tokens": 40,
             "temperature": 0.0,
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         try:
             resp = await asyncio.wait_for(
@@ -537,6 +537,7 @@ class RenderSceneProcessor(FrameProcessor):
             ],
             "max_tokens": 24,
             "temperature": 0.9,
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         try:
             resp = await asyncio.wait_for(
@@ -593,6 +594,7 @@ class RenderSceneProcessor(FrameProcessor):
             ],
             "max_tokens": 60,
             "temperature": 0.0,
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         try:
             resp = await asyncio.wait_for(
@@ -719,25 +721,31 @@ class RenderSceneProcessor(FrameProcessor):
             system_content = self._prompt_cache
         if needs_thinking:
             system_content = (
-                "Use your private <think> block to work through these steps. "
-                "NEVER output these steps as your response — your only text output "
-                "to the user is ONE SHORT sentence AFTER all tool calls are done.\n"
+                "Use your private <think> block. "
+                "NEVER output it — your only visible output is ONE SHORT sentence after all tool calls.\n"
                 "\n"
-                "THINK STEP 1 — RESOLVE: Which object? "
-                "Pronouns ('it', 'that') = most recently added/modified object. "
-                "Named ('the blue sphere') = match by color/type in scene.\n"
+                "STEP 1 — RESOLVE: Identify the exact object id.\n"
+                "  Pronoun ('it', 'that') = most recently added/modified (history first, then last scene entry).\n"
+                "  Named attribute ('the blue sphere') = match color/size/type in scene.\n"
                 "\n"
-                "THINK STEP 2 — LOCATE: Copy the exact x, y, z of the target object "
-                "and the head pose right/forward/up vectors from the context.\n"
+                "STEP 2 — LOCATE: Copy the exact numbers from the pre-fetched context.\n"
+                "  NEVER call get_scene_state or get_head_pose — the data is already provided.\n"
+                "  For displacement: write out old x, y, z and head forward/right/up vectors.\n"
+                "  For object-anchored placement: write out anchor x, y, z.\n"
+                "  For between-me-and-obj: write out head.position and obj.position.\n"
                 "\n"
-                "THINK STEP 3 — COMPUTE: Calculate new coordinates with explicit arithmetic. "
-                "User-relative move: new = old + head_vec × distance (per component). "
-                "Near object: new = obj.pos ± world_offset. "
-                "Midpoint: new = (A + B) / 2 per component. "
-                "Write out each component: x=…, y=…, z=…\n"
+                "STEP 3 — COMPUTE: Write every component explicitly before calling any tool.\n"
+                "  Displace existing object:  new = old + head_vec × d  (per component).\n"
+                "  Diagonal displacement:     new = old + forward_vec×d₁ + right_vec×d₂.\n"
+                "  Closer / further:          new = old ± forward_vec × d.\n"
+                "  Object-relative placement: new = obj.pos ± world_axis × d.\n"
+                "  Midpoint (A to B):         new = (A + B) / 2  per component.\n"
+                "  Between me and obj:        new = (head.pos + obj.pos) / 2  per component.\n"
+                "  Same height as obj:        keep x/z from placement; set y = obj.y.\n"
+                "  On the floor:              keep x/z from placement; set y = 0.\n"
                 "\n"
-                "THINK STEP 4 — EXECUTE: call the tool with the computed values, "
-                "then reply with ONE short sentence to the user.\n\n"
+                "STEP 4 — EXECUTE: call the tool with the computed values. "
+                "Reply with ONE short sentence.\n\n"
                 + system_content
             )
 
@@ -760,13 +768,13 @@ class RenderSceneProcessor(FrameProcessor):
                 "messages": messages,
                 "tools": self._tools_openai,
                 # thinking off: 1024 covers any tool-call JSON.
-                # thinking on: budget=1024 gives room for step-by-step arithmetic;
-                # 2048 total leaves 1024 for the tool-call response.
-                "max_tokens": 2048 if needs_thinking else 1024,
+                # thinking on: 512-token budget covers 3-axis arithmetic; 1536 total
+                # leaves 1024 for the tool-call response.
+                "max_tokens": 1536 if needs_thinking else 1024,
                 "temperature": 0.0,
                 "chat_template_kwargs": {
                     "enable_thinking": needs_thinking,
-                    **({"thinking_budget": 1024} if needs_thinking else {}),
+                    **({"thinking_budget": 512} if needs_thinking else {}),
                 },
             }
             try:

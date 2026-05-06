@@ -39,13 +39,13 @@ vLLM-flag config — only the runtime that interprets them differs.
 
 A new stdlib-only utility package `utils/xr-ai-vllm/` exposes `serve(...)`
 (dispatches pip vs docker) and `stop_persistent_servers(...)` (docker-aware
-cleanup that tries `docker stop <container_name>` first, falls back to the
-existing port → PID → SIGTERM/SIGKILL path for pip mode). Each of the four
-wrapper `__main__.py` files now reads YAML, builds its model-specific
-`extra_serve_args`, and calls `serve()` — the per-service logic
-(`_gpu_compute_major()` quant selection, nano_v3 parser fetch,
-`media_io_kwargs` for omni, `llama3_json` tool-call parser for
-llama_nemotron) stays in the wrapper because it is not runtime-agnostic.
+cleanup that discovers containers by port, falling back to port → PID →
+SIGTERM/SIGKILL for pip mode). Each of the four wrapper `__main__.py` files
+now reads YAML, builds its model-specific `extra_serve_args`, and calls
+`serve()` — the per-service logic (`_gpu_compute_major()` quant selection,
+nano_v3 parser fetch, `media_io_kwargs` for omni, `llama3_json` tool-call
+parser for llama_nemotron) stays in the wrapper because it is not
+runtime-agnostic.
 
 **Why a shared helper instead of triplicated logic.** Four concrete consumers
 justify the abstraction per the AGENTS.md rule. Keeping it stdlib-only matters
@@ -91,6 +91,15 @@ longer hangs when this service is selected.
 semantics, and the `--stop` UX are all unchanged for users who do not flip
 `vllm_backend:`. Existing pip-mode `model_cache` weights are reused by docker
 mode (mounted at the same path inside the container) and vice versa.
+
+### 2026-05-05 — Replace Llama-Nemotron 8B with Nemotron-3-Nano for quick-ack calls
+
+The separate `llm` process (Llama-Nemotron-8B, port 8106) is removed. Quick-ack,
+think classification, still-working, and validation calls now route to the same
+Nemotron-3-Nano 30B server (`agent-llm`, port 8107) that runs the agentic loop.
+All short-response call sites pass `chat_template_kwargs: {enable_thinking: false}`
+with tight `max_tokens` caps (24–60) to ensure no reasoning output and one-shot
+brevity. Frees one GPU allocation slot and removes the separate weight download.
 
 ### 2026-05-05 — Unified loguru stack; `launcher/` and `xr-ai-logging/` consolidated under `utils/`
 

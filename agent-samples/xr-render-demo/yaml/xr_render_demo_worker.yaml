@@ -16,9 +16,10 @@ render_mcp_url: http://localhost:8220
 oxr_mcp_url: http://localhost:8230
 
 # ── llm-server (quick ack / classification) ──────────────────────────────────
-# Llama-Nemotron 8B — quick ack, think classification, validation, still-working.
-# Better instruction following than Minitron; LMFE for reliable JSON output.
-llm_server: http://localhost:8106
+# Nemotron-3-Nano 30B — quick ack, think classification, validation, still-working.
+# Shares the agent-llm server (port 8107); thinking disabled per-request for these
+# short one-shot calls (enable_thinking: false, small max_tokens).
+llm_server: http://localhost:8107
 
 # ── agent-llm-server (reasoning + tool calling) ──────────────────────────────
 # Nemotron-3-Nano 30B via vLLM — tool calling via qwen3_coder parser,

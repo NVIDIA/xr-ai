@@ -128,10 +128,10 @@ def _detect_gpu_config() -> str:
     return cfg
 
 
-# agent-llm (Nemotron-30B) loads first so its FlashInfer MoE JIT compilation
-# runs with the full GPU free.  The compiled kernels are cached after the
-# first run.  On ADA, nemotron3_nano is pinned to cuda:1 so this order has
-# no downside there either.
+# agent-llm (Nemotron-3-Nano 30B) loads first so its FlashInfer MoE JIT
+# compilation runs with the full GPU free.  Compiled kernels are cached after
+# the first run.  It serves both the agentic loop and quick-ack/validation
+# calls; thinking is disabled per-request for the latter.
 def _build_processes() -> list[Process]:
     """Detect the GPU profile and return the per-profile process list.
 
@@ -153,8 +153,6 @@ def _build_processes() -> list[Process]:
                 config=f"{ai}/nemotron3_nano_llm_server.yaml"),
         Process("vlm",        "../../ai-services/vlm-server",         "vlm_server",
                 config=f"{ai}/vlm_server.yaml"),
-        Process("llm",        "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
-                config=f"{ai}/llama_nemotron_llm_server.yaml"),
         Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",      "vlm_mcp_server",
                 config="yaml/vlm_mcp_server.yaml"),
         Process("video-mcp",  "../../agent-mcp-servers/video-mcp",    "video_mcp_server",
@@ -289,16 +287,11 @@ def _ensure_web_vendor() -> None:
 
 # ── Model cleanup (--stop) ────────────────────────────────────────────────────
 
-# Persisted servers cleaned up by --stop.  Each entry is
-# (label, port, container_name|None).  `container_name` is the docker name the
-# corresponding wrapper uses when vllm_backend: docker; pass None for non-vLLM
-# services that don't have a container variant.
-# stop_persistent_servers tries `docker stop <container_name>` first when set,
-# falling back to port → pid → SIGTERM/SIGKILL for the pip path.
-_PERSISTENT_SERVERS: list[tuple[str, int, str | None]] = [
-    ("vlm",       8100, "xr-ai-vllm-vlm-server"),
-    ("llm",       8106, "xr-ai-vllm-llama-nemotron-llm-server"),
-    ("agent-llm", 8107, "xr-ai-vllm-nemotron3-nano-llm-server"),
+# vLLM-backed servers that survive stack shutdown (start_new_session=True).
+# Ports match the defaults in each server's YAML; override here if you change them.
+_PERSISTENT_SERVERS: list[tuple[str, int]] = [
+    ("vlm",       8100),
+    ("agent-llm", 8107),
 ]
 
 

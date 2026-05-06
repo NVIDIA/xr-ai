@@ -128,27 +128,23 @@ def serve(
 
 
 def stop_persistent_servers(
-    services: list[tuple[str, int, str | None]],
+    services: list[tuple[str, int]],
 ) -> None:
     """Stop persisted vLLM servers; safe to call when nothing is running.
 
-    *services* is a list of ``(label, port, container_name | None)`` tuples.
-    For each entry:
+    *services* is a list of ``(label, port)`` tuples. For each entry:
 
     1. Probe ``http://127.0.0.1:<port>/health``. Skip if not reachable.
-    2. If *container_name* is given and that docker container exists,
-       ``docker stop`` it (escalates to ``docker kill`` after 20 s).
-    3. Otherwise (or if docker stop reports no such container), fall back
-       to the port → pid → SIGTERM → SIGKILL path used for pip-mode vLLM.
+    2. If a docker container is found listening on *port*, ``docker stop`` it.
+    3. Otherwise fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM.
 
-    Output is print-style with `[<label>] …` prefixes so it matches the
-    existing `--stop` UX.
+    Output is print-style with ``[<label>] …`` prefixes.
     """
     import signal
     import time
 
     found = False
-    for label, port, container_name in services:
+    for label, port in services:
         try:
             with urllib.request.urlopen(
                 f"http://127.0.0.1:{port}/health", timeout=2
@@ -160,7 +156,8 @@ def stop_persistent_servers(
 
         found = True
 
-        if container_name and _docker.container_exists(container_name):
+        container_name = _docker.container_on_port(port)
+        if container_name:
             print(f"  [{label}] stopping container {container_name} (port={port})…",
                   flush=True)
             if _docker.stop_container(container_name):
