@@ -160,7 +160,7 @@ def setup_logging(name: str, *, namespace: str | None = None) -> Path:
     for noisy in _NOISY_LOGGERS:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    logger.info(
+    logger.debug(
         "logging initialised  name={}  namespace={}  verbose={}  file={}",
         name, ns, verbose, log_file,
     )

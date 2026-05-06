@@ -36,7 +36,7 @@ async def ManagedProcess(name: str, cmd: list[str], cwd: Path | None = None,
     *env*, if given, replaces the child's environment entirely; otherwise
     the child inherits the parent's.
     """
-    log.info("[%s] starting: %s", name, " ".join(cmd))
+    log.debug("[%s] starting: %s", name, " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=cwd,
@@ -44,7 +44,7 @@ async def ManagedProcess(name: str, cmd: list[str], cwd: Path | None = None,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    log.info("[%s] pid=%d", name, proc.pid)
+    log.debug("[%s] pid=%d", name, proc.pid)
 
     prefix = f"[{name}]"
     pipe_tasks = [
@@ -56,7 +56,7 @@ async def ManagedProcess(name: str, cmd: list[str], cwd: Path | None = None,
         yield proc
     finally:
         if proc.returncode is None:
-            log.info("[%s] stopping (pid=%d)…", name, proc.pid)
+            log.debug("[%s] stopping (pid=%d)…", name, proc.pid)
             proc.terminate()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=_STOP_TIMEOUT)
@@ -67,4 +67,4 @@ async def ManagedProcess(name: str, cmd: list[str], cwd: Path | None = None,
         for t in pipe_tasks:
             t.cancel()
         await asyncio.gather(*pipe_tasks, return_exceptions=True)
-        log.info("[%s] stopped (returncode=%s)", name, proc.returncode)
+        log.debug("[%s] stopped (returncode=%s)", name, proc.returncode)

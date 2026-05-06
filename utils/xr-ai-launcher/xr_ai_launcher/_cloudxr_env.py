@@ -41,5 +41,5 @@ def load_cloudxr_env(path: Path) -> None:
                (val.startswith("'") and val.endswith("'")):
                 val = val[1:-1]
             os.environ[key] = val
-    log.info("cloudxr env sourced from %s  (%s=%s)",
-             path, XR_RUNTIME_VAR, os.environ.get(XR_RUNTIME_VAR, "<missing>"))
+    log.debug("cloudxr env sourced from %s  (%s=%s)",
+              path, XR_RUNTIME_VAR, os.environ.get(XR_RUNTIME_VAR, "<missing>"))

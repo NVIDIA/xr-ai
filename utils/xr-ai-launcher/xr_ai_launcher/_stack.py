@@ -157,7 +157,7 @@ def _wait_ready(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
             raise SystemExit(1)
 
         if elapsed - last_report >= _READY_INTERVAL:
-            log.info("[%s] waiting... (%.0fs)", name, elapsed)
+            log.debug("[%s] waiting... (%.0fs)", name, elapsed)
             last_report = elapsed
 
         time.sleep(0.5)
