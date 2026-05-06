@@ -186,7 +186,11 @@ def _print_log_dir_banner(log_dir: Path) -> None:
     on  = "\x1b[1;36m" if is_tty else ""   # bright cyan, bold
     dim = "\x1b[2m"    if is_tty else ""
     off = "\x1b[0m"    if is_tty else ""
-    print(f"\n{dim}{bar}{off}",                                file=sys.stderr, flush=True)
-    print(f"  {on}Per-run logs:{off}  {log_dir}",              file=sys.stderr, flush=True)
+    print(f"\n{dim}{bar}{off}",                                  file=sys.stderr, flush=True)
+    print(f"  {on}Per-run logs:{off}  {log_dir}",                file=sys.stderr, flush=True)
+    print(f"  {dim}<name>.log         one per stack process (hub, stt, agent-llm, worker, …){off}",
+                                                                 file=sys.stderr, flush=True)
+    print(f"  {dim}xr-ai-vllm-*.log   vLLM container output (vllm_backend: docker only){off}",
+                                                                 file=sys.stderr, flush=True)
     print(f"  {dim}Tail all:      tail -F {log_dir}/*.log{off}", file=sys.stderr, flush=True)
-    print(f"{dim}{bar}{off}\n",                                file=sys.stderr, flush=True)
+    print(f"{dim}{bar}{off}\n",                                  file=sys.stderr, flush=True)
