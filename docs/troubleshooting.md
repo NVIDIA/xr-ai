@@ -121,6 +121,46 @@ The orchestrator's `load_credentials()` injects `NGC_API_KEY` into the
 environment before each wrapper runs; the docker backend uses it to run
 `docker login nvcr.io --password-stdin` when no existing auth is found.
 
+### `vllm_backend: docker` — wrapper exits with `vLLM exited before /health became reachable`
+
+**Symptom:** the launcher reports
+
+```
+[<service>] vLLM exited before /health became reachable
+[<service>] exited (rc=1) before signaling ready
+```
+
+and the per-run log file under `/tmp/log_<sample>_<timestamp>/<service>.log`
+contains only wrapper messages — nothing from inside the container.
+
+**Health probe** — confirm vLLM never reached the `/health` endpoint:
+
+```bash
+curl -fsS http://127.0.0.1:8107/health   # nemotron3_nano (agent-llm)
+curl -fsS http://127.0.0.1:8100/health   # vlm_server
+curl -fsS http://127.0.0.1:8106/health   # llama_nemotron (llm)
+```
+
+**Container post-mortem** — the wrapper now streams `docker logs -f` into the
+per-run log file, so on the next run the actual vLLM error lands next to the
+wrapper messages. To inspect manually:
+
+```bash
+docker ps -a --filter name=xr-ai-vllm-
+docker logs --tail=200 <container-name>
+```
+
+**Cause:** vLLM crashed during startup — common reasons: model weights
+missing/inaccessible in the bind-mounted `model_cache`, GPU not visible to
+the container (`nvidia-container-cli` / `--gpus`), HF token missing for a
+gated model, or a reasoning-parser plugin file that is not present inside
+the container.
+
+**Fix:** read the container logs (the next run captures them automatically),
+address the root cause shown there, and retry. If the container was
+auto-removed by `--rm` before you could check, the next failed run will
+have the streamed output in the loguru log file — just re-run.
+
 ### `vllm_backend: docker` — `docker run` fails with `could not select device driver`
 
 **Symptom:** `docker run` exits with a message mentioning `nvidia-container-cli`

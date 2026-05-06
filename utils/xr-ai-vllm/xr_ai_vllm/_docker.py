@@ -220,6 +220,67 @@ def _maybe_ngc_login(image: str) -> None:
         )
 
 
+# ── log forwarding ──────────────────────────────────────────────────────────
+
+
+def _start_log_streamer(container_name: str) -> subprocess.Popen | None:
+    """Tail container stdout/stderr into the wrapper so loguru captures it.
+
+    `docker run -d` does not pipe container output back to the parent — the
+    wrapper sees only the container id. Without this streamer the per-run log
+    file shows wrapper messages only, and any startup failure inside vLLM is
+    invisible after `--rm` removes the container. `docker logs -f` reads from
+    the daemon's log driver, so it replays from container start regardless of
+    when we attach.
+    """
+    try:
+        return subprocess.Popen(
+            ["docker", "logs", "-f", container_name],
+            # stdout/stderr inherited → launcher prefixes them with [<name>]
+            # and the loguru stdlib bridge writes them to the per-run log file.
+        )
+    except FileNotFoundError:
+        return None
+
+
+def _stop_log_streamer(proc: subprocess.Popen | None) -> None:
+    if proc is None or proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _dump_recent_logs(container_name: str, n: int = 200) -> None:
+    """Dump the last *n* lines of container logs through `log.error`.
+
+    Belt-and-suspenders against the small race between `docker run -d`
+    returning and the streamer attaching, and against the container being
+    removed before the streamer flushes. Best-effort: if the container is
+    already gone, this is a no-op.
+    """
+    try:
+        out = subprocess.run(
+            ["docker", "logs", "--tail", str(n), container_name],
+            capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError:
+        return
+    blob = (out.stdout or "") + (out.stderr or "")
+    if not blob.strip():
+        return
+    log.error("---- last %d lines of `docker logs %s` ----", n, container_name)
+    for line in blob.splitlines():
+        log.error("[%s] %s", container_name, line)
+    log.error("---- end of container logs ----")
+
+
 # ── run flow ────────────────────────────────────────────────────────────────
 
 
@@ -300,26 +361,38 @@ def run(
     else:
         proc = None
 
-    _lifecycle.wait_until_healthy(
-        health_url,
-        is_alive=lambda: (proc is None or proc.poll() is None)
-        and container_running(container_name),
-    )
+    log_streamer = _start_log_streamer(container_name) if persistent else None
+    try:
+        _lifecycle.wait_until_healthy(
+            health_url,
+            is_alive=lambda: (proc is None or proc.poll() is None)
+            and container_running(container_name),
+        )
+    except SystemExit:
+        # Give the streamer a beat to flush, then dump the tail explicitly in
+        # case the streamer attached late or the container is already gone.
+        time.sleep(0.5)
+        _dump_recent_logs(container_name)
+        _stop_log_streamer(log_streamer)
+        raise
 
     log.info("Ready  →  http://localhost:%d/v1  (docker: %s)", port, container_name)
     if ready_file:
         ready_file.touch()
 
-    if persistent:
-        # Persistence parity with pip mode: wrapper exits cleanly without
-        # touching the container; cleanup happens via stop_persistent_servers.
-        _lifecycle.idle_until_stopped(health_url, log_prefix)
-    else:
-        assert proc is not None
-        rc = proc.wait()
-        # Foreground container is auto-removed by --rm; nothing else to clean up.
-        if rc != 0:
-            sys.exit(rc)
+    try:
+        if persistent:
+            # Persistence parity with pip mode: wrapper exits cleanly without
+            # touching the container; cleanup happens via stop_persistent_servers.
+            _lifecycle.idle_until_stopped(health_url, log_prefix)
+        else:
+            assert proc is not None
+            rc = proc.wait()
+            # Foreground container is auto-removed by --rm; nothing else to clean up.
+            if rc != 0:
+                sys.exit(rc)
+    finally:
+        _stop_log_streamer(log_streamer)
 
 
 # ── port → pid (used by the docker-aware stop helper for the pip fallback) ──
