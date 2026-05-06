@@ -10,6 +10,14 @@
 Agentic AI for XR — a sample blueprint for multi-modal, real-time conversational AI
 within the CloudXR ecosystem.
 
+## Early Access Notice
+
+This project is currently in early access and is under active development.
+Features, APIs, documentation, and behavior may change without notice.
+Expect bugs, incomplete functionality, and breaking changes as the project
+evolves. Use at your own discretion, and please report issues or feedback
+to help improve the project.
+
 ## What is XR-AI?
 
 XR-AI is a developer stack for building powerful XR and AI systems across devices, platforms, and deployment environments. It connects web, iOS/visionOS, AR glasses, and XR headset clients to GPU-accelerated AI services, tool-using agents, and the CloudXR stack for remote rendering.
@@ -116,21 +124,30 @@ uv sync
 uv run simple_vlm_example
 ```
 
-The hub, VLM, STT, and TTS services all start together.  The VLM and TTS
-models load from disk on first run — expect 30–60 s before the stack is
-ready.  When it is, the hub prints:
+The hub, VLM, STT, and TTS services all start together.  On the very first
+run the worker downloads model weights from HuggingFace (~16 GB total; can
+take several minutes).  After that, the stack is ready in 30–60 s.  When it
+is, the hub prints:
 
 ```
 [hub]   LiveKit URL : ws://0.0.0.0:7880
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
-[hub]   Web client  : http://localhost:8080
+[hub]   Web client  : https://localhost:8080
 ```
 
 #### Step 2 — Connect a client
 
-Open `http://localhost:8080` in a browser.  Leave **Token URL** blank — the
-web client fetches a token from the server automatically.  Click **Connect**.
+Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
+on by default (a self-signed cert is generated on first run at
+`~/.local/share/xr-ai/web-server.crt`), so you'll see a "Your connection
+is not private" warning the first time — click **Advanced → Proceed**
+(Chrome/Edge) or **Accept the Risk and Continue** (Firefox).  See
+[`docs/networking.md`](docs/networking.md) for trusting the cert
+permanently or running over plain HTTP instead.
+
+Leave **Token URL** blank — the web client fetches a token from the server
+automatically.  Click **Connect**.
 
 You are now live in the XR session.  To test the agent:
 
@@ -210,8 +227,12 @@ The hub auto-discovers `server-runtime/xr_media_hub.yaml`.
 
 ### Web
 
-Open `http://localhost:8080` in a browser.  Leave **Token URL** blank to use
-the server's built-in `/token` endpoint, or paste the printed token directly.
+Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
+on by default; the first connection shows a self-signed cert warning that
+you click through (or trust permanently — see
+[`docs/networking.md`](docs/networking.md)).  Leave **Token URL** blank to
+use the server's built-in `/token` endpoint, or paste the printed token
+directly.
 
 The page's import map loads `livekit-client` and `@nvidia/cloudxr` from
 `client-samples/web/vendor/` (same-origin, so XR headsets and offline LANs
@@ -219,10 +240,6 @@ work).  Both bundles are gitignored build output.  The xr-render-demo
 orchestrator builds them automatically on first run (requires npm on PATH).
 For a manual rebuild after an SDK bump, see
 [`client-samples/web-xr-build/README.md`](client-samples/web-xr-build/README.md).
-
-For HTTPS setup (required for camera access from remote devices) and the
-self-signed certificate trust steps, see
-[`docs/networking.md`](docs/networking.md).
 
 ### Android
 

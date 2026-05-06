@@ -13,8 +13,8 @@ if a firewall is active.
 | 7880 | TCP | LiveKit WebSocket signaling |
 | 7881 | TCP | LiveKit WebRTC TCP fallback |
 | 7882 | UDP | LiveKit WebRTC UDP media |
-| 8080 | TCP | Web client / token server (HTTP) |
-| 8443 | TCP | Web client / token server (HTTPS, if enabled) |
+| 8080 | TCP | Web client / token server (HTTP or HTTPS — depends on `web_server_tls`; samples ship HTTPS) |
+| 8443 | TCP | Optional alternate HTTPS port (only if you change `web_server_port`) |
 | 48322 | TCP | CloudXR WSS proxy (XR headset / client connection) |
 
 ## Ubuntu / Debian (`ufw`)
@@ -43,17 +43,16 @@ sudo firewall-cmd --reload
 
 ## TLS for the web client
 
-Camera access in browsers is only permitted over `localhost` or HTTPS. When
-connecting from another device on the network, enable TLS in
-`xr_media_hub.yaml`:
-
-```yaml
-web_server_tls: true
-web_server_port: 8443   # conventional HTTPS alt-port (optional)
-```
-
+The shipped sample YAMLs (`agent-samples/*/yaml/xr_media_hub.yaml`) already
+have `web_server_tls: true`, so the web client is served over HTTPS by
+default — required for camera access from any device that isn't `localhost`.
 On first run a self-signed certificate is generated at
-`~/.local/share/xr-ai/web-server.crt`. To trust it:
+`~/.local/share/xr-ai/web-server.crt`.
+
+To **disable** TLS (e.g. for `localhost`-only dev where the cert warning is
+noise), set `web_server_tls: false` in the sample's `xr_media_hub.yaml`.
+
+To **trust the self-signed cert** so you stop seeing the warning:
 
 - **Chrome / Edge**: navigate to `https://<host>:8443`, click **Advanced →
   Proceed to … (unsafe)**.
