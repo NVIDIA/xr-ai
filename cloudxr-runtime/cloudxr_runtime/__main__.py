@@ -98,18 +98,23 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
         if not ready:
             if stop.done():
                 return  # cancelled by signal — clean exit
-            if not runtime_proc.is_alive() and runtime_proc.exitcode != 0:
+            native_log = latest_runtime_log() or logs_dir
+            if not runtime_proc.is_alive():
+                # Process exited before signaling ready. exitcode may be None
+                # for a tick after termination — treat that as a failure too.
+                rc = runtime_proc.exitcode
                 logger.error(
-                    "CloudXR runtime exited (code {}).\n"
-                    "  Check for leftover containers: docker ps --filter name=cloudxr\n"
-                    "  Native log: {}",
-                    runtime_proc.exitcode, latest_runtime_log() or logs_dir,
+                    "CloudXR runtime exited (rc={}) before signaling ready.\n"
+                    "  Native log: {}\n"
+                    "  Leftover containers: docker ps --filter name=cloudxr",
+                    rc if rc is not None else "?", native_log,
                 )
-                sys.exit(runtime_proc.exitcode or 1)
+                sys.exit(rc or 1)
             logger.error(
-                "CloudXR runtime did not become ready within 120 s.\n"
+                "CloudXR runtime did not become ready within 120 s "
+                "(process still alive — readiness lock file missing).\n"
                 "  Native log: {}",
-                latest_runtime_log() or logs_dir,
+                native_log,
             )
             sys.exit(1)
 
