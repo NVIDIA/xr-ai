@@ -37,7 +37,6 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 import urllib.request
 from pathlib import Path
 
@@ -278,31 +277,14 @@ def _ensure_web_vendor() -> None:
             f"    cd {build_sh.parent} && ./build.sh\n"
         )
 
-    # Capture build.sh output to a sibling file in the per-run log dir so
-    # the wrapper terminal stays quiet on the happy path. On failure, dump
-    # the captured output to stderr so the user can see the error inline.
-    log_root = Path(os.environ.get("XR_AI_LOG_ROOT", "/tmp"))
-    log_dir = log_root / (
-        f"log_{os.environ['XR_AI_LOG_NAMESPACE']}_{os.environ['XR_AI_LOG_TIMESTAMP']}"
-    )
-    log_dir.mkdir(parents=True, exist_ok=True)
-    build_log = log_dir / "web-vendor-build.log"
-
-    logger.info("Building web vendor bundle (~10 s) → {}", build_log)
-    t0 = time.monotonic()
-    with open(build_log, "wb") as fh:
-        result = subprocess.run(
-            [str(build_sh)], cwd=str(build_sh.parent),
-            stdout=fh, stderr=fh,
-        )
-    elapsed = time.monotonic() - t0
+    logger.info("Web vendor bundle not found — running build.sh: {}", build_sh)
+    result = subprocess.run([str(build_sh)], cwd=str(build_sh.parent))
     if result.returncode != 0:
-        sys.stderr.write(build_log.read_text(errors="replace"))
         sys.exit(
-            f"\n  [setup] build.sh failed (exit {result.returncode}, {elapsed:.1f}s).\n"
-            f"  Full log: {build_log}\n"
+            f"\n  [setup] build.sh failed (exit {result.returncode}).\n"
+            f"  Check the output above, then re-run.\n"
         )
-    logger.info("Web vendor bundle ready ({:.1f}s)", elapsed)
+    logger.info("Web vendor bundle ready")
 
 
 # ── Model cleanup (--stop) ────────────────────────────────────────────────────
