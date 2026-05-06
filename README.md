@@ -3,10 +3,86 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
+<!-- TODO: hero image -->
+
 # xr-ai
 
 Agentic AI for XR — a sample blueprint for multi-modal, real-time conversational AI
 within the CloudXR ecosystem.
+
+## Early Access Notice
+
+This project is currently in early access and is under active development.
+Features, APIs, documentation, and behavior may change without notice.
+Expect bugs, incomplete functionality, and breaking changes as the project
+evolves. Use at your own discretion, and please report issues or feedback
+to help improve the project.
+
+## What is XR-AI?
+
+XR-AI is a developer stack for building powerful XR and AI systems across devices, platforms, and deployment environments. It connects web, iOS/visionOS, AR glasses, and XR headset clients to GPU-accelerated AI services, tool-using agents, and the CloudXR stack for remote rendering.
+
+With XR-AI, developers can build agents that see and hear what the user experiences, reason over live physical context, call external tools through MCP, and respond with audio or data in the same XR session. The stack provides an end-to-end foundation for multimodal spatial computing applications: real-time media routing, participant-aware response handling, agent interfaces, AI service integration, remote rendering, and sample applications that show the pieces working together.
+
+The value is speed without lock-in. XR-AI is designed to work quickly with NVIDIA open models for vision, language, speech, and speech synthesis, while still giving developers the flexibility to bring their own models, services, tools, and application logic. Because it is built around NVIDIA GPU infrastructure, the same architecture can be deployed where the workload needs to run: cloud, data center, workstation, or edge.
+
+XR-AI also gives developers a practical path across product categories. Teams can start with AI glasses-style experiences that use live camera, audio, and agent responses, then extend the same framework to richer AR glasses or XR headset experiences that use CloudXR remote rendering. This lets developers build for today's lightweight AI devices while keeping a clear path to immersive, GPU-rendered spatial applications.
+
+XR-AI is especially useful when you need to:
+
+- **Build multimodal XR agents** that can see, hear, reason, use tools, and respond in real time.
+- **Target multiple client platforms** including web, iOS/visionOS, AR glasses, and XR headsets.
+- **Use NVIDIA open models out of the box** while preserving the flexibility to bring your own models and services.
+- **Deploy wherever NVIDIA GPUs are available**, from cloud and data center to workstation and edge.
+- **Start with AI glasses-style experiences and scale to CloudXR remote rendering** for richer AR and XR applications.
+- **Keep transport, rendering, model services, tools, and agent logic separated** so teams can evolve each layer independently.
+
+
+## Requirements
+
+**Hardware**
+
+XR-AI samples are designed for a single NVIDIA RTX PRO 6000 Blackwell workstation GPU or an
+NVIDIA DGX Spark.  Both provide enough VRAM to run the
+full model stack locally.  If you prefer not to run models on local hardware,
+model endpoints are plain URLs — point the worker config at a cloud NIM or model
+endpoint and no local GPU is required for the agent or hub.
+
+| Sample | Local VRAM needed |
+|---|---|
+| simple-vlm-example | ~16 GB |
+| xr-render-demo | ~17 GB |
+| Hub only | none |
+
+**Software**
+
+| Requirement | Version | Notes |
+|---|---|---|
+| OS | Linux | Ubuntu 22.04 / 24.04 recommended |
+| Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
+| [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
+| NVIDIA driver | 570+ | required for local model inference |
+| npm | 18+ | only needed to rebuild the web vendor bundle |
+
+`uv` handles all Python dependencies per-sample — no global `pip install`
+or virtual-environment setup needed.  If you do not have it:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**GPU-profile prerequisites** — install before `uv sync` for these targets:
+
+- **DGX Spark** (`xr-render-demo/yaml/spark/`): `sudo apt install python3-dev`
+- **RTX PRO 6000 Blackwell** (`xr-render-demo/yaml/96G_blackwell/`): NVIDIA Container Toolkit + CUDA NVCC (`sudo apt install nvidia-cuda-toolkit`)
+
+If `uv sync` or the VLM fails on first run, see
+[`docs/troubleshooting.md`](docs/troubleshooting.md).
+
+**Network** — open the firewall ports listed in
+[`docs/networking.md`](docs/networking.md) before connecting from another
+machine.  UDP 7882 is a silent-failure path: signaling succeeds but media
+frames are dropped if it is closed.
 
 ## Architecture
 
@@ -24,6 +100,12 @@ required process automatically. No separate server launch step.
 
 ## Quickstart
 
+Every sample follows the same two-step pattern: **start the server, then
+connect a client.**  The server command launches the hub, model services,
+and agent together.  Once it is ready, any supported client — web browser,
+Android app, iOS/visionOS app, or AR glasses — can join the session using
+the token printed on startup.
+
 ### Simple VLM example (vision Q&A over voice + text)
 
 End-to-end voice + vision sample.  Speak into the mic, type into the data
@@ -34,35 +116,67 @@ streaming Piper TTS audio plus a `vlm.response` text message.
 Requires ~16 GB VRAM (default VLM is `nvidia/Cosmos-Reason1-7B`, NVIDIA
 Open Model License + Apache 2.0).
 
+#### Step 1 — Start the server
+
 ```bash
 cd xr-ai/agent-samples/simple-vlm-example
 uv sync
 uv run simple_vlm_example
 ```
 
-On startup you will see hub output (prefixed `[hub]`) followed by the
-worker connecting.  The hub prints connection details:
+The hub, VLM, STT, and TTS services all start together.  On the very first
+run the worker downloads model weights from HuggingFace (~16 GB total; can
+take several minutes).  After that, the stack is ready in 30–60 s.  When it
+is, the hub prints:
 
 ```
 [hub]   LiveKit URL : ws://0.0.0.0:7880
 [hub]   Room        : xr-room
-[hub]   Token       : eyJ…   ← paste this into the client
-[hub]   Web client  : http://localhost:8080
+[hub]   Token       : eyJ…
+[hub]   Web client  : https://localhost:8080
 ```
 
-**Client protocol** — anything you send via the data channel is treated
-as a query:
-- `"ping"` → uses the configured default prompt (`"Describe what you see."`).
-- Any other UTF-8 text → used as the query verbatim.
-- Audio from the mic → STT (parakeet) → query.
+#### Step 2 — Connect a client
 
-Override the VLM model by editing `vlm_server.yaml` in the sample
-directory.  Each sample has its own `xr_media_hub.yaml` controlling the
-hub; see [`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
+Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
+on by default (a self-signed cert is generated on first run at
+`~/.local/share/xr-ai/web-server.crt`), so you'll see a "Your connection
+is not private" warning the first time — click **Advanced → Proceed**
+(Chrome/Edge) or **Accept the Risk and Continue** (Firefox).  See
+[`docs/networking.md`](docs/networking.md) for trusting the cert
+permanently or running over plain HTTP instead.
+
+Leave **Token URL** blank — the web client fetches a token from the server
+automatically.  Click **Connect**.
+
+You are now live in the XR session.  To test the agent:
+
+- Type `ping` in the data channel → the agent describes what the camera sees.
+- Type any question → sent verbatim to the VLM.
+- Speak into your mic → speech is transcribed and sent as a query.
+
+A successful round trip: your query appears in the log, the agent responds
+after a moment, and you hear the reply through your speakers.
+
+**Local model** — override the model weights or GPU settings by editing
+`vlm_server.yaml` in the sample directory.
+
+**Remote model** — to use a model on another machine or a cloud NIM
+endpoint, set `vlm_server` (and optionally `vlm_model_name`) in the
+sample's worker YAML (e.g., `simple_vlm_example_worker.yaml`):
+
+```yaml
+vlm_server:     http://192.168.1.42:8100   # or https://your-nim-endpoint
+vlm_model_name: vlm                        # served-model-name on that host
+```
+
+When pointing at a remote model, `vlm_server.yaml` is unused — you can
+remove the `vlm_server` entry from the launcher's process list so no local
+vLLM process is started.
+
+Each sample has its own `xr_media_hub.yaml` controlling the hub; see
+[`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
 for the full option list.
-
-The VLM and TTS models are loaded at startup (~30–60 s).  They are ready
-before the first query.
 
 ---
 
@@ -76,6 +190,7 @@ web client for desktop dev.
 
 ```bash
 cd xr-ai/agent-samples/xr-render-demo
+uv sync
 uv run xr_render_demo
 ```
 
@@ -91,7 +206,9 @@ uv run xr_render_demo
 ```
 
 Plan ~17 GB VRAM for the LLM + STT models on first run (weights download
-on demand).
+on demand).  To free VRAM after exit see
+[`docs/troubleshooting.md`](docs/troubleshooting.md) — vLLM-backed servers
+intentionally survive stack restarts.
 
 ---
 
@@ -106,57 +223,25 @@ uv run xr_media_hub
 Useful for development or when running an agent in a separate terminal.
 The hub auto-discovers `server-runtime/xr_media_hub.yaml`.
 
----
+## Clients
 
-### Web client
+### Web
 
-#### Vendor bundle setup
+Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
+on by default; the first connection shows a self-signed cert warning that
+you click through (or trust permanently — see
+[`docs/networking.md`](docs/networking.md)).  Leave **Token URL** blank to
+use the server's built-in `/token` endpoint, or paste the printed token
+directly.
 
 The page's import map loads `livekit-client` and `@nvidia/cloudxr` from
-`client-samples/web/vendor/` (same-origin, so XR headsets and offline
-LANs work). Both bundles are gitignored build output.
+`client-samples/web/vendor/` (same-origin, so XR headsets and offline LANs
+work).  Both bundles are gitignored build output.  The xr-render-demo
+orchestrator builds them automatically on first run (requires npm on PATH).
+For a manual rebuild after an SDK bump, see
+[`client-samples/web-xr-build/README.md`](client-samples/web-xr-build/README.md).
 
-The xr-render-demo orchestrator builds them automatically on first run
-(requires npm on PATH). To build manually or to rebuild after an SDK bump:
-
-```bash
-cd xr-ai/client-samples/web-xr-build
-./build.sh
-```
-
-Re-run only when bumping the SDK versions in `web-xr-build/package.json`
-or `web-xr-build/.sdk-version`.
-
-#### Connecting
-
-Open `http://localhost:8080` in a browser. Leave **Token URL** blank to use the
-server's built-in `/token` endpoint, or paste the printed token directly.
-
-#### HTTPS (required for camera access from remote devices)
-
-Camera access in browsers is only permitted over `localhost` or HTTPS. When
-connecting from another device on the network, enable TLS in `xr_media_hub.yaml`:
-
-```yaml
-web_server_tls: true
-web_server_port: 8443   # conventional HTTPS alt-port (optional)
-```
-
-On first run a self-signed certificate is generated at
-`~/.local/share/xr-ai/web-server.crt`. To trust it:
-
-- **Chrome / Edge**: navigate to `https://<host>:8443`, click **Advanced →
-  Proceed to … (unsafe)**.
-- **Firefox**: click **Advanced → Accept the Risk and Continue**.
-- **iOS / Safari**: open the cert URL, follow the prompt to install the profile,
-  then enable it under **Settings → General → VPN & Device Management**.
-
-To use your own certificate, set `cert_file` and `key_file` in
-`xr_media_hub.yaml`.
-
----
-
-### Android client
+### Android
 
 See [`client-samples/android/README.md`](client-samples/android/README.md) for
 full setup. Quick steps:
@@ -168,9 +253,7 @@ full setup. Quick steps:
 
 Permissions (`RECORD_AUDIO`, `CAMERA`) are requested at runtime on first use.
 
----
-
-### iOS / visionOS client
+### iOS / visionOS
 
 See [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
 for full Xcode setup. Quick connection settings:
@@ -184,51 +267,21 @@ for full Xcode setup. Quick connection settings:
 The token is valid for 24 hours. To get a fresh one restart the server or call
 `GET http://<host>:8080/token?identity=<name>`.
 
-## Firewall
+## Networking
 
-The hub and CloudXR runtime use the following ports. Open them permanently if a firewall is active.
-
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| 7880 | TCP | LiveKit WebSocket signaling |
-| 7881 | TCP | LiveKit WebRTC TCP fallback |
-| 7882 | UDP | LiveKit WebRTC UDP media |
-| 8080 | TCP | Web client / token server (HTTP) |
-| 8443 | TCP | Web client / token server (HTTPS, if enabled) |
-| 48322 | TCP | CloudXR WSS proxy (XR headset / client connection) |
-
-**Ubuntu / Debian (`ufw`)**
-
-```bash
-sudo ufw allow 7880/tcp
-sudo ufw allow 7881/tcp
-sudo ufw allow 7882/udp
-sudo ufw allow 8080/tcp
-sudo ufw allow 8443/tcp   # HTTPS only
-sudo ufw allow 48322/tcp  # CloudXR (xr-render-demo)
-sudo ufw reload
-```
-
-**RHEL / Fedora / CentOS (`firewall-cmd`)**
-
-```bash
-sudo firewall-cmd --permanent --add-port=7880/tcp
-sudo firewall-cmd --permanent --add-port=7881/tcp
-sudo firewall-cmd --permanent --add-port=7882/udp
-sudo firewall-cmd --permanent --add-port=8080/tcp
-sudo firewall-cmd --permanent --add-port=8443/tcp   # HTTPS only
-sudo firewall-cmd --permanent --add-port=48322/tcp  # CloudXR (xr-render-demo)
-sudo firewall-cmd --reload
-```
-
----
+The hub and CloudXR runtime use a small set of TCP/UDP ports (LiveKit on
+7880–7882, web client on 8080/8443, CloudXR WSS proxy on 48322).  Open the
+ones you need before connecting from another machine — full table and
+distro-specific `ufw` / `firewall-cmd` recipes are in
+[`docs/networking.md`](docs/networking.md).  The same doc covers HTTPS for
+the web client and self-signed certificate trust on each browser.
 
 ## Tests
 
 `tests/` contains the multi-client / multi-agent integration suite. The
 core IPC tests run without Docker or LiveKit — they spin up real
 `HubEndpoint` / `ConnectorEndpoint` / `ProcessorEndpoint` instances over
-`ipc://` sockets and verify routing, isolation, and the new
+`ipc://` sockets and verify routing, isolation, and the
 `ReturnAudioFlush` control path.
 
 ```bash
@@ -237,12 +290,35 @@ uv sync
 uv run pytest -v
 ```
 
-See [`tests/README.md`](tests/README.md) for the full breakdown.
+See [`tests/README.md`](tests/README.md) for the full breakdown. CI runs
+the suite on every push and pull request via
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml) on Python 3.11
+and 3.12.
 
-CI runs the suite on every push and pull request via
-[`.github/workflows/tests.yml`](.github/workflows/tests.yml) on Python
-3.11 and 3.12.
+## Deeper docs
 
-## Design
+For engineers and agents working in the repo:
 
-See [`docs/`](docs/) and the workspace-level `design.md` for architecture details.
+| Doc | Topic |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
+| [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
+| [`docs/architecture.md`](docs/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
+| [`docs/process-model.md`](docs/process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
+| [`docs/ai-services.md`](docs/ai-services.md) | VLM / STT / TTS / LLM server reference + worker call examples |
+| [`docs/adding-a-sample.md`](docs/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
+| [`docs/adding-cloudxr.md`](docs/adding-cloudxr.md) | Wiring CloudXR into a sample |
+| [`docs/credentials.md`](docs/credentials.md) | HF / NGC token management |
+| [`docs/networking.md`](docs/networking.md) | Firewall ports + HTTPS for the web client |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Known frictions and runtime symptoms |
+| [`docs/spdx-headers.md`](docs/spdx-headers.md) | SPDX header style and enforcement |
+| [`docs/changelog.md`](docs/changelog.md) | Significant design decisions, reverse chronological |
+
+## Project meta
+
+- [`LICENSE`](LICENSE) — Apache-2.0.
+- [`SECURITY.md`](SECURITY.md) — how to report a vulnerability.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution process and DCO.
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — community standards.
+- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — bundled third-party
+  components and their licenses.
