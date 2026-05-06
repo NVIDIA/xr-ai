@@ -35,16 +35,15 @@ import os
 import platform
 import re
 import shutil
-import signal
 import subprocess
 import sys
-import time
 import urllib.request
 from pathlib import Path
 
 from loguru import logger
 from xr_ai_launcher import Process, run_stack
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import stop_persistent_servers
 
 _BASE = Path(__file__).resolve().parent
 
@@ -290,80 +289,21 @@ def _ensure_web_vendor() -> None:
 
 # ── Model cleanup (--stop) ────────────────────────────────────────────────────
 
-# vLLM-backed servers that survive stack shutdown (start_new_session=True).
-# Ports match the defaults in each server's YAML; override here if you change them.
-_PERSISTENT_SERVERS: list[tuple[str, int]] = [
-    ("vlm",       8100),
-    ("llm",       8106),
-    ("agent-llm", 8107),
+# Persisted servers cleaned up by --stop.  Each entry is
+# (label, port, container_name|None).  `container_name` is the docker name the
+# corresponding wrapper uses when vllm_backend: docker; pass None for non-vLLM
+# services that don't have a container variant.
+# stop_persistent_servers tries `docker stop <container_name>` first when set,
+# falling back to port → pid → SIGTERM/SIGKILL for the pip path.
+_PERSISTENT_SERVERS: list[tuple[str, int, str | None]] = [
+    ("vlm",       8100, "xr-ai-vllm-vlm-server"),
+    ("llm",       8106, "xr-ai-vllm-llama-nemotron-llm-server"),
+    ("agent-llm", 8107, "xr-ai-vllm-nemotron3-nano-llm-server"),
 ]
 
 
-def _pid_on_port(port: int) -> int | None:
-    """Return the PID of the process listening on *port*, or None."""
-    # Try ss first (iproute2, always present on modern Linux).
-    try:
-        out = subprocess.check_output(
-            ["ss", "-tlnpH", f"sport = :{port}"],
-            text=True, stderr=subprocess.DEVNULL,
-        )
-        m = re.search(r"pid=(\d+)", out)
-        if m:
-            return int(m.group(1))
-    except Exception:
-        pass
-    # Fallback: lsof.
-    try:
-        out = subprocess.check_output(
-            ["lsof", "-ti", f"tcp:{port}"],
-            text=True, stderr=subprocess.DEVNULL,
-        ).strip()
-        if out:
-            return int(out.splitlines()[0])
-    except Exception:
-        pass
-    return None
-
-
 def _stop_models() -> None:
-    """Send SIGTERM to any persisted vLLM processes, wait, then SIGKILL if needed."""
-    found = False
-    for name, port in _PERSISTENT_SERVERS:
-        try:
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/health", timeout=2
-            ) as r:
-                if r.status != 200:
-                    continue
-        except Exception:
-            continue
-
-        pid = _pid_on_port(port)
-        if pid is None:
-            print(f"  [{name}] running on :{port} but could not find PID — "
-                  f"kill manually", flush=True)
-            found = True
-            continue
-
-        print(f"  [{name}] stopping (pid={pid}, port={port})…", flush=True)
-        found = True
-        try:
-            os.kill(pid, signal.SIGTERM)
-            for _ in range(40):          # wait up to 20 s
-                time.sleep(0.5)
-                try:
-                    os.kill(pid, 0)      # still alive?
-                except ProcessLookupError:
-                    print(f"  [{name}] stopped", flush=True)
-                    break
-            else:
-                print(f"  [{name}] force-killing", flush=True)
-                os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            print(f"  [{name}] already gone", flush=True)
-
-    if not found:
-        print("  No persistent model servers found running.", flush=True)
+    stop_persistent_servers(_PERSISTENT_SERVERS)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

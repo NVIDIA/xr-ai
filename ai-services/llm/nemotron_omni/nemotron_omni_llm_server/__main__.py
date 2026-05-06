@@ -5,7 +5,9 @@
 nemotron_omni_llm_server — vLLM launcher for Nemotron-3-Nano-Omni-30B-A3B-Reasoning.
 
 Omni multimodal model (text + video). Selects the weight quantisation based
-on GPU compute capability and execs into ``vllm serve``.
+on GPU compute capability and dispatches through ``xr_ai_vllm.serve`` to either
+the pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm`` docker
+container (per ``vllm_backend`` in YAML).
 
 Config keys (nemotron_omni_llm_server.yaml)
 -------------------------------------------
@@ -26,6 +28,9 @@ Config keys (nemotron_omni_llm_server.yaml)
     video_pruning_rate:       float  --video-pruning-rate (default: 0.5).
     video_fps:                int    FPS for video input sampling (default: 2).
     video_num_frames:         int    Max frames per video (default: 256).
+    vllm_backend:             str    "pip" (default) or "docker".
+    vllm_image:               str    NGC image when vllm_backend=docker
+                                     (default: nvcr.io/nvidia/vllm:26.04-py3).
 """
 import argparse
 import json
@@ -37,6 +42,7 @@ from pathlib import Path
 import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import DEFAULT_IMAGE, serve
 
 _MODEL_BLACKWELL = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4"
 _MODEL_ADA       = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8"
@@ -54,6 +60,8 @@ _DEFAULT_PRUNE   = 0.5
 _DEFAULT_FPS     = 2
 _DEFAULT_FRAMES  = 256
 
+_CONTAINER_NAME = "xr-ai-vllm-nemotron-omni-llm-server"
+
 
 def _gpu_compute_major() -> int:
     try:
@@ -64,8 +72,6 @@ def _gpu_compute_major() -> int:
         if out:
             return int(out[0].split(".")[0])
     except Exception:
-        # Detection is best-effort; if nvidia-smi is unavailable or parsing fails,
-        # fall back to 0 (unknown capability) so caller can select a safe default.
         pass
     return 0
 
@@ -86,7 +92,8 @@ def run() -> None:
     setup_logging("llm-nemotron-omni")
 
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=Path, default=None)
+    p.add_argument("--config",     type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -96,7 +103,6 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    # Model selection
     if cfg.get("use_bf16", False):
         model = cfg.get("model_bf16", _MODEL_BF16)
         use_kv_fp8 = False
@@ -124,23 +130,25 @@ def run() -> None:
     prune_rate    = float(cfg.get("video_pruning_rate", _DEFAULT_PRUNE))
     video_fps     = int(cfg.get("video_fps",        _DEFAULT_FPS))
     video_frames  = int(cfg.get("video_num_frames", _DEFAULT_FRAMES))
+    backend       = cfg.get("vllm_backend",         "pip")
+    image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
 
-    if cuda_devices := cfg.get("cuda_visible_devices"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
+    cuda_devices = cfg.get("cuda_visible_devices")
+    if cuda_devices is not None:
+        cuda_devices = str(cuda_devices)
+        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
-    if hf_token := (cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")):
+    hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
+    if hf_token:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ["HF_HOME"] = str(model_cache)
 
     media_io_kwargs = json.dumps({"video": {"fps": video_fps, "num_frames": video_frames}})
 
-    argv = [
-        "vllm", "serve", model,
+    extra_serve_args = [
         "--served-model-name", served_name,
-        "--host", host,
-        "--port", str(port),
         "--trust-remote-code",
         "--max-num-seqs", str(max_seqs),
         "--tensor-parallel-size", str(tp_size),
@@ -154,12 +162,25 @@ def run() -> None:
         "--tool-call-parser", "qwen3_coder",
     ]
     if use_kv_fp8:
-        argv.extend(["--kv-cache-dtype", "fp8"])
+        extra_serve_args += ["--kv-cache-dtype", "fp8"]
     if enforce_eager:
-        argv.append("--enforce-eager")
+        extra_serve_args.append("--enforce-eager")
 
-    logger.info("Launching vLLM  http://{}:{}/v1  model={}", host, port, model)
-    os.execvp(argv[0], argv)
+    serve(
+        backend=backend,
+        persistent=False,
+        image=image,
+        container_name=_CONTAINER_NAME,
+        log_prefix="nemotron_omni",
+        model=model,
+        extra_serve_args=extra_serve_args,
+        host=host,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token or None,
+        cuda_visible_devices=cuda_devices,
+        ready_file=ns.ready_file,
+    )
 
 
 if __name__ == "__main__":

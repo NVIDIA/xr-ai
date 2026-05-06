@@ -4,8 +4,10 @@
 """
 llama_nemotron_llm_server — vLLM launcher for Llama-3.1-Nemotron-Nano-8B-v1.
 
-Reads config, sets HuggingFace env vars, and execs into ``vllm serve``.
-vLLM handles the OpenAI-compatible HTTP API, tool calling, and weight loading.
+Reads config and dispatches through ``xr_ai_vllm.serve`` to either the
+pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm`` docker container
+(per ``vllm_backend`` in YAML). vLLM handles the OpenAI-compatible HTTP API,
+the native Llama-3.1 chat template, and tool-call parsing.
 
 Accepts ``--config <path>.yaml`` (auto-passed by xr-ai-launcher).
 
@@ -24,64 +26,32 @@ Config keys
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
     tool_call_parser:        str    vLLM --tool-call-parser (default: "llama3_json").
     enable_tool_choice:      bool   Pass --enable-auto-tool-choice (default: true).
+    vllm_backend:            str    "pip" (default) or "docker".
+    vllm_image:              str    NGC image when vllm_backend=docker
+                                    (default: nvcr.io/nvidia/vllm:26.04-py3).
 """
 import argparse
 import os
-import signal
-import subprocess
 import sys
-import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 import yaml
-from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import DEFAULT_IMAGE, serve
 
-_DEFAULT_MODEL             = "nvidia/Llama-3.1-Nemotron-Nano-8B-v1"
-_DEFAULT_PORT              = 8106
-_DEFAULT_HOST              = "0.0.0.0"
-_DEFAULT_SERVED_NAME       = "llm"
-_DEFAULT_SEQS              = 8
-_DEFAULT_TP                = 1
-_DEFAULT_CTX               = 32768
-_DEFAULT_GPU_MEM           = 0.85
-_DEFAULT_EAGER             = False
-_DEFAULT_TOOL_CALL_PARSER  = "llama3_json"
+_DEFAULT_MODEL              = "nvidia/Llama-3.1-Nemotron-Nano-8B-v1"
+_DEFAULT_PORT               = 8106
+_DEFAULT_HOST               = "0.0.0.0"
+_DEFAULT_SERVED_NAME        = "llm"
+_DEFAULT_SEQS               = 8
+_DEFAULT_TP                 = 1
+_DEFAULT_CTX                = 32768
+_DEFAULT_GPU_MEM            = 0.85
+_DEFAULT_EAGER              = False
+_DEFAULT_TOOL_CALL_PARSER   = "llama3_json"
 _DEFAULT_ENABLE_TOOL_CHOICE = True
 
-
-def _idle_until_stopped(health_url: str, poll_s: float = 5.0) -> None:
-    """Block until the health endpoint stops responding or a signal arrives.
-
-    Used when reusing an already-running vLLM instance so the launcher sees a
-    live process. Exits cleanly on SIGTERM/SIGINT without touching vLLM.
-    """
-    stopped = [False]
-    orig_term = signal.getsignal(signal.SIGTERM)
-    orig_int  = signal.getsignal(signal.SIGINT)
-
-    def _on_signal(sig, _frame):
-        stopped[0] = True
-
-    signal.signal(signal.SIGTERM, _on_signal)
-    signal.signal(signal.SIGINT,  _on_signal)
-    try:
-        while not stopped[0]:
-            try:
-                with urllib.request.urlopen(health_url, timeout=2) as r:
-                    if r.status != 200:
-                        print("[llama_nemotron] existing vLLM stopped responding — exiting",
-                              flush=True)
-                        return
-            except Exception:
-                print("[llama_nemotron] existing vLLM unreachable — exiting", flush=True)
-                return
-            time.sleep(poll_s)
-    finally:
-        signal.signal(signal.SIGTERM, orig_term)
-        signal.signal(signal.SIGINT,  orig_int)
+_CONTAINER_NAME = "xr-ai-vllm-llama-nemotron-llm-server"
 
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
@@ -111,32 +81,34 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    model               = cfg.get("model",               _DEFAULT_MODEL)
-    host                = cfg.get("host",                 _DEFAULT_HOST)
-    port                = int(cfg.get("port",             _DEFAULT_PORT))
-    served_name         = cfg.get("served_model_name",    _DEFAULT_SERVED_NAME)
-    max_seqs            = int(cfg.get("max_num_seqs",     _DEFAULT_SEQS))
-    tp_size             = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
-    max_ctx             = int(cfg.get("max_model_len",    _DEFAULT_CTX))
-    gpu_mem             = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
-    enforce_eager       = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
-    tool_call_parser    = cfg.get("tool_call_parser",     _DEFAULT_TOOL_CALL_PARSER)
-    enable_tool_choice  = bool(cfg.get("enable_tool_choice", _DEFAULT_ENABLE_TOOL_CHOICE))
+    model              = cfg.get("model",                _DEFAULT_MODEL)
+    host               = cfg.get("host",                 _DEFAULT_HOST)
+    port               = int(cfg.get("port",             _DEFAULT_PORT))
+    served_name        = cfg.get("served_model_name",    _DEFAULT_SERVED_NAME)
+    max_seqs           = int(cfg.get("max_num_seqs",     _DEFAULT_SEQS))
+    tp_size            = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
+    max_ctx            = int(cfg.get("max_model_len",    _DEFAULT_CTX))
+    gpu_mem            = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
+    enforce_eager      = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
+    tool_call_parser   = cfg.get("tool_call_parser",     _DEFAULT_TOOL_CALL_PARSER)
+    enable_tool_choice = bool(cfg.get("enable_tool_choice", _DEFAULT_ENABLE_TOOL_CHOICE))
+    backend            = cfg.get("vllm_backend",         "pip")
+    image              = cfg.get("vllm_image",           DEFAULT_IMAGE)
 
-    if cuda_devices := cfg.get("cuda_visible_devices"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
+    cuda_devices = cfg.get("cuda_visible_devices")
+    if cuda_devices is not None:
+        cuda_devices = str(cuda_devices)
+        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
-    if hf_token := (cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")):
+    hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
+    if hf_token:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ["HF_HOME"] = str(model_cache)
 
-    argv = [
-        "vllm", "serve", model,
+    extra_serve_args = [
         "--served-model-name", served_name,
-        "--host", host,
-        "--port", str(port),
         "--trust-remote-code",
         "--max-num-seqs", str(max_seqs),
         "--tensor-parallel-size", str(tp_size),
@@ -144,47 +116,25 @@ def run() -> None:
         "--gpu-memory-utilization", str(gpu_mem),
     ]
     if enable_tool_choice:
-        argv += ["--enable-auto-tool-choice", "--tool-call-parser", tool_call_parser]
+        extra_serve_args += ["--enable-auto-tool-choice", "--tool-call-parser", tool_call_parser]
     if enforce_eager:
-        argv.append("--enforce-eager")
+        extra_serve_args.append("--enforce-eager")
 
-    health_url = f"http://127.0.0.1:{port}/health"
-
-    # Reuse an already-running vLLM instance (e.g. survived a worker crash).
-    try:
-        with urllib.request.urlopen(health_url, timeout=3) as r:
-            already_up = r.status == 200
-    except Exception:
-        already_up = False
-
-    if already_up:
-        print(f"[llama_nemotron] vLLM already running on port {port} — reusing", flush=True)
-        if ns.ready_file:
-            ns.ready_file.touch()
-        _idle_until_stopped(health_url)
-        return
-
-    print(f"[llama_nemotron] Launching vLLM  http://{host}:{port}/v1  model={model}", flush=True)
-    # start_new_session=True puts vLLM in its own process group so the
-    # launcher's killpg() does not reach it when shutting down the wrapper.
-    proc = subprocess.Popen(argv, start_new_session=True)
-
-    while True:
-        if proc.poll() is not None:
-            sys.exit(proc.returncode or 1)
-        try:
-            with urllib.request.urlopen(health_url, timeout=2) as r:
-                if r.status == 200:
-                    break
-        except Exception:
-            pass
-        time.sleep(2)
-
-    logger.info("Ready  →  http://localhost:{}/v1", port)
-    if ns.ready_file:
-        ns.ready_file.touch()
-
-    proc.wait()
+    serve(
+        backend=backend,
+        persistent=True,
+        image=image,
+        container_name=_CONTAINER_NAME,
+        log_prefix="llama_nemotron",
+        model=model,
+        extra_serve_args=extra_serve_args,
+        host=host,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token or None,
+        cuda_visible_devices=cuda_devices,
+        ready_file=ns.ready_file,
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-vllm"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+# Intentionally no runtime dependencies — stdlib only.
+# Dispatches vLLM hosting to either the pip-installed `vllm` CLI in the caller's
+# venv, or the NGC `nvcr.io/nvidia/vllm:<tag>` docker container.  Adding deps
+# here would defeat the docker mode (whose point is to avoid pulling vllm into
+# the wrapper's venv).
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_vllm"]

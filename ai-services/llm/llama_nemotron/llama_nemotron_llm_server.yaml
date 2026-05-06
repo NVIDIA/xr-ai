@@ -28,3 +28,15 @@ enforce_eager:          false
 # Set enable_tool_choice: false to disable tool calling entirely.
 enable_tool_choice: true
 tool_call_parser:   llama3_json
+
+# vLLM runtime — pip-installed vllm (default) or NGC docker container.
+#   pip     — vllm CLI from this wrapper's venv (today's behavior)
+#   docker  — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …`
+# Both honor the same config keys above; only the runtime hosting vllm differs.
+# docker mode requires Docker Engine + NVIDIA Container Toolkit and a
+# `docker login nvcr.io` (or NGC_API_KEY in the environment).
+vllm_backend: docker
+
+# Container image used when vllm_backend: docker.  Override to pin a different
+# tag, an internal mirror, or a custom build.
+vllm_image: nvcr.io/nvidia/vllm:26.04-py3

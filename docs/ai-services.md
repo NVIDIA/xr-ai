@@ -17,13 +17,13 @@ based on the tool-calling / reasoning / hardware trade-offs documented below.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
-| `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | transformers in-process |
+| `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
 | `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `ai-services/tts/magpie/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
-| `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | transformers in-process (+ LMFE) |
-| `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 | vLLM (execvp shim) |
-| `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4 / FP8 / BF16, GPU-selected) | vLLM — multimodal (text + video) |
+| `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
+| `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
+| `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4 / FP8 / BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → hub |
 | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8220 | — | FastMCP → vlm-server (`ask_image` tool) |
@@ -127,16 +127,20 @@ async with httpx.AsyncClient() as client:
 
 ## vLLM model persistence
 
-The three vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
-`nemotron3_nano_llm_server`) **survive stack restarts by design**. Each wrapper
-script checks its health endpoint before spawning vLLM:
+The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+`nemotron3_nano_llm_server`) **survive stack restarts by design**.
+`nemotron_omni_llm_server` is foreground (dies with the wrapper). Each
+persistent wrapper script checks its health endpoint before spawning vLLM:
 
 - **Already running** → touch the ready file immediately, then idle. Stack is
   ready in seconds; no model reload.
 - **Not running** → spawn vLLM normally, wait for `/health`, touch ready file.
 
-vLLM is spawned with `start_new_session=True` so the launcher's `killpg()` does
-not reach it on shutdown. The wrapper exits cleanly; vLLM keeps running.
+In pip mode, vLLM is spawned with `start_new_session=True` so the launcher's
+`killpg()` does not reach it on shutdown. In docker mode, the container is
+launched detached (`docker run -d --name xr-ai-vllm-<service>`) so it
+similarly outlives the wrapper. Either way the wrapper exits cleanly and
+vLLM keeps running.
 
 **Stopping the persisted servers** — run from the sample directory:
 
@@ -144,35 +148,106 @@ not reach it on shutdown. The wrapper exits cleanly; vLLM keeps running.
 uv run xr_render_demo --stop
 ```
 
-This hits each model server's `/health` endpoint, finds the listening PID via
-`ss` (or `lsof`), sends `SIGTERM`, and waits up to 20 s before `SIGKILL`. It
-is safe to run while the stack is down — processes that are not running are
-silently skipped.
+This hits each model server's `/health` endpoint, then either runs
+`docker stop <container_name>` (docker-mode servers) or finds the listening
+PID via `ss`/`lsof` and sends `SIGTERM` (pip-mode), escalating to
+`docker kill` / `SIGKILL` after 20 s. It is safe to run while the stack is
+down — processes/containers that are not running are silently skipped.
 
-The target ports are defined in `_PERSISTENT_SERVERS` in `main.py` and match the
-defaults in the per-profile YAML files. Update that list if you change the port
-in a YAML.
+The target ports and container names are defined in `_PERSISTENT_SERVERS` in
+`main.py` and match the defaults in the per-profile YAML files. Update that
+list if you change the port or container name.
+
+## Choosing the vLLM runtime (pip vs Docker)
+
+All four vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`) accept a
+`vllm_backend:` key in their YAML to pick how vLLM is hosted:
+
+| `vllm_backend` | Runtime | Default | Use when |
+|---|---|---|---|
+| `pip` | `vllm serve` from the wrapper's venv | yes | Standard development; fastest iteration; works offline once weights are cached. |
+| `docker` | `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …` | no | Trying NVIDIA's optimized vLLM container; pinning a specific NGC release; reproducing a deployment image. |
+
+Both modes honor identical config keys — same model, same port, same vLLM
+flags. The dispatcher lives in `utils/xr-ai-vllm/`. Switching is one YAML edit:
+
+```yaml
+vllm_backend: docker
+vllm_image:   nvcr.io/nvidia/vllm:26.04-py3
+```
+
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.04-py3`; override to pin
+another tag, an internal mirror, or a custom build.
+
+### docker mode — prerequisites
+
+- **Docker Engine** with the user in the `docker` group (`docker version`
+  must succeed without `sudo`).
+- **NVIDIA Container Toolkit** so `--gpus` works:
+  https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+- **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
+  `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
+  `load_credentials()` from `~/.config/xr-ai/credentials.json` per
+  [`docs/credentials.md`](credentials.md)). Otherwise log in manually once:
+
+  ```bash
+  docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY
+  ```
+
+Existing `~/.docker/config.json` entries take priority and are not overwritten.
+
+### docker mode — runtime details
+
+- Container is launched with `--network host --ipc host --gpus …` (matches
+  the existing LiveKit container precedent and gives vLLM the shared-memory
+  region its workers expect).
+- The host `model_cache` is bind-mounted at the same path inside the
+  container and `HF_HOME` is set to it, so weights cached by pip mode are
+  reused by docker mode and vice versa.
+- Container name is deterministic per service: `xr-ai-vllm-vlm-server`,
+  `xr-ai-vllm-llama-nemotron-llm-server`,
+  `xr-ai-vllm-nemotron3-nano-llm-server`,
+  `xr-ai-vllm-nemotron-omni-llm-server`.
+- Persistence parity: `vlm_server`, `llama_nemotron_llm_server`, and
+  `nemotron3_nano_llm_server` run detached (`docker run -d --rm --name …`) so
+  the container survives stack restarts, mirroring their pip-mode
+  `start_new_session=True` behavior. `nemotron_omni_llm_server` runs
+  foreground (container exits with the wrapper) — same as its pip-mode
+  semantics.
+
+### Cleanup
+
+`uv run xr_render_demo --stop` works for both modes. The cleanup path probes
+`/health` first; for docker mode it then runs `docker stop <container_name>`
+(escalating to `docker kill` after 20 s); for pip mode it falls back to the
+port → PID → SIGTERM/SIGKILL path. Same UX for both.
 
 ## Per-server notes
 
-- **vlm-server** loads Cosmos-Reason1-7B in-process via HuggingFace transformers.
-  Model warms up at startup; strips `<think>…</think>` blocks automatically.
-- **llm/llama_nemotron** loads Llama-3.1-Nemotron-Nano-8B-v1 via HuggingFace
-  transformers (no `trust_remote_code`). Native Llama-3.1 tool calling —
-  `tools=[...]` in the request is rendered via the model's chat template and
-  decoding is grammar-constrained by `lm-format-enforcer` so the tool-call JSON
-  is always syntactically valid. Per-turn reasoning toggle via
-  `"detailed thinking on"` / `"detailed thinking off"` in a system or user message;
-  reasoning preamble is **not** stripped server-side. See
+- **vlm-server** is a thin launcher around `vllm serve` for Cosmos-Reason1-7B
+  (or any Qwen2.5-VL-compatible VLM). vLLM handles weight loading, image
+  decoding, and the OpenAI-compatible HTTP API. Hosting backend is selectable
+  per YAML — see *Choosing the vLLM runtime* above.
+- **llm/llama_nemotron** is a thin wrapper around `vllm serve` for
+  `Llama-3.1-Nemotron-Nano-8B-v1`. vLLM handles native Llama-3.1 tool calling
+  via the `llama3_json` parser — `tools=[...]` in the request is rendered via
+  the model's chat template and the resulting tool calls come back in OpenAI
+  wire format (`finish_reason: "tool_calls"`). Per-turn reasoning toggle via
+  `"detailed thinking on"` / `"detailed thinking off"` in a system or user
+  message; reasoning preamble is **not** stripped server-side. Hosting backend
+  is selectable per YAML (see *Choosing the vLLM runtime*). See
   [`ai-services/llm/llama_nemotron/README.md`](../ai-services/llm/llama_nemotron/README.md)
   for the full HTTP contract and tuning knobs.
-- **llm/nemotron3_nano** is a ~200-line `execvp` shim into vLLM serving
-  `NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4`. vLLM handles tool calling
-  (`qwen3_coder` parser), reasoning extraction (`nano_v3` parser — auto-fetched
-  into `model_cache`), and FlashInfer FP4 MoE kernels. Requires a Blackwell-class
-  GPU (B200 / RTX PRO 6000) for native FP4; swap to the BF16 model variant for
-  Hopper/Ampere. `enforce_eager: true` by default to avoid the silent 3–8 min
-  CUDA graph + FlashInfer autotune on cold start. See
+- **llm/nemotron3_nano** is a thin wrapper around `vllm serve` for
+  `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
+  capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning
+  extraction (`nano_v3` parser — auto-fetched into `model_cache`), and
+  FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 / RTX PRO
+  6000) for native FP4; swap to FP8 / BF16 variants for Hopper/Ampere.
+  `enforce_eager: true` by default to avoid the silent 3–8 min CUDA graph +
+  FlashInfer autotune on cold start. Hosting backend is selectable per YAML
+  (see *Choosing the vLLM runtime*). See
   [`ai-services/llm/nemotron3_nano/README.md`](../ai-services/llm/nemotron3_nano/README.md)
   for the vLLM flags it forwards and Blackwell prerequisites.
 - **llm/nemotron_omni** is a vLLM-backed multimodal LLM serving
@@ -181,7 +256,9 @@ in a YAML.
   capability: NVFP4 on Blackwell (SM100+), FP8 on Ada/Hopper, BF16 forced via
   `use_bf16: true` for highest quality at the largest VRAM cost. Same
   OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
-  swap backends.
+  swap backends. Hosting backend is selectable per YAML (see *Choosing the
+  vLLM runtime*); runs foreground in both pip and docker modes (no
+  cross-restart persistence).
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; `language` / `temperature` form fields are accepted but ignored.
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.

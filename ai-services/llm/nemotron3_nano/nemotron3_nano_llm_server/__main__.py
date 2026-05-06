@@ -5,8 +5,9 @@
 nemotron3_nano_llm_server — vLLM launcher for Nemotron-3-Nano-30B.
 
 Selects the FP8 or NVFP4 model variant based on GPU compute capability,
-downloads the nano_v3 reasoning-parser plugin once, and execs into
-``vllm serve``.
+downloads the nano_v3 reasoning-parser plugin once, and dispatches through
+``xr_ai_vllm.serve`` to either the pip-installed ``vllm`` CLI or the NGC
+``nvcr.io/nvidia/vllm`` docker container (per ``vllm_backend`` in YAML).
 
 Accepts ``--config <path>.yaml`` (auto-passed by xr-ai-launcher).
 
@@ -25,20 +26,21 @@ Config keys
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
     enforce_eager:           bool   Skip CUDA graph capture (default: true).
     parser_url:              str    URL to fetch nano_v3_reasoning_parser.py.
+    vllm_backend:            str    "pip" (default) or "docker".
+    vllm_image:              str    NGC image when vllm_backend=docker
+                                    (default: nvcr.io/nvidia/vllm:26.04-py3).
 """
 import argparse
 import os
-import signal
 import subprocess
 import sys
-import time
-import urllib.error
 import urllib.request
 from pathlib import Path
 
 import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_vllm import DEFAULT_IMAGE, serve
 
 _MODEL_BLACKWELL  = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
 _MODEL_ADA        = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
@@ -57,6 +59,8 @@ _PARSER_URL_DEFAULT = (
     f"/resolve/main/{_PARSER_FILENAME}"
 )
 
+_CONTAINER_NAME = "xr-ai-vllm-nemotron3-nano-llm-server"
+
 
 def _gpu_compute_major() -> int:
     try:
@@ -73,34 +77,6 @@ def _gpu_compute_major() -> int:
             exc,
         )
     return 0
-
-
-def _idle_until_stopped(health_url: str, poll_s: float = 5.0) -> None:
-    """Block until the health endpoint stops responding or a signal arrives."""
-    stopped = [False]
-    orig_term = signal.getsignal(signal.SIGTERM)
-    orig_int  = signal.getsignal(signal.SIGINT)
-
-    def _on_signal(sig, _frame):
-        stopped[0] = True
-
-    signal.signal(signal.SIGTERM, _on_signal)
-    signal.signal(signal.SIGINT,  _on_signal)
-    try:
-        while not stopped[0]:
-            try:
-                with urllib.request.urlopen(health_url, timeout=2) as r:
-                    if r.status != 200:
-                        print("[nemotron3_nano] existing vLLM stopped responding — exiting",
-                              flush=True)
-                        return
-            except Exception:
-                print("[nemotron3_nano] existing vLLM unreachable — exiting", flush=True)
-                return
-            time.sleep(poll_s)
-    finally:
-        signal.signal(signal.SIGTERM, orig_term)
-        signal.signal(signal.SIGINT,  orig_int)
 
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
@@ -140,8 +116,10 @@ def run() -> None:
             cfg = yaml.safe_load(f) or {}
 
     # Set before _gpu_compute_major() so nvidia-smi queries the right device.
-    if cuda_devices := cfg.get("cuda_visible_devices"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
+    cuda_devices = cfg.get("cuda_visible_devices")
+    if cuda_devices is not None:
+        cuda_devices = str(cuda_devices)
+        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
 
     major = _gpu_compute_major()
     if major >= 10:
@@ -152,7 +130,7 @@ def run() -> None:
         arch  = f"SM{major}0" if major > 0 else "unknown GPU"
         logger.info("Pre-Blackwell ({}) → {}", arch, model)
 
-    host          = cfg.get("host",               _DEFAULT_HOST)
+    host          = cfg.get("host",                _DEFAULT_HOST)
     port          = int(cfg.get("port",            _DEFAULT_PORT))
     served_name   = cfg.get("served_model_name",   _DEFAULT_SERVED)
     max_seqs      = int(cfg.get("max_num_seqs",    _DEFAULT_SEQS))
@@ -161,17 +139,21 @@ def run() -> None:
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
     enforce_eager = bool(cfg.get("enforce_eager",  _DEFAULT_EAGER))
     parser_url    = cfg.get("parser_url",          _PARSER_URL_DEFAULT)
+    backend       = cfg.get("vllm_backend",        "pip")
+    image         = cfg.get("vllm_image",          DEFAULT_IMAGE)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
-    if hf_token := (cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")):
+    hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
+    if hf_token:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ["HF_HOME"] = str(model_cache)
 
     # FlashInfer JIT-compiles CUTLASS MoE kernels on first run via nvcc.
-    # Ensure nvcc is on PATH (CUDA toolkit may not be in the login shell's PATH
-    # even when CUDA is installed) and cap ninja parallelism so concurrent nvcc
+    # Ensure nvcc is on PATH and cap ninja parallelism so concurrent nvcc
     # processes don't exhaust RAM on unified-memory machines like DGX Spark.
+    # In docker mode the container ships its own toolchain, but exporting
+    # CUDA_HOME / MAX_JOBS here is harmless.
     _cuda_bin = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda")) / "bin"
     if _cuda_bin.exists():
         os.environ["PATH"] = str(_cuda_bin) + ":" + os.environ.get("PATH", "")
@@ -179,11 +161,8 @@ def run() -> None:
 
     parser_path = _ensure_reasoning_parser(model_cache, parser_url)
 
-    argv = [
-        "vllm", "serve", model,
+    extra_serve_args = [
         "--served-model-name", served_name,
-        "--host", host,
-        "--port", str(port),
         "--trust-remote-code",
         "--enable-auto-tool-choice",
         "--tool-call-parser", "qwen3_coder",
@@ -195,47 +174,25 @@ def run() -> None:
         "--gpu-memory-utilization", str(gpu_mem),
     ]
     if major >= 10:
-        argv.extend(["--kv-cache-dtype", "fp8"])
+        extra_serve_args += ["--kv-cache-dtype", "fp8"]
     if enforce_eager:
-        argv.append("--enforce-eager")
+        extra_serve_args.append("--enforce-eager")
 
-    health_url = f"http://127.0.0.1:{port}/health"
-
-    # Reuse an already-running vLLM instance (e.g. survived a worker crash).
-    try:
-        with urllib.request.urlopen(health_url, timeout=3) as r:
-            already_up = r.status == 200
-    except Exception:
-        already_up = False
-
-    if already_up:
-        print(f"[nemotron3_nano] vLLM already running on port {port} — reusing", flush=True)
-        if ns.ready_file:
-            ns.ready_file.touch()
-        _idle_until_stopped(health_url)
-        return
-
-    print(f"[nemotron3_nano] Launching vLLM  http://{host}:{port}/v1  model={model}", flush=True)
-    # start_new_session=True puts vLLM in its own process group so the
-    # launcher's killpg() does not reach it when shutting down the wrapper.
-    proc = subprocess.Popen(argv, start_new_session=True)
-
-    while True:
-        if proc.poll() is not None:
-            sys.exit(proc.returncode or 1)
-        try:
-            with urllib.request.urlopen(health_url, timeout=2) as r:
-                if r.status == 200:
-                    break
-        except Exception:
-            pass
-        time.sleep(2)
-
-    logger.info("Ready  →  http://localhost:{}/v1", port)
-    if ns.ready_file:
-        ns.ready_file.touch()
-
-    proc.wait()
+    serve(
+        backend=backend,
+        persistent=True,
+        image=image,
+        container_name=_CONTAINER_NAME,
+        log_prefix="nemotron3_nano",
+        model=model,
+        extra_serve_args=extra_serve_args,
+        host=host,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token or None,
+        cuda_visible_devices=cuda_devices,
+        ready_file=ns.ready_file,
+    )
 
 
 if __name__ == "__main__":
