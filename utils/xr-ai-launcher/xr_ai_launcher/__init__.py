@@ -28,12 +28,14 @@ Typical usage::
 
 from ._cloudxr_env import XR_RUNTIME_VAR, load_cloudxr_env
 from ._credentials import ensure_credentials, load_credentials
+from ._gpu import detect_gpu_config
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
 
 __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
     "ensure_credentials", "load_credentials",
+    "detect_gpu_config",
     "ManagedProcess",
     "Parallel", "Process", "run_stack",
 ]

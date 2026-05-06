@@ -50,8 +50,9 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| simple-vlm-example | ~23 GB |
-| xr-render-demo | ~70 GB |
+| model-servers (all 4 models) | ~70 GB |
+| simple-vlm-example (standalone) | ~23 GB |
+| xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
 **Software**
@@ -96,16 +97,40 @@ frames are dropped if it is closed.
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
 
-Each sample is self-contained: running it starts the hub and every other
-required process automatically. No separate server launch step.
+Lightweight samples (`simple-vlm-example`) are self-contained — one command
+starts everything.  Heavier demos (`xr-render-demo`) split model loading from
+the demo itself: start `model-servers` once, then run the demo as many times
+as you like without reloading weights.
 
 ## Quickstart
 
-Every sample follows the same two-step pattern: **start the server, then
-connect a client.**  The server command launches the hub, model services,
-and agent together.  Once it is ready, any supported client — web browser,
-Android app, iOS/visionOS app, or AR glasses — can join the session using
-the token printed on startup.
+Every sample follows the same pattern: **start the server, then connect a
+client.**  Once it is ready, any supported client — web browser, Android app,
+iOS/visionOS app, or AR glasses — can join the session using the token printed
+on startup.
+
+### Model servers (shared AI services)
+
+`model-servers` starts the four inference services used across demos and exits
+immediately — the services keep running in the background with weights hot.
+Start this once before running `xr-render-demo`, or whenever you want to
+pre-warm models:
+
+```bash
+cd agent-samples/model-servers
+uv sync
+uv run model_servers
+```
+
+GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
+On first run each model downloads from HuggingFace (~50 GB total; can take
+tens of minutes).  On subsequent runs the containers restart in under a minute.
+
+To stop all model servers when done:
+
+```bash
+uv run model_servers --stop
+```
 
 ### Simple VLM example (vision Q&A over voice + text)
 
@@ -114,21 +139,35 @@ channel, or send the literal text `"ping"` — all routes go through the
 same VLM pipeline against the latest video frame.  Replies arrive as
 streaming Piper TTS audio plus a `vlm.response` text message.
 
-Requires ~16 GB VRAM (default VLM is `nvidia/Cosmos-Reason1-7B`, NVIDIA
-Open Model License + Apache 2.0).
+Uses `nvidia/Cosmos-Reason1-7B` (NVIDIA Open Model License + Apache 2.0).
 
-#### Step 1 — Start the server
+There are two ways to run it:
+
+**Standalone** (~23 GB VRAM) — starts its own VLM and STT, owns them for the
+session, and stops them when you exit:
 
 ```bash
-cd xr-ai/agent-samples/simple-vlm-example
+cd agent-samples/simple-vlm-example
 uv sync
 uv run simple_vlm_example
 ```
 
-The hub, VLM, STT, and TTS services all start together.  On the very first
-run the worker downloads model weights from HuggingFace (~16 GB total; can
-take several minutes).  After that, the stack is ready in 30–60 s.  When it
-is, the hub prints:
+On the very first run weights download from HuggingFace (~23 GB; can take
+several minutes).
+
+**With model-servers pre-running** — if VLM (port 8100) and STT (port 8103)
+are already up from `model-servers`, the demo detects them at startup and
+reuses them.  No extra flags needed.  When you exit, those services keep
+running.
+
+#### Step 1 — Start the server
+
+```bash
+uv run simple_vlm_example
+```
+
+The hub, VLM, STT, and TTS start together (or reuse running services).
+When ready the hub prints:
 
 ```
 [hub]   LiveKit URL : ws://0.0.0.0:7880
@@ -189,8 +228,23 @@ voice — radius follows loudness, colour and position follow spoken commands
 Quest 3 / Vision Pro on the same LAN, or the IWER emulator built into the
 web client for desktop dev.
 
+**Requires `model-servers` to be running first** — the demo does not start
+its own model services.
+
+#### Step 1 — Start model servers (once)
+
 ```bash
-cd xr-ai/agent-samples/xr-render-demo
+cd agent-samples/model-servers
+uv sync && uv run model_servers
+```
+
+This exits immediately once all four services are ready.  Weights stay loaded
+in the background.
+
+#### Step 2 — Start the demo
+
+```bash
+cd agent-samples/xr-render-demo
 uv sync
 uv run xr_render_demo
 ```
@@ -204,24 +258,26 @@ binary, so the auto-download is not available — build LOVR from source and
 export `LOVR_BIN`. See
 [`docs/troubleshooting.md`](docs/troubleshooting.md#dgx-spark--lovr-auto-download-is-not-supported).
 
-To use a custom LOVR build instead:
+To use a custom LOVR build:
 
 ```bash
 export LOVR_BIN=/path/to/your/lovr   # or set lovr_bin: in render_mcp.yaml
 uv run xr_render_demo
 ```
 
-Plan ~17 GB VRAM for the LLM + STT models on first run (weights download
-on demand).  To free VRAM after exit see
-[`docs/troubleshooting.md`](docs/troubleshooting.md) — vLLM-backed servers
-intentionally survive stack restarts.
+To stop the model servers when done:
+
+```bash
+cd agent-samples/model-servers
+uv run model_servers --stop
+```
 
 ---
 
 ### Hub only (server-runtime standalone)
 
 ```bash
-cd xr-ai/server-runtime
+cd server-runtime
 uv sync
 uv run xr_media_hub
 ```
@@ -291,7 +347,7 @@ core IPC tests run without Docker or LiveKit — they spin up real
 `ReturnAudioFlush` control path.
 
 ```bash
-cd xr-ai/tests
+cd tests
 uv sync
 uv run pytest -v
 ```

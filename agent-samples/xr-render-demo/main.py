@@ -15,6 +15,12 @@ loudness, and pushes a render command to render-mcp. render-mcp owns the LOVR
 child process and forwards render commands to it. CloudXR runs alongside as
 its own stream — neither stack passes through the other.
 
+Prerequisites
+-------------
+The four AI inference servers must be running before this demo starts:
+
+    uv run --project agent-samples/model-servers model_servers
+
 How to run (from the repo root or any directory):
     uv run --project agent-samples/xr-render-demo xr_render_demo
 
@@ -30,7 +36,6 @@ WebXR DevUI on desktop). Speak; the sphere tracks your voice in the headset.
 
 The CloudXR EULA is accepted via cloudxr_runtime.yaml (see ``accept_eula``).
 """
-import argparse
 import os
 import platform
 import re
@@ -43,128 +48,43 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_launcher import Process, run_stack
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import stop_persistent_servers
 
 _BASE = Path(__file__).resolve().parent
 
 
-def _detect_gpu_config() -> str:
-    """Return the GPU config profile by querying nvidia-smi.
+# ── Process stack ─────────────────────────────────────────────────────────────
+#
+# Model servers are launch_mode="reuse" — they are started and owned by
+# model-servers, not this demo.  The entries document the dependency and
+# the launcher skips spawning them; start them first with:
+#   uv run --project agent-samples/model-servers model_servers
 
-    Profiles
-    --------
-    dual_48G_ada   — 2× ADA 48 GB (default / current dev box)
-    spark          — 1× Blackwell GB10 (DGX Spark; ~96 GiB GPU-visible HBM)
-    96G_blackwell  — 1× Blackwell ~96 GB
+_PROCESSES: list[Process] = [
+    Process("stt",       "../../ai-services/stt-server",         "stt_server",
+            launch_mode="reuse"),
+    Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+            launch_mode="reuse"),
+    Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
+            launch_mode="reuse"),
+    Process("llm",       "../../ai-services/llm/llama_nemotron",  "llama_nemotron_llm_server",
+            launch_mode="reuse"),
+    Process("hub",        "../../server-runtime",                "xr_media_hub",
+            config="yaml/xr_media_hub.yaml"),
+    Process("cloudxr",    "../../cloudxr-runtime",               "cloudxr_runtime",
+            config="yaml/cloudxr_runtime.yaml"),
+    Process("tts",        "../../ai-services/tts/piper",         "piper_tts_server",
+            config="yaml/piper_tts_server.yaml"),
+    Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",     "vlm_mcp_server",
+            config="yaml/vlm_mcp_server.yaml"),
+    Process("video-mcp",  "../../agent-mcp-servers/video-mcp",   "video_mcp_server",
+            config="yaml/video_mcp_server.yaml"),
+    Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),
+    Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server",
+            config="yaml/oxr_mcp_server.yaml"),
+    Process("worker",     "worker",                              "xr_render_demo_worker",
+            config="yaml/xr_render_demo_worker.yaml"),
+]
 
-    Falls back to ``dual_48G_ada`` on any detection failure.
-    """
-    # Query name, compute_cap, and memory.total.
-    # Use only csv,noheader — nounits is not supported on all driver versions.
-    # Memory values arrive as "47940 MiB" or "Not Supported"; strip units below.
-    try:
-        raw = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=name,compute_cap,memory.total",
-             "--format=csv,noheader"],
-            text=True, stderr=subprocess.DEVNULL,
-        ).strip().splitlines()
-    except Exception as exc:
-        logger.warning("nvidia-smi unavailable ({}) — using dual_48G_ada", exc)
-        return "dual_48G_ada"
-
-    # Known Spark GPU names (unified memory, no discrete memory.total).
-    _SPARK_NAMES = {"gb10", "b10"}
-
-    gpus: list[tuple[str, float, float]] = []  # (name, compute_cap, mem_mib)
-    for line in raw:
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) < 3:
-            continue
-        name, cap_str, mem_str = parts[0], parts[1], parts[2]
-        try:
-            cap = float(cap_str)
-        except ValueError:
-            continue
-        # Memory: "47940 MiB", "N/A", "Not Supported" → extract number or 0
-        mem = 0.0
-        for tok in mem_str.split():
-            try:
-                mem = float(tok)
-                break
-            except ValueError:
-                pass
-        gpus.append((name.lower(), cap, mem))
-
-    if not gpus:
-        logger.warning("GPU detection returned no parseable data — using dual_48G_ada")
-        return "dual_48G_ada"
-
-    n_gpus       = len(gpus)
-    first_name   = gpus[0][0]
-    first_cap    = gpus[0][1]
-    is_blackwell = first_cap >= 10.0
-    # Spark: name contains a known Spark identifier, OR all memory values are
-    # zero (unified memory) and the GPU is Blackwell.
-    is_spark     = any(s in first_name for s in _SPARK_NAMES)
-    known_mem    = [m for _, _, m in gpus if m > 0]
-    total_mem_gb = sum(known_mem) / 1024 if known_mem else 0.0
-
-    if is_blackwell and (is_spark or (not known_mem)):
-        cfg = "spark"
-    elif is_blackwell and total_mem_gb >= 120:
-        cfg = "spark"
-    elif is_blackwell:
-        cfg = "96G_blackwell"
-    elif n_gpus >= 2:
-        cfg = "dual_48G_ada"
-    else:
-        cfg = "dual_48G_ada"
-
-    mem_str = f"{total_mem_gb:.0f} GiB" if known_mem else "unified memory"
-    logger.info(
-        "GPU config: {}  ({}x {}, {}, SM{:.1f})",
-        cfg, n_gpus, gpus[0][0].upper(), mem_str, first_cap,
-    )
-    return cfg
-
-
-# agent-llm (Nemotron-30B) loads first so its FlashInfer MoE JIT compilation
-# runs with the full GPU free.  The compiled kernels are cached after the
-# first run.  On ADA, nemotron3_nano is pinned to cuda:1 so this order has
-# no downside there either.
-def _build_processes() -> list[Process]:
-    """Detect the GPU profile and return the per-profile process list.
-
-    Deferred to call time (rather than module import) so log calls inside
-    ``_detect_gpu_config`` happen after ``setup_logging`` has installed
-    loguru sinks.
-    """
-    ai = f"yaml/{_detect_gpu_config()}"
-    return [
-        Process("hub",        "../../server-runtime",                 "xr_media_hub",
-                config="yaml/xr_media_hub.yaml"),
-        Process("cloudxr",    "../../cloudxr-runtime",                "cloudxr_runtime",
-                config="yaml/cloudxr_runtime.yaml"),
-        Process("stt",        "../../ai-services/stt-server",         "stt_server",
-                config=f"{ai}/stt_server.yaml"),
-        Process("tts",        "../../ai-services/tts/piper",          "piper_tts_server",
-                config=f"{ai}/piper_tts_server.yaml"),
-        Process("agent-llm",  "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
-                config=f"{ai}/nemotron3_nano_llm_server.yaml"),
-        Process("vlm",        "../../ai-services/vlm-server",         "vlm_server",
-                config=f"{ai}/vlm_server.yaml"),
-        Process("llm",        "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
-                config=f"{ai}/llama_nemotron_llm_server.yaml"),
-        Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",      "vlm_mcp_server",
-                config="yaml/vlm_mcp_server.yaml"),
-        Process("video-mcp",  "../../agent-mcp-servers/video-mcp",    "video_mcp_server",
-                config="yaml/video_mcp_server.yaml"),
-        Process("render-mcp", "../../agent-mcp-servers/render-mcp",   "render_mcp"),
-        Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",      "oxr_mcp_server",
-                config="yaml/oxr_mcp_server.yaml"),
-        Process("worker",     "worker",                               "xr_render_demo_worker",
-                config="yaml/xr_render_demo_worker.yaml"),
-    ]
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.
 _LOVR_BIN_LINE = re.compile(r"^\s*lovr_bin\s*:\s*\S")
@@ -287,42 +207,13 @@ def _ensure_web_vendor() -> None:
     logger.info("Web vendor bundle ready")
 
 
-# ── Model cleanup (--stop) ────────────────────────────────────────────────────
-
-# Persisted servers cleaned up by --stop.  Each entry is
-# (label, port, container_name|None).  `container_name` is the docker name the
-# corresponding wrapper uses when vllm_backend: docker; pass None for non-vLLM
-# services that don't have a container variant.
-# stop_persistent_servers tries `docker stop <container_name>` first when set,
-# falling back to port → pid → SIGTERM/SIGKILL for the pip path.
-_PERSISTENT_SERVERS: list[tuple[str, int, str | None]] = [
-    ("vlm",       8100, "xr-ai-vllm-vlm-server"),
-    ("llm",       8106, "xr-ai-vllm-llama-nemotron-llm-server"),
-    ("agent-llm", 8107, "xr-ai-vllm-nemotron3-nano-llm-server"),
-]
-
-
-def _stop_models() -> None:
-    stop_persistent_servers(_PERSISTENT_SERVERS)
-
-
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def run() -> None:
     setup_logging("orchestrator", namespace="xr-render-demo")
-
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--stop", action="store_true",
-                   help="Stop any persisted vLLM model servers and exit.")
-    ns, _ = p.parse_known_args()
-
-    if ns.stop:
-        _stop_models()
-        return
-
     _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(_build_processes(), _BASE)
+    run_stack(_PROCESSES, _BASE)
 
 
 if __name__ == "__main__":

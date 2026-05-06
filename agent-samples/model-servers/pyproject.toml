@@ -6,20 +6,23 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "simple-vlm-example"
+name = "model-servers"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
+    # Used by --stop to clean up persisted vLLM servers.
+    "xr-ai-vllm",
 ]
 
 [tool.uv.sources]
 xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-vllm     = { path = "../../utils/xr-ai-vllm",    editable = true }
 
 [project.scripts]
-simple_vlm_example = "main:run"
+model_servers = "main:run"
 
 [tool.hatch.build.targets.wheel]
 only-include = ["main.py"]

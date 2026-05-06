@@ -1,14 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Piper TTS server reference configuration.
-# Copy to your agent sample root as piper_tts_server.yaml and edit as needed.
-#
+# Piper TTS server configuration.
 # Browse available voices: https://huggingface.co/rhasspy/piper-voices
-# Voice name format: <locale>-<speaker>-<quality>
-# Examples: en_US-lessac-medium, en_GB-alan-medium, de_DE-thorsten-medium
 
 voice:       en_US-lessac-medium
 port:        8105
 use_cuda:    false    # CPU is fast enough (~100 ms/sentence)
-model_cache: ../../../../models
+model_cache: ../../../models
