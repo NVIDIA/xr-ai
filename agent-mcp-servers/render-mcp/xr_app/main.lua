@@ -141,7 +141,7 @@ end
 
 function lovr.load()
     lovr.graphics.setBackgroundColor(0, 0, 0, 0)
-    lovr.headset.setClipDistance(0.1, 256.0)
+    lovr.headset.setClipDistance(256.0, 0.15)
     print("[render-mcp-scene] lovr.load  socket=" .. socket_addr)
 
     local ok_a, active = pcall(lovr.headset.isActive)
