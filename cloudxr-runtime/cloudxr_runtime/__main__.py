@@ -52,7 +52,7 @@ async def _wait_with_progress(
         if lock_file.exists():
             return True
         if elapsed > 0 and elapsed % 10 == 0:
-            logger.info("[{}s] still waiting for CloudXR runtime…", elapsed)
+            logger.debug("[{}s] still waiting for CloudXR runtime…", elapsed)
         await asyncio.sleep(1)
         elapsed += 1
     return False

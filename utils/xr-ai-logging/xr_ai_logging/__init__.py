@@ -119,6 +119,10 @@ def setup_logging(name: str, *, namespace: str | None = None) -> Path:
     """
     verbose = _is_verbose()
 
+    # First call in a run (orchestrator) doesn't have the stamp env var yet —
+    # subprocesses inherit it. Used below to surface the log dir once.
+    is_first_call = "XR_AI_LOG_TIMESTAMP" not in os.environ
+
     stamp = os.environ.get("XR_AI_LOG_TIMESTAMP") or time.strftime(
         "%Y-%m-%d_%H-%M-%S",
     )
@@ -164,4 +168,8 @@ def setup_logging(name: str, *, namespace: str | None = None) -> Path:
         "logging initialised  name={}  namespace={}  verbose={}  file={}",
         name, ns, verbose, log_file,
     )
+    if is_first_call:
+        # Single banner from the orchestrator so the user knows where every
+        # subprocess log file for this run will live.
+        logger.info("logs → {}", log_dir)
     return log_file

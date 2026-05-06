@@ -81,7 +81,7 @@ async def _stats_loop() -> None:
             achps = _audio_counts.pop(pid, 0) / STATS_INTERVAL
             dps   = _data_counts.pop(pid, 0)  / STATS_INTERVAL
             parts.append(f"{pid}  video={fps:.1f}fps  audio={achps:.1f}ch/s  data={dps:.1f}msg/s")
-        logger.info("stats ─ {}", " │ ".join(parts))
+        logger.debug("stats ─ {}", " │ ".join(parts))
 
 
 async def main(ready_file: Path | None = None) -> None:
