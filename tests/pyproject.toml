@@ -14,6 +14,9 @@ dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-agent",
     "xr-media-hub",
+    "xr-ai-launcher",
+    "xr-ai-logging",
+    "xr-ai-vllm",
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -21,8 +24,11 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-agent  = { path = "../agent-sdk",      editable = true }
-xr-media-hub = { path = "../server-runtime", editable = true }
+xr-ai-agent    = { path = "../agent-sdk",               editable = true }
+xr-media-hub   = { path = "../server-runtime",          editable = true }
+xr-ai-launcher = { path = "../utils/xr-ai-launcher",   editable = true }
+xr-ai-logging  = { path = "../utils/xr-ai-logging",    editable = true }
+xr-ai-vllm     = { path = "../utils/xr-ai-vllm",       editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_tests"]
