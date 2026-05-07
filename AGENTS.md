@@ -14,6 +14,7 @@ historical decisions in `docs/changelog.md`.
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
+                    # xr-ai-pipecat: optional Pipecat transport bridge (heavier deps)
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
 ai-services/        # OpenAI-compatible inference servers (VLM, STT, TTS, LLM)
@@ -29,8 +30,10 @@ docs/               # Topic deep-dives + changelog
   `ProcessorEndpoint`; return traffic goes only to the originating client.
 - **Agents talk to the hub via IPC only.** LiveKit is an internal transport
   detail — never surface it to agents.
-- **`agent-sdk` (`xr-ai-agent`) depends only on `pyzmq` + `msgpack`.** No
-  LiveKit, FastAPI, or uvicorn.
+- **`agent-sdk/xr-ai-agent` depends only on `pyzmq` + `msgpack`.** No
+  LiveKit, FastAPI, or uvicorn. `agent-sdk/xr-ai-pipecat` is a separate
+  optional package with heavier deps (pipecat-ai, scipy, numpy, httpx,
+  fastmcp); it bridges `ProcessorEndpoint` to Pipecat pipelines.
 - **Workers never import from `server-runtime` or `xr_ai_launcher`.** Only
   `xr_ai_agent` + task-specific libs (numpy, torch, …).
 - **MCP servers are the agent's only interface to XR data and rendering.**

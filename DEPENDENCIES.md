@@ -43,6 +43,19 @@ xr-ai-agent  (agent-sdk/)
     └── pyzmq >=26.0
     └── msgpack >=1.0
 
+xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
+    └── xr-ai-agent   [editable: ..]
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── pipecat-ai >=0.0.46
+    └── numpy >=1.24
+    └── scipy >=1.11
+    └── httpx >=0.27
+    └── fastmcp >=0.4
+    Optional Pipecat transport bridge: connects ProcessorEndpoint (ZMQ IPC)
+    to a Pipecat frame pipeline. Resamples hub float32 audio → 16 kHz int16
+    for STT; converts TTS int16 PCM back to float32 AudioChunks for return.
+    Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
+
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
 
