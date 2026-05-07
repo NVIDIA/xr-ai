@@ -4,7 +4,6 @@
 """Unit tests for xr_ai_vllm._lifecycle pure helpers."""
 from __future__ import annotations
 
-import signal
 from unittest.mock import MagicMock, patch
 
 import pytest

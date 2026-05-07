@@ -7,8 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from xr_ai_vllm._docker import (
     _already_logged_in,
     _registry_for,
@@ -37,31 +35,27 @@ class TestRegistryFor:
 
 class TestAlreadyLoggedIn:
     def test_no_docker_config(self, tmp_path, monkeypatch):
-        import xr_ai_vllm._docker as _docker_mod
-        monkeypatch.setattr(_docker_mod, "_DOCKER_CONFIG", tmp_path / "config.json")
+        monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", tmp_path / "config.json")
         assert not _already_logged_in("nvcr.io")
 
     def test_registry_in_auths(self, tmp_path, monkeypatch):
         import json
-        import xr_ai_vllm._docker as _docker_mod
         cfg = tmp_path / "config.json"
         cfg.write_text(json.dumps({"auths": {"nvcr.io": {"auth": "dG9rZW4="}}}))
-        monkeypatch.setattr(_docker_mod, "_DOCKER_CONFIG", cfg)
+        monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", cfg)
         assert _already_logged_in("nvcr.io")
 
     def test_other_registry_not_present(self, tmp_path, monkeypatch):
         import json
-        import xr_ai_vllm._docker as _docker_mod
         cfg = tmp_path / "config.json"
         cfg.write_text(json.dumps({"auths": {"docker.io": {}}}))
-        monkeypatch.setattr(_docker_mod, "_DOCKER_CONFIG", cfg)
+        monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", cfg)
         assert not _already_logged_in("nvcr.io")
 
     def test_corrupt_config_returns_false(self, tmp_path, monkeypatch):
-        import xr_ai_vllm._docker as _docker_mod
         cfg = tmp_path / "config.json"
         cfg.write_text("not json{{{")
-        monkeypatch.setattr(_docker_mod, "_DOCKER_CONFIG", cfg)
+        monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", cfg)
         assert not _already_logged_in("nvcr.io")
 
 

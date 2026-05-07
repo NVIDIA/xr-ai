@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-import xr_ai_logging
 from xr_ai_logging import setup_logging
 
 
