@@ -226,6 +226,12 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Claude Code
+#  `.claude/` holds per-user local Claude Code configuration: custom subagents,
+#  agent memory, and session state. These are personal to each contributor and
+#  must not be committed. General agent guidelines live in AGENTS.md / CLAUDE.md.
+.claude/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
