@@ -174,7 +174,15 @@ def stop_container(name: str, timeout_s: int = 20) -> bool:
 
 
 def _registry_for(image: str) -> str | None:
-    """Return the registry host for *image* if it is fully qualified, else None."""
+    """Return the registry host for *image* if it is fully qualified, else None.
+
+    A registry is only present when the reference contains a `/` AND the first
+    segment looks like a host (contains `.` for a hostname or `:` for a port).
+    Without the `/` check a bare tagged image like ``"myimage:latest"`` would
+    be misread as a registry because of the tag's colon.
+    """
+    if "/" not in image:
+        return None
     head = image.split("/", 1)[0]
     return head if "." in head or ":" in head else None
 
