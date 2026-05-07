@@ -9,16 +9,25 @@ import os
 from pathlib import Path
 
 import pytest
+from loguru import logger
 
 from xr_ai_logging import setup_logging
 
 
 @pytest.fixture(autouse=True)
 def _clean_log_env(monkeypatch, tmp_path):
-    """Redirect log output to tmp_path and clear timestamp/namespace stamps."""
+    """Redirect log output to tmp_path and clear timestamp/namespace stamps.
+
+    `setup_logging` calls `logger.remove()` to wipe loguru's default sink.
+    Add a teardown that does the same so each test leaves the global loguru
+    state empty — otherwise a sink added by one test would still receive
+    records emitted by the next.
+    """
     monkeypatch.delenv("XR_AI_LOG_NAMESPACE", raising=False)
     monkeypatch.delenv("XR_AI_LOG_TIMESTAMP", raising=False)
     monkeypatch.setenv("XR_AI_LOG_ROOT", str(tmp_path))
+    yield
+    logger.remove()
 
 
 class TestSetupLoggingReturnValue:
@@ -27,6 +36,9 @@ class TestSetupLoggingReturnValue:
         assert isinstance(result, Path)
 
     def test_log_file_created(self, tmp_path):
+        # Loguru's `add(path, enqueue=True)` opens the file synchronously
+        # before returning, so the path exists immediately even though no
+        # record has been written yet.
         log_file = setup_logging("test-proc")
         assert log_file.exists()
 

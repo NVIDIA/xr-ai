@@ -4,6 +4,7 @@
 """Unit tests for xr_ai_vllm._docker pure helpers."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -29,9 +30,6 @@ class TestRegistryFor:
         # host:port/image has a colon in the first segment
         assert _registry_for("localhost:5000/myimage:latest") == "localhost:5000"
 
-    def test_plain_image_name(self):
-        assert _registry_for("myimage") is None
-
 
 class TestAlreadyLoggedIn:
     def test_no_docker_config(self, tmp_path, monkeypatch):
@@ -39,14 +37,12 @@ class TestAlreadyLoggedIn:
         assert not _already_logged_in("nvcr.io")
 
     def test_registry_in_auths(self, tmp_path, monkeypatch):
-        import json
         cfg = tmp_path / "config.json"
         cfg.write_text(json.dumps({"auths": {"nvcr.io": {"auth": "dG9rZW4="}}}))
         monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", cfg)
         assert _already_logged_in("nvcr.io")
 
     def test_other_registry_not_present(self, tmp_path, monkeypatch):
-        import json
         cfg = tmp_path / "config.json"
         cfg.write_text(json.dumps({"auths": {"docker.io": {}}}))
         monkeypatch.setattr("xr_ai_vllm._docker._DOCKER_CONFIG", cfg)

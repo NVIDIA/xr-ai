@@ -52,7 +52,7 @@ class TestReadWrite:
         assert json.loads(creds_file.read_text()) == {"HF_TOKEN": "abc"}
         assert oct(creds_file.stat().st_mode & 0o777) == oct(0o600)
 
-    def test_write_filters_non_string_values(self, fake_creds_dir):
+    def test_read_filters_non_string_values(self, fake_creds_dir):
         """_read skips non-string values written by other tools."""
         creds_file, _ = fake_creds_dir
         creds_file.write_text(json.dumps({"HF_TOKEN": "tok", "BAD": 123}))
