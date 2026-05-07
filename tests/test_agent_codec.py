@@ -110,11 +110,11 @@ class TestFrameSignalCodec:
         assert out.participant_id == orig.participant_id
         assert out.track_id       == orig.track_id
 
-    def test_pixel_format_preserved(self):
-        for fmt in PixelFormat:
-            orig = FrameSignal(0, 0, 0, 1, 1, fmt, 0)
-            out = rt(MsgType.FRAME_SIGNAL, orig)
-            assert out.fmt == fmt
+    @pytest.mark.parametrize("fmt", list(PixelFormat))
+    def test_pixel_format_preserved(self, fmt):
+        orig = FrameSignal(0, 0, 0, 1, 1, fmt, 0)
+        out = rt(MsgType.FRAME_SIGNAL, orig)
+        assert out.fmt == fmt
 
 
 class TestAudioChunkCodec:
@@ -264,6 +264,8 @@ class TestWireFormat:
         """The wire format starts with the type byte (u8)."""
         msg = FrameRequest("pid", "track")
         wire = encode(MsgType.FRAME_REQUEST, msg)
+        # The type byte is u8 — every registered MsgType value must stay in 0..255
+        # or `_TYPE_HDR.pack(type_id)` in _codec.py will raise.
         assert wire[0] == int(MsgType.FRAME_REQUEST)
 
     def test_encode_is_bytes(self):
@@ -279,7 +281,12 @@ class TestWireFormat:
     def test_unknown_type_id_raises_on_decode(self):
         """A byte sequence with an unregistered type_id must raise KeyError."""
         import msgpack
-        # Build a fake wire message with type_id=255 (not registered).
-        fake = bytes([255]) + msgpack.packb([], use_bin_type=True)
-        with pytest.raises(KeyError):
+
+        from xr_ai_agent._codec import _decoders
+
+        # Pick the first unused type_id dynamically so this test stays valid
+        # if 255 is ever registered.
+        free_id = next(i for i in range(256) if i not in _decoders)
+        fake = bytes([free_id]) + msgpack.packb([], use_bin_type=True)
+        with pytest.raises(KeyError, match=str(free_id)):
             decode(fake)
