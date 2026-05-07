@@ -52,6 +52,7 @@ except ImportError:
     _TORCH_AVAILABLE = False
 
 from xr_ai_agent import DataMessage
+from xr_ai_logging import print_task_done_banner
 from xr_ai_pipecat.audio import stream_sentences_to_audio
 from xr_ai_pipecat.services import SttClient, TtsClient
 from xr_ai_pipecat.transport import XRMediaHubTransport, SAMPLE_RATE
@@ -374,6 +375,8 @@ class RenderSceneProcessor(FrameProcessor):
                 text, pid, ref_us = self._pending
                 self._pending = None
 
+            t0 = time.monotonic()
+
             # Quick-ack: fast Minitron call that (a) speaks an immediate
             # acknowledgment and (b) classifies whether Nemotron needs
             # reasoning enabled.  Await it first so the think flag is ready
@@ -412,9 +415,11 @@ class RenderSceneProcessor(FrameProcessor):
                 name="agentic-loop",
             )
             response = None
+            outcome = "done"
             try:
                 response = await self._agentic_task
             except asyncio.CancelledError:
+                outcome = "interrupted"
                 logger.info("agentic loop interrupted by new utterance")
                 send_pid = pid or self._transport.target_participant
                 if send_pid:
@@ -425,6 +430,7 @@ class RenderSceneProcessor(FrameProcessor):
                             "flush_return_audio failed during cancellation",
                         )
             except Exception:
+                outcome = "error"
                 logger.exception("agentic loop failed")
                 response = "Something went wrong — please try again."
             finally:
@@ -434,6 +440,12 @@ class RenderSceneProcessor(FrameProcessor):
                     await still_task
                 except asyncio.CancelledError:
                     pass  # expected — we just cancelled it above
+                print_task_done_banner(
+                    "xr-render-demo",
+                    status=outcome,
+                    detail=f"pid={pid!r}  utterance={text[:60]!r}",
+                    duration_s=time.monotonic() - t0,
+                )
 
             send_pid = pid or self._transport.target_participant
 
@@ -708,8 +720,8 @@ class RenderSceneProcessor(FrameProcessor):
             ctx_parts.append("[Recent conversation]\n" + "\n".join(hist_lines))
 
         context = "\n".join(ctx_parts)
-        logger.info("pre-fetched context for turn")
-        _trace_log.info("CTX   {}", context.replace("\n", " | "))
+        logger.debug("pre-fetched context for turn")
+        _trace_log.debug("CTX   {}", context.replace("\n", " | "))
 
         try:
             system_content = self._prompt_path.read_text(encoding="utf-8").strip()
@@ -873,8 +885,8 @@ class RenderSceneProcessor(FrameProcessor):
                     # Data channel only — TTS is too spammy for per-tool updates.
                     await self._send(pid, progress, topic=_AGENT_PROGRESS_TOPIC)
 
-                logger.info("tool call  iter={}  tool={}  args={}", iteration, name, args)
-                _trace_log.info(
+                logger.debug("tool call  iter={}  tool={}  args={}", iteration, name, args)
+                _trace_log.debug(
                     "TOOL  [{}] {}({})", iteration, name,
                     ", ".join(f"{k}={v}" for k, v in args.items()),
                 )

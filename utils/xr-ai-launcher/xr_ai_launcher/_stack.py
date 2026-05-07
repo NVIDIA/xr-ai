@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -64,15 +65,22 @@ class Process:
     """
     Declares one process in the stack.
 
-    name        — label used in log output.
-    project     — path to the uv project (relative to the sample root, or absolute).
-    command     — entry-point script to run inside the project's venv.
-    config      — path to the YAML config (relative to the sample root, or absolute).
-                  Passed as ``--config <path>`` to the subprocess. Omit for processes
-                  that take no config.
-    gpu         — optional CUDA_VISIBLE_DEVICES value (e.g. ``"0"``, ``"0,1"``).
-    launch_mode — controls spawn + shutdown behaviour:
-    port        — optional service port, used to stop ``persist`` services.
+    name                 — label used in log output.
+    project              — path to the uv project (relative to the sample root, or absolute).
+    command              — entry-point script to run inside the project's venv.
+    config               — path to the YAML config (relative to the sample root, or absolute).
+                           Passed as ``--config <path>`` to the subprocess. Omit for
+                           processes that take no config.
+    gpu                  — optional CUDA_VISIBLE_DEVICES value (e.g. ``"0"``, ``"0,1"``).
+    launch_mode          — controls spawn + shutdown behaviour:
+    port                 — optional service port, used to stop ``persist`` services.
+    quiet_native_output  — when True, captured subprocess lines that don't look like
+                           Python loguru output (no ``HH:MM:SS.SSS`` prefix) are routed
+                           through stdlib ``logging`` at DEBUG instead of printed to
+                           stdout. Use for processes that emit native C/C++ chatter
+                           (e.g. OpenXR loader output) interleaved with their own Python
+                           loguru lines. Default ``False`` — every other Process keeps
+                           today's unconditional ``print`` behavior verbatim.
 
       ``"own"``     (default) — launcher spawns this process and kills it on shutdown.
       ``"persist"`` — launcher spawns this process but leaves it running on shutdown.
@@ -83,13 +91,14 @@ class Process:
                       process list documents the dependency; the launcher skips it
                       entirely and does not kill it on shutdown.
     """
-    name:        str
-    project:     str | Path
-    command:     str
-    config:      str | Path | None = None
-    gpu:         str | None = None
-    launch_mode: str = "own"
-    port:        int | None = None
+    name:                str
+    project:             str | Path
+    command:             str
+    config:              str | Path | None = None
+    gpu:                 str | None = None
+    launch_mode:         str = "own"
+    port:                int | None = None
+    quiet_native_output: bool = False
 
 
 @dataclass(frozen=True)
@@ -117,10 +126,29 @@ class Parallel:
 
 # ── subprocess helpers ─────────────────────────────────────────────────────────
 
-def _forward(stream, prefix: str) -> None:
-    """Drain *stream* line-by-line, printing each with *prefix*."""
+# Subprocess Python loguru lines start with the format set in
+# xr_ai_logging.setup_logging: "HH:mm:ss.SSS LEVEL    name message".
+# Used to distinguish loguru-formatted Python output (terminal-visible) from
+# untimed C-level native output (file-only) when ``quiet_native_output`` is set.
+_LOGURU_TIME_RE = re.compile(r"^\d{2}:\d{2}:\d{2}\.\d{3}\s")
+
+
+def _forward(stream, prefix: str, *, quiet_native: bool = False) -> None:
+    """Drain *stream* line-by-line, printing each with *prefix*.
+
+    When *quiet_native* is True, lines that don't carry a loguru-style
+    ``HH:MM:SS.SSS`` prefix are routed through stdlib ``logging`` at DEBUG
+    instead of printed. Those records reach the orchestrator's loguru file
+    sink (DEBUG) but not its stderr sink (INFO), keeping the terminal clean
+    of native C-level chatter while preserving full output in the log file.
+    """
     for raw in stream:
-        print(f"{prefix} {raw.decode(errors='replace').rstrip()}", flush=True)
+        line = raw.decode(errors='replace').rstrip()
+        formatted = f"{prefix} {line}"
+        if quiet_native and not _LOGURU_TIME_RE.match(line):
+            log.debug(formatted)
+        else:
+            print(formatted, flush=True)
 
 
 def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
@@ -147,7 +175,12 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
                          start_new_session=True)
     prefix = f"[{proc.name}]"
     for stream in (p.stdout, p.stderr):
-        threading.Thread(target=_forward, args=(stream, prefix), daemon=True).start()
+        threading.Thread(
+            target=_forward,
+            args=(stream, prefix),
+            kwargs={"quiet_native": proc.quiet_native_output},
+            daemon=True,
+        ).start()
     return p
 
 
@@ -279,6 +312,28 @@ def _shutdown(
                     )
 
 
+# ── readiness banner ───────────────────────────────────────────────────────────
+
+def _print_ready_banner(names: list[str]) -> None:
+    """Loud, single-message banner so the ready milestone is visible at a glance.
+
+    Style mirrors ``_print_log_dir_banner`` in xr_ai_logging — same width and
+    dim-grey bar — so the run begins and ends with matching brackets in the
+    user's terminal. ANSI is TTY-only; the file sink still has the loguru
+    record from ``log.info`` above.
+    """
+    bar = "─" * 78
+    is_tty = sys.stderr.isatty()
+    on  = "\x1b[1;32m" if is_tty else ""   # bright green, bold
+    dim = "\x1b[2m"    if is_tty else ""
+    off = "\x1b[0m"    if is_tty else ""
+    print(f"\n{dim}{bar}{off}",                  file=sys.stderr, flush=True)
+    print(f"  {on}All processes ready{off}",     file=sys.stderr, flush=True)
+    if names:
+        print(f"  {dim}{', '.join(names)}{off}", file=sys.stderr, flush=True)
+    print(f"{dim}{bar}{off}\n",                  file=sys.stderr, flush=True)
+
+
 # ── public API ─────────────────────────────────────────────────────────────────
 
 def run_stack(
@@ -362,6 +417,7 @@ def run_stack(
                     _wait_ready(item.name, ready_file, launched[item.name])
 
             log.info("All processes ready.")
+            _print_ready_banner(list(launched.keys()))
             if exit_after_ready:
                 return
             _monitor(launched)

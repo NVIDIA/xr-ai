@@ -9,11 +9,23 @@
 --   { op="scene.remove", value={ id } }
 --   { op="scene.scale",  value={ id, scale } }    -- high-frequency audio path
 
-print("[render-mcp-scene] main.lua: top of file")
+-- ── lovr.log override ────────────────────────────────────────────────────────
+-- Emit a tab-separated marker so render-mcp's Python side (the
+-- xr_ai_launcher._processes._forward forwarder) can route by authoritative
+-- LOVR severity. Levels follow https://lovr.org/docs/lovr.log: debug, info,
+-- warn, error. Anything calling lovr.log(...) below (or any LOVR engine
+-- message routed through this callback) flows through here.
+function lovr.log(message, level, tag)
+    if message:sub(-1) == "\n" then message = message:sub(1, -2) end
+    io.stdout:write(string.format("LOVR_LOG\t%s\t%s\t%s\n", level, tag or "", message))
+    io.stdout:flush()
+end
+
+lovr.log("main.lua: top of file", "info", "render-mcp-scene")
 
 local zmq = require("lib.zmq")
 local mp  = require("lib.msgpack")
-print("[render-mcp-scene] lib.zmq + lib.msgpack loaded")
+lovr.log("lib.zmq + lib.msgpack loaded", "info", "render-mcp-scene")
 
 -- ── Scene state ───────────────────────────────────────────────────────────────
 
@@ -35,7 +47,7 @@ local ok, err = pcall(function()
 end)
 if not ok then
     recv_err = tostring(err)
-    print("[render-mcp-scene] ZMQ error: " .. recv_err)
+    lovr.log("ZMQ error: " .. recv_err, "info", "render-mcp-scene")
 end
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
@@ -71,7 +83,7 @@ end
 local function handle_scene_add(v)
     local id = v.id
     if not id then
-        print("[render-mcp-scene] scene.add: missing id — dropping")
+        lovr.log("scene.add: missing id — dropping", "info", "render-mcp-scene")
         return
     end
     local ptype      = v.type or "sphere"
@@ -80,16 +92,18 @@ local function handle_scene_add(v)
     local size       = tonumber(v.size) or 0.1
     primitives[id]   = make_primitive(ptype, px, py, pz, cr, cg, cb, size)
     scale_warned[id] = nil   -- clear so the id can warn again if it goes missing
-    print(string.format(
-        "[render-mcp-scene] scene.add  id=%s type=%s pos=(%.2f,%.2f,%.2f) color=(%.2f,%.2f,%.2f) size=%.3fm  total=%d",
-        id, ptype, px, py, pz, cr, cg, cb, size, count_primitives()))
+    lovr.log(string.format(
+        "scene.add  id=%s type=%s pos=(%.2f,%.2f,%.2f) color=(%.2f,%.2f,%.2f) size=%.3fm  total=%d",
+        id, ptype, px, py, pz, cr, cg, cb, size, count_primitives()),
+        "info", "render-mcp-scene")
 end
 
 local function handle_scene_update(v)
     local id  = v.id
     local obj = id and primitives[id]
     if not obj then
-        print(string.format("[render-mcp-scene] scene.update: unknown id=%s", tostring(id)))
+        lovr.log(string.format("scene.update: unknown id=%s", tostring(id)),
+                 "info", "render-mcp-scene")
         return
     end
     local changed = {}
@@ -110,17 +124,20 @@ local function handle_scene_update(v)
             changed[#changed+1] = string.format("size=%.3fm", s)
         end
     end
-    print(string.format("[render-mcp-scene] scene.update id=%s  %s",
-                        id, #changed > 0 and table.concat(changed, "  ") or "(nothing changed)"))
+    lovr.log(string.format("scene.update id=%s  %s",
+                           id, #changed > 0 and table.concat(changed, "  ") or "(nothing changed)"),
+             "info", "render-mcp-scene")
 end
 
 local function handle_scene_remove(v)
     local id = v.id
     if id and primitives[id] then
         primitives[id] = nil
-        print(string.format("[render-mcp-scene] scene.remove id=%s  remaining=%d", id, count_primitives()))
+        lovr.log(string.format("scene.remove id=%s  remaining=%d", id, count_primitives()),
+                 "info", "render-mcp-scene")
     elseif id then
-        print(string.format("[render-mcp-scene] scene.remove: unknown id=%s", id))
+        lovr.log(string.format("scene.remove: unknown id=%s", id),
+                 "info", "render-mcp-scene")
     end
 end
 
@@ -133,7 +150,8 @@ local function handle_scene_scale(v)
     elseif id and not scale_warned[id] then
         -- Log exactly once per unknown id so it doesn't drown other output.
         scale_warned[id] = true
-        print(string.format("[render-mcp-scene] scene.scale: unknown id=%s (logged once)", tostring(id)))
+        lovr.log(string.format("scene.scale: unknown id=%s (logged once)", tostring(id)),
+                 "info", "render-mcp-scene")
     end
 end
 
@@ -142,17 +160,19 @@ end
 function lovr.load()
     lovr.graphics.setBackgroundColor(0, 0, 0, 0)
     lovr.headset.setClipDistance(256.0, 0.15)
-    print("[render-mcp-scene] lovr.load  socket=" .. socket_addr)
+    lovr.log("lovr.load  socket=" .. socket_addr, "info", "render-mcp-scene")
 
     local ok_a, active = pcall(lovr.headset.isActive)
     local ok_d, name   = pcall(lovr.headset.getDriver)
-    print(string.format("[render-mcp-scene] headset: active=%s driver=%s",
+    lovr.log(string.format("headset: active=%s driver=%s",
         ok_a and tostring(active) or "<err>",
-        ok_d and tostring(name)   or "<err>"))
+        ok_d and tostring(name)   or "<err>"),
+        "info", "render-mcp-scene")
 
     local ok_p, applied = pcall(lovr.headset.setPassthrough, "blend")
-    print(string.format("[render-mcp-scene] setPassthrough('blend') ok=%s applied=%s",
-        tostring(ok_p), tostring(applied)))
+    lovr.log(string.format("setPassthrough('blend') ok=%s applied=%s",
+        tostring(ok_p), tostring(applied)),
+        "info", "render-mcp-scene")
 end
 
 local function drain_commands()
@@ -163,11 +183,13 @@ local function drain_commands()
 
         local okd, decoded = pcall(mp.decode, raw)
         if not okd then
-            print("[render-mcp-scene] msgpack decode error: " .. tostring(decoded))
+            lovr.log("msgpack decode error: " .. tostring(decoded),
+                     "info", "render-mcp-scene")
             goto continue
         end
         if type(decoded) ~= "table" then
-            print("[render-mcp-scene] unexpected message type: " .. type(decoded))
+            lovr.log("unexpected message type: " .. type(decoded),
+                     "info", "render-mcp-scene")
             goto continue
         end
 
@@ -181,14 +203,15 @@ local function drain_commands()
         elseif op == "scene.remove" then ok_h, herr = pcall(handle_scene_remove, v)
         elseif op == "scene.scale"  then ok_h, herr = pcall(handle_scene_scale,  v)
         elseif op ~= nil then
-            print("[render-mcp-scene] unknown op=" .. tostring(op))
+            lovr.log("unknown op=" .. tostring(op), "info", "render-mcp-scene")
         else
-            print("[render-mcp-scene] message missing 'op' field")
+            lovr.log("message missing 'op' field", "info", "render-mcp-scene")
         end
 
         if ok_h == false then
-            print(string.format("[render-mcp-scene] handler error (op=%s): %s",
-                                tostring(op), tostring(herr)))
+            lovr.log(string.format("handler error (op=%s): %s",
+                                   tostring(op), tostring(herr)),
+                     "info", "render-mcp-scene")
         end
 
         ::continue::
@@ -219,14 +242,15 @@ function lovr.update(dt)
         heartbeat_t = 0.0
         local n = count_primitives()
         if n == 0 then
-            print("[render-mcp-scene] heartbeat: scene empty")
+            lovr.log("heartbeat: scene empty", "info", "render-mcp-scene")
         else
             for id, obj in pairs(primitives) do
-                print(string.format(
-                    "[render-mcp-scene] heartbeat: id=%s type=%s pos=(%.2f,%.2f,%.2f) size=%.3fm",
+                lovr.log(string.format(
+                    "heartbeat: id=%s type=%s pos=(%.2f,%.2f,%.2f) size=%.3fm",
                     id, obj.type,
                     obj.current_pos[1], obj.current_pos[2], obj.current_pos[3],
-                    obj.current_scale))
+                    obj.current_scale),
+                    "info", "render-mcp-scene")
             end
         end
     end

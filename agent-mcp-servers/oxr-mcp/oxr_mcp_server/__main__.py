@@ -358,7 +358,13 @@ async def _serve(cfg: Config, ready_file: Path | None = None) -> None:
     logger.info("oxr-mcp: ready to serve get_head_pose (session opens lazily on first request)")
     try:
         app = build_mcp(source).http_app(path="/mcp")
-        uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="warning")
+        # log_config=None skips uvicorn's own dictConfig install so its
+        # uvicorn / uvicorn.error / uvicorn.access loggers fall back to root
+        # and get intercepted by the loguru bridge installed in setup_logging.
+        # log_level="warning" still applies (set independently via setLevel
+        # on each uvicorn logger), so only WARNING+ records reach loguru.
+        uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port,
+                                log_level="warning", log_config=None)
         server = uvicorn.Server(uv_cfg)
         logger.info("oxr-mcp  mcp=/mcp  port={}", cfg.port)
         if ready_file:

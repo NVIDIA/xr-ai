@@ -74,12 +74,14 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
     # Curated session transcript — only records bound with extra={"trace": True}
     # via ``logger.bind(trace=True)`` reach this sink.  Tail this file (or
     # paste it) to see USER/CTX/TOOL/RES/RESP events without the full chatter.
+    # DEBUG so verbose CTX / TOOL records (demoted out of the terminal) still
+    # land here.
     logger.add(
         _TRACE_FILE,
         filter=lambda r: r["extra"].get("trace") is True,
         format="{time:HH:mm:ss}  {message}",
         mode="w",
-        level="INFO",
+        level="DEBUG",
     )
     logger.bind(trace=True).info("=== trace started ===")
 

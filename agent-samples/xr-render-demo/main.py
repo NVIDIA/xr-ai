@@ -80,7 +80,8 @@ _PROCESSES: list[Process] = [
             config="yaml/video_mcp_server.yaml"),
     Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),
     Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server",
-            config="yaml/oxr_mcp_server.yaml"),
+            config="yaml/oxr_mcp_server.yaml",
+            quiet_native_output=True),
     Process("worker",     "worker",                              "xr_render_demo_worker",
             config="yaml/xr_render_demo_worker.yaml"),
 ]
