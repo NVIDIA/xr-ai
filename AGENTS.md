@@ -13,8 +13,9 @@ historical decisions in `docs/changelog.md`.
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
-agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
-                    # xr-ai-pipecat: optional Pipecat transport bridge (heavier deps)
+agent-sdk/          # Two packages:
+                    #   xr-ai-agent   — IPC client library (pyzmq + msgpack only)
+                    #   xr-ai-pipecat — optional Pipecat transport bridge (heavier deps)
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
 ai-services/        # OpenAI-compatible inference servers (VLM, STT, TTS, LLM)
