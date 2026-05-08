@@ -283,25 +283,40 @@ uv run model_servers --stop
 
 ---
 
-### Mono SLAM example (monocular visual odometry + 3-D trajectory viz)
+### Mono SLAM example (monocular SLAM + 3-D trajectory viz)
 
-Lightweight pipeline that reads video frames from the hub, runs ORB-based
-monocular visual odometry, prints the estimated camera pose to the log
-once per processed frame, and displays a live 3-D trajectory plot with a
-camera orientation triad.  No model weights, no GPU required — runs on
-any machine with a webcam-equipped client.
+Lightweight pipeline that reads video frames from the hub, runs
+[DPVO](https://github.com/princeton-vl/DPVO) (Deep Patch Visual
+Odometry, MIT license) for monocular SLAM, publishes the estimated
+camera pose once per processed frame, and displays a live 3-D trajectory
+plot with a camera orientation triad.
 
-Uses ORB feature matching and OpenCV `recoverPose` (Essential matrix /
-RANSAC).  No loop closure, no bundle adjustment, no mapping — tracking
-only.  Translation is unit-norm (monocular scale ambiguity); pose is
-relative to the first frame.
+DPVO maintains an incremental patch graph with local bundle adjustment
+every frame and optional loop closure.  Translation is up to an
+unknown scale (monocular scale ambiguity); pose is relative to the first
+frame.  A CUDA GPU is required for DPVO — see the install note below.
 
 Three processes start together:
 - **hub** — XR media routing hub
-- **worker** (`mono_slam_example_worker`) — per-frame ORB VO; publishes
-  pose updates to the viz via the hub data channel
+- **worker** (`mono_slam_example_worker`) — per-frame DPVO inference;
+  publishes pose updates to the viz via the hub data channel
 - **viz** (`mono_slam_example_viz`) — subscribes to pose updates and
   renders a real-time 3-D trajectory + orientation triad
+
+**Prerequisites:** Install DPVO and its CUDA extensions once before
+running (requires `nvcc` on PATH):
+
+```bash
+bash scripts/install_dpvo.sh
+```
+
+Then download the DPVO checkpoint (~60 MB) and place it at
+`models/dpvo.pth` (or set `weights_path` in the worker YAML):
+
+```bash
+wget https://www.dropbox.com/s/nap0u8zslspdwm4/models.zip
+unzip models.zip          # extracts models/dpvo.pth
+```
 
 ```bash
 cd agent-samples/mono-slam-example
@@ -313,10 +328,11 @@ Then connect any client and start streaming video.  Pose lines appear in
 the log as:
 
 ```
-slam pose  pid='default'  track=TR_xxx  frame=5  inliers=42
-  roll_deg=0.12  pitch_deg=-1.30  yaw_deg=2.45
-  tx=0.0023  ty=-0.0011  tz=0.0087  [t unit-norm monocular scale]
+slam pose  pid='default'  frame=12
+  pos=[+0.0023 -0.0011 +0.0234]  det(R)=1.000000
 ```
+
+DPVO initialises at frame 8; no pose is published before that.
 
 The viz window opens automatically when a display is available.  To run
 headless (e.g., on a server), set `save_frames_dir` in

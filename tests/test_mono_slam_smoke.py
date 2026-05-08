@@ -56,22 +56,24 @@ skip_no_gpu = pytest.mark.skipif(
 
 
 def _synthetic_frames(n: int, height: int = 240, width: int = 320) -> list[np.ndarray]:
-    """Return n uint8 (H, W, 3) RGB frames with a checkerboard + noise pattern.
+    """Return n uint8 (H, W, 3) RGB frames with a translating checkerboard.
 
-    The visual content is irrelevant for the smoke test — we only need frames
-    that are non-trivially different so DPVO's motion probe doesn't stall
-    initialisation indefinitely.
+    The checkerboard shifts 4 pixels per frame, producing coherent optical
+    flow so DPVO's motion_probe() exceeds its 2.0 threshold and increments n.
+    Without translation (static content + noise only), motion_probe() stays
+    near zero and is_initialized never flips.
     """
-    rng = np.random.default_rng(seed=42)
     frames = []
     for i in range(n):
-        # Checkerboard base
-        xs = np.arange(width) // 16
+        # Translate checkerboard by 4*i pixels horizontally for real optical flow.
+        shift = i * 4
+        xs = (np.arange(width) - shift) // 16
         ys = np.arange(height) // 16
         board = ((xs[None, :] + ys[:, None]) % 2).astype(np.uint8) * 200
         rgb = np.stack([board, board, board], axis=-1)
-        # Per-frame noise so frames differ
-        noise = rng.integers(0, 30, size=(height, width, 3), dtype=np.uint8)
+        # Small per-frame noise (seeded per-frame for determinism).
+        rng = np.random.default_rng(seed=i)
+        noise = rng.integers(0, 15, size=(height, width, 3), dtype=np.uint8)
         frames.append(np.clip(rgb.astype(np.int16) + noise, 0, 255).astype(np.uint8))
     return frames
 
