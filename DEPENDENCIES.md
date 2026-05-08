@@ -345,7 +345,11 @@ LOOP_CLOSURE=True DPVO cfg override), and logs the live world-frame camera pose.
 DPVO is installed via the worker's pyproject.toml as an editable path
 source.  The orchestrator's first-run bootstrap (`_ensure_dpvo_source` in
 `main.py`) clones DPVO into `deps/dpvo/` and extracts Eigen 3.4.0 there;
-`uv sync` then builds DPVO's CUDA extensions against the local torch.
+`uv sync` then builds DPVO's CUDA extensions in an isolated build env
+seeded with setuptools, wheel, and torch (via `extra-build-dependencies`
+with `match-runtime = true`).  DPVO has no pyproject.toml so uv falls back
+to the legacy setuptools backend — `extra-build-dependencies` provides
+the backend and torch for the isolated build env before any hook runs.
 A CUDA toolkit (>= 12.1) with `nvcc` on PATH is required.
 
 Download the TUM benchmark dataset with:
