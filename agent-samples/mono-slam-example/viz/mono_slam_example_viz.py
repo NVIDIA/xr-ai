@@ -172,21 +172,15 @@ class MonoSlamVizProcess:
 
     # ── main coroutine ─────────────────────────────────────────────────────────
 
-    async def run(self, ready_file: pathlib.Path | None = None) -> None:
+    async def run(self) -> None:
         self._running = True
 
         import matplotlib
         matplotlib.use(self._backend_name)
         import matplotlib.pyplot as plt
-        from matplotlib.animation import FuncAnimation
 
         fig, ax = build_figure()
         drain_task = asyncio.create_task(self._drain_queue())
-
-        # Set ready only after the figure is created — the hub + worker started
-        # before us, so IPC messages may already be queued.
-        if ready_file:
-            ready_file.touch()
 
         loop = asyncio.get_running_loop()
 
@@ -266,7 +260,16 @@ def _detect_backend(cfg_backend: str, save_dir: pathlib.Path | None) -> tuple[st
             return "TkAgg", None
         except ImportError:
             pass
-        return "Qt5Agg", None
+        try:
+            import PyQt5  # noqa: F401
+            return "Qt5Agg", None
+        except ImportError:
+            pass
+        # No interactive toolkit available despite a display — fall back to headless.
+        logger.warning(
+            "viz: display found but neither tkinter nor PyQt5 is available; "
+            "falling back to headless PNG mode"
+        )
     # headless, no save_dir configured — write to a safe default.
     return "Agg", pathlib.Path("/tmp/mono_slam_frames")
 
@@ -310,10 +313,17 @@ async def _main(cfg: dict, ready_file: pathlib.Path | None) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, viz.shutdown)
 
+    # Signal ready immediately after IPC subscription — this is the point where
+    # the viz is able to receive pose messages.  Doing it here (rather than
+    # inside viz.run() after build_figure) means a slow or failing matplotlib
+    # backend cannot prevent the launcher from advancing to the monitor phase.
+    if ready_file:
+        ready_file.touch()
+
     # Run the IPC receive loop alongside the render loop.
     ep_task = asyncio.create_task(ep.run())
     try:
-        await viz.run(ready_file=ready_file)
+        await viz.run()
     finally:
         viz.shutdown()
         ep_task.cancel()
