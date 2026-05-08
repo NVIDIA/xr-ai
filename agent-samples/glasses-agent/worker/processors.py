@@ -177,6 +177,8 @@ class QueryProcessor:
         # Guidance mode state.
         self._guidance_demo: Demonstration | None = None
         self._guidance_step: int = 0
+        self._guidance_monitor_task: asyncio.Task | None = None
+        self._guidance_advancing:    bool                = False
 
     async def handle(
         self,
@@ -392,17 +394,25 @@ class QueryProcessor:
         self._guidance_step = 0
         _trace_log.info("GUIDANCE_START  demo=%s  steps=%d", demo.name, len(demo.steps))
         await self._speak_current_guidance_step(pid)
+        self._start_guidance_monitor(pid)
 
     async def _advance_guidance(self, pid: str) -> None:
-        if self._guidance_demo is None:
+        if self._guidance_demo is None or self._guidance_advancing:
             return
-        self._guidance_step += 1
-        if self._guidance_step >= len(self._guidance_demo.steps):
-            await self._finish_guidance(pid)
-        else:
-            await self._speak_current_guidance_step(pid)
+        self._guidance_advancing = True
+        try:
+            self._guidance_step += 1
+            if self._guidance_step >= len(self._guidance_demo.steps):
+                await self._finish_guidance(pid)
+            else:
+                await self._speak_current_guidance_step(pid)
+        finally:
+            self._guidance_advancing = False
 
     async def _finish_guidance(self, pid: str) -> None:
+        if self._guidance_monitor_task and not self._guidance_monitor_task.done():
+            self._guidance_monitor_task.cancel()
+            self._guidance_monitor_task = None
         demo = self._guidance_demo
         self._guidance_demo = None
         self._guidance_step = 0
@@ -420,13 +430,55 @@ class QueryProcessor:
             return
         step = demo.steps[self._guidance_step]
         total = len(demo.steps)
-        response = (
-            f"Step {step.step_number} of {total}: {step.description} "
-            f"Say 'next' when you're ready for the next step."
-        )
+        response = f"Step {step.step_number} of {total}: {step.description}"
         await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
         await self._say(pid, response)
         _trace_log.info("GUIDANCE_STEP  %d/%d  %s", step.step_number, total, step.description[:60])
+
+    # ── guidance auto-advance monitor ─────────────────────────────────────────
+
+    def _start_guidance_monitor(self, pid: str) -> None:
+        if self._guidance_monitor_task and not self._guidance_monitor_task.done():
+            self._guidance_monitor_task.cancel()
+        self._guidance_monitor_task = asyncio.create_task(
+            self._guidance_monitor_loop(pid), name="guidance-monitor"
+        )
+
+    async def _guidance_monitor_loop(self, pid: str) -> None:
+        try:
+            consecutive_yes = 0
+            while self._guidance_demo is not None:
+                await asyncio.sleep(self._cfg.guidance_check_interval_s)
+                if self._guidance_demo is None:
+                    break
+                frame_path = await self._get_latest_frame_path(pid, ref_us=0)
+                if not frame_path:
+                    continue
+                step_description = self._guidance_demo.steps[self._guidance_step].description
+                completed = await self._check_step_complete(step_description, frame_path)
+                if completed:
+                    consecutive_yes += 1
+                    if consecutive_yes >= 2:
+                        consecutive_yes = 0
+                        await self._advance_guidance(pid)
+                else:
+                    consecutive_yes = 0
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            log.exception("guidance monitor error")
+
+    async def _check_step_complete(self, step_description: str, frame_path: str) -> bool:
+        question = (
+            f"The person is following a procedure. The current step is:\n"
+            f"  '{step_description}'\n\n"
+            f"Look at this image carefully. Has the person FINISHED doing this step?\n"
+            f"Answer with exactly one word: YES or NO."
+        )
+        result = await self._call_mcp(self._vlm, "ask_image",
+                                      {"question": question, "image_path": frame_path},
+                                      silent=True)
+        return isinstance(result, str) and result.strip().upper().startswith("YES")
 
     # ── quick-ack ─────────────────────────────────────────────────────────────
 
@@ -696,6 +748,8 @@ class QueryProcessor:
             return {"error": str(exc)}
 
     async def close(self) -> None:
+        if self._guidance_monitor_task and not self._guidance_monitor_task.done():
+            self._guidance_monitor_task.cancel()
         await self._http.aclose()
 
 

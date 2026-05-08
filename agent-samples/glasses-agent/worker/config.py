@@ -22,10 +22,11 @@ class WorkerConfig:
     transcript_mcp:   str   # transcript-mcp base URL, e.g. http://localhost:8200
 
     # Background VLM observation loop
-    vlm_interval_s:       float
-    vlm_obs_max:          int
-    condenser_interval_s: float
-    transcript_source:    str
+    vlm_interval_s:            float
+    vlm_obs_max:               int
+    condenser_interval_s:      float
+    transcript_source:         str
+    guidance_check_interval_s: float
 
     # VAD
     silence_threshold: float
@@ -51,8 +52,9 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         transcript_mcp      = data.get("transcript_mcp",      "http://localhost:8200"),
         vlm_interval_s      = float(data.get("vlm_interval_s",      1.0)),
         vlm_obs_max         = int(data.get("vlm_obs_max",           240)),
-        condenser_interval_s = float(data.get("condenser_interval_s", 60.0)),
-        transcript_source   = data.get("transcript_source",   "glasses-agent"),
+        condenser_interval_s      = float(data.get("condenser_interval_s", 60.0)),
+        transcript_source         = data.get("transcript_source",   "glasses-agent"),
+        guidance_check_interval_s = float(data.get("guidance_check_interval_s", 4.0)),
         silence_threshold   = float(data.get("silence_threshold", 0.005)),
         silence_duration    = float(data.get("silence_duration",  0.8)),
         min_speech          = float(data.get("min_speech",        0.15)),
