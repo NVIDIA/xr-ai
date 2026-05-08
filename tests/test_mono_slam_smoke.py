@@ -5,7 +5,7 @@
 CI smoke test for the DPVO SLAM adapter (slam.py).
 
 Skipped when DPVO is not installed (no model weights, no CUDA required for
-import check).  When DPVO is installed, feeds 15 synthetic frames to the
+import check).  When DPVO is installed, feeds synthetic frames to the
 adapter and asserts that:
 
   1. DPVOSlam constructs without exception.
@@ -87,7 +87,10 @@ class TestDPVOSlamAdapter:
     WIDTH  = 320
     # fx=fy≈277 for a 60° FOV over 320px wide image
     INTRINSICS = np.array([277.0, 277.0, 160.0, 120.0], dtype=np.float32)
-    N_FRAMES   = 15   # must be > 8 (DPVO init threshold)
+    # Synthetic frames need more margin than the raw DPVO threshold of 8:
+    # on a translating checkerboard, motion_probe() skips every other frame,
+    # so n reaches 8 around frame 14-16 in practice. 25 gives enough headroom.
+    N_FRAMES   = 25
 
     def _make_slam(self, weights_path: str) -> object:
         """Construct a DPVOSlam; return it."""

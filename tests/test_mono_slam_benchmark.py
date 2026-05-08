@@ -124,8 +124,8 @@ def ate_rmse(
     """Compute ATE RMSE (metres) after Sim(3) alignment.
 
     Args:
-        poses_est:  (N, 7) estimated poses [tx, ty, tz, qx, qy, qz, qw].
-        poses_gt:   (N, 7) ground-truth poses in the same order.
+        poses_est:  (N, 3) or (N, ≥3) estimated positions (or full 7-vec poses).
+        poses_gt:   (N, 3) or (N, ≥3) ground-truth positions in the same order.
         with_scale: Whether to recover scale (True for monocular).
 
     Returns:
@@ -147,73 +147,67 @@ def _load_tum_sequence(
     dataset_dir: Path,
     stride: int = 1,
 ) -> tuple[list[float], list[np.ndarray], np.ndarray]:
-    """Load timestamps, RGB frames, and ground-truth poses from TUM RGB-D.
+    """Load, undistort, and crop TUM RGB-D frames with GT association.
+
+    Matches the preprocessing in the official evaluate_tum.py from the DPVO
+    repo: undistort with fr1 radial-tangential coefficients, then crop 8 rows
+    top/bottom and 16 cols left/right to remove the distortion border.
 
     Args:
-        dataset_dir: Path to an extracted TUM sequence (contains rgb/, depth/,
-                     rgb.txt, groundtruth.txt).
+        dataset_dir: Path to an extracted TUM fr1 sequence.
         stride:      Use every Nth frame (default 1 = all frames).
 
     Returns:
-        tstamps:   List of float timestamps (seconds).
-        frames:    List of (H, W, 3) uint8 RGB frames.
-        gt_poses:  (M, 7) float64 ground-truth poses [tx,ty,tz,qx,qy,qz,qw]
-                   at the timestamps closest to each loaded frame.
+        tstamps:   List of float timestamps (seconds, from image filenames).
+        frames:    List of (H, W, 3) uint8 RGB frames (undistorted + cropped).
+        gt_poses:  (M, 8) float64 — [timestamp, tx, ty, tz, qx, qy, qz, qw]
+                   at the timestamps closest to each loaded frame.  Column 0
+                   is the GT timestamp; columns 1:4 are the XYZ position used
+                   for ATE computation.
     """
     import cv2
 
-    rgb_txt  = dataset_dir / "rgb.txt"
-    gt_txt   = dataset_dir / "groundtruth.txt"
+    # freiburg1 camera matrix and radial-tangential distortion coefficients.
+    _K = np.array([[517.3, 0.0, 318.6], [0.0, 516.5, 255.3], [0.0, 0.0, 1.0]])
+    _D = np.array([0.2624, -0.9531, -0.0054, 0.0026, 1.1633])
+    _CROP_ROW, _CROP_COL = 8, 16
 
-    # Parse rgb.txt — lines: "timestamp path"
-    rgb_entries: list[tuple[float, Path]] = []
-    with open(rgb_txt) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split()
-            rgb_entries.append((float(parts[0]), dataset_dir / parts[1]))
+    gt_txt = dataset_dir / "groundtruth.txt"
+    gt_lines = [l.strip() for l in gt_txt.read_text().splitlines()
+                if l.strip() and not l.startswith("#")]
+    gt_data_arr = np.array([[float(x) for x in l.split()] for l in gt_lines])
+    gt_ts_arr   = gt_data_arr[:, 0]  # (M,) — GT timestamps in seconds
 
-    rgb_entries = rgb_entries[::stride]
-
-    # Parse groundtruth.txt — lines: "timestamp tx ty tz qx qy qz qw"
-    gt_ts: list[float] = []
-    gt_data: list[np.ndarray] = []
-    with open(gt_txt) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split()
-            gt_ts.append(float(parts[0]))
-            gt_data.append(np.array([float(x) for x in parts[1:]], dtype=np.float64))
-    gt_ts_arr  = np.array(gt_ts)
-    gt_data_arr = np.vstack(gt_data)  # (M, 7)
+    # Walk sorted PNG files directly (same order as evaluate_tum.py).
+    rgb_dir   = dataset_dir / "rgb"
+    img_files = sorted(rgb_dir.glob("*.png"))[::stride]
 
     tstamps: list[float] = []
     frames:  list[np.ndarray] = []
     gt_poses: list[np.ndarray] = []
 
-    for ts, img_path in rgb_entries:
-        img = cv2.imread(str(img_path))
+    for imgf in img_files:
+        ts = float(imgf.stem)
+        img = cv2.imread(str(imgf))
         if img is None:
             continue
+        img = cv2.undistort(img, _K, _D)
+        img = img[_CROP_ROW:-_CROP_ROW, _CROP_COL:-_CROP_COL]
         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # Associate ground-truth by nearest timestamp.
         idx = int(np.argmin(np.abs(gt_ts_arr - ts)))
         tstamps.append(ts)
         frames.append(rgb)
-        gt_poses.append(gt_data_arr[idx])
+        gt_poses.append(gt_data_arr[idx])  # [ts, tx, ty, tz, qx, qy, qz, qw]
 
     return tstamps, frames, np.vstack(gt_poses)
 
 
-# ── TUM freiburg1 intrinsics (hard-coded, same as DPVO evaluate_tum.py) ───────
+# ── TUM freiburg1 intrinsics AFTER undistort + 16/8 px crop ──────────────────
+# Matches evaluate_tum.py: cx -= 16 (left crop), cy -= 8 (top crop).
 
 _FREIBURG1_INTRINSICS = np.array(
-    [517.3, 516.5, 318.6, 255.3],   # fx, fy, cx, cy
+    [517.3, 516.5, 318.6 - 16, 255.3 - 8],   # fx, fy, cx, cy
     dtype=np.float32,
 )
 
@@ -255,11 +249,11 @@ class TestDPVOBenchmarkTUM:
 
     @pytest.fixture(scope="class")
     def trajectory_result(self, dataset_dir, weights_path):
-        """Run DPVO on the full TUM sequence; return (poses_est, poses_gt)."""
+        """Run DPVO on the full TUM sequence; return (est_xyz, gt_xyz) matched by ts."""
         from slam import DPVOSlam
 
-        stride = 2   # every other frame — same as DPVO paper evaluation
-        tstamps, frames, gt_poses = _load_tum_sequence(dataset_dir, stride=stride)
+        stride = 1   # same default as evaluate_tum.py
+        tstamps, frames, gt_arr = _load_tum_sequence(dataset_dir, stride=stride)
         assert len(frames) >= 50, (
             f"Only {len(frames)} frames loaded — check dataset_dir path"
         )
@@ -278,14 +272,17 @@ class TestDPVOBenchmarkTUM:
                 slam.push(ts, frame)
 
         poses_est, est_tstamps = slam.terminate()   # (N, 7), (N,)
+        # est_tstamps are the float timestamps we passed to push(); associate
+        # each to the nearest GT entry by timestamp so frame drops are handled.
+        gt_ts_arr = gt_arr[:, 0]
+        matched_gt_xyz  = []
+        matched_est_xyz = []
+        for i, ts in enumerate(est_tstamps):
+            j = int(np.argmin(np.abs(gt_ts_arr - ts)))
+            matched_gt_xyz.append(gt_arr[j, 1:4])
+            matched_est_xyz.append(poses_est[i, :3])
 
-        # Associate estimated poses with GT poses by timestamp.
-        gt_ts = np.array(tstamps, dtype=np.float64)
-        # est_tstamps are indices into tstamps (DPVO uses tstamp as frame index when int).
-        # After terminate(), tstamps array echoes the values passed to __call__.
-        # We trust the order and crop GT to match estimated length.
-        n = min(len(poses_est), len(gt_poses))
-        return poses_est[:n], gt_poses[:n]
+        return np.vstack(matched_est_xyz), np.vstack(matched_gt_xyz)
 
     def test_ate_rmse_within_threshold(self, trajectory_result):
         """ATE RMSE (after Sim(3) alignment) is below 5 cm on TUM fr1/xyz."""
