@@ -61,6 +61,12 @@ dpvo          = { path = "../../../deps/dpvo", editable = true }
 # already-installed torch in this venv.
 no-build-isolation-package = ["dpvo"]
 
+[tool.uv.extra-build-dependencies]
+# DPVO's pyproject doesn't list setuptools/wheel in build-system.requires,
+# so with isolation off they wouldn't be available either.  Inject them
+# only for dpvo's build step.
+dpvo = ["setuptools", "wheel"]
+
 [project.scripts]
 mono_slam_example_worker = "mono_slam_example_worker:run"
 
