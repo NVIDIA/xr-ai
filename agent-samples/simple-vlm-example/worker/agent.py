@@ -43,11 +43,13 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 
 import httpx
 from loguru import logger
 from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
                           ParticipantEvent, ProcessorEndpoint)
+from xr_ai_logging import print_task_done_banner
 
 from audio import chunks_to_wav, now_us, rms, wav_to_chunks
 from pixels import encode_image, frame_to_pil
@@ -221,6 +223,8 @@ class SimpleVlmAgent:
             old_timer.cancel()
 
         self._camera_held.add(pid)
+        t0 = time.monotonic()
+        status = "done"
         try:
             # Acquire a fresh frame, requesting the camera if needed.
             sig = self._latest_signal(pid)
@@ -255,11 +259,23 @@ class SimpleVlmAgent:
 
             if full_response is not None:
                 await self._reply(pid, full_response, frame.pts_us)
+        except asyncio.CancelledError:
+            status = "interrupted"
+            raise
+        except Exception:
+            status = "error"
+            raise
         finally:
             self._camera_held.discard(pid)
             # After the query, keep camera on for a grace period so rapid
             # follow-up queries skip the startup delay.  Then send stopCamera.
             self._schedule_camera_off(pid)
+            print_task_done_banner(
+                "simple-vlm-example",
+                status=status,
+                detail=f"pid={pid!r}  query={query[:60]!r}",
+                duration_s=time.monotonic() - t0,
+            )
 
     async def _stream_and_speak(
         self, pid: str, image_url: str, query: str, fallback_pts_us: int,
