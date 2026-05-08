@@ -37,4 +37,5 @@ only-include = [
     "agent.py",
     "pixels.py",
     "pose.py",
+    "slam.py",
 ]

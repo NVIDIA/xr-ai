@@ -39,3 +39,6 @@ packages = ["xr_ai_tests"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["."]
+markers = [
+    "slow: marks tests as slow / requiring external data (deselect with -m 'not slow')",
+]

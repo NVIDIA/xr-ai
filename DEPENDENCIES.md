@@ -337,12 +337,16 @@ Web client must be a build that includes the bundled CloudXR JS SDK
 
 ### mono-slam-example  (agent-samples/mono-slam-example/)
 
-Monocular visual odometry pipeline: reads video frames from the hub and
-logs per-frame camera pose (roll/pitch/yaw + accumulated unit translation).
-ORB feature matching → BFMatcher (Lowe ratio test) → Essential matrix (RANSAC)
-→ recoverPose.  No loop closure, no bundle adjustment, no mapping.
-Translation is unit-norm (monocular scale ambiguity).  No model weights;
-no GPU required.
+Monocular SLAM pipeline using DPVO (Deep Patch Visual Odometry, MIT license).
+Reads video frames from the hub, feeds them to DPVO for local bundle-adjusted
+pose tracking (map + incremental BA per frame; loop closure optional via
+LOOP_CLOSURE=True DPVO cfg override), and logs the live world-frame camera pose.
+
+DPVO is NOT installed via pyproject.toml — it requires a CUDA toolkit and
+custom CUDA extensions compiled at install time.  Install with:
+    bash scripts/install_dpvo.sh
+Download model weights and TUM benchmark dataset with:
+    bash scripts/download_dataset.sh
 
 On every accepted pose the worker publishes a `DataMessage` on hub topic
 `data._mono_slam_viz.mono_slam.pose` (msgpack payload: `[[tx,ty,tz],[R_flat]]`).
@@ -355,10 +359,17 @@ and renders a real-time 3-D trajectory + orientation triad.
 | Worker | `mono-slam-example-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, opencv-python-headless >=4.8, msgpack >=1.0, pyyaml >=6.0 |
 | Viz | `mono-slam-example-viz` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, matplotlib >=3.7, pyyaml >=6.0 |
 
+DPVO runtime dependencies (installed by scripts/install_dpvo.sh, not in pyproject.toml):
+  torch 2.3.1+cu121, torch-scatter 2.1.2+pt23cu121 (MIT),
+  scipy >=1.11, pypose >=0.6.7 (MIT), einops >=0.7 (MIT),
+  numba >=0.59 (BSD-2), yacs >=0.1.8 (Apache-2.0), matplotlib >=3.7.
+  DPVO itself: https://github.com/princeton-vl/DPVO (MIT).
+  Eigen 3.4.0 header-only (MPL-2.0) — required to build DPVO CUDA extensions.
+  NOTE: dpvo/plot_utils.py imports evo (GPL-3) and plyfile (GPL-3), but these
+  files are NOT imported by the core DPVO inference path and are NOT installed.
+
 opencv-python-headless chosen over opencv-python to avoid pulling in GUI
-display libraries (Qt / GTK) on a headless server.  If cv2.cuda is available
-at runtime, OpenCV may use it for some internal operations automatically, but
-no hard GPU requirement exists.
+display libraries (Qt / GTK) on a headless server.
 
 matplotlib >=3.7 added for the viz process only.  Uses TkAgg backend when
 $DISPLAY/$WAYLAND_DISPLAY is set; falls back to Agg (off-screen PNG output)

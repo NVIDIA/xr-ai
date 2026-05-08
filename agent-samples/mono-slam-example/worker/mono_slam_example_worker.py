@@ -9,14 +9,12 @@ Do not run this directly.
 
 Config (mono_slam_example_worker.yaml — auto-passed by the launcher)
 ---------------------------------------------------------------------
-    fov_deg:           60.0    horizontal FOV for approximate intrinsics
-    focal_length_px:   <float> if set, overrides fov_deg (calibrated value)
-    frame_stride:      3       sample every Nth FrameSignal per track
-    max_features:      500     ORB keypoint budget per frame
-    match_ratio:       0.75    Lowe ratio-test threshold
-    ransac_prob:       0.999   RANSAC confidence for findEssentialMat
-    ransac_threshold:  1.0     reprojection threshold in pixels
-    min_inliers:       20      minimum RANSAC inliers to accept a pose
+    weights_path:       dpvo.pth    path to DPVO checkpoint (required)
+    fov_deg:            60.0        horizontal FOV for approximate intrinsics
+    focal_length_px:    <float>     if set, overrides fov_deg (calibrated value)
+    frame_stride:       3           sample every Nth FrameSignal per track
+    publish_viz:        true        push poses to viz side channel
+    dpvo_cfg_overrides: []          list of YACS key=value strings for DPVO config
 """
 from __future__ import annotations
 
@@ -39,18 +37,16 @@ _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     setup_logging("worker", namespace="mono-slam-example")
 
+    weights_path = cfg.get("weights_path", "dpvo.pth")
     ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     agent = MonoSlamAgent(
         ep,
-        fov_deg          =float(cfg.get("fov_deg",          60.0)),
-        focal_length_px  =cfg.get("focal_length_px",         None),
-        frame_stride     =int(  cfg.get("frame_stride",      3)),
-        max_features     =int(  cfg.get("max_features",      500)),
-        match_ratio      =float(cfg.get("match_ratio",       0.75)),
-        ransac_prob      =float(cfg.get("ransac_prob",       0.999)),
-        ransac_threshold =float(cfg.get("ransac_threshold",  1.0)),
-        min_inliers      =int(  cfg.get("min_inliers",       20)),
-        publish_viz      =bool( cfg.get("publish_viz",       True)),
+        weights_path       =str(weights_path),
+        fov_deg            =float(cfg.get("fov_deg",           60.0)),
+        focal_length_px    =cfg.get("focal_length_px",          None),
+        frame_stride       =int(  cfg.get("frame_stride",       3)),
+        publish_viz        =bool( cfg.get("publish_viz",        True)),
+        dpvo_cfg_overrides =list( cfg.get("dpvo_cfg_overrides", [])),
     )
 
     loop = asyncio.get_running_loop()
@@ -61,8 +57,8 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         ready_file.touch()
 
     logger.info(
-        "mono-slam-example connecting  sub={}  push={}  stride={}",
-        _HUB_PUB, _HUB_PUSH, cfg.get("frame_stride", 3),
+        "mono-slam-example connecting  sub={}  push={}  stride={}  weights={}",
+        _HUB_PUB, _HUB_PUSH, cfg.get("frame_stride", 3), weights_path,
     )
     try:
         await agent.run()

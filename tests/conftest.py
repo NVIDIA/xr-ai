@@ -35,6 +35,26 @@ from xr_ai_agent          import ProcessorEndpoint
 from xr_media_hub.ipc     import ConnectorEndpoint, HubEndpoint
 
 
+# ── CLI options for SLAM benchmark / smoke tests ─────────────────────────────
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--weights-path",
+        default="models/dpvo.pth",
+        help="Path to DPVO model weights (dpvo.pth).  Used by SLAM tests.",
+    )
+    parser.addoption(
+        "--dataset-dir",
+        default=None,
+        help=(
+            "Path to a TUM RGB-D sequence directory "
+            "(e.g. datasets/tum/rgbd_dataset_freiburg1_xyz).  "
+            "Required for test_mono_slam_benchmark.py."
+        ),
+    )
+
+
 # ── address fixtures ────────────────────────────────────────────────────────
 
 

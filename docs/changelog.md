@@ -9,6 +9,46 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-08 — mono-slam-example: replace ORB VO with DPVO (deep monocular SLAM)
+
+Replaced the hand-rolled ORB → Essential matrix → recoverPose pipeline with
+DPVO (Deep Patch Visual Odometry, Princeton Vision Lab, MIT license).
+
+**Why DPVO:**
+- Only MIT-licensed monocular SLAM system with a Python API validated on
+  TUM RGB-D, EuRoC, and KITTI.  All other candidates (ORB-SLAM3, VINS-Mono,
+  OpenVINS, DSO, pySLAM) are GPL-3 or have no Python API; MAST3R-SLAM is
+  CC-BY-NC-SA (non-commercial restriction).
+- Supports loop closure (LOOP_CLOSURE=True config override).
+- Incremental local BA every frame after initialisation (frame ≥ 8).
+- Pretrained weights have no NonCommercial clause.
+
+**License audit (ruled out):**
+  ORB-SLAM3 (GPL-3), VINS-Mono (GPL-3), OpenVINS (GPL-3), DSO (GPL-3),
+  pySLAM (GPL-3), MAST3R-SLAM (CC-BY-NC-SA), stella_vslam (BSD-2 but
+  no Python API).
+
+**Architecture:**
+- `slam.py` is a thin adapter around `dpvo.DPVO`: `push(tstamp, rgb)` feeds
+  one frame, `current_pose()` reads the live (unoptimised) world-frame pose
+  from `pg.poses_[n-1]` after each local BA.  No per-frame return value from
+  DPVO's `__call__` — live pose is read from patch graph state.
+- `terminate()` runs 12 global BA rounds and returns the full refined
+  trajectory; used only for offline evaluation (benchmark tests).
+- DPVO is NOT listed in pyproject.toml because it requires nvcc and custom
+  CUDA extensions compiled at install time.  `scripts/install_dpvo.sh` handles
+  the full installation including Eigen 3.4.0 (MPL-2.0, SHA256-pinned).
+- `pose.py` and `pose_to_euler_deg` are kept for Euler angle logging.
+- `pixels.py` gains `frame_to_rgb` (DPVO needs 3-channel RGB, not grayscale).
+
+**Coordinate frame:**
+  DPVO uses OpenCV camera frame (X right, Y down, Z forward).
+  `pg.poses_[i]` is T_cam_from_world (inverted); we call `.inv()` to get
+  T_world_from_cam with pos_world = T.t.
+
+**IPC payload unchanged:** `[[tx, ty, tz], [R_flat_9_floats]]` on hub topic
+  `data._mono_slam_viz.mono_slam.pose`.  Viz process untouched.
+
 ### 2026-05-08 — mono-slam-example: classic feature-based visual odometry
 
 New agent sample `agent-samples/mono-slam-example/` adds a lightweight

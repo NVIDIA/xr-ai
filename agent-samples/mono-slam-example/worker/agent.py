@@ -2,23 +2,28 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-MonoSlamAgent — per-frame visual odometry pose logger.
+MonoSlamAgent — per-frame DPVO visual odometry pose logger.
 
-Subscribes to FrameSignals from the hub, samples frames at the configured
-stride, and runs ORB-based visual odometry to accumulate a relative camera
-pose.  Pose is logged per frame as a structured single-line message.
+Subscribes to FrameSignals from the hub, feeds frames to a DPVO SLAM
+instance, and logs the live world-frame camera pose per accepted frame.
+Pose is also published on the viz side channel once DPVO is initialised.
 
 Design notes
 ------------
-- No loop closure, no bundle adjustment, no mapping — tracking only.
-- Translation is unit-norm (monocular scale ambiguity); accumulated position
-  reflects direction of travel, not metric distance.
+- DPVO (MIT-licensed) runs local bundle adjustment every frame once
+  initialised (frame ≥ 8); the live pose is read directly from the patch
+  graph after each push and has modest drift.
+- Translation has DPVO's internal scale (not metric, no ground-truth
+  reference).  The log line notes this.
 - Camera intrinsics are approximated from frame dimensions; provide a
   calibrated focal_length_px in the YAML for better accuracy.
-- Per-(pid, track) state is reset when the track changes size or when the
+- Per-(pid, track) state resets when the track changes size or when the
   participant leaves.
-- CPU-bound ORB + recoverPose runs in a thread-pool executor to avoid
-  blocking the asyncio event loop.
+- GPU-bound DPVO runs in a thread-pool executor so the asyncio loop stays
+  responsive.
+- DPVO requires CUDA.  If DPVO is not installed, import succeeds but
+  construction of DPVOSlam raises ImportError; the agent logs an error
+  and exits cleanly.
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ import asyncio
 import functools
 import time
 from dataclasses import dataclass, field
+from typing import Optional
 
 import msgpack
 import numpy as np
@@ -33,11 +39,11 @@ from loguru import logger
 from xr_ai_agent import DataMessage, FrameData, FrameSignal, MsgType, ParticipantEvent, ProcessorEndpoint
 from xr_ai_agent import encode as ipc_encode
 
-from pixels import frame_to_gray
-from pose import PoseResult, build_camera_matrix, compute_pose, rotation_to_euler_deg
+from pixels import frame_to_rgb
+from pose import build_camera_matrix, rotation_to_euler_deg
+from slam import DPVOSlam, intrinsics_from_K
 
 # Synthetic participant / topic that the viz process subscribes to.
-# Using a synthetic participant keeps pose telemetry off real data channels.
 _VIZ_PARTICIPANT = "_mono_slam_viz"
 _VIZ_TOPIC       = "mono_slam.pose"
 
@@ -46,8 +52,8 @@ def encode_pose(t_world: np.ndarray, R_world: np.ndarray) -> bytes:
     """Encode camera pose as a msgpack list for the viz side channel.
 
     Args:
-        t_world: Camera position in world frame, shape (3,).  Unit-norm.
-        R_world: R_curr_from_world, shape (3, 3).
+        t_world: Camera position in world frame, shape (3,).
+        R_world: R_cam_from_world, shape (3, 3).
 
     Returns:
         msgpack bytes: [[tx, ty, tz], [r00..r22 flat row-major]]
@@ -60,26 +66,12 @@ def encode_pose(t_world: np.ndarray, R_world: np.ndarray) -> bytes:
 
 @dataclass
 class _TrackState:
-    """Accumulated VO state for a single (participant, track) pair.
+    """DPVO instance and bookkeeping for a single (participant, track) pair.
 
-    Convention (OpenCV camera frame: X right, Y down, Z forward):
-
-    R_world  — rotation matrix R_curr_from_world.
-               Transforms a world-frame point to the current camera frame:
-               p_cam = R_world @ p_world + t_world_cam.
-
-    t_world_cam — translation part of T_curr_from_world, i.e. the origin
-               of the world (first-frame camera) expressed in the current
-               camera frame.
-
-    Camera position in world coordinates:
-               pos_world = -R_world.T @ t_world_cam
-               (logged as tx/ty/tz — direction only, no metric scale).
+    Convention: DPVO camera frame — X right, Y down, Z forward (OpenCV).
     """
-    prev_gray: np.ndarray | None = None
-    R_world:     np.ndarray = field(default_factory=lambda: np.eye(3))
-    t_world_cam: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    frame_count: int = 0       # frames processed (after stride filter)
+    slam:        Optional[DPVOSlam] = None
+    frame_count: int = 0       # frames pushed to DPVO
     signal_count: int = 0      # FrameSignals seen (before stride filter)
     width: int = 0
     height: int = 0
@@ -91,28 +83,20 @@ class MonoSlamAgent:
         self,
         ep: ProcessorEndpoint,
         *,
+        weights_path: str,
         fov_deg: float = 60.0,
         focal_length_px: float | None = None,
         frame_stride: int = 3,
-        max_features: int = 500,
-        match_ratio: float = 0.75,
-        ransac_prob: float = 0.999,
-        ransac_threshold: float = 1.0,
-        min_inliers: int = 20,
         publish_viz: bool = True,
+        dpvo_cfg_overrides: list[str] | None = None,
     ) -> None:
-        self._ep              = ep
-        self._fov_deg         = fov_deg
-        self._focal_length_px = focal_length_px
-        self._frame_stride    = max(1, frame_stride)
-        self._publish_viz     = publish_viz
-        self._vo_kwargs: dict = dict(
-            max_features=max_features,
-            match_ratio=match_ratio,
-            ransac_prob=ransac_prob,
-            ransac_threshold=ransac_threshold,
-            min_inliers=min_inliers,
-        )
+        self._ep                  = ep
+        self._weights_path        = weights_path
+        self._fov_deg             = fov_deg
+        self._focal_length_px     = focal_length_px
+        self._frame_stride        = max(1, frame_stride)
+        self._publish_viz         = publish_viz
+        self._dpvo_cfg_overrides  = dpvo_cfg_overrides or []
 
         # Keyed by (participant_id, track_id).
         self._tracks: dict[tuple[str, str], _TrackState] = {}
@@ -141,80 +125,81 @@ class MonoSlamAgent:
 
         loop = asyncio.get_running_loop()
         try:
-            gray = await loop.run_in_executor(None, frame_to_gray, frame)
+            rgb = await loop.run_in_executor(None, frame_to_rgb, frame)
         except ValueError as exc:
             logger.warning("pixel conversion failed  track={}  {}", sig.track_id, exc)
             return
 
-        K = build_camera_matrix(
-            sig.width, sig.height,
-            fov_deg=self._fov_deg,
-            focal_length_px=self._focal_length_px,
-        )
-
-        if state.prev_gray is None:
-            state.prev_gray = gray
-            state.frame_count += 1
-            logger.info(
-                "slam  pid={!r}  track={}  frame={}  status=first_frame"
-                "  size={}x{}",
-                sig.participant_id, sig.track_id, state.frame_count,
+        # Lazily construct the DPVO instance on the first real frame.
+        if state.slam is None:
+            K = build_camera_matrix(
                 sig.width, sig.height,
+                fov_deg=self._fov_deg,
+                focal_length_px=self._focal_length_px,
             )
-            return
+            intr = intrinsics_from_K(K)
+            try:
+                state.slam = await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        DPVOSlam,
+                        self._weights_path,
+                        sig.height,
+                        sig.width,
+                        intr,
+                        self._dpvo_cfg_overrides or None,
+                    ),
+                )
+            except Exception as exc:
+                logger.error(
+                    "DPVO init failed  track={}  {}  "
+                    "(is dpvo installed and CUDA available?)",
+                    sig.track_id, exc,
+                )
+                # Mark track as permanently broken so we don't retry every frame.
+                del self._tracks[key]
+                return
+            logger.info(
+                "slam  pid={!r}  track={}  status=dpvo_init  size={}x{}",
+                sig.participant_id, sig.track_id, sig.width, sig.height,
+            )
 
-        result: PoseResult = await loop.run_in_executor(
+        tstamp = time.time()
+        await loop.run_in_executor(
             None,
-            functools.partial(compute_pose, state.prev_gray, gray, K, **self._vo_kwargs),
+            functools.partial(state.slam.push, tstamp, rgb),
         )
-
-        state.prev_gray = gray
         state.frame_count += 1
 
-        if not result.ok:
-            logger.info(
-                "slam  pid={!r}  track={}  frame={}  status=skipped"
-                "  inliers={}",
+        pose = state.slam.current_pose()
+        if pose is None:
+            # DPVO not yet initialised (needs ≥8 frames).
+            logger.debug(
+                "slam  pid={!r}  track={}  frame={}  status=initialising",
                 sig.participant_id, sig.track_id, state.frame_count,
-                result.num_inliers,
             )
             return
 
-        # Accumulate T_curr_from_world from successive relative poses.
-        #
-        # recoverPose convention: p_curr_cam = R @ p_prev_cam + t
-        # So T_curr_from_prev = (R, t).
-        #
-        # T_curr_from_world = T_curr_from_prev @ T_prev_from_world
-        #   R_new = R_step @ R_old
-        #   t_new = R_step @ t_old + t_step
-        state.t_world_cam = result.R @ state.t_world_cam + result.t
-        state.R_world     = result.R @ state.R_world
+        roll, pitch, yaw = rotation_to_euler_deg(pose.R_world)
+        pos = pose.pos_world
 
-        # Camera position in world (first-frame) coordinates.
-        # pos_world = -R_world.T @ t_world_cam  (no metric scale — unit-norm chain).
-        pos = -state.R_world.T @ state.t_world_cam
-
-        roll, pitch, yaw = rotation_to_euler_deg(state.R_world)
-
-        # Single structured log line — grep on "slam pose" to extract all poses.
         logger.info(
             "slam pose"
             "  pid={!r}  track={}"
             "  frame={}"
-            "  inliers={}"
+            "  dpvo_frame={}"
             "  roll_deg={:.2f}  pitch_deg={:.2f}  yaw_deg={:.2f}"
             "  tx={:.4f}  ty={:.4f}  tz={:.4f}"
-            "  [t unit-norm monocular scale]",
+            "  [t in DPVO internal scale]",
             sig.participant_id, sig.track_id,
             state.frame_count,
-            result.num_inliers,
+            pose.frame_idx,
             roll, pitch, yaw,
             pos[0], pos[1], pos[2],
         )
 
         if self._publish_viz:
-            self._publish_pose(pos, state.R_world)
+            self._publish_pose(pos, pose.R_world)
 
     # ── viz side channel ───────────────────────────────────────────────────────
 

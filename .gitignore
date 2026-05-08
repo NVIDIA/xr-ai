@@ -7,6 +7,9 @@
 **/models/**
 models
 
+# Downloaded evaluation datasets (TUM, EuRoC, KITTI, etc.)
+datasets/
+
 # Downloaded binaries (e.g. LOVR AppImage) — same convention as models/
 **/deps/**
 !**/deps/.gitkeep
