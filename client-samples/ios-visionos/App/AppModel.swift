@@ -113,6 +113,7 @@ final class AppModel {
     var agentStatus: String?
     var isAudioActive = false
     var isCameraActive = false
+    private var isCameraStarting = false
     var isConnecting = false
     var receivedMessages: [ReceivedMessage] = []
     var lastError: String?
@@ -232,6 +233,10 @@ final class AppModel {
     // MARK: - Camera
 
     func startCamera() async {
+        guard !isCameraStarting, !isCameraActive else { return }
+        isCameraStarting = true
+        defer { isCameraStarting = false }
+
         #if os(visionOS)
         // Surface a friendly message when main-camera access is permanently
         // denied. Without this probe the user sees `LiveKitError.deviceAccessDenied`

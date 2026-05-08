@@ -176,9 +176,10 @@ struct ContentView: View {
         Toggle("Camera on demand", isOn: $m.cameraOnDemand)
 
         if model.connectionState == .connected {
-            Picker("Camera Mode", selection: $m.cameraPosition) {
-                Text("Front").tag(CameraConfig.Position.front)
-                Text("Back").tag(CameraConfig.Position.back)
+            Picker("Camera", selection: $m.cameraPosition) {
+                ForEach(CameraConfig.Position.allCases, id: \.self) { position in
+                    Text(position.displayName).tag(position)
+                }
             }
             #if os(visionOS)
             .disabled(true)
@@ -358,6 +359,19 @@ private struct AgentStatusBadge: View {
         case "processing": return "Processing…"
         case nil:          return "—"
         default:           return "Unknown"
+        }
+    }
+}
+
+// MARK: - CameraConfig.Position + CaseIterable
+
+extension CameraConfig.Position: CaseIterable {
+    public static var allCases: [CameraConfig.Position] { [.back, .front] }
+
+    var displayName: String {
+        switch self {
+        case .front: "Front"
+        case .back:  "Back"
         }
     }
 }
