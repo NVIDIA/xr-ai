@@ -3,18 +3,25 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Install DPVO (Deep Patch Visual Odometry, MIT license) and its CUDA
-# dependencies into the current Python environment.
+# dependencies into the mono-slam-example worker's uv-managed venv.
 #
 # Requirements:
 #   - CUDA 12.1 or later (nvcc must be on PATH)
 #   - Python 3.11 or 3.12
 #   - A GPU (DPVO does not run on CPU)
+#   - `uv` on PATH (used to materialize the worker venv if missing)
 #
-# Usage:
+# Usage (from anywhere):
 #   bash scripts/install_dpvo.sh
 #
+# The script always targets agent-samples/mono-slam-example/worker/.venv —
+# that is the venv `uv run mono_slam_example` ultimately spawns the worker in,
+# so DPVO + torch must land there. Running plain `pip install` would put them
+# in system Python or the orchestrator venv and the worker would still fail
+# with `ModuleNotFoundError: torch`.
+#
 # After installation:
-#   The dpvo package is available as "import dpvo".
+#   The dpvo package is available to the worker as "import dpvo".
 #   Download model weights with: bash scripts/download_dataset.sh
 set -euo pipefail
 
@@ -27,9 +34,32 @@ TORCH_VERSION="2.3.1+cu121"
 TORCH_INDEX="https://download.pytorch.org/whl/cu121"
 TORCH_SCATTER_INDEX="https://data.pyg.org/whl/torch-2.3.1+cu121.html"
 
+# ── 0. Resolve the worker venv ─────────────────────────────────────────────────
+WORKER_DIR="${REPO_ROOT}/agent-samples/mono-slam-example/worker"
+WORKER_VENV="${WORKER_DIR}/.venv"
+
+if [[ ! -d "${WORKER_VENV}" ]]; then
+    if ! command -v uv &>/dev/null; then
+        echo "ERROR: worker venv missing at ${WORKER_VENV} and 'uv' is not on PATH." >&2
+        echo "       Install uv (https://docs.astral.sh/uv/) or run 'uv sync' in" >&2
+        echo "       ${WORKER_DIR} to create the venv first." >&2
+        exit 1
+    fi
+    echo "Worker venv not found — creating it via 'uv sync' ..."
+    (cd "${WORKER_DIR}" && uv sync --quiet)
+fi
+
+PIP="${WORKER_VENV}/bin/pip"
+PYBIN="${WORKER_VENV}/bin/python"
+if [[ ! -x "${PIP}" ]] || [[ ! -x "${PYBIN}" ]]; then
+    echo "ERROR: ${WORKER_VENV} exists but is missing pip/python." >&2
+    exit 1
+fi
+
 echo "=== DPVO installer ==="
-echo "DPVO dir:  ${DPVO_DIR}"
-echo "Torch:     ${TORCH_VERSION}"
+echo "Target venv: ${WORKER_VENV}"
+echo "DPVO dir:    ${DPVO_DIR}"
+echo "Torch:       ${TORCH_VERSION}"
 
 # ── 1. Check nvcc ───────────────────────────────────────────────────────────────
 if ! command -v nvcc &>/dev/null; then
@@ -50,7 +80,7 @@ echo "nvcc: $(nvcc --version | head -1)"
 
 # ── 2. Install torch 2.3.1+cu121 ───────────────────────────────────────────────
 echo "Installing torch ${TORCH_VERSION} ..."
-pip install \
+"${PIP}" install \
     "torch==${TORCH_VERSION}" \
     "torchvision>=0.18.1+cu121" \
     --index-url "${TORCH_INDEX}" \
@@ -58,13 +88,13 @@ pip install \
 
 # ── 3. Install torch-scatter (MIT-licensed, PyG wheel) ─────────────────────────
 echo "Installing torch-scatter ..."
-pip install "torch-scatter==2.1.2" \
+"${PIP}" install "torch-scatter==2.1.2" \
     --find-links "${TORCH_SCATTER_INDEX}" \
     --no-deps --quiet
 
 # ── 4. Install DPVO Python dependencies ────────────────────────────────────────
 echo "Installing DPVO Python dependencies ..."
-pip install \
+"${PIP}" install \
     "scipy>=1.11" \
     "pypose>=0.6.7" \
     "einops>=0.7" \
@@ -122,11 +152,11 @@ fi
 echo "Building DPVO CUDA extensions (this takes a few minutes) ..."
 cd "${DPVO_DIR}"
 PATH="$(dirname "$(command -v nvcc)"):${PATH}" \
-pip install --no-build-isolation -e . --quiet
+"${PIP}" install --no-build-isolation -e . --quiet
 
 echo ""
 echo "=== DPVO installation complete ==="
-echo "Verify with:  python -c 'import dpvo; print(dpvo.__file__)'"
+echo "Verify with:  ${PYBIN} -c 'import dpvo; print(dpvo.__file__)'"
 echo ""
 echo "Download model weights:"
 echo "  wget https://www.dropbox.com/s/nap0u8zslspdwm4/models.zip"
