@@ -283,17 +283,25 @@ uv run model_servers --stop
 
 ---
 
-### Mono SLAM example (monocular visual odometry pose logger)
+### Mono SLAM example (monocular visual odometry + 3-D trajectory viz)
 
-Lightweight pipeline that reads video frames from the hub and prints the
-estimated camera pose (roll/pitch/yaw + accumulated translation) to the
-log once per frame.  No model weights, no GPU required — runs on any
-machine with a webcam-equipped client.
+Lightweight pipeline that reads video frames from the hub, runs ORB-based
+monocular visual odometry, prints the estimated camera pose to the log
+once per processed frame, and displays a live 3-D trajectory plot with a
+camera orientation triad.  No model weights, no GPU required — runs on
+any machine with a webcam-equipped client.
 
 Uses ORB feature matching and OpenCV `recoverPose` (Essential matrix /
 RANSAC).  No loop closure, no bundle adjustment, no mapping — tracking
 only.  Translation is unit-norm (monocular scale ambiguity); pose is
 relative to the first frame.
+
+Three processes start together:
+- **hub** — XR media routing hub
+- **worker** (`mono_slam_example_worker`) — per-frame ORB VO; publishes
+  pose updates to the viz via the hub data channel
+- **viz** (`mono_slam_example_viz`) — subscribes to pose updates and
+  renders a real-time 3-D trajectory + orientation triad
 
 ```bash
 cd agent-samples/mono-slam-example
@@ -309,6 +317,12 @@ slam pose  pid='default'  track=TR_xxx  frame=5  inliers=42
   roll_deg=0.12  pitch_deg=-1.30  yaw_deg=2.45
   tx=0.0023  ty=-0.0011  tz=0.0087  [t unit-norm monocular scale]
 ```
+
+The viz window opens automatically when a display is available.  To run
+headless (e.g., on a server), set `save_frames_dir` in
+`yaml/mono_slam_example_viz.yaml` — the viz writes per-frame PNGs there
+instead of opening a window.  Set `publish_viz: false` in
+`yaml/mono_slam_example_worker.yaml` to disable the viz channel entirely.
 
 Tune `fov_deg` (or provide `focal_length_px`) in
 `yaml/mono_slam_example_worker.yaml` to match your camera.

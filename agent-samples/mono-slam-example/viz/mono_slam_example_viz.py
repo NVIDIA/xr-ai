@@ -22,11 +22,14 @@ Config (mono_slam_example_viz.yaml — auto-passed by the launcher)
     fps_target:         20      max plot update rate (Hz)
 
 Backend selection (backend: auto):
-    If $DISPLAY (Linux) or $WAYLAND_DISPLAY is set → TkAgg (interactive window).
-    Otherwise → Agg (writes PNGs to save_frames_dir, creating it if needed).
+    Priority order:
+    1. If save_frames_dir is set → Agg + that directory (PNG capture wins
+       over any display).
+    2. Else if $DISPLAY / $WAYLAND_DISPLAY / $MIR_SOCKET is set → TkAgg
+       (falls back to Qt5Agg if tkinter is unavailable).
+    3. Else → Agg + /tmp/mono_slam_frames (fully headless).
     backend: qt forces Qt5Agg; backend: save forces Agg+save regardless of
-    $DISPLAY.  Agg requires save_frames_dir to be set; auto-assigns
-    /tmp/mono_slam_frames if not.
+    $DISPLAY.
 """
 from __future__ import annotations
 
@@ -237,12 +240,21 @@ class MonoSlamVizProcess:
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 def _detect_backend(cfg_backend: str, save_dir: pathlib.Path | None) -> tuple[str, pathlib.Path | None]:
-    """Return (matplotlib_backend_name, effective_save_dir)."""
+    """Return (matplotlib_backend_name, effective_save_dir).
+
+    Priority for ``backend: auto``:
+    1. If ``save_frames_dir`` is explicitly set → Agg + that directory
+       (operator chose offline PNG capture; display availability is irrelevant).
+    2. Else if a display environment variable is set → interactive TkAgg/Qt5Agg.
+    3. Else headless → Agg + default tmp directory.
+    """
     if cfg_backend == "save":
         return "Agg", save_dir or pathlib.Path("/tmp/mono_slam_frames")
     if cfg_backend == "qt":
         return "Qt5Agg", None
-    # auto: check for a display
+    # auto: honour explicit save_frames_dir before checking for a display.
+    if save_dir is not None:
+        return "Agg", save_dir
     has_display = bool(
         os.environ.get("DISPLAY")
         or os.environ.get("WAYLAND_DISPLAY")
@@ -255,8 +267,8 @@ def _detect_backend(cfg_backend: str, save_dir: pathlib.Path | None) -> tuple[st
         except ImportError:
             pass
         return "Qt5Agg", None
-    # headless
-    return "Agg", save_dir or pathlib.Path("/tmp/mono_slam_frames")
+    # headless, no save_dir configured — write to a safe default.
+    return "Agg", pathlib.Path("/tmp/mono_slam_frames")
 
 
 # ── asyncio entry ──────────────────────────────────────────────────────────────
