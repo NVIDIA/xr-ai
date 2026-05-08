@@ -31,6 +31,11 @@ dependencies = [
     "yacs>=0.1.8",
     "matplotlib>=3.7",
     "dpvo",
+    # Build-time deps for dpvo (no-build-isolation means the build env IS the
+    # project venv).  DPVO's own pyproject doesn't declare them, so they must
+    # be present here for setuptools.build_meta to load.
+    "setuptools>=68",
+    "wheel>=0.41",
 ]
 
 [[tool.uv.index]]
@@ -58,14 +63,9 @@ dpvo          = { path = "../../../deps/dpvo", editable = true }
 [tool.uv]
 # DPVO's setup.py imports torch at build time; an isolated build env would
 # not have torch and the install would fail.  Build dpvo against the
-# already-installed torch in this venv.
+# already-installed torch in this venv (which also carries setuptools+wheel
+# from the runtime deps above, satisfying setuptools.build_meta).
 no-build-isolation-package = ["dpvo"]
-
-[tool.uv.extra-build-dependencies]
-# DPVO's pyproject doesn't list setuptools/wheel in build-system.requires,
-# so with isolation off they wouldn't be available either.  Inject them
-# only for dpvo's build step.
-dpvo = ["setuptools", "wheel"]
 
 [project.scripts]
 mono_slam_example_worker = "mono_slam_example_worker:run"
