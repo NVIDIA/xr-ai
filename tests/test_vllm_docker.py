@@ -30,6 +30,11 @@ class TestRegistryFor:
         # host:port/image has a colon in the first segment
         assert _registry_for("localhost:5000/myimage:latest") == "localhost:5000"
 
+    def test_tagged_unqualified_name_no_registry(self):
+        # A bare image with a tag must not be misread as a registry just
+        # because the tag's `:` looks like a host:port marker.
+        assert _registry_for("myimage:latest") is None
+
 
 class TestAlreadyLoggedIn:
     def test_no_docker_config(self, tmp_path, monkeypatch):
