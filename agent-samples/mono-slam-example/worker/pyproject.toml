@@ -59,11 +59,13 @@ dpvo          = { path = "../../../deps/dpvo", editable = true }
 # DPVO has no pyproject.toml (only setup.py), so uv uses the legacy
 # setuptools backend, which must be importable in the isolated build env.
 # setup.py also imports torch at build time; match-runtime = true reuses
-# the same cached torch wheel that lands in the project venv.
+# the same torch the project resolution picked (the version pin lives in
+# [project.dependencies] above; uv rejects redundant pins on match-runtime
+# entries).
 dpvo = [
     "setuptools>=68",
     "wheel>=0.41",
-    { requirement = "torch==2.3.1", match-runtime = true },
+    { requirement = "torch", match-runtime = true },
 ]
 
 [project.scripts]
