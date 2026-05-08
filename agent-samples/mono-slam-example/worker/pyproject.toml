@@ -18,6 +18,7 @@ dependencies = [
     # server-side frame processing.  If cv2.cuda is available at runtime
     # the code falls back to it transparently — no hard requirement.
     "opencv-python-headless>=4.8",
+    "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
