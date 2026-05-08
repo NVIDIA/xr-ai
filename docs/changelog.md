@@ -9,6 +9,35 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-08 — mono-slam-example: classic feature-based visual odometry
+
+New agent sample `agent-samples/mono-slam-example/` adds a lightweight
+monocular visual odometry pipeline.
+
+**Design choice: OpenCV ORB + recoverPose, no deep model.**
+The task asks for "lightweight, runs on any GPU" + "monocular SLAM".
+Real monocular SLAM (ORB-SLAM3, DROID-SLAM) requires heavy deps and
+often a GPU.  Classic feature-based VO (ORB keypoints → BFMatcher →
+findEssentialMat → recoverPose) is CPU-only, has no model weights, and
+ships with `opencv-python-headless`.  For the stated goal (log pose per
+frame) this is the correct trade-off.
+
+**What this pipeline does NOT do:**
+- No loop closure — pose drifts over long sequences.
+- No bundle adjustment — no global consistency.
+- No metric scale — translation is unit-norm (monocular ambiguity).
+- No calibration — K is approximated from FOV; provide focal_length_px
+  for better accuracy.
+
+These limitations are called out in YAML comments, agent docstrings, and
+the PR body.  They would need to be addressed to harden the pipeline for
+production tracking.
+
+**Frame conventions:** OpenCV camera frame (X right, Y down, Z forward).
+cv2.recoverPose returns R, t such that p_curr = R @ p_prev + t (previous
+→ current).  Euler angles use ZYX intrinsic (yaw → pitch → roll in body
+frame), reported in degrees.
+
 ### 2026-05-05 — Docker backend option for vLLM-backed servers
 
 All four vLLM-backed services (`vlm_server`, `llama_nemotron_llm_server`,

@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mono-slam-example-worker"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "xr-ai-agent",
+    "xr-ai-logging",
+    "numpy>=1.24",
+    # opencv-python provides ORB, BFMatcher, findEssentialMat, recoverPose.
+    # The CPU-only (headless) build avoids GUI deps and is sufficient for
+    # server-side frame processing.  If cv2.cuda is available at runtime
+    # the code falls back to it transparently — no hard requirement.
+    "opencv-python-headless>=4.8",
+]
+
+[tool.uv.sources]
+xr-ai-agent   = { path = "../../../agent-sdk", editable = true }
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
+
+[project.scripts]
+mono_slam_example_worker = "mono_slam_example_worker:run"
+
+[tool.hatch.build.targets.wheel]
+only-include = [
+    "mono_slam_example_worker.py",
+    "agent.py",
+    "pixels.py",
+    "pose.py",
+]

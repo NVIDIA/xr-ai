@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# mono-slam-example worker configuration.
+#
+# Camera intrinsics
+# -----------------
+# The hub does not provide calibration data, so K is approximated from
+# frame dimensions using the configured field-of-view.  Pose estimates
+# are relative (no metric scale) and will drift without loop closure.
+# Replace focal_length_px with a real calibrated value when available.
+#
+# focal_length_px: if set, used directly as fx = fy.
+#                  if omitted, derived from fov_deg and frame width.
+fov_deg: 60.0          # horizontal FOV assumed when focal_length_px is absent
+# focal_length_px: 600.0   # uncomment to override the FOV-derived value
+
+# Tracking parameters
+# -------------------
+# frame_stride: pull pixels every Nth FrameSignal (per track).
+#               Higher = less CPU, coarser motion estimates.
+frame_stride: 3
+
+# ORB feature detector
+max_features: 500       # ORB keypoints per frame
+match_ratio:  0.75      # Lowe ratio test threshold for BFMatcher
+
+# recoverPose
+ransac_prob:       0.999   # RANSAC confidence
+ransac_threshold:  1.0     # reprojection threshold in pixels
+min_inliers:       20      # frames with fewer inliers are skipped (degenerate)

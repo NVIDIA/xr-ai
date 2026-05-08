@@ -53,6 +53,7 @@ endpoint and no local GPU is required for the agent or hub.
 | model-servers (all 4 models) | ~70 GB |
 | simple-vlm-example (standalone) | ~23 GB |
 | xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
+| mono-slam-example | none |
 | Hub only | none |
 
 **Software**
@@ -279,6 +280,38 @@ To stop the model servers when done:
 cd agent-samples/model-servers
 uv run model_servers --stop
 ```
+
+---
+
+### Mono SLAM example (monocular visual odometry pose logger)
+
+Lightweight pipeline that reads video frames from the hub and prints the
+estimated camera pose (roll/pitch/yaw + accumulated translation) to the
+log once per frame.  No model weights, no GPU required — runs on any
+machine with a webcam-equipped client.
+
+Uses ORB feature matching and OpenCV `recoverPose` (Essential matrix /
+RANSAC).  No loop closure, no bundle adjustment, no mapping — tracking
+only.  Translation is unit-norm (monocular scale ambiguity); pose is
+relative to the first frame.
+
+```bash
+cd agent-samples/mono-slam-example
+uv sync
+uv run mono_slam_example
+```
+
+Then connect any client and start streaming video.  Pose lines appear in
+the log as:
+
+```
+slam pose  pid='default'  track=TR_xxx  frame=5  inliers=42
+  roll_deg=0.12  pitch_deg=-1.30  yaw_deg=2.45
+  tx=0.0023  ty=-0.0011  tz=0.0087  [t unit-norm monocular scale]
+```
+
+Tune `fov_deg` (or provide `focal_length_px`) in
+`yaml/mono_slam_example_worker.yaml` to match your camera.
 
 ---
 

@@ -133,17 +133,19 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
 xr-ai-tests  (tests/)
-    └── xr-ai-agent     [editable: ../agent-sdk]
-    └── xr-media-hub    [editable: ../server-runtime]
-    └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher]
-    └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
-    └── xr-ai-vllm      [editable: ../utils/xr-ai-vllm]
+    └── xr-ai-agent              [editable: ../agent-sdk]
+    └── xr-media-hub             [editable: ../server-runtime]
+    └── xr-ai-launcher           [editable: ../utils/xr-ai-launcher]
+    └── xr-ai-logging            [editable: ../utils/xr-ai-logging]
+    └── xr-ai-vllm               [editable: ../utils/xr-ai-vllm]
+    └── mono-slam-example-worker [editable: ../agent-samples/mono-slam-example/worker]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
     Multi-client / multi-agent integration tests over the IPC layer.
     Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
-    Also covers unit tests for the leaf util packages (launcher, logging, vllm).
+    Also covers unit tests for the leaf util packages (launcher, logging, vllm)
+    and pose math for mono-slam-example.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0
@@ -332,6 +334,25 @@ Starts: hub, cloudxr-runtime, piper-tts (8105), vlm-mcp (8220),
 video-mcp (8210), render-mcp (8220), oxr-mcp (8230), worker.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
+
+### mono-slam-example  (agent-samples/mono-slam-example/)
+
+Monocular visual odometry pipeline: reads video frames from the hub and
+logs per-frame camera pose (roll/pitch/yaw + accumulated unit translation).
+ORB feature matching → BFMatcher (Lowe ratio test) → Essential matrix (RANSAC)
+→ recoverPose.  No loop closure, no bundle adjustment, no mapping.
+Translation is unit-norm (monocular scale ambiguity).  No model weights;
+no GPU required.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `mono-slam-example` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `mono-slam-example-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, opencv-python-headless >=4.8, pyyaml >=6.0 |
+
+opencv-python-headless chosen over opencv-python to avoid pulling in GUI
+display libraries (Qt / GTK) on a headless server.  If cv2.cuda is available
+at runtime, OpenCV may use it for some internal operations automatically, but
+no hard GPU requirement exists.
 
 ---
 
