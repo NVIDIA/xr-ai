@@ -342,10 +342,13 @@ Reads video frames from the hub, feeds them to DPVO for local bundle-adjusted
 pose tracking (map + incremental BA per frame; loop closure optional via
 LOOP_CLOSURE=True DPVO cfg override), and logs the live world-frame camera pose.
 
-DPVO is NOT installed via pyproject.toml — it requires a CUDA toolkit and
-custom CUDA extensions compiled at install time.  Install with:
-    bash scripts/install_dpvo.sh
-Download model weights and TUM benchmark dataset with:
+DPVO is installed via the worker's pyproject.toml as an editable path
+source.  The orchestrator's first-run bootstrap (`_ensure_dpvo_source` in
+`main.py`) clones DPVO into `deps/dpvo/` and extracts Eigen 3.4.0 there;
+`uv sync` then builds DPVO's CUDA extensions against the local torch.
+A CUDA toolkit (>= 12.1) with `nvcc` on PATH is required.
+
+Download the TUM benchmark dataset with:
     bash scripts/download_dataset.sh
 
 On every accepted pose the worker publishes a `DataMessage` on hub topic
@@ -356,17 +359,19 @@ and renders a real-time 3-D trajectory + orientation triad.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `mono-slam-example` | `xr-ai-launcher`, `xr-ai-logging` | — |
-| Worker | `mono-slam-example-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, opencv-python-headless >=4.8, msgpack >=1.0, pyyaml >=6.0 |
+| Worker | `mono-slam-example-worker` | `xr-ai-agent`, `xr-ai-logging`, `dpvo` (editable, deps/dpvo) | torch 2.3.1+cu121, torchvision 0.18.1+cu121, torch-scatter 2.1.2+pt23cu121 (MIT), scipy >=1.11, pypose >=0.6.7 (MIT), einops >=0.7 (MIT), numba >=0.59 (BSD-2), yacs >=0.1.8 (Apache-2.0), matplotlib >=3.7, opencv-python-headless >=4.8, numpy >=1.24, msgpack >=1.0, pyyaml >=6.0 |
 | Viz | `mono-slam-example-viz` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, matplotlib >=3.7, pyyaml >=6.0 |
 
-DPVO runtime dependencies (installed by scripts/install_dpvo.sh, not in pyproject.toml):
-  torch 2.3.1+cu121, torch-scatter 2.1.2+pt23cu121 (MIT),
-  scipy >=1.11, pypose >=0.6.7 (MIT), einops >=0.7 (MIT),
-  numba >=0.59 (BSD-2), yacs >=0.1.8 (Apache-2.0), matplotlib >=3.7.
-  DPVO itself: https://github.com/princeton-vl/DPVO (MIT).
-  Eigen 3.4.0 header-only (MPL-2.0) — required to build DPVO CUDA extensions.
-  NOTE: dpvo/plot_utils.py imports evo (GPL-3) and plyfile (GPL-3), but these
-  files are NOT imported by the core DPVO inference path and are NOT installed.
+Custom uv index sources used by the worker:
+  pytorch-cu121 (`https://download.pytorch.org/whl/cu121`) — torch, torchvision
+  pyg-cu121 (`https://data.pyg.org/whl/torch-2.3.1+cu121.html`, flat) — torch-scatter
+  Editable path (`../../../deps/dpvo`) — dpvo (cloned at first-run by the orchestrator)
+
+DPVO repository: https://github.com/princeton-vl/DPVO (MIT).
+Eigen 3.4.0 header-only (MPL-2.0) — vendored under deps/dpvo/thirdparty/.
+NOTE: dpvo/plot_utils.py imports evo (GPL-3) and plyfile (GPL-3); those
+files are NOT imported by the core DPVO inference path and are NOT
+installed because they live outside dpvo's `[tool.setuptools.packages]`.
 
 opencv-python-headless chosen over opencv-python to avoid pulling in GUI
 display libraries (Qt / GTK) on a headless server.

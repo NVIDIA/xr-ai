@@ -13,20 +13,53 @@ dependencies = [
     "xr-ai-agent",
     "xr-ai-logging",
     "numpy>=1.24",
-    # opencv-python provides ORB, BFMatcher, findEssentialMat, recoverPose.
-    # The CPU-only (headless) build avoids GUI deps and is sufficient for
-    # server-side frame processing.  If cv2.cuda is available at runtime
-    # the code falls back to it transparently — no hard requirement.
     "opencv-python-headless>=4.8",
-    # msgpack is transitive via xr-ai-agent; listed explicitly because
-    # agent.py imports it directly for the viz pose encoder.
     "msgpack>=1.0",
     "pyyaml>=6.0",
+    # DPVO and its CUDA stack (torch 2.3.1 + cu121).  The orchestrator's
+    # _ensure_dpvo_source() bootstrap clones DPVO into deps/dpvo/ and
+    # extracts Eigen 3.4.0 there before this worker syncs, so the editable
+    # path source below resolves on first run.  See ../README.md for the
+    # CUDA prerequisites.
+    "torch==2.3.1",
+    "torchvision==0.18.1",
+    "torch-scatter==2.1.2",
+    "scipy>=1.11",
+    "pypose>=0.6.7",
+    "einops>=0.7",
+    "numba>=0.59",
+    "yacs>=0.1.8",
+    "matplotlib>=3.7",
+    "dpvo",
 ]
+
+[[tool.uv.index]]
+# Torch CUDA wheels.  `explicit = true` keeps generic packages off this index.
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+# PyG-hosted prebuilt torch-scatter wheels for torch 2.3.1 + cu121.
+# This is a flat wheelhouse (HTML index of files), not a PEP 503 simple index.
+name = "pyg-cu121"
+url = "https://data.pyg.org/whl/torch-2.3.1+cu121.html"
+format = "flat"
+explicit = true
 
 [tool.uv.sources]
 xr-ai-agent   = { path = "../../../agent-sdk", editable = true }
 xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
+torch         = { index = "pytorch-cu121" }
+torchvision   = { index = "pytorch-cu121" }
+torch-scatter = { index = "pyg-cu121" }
+dpvo          = { path = "../../../deps/dpvo", editable = true }
+
+[tool.uv]
+# DPVO's setup.py imports torch at build time; an isolated build env would
+# not have torch and the install would fail.  Build dpvo against the
+# already-installed torch in this venv.
+no-build-isolation-package = ["dpvo"]
 
 [project.scripts]
 mono_slam_example_worker = "mono_slam_example_worker:run"

@@ -35,9 +35,12 @@ DPVO (Deep Patch Visual Odometry, Princeton Vision Lab, MIT license).
   DPVO's `__call__` — live pose is read from patch graph state.
 - `terminate()` runs 12 global BA rounds and returns the full refined
   trajectory; used only for offline evaluation (benchmark tests).
-- DPVO is NOT listed in pyproject.toml because it requires nvcc and custom
-  CUDA extensions compiled at install time.  `scripts/install_dpvo.sh` handles
-  the full installation including Eigen 3.4.0 (MPL-2.0, SHA256-pinned).
+- DPVO is installed via the worker's pyproject.toml as an editable path
+  source pointing at `deps/dpvo/`, with `[[tool.uv.index]]` entries for the
+  pytorch CUDA wheels and PyG-hosted torch-scatter.  The orchestrator's
+  first-run bootstrap (`_ensure_dpvo_source` in `main.py`) clones DPVO and
+  extracts a SHA256-pinned Eigen 3.4.0 (MPL-2.0); `uv sync` then builds the
+  CUDA extensions.  Mirrors xr-render-demo's `_ensure_lovr_bin` pattern.
 - `pose.py` and `pose_to_euler_deg` are kept for Euler angle logging.
 - `pixels.py` gains `frame_to_rgb` (DPVO needs 3-channel RGB, not grayscale).
 

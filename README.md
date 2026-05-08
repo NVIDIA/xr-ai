@@ -303,15 +303,12 @@ Three processes start together:
 - **viz** (`mono_slam_example_viz`) — subscribes to pose updates and
   renders a real-time 3-D trajectory + orientation triad
 
-**Prerequisites:** Install DPVO and its CUDA extensions once before
-running (requires `nvcc` on PATH):
+**Prerequisites:** a CUDA-capable GPU and CUDA toolkit (>= 12.1) with
+`nvcc` on `PATH`.  The worker's `uv sync` builds DPVO's CUDA extensions
+against the local torch install — no separate installer step.
 
-```bash
-bash scripts/install_dpvo.sh
-```
-
-Then download the DPVO checkpoint (~60 MB) and place it at
-`models/dpvo.pth` (or set `weights_path` in the worker YAML):
+Download the DPVO checkpoint (~60 MB) and place it at `models/dpvo.pth`
+(or set `weights_path` in the worker YAML):
 
 ```bash
 wget https://www.dropbox.com/s/nap0u8zslspdwm4/models.zip
@@ -323,6 +320,10 @@ cd agent-samples/mono-slam-example
 uv sync
 uv run mono_slam_example
 ```
+
+On first run the orchestrator clones DPVO into `../../deps/dpvo/` and
+extracts Eigen 3.4.0 into its `thirdparty/`; the worker then syncs and
+builds the CUDA extensions.  Subsequent runs are fast (no rebuild).
 
 Then connect any client and start streaming video.  Pose lines appear in
 the log as:
