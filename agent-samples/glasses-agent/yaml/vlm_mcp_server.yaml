@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# vlm-mcp server configuration for glasses-agent.
+# Proxies ask_image tool calls to vlm-server.
+
+host: 0.0.0.0
+port: 8240
+vlm_server: http://localhost:8100
+vlm_request_timeout_s: 60.0
+# enable_thinking: false suppresses <think> blocks for lower latency.
+enable_thinking: false
