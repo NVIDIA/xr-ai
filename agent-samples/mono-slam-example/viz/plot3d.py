@@ -25,17 +25,21 @@ from collections import deque
 
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3-D projection
+from mpl_toolkits.mplot3d import Axes3D
 
 
-def build_figure(title: str = "mono-SLAM trajectory") -> tuple[plt.Figure, plt.Axes]:
+def build_figure(title: str = "mono-SLAM trajectory") -> tuple[plt.Figure, Axes3D]:
     """Create the Figure and 3-D Axes used by the animation loop.
 
     Returns a (figure, ax) pair.  Call this once at startup; pass both
     to ``update_plot`` on every animation tick.
+
+    Importing ``Axes3D`` registers the ``"3d"`` projection with matplotlib's
+    projection registry, which is required for ``add_subplot(..., projection="3d")``
+    to work.  The import is load-bearing — do not remove it.
     """
     fig = plt.figure(figsize=(8, 6))
-    ax = fig.add_subplot(111, projection="3d")
+    ax: Axes3D = fig.add_subplot(111, projection="3d")
     ax.set_title(title, fontsize=10)
     ax.set_xlabel("X (right)")
     ax.set_ylabel("Y (down)")

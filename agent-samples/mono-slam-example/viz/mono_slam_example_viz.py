@@ -38,7 +38,6 @@ import asyncio
 import os
 import pathlib
 import signal
-import struct
 import time
 
 import msgpack
@@ -124,7 +123,7 @@ class MonoSlamVizProcess:
         try:
             self._queue.put_nowait(result)
         except asyncio.QueueFull:
-            pass
+            logger.debug("viz: pose queue full — frame dropped (render backlog)")
 
     # ── asyncio task: drain queue ──────────────────────────────────────────────
 
@@ -144,7 +143,6 @@ class MonoSlamVizProcess:
         if not self._trajectory:
             return
 
-        fps_str = str(int(1.0 / self._frame_interval))
         history_window = (
             int(self._history_window_s / self._frame_interval)
             if self._history_window_s > 0
@@ -201,7 +199,7 @@ class MonoSlamVizProcess:
                 try:
                     await drain_task
                 except asyncio.CancelledError:
-                    pass
+                    pass  # Expected: we just cancelled drain_task during shutdown.
         else:
             # Interactive window: use FuncAnimation on the main thread while IPC
             # runs as an asyncio background task pumped by a recurring call_later.
@@ -222,7 +220,7 @@ class MonoSlamVizProcess:
                 try:
                     await drain_task
                 except asyncio.CancelledError:
-                    pass
+                    pass  # Expected: we just cancelled drain_task during shutdown.
                 plt.close("all")
 
     def shutdown(self) -> None:
@@ -330,7 +328,7 @@ async def _main(cfg: dict, ready_file: pathlib.Path | None) -> None:
         try:
             await ep_task
         except asyncio.CancelledError:
-            pass
+            pass  # Expected: we just cancelled ep_task during shutdown.
     logger.info("mono-slam-example viz stopped")
 
 
