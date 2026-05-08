@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# mono-slam-example visualizer configuration.
+#
+# Hub connection
+# --------------
+hub_pub:  ipc:///tmp/xr_hub_pub
+hub_push: ipc:///tmp/xr_hub_in
+
+# Display backend
+# ---------------
+# auto  → opens a TkAgg/Qt5Agg window if $DISPLAY/$WAYLAND_DISPLAY is set;
+#          falls back to Agg + PNG save on headless machines.
+# qt    → force Qt5Agg (requires PyQt5).
+# save  → force Agg + write PNGs to save_frames_dir (headless-safe).
+backend: auto
+
+# save_frames_dir: /tmp/mono_slam_frames   # directory for per-frame PNGs
+#                                           # (created if absent; set by auto
+#                                           #  on headless machines)
+
+# Trajectory display
+# ------------------
+# history_window_s: show the most recent N seconds of trajectory as a bright
+#                   line; older positions are dimmed.  0 = show full history.
+history_window_s: 5.0
+
+# axis_length_m: length of each orientation triad arm in world-unit fractions.
+#                (translation is unit-norm, so "1.0" = full trajectory scale)
+axis_length_m: 0.1
+
+# fps_target: maximum plot refresh rate (Hz).  The viz may run slower if
+#             the system is loaded; it never blocks the worker.
+fps_target: 20

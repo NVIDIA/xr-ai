@@ -19,6 +19,10 @@ _PROCESSES: list[Process] = [
             config="yaml/xr_media_hub.yaml"),
     Process("worker", "worker",               "mono_slam_example_worker",
             config="yaml/mono_slam_example_worker.yaml"),
+    # viz subscribes to pose updates from the worker via the hub data channel.
+    # Starts after the worker so IPC is ready before the first pose arrives.
+    Process("viz",    "viz",                  "mono_slam_example_viz",
+            config="yaml/mono_slam_example_viz.yaml"),
 ]
 
 

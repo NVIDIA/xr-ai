@@ -18,6 +18,9 @@ dependencies = [
     # server-side frame processing.  If cv2.cuda is available at runtime
     # the code falls back to it transparently — no hard requirement.
     "opencv-python-headless>=4.8",
+    # msgpack is transitive via xr-ai-agent; listed explicitly because
+    # agent.py imports it directly for the viz pose encoder.
+    "msgpack>=1.0",
     "pyyaml>=6.0",
 ]
 

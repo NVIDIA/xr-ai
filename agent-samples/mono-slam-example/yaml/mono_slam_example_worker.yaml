@@ -29,3 +29,11 @@ match_ratio:  0.75      # Lowe ratio test threshold for BFMatcher
 ransac_prob:       0.999   # RANSAC confidence
 ransac_threshold:  1.0     # reprojection threshold in pixels
 min_inliers:       20      # frames with fewer inliers are skipped (degenerate)
+
+# Viz side channel
+# ----------------
+# publish_viz: if true, the worker pushes each accepted pose to the hub on
+#              participant "_mono_slam_viz" / topic "mono_slam.pose" so the
+#              viz process can draw the trajectory.  Set false to disable
+#              the side channel in headless or test environments.
+publish_viz: true

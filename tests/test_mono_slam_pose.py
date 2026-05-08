@@ -345,3 +345,64 @@ class TestFrameToGray:
         frame.data = b"\x00" * 16
         with pytest.raises(ValueError, match="Unsupported"):
             frame_to_gray(frame)
+
+
+# ── agent.encode_pose (viz side-channel serializer) ───────────────────────────
+
+class TestEncodePose:
+    """Round-trip tests for the worker→viz msgpack payload."""
+
+    def _decode(self, data: bytes) -> tuple[np.ndarray, np.ndarray]:
+        import msgpack
+        fields = msgpack.unpackb(data, raw=False)
+        t = np.array(fields[0], dtype=np.float64)
+        R = np.array(fields[1], dtype=np.float64).reshape(3, 3)
+        return t, R
+
+    def test_identity_roundtrip(self):
+        from agent import encode_pose
+        t = np.zeros(3)
+        R = np.eye(3)
+        payload = encode_pose(t, R)
+        t2, R2 = self._decode(payload)
+        np.testing.assert_allclose(t2, t, atol=1e-12)
+        np.testing.assert_allclose(R2, R, atol=1e-12)
+
+    def test_arbitrary_pose_roundtrip(self):
+        from agent import encode_pose
+        t = np.array([0.1, -0.5, 2.3])
+        R = _rz(37.0) @ _ry(-12.0)
+        payload = encode_pose(t, R)
+        t2, R2 = self._decode(payload)
+        np.testing.assert_allclose(t2, t, atol=1e-12)
+        np.testing.assert_allclose(R2, R, atol=1e-12)
+
+    def test_payload_is_bytes(self):
+        from agent import encode_pose
+        payload = encode_pose(np.zeros(3), np.eye(3))
+        assert isinstance(payload, bytes)
+
+    def test_shape_preserved(self):
+        """Decoded arrays have the expected shapes."""
+        from agent import encode_pose
+        payload = encode_pose(np.array([1.0, 2.0, 3.0]), np.eye(3))
+        t, R = self._decode(payload)
+        assert t.shape == (3,)
+        assert R.shape == (3, 3)
+
+    def test_unit_translation_preserved(self):
+        """Unit-norm translation vectors survive the round-trip without scaling."""
+        from agent import encode_pose
+        t = np.array([1.0, 0.0, 0.0])  # unit forward
+        payload = encode_pose(t, np.eye(3))
+        t2, _ = self._decode(payload)
+        np.testing.assert_allclose(np.linalg.norm(t2), 1.0, atol=1e-12)
+
+    def test_negative_components(self):
+        from agent import encode_pose
+        t = np.array([-1.0, -2.0, -3.0])
+        R = _ry(180.0)
+        payload = encode_pose(t, R)
+        t2, R2 = self._decode(payload)
+        np.testing.assert_allclose(t2, t, atol=1e-12)
+        np.testing.assert_allclose(R2, R, atol=1e-12)

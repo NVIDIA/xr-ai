@@ -50,6 +50,7 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         ransac_prob      =float(cfg.get("ransac_prob",       0.999)),
         ransac_threshold =float(cfg.get("ransac_threshold",  1.0)),
         min_inliers      =int(  cfg.get("min_inliers",       20)),
+        publish_viz      =bool( cfg.get("publish_viz",       True)),
     )
 
     loop = asyncio.get_running_loop()

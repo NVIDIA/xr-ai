@@ -24,14 +24,38 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import time
 from dataclasses import dataclass, field
 
+import msgpack
 import numpy as np
 from loguru import logger
-from xr_ai_agent import FrameData, FrameSignal, ParticipantEvent, ProcessorEndpoint
+from xr_ai_agent import DataMessage, FrameData, FrameSignal, MsgType, ParticipantEvent, ProcessorEndpoint
+from xr_ai_agent import encode as ipc_encode
 
 from pixels import frame_to_gray
 from pose import PoseResult, build_camera_matrix, compute_pose, rotation_to_euler_deg
+
+# Synthetic participant / topic that the viz process subscribes to.
+# Using a synthetic participant keeps pose telemetry off real data channels.
+_VIZ_PARTICIPANT = "_mono_slam_viz"
+_VIZ_TOPIC       = "mono_slam.pose"
+
+
+def encode_pose(t_world: np.ndarray, R_world: np.ndarray) -> bytes:
+    """Encode camera pose as a msgpack list for the viz side channel.
+
+    Args:
+        t_world: Camera position in world frame, shape (3,).  Unit-norm.
+        R_world: R_curr_from_world, shape (3, 3).
+
+    Returns:
+        msgpack bytes: [[tx, ty, tz], [r00..r22 flat row-major]]
+    """
+    return msgpack.packb(
+        [t_world.tolist(), R_world.flatten().tolist()],
+        use_bin_type=True,
+    )
 
 
 @dataclass
@@ -75,11 +99,13 @@ class MonoSlamAgent:
         ransac_prob: float = 0.999,
         ransac_threshold: float = 1.0,
         min_inliers: int = 20,
+        publish_viz: bool = True,
     ) -> None:
         self._ep              = ep
         self._fov_deg         = fov_deg
         self._focal_length_px = focal_length_px
         self._frame_stride    = max(1, frame_stride)
+        self._publish_viz     = publish_viz
         self._vo_kwargs: dict = dict(
             max_features=max_features,
             match_ratio=match_ratio,
@@ -186,6 +212,35 @@ class MonoSlamAgent:
             roll, pitch, yaw,
             pos[0], pos[1], pos[2],
         )
+
+        if self._publish_viz:
+            self._publish_pose(pos, state.R_world)
+
+    # ── viz side channel ───────────────────────────────────────────────────────
+
+    def _publish_pose(self, pos: np.ndarray, R_world: np.ndarray) -> None:
+        """Schedule a pose update to the viz process via the hub data channel.
+
+        Fire-and-forget: creates an asyncio task and swallows all errors so
+        viz telemetry never stalls or crashes the worker.
+        """
+        payload = encode_pose(pos, R_world)
+        msg = DataMessage(
+            participant_id=_VIZ_PARTICIPANT,
+            topic=_VIZ_TOPIC,
+            pts_us=int(time.time() * 1_000_000),
+            data=payload,
+        )
+        raw = ipc_encode(MsgType.DATA_MESSAGE, msg)
+
+        async def _send() -> None:
+            try:
+                await self._ep._push.send(raw)
+            except Exception:
+                pass  # drop silently — viz is decorative, worker must not block
+
+        t = asyncio.create_task(_send())
+        t.add_done_callback(lambda _: None)  # suppress "exception never retrieved"
 
     # ── participant lifecycle ──────────────────────────────────────────────────
 

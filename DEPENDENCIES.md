@@ -344,15 +344,26 @@ ORB feature matching → BFMatcher (Lowe ratio test) → Essential matrix (RANSA
 Translation is unit-norm (monocular scale ambiguity).  No model weights;
 no GPU required.
 
+On every accepted pose the worker publishes a `DataMessage` on hub topic
+`data._mono_slam_viz.mono_slam.pose` (msgpack payload: `[[tx,ty,tz],[R_flat]]`).
+The viz process subscribes via a `ProcessorEndpoint` with `auto_subscribe=False`
+and renders a real-time 3-D trajectory + orientation triad.
+
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `mono-slam-example` | `xr-ai-launcher`, `xr-ai-logging` | — |
-| Worker | `mono-slam-example-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, opencv-python-headless >=4.8, pyyaml >=6.0 |
+| Worker | `mono-slam-example-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, opencv-python-headless >=4.8, msgpack >=1.0, pyyaml >=6.0 |
+| Viz | `mono-slam-example-viz` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, matplotlib >=3.7, pyyaml >=6.0 |
 
 opencv-python-headless chosen over opencv-python to avoid pulling in GUI
 display libraries (Qt / GTK) on a headless server.  If cv2.cuda is available
 at runtime, OpenCV may use it for some internal operations automatically, but
 no hard GPU requirement exists.
+
+matplotlib >=3.7 added for the viz process only.  Uses TkAgg backend when
+$DISPLAY/$WAYLAND_DISPLAY is set; falls back to Agg (off-screen PNG output)
+on headless machines.  PyQt5 is not added as a hard dep — TkAgg is preferred
+because tkinter ships with the CPython stdlib.
 
 ---
 
