@@ -15,13 +15,10 @@ steps no-op on subsequent runs.
 A CUDA-capable GPU and CUDA toolkit (>= 12.1, with nvcc on PATH) are
 required.
 """
-import hashlib
 import os
 import shutil
 import subprocess
 import sys
-import urllib.request
-import zipfile
 from pathlib import Path
 
 from loguru import logger
@@ -50,21 +47,12 @@ _PROCESSES: list[Process] = [
 
 _DPVO_REPO     = "https://github.com/princeton-vl/DPVO.git"
 _DPVO_DIR      = (_BASE / "../../deps/dpvo").resolve()
+_EIGEN_REPO    = "https://gitlab.com/libeigen/eigen.git"
 _EIGEN_VERSION = "3.4.0"
-_EIGEN_SHA256  = "8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72"
-_EIGEN_URL     = (
-    f"https://gitlab.com/libeigen/eigen/-/archive/{_EIGEN_VERSION}/"
-    f"eigen-{_EIGEN_VERSION}.zip"
-)
-
-
-def _dl_progress(block_num: int, block_size: int, total_size: int) -> None:
-    # Carriage-return progress is intentionally raw print() — loguru records
-    # are line-oriented and would emit a fresh line per update, defeating
-    # the in-place spinner.  Same approach as xr-render-demo.
-    if total_size > 0:
-        pct = min(100, block_num * block_size * 100 // total_size)
-        print(f"\r  [setup]   {pct}%   ", end="", flush=True)
+# Pinned commit for tag 3.4.0.  GitLab's archive-zip endpoint is
+# non-deterministic (files inside the zip are repacked per request), so we
+# clone the tag instead and trust git's content-addressed integrity.
+_EIGEN_COMMIT  = "3147391d946bb4b6c68edd901f2add6ac1f31f8c"
 
 
 def _ensure_nvcc_on_path() -> None:
@@ -98,45 +86,35 @@ def _ensure_dpvo_source() -> None:
         logger.debug("DPVO already cloned at {}", _DPVO_DIR)
 
     eigen_dir = _DPVO_DIR / "thirdparty" / f"eigen-{_EIGEN_VERSION}"
-    if eigen_dir.exists():
+    if (eigen_dir / "Eigen").is_dir():
         logger.debug("Eigen already present at {}", eigen_dir)
         return
 
-    logger.info("Eigen {} not found — downloading", _EIGEN_VERSION)
+    logger.info("Eigen {} not found — cloning {}", _EIGEN_VERSION, _EIGEN_REPO)
     eigen_dir.parent.mkdir(parents=True, exist_ok=True)
-    partial = eigen_dir.parent / "eigen.zip.partial"
-    try:
-        urllib.request.urlretrieve(_EIGEN_URL, partial, _dl_progress)
-        print()  # finish progress line
-    except Exception as exc:
-        partial.unlink(missing_ok=True)
-        sys.exit(f"\n  [setup] Eigen download failed: {exc}\n")
-
-    actual = hashlib.sha256(partial.read_bytes()).hexdigest()
-    if actual != _EIGEN_SHA256:
-        partial.unlink(missing_ok=True)
+    # Wipe any leftover partial dir so git clone has a clean target.
+    if eigen_dir.exists():
+        shutil.rmtree(eigen_dir)
+    # Shallow-clone the tag, then verify the resolved commit matches our pin —
+    # protects against the (extremely unlikely) case of an upstream tag move.
+    subprocess.run(
+        ["git", "clone", "--depth", "1",
+         "--branch", _EIGEN_VERSION,
+         _EIGEN_REPO, str(eigen_dir)],
+        check=True,
+    )
+    head = subprocess.check_output(
+        ["git", "-C", str(eigen_dir), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    if head != _EIGEN_COMMIT:
         sys.exit(
-            f"\n  [setup] Eigen SHA256 mismatch.\n"
-            f"    expected: {_EIGEN_SHA256}\n"
-            f"    got:      {actual}\n"
+            f"\n  [setup] Eigen commit mismatch.\n"
+            f"    expected: {_EIGEN_COMMIT}\n"
+            f"    got:      {head}\n"
+            f"    tag {_EIGEN_VERSION} appears to have moved upstream.\n"
         )
-
-    with zipfile.ZipFile(partial) as zf:
-        zf.extractall(eigen_dir.parent)
-    partial.unlink()
-
-    # Some Eigen archives extract as eigen-<hash>/ rather than eigen-3.4.0/;
-    # rename if needed so DPVO's setup.py finds the path it expects.
-    if not eigen_dir.exists():
-        extracted = next(
-            (d for d in eigen_dir.parent.iterdir()
-             if d.is_dir() and d.name.startswith("eigen-")),
-            None,
-        )
-        if extracted is not None:
-            extracted.rename(eigen_dir)
-
-    logger.info("Eigen extracted to {}", eigen_dir)
+    logger.info("Eigen cloned to {}", eigen_dir)
 
 
 def run() -> None:
