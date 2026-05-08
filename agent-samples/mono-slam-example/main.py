@@ -55,21 +55,71 @@ _EIGEN_VERSION = "3.4.0"
 _EIGEN_COMMIT  = "3147391d946bb4b6c68edd901f2add6ac1f31f8c"
 
 
+_MIN_CUDA = (12, 1)
+
+
+def _nvcc_major_minor(nvcc: str) -> tuple[int, int] | None:
+    """Parse `<nvcc> --version` and return (major, minor) or None on failure.
+
+    Output format includes a line like:
+        Cuda compilation tools, release 12.1, V12.1.66
+    """
+    try:
+        out = subprocess.check_output([nvcc, "--version"], text=True,
+                                      stderr=subprocess.DEVNULL)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    for line in out.splitlines():
+        if "release" in line:
+            tail = line.split("release", 1)[1].strip().split(",", 1)[0]
+            parts = tail.split(".")
+            if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                return int(parts[0]), int(parts[1])
+    return None
+
+
 def _ensure_nvcc_on_path() -> None:
-    """Make nvcc reachable so DPVO's CUDA build picks up the toolchain."""
-    if shutil.which("nvcc"):
-        return
-    for candidate in ("/usr/local/cuda/bin",
-                      "/usr/local/cuda-12.6/bin",
-                      "/usr/local/cuda-12.1/bin"):
-        if Path(candidate, "nvcc").exists():
-            os.environ["PATH"] = f"{candidate}:{os.environ.get('PATH', '')}"
-            logger.info("Added {} to PATH for CUDA build", candidate)
+    """Make a CUDA-{_MIN_CUDA}+-capable nvcc reachable for DPVO's build.
+
+    DPVO compiles CUDA extensions against the torch we install (cu121).
+    Torch's build step refuses to use a host nvcc whose major version
+    differs from torch's CUDA version, so we must put a 12.x toolchain
+    first on PATH even if a 11.x one is the system default.
+    """
+    current = shutil.which("nvcc")
+    if current:
+        ver = _nvcc_major_minor(current)
+        if ver is not None and ver >= _MIN_CUDA:
+            logger.debug("nvcc {}.{} already on PATH at {}", ver[0], ver[1], current)
             return
+        logger.warning(
+            "nvcc on PATH ({}) is {}.{} — need >= {}.{}; searching for a "
+            "newer install", current, *(ver or (0, 0)), *_MIN_CUDA,
+        )
+
+    # Common locations for side-by-side CUDA installs.  Prefer the highest
+    # qualifying version; sort by parsed (major, minor) descending.
+    candidates: list[tuple[tuple[int, int], str]] = []
+    for path in sorted(Path("/usr/local").glob("cuda-*")):
+        nvcc = path / "bin" / "nvcc"
+        if nvcc.exists():
+            ver = _nvcc_major_minor(str(nvcc))
+            if ver is not None and ver >= _MIN_CUDA:
+                candidates.append((ver, str(path / "bin")))
+    candidates.sort(reverse=True)
+
+    if candidates:
+        chosen = candidates[0][1]
+        os.environ["PATH"] = f"{chosen}:{os.environ.get('PATH', '')}"
+        logger.info("Prepending {} to PATH for CUDA build", chosen)
+        return
+
     sys.exit(
-        "\n  mono-slam-example: nvcc not found.\n"
-        "  Install CUDA toolkit (>= 12.1) and add its bin/ to PATH, then\n"
-        "  re-run.\n"
+        f"\n  mono-slam-example: no CUDA >= {_MIN_CUDA[0]}.{_MIN_CUDA[1]} found.\n"
+        f"  DPVO compiles its CUDA extensions against torch 2.3.1+cu121, which\n"
+        f"  requires the CUDA {_MIN_CUDA[0]}.{_MIN_CUDA[1]}+ toolkit.\n"
+        f"  Install it from https://developer.nvidia.com/cuda-toolkit and ensure\n"
+        f"  its bin/ is on PATH (or installs to /usr/local/cuda-12.x/), then re-run.\n"
     )
 
 

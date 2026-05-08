@@ -303,8 +303,11 @@ Three processes start together:
 - **viz** (`mono_slam_example_viz`) — subscribes to pose updates and
   renders a real-time 3-D trajectory + orientation triad
 
-**Prerequisites:** a CUDA-capable GPU and CUDA toolkit (>= 12.1) with
-`nvcc` on `PATH`.  The worker's `uv sync` builds DPVO's CUDA extensions
+**Prerequisites:** a CUDA-capable GPU and CUDA toolkit **>= 12.1**.  The
+orchestrator searches `/usr/local/cuda-12*/bin/` and prepends a qualifying
+`nvcc` to `PATH` automatically; if your default `nvcc` is older (e.g.
+CUDA 11.x), install CUDA 12.x side-by-side and the bootstrap will pick
+it up.  The worker's `uv sync` then builds DPVO's CUDA extensions
 against the local torch install — no separate installer step.
 
 Download the DPVO checkpoint (~60 MB) and place it at `models/dpvo.pth`
