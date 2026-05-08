@@ -55,7 +55,11 @@ _EIGEN_VERSION = "3.4.0"
 _EIGEN_COMMIT  = "3147391d946bb4b6c68edd901f2add6ac1f31f8c"
 
 
-_MIN_CUDA = (12, 1)
+# torch 2.3.1+cu121's cpp_extension build refuses any nvcc whose major
+# version differs from torch's CUDA major (12).  Both 11.x and 13.x fail.
+# Within major 12 we want the highest minor we can find that's >= 12.1.
+_REQUIRED_CUDA_MAJOR = 12
+_MIN_CUDA_MINOR      = 1
 
 
 def _nvcc_major_minor(nvcc: str) -> tuple[int, int] | None:
@@ -78,33 +82,41 @@ def _nvcc_major_minor(nvcc: str) -> tuple[int, int] | None:
     return None
 
 
-def _ensure_nvcc_on_path() -> None:
-    """Make a CUDA-{_MIN_CUDA}+-capable nvcc reachable for DPVO's build.
+def _cuda_version_acceptable(ver: tuple[int, int]) -> bool:
+    """torch 2.3.1+cu121 accepts only major == 12 with minor >= 12.1."""
+    return ver[0] == _REQUIRED_CUDA_MAJOR and ver[1] >= _MIN_CUDA_MINOR
 
-    DPVO compiles CUDA extensions against the torch we install (cu121).
-    Torch's build step refuses to use a host nvcc whose major version
-    differs from torch's CUDA version, so we must put a 12.x toolchain
-    first on PATH even if a 11.x one is the system default.
+
+def _ensure_nvcc_on_path() -> None:
+    """Make a CUDA-12.x nvcc reachable for DPVO's build.
+
+    DPVO compiles CUDA extensions against torch 2.3.1+cu121, whose build
+    step (`torch.utils.cpp_extension._check_cuda_version`) errors out if
+    the host nvcc's major version differs from torch's CUDA major (12).
+    A host with CUDA 11.x first on PATH (or 13.x — already shipping on
+    some distros) needs us to find a side-by-side 12.x install.
     """
     current = shutil.which("nvcc")
     if current:
         ver = _nvcc_major_minor(current)
-        if ver is not None and ver >= _MIN_CUDA:
+        if ver is not None and _cuda_version_acceptable(ver):
             logger.debug("nvcc {}.{} already on PATH at {}", ver[0], ver[1], current)
             return
         logger.warning(
-            "nvcc on PATH ({}) is {}.{} — need >= {}.{}; searching for a "
-            "newer install", current, *(ver or (0, 0)), *_MIN_CUDA,
+            "nvcc on PATH ({}) is {}.{} — need {}.{}+ within major {}; "
+            "searching for a side-by-side install",
+            current, *(ver or (0, 0)),
+            _REQUIRED_CUDA_MAJOR, _MIN_CUDA_MINOR, _REQUIRED_CUDA_MAJOR,
         )
 
     # Common locations for side-by-side CUDA installs.  Prefer the highest
-    # qualifying version; sort by parsed (major, minor) descending.
+    # qualifying minor within the required major; sort by version desc.
     candidates: list[tuple[tuple[int, int], str]] = []
     for path in sorted(Path("/usr/local").glob("cuda-*")):
         nvcc = path / "bin" / "nvcc"
         if nvcc.exists():
             ver = _nvcc_major_minor(str(nvcc))
-            if ver is not None and ver >= _MIN_CUDA:
+            if ver is not None and _cuda_version_acceptable(ver):
                 candidates.append((ver, str(path / "bin")))
     candidates.sort(reverse=True)
 
@@ -115,11 +127,16 @@ def _ensure_nvcc_on_path() -> None:
         return
 
     sys.exit(
-        f"\n  mono-slam-example: no CUDA >= {_MIN_CUDA[0]}.{_MIN_CUDA[1]} found.\n"
-        f"  DPVO compiles its CUDA extensions against torch 2.3.1+cu121, which\n"
-        f"  requires the CUDA {_MIN_CUDA[0]}.{_MIN_CUDA[1]}+ toolkit.\n"
-        f"  Install it from https://developer.nvidia.com/cuda-toolkit and ensure\n"
-        f"  its bin/ is on PATH (or installs to /usr/local/cuda-12.x/), then re-run.\n"
+        f"\n  mono-slam-example: no CUDA {_REQUIRED_CUDA_MAJOR}.x install with\n"
+        f"  minor >= {_MIN_CUDA_MINOR} was found.  DPVO compiles its CUDA\n"
+        f"  extensions against torch 2.3.1+cu121, which requires nvcc with\n"
+        f"  major == {_REQUIRED_CUDA_MAJOR}; both 11.x and 13.x are rejected\n"
+        f"  by torch's build-time CUDA-version check.\n\n"
+        f"  Install CUDA {_REQUIRED_CUDA_MAJOR}.{_MIN_CUDA_MINOR}+ from\n"
+        f"  https://developer.nvidia.com/cuda-toolkit-archive — installing it\n"
+        f"  side-by-side under /usr/local/cuda-{_REQUIRED_CUDA_MAJOR}.x/ is\n"
+        f"  enough; the bootstrap will pick it up automatically without\n"
+        f"  disturbing your existing default toolkit.\n"
     )
 
 
