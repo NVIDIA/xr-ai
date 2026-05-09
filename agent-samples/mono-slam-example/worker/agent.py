@@ -48,6 +48,18 @@ from slam import DPVOSlam, intrinsics_from_K
 _VIZ_PARTICIPANT = "_mono_slam_viz"
 _VIZ_TOPIC       = "mono_slam.pose"
 
+# DPVO operates on a stride-16 feature map.  Frames whose width or height
+# is not divisible by 16 cause patch-count drift inside the patch graph
+# and crash the network forward a few frames in (`net + inp + corr` size
+# mismatch).  Round the locked-init resolution down to the nearest
+# multiple of 16; resize incoming frames to it before push.  Mirrors
+# DPVO's own `evaluate_tum.py` preprocessing.
+_DPVO_STRIDE = 16
+
+
+def _round_down_to_stride(n: int) -> int:
+    return (n // _DPVO_STRIDE) * _DPVO_STRIDE
+
 
 def encode_pose(t_world: np.ndarray, R_world: np.ndarray) -> bytes:
     """Encode camera pose as a msgpack list for the viz side channel.
@@ -146,7 +158,18 @@ class MonoSlamAgent:
         if state.slam is None:
             async with state.init_lock:
                 if state.slam is None:
-                    init_w, init_h = sig.width, sig.height
+                    # Round the source resolution down to a multiple of
+                    # DPVO's feature stride.  K is computed for the rounded
+                    # size; subsequent frames are resized to match below.
+                    init_w = _round_down_to_stride(sig.width)
+                    init_h = _round_down_to_stride(sig.height)
+                    if init_w < _DPVO_STRIDE or init_h < _DPVO_STRIDE:
+                        logger.error(
+                            "frame too small for DPVO  track={}  size={}x{}",
+                            sig.track_id, sig.width, sig.height,
+                        )
+                        del self._tracks[key]
+                        return
                     K = build_camera_matrix(
                         init_w, init_h,
                         fov_deg=self._fov_deg,
