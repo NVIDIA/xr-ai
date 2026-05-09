@@ -132,6 +132,15 @@ class DPVOSlam:
         """
         return self._latest_pose
 
+    def init_progress(self) -> dict:
+        """Snapshot of DPVO's internal bootstrap state for diagnostics."""
+        dpvo = self._dpvo
+        return {
+            "n":              int(getattr(dpvo, "n", 0)),
+            "is_initialized": bool(getattr(dpvo, "is_initialized", False)),
+            "M":              int(getattr(dpvo, "M", 0)),
+        }
+
     def terminate(self) -> tuple[np.ndarray, np.ndarray]:
         """Run global BA and return the full refined trajectory.
 

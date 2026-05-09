@@ -218,13 +218,16 @@ class MonoSlamAgent:
 
         # The first push compiles DPVO's CUDA kernels for this resolution
         # (PyTorch JIT) and can take 10-30 s before returning.  Surface that
-        # so the user knows the stack is alive, not hung.
+        # so the user knows the stack is alive, not hung.  Also log the
+        # mean pixel value to rule out a silent all-black input pipeline.
         if state.frame_count == 0:
             logger.info(
                 "slam  pid={!r}  track={}  status=first_push  "
+                "rgb_shape={}  rgb_mean={:.1f}  "
                 "(CUDA kernels JIT-compile on the first frame; this can take "
                 "10-30 s)",
                 sig.participant_id, sig.track_id,
+                rgb.shape, float(rgb.mean()),
             )
 
         tstamp = time.time()
@@ -236,13 +239,21 @@ class MonoSlamAgent:
 
         pose = state.slam.current_pose()
         if pose is None:
-            # DPVO needs ≥8 frames before yielding a real pose.  Log every
-            # other accepted frame at INFO so the user sees progress
-            # (DEBUG is hidden by default and made the worker look hung).
-            if state.frame_count % 2 == 1:
+            # DPVO needs both enough frames AND enough camera motion
+            # (parallax) to bootstrap.  Without translation it never sets
+            # is_initialized=True.  Surface DPVO's internal counters so a
+            # stuck bootstrap is visible (n stops growing → no frames
+            # reaching the graph; n grows but is_initialized stays False
+            # → not enough motion / texture to triangulate).
+            if state.frame_count % 30 == 1:
+                progress = state.slam.init_progress()
                 logger.info(
-                    "slam  pid={!r}  track={}  frame={}  status=initialising",
+                    "slam  pid={!r}  track={}  frame={}  status=initialising  "
+                    "dpvo_n={}  dpvo_M={}  is_initialized={}  "
+                    "(needs camera translation — pure rotation does not "
+                    "trigger bootstrap)",
                     sig.participant_id, sig.track_id, state.frame_count,
+                    progress["n"], progress["M"], progress["is_initialized"],
                 )
             return
 
