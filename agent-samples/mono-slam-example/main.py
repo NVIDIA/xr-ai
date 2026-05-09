@@ -219,19 +219,47 @@ def _ensure_dpvo_weights() -> None:
             f"\n  [setup] DPVO weights download failed: {exc}\n"
             f"  Manual fallback:\n"
             f"    wget -O {partial} '{_DPVO_WEIGHTS_URL}'\n"
-            f"    unzip {partial} -d {_DPVO_DIR}\n"
+            f"    unzip {partial} -d {weights.parent}\n"
         )
 
-    with zipfile.ZipFile(partial) as zf:
-        zf.extractall(_DPVO_DIR)
-    partial.unlink()
-
-    if not weights.exists():
+    # The Dropbox archive's internal layout has shifted historically —
+    # earlier install scripts assumed `models/dpvo.pth`, but the zip we
+    # actually receive may put the .pth at the top level or in a different
+    # subdirectory.  Extract into a scratch dir, find the first .pth, and
+    # move it to the canonical location.
+    scratch = weights.parent / ".extract"
+    if scratch.exists():
+        shutil.rmtree(scratch)
+    scratch.mkdir(parents=True)
+    try:
+        with zipfile.ZipFile(partial) as zf:
+            zf.extractall(scratch)
+    except zipfile.BadZipFile:
+        # Most likely Dropbox served an HTML auth page instead of the zip.
+        head = partial.read_bytes()[:64].decode("utf-8", errors="replace")
+        partial.unlink(missing_ok=True)
+        shutil.rmtree(scratch, ignore_errors=True)
         sys.exit(
-            f"\n  [setup] models.zip extracted but {weights} was not produced.\n"
-            f"  The archive layout may have changed upstream; download the\n"
-            f"  checkpoint manually and place it at that path.\n"
+            f"\n  [setup] downloaded file is not a valid zip.\n"
+            f"  First bytes: {head!r}\n"
+            f"  Dropbox may have changed the URL scheme; download the\n"
+            f"  checkpoint manually and place it at {weights}.\n"
         )
+
+    found = next((p for p in scratch.rglob("*.pth")), None)
+    if found is None:
+        listing = "\n    ".join(str(p.relative_to(scratch)) for p in scratch.rglob("*"))
+        partial.unlink(missing_ok=True)
+        shutil.rmtree(scratch, ignore_errors=True)
+        sys.exit(
+            f"\n  [setup] models.zip extracted but no *.pth file was found.\n"
+            f"  Archive contents:\n    {listing or '(empty)'}\n"
+            f"  Download the checkpoint manually and place it at {weights}.\n"
+        )
+
+    found.replace(weights)  # canonical location regardless of zip layout
+    shutil.rmtree(scratch, ignore_errors=True)
+    partial.unlink()
     logger.info("DPVO weights saved to {}", weights)
 
 
