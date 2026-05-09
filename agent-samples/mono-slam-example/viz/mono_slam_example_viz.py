@@ -205,6 +205,14 @@ class MonoSlamVizProcess:
             # runs as an asyncio background task pumped by a recurring call_later.
             plt.ion()
             plt.show(block=False)
+            # Force the window manager to actually realise the figure now,
+            # before any pose has arrived — `plt.show(block=False)` only
+            # queues the window; without an early flush_events() the window
+            # stays unmapped until the first render, which made the viz
+            # look broken when the worker took a few seconds to publish
+            # its first pose.
+            fig.canvas.draw()
+            fig.canvas.flush_events()
 
             last_render = 0.0
             try:
@@ -213,6 +221,11 @@ class MonoSlamVizProcess:
                     if now - last_render >= self._frame_interval:
                         self._render_frame(fig, ax)
                         last_render = now
+                    # Pump the GUI event loop every tick — even when
+                    # _render_frame early-returns because the trajectory is
+                    # empty.  Without this the window never repaints and
+                    # the user only sees a flash on shutdown.
+                    fig.canvas.flush_events()
                     # Yield back to asyncio so the IPC loop (ep.run) can progress.
                     await asyncio.sleep(0.02)
             finally:

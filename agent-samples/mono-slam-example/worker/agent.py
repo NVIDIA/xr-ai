@@ -216,6 +216,17 @@ class MonoSlamAgent:
             rgb = cv2.resize(rgb, (state.width, state.height),
                              interpolation=cv2.INTER_AREA)
 
+        # The first push compiles DPVO's CUDA kernels for this resolution
+        # (PyTorch JIT) and can take 10-30 s before returning.  Surface that
+        # so the user knows the stack is alive, not hung.
+        if state.frame_count == 0:
+            logger.info(
+                "slam  pid={!r}  track={}  status=first_push  "
+                "(CUDA kernels JIT-compile on the first frame; this can take "
+                "10-30 s)",
+                sig.participant_id, sig.track_id,
+            )
+
         tstamp = time.time()
         await loop.run_in_executor(
             None,
@@ -225,11 +236,14 @@ class MonoSlamAgent:
 
         pose = state.slam.current_pose()
         if pose is None:
-            # DPVO not yet initialised (needs ≥8 frames).
-            logger.debug(
-                "slam  pid={!r}  track={}  frame={}  status=initialising",
-                sig.participant_id, sig.track_id, state.frame_count,
-            )
+            # DPVO needs ≥8 frames before yielding a real pose.  Log every
+            # other accepted frame at INFO so the user sees progress
+            # (DEBUG is hidden by default and made the worker look hung).
+            if state.frame_count % 2 == 1:
+                logger.info(
+                    "slam  pid={!r}  track={}  frame={}  status=initialising",
+                    sig.participant_id, sig.track_id, state.frame_count,
+                )
             return
 
         roll, pitch, yaw = rotation_to_euler_deg(pose.R_world)
