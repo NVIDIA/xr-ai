@@ -33,6 +33,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
+import cv2
 import msgpack
 import numpy as np
 from loguru import logger
@@ -110,11 +111,6 @@ class MonoSlamAgent:
         key = (sig.participant_id, sig.track_id)
         state = self._tracks.setdefault(key, _TrackState())
 
-        # Reset state when the frame dimensions change (new camera / resolution).
-        if state.width != sig.width or state.height != sig.height:
-            self._tracks[key] = _TrackState(width=sig.width, height=sig.height)
-            state = self._tracks[key]
-
         state.signal_count += 1
         if state.signal_count % self._frame_stride != 1:
             return
@@ -130,8 +126,15 @@ class MonoSlamAgent:
             logger.warning("pixel conversion failed  track={}  {}", sig.track_id, exc)
             return
 
-        # Lazily construct the DPVO instance on the first real frame.
+        # Lazily construct the DPVO instance on the first real frame, and
+        # lock the (W, H) DPVO was built with — its internal patch graph and
+        # network buffers are sized at init time and cannot accept a different
+        # resolution mid-track.  WebRTC simulcast / ABR can flip the source
+        # resolution between frames; resize incoming frames to match the
+        # locked size instead of reinitialising DPVO.
         if state.slam is None:
+            state.width  = sig.width
+            state.height = sig.height
             K = build_camera_matrix(
                 sig.width, sig.height,
                 fov_deg=self._fov_deg,
@@ -163,6 +166,13 @@ class MonoSlamAgent:
                 "slam  pid={!r}  track={}  status=dpvo_init  size={}x{}",
                 sig.participant_id, sig.track_id, sig.width, sig.height,
             )
+
+        # If WebRTC ABR resized the source mid-stream, scale the frame back
+        # to DPVO's locked init resolution.  rgb is HxWxC (numpy / uint8);
+        # cv2.resize takes (W, H) in pixel coords.
+        if rgb.shape[1] != state.width or rgb.shape[0] != state.height:
+            rgb = cv2.resize(rgb, (state.width, state.height),
+                             interpolation=cv2.INTER_AREA)
 
         tstamp = time.time()
         await loop.run_in_executor(
