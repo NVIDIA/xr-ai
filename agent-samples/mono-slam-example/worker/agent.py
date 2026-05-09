@@ -76,6 +76,11 @@ class _TrackState:
     signal_count: int = 0      # FrameSignals seen (before stride filter)
     width: int = 0
     height: int = 0
+    # Held while DPVO is being constructed.  Frames arrive from WebRTC
+    # faster than the GPU init takes; without this lock, concurrent
+    # `_on_frame` callbacks all see `slam is None` and race on init,
+    # leaving width/height out of sync with the surviving DPVO instance.
+    init_lock:   asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 class MonoSlamAgent:
@@ -132,40 +137,54 @@ class MonoSlamAgent:
         # resolution mid-track.  WebRTC simulcast / ABR can flip the source
         # resolution between frames; resize incoming frames to match the
         # locked size instead of reinitialising DPVO.
+        #
+        # WebRTC delivers frames faster than the GPU init takes, so we
+        # serialise the init under a per-track asyncio.Lock with the
+        # double-checked-locking pattern.  Frames that arrive while init
+        # is in flight wait, then either reuse the freshly-built DPVO or
+        # fall through to push if the init failed.
         if state.slam is None:
-            state.width  = sig.width
-            state.height = sig.height
-            K = build_camera_matrix(
-                sig.width, sig.height,
-                fov_deg=self._fov_deg,
-                focal_length_px=self._focal_length_px,
-            )
-            intr = intrinsics_from_K(K)
-            try:
-                state.slam = await loop.run_in_executor(
-                    None,
-                    functools.partial(
-                        DPVOSlam,
-                        self._weights_path,
-                        sig.height,
-                        sig.width,
-                        intr,
-                        self._dpvo_cfg_overrides or None,
-                    ),
-                )
-            except Exception as exc:
-                logger.error(
-                    "DPVO init failed  track={}  {}  "
-                    "(is dpvo installed and CUDA available?)",
-                    sig.track_id, exc,
-                )
-                # Mark track as permanently broken so we don't retry every frame.
-                del self._tracks[key]
-                return
-            logger.info(
-                "slam  pid={!r}  track={}  status=dpvo_init  size={}x{}",
-                sig.participant_id, sig.track_id, sig.width, sig.height,
-            )
+            async with state.init_lock:
+                if state.slam is None:
+                    init_w, init_h = sig.width, sig.height
+                    K = build_camera_matrix(
+                        init_w, init_h,
+                        fov_deg=self._fov_deg,
+                        focal_length_px=self._focal_length_px,
+                    )
+                    intr = intrinsics_from_K(K)
+                    try:
+                        slam = await loop.run_in_executor(
+                            None,
+                            functools.partial(
+                                DPVOSlam,
+                                self._weights_path,
+                                init_h,
+                                init_w,
+                                intr,
+                                self._dpvo_cfg_overrides or None,
+                            ),
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "DPVO init failed  track={}  {}  "
+                            "(is dpvo installed and CUDA available?)",
+                            sig.track_id, exc,
+                        )
+                        # Mark track as permanently broken so we don't
+                        # retry every frame.
+                        del self._tracks[key]
+                        return
+                    # Publish width/height and slam together, after the
+                    # heavy init succeeds — concurrent waiters now see a
+                    # consistent (slam, width, height) snapshot.
+                    state.width  = init_w
+                    state.height = init_h
+                    state.slam   = slam
+                    logger.info(
+                        "slam  pid={!r}  track={}  status=dpvo_init  size={}x{}",
+                        sig.participant_id, sig.track_id, init_w, init_h,
+                    )
 
         # If WebRTC ABR resized the source mid-stream, scale the frame back
         # to DPVO's locked init resolution.  rgb is HxWxC (numpy / uint8);
