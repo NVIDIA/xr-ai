@@ -15,7 +15,10 @@ fov_deg: 60.0          # horizontal FOV assumed when focal_length_px is absent
 
 # DPVO model weights
 # ------------------
-# Download with:  bash scripts/install_dpvo.sh
+# Auto-downloaded by the orchestrator's _ensure_dpvo_weights() bootstrap on
+# first run.  Relative paths are resolved against the DPVO install dir
+# (deps/dpvo/), so the default below resolves to deps/dpvo/models/dpvo.pth.
+# Pass an absolute path here to use a checkpoint outside the DPVO tree.
 weights_path: models/dpvo.pth
 
 # Tracking parameters

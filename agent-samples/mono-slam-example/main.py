@@ -19,6 +19,8 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.request
+import zipfile
 from pathlib import Path
 
 from loguru import logger
@@ -47,6 +49,8 @@ _PROCESSES: list[Process] = [
 
 _DPVO_REPO     = "https://github.com/princeton-vl/DPVO.git"
 _DPVO_DIR      = (_BASE / "../../deps/dpvo").resolve()
+_DPVO_WEIGHTS_URL = "https://www.dropbox.com/s/nap0u8zslspdwm4/models.zip?dl=1"
+_DPVO_WEIGHTS_REL = "models/dpvo.pth"   # within _DPVO_DIR
 _EIGEN_REPO    = "https://gitlab.com/libeigen/eigen.git"
 _EIGEN_VERSION = "3.4.0"
 # Pinned commit for tag 3.4.0.  GitLab's archive-zip endpoint is
@@ -184,10 +188,58 @@ def _ensure_dpvo_source() -> None:
     logger.info("Eigen cloned to {}", eigen_dir)
 
 
+def _dl_progress(block_num: int, block_size: int, total_size: int) -> None:
+    if total_size > 0:
+        pct = min(100, block_num * block_size * 100 // total_size)
+        print(f"\r  [setup]   {pct}%   ", end="", flush=True)
+
+
+def _ensure_dpvo_weights() -> None:
+    """Download DPVO model weights into deps/dpvo/models/dpvo.pth if missing.
+
+    Princeton-VL distributes the checkpoint as a Dropbox-hosted models.zip
+    that unpacks to ``models/dpvo.pth``.  We fetch + extract it directly
+    into the cloned DPVO dir so the worker can resolve the relative
+    `weights_path: models/dpvo.pth` against `dpvo.__file__.parent.parent`.
+    """
+    weights = _DPVO_DIR / _DPVO_WEIGHTS_REL
+    if weights.exists():
+        logger.debug("DPVO weights already present at {}", weights)
+        return
+
+    logger.info("DPVO weights not found — downloading from {}", _DPVO_WEIGHTS_URL)
+    weights.parent.mkdir(parents=True, exist_ok=True)
+    partial = weights.parent / "models.zip.partial"
+    try:
+        urllib.request.urlretrieve(_DPVO_WEIGHTS_URL, partial, _dl_progress)
+        print()  # finish progress line
+    except Exception as exc:
+        partial.unlink(missing_ok=True)
+        sys.exit(
+            f"\n  [setup] DPVO weights download failed: {exc}\n"
+            f"  Manual fallback:\n"
+            f"    wget -O {partial} '{_DPVO_WEIGHTS_URL}'\n"
+            f"    unzip {partial} -d {_DPVO_DIR}\n"
+        )
+
+    with zipfile.ZipFile(partial) as zf:
+        zf.extractall(_DPVO_DIR)
+    partial.unlink()
+
+    if not weights.exists():
+        sys.exit(
+            f"\n  [setup] models.zip extracted but {weights} was not produced.\n"
+            f"  The archive layout may have changed upstream; download the\n"
+            f"  checkpoint manually and place it at that path.\n"
+        )
+    logger.info("DPVO weights saved to {}", weights)
+
+
 def run() -> None:
     setup_logging("orchestrator", namespace="mono-slam-example")
     _ensure_nvcc_on_path()
     _ensure_dpvo_source()
+    _ensure_dpvo_weights()
     run_stack(_PROCESSES, _BASE)
 
 

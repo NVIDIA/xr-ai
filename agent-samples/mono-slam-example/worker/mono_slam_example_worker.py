@@ -9,7 +9,9 @@ Do not run this directly.
 
 Config (mono_slam_example_worker.yaml — auto-passed by the launcher)
 ---------------------------------------------------------------------
-    weights_path:       dpvo.pth    path to DPVO checkpoint (required)
+    weights_path:       models/dpvo.pth    path to DPVO checkpoint
+                                           (relative paths resolve against
+                                           the DPVO install dir under deps/dpvo/)
     fov_deg:            60.0        horizontal FOV for approximate intrinsics
     focal_length_px:    <float>     if set, overrides fov_deg (calibrated value)
     frame_stride:       3           sample every Nth FrameSignal per track
@@ -34,10 +36,26 @@ _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 
+def _resolve_weights_path(weights: str | pathlib.Path) -> str:
+    """Resolve ``weights`` to an absolute path.
+
+    Absolute paths are returned unchanged.  Relative paths are interpreted
+    against the DPVO install root (``dpvo.__file__.parent.parent``) so the
+    yaml default ``weights_path: models/dpvo.pth`` lines up with the
+    location the orchestrator's ``_ensure_dpvo_weights()`` writes to.
+    """
+    p = pathlib.Path(weights)
+    if p.is_absolute():
+        return str(p)
+    import dpvo as _dpvo_pkg  # local import — DPVO is only installed in worker venvs
+    dpvo_root = pathlib.Path(_dpvo_pkg.__file__).resolve().parent.parent
+    return str(dpvo_root / p)
+
+
 async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     setup_logging("worker", namespace="mono-slam-example")
 
-    weights_path = cfg.get("weights_path", "dpvo.pth")
+    weights_path = _resolve_weights_path(cfg.get("weights_path", "models/dpvo.pth"))
     ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     agent = MonoSlamAgent(
         ep,

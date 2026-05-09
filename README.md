@@ -312,23 +312,21 @@ toolkit is on a different major.  The worker's `uv sync` then builds
 DPVO's CUDA extensions against the local torch install — no separate
 installer step.
 
-Download the DPVO checkpoint (~60 MB) and place it at `models/dpvo.pth`
-(or set `weights_path` in the worker YAML):
-
-```bash
-wget https://www.dropbox.com/s/nap0u8zslspdwm4/models.zip
-unzip models.zip          # extracts models/dpvo.pth
-```
-
 ```bash
 cd agent-samples/mono-slam-example
 uv sync
 uv run mono_slam_example
 ```
 
-On first run the orchestrator clones DPVO into `../../deps/dpvo/` and
-extracts Eigen 3.4.0 into its `thirdparty/`; the worker then syncs and
-builds the CUDA extensions.  Subsequent runs are fast (no rebuild).
+On first run the orchestrator:
+1. Clones DPVO into `../../deps/dpvo/` and extracts Eigen 3.4.0 into its
+   `thirdparty/`.
+2. Downloads the DPVO checkpoint (~60 MB) into
+   `../../deps/dpvo/models/dpvo.pth`.
+3. Spawns the worker, whose `uv sync` builds the CUDA extensions.
+
+Subsequent runs are fast (no rebuild, no re-download).  Set
+`weights_path:` in the worker YAML to override the checkpoint location.
 
 Then connect any client and start streaming video.  Pose lines appear in
 the log as:
