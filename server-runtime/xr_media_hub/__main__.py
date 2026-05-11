@@ -116,7 +116,15 @@ async def main(ready_file: Path | None = None) -> None:
 
     token = make_client_token(cfg, identity="ios-client")
     web_scheme = "https" if cfg.web_server_tls else "http"
-    logger.info("LiveKit URL : ws://0.0.0.0:{}  (plain ws — no TLS)", cfg.lk_port_ws)
+    # External clients reach LiveKit via the web server's /rtc proxy;
+    # without that, LiveKit's native plain ws:// is the only path.
+    if cfg.enable_web_server:
+        lk_scheme   = "wss" if cfg.web_server_tls else "ws"
+        lk_url_port = cfg.web_server_port
+    else:
+        lk_scheme   = "ws"
+        lk_url_port = cfg.lk_port_ws
+    logger.info("LiveKit URL : {}://0.0.0.0:{}", lk_scheme, lk_url_port)
     logger.info("Room        : {}", cfg.room_name)
     logger.info("Token       : {}", token)
     if cfg.enable_web_server:

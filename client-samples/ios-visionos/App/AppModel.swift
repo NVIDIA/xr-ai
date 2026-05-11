@@ -29,13 +29,8 @@ final class AppModel {
     var host: String = AppModel.defaults.string(forKey: Keys.host) ?? "192.168.1.100" {
         didSet { AppModel.defaults.set(host, forKey: Keys.host) }
     }
-    var port: String = AppModel.defaults.string(forKey: Keys.port) ?? "7880" {
+    var port: String = AppModel.defaults.string(forKey: Keys.port) ?? "8080" {
         didSet { AppModel.defaults.set(port, forKey: Keys.port) }
-    }
-    // Default `false`: `bool(forKey:)` returns `false` for missing keys.
-    // To change the default to `true`, switch to `object(forKey:) as? Bool ?? true`.
-    var secure: Bool = AppModel.defaults.bool(forKey: Keys.secure) {
-        didSet { AppModel.defaults.set(secure, forKey: Keys.secure) }
     }
     /// Bearer token bypass — intentionally not persisted.
     var token: String = ""
@@ -60,7 +55,8 @@ final class AppModel {
     /// When `true`, ``clientControl`` startCamera/stopCamera messages from
     /// the agent are honoured.  When `false` (default — always-on), they are
     /// ignored and the camera button is the sole control.
-    /// (Default `false`; see note on `secure` for `bool(forKey:)` semantics.)
+    /// `bool(forKey:)` returns `false` for missing keys, which matches the
+    /// always-on default.
     var cameraOnDemand: Bool = AppModel.defaults.bool(forKey: Keys.cameraOnDemand) {
         didSet { AppModel.defaults.set(cameraOnDemand, forKey: Keys.cameraOnDemand) }
     }
@@ -72,7 +68,6 @@ final class AppModel {
     private enum Keys {
         static let host           = "settings.host"
         static let port           = "settings.port"
-        static let secure         = "settings.secure"
         static let tokenServerURL = "settings.tokenServerURL"
         static let identity       = "settings.identity"
         static let audioMode      = "settings.audioMode"
@@ -127,20 +122,15 @@ final class AppModel {
         lastError = nil
         receivedMessages.removeAll()
 
-        let portNumber = Int(port) ?? 7880
+        let portNumber = Int(port) ?? 8080
         let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTokenURL = tokenServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let tokenScheme = secure ? "https" : "http"
         let resolvedTokenURL = trimmedTokenURL.isEmpty
-            ? URL(string: "\(tokenScheme)://\(host):8080/token")
+            ? URL(string: "https://\(host):\(portNumber)/token")
             : URL(string: trimmedTokenURL)
-        // LiveKit always runs on plain ws:// in this deployment — TLS is terminated
-        // at the web-server layer (port 8080), not at the LiveKit signaling port (7880).
-        // `secure` only affects the token-endpoint URL scheme (http vs https).
         let lkConfig = LiveKitConfig(
             host: host,
             port: portNumber,
-            secure: false,
             token: trimmedToken.isEmpty ? nil : trimmedToken,
             tokenURL: resolvedTokenURL
         )

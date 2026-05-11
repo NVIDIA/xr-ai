@@ -18,7 +18,6 @@ lk_port_udp: 7882
 enable_web_server: true
 web_server_port:   8080
 web_client_dir:    ../../../client-samples/web
-web_server_tls:    true
 
 # ── Optional: token server ────────────────────────────────────────────────────
 enable_token_server: true

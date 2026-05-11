@@ -175,7 +175,7 @@ Read these on demand when the topic comes up:
 
 | File | When to read |
 |---|---|
-| `docs/architecture.md` | Working across module boundaries; understanding hub ↔ transport ↔ agent boundaries; LiveKit `ws://` limitation |
+| `docs/architecture.md` | Working across module boundaries; understanding hub ↔ transport ↔ agent boundaries; the same-origin wss:// signaling proxy in front of LiveKit |
 | `docs/process-model.md` | Touching `utils/xr-ai-launcher/`, orchestrators, ready-files, or adding a managed process type |
 | `docs/credentials.md` | Code that needs `HF_TOKEN` / `NGC_API_KEY` |
 | `docs/ai-services.md` | Adding, calling, or operating a VLM / STT / TTS / LLM server (incl. vLLM persistence) |

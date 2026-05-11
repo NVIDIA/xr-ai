@@ -39,6 +39,7 @@ app/src/main/java/com/nvidia/xrai/streamkitsample/
 │       └── livekit/
 │           └── LiveKitBackend.kt   ← LiveKit Android SDK implementation
 ├── AppViewModel.kt                 ← observable state + actions (mirrors AppModel.swift / app.js model)
+├── CertInstall.kt                  ← one-tap cert fetch + KeyChain install intent
 └── MainActivity.kt                 ← Jetpack Compose UI
 ```
 
@@ -91,7 +92,7 @@ uv sync && uv run echo_agent
 The hub prints:
 
 ```
-[hub]   LiveKit URL : ws://0.0.0.0:7880
+[hub]   LiveKit URL : wss://0.0.0.0:8080
 [hub]   Token       : eyJ…   ← paste into the app
 ```
 
@@ -100,12 +101,18 @@ In the app:
 | Field | Value |
 |---|---|
 | Host / IP | IP of the machine running the server |
-| Port | `7880` |
+| Port | `8080` (the hub web-server port, not LiveKit's internal 7880) |
 | Token | Paste the printed JWT |
 | Identity | Any string unique to this device |
 
 Leave **Token URL** blank to use the server's default `/token` endpoint, or paste
 the printed JWT directly into **Token**.
+
+The hub serves a self-signed cert by default. Before connecting for the first
+time, tap **Install hub certificate** in the Connection section. The app fetches
+the cert from the hub and opens the system cert-install dialog — confirm to
+install. After install, connect normally; Android validates against the system +
+user CA store automatically.
 
 ## Permissions
 

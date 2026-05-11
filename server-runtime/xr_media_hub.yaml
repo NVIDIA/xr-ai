@@ -26,15 +26,19 @@ web_server_host:   "0.0.0.0"
 web_server_port:   8080
 # Path is relative to this file's directory.
 web_client_dir:    ../client-samples/web
-# Enable HTTPS with a self-signed certificate (auto-generated on first run at
-# ~/.local/share/xr-ai/web-server.crt).  Required for camera access when
-# connecting from a device other than localhost.
-# web_server_tls: true
-# Supply your own cert/key to replace the auto-generated one:
+# HTTPS is on by default. A self-signed cert is auto-generated on first run
+# at ~/.local/share/xr-ai/web-server.crt. Browsers reach LiveKit via the
+# same-origin wss://<host>:web_server_port/rtc proxy this server exposes.
+# Set web_server_tls: false only when the hub should *not* terminate TLS
+# itself — either a TLS-terminating reverse proxy (nginx, Caddy, Cloudflare
+# Tunnel) sits in front and speaks plain http://+ws:// to the hub on the
+# loopback, or you're doing localhost-only dev where browsers grant
+# camera/mic on http://localhost. Supply your own cert/key with
+# cert_file / key_file:
 # cert_file: /path/to/cert.pem
 # key_file:  /path/to/key.pem
 
-# ── Optional: token server (only needed for HTTPS/WSS proxy) ─────────────────
+# ── Optional: token server (legacy plain-HTTP entry point) ────────────────────
 enable_token_server: true
 
 # ── Video recording (NVENC, optional) ─────────────────────────────────────────
