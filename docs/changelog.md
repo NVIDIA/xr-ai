@@ -9,6 +9,119 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-10 — TLS by default; canonicalize the same-origin wss:// proxy; drop the client-side `secure` toggle
+
+`web_server_tls` now defaults to **true**. The hub web server terminates
+HTTPS on `web_server_port` (8080) and exposes a same-origin
+`wss://<host>:8080/rtc[/<version>]` route that proxies LiveKit signaling
+to the internal plaintext 7880 (`_lk_proxy.py`); that proxy is now the
+**only** client-facing signaling path. LiveKit's native 7880 stays on
+`127.0.0.1` — no external client connects to it directly.
+
+The proxy gained protocol-version-aware paths in the same change: the
+LiveKit JS SDK v2.x appends `/rtc/v1` to the base URL it is given (see
+`client-sdk-js/src/api/utils.ts::createRtcUrl`), so the proxy now matches
+`/rtc/{tail:path}` and forwards the version segment verbatim. The
+previous `/rtc`-only routes would have closed v2.x sessions through the
+catch-all WebSocket handler.
+
+The Android, iOS, and visionOS samples lost their "HTTPS token" / `secure`
+toggle. The `secure` field is gone from `BackendConfiguration`
+(`.swift`/`.kt`); the URL is unconditionally `wss://<host>:<port>` and the
+default token endpoint is `https://<host>:<port>/token`. The web non-XR
+client auto-detects from `window.location.protocol`. The default `port`
+field on mobile changed from `7880` → `8080` (the hub web-server port,
+*not* LiveKit's native port). iOS persists this via `UserDefaults`, so a
+device that had connected with the old default will keep `7880` saved
+and needs to be edited in the app — Android's Compose `mutableStateOf`
+isn't persisted, so it picks up the new default on next launch.
+
+**Why this over native LiveKit TLS.** `docs/architecture.md` previously
+listed three workarounds and called native LiveKit TLS "the correct
+long-term fix but has not been implemented yet". On audit, the proxy
+(workaround #1) was already in place and exercised by `web-xr`; the
+remaining bug was that mobile clients built their own `ws://host:7880`
+URL instead of using the URL `/token` returns. Native LiveKit TLS would
+have required Rust-side cert verification in `livekit-rtc` for the
+internal Python connector talking to its own LiveKit instance — an
+uncertain surface to depend on. Canonicalizing the proxy is a smaller
+change with the same user-visible outcome.
+
+**What stayed.** `web_server_tls: false` is still a valid escape hatch
+for `localhost`-only dev; the same-origin proxy then serves plain `ws://`.
+The internal Python connector still talks to LiveKit over plain `ws://`
+on `127.0.0.1:7880`. WebRTC media on 7881/TCP fallback and 7882/UDP is
+DTLS/SRTP regardless — those ports are unchanged.
+
+**iOS / visionOS cert install is mandatory.** Investigating a real client
+rejection: the LiveKit Swift SDK's `URLSession` (`WebSocket.swift`
+`Delegate`) does not implement
+`urlSession(_:didReceive:completionHandler:)` for server-trust
+challenges, and ATS does not bypass cert-chain validation regardless of
+`NSAllowsArbitraryLoads` — the previous code comment claiming otherwise
+was wrong. The `TrustingSessionDelegate` inside `LiveKitBackend.swift`
+only covers the `/token` HTTP fetch, and was additionally gated by
+`#if DEBUG` (so Release builds rejected the cert there too). The
+`#if DEBUG` gate is gone, and the hub now exposes `/cert` (MIME
+`application/x-x509-ca-cert`) so iOS Safari can install the hub's
+self-signed cert in one tap. The iOS README + `docs/networking.md` +
+`docs/troubleshooting.md` document the install + Full Trust toggle.
+Android also requires cert install; see the tech-debt cleanup sub-entry below.
+
+**The Full Trust toggle did not appear in initial testing** because
+`_tls.py` generated the cert with `BasicConstraints CA:FALSE`; iOS only
+exposes the toggle for CA-marked certs. The generator now writes a
+self-signed CA (the mkcert pattern: `CA:TRUE`, `KeyUsage` with both
+`key_cert_sign` and `digital_signature` + `key_encipherment`, EKU
+`SERVER_AUTH`) and `ensure_self_signed_cert()` detects a cached non-CA
+cert from older builds and regenerates with a one-line log banner.
+Devices that installed the old profile must remove it from VPN &
+Device Management before reinstalling the new one.
+
+**The cert's SAN missed the LAN IP** in a second round of iOS testing
+(`errSSLBadCert` / NSURLErrorDomain `-1202`, "pretending to be
+10.29.90.196"). The previous SAN-population path used
+`socket.gethostbyname(socket.gethostname())`, which on Ubuntu returns
+the `/etc/hosts` loopback alias `127.0.1.1` rather than the LAN IP.
+`_tls.py` now enumerates routable IPv4 addresses via the UDP-connect
+trick (open a non-blocking UDP socket to `8.8.8.8` / `1.1.1.1` /
+`169.254.169.254` and ask the kernel which interface it would route
+from) and `gethostbyname_ex` for /etc/hosts aliases, then includes every
+non-loopback hit in the SAN. `ensure_self_signed_cert()` also detects a
+SAN that's missing a currently-detected local IP and regenerates with a
+log banner directing users to reinstall the profile.
+
+**Third iOS issue: 401 from LiveKit after a successful TLS handshake.**
+The LiveKit Swift SDK 2.13.0 puts the JWT in
+`Authorization: Bearer <token>` (the JS SDK uses `?access_token=…` in
+the query string instead). The same-origin proxy in `_lk_proxy.py`
+forwarded the query string but dropped every request header, so
+LiveKit-server saw an unauthenticated WSS upgrade from the Swift SDK
+and 401'd it. The proxy now forwards end-to-end headers (everything
+except a hop-by-hop allowlist) to both the `/rtc/validate` HTTP shim and
+the `/rtc[/<version>]` WebSocket, via httpx and `websockets.connect`'s
+`additional_headers`. The web client is unaffected — it puts the token
+in the query string and worked before.
+
+**Tech-debt cleanup: `TrustAllCerts.kt` removed; Android now requires cert
+install like iOS.** `TrustAllCerts.kt` was not "trust our specific self-signed
+cert" — it accepted any cert from any issuer, including legitimately-misissued
+or attacker-controlled ones, defeating TLS entirely for the Android client.
+The file is deleted. `LiveKitOverrides` (which existed solely to inject the
+trust-all OkHttpClient) is dropped from `LiveKitBackend.kt` as well. Android
+now validates against the system + user CA store identically to iOS. To
+replace the manual URL-typing step, both apps gained an in-app **"Install hub
+certificate"** button in the Connection section (enabled when Host is non-empty,
+visible in the disconnected state). Android fetches the cert from
+`https://<host>:<port>/cert` using a single-connection trust-all
+`HttpsURLConnection` scoped to that one call only (the cert cannot be
+pre-validated because it is what we are installing), then opens the system
+`KeyChain` install dialog. iOS opens Safari at the same URL, which triggers
+the existing profile-install flow. The `network_security_config.xml`
+`<certificates src="user"/>` anchor — already present — is the mechanism that
+makes Android accept the cert once it is OS-installed; no domain-config
+exception was needed or added.
+
 ### 2026-05-05 — Docker backend option for vLLM-backed servers
 
 All four vLLM-backed services (`vlm_server`, `llama_nemotron_llm_server`,

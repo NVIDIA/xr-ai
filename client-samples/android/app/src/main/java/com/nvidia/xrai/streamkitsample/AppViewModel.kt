@@ -43,16 +43,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── Connection settings ────────────────────────────────────────────────────
 
     var host by mutableStateOf("192.168.1.100")
-    var port by mutableStateOf("7880")
-    /**
-     * When true, the default token URL uses `https://`. Has no effect on the
-     * LiveKit signaling socket — that is always plain `ws://` in the reference
-     * deployment.
-     */
-    var secure by mutableStateOf(false)
+    var port by mutableStateOf("8080")
     /** Pre-signed JWT token (alternative to tokenServerURL). */
     var tokenInput by mutableStateOf("")
-    /** Token server URL. Defaults to http(s)://<host>:8080/token when blank. */
+    /** Token server URL. Defaults to https://<host>:<port>/token when blank. */
     var tokenServerURL by mutableStateOf("")
     var identity by mutableStateOf("android-client")
 
@@ -108,18 +102,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             receivedMessages.clear()
 
             try {
-                val portNumber = port.toIntOrNull() ?: 7880
+                val portNumber = port.toIntOrNull() ?: 8080
                 val trimmedToken = tokenInput.trim()
-                val tokenScheme = if (secure) "https" else "http"
                 val resolvedTokenURL = tokenServerURL.trim().ifEmpty {
-                    // Default mirrors AppModel.swift: http(s)://<host>:8080/token
-                    "$tokenScheme://$host:8080/token"
+                    "https://$host:$portNumber/token"
                 }
 
                 val lkConfig = LiveKitConfig(
                     host = host,
                     port = portNumber,
-                    secure = secure,
                     token = trimmedToken.ifEmpty { null },
                     tokenURL = resolvedTokenURL,
                 )

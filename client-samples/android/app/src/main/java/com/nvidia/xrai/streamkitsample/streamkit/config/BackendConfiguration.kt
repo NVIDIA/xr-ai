@@ -47,24 +47,19 @@ sealed class BackendConfiguration {
  */
 data class LiveKitConfig(
     /**
-     * IP address or hostname of the LiveKit server (e.g. `"192.168.1.100"`).
+     * IP address or hostname of the xr-ai hub (e.g. `"192.168.1.100"`).
      * Do not include a scheme or port.
      */
     val host: String,
 
-    /** WebSocket port. Defaults to `7880` (LiveKit's default). */
-    val port: Int = 7880,
-
     /**
-     * Use `https://` for the default token endpoint. Set `false` when the
-     * token server speaks plain `http://`.
+     * Hub web-server port. Defaults to `8080`.
      *
-     * The LiveKit signaling socket is **always** plain `ws://` in the xr-ai
-     * reference deployment (port 7880) — TLS terminates at the web/token
-     * server, not at LiveKit. This flag therefore does not affect the
-     * signaling URL.
+     * The client connects to `wss://<host>:<port>`; the hub serves a
+     * same-origin /rtc proxy that forwards LiveKit signaling internally.
+     * This is *not* LiveKit's native signaling port (7880).
      */
-    val secure: Boolean = false,
+    val port: Int = 8080,
 
     /**
      * A pre-signed LiveKit JWT token.

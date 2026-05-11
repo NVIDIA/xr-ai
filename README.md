@@ -170,7 +170,7 @@ The hub, VLM, STT, and TTS start together (or reuse running services).
 When ready the hub prints:
 
 ```
-[hub]   LiveKit URL : ws://0.0.0.0:7880
+[hub]   LiveKit URL : wss://0.0.0.0:8080
 [hub]   Room        : xr-room
 [hub]   Token       : eyJ…
 [hub]   Web client  : https://localhost:8080
@@ -319,7 +319,7 @@ full setup. Quick steps:
 1. Open `client-samples/android/` in Android Studio (Hedgehog or later).
 2. Let Gradle sync finish — it downloads the LiveKit Android SDK automatically.
 3. Run on a device or emulator (API 24+).
-4. Enter the server IP, port (`7880`), and paste the printed token.
+4. Enter the server IP, port (`8080` — the hub's web-server port, *not* LiveKit's internal 7880), and paste the printed token.
 
 Permissions (`RECORD_AUDIO`, `CAMERA`) are requested at runtime on first use.
 
@@ -331,19 +331,30 @@ for full Xcode setup. Quick connection settings:
 | Field | Value |
 |---|---|
 | Host | IP of the machine running the server |
-| Port | `7880` |
+| Port | `8080` (the hub web-server port; *not* LiveKit's internal 7880) |
 | Token | Paste the token printed on server startup |
 
 The token is valid for 24 hours. To get a fresh one restart the server or call
-`GET http://<host>:8080/token?identity=<name>`.
+`GET https://<host>:8080/token?identity=<name>`.
+
+> **One-time per device:** the LiveKit Swift SDK does not expose a
+> server-trust hook, so iOS rejects the hub's self-signed cert until you
+> install it as a trusted profile. On the device, open
+> `https://<host>:8080/cert` in Safari → bypass the warning → install →
+> enable **Settings → General → About → Certificate Trust Settings →
+> Enable Full Trust**. Full walkthrough plus recovery for the common
+> failure modes is in
+> [`client-samples/ios-visionos/README.md`](client-samples/ios-visionos/README.md)
+> under "Trusting the hub's self-signed cert".
 
 ## Networking
 
-The hub and CloudXR runtime use a small set of TCP/UDP ports (LiveKit on
-7880–7882, web client on 8080/8443, CloudXR WSS proxy on 48322).  Open the
-ones you need before connecting from another machine — full table and
+The hub and CloudXR runtime use a small set of TCP/UDP ports (web client +
+wss /rtc proxy on 8080, WebRTC fallbacks on 7881/TCP + 7882/UDP, CloudXR
+WSS proxy on 48322). LiveKit's native 7880 stays on loopback — clients
+connect through the same-origin wss proxy, not directly. Full table and
 distro-specific `ufw` / `firewall-cmd` recipes are in
-[`docs/networking.md`](docs/networking.md).  The same doc covers HTTPS for
+[`docs/networking.md`](docs/networking.md). The same doc covers HTTPS for
 the web client and self-signed certificate trust on each browser.
 
 ## Tests

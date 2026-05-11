@@ -60,12 +60,14 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import kotlinx.coroutines.launch
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -258,6 +260,8 @@ private fun ConnectionSection(vm: AppViewModel) {
     val state = vm.connectionState
     val isDisconnected = state == ConnectionState.DISCONNECTED
     val isTransitioning = state == ConnectionState.CONNECTING || state == ConnectionState.RECONNECTING
+    val context = LocalContext.current
+    val scope   = rememberCoroutineScope()
 
     SectionCard(title = "Connection") {
         // State row
@@ -296,34 +300,8 @@ private fun ConnectionSection(vm: AppViewModel) {
             enabled = isDisconnected,
             alpha = fieldAlpha,
             keyboardType = KeyboardType.Number,
-            placeholder = "7880",
+            placeholder = "8080",
         )
-        // HTTPS toggle for the default token endpoint. The LiveKit signaling
-        // socket on 7880 is always plain ws:// in the xr-ai reference
-        // deployment, so this only flips http:// ↔ https:// for the token URL.
-        CardRow {
-            Box(modifier = Modifier.alpha(fieldAlpha)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "HTTPS token",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Switch(
-                        checked = vm.secure,
-                        onCheckedChange = { vm.secure = it },
-                        enabled = isDisconnected,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = ColorGreen,
-                        ),
-                    )
-                }
-            }
-        }
         FieldRow(
             label = "Token",
             value = vm.tokenInput,
@@ -351,6 +329,25 @@ private fun ConnectionSection(vm: AppViewModel) {
             placeholder = "android-client",
             showDivider = true,
         )
+
+        // Cert install — shown in the disconnected state so the user can trust
+        // the hub's self-signed CA before the first connection attempt.
+        if (isDisconnected) {
+            CardRow(showDivider = true) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val intent = fetchCertInstallIntent(vm.host, vm.port)
+                            if (intent != null) context.startActivity(intent)
+                        }
+                    },
+                    enabled = vm.host.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Install hub certificate", color = ColorBlue)
+                }
+            }
+        }
 
         // Connect / Disconnect button
         CardRow(showDivider = false) {

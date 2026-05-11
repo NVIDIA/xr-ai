@@ -6,21 +6,15 @@
 -->
 
 <!--
-  Network security policy for the StreamKit sample.
+  Network security policy for the StreamKit sample. Both relaxations are
+  developer-tool concessions; tighten via <domain-config> in production.
 
-  Two non-default behaviors are enabled here so the sample can talk to a
-  development server on the LAN:
-
-  1. cleartextTrafficPermitted="true" — Android 9+ blocks plain http:// and
-     ws:// by default for non-localhost hosts. The xr-ai reference deployment
-     speaks plain ws:// on port 7880 and http:// on port 8080, so we re-enable
-     cleartext globally. (For a production app, restrict this to specific
-     hostnames via <domain-config>.)
-
-  2. <certificates src="user"/> — when the user enables TLS in the app, the
-     hub serves a self-signed certificate generated on first run. The user
-     can install that cert as a profile (see the README "HTTPS" section).
-     Android only honors user-installed CAs if the app explicitly opts in.
+  - cleartextTrafficPermitted="true" — allow plain http://+ws:// for
+    localhost-only dev and plain-HTTP token servers.
+  - <certificates src="user"/> — the actual trust path: once the user
+    installs the hub's self-signed CA via the in-app "Install hub certificate"
+    button (or manually from https://<host>:<port>/cert), Android validates
+    the hub's TLS cert against the user CA store automatically.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">

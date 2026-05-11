@@ -10,59 +10,78 @@ if a firewall is active.
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 7880 | TCP | LiveKit WebSocket signaling |
-| 7881 | TCP | LiveKit WebRTC TCP fallback |
-| 7882 | UDP | LiveKit WebRTC UDP media |
-| 8080 | TCP | Web client / token server (HTTP or HTTPS — depends on `web_server_tls`; samples ship HTTPS) |
-| 8443 | TCP | Optional alternate HTTPS port (only if you change `web_server_port`) |
+| 7880 | TCP | LiveKit signaling (internal — bound to 127.0.0.1 via the hub's /rtc proxy; browsers and mobile clients do not connect here) |
+| 7881 | TCP | LiveKit WebRTC TCP fallback (DTLS/SRTP — already encrypted) |
+| 7882 | UDP | LiveKit WebRTC UDP media (DTLS/SRTP — already encrypted) |
+| 8080 | TCP | Web client + token server + wss:// /rtc proxy (HTTPS — the single entry point for browser, Android, iOS, and visionOS clients) |
 | 48322 | TCP | CloudXR WSS proxy (XR headset / client connection) |
 
 ## Ubuntu / Debian (`ufw`)
 
 ```bash
-sudo ufw allow 7880/tcp
-sudo ufw allow 7881/tcp
-sudo ufw allow 7882/udp
-sudo ufw allow 8080/tcp
-sudo ufw allow 8443/tcp   # HTTPS only
-sudo ufw allow 48322/tcp  # CloudXR (xr-render-demo)
+sudo ufw allow 7881/tcp     # WebRTC TCP fallback
+sudo ufw allow 7882/udp     # WebRTC UDP media
+sudo ufw allow 8080/tcp     # https + wss entry point
+sudo ufw allow 48322/tcp    # CloudXR (xr-render-demo)
 sudo ufw reload
 ```
+
+7880 stays on `127.0.0.1`; do not expose it externally — browsers and
+mobile clients reach LiveKit through the same-origin `wss://<host>:8080/rtc`
+proxy, not directly.
 
 ## RHEL / Fedora / CentOS (`firewall-cmd`)
 
 ```bash
-sudo firewall-cmd --permanent --add-port=7880/tcp
 sudo firewall-cmd --permanent --add-port=7881/tcp
 sudo firewall-cmd --permanent --add-port=7882/udp
 sudo firewall-cmd --permanent --add-port=8080/tcp
-sudo firewall-cmd --permanent --add-port=8443/tcp   # HTTPS only
-sudo firewall-cmd --permanent --add-port=48322/tcp  # CloudXR (xr-render-demo)
+sudo firewall-cmd --permanent --add-port=48322/tcp
 sudo firewall-cmd --reload
 ```
 
 ## TLS for the web client
 
-The shipped sample YAMLs (`agent-samples/*/yaml/xr_media_hub.yaml`) already
-have `web_server_tls: true`, so the web client is served over HTTPS by
-default — required for camera access from any device that isn't `localhost`.
-On first run a self-signed certificate is generated at
-`~/.local/share/xr-ai/web-server.crt`.
+TLS is **on by default** — `web_server_tls: true` is the built-in default.
+The web server terminates HTTPS on `web_server_port` (8080 by default) and
+also exposes a same-origin `wss://<host>:8080/rtc` proxy that forwards
+LiveKit signaling to the internal plaintext port. This is the only path
+browser / Android / iOS / visionOS clients use; LiveKit's native 7880 is
+never reached directly by client traffic.
 
-To **disable** TLS (e.g. for `localhost`-only dev where the cert warning is
-noise), set `web_server_tls: false` in the sample's `xr_media_hub.yaml`.
+On first run a self-signed certificate is generated at
+`~/.local/share/xr-ai/web-server.crt`. To use your own, set `cert_file`
+and `key_file` in `xr_media_hub.yaml`.
+
+To **disable** TLS for `localhost`-only dev where the cert warning is
+noise, set `web_server_tls: false`. With TLS off, the same-origin proxy
+serves plain `ws://` instead of `wss://`, and `localhost` is the only
+context where camera/mic permissions are granted without HTTPS.
 
 To **trust the self-signed cert** so you stop seeing the warning:
 
-- **Chrome / Edge**: navigate to `https://<host>:8443`, click **Advanced →
+- **Chrome / Edge**: navigate to `https://<host>:8080`, click **Advanced →
   Proceed to … (unsafe)**.
 - **Firefox**: click **Advanced → Accept the Risk and Continue**.
-- **iOS / Safari**: open the cert URL, follow the prompt to install the
-  profile, then enable it under **Settings → General → VPN & Device
-  Management**.
+- **Android**: tap **Install hub certificate** in the app's Connection
+  section (visible before the first connection). The app fetches the cert
+  from `https://<host>:<port>/cert` and opens the system install dialog.
+  After confirming, connect normally — the LiveKit SDK validates against
+  the system + user CA store automatically.
 
-To use your own certificate, set `cert_file` and `key_file` in
+- **iOS / iPadOS / visionOS**: tap **Install hub certificate** in the
+  app's Connection section. This opens Safari at
+  `https://<host>:<port>/cert`. In Safari: tap **Show Details → visit
+  this website** past the cert warning → **Download Configuration
+  Profile** → **Allow** → install via **Settings → General → VPN &
+  Device Management** → enable **Settings → General → About →
+  Certificate Trust Settings → Enable Full Trust** for the new cert.
+
+  This step is **mandatory** on iOS: the LiveKit Swift SDK's `URLSession`
+  does not expose a server-trust auth-challenge hook, and ATS does not
+  bypass certificate-chain validation regardless of `NSAllowsArbitraryLoads`.
+  Until the cert is trusted at the OS level, the wss handshake fails.
+
+Production deployments on any platform should replace the auto-generated
+cert with one from a public CA via `cert_file` / `key_file` in
 `xr_media_hub.yaml`.
-
-See also `docs/architecture.md` for the LiveKit `ws://` mixed-content
-limitation.

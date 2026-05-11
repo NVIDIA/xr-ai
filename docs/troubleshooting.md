@@ -200,16 +200,95 @@ silently dropped without 7882.
 
 ### HTTPS web client → `ws://` mixed-content warning
 
-**Symptom:** loading the web client over `https://…:8443` shows a mixed-content
-warning and the LiveKit connection is blocked by the browser.
+**Symptom:** the LiveKit JS SDK logs a mixed-content error connecting to
+`ws://<host>:7880/…` from an HTTPS page.
 
-**Cause:** LiveKit always serves plain `ws://` today; an HTTPS page can't open
-a `ws://` socket.
+**Cause:** a stale client build (or a hand-rolled config) is pointing at
+LiveKit's native 7880 instead of the same-origin `wss://<host>:8080/rtc`
+proxy the hub exposes.
 
-**Fix:** see the workarounds in
-[`docs/architecture.md`](architecture.md) under *Known limitations* —
-either run the web client over `http://localhost`, put a TLS-terminating
-proxy in front of LiveKit, or wait for native LiveKit TLS.
+**Fix:** rebuild against the current `client-samples/web` or `web-xr` —
+both auto-detect the page's protocol and use the wss proxy. If you're
+holding a `LiveKitConfig` directly, set `port` to the hub's
+`web_server_port` (8080) and let the SDK build `wss://host:8080`. The
+`secure` toggle is gone from the Android, iOS, and visionOS samples —
+wss is the only mode.
+
+### Android — connection fails with TLS / certificate errors
+
+**Symptom:** the Android sample fails to connect; the error shows an
+`SSLHandshakeException` or similar TLS error.
+
+**Cause:** the hub uses a self-signed cert by default. The Android sample
+no longer bypasses cert validation globally — it now validates against the
+system + user CA store, the same as iOS.
+
+**Fix:** install the hub's cert via the in-app button before connecting:
+
+1. In the Connection section, tap **Install hub certificate** (enabled once
+   Host is non-empty).
+2. The app fetches the cert from `https://<host>:<port>/cert` and opens the
+   system cert-install dialog.
+3. Confirm the install. After install, tap **Connect** — validation succeeds
+   automatically.
+
+Repeat for each hub host. Replace the auto-generated cert with one from a
+public CA via `cert_file` / `key_file` in `xr_media_hub.yaml` for
+production.
+
+### iOS / visionOS — connection fails with cert-trust errors
+
+**Symptom:** the iOS or visionOS sample fails to connect; the LiveKit
+WebSocket reports a TLS error (e.g. `NSURLErrorServerCertificateUntrusted`,
+`-1202`, "The certificate for this server is invalid").
+
+**Cause:** the LiveKit Swift SDK's `URLSession` does not expose a
+server-trust auth-challenge hook (`WebSocket.swift` Delegate only
+implements `didOpenWithProtocol` and `didCompleteWithError`), and ATS
+does not bypass certificate-chain validation regardless of
+`NSAllowsArbitraryLoads`. Until the hub's self-signed cert is trusted at
+the OS level, the wss handshake fails. The `TrustingSessionDelegate`
+inside `LiveKitBackend.swift` only covers the `/token` HTTP fetch.
+
+**Fix:** install the hub's cert as a trusted profile on the device:
+
+1. In Safari on the device, open `https://<host>:8080/cert` and tap
+   **Show Details → visit this website** past the cert warning.
+2. Approve the **Download Configuration Profile** prompt.
+3. Install via **Settings → General → VPN & Device Management**.
+4. Toggle **Settings → General → About → Certificate Trust Settings →
+   Enable Full Trust** for the new cert.
+
+If step 4 shows no toggle, the cached cert on the hub is from an older
+xr-ai build that wrote `BasicConstraints CA:FALSE` and iOS will not
+expose the trust toggle for it. Remove the installed profile via
+**VPN & Device Management** and restart the hub — it auto-detects the
+stale cert and regenerates as a self-signed CA (logged as `TLS: cached
+cert is not a CA cert — regenerating…`).
+
+If the toggle was enabled but the wss handshake still fails with
+`errSSLBadCert` / NSURLErrorDomain `-1202` and a message like *"pretending
+to be 10.29.90.196"* (i.e. the IP you typed into the app), the cert's
+SubjectAlternativeName doesn't cover that IP. The hub now detects local
+IPv4 addresses via a UDP-connect probe and auto-regenerates the cert
+whenever the SAN is missing one (logged as `TLS: cached cert SAN is
+missing local IP(s) … — regenerating…`); just restart the hub and
+re-install the profile on the device. To force regen explicitly, delete
+`~/.local/share/xr-ai/web-server.crt` and `web-server.key` before
+restarting.
+
+If the cert is trusted (no `-1202`) but the room connection still fails
+with HTTP 401 / "no permissions to access the room", the hub's wss /rtc
+proxy is dropping the `Authorization: Bearer <token>` header the Swift
+SDK sends (the JS SDK puts the JWT in the query string and never hit
+this code path). The current proxy forwards `Authorization` plus every
+other end-to-end header on both `/rtc/validate` and the WebSocket;
+pulling the latest hub and restarting fixes this without any
+client-side change.
+
+Repeat the install step per hub host, or replace the auto-generated cert
+with a public-CA cert via `cert_file` / `key_file` in `xr_media_hub.yaml`
+for production.
 
 ### Chrome — Immersive Web extension cannot be enabled
 
