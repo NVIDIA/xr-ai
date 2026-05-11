@@ -6,18 +6,14 @@ Web server — serves the standalone web client and a token endpoint.
 
 Serves:
   GET  /token           — signed LiveKit JWT; returns {token, url, room}
-  GET  /rtc/validate    — proxied to LiveKit HTTP (token pre-check)
-  WS   /rtc             — proxied to LiveKit WebSocket signaling
+  GET  /cert            — active TLS cert as an installable iOS profile
+  GET  /rtc[/*]/validate — proxied to LiveKit HTTP (token pre-check)
+  WS   /rtc[/*]         — proxied to LiveKit WebSocket signaling
   GET  /*               — static files from web_client_dir (SPA fallback)
-
-Runs on web_server_port (default 8080) so it does not conflict with the
-optional token server (default 8000) or LiveKit (7880).
 
 When ``web_server_tls`` is enabled the /token endpoint returns a same-origin
 ``wss://<host>:<web_server_port>/rtc`` URL and the /rtc* routes proxy to the
-internal plaintext LiveKit signaling port. This avoids the HTTPS-page-vs-ws://
-mixed-content problem for browser clients (including XR headsets) without
-requiring LiveKit itself to terminate TLS.
+internal plaintext LiveKit signaling port.
 """
 from __future__ import annotations
 
@@ -25,7 +21,7 @@ import asyncio
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Query, Request, WebSocket
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -37,7 +33,7 @@ from ._token import make_client_token
 from .config import LiveKitConnectorConfig
 
 
-def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
+def _build_app(cfg: LiveKitConnectorConfig, cert_bytes: bytes | None) -> FastAPI:
     app = FastAPI(title="XR-Media-Hub Web Server", docs_url=None, redoc_url=None)
     app.add_middleware(
         CORSMiddleware,
@@ -49,37 +45,42 @@ def _build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
     lk_internal_http = f"http://127.0.0.1:{cfg.lk_port_ws}"
     lk_internal_ws   = f"ws://127.0.0.1:{cfg.lk_port_ws}"
 
-    # Reused across every /rtc/validate hit so we don't pay TCP+TLS startup
-    # on every token check. Same lifecycle as the FastAPI app.
+    # Shared so /rtc/validate hits don't pay TCP+TLS startup per request.
     proxy_client = httpx.AsyncClient(timeout=5.0)
 
     @app.on_event("shutdown")
     async def _close_proxy_client() -> None:
         await proxy_client.aclose()
 
+    @app.get("/cert")
+    async def get_cert() -> Response:
+        """Serve the self-signed cert as an installable iOS profile."""
+        if cert_bytes is None:
+            raise HTTPException(status_code=404, detail="TLS disabled — no cert to serve")
+        return Response(
+            content=cert_bytes,
+            media_type="application/x-x509-ca-cert",
+            headers={"Content-Disposition": 'attachment; filename="xr-ai-hub.crt"'},
+        )
+
     @app.get("/token")
     async def get_token(request: Request, identity: str = Query(default="web-user")) -> dict:
-        # Derive the LiveKit host from the incoming request so the URL works
-        # whether the browser is on localhost or a remote machine.
+        # Use the request's Host header so the URL works for both localhost
+        # and remote clients without per-deployment config.
         host = request.headers.get("host", "localhost").split(":")[0]
         if cfg.web_server_tls:
-            # Same-origin WSS proxy — avoids mixed-content on HTTPS pages.
             lk_url = f"wss://{host}:{cfg.web_server_port}"
         else:
             lk_url = f"ws://{host}:{cfg.lk_port_ws}"
         token = make_client_token(cfg, identity=identity, ttl=None)
         return {"token": token, "room": cfg.room_name, "url": lk_url}
 
-    # ── LiveKit signaling proxy (only useful when web_server_tls is true) ────
-    # Always register — it's harmless on plain HTTP and keeps the code simpler.
-
-    @app.get("/rtc/validate")
-    async def rtc_validate(request: Request) -> Response:
-        return await _lk_proxy.proxy_validate(proxy_client, lk_internal_http, request)
-
-    @app.websocket("/rtc")
-    async def rtc_ws_proxy(client_ws: WebSocket) -> None:
-        await _lk_proxy.pump_rtc_ws(client_ws, lk_internal_ws)
+    _lk_proxy.mount_rtc_proxy(
+        app,
+        client=proxy_client,
+        lk_internal_http=lk_internal_http,
+        lk_internal_ws=lk_internal_ws,
+    )
 
     # StaticFiles asserts scope["type"] == "http" and crashes on WebSocket upgrades.
     # Catch any remaining WebSocket paths and close them before the mount sees them.
@@ -100,9 +101,8 @@ class WebServer:
         self._task: asyncio.Task | None = None
 
     async def start(self) -> None:
-        app = _build_app(self._cfg)
-
         ssl_kwargs: dict = {}
+        cert_bytes: bytes | None = None
         scheme = "http"
         if self._cfg.web_server_tls:
             cert = self._cfg.cert_file or None
@@ -112,6 +112,14 @@ class WebServer:
                 logger.info("TLS: using auto-generated self-signed cert  {}", cert)
             ssl_kwargs = {"ssl_certfile": cert, "ssl_keyfile": key}
             scheme = "https"
+            # Read once at startup so /cert serves from memory.
+            try:
+                with open(cert, "rb") as f:
+                    cert_bytes = f.read()
+            except OSError as exc:
+                logger.warning("TLS: cannot read cert at {} for /cert endpoint: {}", cert, exc)
+
+        app = _build_app(self._cfg, cert_bytes)
 
         uv_cfg = uvicorn.Config(
             app=app,

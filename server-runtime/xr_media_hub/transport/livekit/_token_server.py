@@ -5,12 +5,10 @@
 Token server — browser-facing HTTPS entry point.
 
 Serves:
-  GET  /token           — signed LiveKit JWT for browser clients
-  GET  /rtc/validate    — proxied to LiveKit HTTP (token pre-check)
-  WS   /rtc             — proxied to LiveKit WebSocket (signaling)
-  GET  /                — optional browser static files
-
-Runs programmatically via uvicorn so the caller can await start()/stop().
+  GET  /token            — signed LiveKit JWT for browser clients
+  GET  /rtc[/*]/validate — proxied to LiveKit HTTP (token pre-check)
+  WS   /rtc[/*]          — proxied to LiveKit WebSocket (signaling)
+  GET  /                 — optional browser static files
 """
 from __future__ import annotations
 
@@ -18,9 +16,8 @@ import asyncio
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Query, Request, WebSocket
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
 from loguru import logger
 
 from . import _lk_proxy
@@ -40,19 +37,23 @@ def build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
         allow_headers=["*"],
     )
 
+    proxy_client = httpx.AsyncClient(timeout=5.0)
+
+    @app.on_event("shutdown")
+    async def _close_proxy_client() -> None:
+        await proxy_client.aclose()
+
     @app.get("/token")
     async def get_token(identity: str = Query(default="browser-user")) -> dict:
         token = make_client_token(cfg, identity=identity, ttl=None)
         return {"token": token, "room": cfg.room_name, "url": cfg.token_server_url}
 
-    @app.get("/rtc/validate")
-    async def rtc_validate(request: Request) -> Response:
-        async with httpx.AsyncClient() as client:
-            return await _lk_proxy.proxy_validate(client, lk_internal_http, request)
-
-    @app.websocket("/rtc")
-    async def rtc_ws_proxy(client_ws: WebSocket) -> None:
-        await _lk_proxy.pump_rtc_ws(client_ws, lk_internal_ws)
+    _lk_proxy.mount_rtc_proxy(
+        app,
+        client=proxy_client,
+        lk_internal_http=lk_internal_http,
+        lk_internal_ws=lk_internal_ws,
+    )
 
     if cfg.browser_dir:
         from fastapi.staticfiles import StaticFiles

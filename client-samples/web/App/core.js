@@ -93,9 +93,18 @@ export async function enumerateCameras(model, render) {
  * @returns {object}
  */
 export function createBaseModel() {
+  // Hub serves the page and the wss:// /rtc proxy on the same origin. Default
+  // port + scheme to the page's own so the demo Just Works for both the local
+  // https://localhost:8080 dev flow and a remote https://host:8080 deployment.
+  const isPageSecure = typeof window !== 'undefined'
+    && window.location.protocol === 'https:';
+  const defaultPort = isPageSecure
+    ? (Number(window.location.port) || 443)
+    : 8080;
   return {
     host:            window.location.hostname || 'localhost',
-    port:            7880,
+    port:            defaultPort,
+    secure:          isPageSecure,
     tokenServerURL:  '',
     token:           '',
     identity:        'web-client',
@@ -520,7 +529,7 @@ export function wireBaseEvents(model, actions) {
   const { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendPing, sendCustom } = actions;
 
   $('host-input').addEventListener('input', (e) => { model.host = e.target.value; });
-  $('port-input').addEventListener('input', (e) => { model.port = Number(e.target.value) || 7880; });
+  $('port-input').addEventListener('input', (e) => { model.port = Number(e.target.value) || 8080; });
   $('token-input').addEventListener('input', (e) => { model.token = e.target.value; });
   $('token-url-input').addEventListener('input', (e) => { model.tokenServerURL = e.target.value; });
   $('identity-input').addEventListener('input', (e) => { model.identity = e.target.value; });

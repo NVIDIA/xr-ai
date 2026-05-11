@@ -175,6 +175,85 @@ resource and loaded automatically at runtime.
 
 ---
 
+## Trusting the hub's self-signed cert (one-time per device)
+
+The hub ships TLS-on-by-default with a self-signed cert, and the LiveKit
+Swift SDK's `URLSession` does not expose a server-trust hook — so the wss
+handshake fails until iOS trusts the cert. The `TrustingSessionDelegate`
+inside `LiveKitBackend.swift` only covers the `/token` HTTP fetch, not the
+LiveKit WebSocket. Install the cert once:
+
+1. In the app's Connection section, enter the hub host and port, then tap
+   **Install hub certificate**. This opens Safari at
+   `https://<host>:<port>/cert`.
+2. Safari shows "Not Private" — tap **Show Details → visit this website**.
+3. iOS prompts: **Download Configuration Profile**. Tap **Allow**.
+4. Open **Settings → General → VPN & Device Management**, tap the
+   downloaded profile under "Downloaded Profile", then **Install** (top
+   right) and enter your passcode.
+5. Open **Settings → General → About → Certificate Trust Settings** and
+   toggle **Enable Full Trust** for the new cert.
+
+The connection now completes without warnings. To switch hubs, repeat for
+each new host or replace the auto-generated cert with one from a public
+CA (`cert_file` / `key_file` in `xr_media_hub.yaml`).
+
+### "Enable Full Trust" toggle does not appear
+
+iOS only exposes the Certificate Trust Settings toggle for certs marked
+`BasicConstraints CA:TRUE`. Older xr-ai builds generated a non-CA cert
+and the toggle never appeared no matter how cleanly the profile was
+installed.
+
+**Fix:** the hub now auto-regenerates the cert as a self-signed CA on
+next start if the cached one isn't already CA-marked. The recovery flow
+is:
+
+1. On each device that has the old profile, **Settings → General → VPN
+   & Device Management** → tap the installed profile → **Remove
+   Profile**.
+2. On the server, restart the hub. It logs `TLS: cached cert is not a
+   CA cert — regenerating…` and writes a new
+   `~/.local/share/xr-ai/web-server.crt`. (If you want to force the
+   regen explicitly, delete `~/.local/share/xr-ai/web-server.crt` and
+   `~/.local/share/xr-ai/web-server.key` first.)
+3. Re-open `https://<host>:8080/cert` on the device and follow the
+   install steps above. The new cert appears under **Certificate Trust
+   Settings** with the Full Trust toggle exposed.
+
+### Connection fails with `errSSLBadCert` / `-1202` after the cert is trusted
+
+If you installed the profile and toggled Full Trust on but the wss
+handshake still errors out with NSURLErrorDomain `-1202` and a message
+like *"pretending to be 10.29.90.196"*, the cert's SubjectAlternativeName
+does not cover the IP you're typing into the app. This happens when the
+hub generated the cert before that interface was up, or via an
+`/etc/hosts` loopback alias (the Ubuntu default of `127.0.1.1` instead of
+the LAN IP).
+
+**Fix:** the hub now probes the kernel's outbound IPv4 addresses at cert
+load and regenerates the cert whenever its SAN is missing a current local
+IP. Restart the hub — it logs `TLS: cached cert SAN is missing local
+IP(s) [10.29.90.196] — regenerating…` — then on the device remove the
+old profile under **VPN & Device Management** and reinstall from
+`https://<host>:8080/cert` exactly as above.
+
+### TLS succeeds but the room rejects the token with 401
+
+If the cert is trusted (no `-1202` error) but the room connection still
+fails immediately with HTTP 401 / "no permissions to access the room",
+the hub's wss /rtc proxy is dropping the `Authorization: Bearer <token>`
+header the Swift SDK sends. The JS SDK puts the JWT in the query string,
+so the web client never hit this code path; older proxy builds didn't
+forward request headers.
+
+**Fix:** purely server-side — pull the latest hub and restart. The proxy
+now forwards `Authorization` (and every other end-to-end header) on both
+the `/rtc/validate` HTTP shim and the `/rtc[/<version>]` WebSocket. No
+client-side action needed.
+
+---
+
 ## Quick-start usage
 
 ```swift
@@ -183,7 +262,7 @@ import StreamKit
 // 1. Create a session backed by LiveKit
 let session = StreamSession(.liveKit(LiveKitConfig(
     host: "192.168.1.100",
-    token: myJWT          // or: tokenURL: URL(string: "http://…/token")!
+    token: myJWT          // or: tokenURL: URL(string: "https://…/token")!
 )))
 
 // 2. Connect (room name + identity are in SessionConfig)

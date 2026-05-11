@@ -50,14 +50,15 @@ extension BackendConfiguration {
 /// Exactly one of ``token`` or ``tokenURL`` must be provided.
 public struct LiveKitConfig: Sendable {
 
-    /// IP address or hostname of the LiveKit server (e.g. `"192.168.1.100"`).
+    /// IP address or hostname of the xr-ai hub (e.g. `"192.168.1.100"`).
     public var host: String
 
-    /// WebSocket port. Defaults to `7880`.
+    /// Hub web-server port. Defaults to `8080`.
+    ///
+    /// The client connects to `wss://<host>:<port>`; the hub serves a
+    /// same-origin /rtc proxy that forwards LiveKit signaling internally.
+    /// This is *not* LiveKit's native signaling port (7880).
     public var port: Int
-
-    /// Use `wss://` / `https://`. Defaults to `false` for local / LAN connections.
-    public var secure: Bool
 
     /// A pre-signed LiveKit JWT token.
     /// The token must encode the room name and participant identity.
@@ -71,14 +72,12 @@ public struct LiveKitConfig: Sendable {
 
     public init(
         host: String,
-        port: Int = 7880,
-        secure: Bool = false,
+        port: Int = 8080,
         token: String? = nil,
         tokenURL: URL? = nil
     ) {
         self.host = host
         self.port = port
-        self.secure = secure
         self.token = token
         self.tokenURL = tokenURL
     }

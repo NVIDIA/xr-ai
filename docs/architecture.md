@@ -59,23 +59,24 @@ searching upward from CWD when the orchestrator runs.
 For runtime symptoms and fixes that aren't architectural, see
 [`docs/troubleshooting.md`](troubleshooting.md).
 
-### LiveKit always uses plain `ws://` (no TLS)
+### LiveKit signaling is fronted by a same-origin wss:// proxy
 
-The web server (`web_server_tls: true`) and token endpoint both support HTTPS,
-but LiveKit itself always runs over plain WebSocket (`ws://`).  This means:
+LiveKit-server itself still runs plain `ws://` on the loopback interface
+(`127.0.0.1:7880`). The hub's web server (`_web_server.py`) terminates TLS
+on `web_server_port` (8080 by default) and exposes a same-origin
+`wss://<host>:8080/rtc` route that proxies LiveKit signaling
+bidirectionally (`_lk_proxy.py`). Every external client — browser, web-xr,
+Android, iOS, visionOS — connects only to that wss URL; nothing reaches
+LiveKit's 7880 from off-box.
 
-- The `/token` response returns `url: ws://<host>:<lk_port_ws>`.
-- Browsers loaded over HTTPS will block the `ws://` connection as mixed content.
-- Native clients (iOS, visionOS, Android) are unaffected — they accept both.
+The `/token` endpoint returns `url: wss://<host>:<web_server_port>` when
+`web_server_tls: true` (the default), so the URL the client SDK uses comes
+straight from the server — no client-side toggle needed.
 
-**Workarounds until LiveKit TLS is added:**
+WebRTC media (7881/TCP fallback, 7882/UDP) is DTLS/SRTP regardless, so no
+extra encryption is needed on those ports.
 
-1. Use a reverse proxy (nginx, Caddy) in front of LiveKit to terminate TLS and
-   forward as plain WebSocket internally.  Point `web_client_dir` at a build
-   that targets the proxy URL.
-2. Run the web client over plain HTTP (`web_server_tls: false`), which avoids
-   the mixed-content restriction.  Camera/mic access requires a secure context,
-   so this only works on `localhost` or with a browser flag override.
-3. Add native LiveKit TLS: set `tls.cert` and `tls.key` in the generated
-   `livekit.yaml` (see `_docker.py`) and change the token URL scheme to `wss://`.
-   This is the correct long-term fix but has not been implemented yet.
+To run a fully plain stack for `localhost` dev, set `web_server_tls: false`
+— `/token` then returns `ws://`, and the same-origin proxy serves plain
+WebSocket. `localhost` is the only context where browsers grant
+camera/mic permissions without HTTPS.

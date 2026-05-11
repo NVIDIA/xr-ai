@@ -77,8 +77,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             throw StreamError.invalidHost(config.host)
         }
 
-        let scheme = config.secure ? "wss" : "ws"
-        let url = "\(scheme)://\(config.host):\(config.port)"
+        let url = "wss://\(config.host):\(config.port)"
 
         let token: String
         if let t = config.token, !t.isEmpty {
@@ -580,25 +579,21 @@ private extension CameraConfig {
 
 // MARK: - TrustingSessionDelegate
 
-/// URLSession delegate that accepts any server certificate.
-///
-/// Used exclusively for the token-endpoint fetch so that developer servers
-/// running with self-signed TLS certificates work without manual CA installation.
-/// The LiveKit WebSocket connection is covered by `NSAllowsArbitraryLoads` in
-/// the app's Info.plist.
+/// URLSession delegate that accepts any server certificate. Used only for
+/// the /token fetch — the LiveKit Swift SDK owns its own URLSession, so
+/// the wss handshake to a self-signed cert still requires a trusted
+/// profile on the device.
 private final class TrustingSessionDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
     func urlSession(
         _ session: URLSession,
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        #if DEBUG
         if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
            let trust = challenge.protectionSpace.serverTrust {
             completionHandler(.useCredential, URLCredential(trust: trust))
             return
         }
-        #endif
         completionHandler(.performDefaultHandling, nil)
     }
 }

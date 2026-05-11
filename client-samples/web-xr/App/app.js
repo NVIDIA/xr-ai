@@ -37,14 +37,10 @@ const dbg = (typeof window !== 'undefined' && window.__dbg) || {
 // Model state — base fields + XR extensions
 // ─────────────────────────────────────────────────────────────────────────────
 
-// When served over HTTPS the hub proxies LiveKit signaling at wss://<host>:<port>/rtc.
-const _pageIsSecure = window.location.protocol === 'https:';
-const _defaultPort  = _pageIsSecure ? (Number(window.location.port) || 443) : 7880;
-
+// createBaseModel() picks the right host/port/secure from window.location.
+// We only add the XR-specific fields here.
 const model = {
   ...createBaseModel(),
-  port:   _defaultPort,
-  secure: _pageIsSecure,
   // CloudXR state
   xrHost:  window.location.hostname || 'localhost',
   xrPort:  48322,

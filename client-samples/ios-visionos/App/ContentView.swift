@@ -84,9 +84,7 @@ struct ContentView: View {
                     .keyboardType(.numberPad)
                     #endif
 
-                Toggle("Token server uses HTTPS", isOn: $m.secure)
-
-                TextField("Token server URL (e.g. http://host/token)", text: $m.tokenServerURL)
+                TextField("Token server URL (e.g. https://host:8080/token)", text: $m.tokenServerURL)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .onSubmit {}
@@ -98,6 +96,13 @@ struct ContentView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .onSubmit {}
+
+                Button("Install hub certificate") {
+                    if let url = URL(string: "https://\(m.host):\(m.port)/cert") {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .disabled(m.host.isEmpty)
 
                 Button(model.isConnecting ? "Connecting…" : "Connect") {
                     Task { await model.connect() }
