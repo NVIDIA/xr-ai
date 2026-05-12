@@ -27,6 +27,7 @@ import asyncio
 import contextlib
 import glob
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,14 +97,38 @@ def _build_config(yaml_path: Path, raw: dict) -> Config:
     if env_file_raw:
         env_file = _resolve(yaml_dir, env_file_raw)
 
+    scene_socket = raw.get("scene_socket", "ipc:///tmp/xr_render_scene")
+    _validate_scene_socket(scene_socket)
+
     return Config(
         lovr_bin         = lovr_bin,
         xr_app_dir       = xr_app_dir,
-        scene_socket     = raw.get("scene_socket", "ipc:///tmp/xr_render_scene"),
+        scene_socket     = scene_socket,
         cloudxr_env_file = env_file,
         host             = raw.get("host", "0.0.0.0"),
         port             = int(raw.get("port", 8220)),
     )
+
+
+# ZMQ transport prefixes we accept for the LOVR-facing PUSH socket. The ipc
+# branch requires a non-empty path under the leading slash so we reject
+# `ipc:///` — that's the exact typo that produces a cryptic bind() error
+# deep inside pyzmq.
+_SCENE_SOCKET_RE = re.compile(
+    r"^(?:ipc://(?:/[^/].*|[^/].*)|tcp://[^/]+:\d+|inproc://.+)$"
+)
+
+
+def _validate_scene_socket(value: str) -> None:
+    """Fail fast on malformed scene_socket URLs (e.g. 'ipc:///' with no path).
+
+    Catches the common typos before pyzmq's bind() raises an opaque error.
+    """
+    if not isinstance(value, str) or not _SCENE_SOCKET_RE.match(value):
+        sys.exit(
+            f"render-mcp: invalid scene_socket {value!r}.\n"
+            "  Expected ipc://<path>, tcp://<host>:<port>, or inproc://<name>."
+        )
 
 
 def _find_bundled_libzmq() -> Path | None:
@@ -151,6 +176,7 @@ class SceneDispatcher:
         self._spawn_lock: asyncio.Lock = asyncio.Lock()
         self._render_drops: int = 0
         self._spawn_error: str | None = None
+        self._watch_task: asyncio.Task | None = None
 
         # Scene state: { id → { type, position, color, scale } }
         self._objects: dict[str, dict] = {}
@@ -202,7 +228,7 @@ class SceneDispatcher:
                 )
                 self._lovr_started = False
 
-            asyncio.create_task(_watch(), name="lovr-watch")
+            self._watch_task = asyncio.create_task(_watch(), name="lovr-watch")
 
             self._lovr_started = True
             logger.info("render-mcp: LOVR spawned (xr.start handled)")
@@ -301,6 +327,8 @@ class SceneDispatcher:
             return {"ok": False, "reason": "backpressure"}
 
     def close(self) -> None:
+        if self._watch_task is not None and not self._watch_task.done():
+            self._watch_task.cancel()
         with contextlib.suppress(Exception):
             self._push.close(linger=0)
 

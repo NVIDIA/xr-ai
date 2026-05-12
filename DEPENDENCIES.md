@@ -138,12 +138,15 @@ xr-ai-tests  (tests/)
     └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
     └── xr-ai-vllm      [editable: ../utils/xr-ai-vllm]
+    └── vlm-mcp-server  [editable: ../agent-mcp-servers/vlm-mcp]
+    └── render-mcp      [editable: ../agent-mcp-servers/render-mcp]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
     Multi-client / multi-agent integration tests over the IPC layer.
     Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
-    Also covers unit tests for the leaf util packages (launcher, logging, vllm).
+    Also covers unit tests for the leaf util packages (launcher, logging, vllm)
+    and the vlm-mcp / render-mcp adapter surfaces (mocked upstreams).
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0
