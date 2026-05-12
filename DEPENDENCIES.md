@@ -133,18 +133,20 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
 xr-ai-tests  (tests/)
-    └── xr-ai-agent     [editable: ../agent-sdk]
-    └── xr-media-hub    [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
-    └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher]
-    └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
-    └── xr-ai-vllm      [editable: ../utils/xr-ai-vllm]
+    └── xr-ai-agent             [editable: ../agent-sdk]
+    └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
+    └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
+    └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
+    └── xr-ai-vllm              [editable: ../utils/xr-ai-vllm]
+    └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages
-    (launcher, logging, vllm).
+    (launcher, logging, vllm) and a CI-viable subprocess test for
+    transcript-mcp-server (fastmcp pulled in transitively).
 
     Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
     `-m "not gpu"` in CI). They spawn real ai-services via `uv run` (e.g.
