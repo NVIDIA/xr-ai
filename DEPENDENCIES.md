@@ -141,9 +141,13 @@ xr-ai-tests  (tests/)
     └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
     └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
     └── render-mcp              [editable: ../agent-mcp-servers/render-mcp]
+    └── video-mcp-server        [editable: ../agent-mcp-servers/video-mcp]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
+    └── fastmcp >=0.4   (only used by tests marked `gpu`)
+    └── Pillow >=10.0   (only used by tests marked `gpu`)
+    └── pyyaml >=6.0    (only used by tests marked `gpu`)
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages
@@ -153,10 +157,12 @@ xr-ai-tests  (tests/)
 
     Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
     `-m "not gpu"` in CI). They spawn real ai-services via `uv run` (e.g.
-    `test_gpu_stt_server.py`), import `livekit.rtc` directly to drive
-    `_room_client.py`, and shell out to `docker` to manage a LiveKit
-    container — `livekit`, `livekit-api`, and `docker` all come in
-    transitively via `xr-media-hub` rather than redeclared here.
+    `test_gpu_stt_server.py`, `test_gpu_video_mcp.py`), import
+    `livekit.rtc` directly to drive `_room_client.py`, exercise NVENC /
+    NVDEC via PyNvVideoCodec, and shell out to `docker` to manage a
+    LiveKit container — `livekit`, `livekit-api`, `PyNvVideoCodec`, and
+    `docker` all come in transitively via `xr-media-hub` /
+    `video-mcp-server` rather than redeclared here.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0

@@ -685,10 +685,15 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     finally:
         ep.stop()
         ep_task.cancel()
+        # ep.run() may raise on shutdown (socket closed mid-poll); we've
+        # already stopped the endpoint so that's benign — swallow it but
+        # surface anything unexpected to the log for postmortem.
         try:
             await ep_task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("video-mcp: ep_task exited with {!r} during shutdown", exc)
         ep.close()
 
 
