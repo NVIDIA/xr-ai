@@ -36,3 +36,6 @@ packages = ["xr_ai_tests"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["."]
+markers = [
+    "gpu: requires local GPU / Docker / NVENC; skipped in CI",
+]
