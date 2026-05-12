@@ -35,7 +35,9 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STT_DIR   = _REPO_ROOT / "ai-services" / "stt-server"
-_CACHE_DIR = _REPO_ROOT / "ai-services" / "models"
+_REPO_CACHE = _REPO_ROOT / "ai-services" / "models"
+_HF_CACHE   = Path("~/.cache/huggingface").expanduser()
+_CANDIDATE_CACHES = (_REPO_CACHE, _HF_CACHE)
 _MODEL     = "nvidia/parakeet-tdt-0.6b-v3"
 
 _STARTUP_TIMEOUT_S   = 600.0   # cold model load can easily take minutes.
@@ -66,21 +68,23 @@ def _make_sine_wav(seconds: float = 1.0, sample_rate: int = 16_000,
     return buf.getvalue()
 
 
-def _weights_cached() -> bool:
-    """True iff a NeMo or HF weight file is present under ai-services/models.
+def _resolve_cached_cache_root() -> Path | None:
+    """Return the first cache root containing parakeet weights, or None.
 
-    The server resolves ``model_cache: ../models`` (relative to its YAML) and
-    sets ``NEMO_CACHE_DIR`` / ``HF_HOME`` underneath it. A pristine repo
-    has no weights, so without this check the test would block for minutes
-    pulling ~1 GB before failing.
+    Checks both the repo-local model cache (``ai-services/models``, the
+    canonical location wired into the stt-server YAML) and the standard
+    Hugging Face cache (``~/.cache/huggingface``) so weights downloaded by
+    any other tool are reused without a redundant fetch.
     """
-    for root in (_CACHE_DIR / "nemo", _CACHE_DIR / "huggingface"):
-        if not root.is_dir():
-            continue
-        for pattern in ("*.nemo", "*.safetensors"):
-            if next(root.rglob(pattern), None) is not None:
-                return True
-    return False
+    for root in _CANDIDATE_CACHES:
+        for sub in ("nemo", "huggingface", "hub"):
+            base = root / sub
+            if not base.is_dir():
+                continue
+            for pattern in ("*.nemo", "*.safetensors"):
+                if next(base.rglob(pattern), None) is not None:
+                    return root
+    return None
 
 
 def _build_multipart(field_name: str, filename: str, payload: bytes,
@@ -137,14 +141,15 @@ def _terminate(proc: subprocess.Popen) -> None:
 
 @pytest.fixture
 def stt_yaml(tmp_path: Path) -> tuple[Path, int]:
-    """Write a temp YAML pointing at the shared model cache on a free port."""
+    """Write a temp YAML pointing at whichever cache root holds the weights."""
     port = _pick_free_port()
+    cache_root = _resolve_cached_cache_root() or _REPO_CACHE
     cfg  = (
         "model: nvidia/parakeet-tdt-0.6b-v3\n"
         "device: auto\n"
         f"port: {port}\n"
         'host: "127.0.0.1"\n'
-        f"model_cache: {_CACHE_DIR}\n"
+        f"model_cache: {cache_root}\n"
     )
     path = tmp_path / "stt_server.yaml"
     path.write_text(cfg)
@@ -156,9 +161,10 @@ async def test_stt_server_transcribes_sine_wav(stt_yaml: tuple[Path, int]) -> No
         pytest.skip("uv not on PATH")
     if not _STT_DIR.exists():
         pytest.skip(f"stt-server source tree missing: {_STT_DIR}")
-    if not _weights_cached():
+    if _resolve_cached_cache_root() is None:
         pytest.skip(
-            f"NeMo/HF weights for {_MODEL} not cached under {_CACHE_DIR}; "
+            f"NeMo/HF weights for {_MODEL} not cached under any of "
+            f"{[str(p) for p in _CANDIDATE_CACHES]}; "
             "run the stt server once outside the test to populate it.",
         )
 

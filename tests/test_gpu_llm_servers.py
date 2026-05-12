@@ -254,6 +254,8 @@ async def test_llama_nemotron_tool_call(tmp_path: Path) -> None:
         assert isinstance(args, dict), f"tool args not a dict: {args_str!r}"
     finally:
         _terminate(proc)
+        # Wrapper SIGTERM doesn't reach the persistent vLLM child.
+        stop_persistent_servers([("llama_nemotron", port)])
 
 
 # ── test 2: nemotron3_nano persistence ──────────────────────────────────────
@@ -422,3 +424,4 @@ async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
         assert isinstance(content, str) and content.strip(), f"empty content: {data!r}"
     finally:
         _terminate(proc)
+        stop_persistent_servers([("nemotron_omni", port)])

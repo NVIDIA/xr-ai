@@ -28,6 +28,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _helpers import kill_orphan_vllm
+
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
@@ -187,3 +189,4 @@ async def test_vlm_server_chat_completions_smoke():
             assert isinstance(content, str) and content.strip(), f"empty content: {data!r}"
         finally:
             await _terminate(proc)
+            kill_orphan_vllm(port)
