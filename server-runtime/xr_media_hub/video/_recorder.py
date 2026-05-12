@@ -82,6 +82,9 @@ class _TrackEncoder:
     height:         int            = 0
     out_dir:        Path           = field(default_factory=Path)
     last_ts:        float          = 0.0
+    # Sticky once NVENC (re)creation fails — _encode_frame short-circuits so
+    # we don't dereference encoder=None and turn every frame into a silent drop.
+    failed:         bool           = False
 
 
 class VideoRecorder:
@@ -135,6 +138,8 @@ class VideoRecorder:
             enc = self._encoders[key]
 
         with enc.lock:
+            if enc.failed:
+                return
             if now - enc.last_ts < self._min_interval:
                 return
             enc.last_ts = now
@@ -163,14 +168,14 @@ class VideoRecorder:
                 try:
                     enc.encoder = self._create_encoder(width, height)
                 except Exception as e:
-                    logger.warning(
-                        "recorder  CreateEncoder failed pid={!r} {}x{}: {} — "
+                    logger.error(
+                        "recorder  CreateEncoder failed pid={!r} {}x{}→{}x{}: {} — "
                         "recording disabled for this track",
-                        pid, width, height, e,
+                        pid, enc.width, enc.height, width, height, e,
                     )
-                    # Update dimensions so we don't retry on every frame.
                     enc.width  = width
                     enc.height = height
+                    enc.failed = True
                     return
                 enc.chunk_start_us = time.time_ns() // 1_000
                 enc.chunk_frames   = 0
