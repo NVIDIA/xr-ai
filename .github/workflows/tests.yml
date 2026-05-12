@@ -52,4 +52,4 @@ jobs:
 
       - name: Run tests
         working-directory: tests
-        run: uv run pytest -v --tb=short --color=yes
+        run: uv run pytest -v --tb=short --color=yes -m "not gpu"
