@@ -27,7 +27,13 @@ import numpy as np
 import pytest
 import yaml
 
-nvc = pytest.importorskip("PyNvVideoCodec")
+# PyNvVideoCodec loads libnvidia-encode.so.1 at import time and raises
+# RuntimeError when NVENC drivers are absent (e.g. on CI runners).
+try:
+    import PyNvVideoCodec as nvc
+except (ImportError, RuntimeError, OSError) as exc:
+    pytest.skip(f"PyNvVideoCodec unavailable: {exc}", allow_module_level=True)
+
 PIL_Image = pytest.importorskip("PIL.Image")
 pytest.importorskip("fastmcp")
 
