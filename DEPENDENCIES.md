@@ -134,7 +134,7 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
-    └── xr-media-hub            [editable: ../server-runtime]
+    └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
     └── xr-ai-vllm              [editable: ../utils/xr-ai-vllm]
@@ -146,15 +146,20 @@ xr-ai-tests  (tests/)
     └── fastmcp >=0.4   (only used by tests marked `gpu`)
     └── Pillow >=10.0   (only used by tests marked `gpu`)
     └── pyyaml >=6.0    (only used by tests marked `gpu`)
-    Multi-client / multi-agent integration tests over the IPC layer.
-    Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
-    Also covers unit tests for the leaf util packages (launcher, logging, vllm),
-    a CI-viable subprocess test for transcript-mcp-server (fastmcp pulled in
-    transitively), and `gpu`-marked smoke tests (e.g. `test_gpu_stt_server.py`,
-    `test_gpu_video_mcp.py`) that spawn real ai-services via `uv run` or
-    exercise NVENC / NVDEC via PyNvVideoCodec (transitively pulled in by
-    `video-mcp-server`); skipped cleanly when the hardware / weights are
-    unavailable.
+    The unmarked suite is multi-client / multi-agent integration tests over
+    the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
+    NVENC required. Also covers unit tests for the leaf util packages
+    (launcher, logging, vllm) and a CI-viable subprocess test for
+    transcript-mcp-server (fastmcp pulled in transitively).
+
+    Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
+    `-m "not gpu"` in CI). They spawn real ai-services via `uv run` (e.g.
+    `test_gpu_stt_server.py`, `test_gpu_video_mcp.py`), import
+    `livekit.rtc` directly to drive `_room_client.py`, exercise NVENC /
+    NVDEC via PyNvVideoCodec, and shell out to `docker` to manage a
+    LiveKit container — `livekit`, `livekit-api`, `PyNvVideoCodec`, and
+    `docker` all come in transitively via `xr-media-hub` /
+    `video-mcp-server` rather than redeclared here.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0
