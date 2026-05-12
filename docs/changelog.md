@@ -9,6 +9,21 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-12 — `gpu` pytest marker + local-only dev script for hardware-bound tests
+
+Some components (Docker-backed vLLM lifecycle, NVENC paths, anything that
+binds a real GPU) cannot be exercised on the GitHub `ubuntu-latest`
+runners. Rather than skip them at import time or hide them behind ad-hoc
+environment flags, we registered a single `gpu` pytest marker in
+`tests/pyproject.toml` (and defensively in `tests/conftest.py::pytest_configure`
+so branches that haven't picked up the pyproject change yet don't emit
+`PytestUnknownMarkWarning`). CI's pytest invocation in
+`.github/workflows/tests.yml` now passes `-m "not gpu"`, and developers
+run the hardware-bound suite via `tests/run_local_gpu_tests.sh`, which
+just calls `uv sync` then `pytest -m gpu` on the local box. Subsequent
+batches that add GPU / Docker / NVENC tests should decorate them with
+`@pytest.mark.gpu`; no further wiring is required.
+
 ### 2026-05-10 — TLS by default; canonicalize the same-origin wss:// proxy; drop the client-side `secure` toggle
 
 `web_server_tls` now defaults to **true**. The hub web server terminates
