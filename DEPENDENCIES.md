@@ -133,22 +133,24 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
 xr-ai-tests  (tests/)
-    └── xr-ai-agent     [editable: ../agent-sdk]
-    └── xr-media-hub    [editable: ../server-runtime]
-    └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher]
-    └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
-    └── xr-ai-vllm      [editable: ../utils/xr-ai-vllm]
-    └── vlm-mcp-server  [editable: ../agent-mcp-servers/vlm-mcp]
-    └── render-mcp      [editable: ../agent-mcp-servers/render-mcp]
+    └── xr-ai-agent             [editable: ../agent-sdk]
+    └── xr-media-hub            [editable: ../server-runtime]
+    └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
+    └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
+    └── xr-ai-vllm              [editable: ../utils/xr-ai-vllm]
+    └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
+    └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
+    └── render-mcp              [editable: ../agent-mcp-servers/render-mcp]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
     Multi-client / multi-agent integration tests over the IPC layer.
     Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
     Also covers unit tests for the leaf util packages (launcher, logging, vllm),
-    the vlm-mcp / render-mcp adapter surfaces (mocked upstreams), and
-    `gpu`-marked smoke tests (e.g. `test_gpu_stt_server.py`) that spawn real
-    ai-services via `uv run` and need cached model weights.
+    a CI-viable subprocess test for transcript-mcp-server (fastmcp pulled in
+    transitively), the vlm-mcp / render-mcp adapter surfaces (mocked
+    upstreams), and `gpu`-marked smoke tests (e.g. `test_gpu_stt_server.py`)
+    that spawn real ai-services via `uv run` and need cached model weights.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0

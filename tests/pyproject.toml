@@ -17,6 +17,8 @@ dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
     "xr-ai-vllm",
+    # MCP servers exercised by subprocess tests (fastmcp pulled in transitively).
+    "transcript-mcp-server",
     "vlm-mcp-server",
     "render-mcp",
     # Test runner.
@@ -26,13 +28,14 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-agent     = { path = "../agent-sdk",                       editable = true }
-xr-media-hub    = { path = "../server-runtime",                  editable = true }
-xr-ai-launcher  = { path = "../utils/xr-ai-launcher",            editable = true }
-xr-ai-logging   = { path = "../utils/xr-ai-logging",             editable = true }
-xr-ai-vllm      = { path = "../utils/xr-ai-vllm",                editable = true }
-vlm-mcp-server  = { path = "../agent-mcp-servers/vlm-mcp",       editable = true }
-render-mcp      = { path = "../agent-mcp-servers/render-mcp",    editable = true }
+xr-ai-agent           = { path = "../agent-sdk",                        editable = true }
+xr-media-hub          = { path = "../server-runtime",                   editable = true }
+xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }
+xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }
+xr-ai-vllm            = { path = "../utils/xr-ai-vllm",                 editable = true }
+transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable = true }
+vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
+render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_tests"]
