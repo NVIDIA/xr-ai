@@ -19,6 +19,8 @@ dependencies = [
     "xr-ai-vllm",
     # MCP servers exercised by subprocess tests (fastmcp pulled in transitively).
     "transcript-mcp-server",
+    "vlm-mcp-server",
+    "render-mcp",
     "video-mcp-server",
     # Test runner.
     "pytest>=8.0",
@@ -37,6 +39,8 @@ xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable
 xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }
 xr-ai-vllm            = { path = "../utils/xr-ai-vllm",                 editable = true }
 transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable = true }
+vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
+render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }
 video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
 
 [tool.hatch.build.targets.wheel]

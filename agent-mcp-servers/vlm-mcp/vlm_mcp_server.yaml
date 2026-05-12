@@ -15,7 +15,7 @@
 # treats as an error.
 
 host:                  0.0.0.0
-port:                  8220
+port:                  8240
 
 # URL of the vlm-server (ai-services/vlm-server/). The MCP tool forwards the
 # loaded image + the LLM's question to this service over HTTP.
