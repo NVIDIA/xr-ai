@@ -17,9 +17,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-# Skip the whole module if PyNvVideoCodec isn't importable — there's no GPU
-# story to test without it.
-pynvc = pytest.importorskip("PyNvVideoCodec")
+# PyNvVideoCodec initialises NVENC at import time, so a missing
+# libnvidia-encode.so.1 raises RuntimeError (not ImportError) — importorskip
+# would let it escape and break collection on CI boxes without NVENC.
+try:
+    import PyNvVideoCodec as pynvc
+except (ImportError, RuntimeError, OSError) as exc:
+    pytest.skip(f"PyNvVideoCodec unavailable: {exc}", allow_module_level=True)
 
 from xr_ai_agent import FrameSignal, PixelFormat, SlotView  # noqa: E402
 
@@ -79,6 +83,7 @@ def _make_recorder(out_dir: str) -> VideoRecorder:
         try:
             probe.EndEncode()
         except Exception:
+            # EndEncode can fail if NVENC went away mid-probe; benign here.
             pass
         del probe
     except Exception as e:
