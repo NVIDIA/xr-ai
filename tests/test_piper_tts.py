@@ -44,6 +44,7 @@ def _pick_port(preferred: int) -> int:
         try:
             s.bind(("127.0.0.1", preferred))
             return preferred
+        # EADDRINUSE on the preferred port — fall through to an ephemeral bind.
         except OSError:
             pass
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
