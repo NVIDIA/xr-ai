@@ -53,11 +53,16 @@ def _build_processes() -> list[Process]:
 
 
 def _stop_models() -> None:
-    stop_persistent_servers([
-        (p.name, p.port)
-        for p in _build_processes()
-        if p.launch_mode == "persist" and p.port is not None
-    ])
+    # Surface docker/ss/lsof failures so operators see why --stop aborted
+    # instead of a silent traceback exit.
+    try:
+        stop_persistent_servers([
+            (p.name, p.port)
+            for p in _build_processes()
+            if p.launch_mode == "persist" and p.port is not None
+        ])
+    except Exception as exc:
+        print(f"model-servers: failed to stop persistent servers: {exc}", flush=True)
 
 
 def run() -> None:
