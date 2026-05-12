@@ -147,10 +147,11 @@ xr-ai-tests  (tests/)
     (launcher, logging, vllm).
 
     Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
-    `-m "not gpu"` in CI). They import `livekit.rtc` directly to drive
-    `_room_client.py` and shell out to `docker` to manage a LiveKit
-    container — both pulled in transitively via `xr-media-hub` rather
-    than redeclared here.
+    `-m "not gpu"` in CI). They spawn real ai-services via `uv run` (e.g.
+    `test_gpu_stt_server.py`), import `livekit.rtc` directly to drive
+    `_room_client.py`, and shell out to `docker` to manage a LiveKit
+    container — `livekit`, `livekit-api`, and `docker` all come in
+    transitively via `xr-media-hub` rather than redeclared here.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0
