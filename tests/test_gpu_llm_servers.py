@@ -63,7 +63,9 @@ _HF_HUB_DIRS = [
 
 # 30B model cold-start (weight load + FlashInfer JIT) is multi-minute on
 # pre-Blackwell; 8B is faster but vLLM startup itself eats ~60s.
-_COLD_STARTUP_TIMEOUT_S = 900.0
+# Cold-start budget covers a first-time weights download (~15–30 GB)
+# + vLLM compile + FlashInfer JIT. Cached runs complete in ~60–180 s.
+_COLD_STARTUP_TIMEOUT_S = 1800.0
 _HOT_STARTUP_TIMEOUT_S  = 60.0
 _SHUTDOWN_TIMEOUT_S     = 30.0
 
@@ -117,6 +119,7 @@ def _health_ok(port: int, timeout: float = 2.0) -> bool:
             f"http://127.0.0.1:{port}/health", timeout=timeout,
         ) as r:
             return r.status == 200
+    # Connection refused / DNS / timeout while the server is still booting — caller retries.
     except Exception:
         return False
 
@@ -145,11 +148,13 @@ def _terminate(proc: subprocess.Popen) -> None:
     try:
         proc.wait(timeout=_SHUTDOWN_TIMEOUT_S)
         return
+    # SIGTERM didn't reap within the grace window; escalate to SIGKILL below.
     except subprocess.TimeoutExpired:
         pass
     proc.kill()
     try:
         proc.wait(timeout=5)
+    # Best-effort reap after SIGKILL — nothing left to do if the wait still times out.
     except subprocess.TimeoutExpired:
         pass
 
@@ -181,10 +186,6 @@ async def test_llama_nemotron_tool_call(tmp_path: Path) -> None:
         pytest.skip("uv not on PATH")
     if not _LLAMA_DIR.exists():
         pytest.skip(f"llama_nemotron source tree missing: {_LLAMA_DIR}")
-    if not _hf_model_cached(_LLAMA_MODEL):
-        pytest.skip(
-            f"HF weights for {_LLAMA_MODEL} not cached under any of {_HF_HUB_DIRS}",
-        )
 
     port = _pick_free_port()
     cfg = {
@@ -254,15 +255,11 @@ async def test_llama_nemotron_tool_call(tmp_path: Path) -> None:
         assert isinstance(args, dict), f"tool args not a dict: {args_str!r}"
     finally:
         _terminate(proc)
+        # Wrapper SIGTERM doesn't reach the persistent vLLM child.
+        stop_persistent_servers([("llama_nemotron", port)])
 
 
 # ── test 2: nemotron3_nano persistence ──────────────────────────────────────
-
-
-_N3_MODELS = [
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
-]
 
 
 async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
@@ -271,12 +268,10 @@ async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
     if not _N3_DIR.exists():
         pytest.skip(f"nemotron3_nano source tree missing: {_N3_DIR}")
 
-    found = _hf_any_cached(_N3_MODELS)
-    if not found:
-        pytest.skip(
-            f"No Nemotron-3-Nano-30B weights cached (checked {_N3_MODELS})",
-        )
-    _, hf_root = found
+    # The wrapper auto-selects the FP8 (Ada/Hopper/Ampere) or NVFP4 (Blackwell)
+    # variant from the GPU's compute capability and downloads on first run
+    # into the HF cache below. Cached runs reuse the weights.
+    hf_root = Path("~/.cache/huggingface").expanduser()
 
     port = _pick_free_port()
     cfg = {
@@ -350,25 +345,15 @@ async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
 # ── test 3: nemotron_omni multimodal ────────────────────────────────────────
 
 
-_OMNI_MODELS = [
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4",
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8",
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
-]
-
-
 async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
     if not _OMNI_DIR.exists():
         pytest.skip(f"nemotron_omni source tree missing: {_OMNI_DIR}")
 
-    found = _hf_any_cached(_OMNI_MODELS)
-    if not found:
-        pytest.skip(
-            f"No Nemotron-3-Nano-Omni-30B weights cached (checked {_OMNI_MODELS})",
-        )
-    _, hf_root = found
+    # Server auto-selects FP8/NVFP4/BF16 by compute cap; downloads on first
+    # run, reuses on subsequent runs.
+    hf_root = Path("~/.cache/huggingface").expanduser()
 
     port = _pick_free_port()
     cfg = {
@@ -410,7 +395,7 @@ async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
                     {"type": "text", "text": "Describe what you see."},
                 ],
             }],
-            "max_tokens":  32,
+            "max_tokens":  256,
             "temperature": 0,
         }
         loop = asyncio.get_running_loop()
@@ -418,7 +403,12 @@ async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
             None, _post_json, f"http://127.0.0.1:{port}/v1/chat/completions", payload,
         )
         assert status == 200, f"HTTP {status}: {data!r}"
-        content = data["choices"][0]["message"]["content"]
-        assert isinstance(content, str) and content.strip(), f"empty content: {data!r}"
+        # Omni is a reasoning variant: the answer may surface in `content`,
+        # or in `reasoning` if the model is still thinking when the
+        # response is returned. Either non-empty string counts as a smoke pass.
+        msg = data["choices"][0]["message"]
+        body = msg.get("content") or msg.get("reasoning") or ""
+        assert isinstance(body, str) and body.strip(), f"empty content+reasoning: {data!r}"
     finally:
         _terminate(proc)
+        stop_persistent_servers([("nemotron_omni", port)])
