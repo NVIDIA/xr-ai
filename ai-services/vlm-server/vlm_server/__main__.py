@@ -8,8 +8,8 @@ Reads config, builds vLLM serve flags, and dispatches through ``xr_ai_vllm.serve
 to either the pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm``
 docker container — picked per-YAML via ``vllm_backend: pip|docker``.
 
-Images are passed as base64 data URLs in the ``image_url`` content block,
-same as the OpenAI vision API format.
+Serves vLLM's OpenAI-compatible /v1/chat/completions endpoint; images are
+passed as base64 data URLs in the ``image_url`` content block.
 
 Accepts ``--config <path>.yaml`` (auto-passed by xr-ai-launcher).
 
@@ -102,18 +102,20 @@ def run() -> None:
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
 
-    cuda_devices = cfg.get("cuda_visible_devices")
-    if cuda_devices is not None:
-        cuda_devices = str(cuda_devices)
-        # Pip mode reads it from the env; docker mode forwards via --gpus.
-        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
-
     model_cache = _resolve_model_cache(cfg, yaml_dir)
     hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
     if hf_token:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-    os.environ["HF_HOME"] = str(model_cache)
+    # setdefault so an externally-set HF cache wins over the YAML default.
+    os.environ.setdefault("HF_HOME", str(model_cache))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(model_cache))
+
+    cuda_devices = cfg.get("cuda_visible_devices")
+    if cuda_devices is not None:
+        cuda_devices = str(cuda_devices)
+        # Pip mode reads it from the env; docker mode forwards via --gpus.
+        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
 
     extra_serve_args = [
         "--served-model-name", served_name,
