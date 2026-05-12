@@ -20,6 +20,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(STREAMKIT_BUILD_SAMPLE
     "Build the sample application in App/" ON)
+option(STREAMKIT_BUILD_TESTS
+    "Build StreamKit unit tests" OFF)
+if(STREAMKIT_BUILD_TESTS)
+    enable_testing()
+endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Compiler defaults

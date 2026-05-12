@@ -33,6 +33,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <utility>
+#include <vector>
 
 namespace streamkit {
 
@@ -46,7 +48,9 @@ enum class PixelFormat {
 
 /// Implemented by backends that accept raw video frames from external sources.
 ///
-/// LiveKitBackend will implement this once the stub is filled in.
+/// The built-in `LiveKitBackend` implements this. Custom backends override
+/// either or both `InjectVideoFrame` overloads — see each overload's
+/// documentation for the move-vs-copy contract.
 class FrameSink {
 public:
     virtual ~FrameSink() = default;
@@ -70,6 +74,41 @@ public:
                                   int stride,
                                   PixelFormat format,
                                   int64_t timestamp_us) = 0;
+
+    /// Zero-copy overload for callers that own the pixel buffer.
+    ///
+    /// When the backend's underlying frame type also stores its pixels in a
+    /// `std::vector<std::uint8_t>` (LiveKit C++ SDK does), the backend can
+    /// move the buffer all the way through to the SDK without any
+    /// allocation or memcpy. The default implementation copies via the
+    /// span overload, so backends that don't override pay the same cost
+    /// as before — non-breaking for existing implementations.
+    ///
+    /// IMPORTANT — surprising move semantics on the default impl:
+    ///   If the backend does NOT override this overload, the buffer is
+    ///   *copied* through the span overload and the rvalue is destroyed
+    ///   at the end of this call. The `&&` only signals that you've
+    ///   handed over ownership — it does not guarantee zero copy unless
+    ///   the backend overrides this method directly.
+    ///
+    /// Subclasses that override only one overload should add
+    /// `using FrameSink::InjectVideoFrame;` to bring the other back into
+    /// scope for direct calls. Callers that go through a `FrameSink&`
+    /// reference (the typical path via `StreamSession::GetBackend()`)
+    /// are unaffected — both overloads are always visible at the base
+    /// type.
+    ///
+    /// Throws NotConnectedError if not connected.
+    virtual void InjectVideoFrame(std::vector<std::uint8_t>&& data,
+                                  int width,
+                                  int height,
+                                  int stride,
+                                  PixelFormat format,
+                                  int64_t timestamp_us) {
+        std::span<const std::byte> as_span(
+            reinterpret_cast<const std::byte*>(data.data()), data.size());
+        InjectVideoFrame(as_span, width, height, stride, format, timestamp_us);
+    }
 };
 
 } // namespace streamkit

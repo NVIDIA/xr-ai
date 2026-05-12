@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-12 — `FrameSink::InjectVideoFrame` gains a zero-copy overload
+
+The span-only `InjectVideoFrame(std::span<const std::byte>, …)` forced backends to allocate + memcpy the entire pixel buffer on every frame before they could construct an owning `livekit::VideoFrame`. On an embedded 32-bit ARMv7-A target (720p I420 @ 30 fps) this dominated per-frame cost at ~63 ms — the camera HAL collapsed to ~6 fps. Hardware-validated A/B against a new `InjectVideoFrame(std::vector<std::uint8_t>&&, …)` overload that moves the buffer directly into the SDK: total per-frame cost drops from ~70 ms to ~5 ms (14× speedup), matching the in-house baseline publisher.
+
+**Design**: the overload is strictly additive. Default impl forwards to the span overload, so any backend that only overrides one path keeps working. Callers with read-only / shared buffers continue to use the span overload; owning callers get the fast path.
+
+The fix benefits every native C++ consumer (CloudXR, native game-engine plugins, embedded camera SDKs), not just embedded — the embedded case is just where the cost crosses from "wasteful" to "unusable". See `client-samples/native/STREAMKIT_FEEDBACK.md` finding #12 for the diagnostic methodology, on-device numbers, and the cross-platform impact estimate.
+
 ### 2026-05-12 — `gpu` pytest marker + local-only dev script for hardware-bound tests
 
 Some components (Docker-backed vLLM lifecycle, NVENC paths, anything that
@@ -23,6 +31,14 @@ run the hardware-bound suite via `tests/run_local_gpu_tests.sh`, which
 just calls `uv sync` then `pytest -m gpu` on the local box. Subsequent
 batches that add GPU / Docker / NVENC tests should decorate them with
 `@pytest.mark.gpu`; no further wiring is required.
+
+### 2026-05-11 — Native StreamKit `LiveKitBackend` implementation
+
+The stub at `client-samples/native/StreamKit/src/Backends/LiveKit/LiveKitBackend.cpp` is replaced with a working implementation against the upstream LiveKit C++ SDK (`livekit::Room`, `LocalParticipant`, `AudioSource`, `VideoSource`). The backend now covers `Connect` / `Disconnect` / `Send` / data-channel `_agent.status` interception / `FrameSink::InjectVideoFrame` lazy publish. CMake gains `LIVEKIT_SDK_ROOT` + `LIVEKIT_LIB_DIR` cache vars; without `LIVEKIT_SDK_ROOT` the backend compiles header-only in stub mode so CI stays green.
+
+**Design**: shared_ptr (not unique_ptr) holds the opaque LiveKit handles so the destructor is well-defined in translation units that don't include the SDK headers (stub mode). The `livekit::VideoSource(width, height)` ctor requires explicit dimensions, so the LiveKit-backed FrameSink can't honour the "track is published on `StartCamera`" interpretation — instead `StartCamera` arms state and the track is created + published on the first injected frame (consistent with FrameSink's documented contract).
+
+**Left out (called out in the README's "Constraints" table)**: platform mic capture (no portable C++ API), platform camera open (same), `FetchToken` HTTP (host overrides), `AudioConfig::MicrophoneMode` AEC/AGC/NS mapping (would need `AudioProcessingModule`). See `client-samples/native/STREAMKIT_FEEDBACK.md` for the cross-SDK API friction surfaced during the integration.
 
 ### 2026-05-10 — TLS by default; canonicalize the same-origin wss:// proxy; drop the client-side `secure` toggle
 

@@ -2,54 +2,140 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /*
- * StreamKit — LiveKitBackend (stub)
+ * StreamKit — LiveKitBackend
  *
- * This file is intentionally left unimplemented. Each method has TODO comments
- * that describe exactly what needs to be called in the LiveKit C++ SDK / livekit-ffi.
+ * The single bridge between StreamKit and the upstream LiveKit C++ SDK
+ * (https://github.com/livekit/rust-sdks → `cpp/`). All `livekit::` includes
+ * live in this file; the rest of StreamKit never sees the SDK.
  *
- * ## Dependency
- *
- * LiveKit provides two C/C++ integration paths:
- *
- *   1. livekit-ffi  — Rust-based, cross-platform, exposes a C ABI via a
- *                     generated header (livekit_ffi.h). Suitable for most
- *                     native targets.
- *                     Repo: https://github.com/livekit/rust-sdks
- *
- *   2. WebRTC native — Build LiveKit's patched libwebrtc directly and use the
- *                     room-level C++ API. Higher effort, more control.
- *
- * See the README for CMake integration instructions for both paths.
- *
- * ## How to complete this file
- *
- *   1. Add livekit-ffi (or your chosen SDK) via CMake FetchContent — see the
- *      placeholder block in the root CMakeLists.txt.
- *   2. Replace `#include "livekit_ffi_stub.h"` with the real SDK header.
- *   3. Replace `LKRoom*` in LiveKitBackend.h with the real room type.
- *   4. Fill in each TODO block below, following the pattern in the Swift and
- *      Kotlin LiveKitBackend implementations for reference.
+ * When `STREAMKIT_HAVE_LIVEKIT` is not defined (i.e. the SDK was not found
+ * by CMake), this file compiles in stub mode: Connect() fires kConnected
+ * immediately without opening a real session. CI can still build the rest
+ * of StreamKit on machines without the SDK.
  */
 
 #include "streamkit/Backends/LiveKit/LiveKitBackend.h"
 #include "streamkit/StreamError.h"
 
+#include "AgentStatusParser.h"
+
+#include <cstdint>
+#include <cstring>
+#include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
-// TODO: Replace with the real livekit-ffi or SDK header once the dependency
-//       is added to CMakeLists.txt.
-//
-// #include <livekit/livekit_ffi.h>
+#if STREAMKIT_HAVE_LIVEKIT
+#include "livekit/audio_frame.h"
+#include "livekit/audio_source.h"
+#include "livekit/livekit.h"
+#include "livekit/local_audio_track.h"
+#include "livekit/local_participant.h"
+#include "livekit/local_video_track.h"
+#include "livekit/room.h"
+#include "livekit/room_delegate.h"
+#include "livekit/room_event_types.h"
+#include "livekit/track.h"
+#include "livekit/video_frame.h"
+#include "livekit/video_source.h"
+#endif
 
 namespace streamkit {
+
+namespace {
+
+#if STREAMKIT_HAVE_LIVEKIT
+// Lazy one-shot initialise of the SDK's global state. livekit::initialize()
+// returns false if already initialised, so this is safe to call from each
+// LiveKitBackend ctor — but doing it once removes the per-instance log line.
+void EnsureSdkInitialised() {
+    static const bool initialised = []() {
+        livekit::initialize();
+        return true;
+    }();
+    (void)initialised;
+}
+
+ConnectionState MapState(livekit::ConnectionState lk) {
+    switch (lk) {
+        case livekit::ConnectionState::Connected:    return ConnectionState::kConnected;
+        case livekit::ConnectionState::Reconnecting: return ConnectionState::kReconnecting;
+        case livekit::ConnectionState::Disconnected: return ConnectionState::kDisconnected;
+    }
+    return ConnectionState::kDisconnected;
+}
+
+livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
+    switch (fmt) {
+        case PixelFormat::kI420: return livekit::VideoBufferType::I420;
+        case PixelFormat::kNV12: return livekit::VideoBufferType::NV12;
+        case PixelFormat::kRGBA: return livekit::VideoBufferType::RGBA;
+        case PixelFormat::kBGRA: return livekit::VideoBufferType::BGRA;
+    }
+    return livekit::VideoBufferType::I420;
+}
+#endif // STREAMKIT_HAVE_LIVEKIT
+
+} // namespace
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Delegate
+// ─────────────────────────────────────────────────────────────────────────────
+
+#if STREAMKIT_HAVE_LIVEKIT
+class LiveKitBackend::Delegate final : public livekit::RoomDelegate {
+public:
+    explicit Delegate(LiveKitBackend* owner) : owner_(owner) {}
+
+    void onConnectionStateChanged(livekit::Room&,
+                                  const livekit::ConnectionStateChangedEvent& e) override {
+        owner_->HandleConnectionStateChange(static_cast<int>(e.state));
+    }
+
+    void onDisconnected(livekit::Room&, const livekit::DisconnectedEvent&) override {
+        owner_->HandleConnectionStateChange(
+            static_cast<int>(livekit::ConnectionState::Disconnected));
+    }
+
+    void onReconnecting(livekit::Room&, const livekit::ReconnectingEvent&) override {
+        owner_->HandleConnectionStateChange(
+            static_cast<int>(livekit::ConnectionState::Reconnecting));
+    }
+
+    void onReconnected(livekit::Room&, const livekit::ReconnectedEvent&) override {
+        owner_->HandleConnectionStateChange(
+            static_cast<int>(livekit::ConnectionState::Connected));
+    }
+
+    void onUserPacketReceived(livekit::Room&,
+                              const livekit::UserDataPacketEvent& e) override {
+        // Paren init (not brace) — some embedded toolchains ship a
+        // pre-final std::span whose ctor takes int, so brace init from a
+        // size_type that's narrower than ptrdiff_t trips
+        // -Wc++11-narrowing.
+        std::span<const std::byte> bytes(
+            reinterpret_cast<const std::byte*>(e.data.data()), e.data.size());
+        owner_->HandleDataReceived(e.topic, bytes);
+    }
+
+private:
+    LiveKitBackend* owner_;
+};
+#else
+class LiveKitBackend::Delegate final {};
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Construction / destruction
 // ─────────────────────────────────────────────────────────────────────────────
 
-LiveKitBackend::LiveKitBackend(const LiveKitConfig& config)
-    : config_(config) {}
+LiveKitBackend::LiveKitBackend(const LiveKitConfig& config) : config_(config) {
+#if STREAMKIT_HAVE_LIVEKIT
+    EnsureSdkInitialised();
+#endif
+}
 
 LiveKitBackend::~LiveKitBackend() {
     TearDown();
@@ -61,19 +147,16 @@ LiveKitBackend::~LiveKitBackend() {
 
 void LiveKitBackend::Connect(const SessionConfig& session_config) {
     session_config_ = session_config;
-    TearDown();  // clean up any previous session
+    TearDown();
 
-    // ── Validate host ─────────────────────────────────────────────────────
     if (config_.host.empty()) {
         throw InvalidHostError(config_.host);
     }
 
-    // ── Build WebSocket URL ───────────────────────────────────────────────
     const std::string scheme = config_.secure ? "wss" : "ws";
     const std::string ws_url = scheme + "://" + config_.host + ":"
                                + std::to_string(config_.port);
 
-    // ── Acquire JWT ───────────────────────────────────────────────────────
     std::string token;
     if (config_.token.has_value() && !config_.token->empty()) {
         token = *config_.token;
@@ -83,60 +166,37 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
         throw MissingTokenError{};
     }
 
-    // ── Create Room and register event listeners ──────────────────────────
-    //
-    // TODO: Create the LiveKit room and register callbacks.
-    //
-    // Using livekit-ffi (C API):
-    //
-    //   LKRoomOptions opts = lk_room_options_default();
-    //   room_ = lk_room_create(&opts);
-    //
-    //   lk_room_set_callback(room_, LK_EVENT_CONNECTION_STATE_CHANGED,
-    //       [](LKConnectionState state, void* ctx) {
-    //           static_cast<LiveKitBackend*>(ctx)->HandleConnectionStateChange(state);
-    //       }, this);
-    //
-    //   lk_room_set_callback(room_, LK_EVENT_DATA_RECEIVED,
-    //       [](const uint8_t* data, size_t len, const char* topic, void* ctx) {
-    //           auto* self = static_cast<LiveKitBackend*>(ctx);
-    //           self->HandleDataReceived(topic,
-    //               std::span(reinterpret_cast<const std::byte*>(data), len));
-    //       }, this);
+    FireStateChanged(ConnectionState::kConnecting);
 
-    // ── Fire CONNECTING before the async handshake ────────────────────────
-    if (on_connection_state_changed) {
-        on_connection_state_changed(ConnectionState::kConnecting);
+#if STREAMKIT_HAVE_LIVEKIT
+    room_ = std::make_shared<livekit::Room>();
+    delegate_ = std::make_shared<Delegate>(this);
+    room_->setDelegate(delegate_.get());
+
+    livekit::RoomOptions opts;
+    // auto_subscribe=true is the SDK default; spelled out so a future
+    // upstream default flip doesn't silently break remote audio playback.
+    opts.auto_subscribe = true;
+
+    const bool ok = room_->Connect(ws_url, token, opts);
+    if (!ok) {
+        room_.reset();
+        delegate_.reset();
+        FireStateChanged(ConnectionState::kDisconnected);
+        throw StreamError("LiveKit Room::Connect returned false for " + ws_url);
     }
-
-    // ── Connect ───────────────────────────────────────────────────────────
-    //
-    // TODO: Call the SDK's connect method and block until connected or throw.
-    //
-    // Using livekit-ffi:
-    //
-    //   LKConnectOptions conn_opts = lk_connect_options_default();
-    //   conn_opts.timeout_ms = 5000;
-    //
-    //   LKError err = lk_room_connect(room_, ws_url.c_str(), token.c_str(), &conn_opts);
-    //   if (err.code != LK_OK) {
-    //       throw StreamError(err.message);
-    //   }
-    //
-    // For async SDKs, block with a promise/future or a condition variable:
-    //
-    //   std::promise<void> connected;
-    //   // ... wire connection callback to call connected.set_value() ...
-    //   connected.get_future().get();  // blocks until kConnected or throws
-
+    is_connected_.store(true);
+    // The SDK delegate may have already fired kConnected during the
+    // blocking Room::Connect above. FireStateChanged dedupes so consumers
+    // see exactly one transition into kConnected regardless of which path
+    // fired first.
+    FireStateChanged(ConnectionState::kConnected);
+#else
     (void)ws_url;
     (void)token;
-
     is_connected_.store(true);
-
-    if (on_connection_state_changed) {
-        on_connection_state_changed(ConnectionState::kConnected);
-    }
+    FireStateChanged(ConnectionState::kConnected);
+#endif
 }
 
 void LiveKitBackend::Disconnect() {
@@ -151,52 +211,38 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
     if (!is_connected_.load()) {
         throw NotConnectedError{};
     }
+    if (config.mode == AudioConfig::MicrophoneMode::kDisabled) {
+        return;
+    }
 
-    // ── Map MicrophoneMode to WebRTC AudioOptions ─────────────────────────
-    //
-    // TODO: Create a local audio track with the appropriate DSP settings and
-    //       publish it to the room.
-    //
-    // Using livekit-ffi:
-    //
-    //   LKAudioOptions audio_opts = lk_audio_options_default();
-    //
-    //   switch (config.mode) {
-    //     case AudioConfig::MicrophoneMode::kVoiceProcessing:
-    //       // Hardware AEC: disable WebRTC's own AEC/AGC/NS to avoid double-processing.
-    //       audio_opts.echo_cancellation  = false;
-    //       audio_opts.auto_gain_control  = false;
-    //       audio_opts.noise_suppression  = false;
-    //       break;
-    //     case AudioConfig::MicrophoneMode::kSoftwareProcessing:
-    //       audio_opts.echo_cancellation  = true;
-    //       audio_opts.auto_gain_control  = true;
-    //       audio_opts.noise_suppression  = true;
-    //       audio_opts.highpass_filter    = config.highpass_filter;
-    //       break;
-    //     case AudioConfig::MicrophoneMode::kRaw:
-    //     case AudioConfig::MicrophoneMode::kDisabled:
-    //       audio_opts.echo_cancellation  = false;
-    //       audio_opts.auto_gain_control  = false;
-    //       audio_opts.noise_suppression  = false;
-    //       break;
-    //   }
-    //
-    //   if (config.mode != AudioConfig::MicrophoneMode::kDisabled) {
-    //       LKError err = lk_local_participant_set_microphone_enabled(
-    //           lk_room_local_participant(room_), true, &audio_opts);
-    //       if (err.code != LK_OK) throw StreamError(err.message);
-    //   }
-
+#if STREAMKIT_HAVE_LIVEKIT
+    // 48 kHz mono, 0 ms queue: the SDK's documented real-time-capture mode.
+    // Mic frames must be driven externally — the C++ SDK ships no platform
+    // capture; subclass to reach `audio_source_` from a platform mic loop.
+    // MicrophoneMode is not applied: the C++ SDK does not surface
+    // AEC / AGC / NS toggles on AudioSource — software DSP would go
+    // through AudioProcessingModule, tracked as a follow-up.
+    StopAudio();
+    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    audio_source_ = std::make_shared<livekit::AudioSource>(48000, 1, 0);
+    audio_track_ = room_->localParticipant()->publishAudioTrack(
+        "mic", audio_source_, livekit::TrackSource::SOURCE_MICROPHONE);
+    audio_armed_.store(true);
+#else
     (void)config;
+#endif
 }
 
 void LiveKitBackend::StopAudio() {
-    // TODO: Disable the microphone track.
-    //
-    // Using livekit-ffi:
-    //   lk_local_participant_set_microphone_enabled(
-    //       lk_room_local_participant(room_), false, nullptr);
+#if STREAMKIT_HAVE_LIVEKIT
+    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    if (audio_track_ && room_) {
+        room_->localParticipant()->unpublishTrack(audio_track_->sid());
+    }
+    audio_track_.reset();
+    audio_source_.reset();
+    audio_armed_.store(false);
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -207,47 +253,92 @@ void LiveKitBackend::StartCamera(const CameraConfig& config) {
     if (!is_connected_.load()) {
         throw CameraRequiresConnectionError{};
     }
-
-    StopCamera();  // unpublish any existing camera track first
-
-    // ── Create and publish a local video track ────────────────────────────
-    //
-    // TODO: Create a video track for the requested device and publish it.
-    //
-    // Using livekit-ffi:
-    //
-    //   LKVideoCaptureOptions cap_opts = lk_video_capture_options_default();
-    //   if (config.device_id.has_value()) {
-    //       cap_opts.device_id = config.device_id->c_str();
-    //   } else {
-    //       cap_opts.facing_mode = (config.facing == CameraConfig::Facing::kFront)
-    //                               ? LK_FACING_FRONT : LK_FACING_BACK;
-    //   }
-    //
-    //   LKLocalVideoTrack* track = lk_local_video_track_create_camera(&cap_opts);
-    //   LKError err = lk_local_participant_publish_video_track(
-    //       lk_room_local_participant(room_), track, nullptr);
-    //   if (err.code != LK_OK) throw StreamError(err.message);
-    //
-    // For frame injection from an external source (see FrameSink.h), create a
-    // BufferCapturer-backed track instead:
-    //
-    //   LKLocalVideoTrack* track = lk_local_video_track_create_buffer_capturer("camera");
-    //   // Store the track handle so InjectVideoFrame() can push frames into it.
-
+    // VideoSource ctor requires explicit width/height, so the track cannot
+    // be created here. Arm the backend; the first FrameSink::InjectVideoFrame
+    // call creates the source and publishes lazily.
     (void)config;
+    StopCamera();
+    camera_armed_.store(true);
 }
 
 void LiveKitBackend::StopCamera() {
-    // TODO: Unpublish and release the camera / buffer track.
-    //
-    // Using livekit-ffi:
-    //   if (camera_track_) {
-    //       lk_local_participant_unpublish_video_track(
-    //           lk_room_local_participant(room_), camera_track_);
-    //       lk_local_video_track_release(camera_track_);
-    //       camera_track_ = nullptr;
-    //   }
+#if STREAMKIT_HAVE_LIVEKIT
+    std::lock_guard<std::mutex> lock(tracks_mutex_);
+    if (video_track_ && room_) {
+        room_->localParticipant()->unpublishTrack(video_track_->sid());
+    }
+    video_track_.reset();
+    video_source_.reset();
+    camera_armed_.store(false);
+#else
+    camera_armed_.store(false);
+#endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FrameSink
+// ─────────────────────────────────────────────────────────────────────────────
+
+void LiveKitBackend::InjectVideoFrame(std::span<const std::byte> data,
+                                      int width,
+                                      int height,
+                                      int stride,
+                                      PixelFormat format,
+                                      int64_t timestamp_us) {
+    // Span entrypoint: own the buffer so we can move it through. Hot-path
+    // callers should use the std::vector&& overload to avoid this copy.
+    std::vector<std::uint8_t> buffer(data.size());
+    std::memcpy(buffer.data(), data.data(), data.size());
+    InjectVideoFrame(std::move(buffer), width, height, stride, format, timestamp_us);
+}
+
+void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
+                                      int width,
+                                      int height,
+                                      int stride,
+                                      PixelFormat format,
+                                      int64_t timestamp_us) {
+    (void)stride;  // The C++ SDK reads tightly packed planes; callers must
+                   // pre-pack if their stride differs from `width *
+                   // bytes_per_pixel` for their format.
+    if (!is_connected_.load()) {
+        throw NotConnectedError{};
+    }
+    if (!camera_armed_.load()) {
+        return;
+    }
+
+#if STREAMKIT_HAVE_LIVEKIT
+    const auto lk_format = MapPixelFormat(format);
+    livekit::VideoFrame frame(width, height, lk_format, std::move(data));
+
+    // Convert to I420 if the input is NV12 / RGBA / BGRA. The LiveKit SDK
+    // accepts non-I420 buffers but most downstream pipelines want I420 and
+    // the conversion FFI is cheap relative to encode.
+    std::optional<livekit::VideoFrame> i420;
+    if (lk_format != livekit::VideoBufferType::I420) {
+        i420 = frame.convert(livekit::VideoBufferType::I420);
+    }
+    const livekit::VideoFrame& outgoing = i420 ? *i420 : frame;
+
+    std::shared_ptr<livekit::VideoSource> source;
+    {
+        std::lock_guard<std::mutex> lock(tracks_mutex_);
+        if (!video_source_) {
+            video_source_ = std::make_shared<livekit::VideoSource>(width, height);
+            video_track_ = room_->localParticipant()->publishVideoTrack(
+                "camera", video_source_, livekit::TrackSource::SOURCE_CAMERA);
+        }
+        source = video_source_;
+    }
+    source->captureFrame(outgoing, timestamp_us);
+#else
+    (void)data;
+    (void)width;
+    (void)height;
+    (void)format;
+    (void)timestamp_us;
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,23 +356,14 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
             "topic '" + std::string(topic) + "' is reserved for internal SDK use");
     }
 
-    // TODO: Publish data via the LiveKit data channel.
-    //
-    // Using livekit-ffi:
-    //
-    //   LKDataPublishOptions opts{};
-    //   opts.reliable = reliable;
-    //   opts.topic    = topic.empty() ? nullptr : std::string(topic).c_str();
-    //
-    //   LKError err = lk_local_participant_publish_data(
-    //       lk_room_local_participant(room_),
-    //       reinterpret_cast<const uint8_t*>(data.data()),
-    //       data.size(),
-    //       &opts);
-    //   if (err.code != LK_OK) throw StreamError(err.message);
-
+#if STREAMKIT_HAVE_LIVEKIT
+    std::vector<std::uint8_t> payload(data.size());
+    std::memcpy(payload.data(), data.data(), data.size());
+    room_->localParticipant()->publishData(payload, reliable, {}, std::string(topic));
+#else
     (void)data;
     (void)reliable;
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,43 +371,35 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
 // ─────────────────────────────────────────────────────────────────────────────
 
 void LiveKitBackend::HandleConnectionStateChange(int lk_state) {
-    // TODO: Map the SDK's connection-state type to ConnectionState and fire
-    //       on_connection_state_changed.
-    //
-    // Using livekit-ffi (LKConnectionState enum):
-    //
-    //   ConnectionState sk_state;
-    //   switch (static_cast<LKConnectionState>(lk_state)) {
-    //     case LK_CONNECTION_STATE_CONNECTED:    sk_state = ConnectionState::kConnected;    break;
-    //     case LK_CONNECTION_STATE_CONNECTING:   sk_state = ConnectionState::kConnecting;   break;
-    //     case LK_CONNECTION_STATE_RECONNECTING: sk_state = ConnectionState::kReconnecting; break;
-    //     default:                               sk_state = ConnectionState::kDisconnected; break;
-    //   }
-    //   is_connected_.store(sk_state == ConnectionState::kConnected);
-    //   if (on_connection_state_changed) on_connection_state_changed(sk_state);
-
+#if STREAMKIT_HAVE_LIVEKIT
+    const auto sk = MapState(static_cast<livekit::ConnectionState>(lk_state));
+    is_connected_.store(sk == ConnectionState::kConnected);
+    FireStateChanged(sk);
+#else
     (void)lk_state;
+#endif
+}
+
+void LiveKitBackend::FireStateChanged(ConnectionState state) {
+    if (last_fired_state_.exchange(state) == state) {
+        // Same state as last fire — skip the callback.
+        return;
+    }
+    if (on_connection_state_changed) {
+        on_connection_state_changed(state);
+    }
 }
 
 void LiveKitBackend::HandleDataReceived(std::string_view topic,
                                         std::span<const std::byte> payload) {
-    // Intercept the reserved agent-status topic — never forward to on_data_received.
     if (topic == kAgentStatusTopic) {
-        // TODO: Parse the JSON payload and extract the "status" string.
-        //
-        // The payload is: {"status": "idle"} or {"status": "processing"}
-        //
-        // Using nlohmann/json or a minimal parse:
-        //
-        //   auto json = nlohmann::json::parse(payload.begin(), payload.end(),
-        //                                     nullptr, /*exceptions=*/false);
-        //   if (!json.is_discarded() && json.contains("status")) {
-        //       std::string status = json["status"].get<std::string>();
-        //       if (!status.empty() && on_agent_status) on_agent_status(status);
-        //   }
+        if (auto status = internal::ExtractAgentStatus(payload)) {
+            if (!status->empty() && on_agent_status) {
+                on_agent_status(*status);
+            }
+        }
         return;
     }
-
     if (on_data_received) {
         on_data_received(topic, payload);
     }
@@ -337,20 +411,28 @@ void LiveKitBackend::HandleDataReceived(std::string_view topic,
 
 void LiveKitBackend::TearDown() {
     is_connected_.store(false);
+    camera_armed_.store(false);
+    audio_armed_.store(false);
 
-    // TODO: Disconnect the room and release the room handle.
-    //
-    // Using livekit-ffi:
-    //
-    //   if (room_) {
-    //       lk_room_disconnect(room_);
-    //       lk_room_release(room_);
-    //       room_ = nullptr;
-    //   }
-
-    if (on_connection_state_changed) {
-        on_connection_state_changed(ConnectionState::kDisconnected);
+#if STREAMKIT_HAVE_LIVEKIT
+    {
+        std::lock_guard<std::mutex> lock(tracks_mutex_);
+        video_track_.reset();
+        video_source_.reset();
+        audio_track_.reset();
+        audio_source_.reset();
     }
+    if (room_) {
+        room_->setDelegate(nullptr);
+        room_.reset();
+    }
+    delegate_.reset();
+#endif
+
+    // FireStateChanged dedupes — a fresh ctor + first Connect goes
+    // kDisconnected -> kConnecting -> kConnected without an initial
+    // spurious kDisconnected from this call.
+    FireStateChanged(ConnectionState::kDisconnected);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -358,35 +440,15 @@ void LiveKitBackend::TearDown() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 std::string LiveKitBackend::FetchToken(const std::string& token_url,
-                                       const std::string& identity) {
-    // TODO: HTTP GET <token_url>?identity=<identity>, return the JWT string.
-    //
-    // The endpoint must return either:
-    //   - A plain JWT string in the response body, or
-    //   - A JSON object: { "token": "eyJ…" }
-    //
-    // Use libcurl, Poco::Net, cpp-httplib, or any other HTTP client available
-    // in your project. The Swift and Kotlin implementations both handle both
-    // response formats — the C++ version must too.
-    //
-    // Example with cpp-httplib:
-    //
-    //   httplib::Client cli(token_url);
-    //   auto res = cli.Get("/?identity=" + UrlEncode(identity));
-    //   if (!res || res->status != 200) throw TokenFetchFailedError(token_url);
-    //
-    //   // Try JSON first.
-    //   auto json = nlohmann::json::parse(res->body, nullptr, false);
-    //   if (!json.is_discarded() && json.contains("token"))
-    //       return json["token"].get<std::string>();
-    //
-    //   // Fall back to plain string.
-    //   auto trimmed = Trim(res->body);
-    //   if (!trimmed.empty()) return trimmed;
-    //
-    //   throw TokenFetchFailedError(token_url);
-
-    throw TokenFetchFailedError(token_url + " — FetchToken not yet implemented");
+                                       const std::string& /*identity*/) {
+    // Token-fetch over HTTP is deliberately not implemented in this
+    // backend. Embedded targets typically pass an inline token in
+    // `LiveKitConfig::token` (computed server-side); desktop hosts that
+    // need a token endpoint can subclass LiveKitBackend and override
+    // FetchToken with their preferred HTTP client (libcurl, Poco::Net,
+    // cpp-httplib). See `App/main.cpp` for the inline-token path.
+    throw TokenFetchFailedError(token_url + " — FetchToken is not implemented in this backend; "
+                                            "supply an inline token in LiveKitConfig::token");
 }
 
 } // namespace streamkit

@@ -10,9 +10,14 @@
  * Usage:
  *   streamkit_sample --host <ip> --token <jwt> [--port 7880] [--identity <name>]
  *
- * NOTE: The LiveKitBackend is currently a stub, so Connect() reports
- * kConnected immediately without opening a real WebRTC session. Replace
- * the stub with a real implementation to use this against a live server.
+ * The LiveKit C++ SDK is wired in via CMake — pass
+ * `-DLIVEKIT_SDK_ROOT=/path/to/sdk` to build against a real LiveKit server.
+ * Without it, the backend compiles in stub mode and `Connect()` reports
+ * `kConnected` immediately for header-only verification.
+ *
+ * This sample assumes an inline JWT; `LiveKitConfig::token_url` is not
+ * wired (the default backend's `FetchToken` throws). Subclass
+ * `LiveKitBackend` and override `FetchToken` to drive your own HTTP client.
  */
 
 #include <algorithm>

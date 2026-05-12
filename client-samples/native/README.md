@@ -3,9 +3,68 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Wrapping the LiveKit C++ SDK into a StreamKit Client Library
+# StreamKit for native C++ — LiveKit-backed client
 
-> **Audience:** Developers who have used LiveKit before and want to add a C++ StreamKit backend — e.g. for an embedded device, a native game engine plugin, or a CloudXR client.
+> **Audience:** Developers who have used LiveKit before and want to embed StreamKit in a native C++ host — e.g. an embedded device, a native game engine plugin, or a CloudXR client.
+
+The `LiveKitBackend` in `StreamKit/src/Backends/LiveKit/LiveKitBackend.cpp` is a working implementation against the upstream LiveKit C++ SDK (`livekit::Room` API). Build it by pointing CMake at a LiveKit SDK install:
+
+```bash
+cmake -S . -B build -DLIVEKIT_SDK_ROOT=/path/to/livekit-cpp-sdk
+cmake --build build
+./build/bin/streamkit_sample --host 192.168.1.100 --token <jwt>
+```
+
+If `LIVEKIT_SDK_ROOT` is not set, the backend compiles in stub mode: `Connect()` reports `kConnected` immediately without opening a real session. This keeps CI green on machines without the SDK and lets you build the rest of StreamKit header-only.
+
+## Running the tests
+
+A small unit-test suite lives under `StreamKit/Tests/StreamKitTests/`. Tests are off by default; pass `-DSTREAMKIT_BUILD_TESTS=ON` to build them and run via CTest. Stub mode is the supported path — tests do not need (and should not be paired with) a `LIVEKIT_SDK_ROOT` pointing at an ABI-incompatible build.
+
+```bash
+cmake -S . -B build -DSTREAMKIT_BUILD_TESTS=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+What's covered:
+
+| Test | What it asserts |
+|---|---|
+| `streamkit_mapping_tests` | `ConnectionState` enum basic ops. |
+| `streamkit_agent_status_tests` | `_agent.status` JSON extractor — canonical / missing-key / truncated / empty-value / empty-payload cases. |
+| `streamkit_frame_sink_tests` | `FrameSink`'s move-overload default impl correctly forwards to the span overload; backends that override both bypass the forwarder. |
+| `streamkit_session_tests` | Full `StreamSession` lifecycle through a `MockBackend` — connect / start audio / start camera / send / receive / agent status / disconnect, verifying event-hook fan-out. |
+| `streamkit_livekit_backend_tests` | `LiveKitBackend` state-change dedupe — no spurious initial `kDisconnected` on first `Connect()`, no doubled `kConnected` after a successful connect, idempotent `Disconnect()`. |
+
+Useful variants:
+
+```bash
+# Run a single test by name
+ctest --test-dir build -R streamkit_frame_sink_tests --output-on-failure
+
+# Run a test binary directly (no ctest wrapper)
+./build/StreamKit/Tests/StreamKitTests/streamkit_frame_sink_tests
+
+# Re-run only failing tests
+ctest --test-dir build --rerun-failed --output-on-failure
+```
+
+Each test is a standalone executable that asserts and exits non-zero on failure — no third-party test framework, no GoogleTest dependency.
+
+## Constraints in the current native backend
+
+| Area | Status |
+|---|---|
+| Connect / Disconnect + state mapping | ✅ implemented |
+| Data channel `Send` + `_agent.status` interception | ✅ implemented |
+| Video publish via `FrameSink::InjectVideoFrame` | ✅ implemented — first frame creates the track. Real-time callers should use the `std::vector<uint8_t>&&` overload to avoid a 1.4 MB per-frame copy. See finding #12 in `STREAMKIT_FEEDBACK.md`. |
+| Microphone capture | ⚠️ no built-in path; subclass and feed `audio_source_` from a platform mic loop |
+| Platform camera open | ⚠️ no built-in path; host opens its camera and pushes frames via FrameSink |
+| `LiveKitConfig::token_url` HTTP fetch | ⚠️ not implemented; pass `LiveKitConfig::token` inline or override `FetchToken` |
+| `AudioConfig::MicrophoneMode` mapping | ⚠️ unapplied — the C++ SDK has no AEC/AGC/NS toggles on `AudioSource` |
+
+The mismatches above against the Swift / Kotlin / JS backends are summarised in [`STREAMKIT_FEEDBACK.md`](STREAMKIT_FEEDBACK.md).
 
 ---
 
