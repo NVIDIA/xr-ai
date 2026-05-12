@@ -23,6 +23,7 @@ import pytest
 import zmq
 import zmq.asyncio
 
+import render_mcp.__main__ as render_main
 from render_mcp.__main__ import (
     Config,
     SceneDispatcher,
@@ -186,7 +187,9 @@ class TestSceneState:
     def test_remove_returns_false_on_unknown_id(self, tmp_path: Path):
         disp = self._disp(tmp_path)
         try:
-            assert disp.remove("does-not-exist") is False
+            # Call outside the assert — `python -O` strips assert bodies.
+            removed = disp.remove("does-not-exist")
+            assert removed is False
         finally:
             disp.close()
 
@@ -349,7 +352,6 @@ async def test_close_cancels_lovr_watch_task(tmp_path: Path, monkeypatch):
     )
 
     # Swap ManagedProcess out before SceneDispatcher.start_lovr_once runs.
-    import render_mcp.__main__ as render_main
     monkeypatch.setattr(render_main, "ManagedProcess",
                         lambda *a, **kw: _FakeManagedProcessCtx())
 
