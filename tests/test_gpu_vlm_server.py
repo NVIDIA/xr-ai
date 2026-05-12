@@ -75,6 +75,7 @@ async def _tcp_open(host: str, port: int, timeout: float = 0.5) -> bool:
         writer.close()
         try:
             await writer.wait_closed()
+        # The probe only cares that the port accepted a connection; teardown errors are noise.
         except Exception:
             pass
         return True
@@ -101,11 +102,13 @@ async def _terminate(proc: asyncio.subprocess.Process) -> None:
     try:
         await asyncio.wait_for(proc.wait(), timeout=_SHUTDOWN_TIMEOUT_S)
         return
+    # SIGTERM didn't reap within the grace window; escalate to SIGKILL below.
     except asyncio.TimeoutError:
         pass
     proc.kill()
     try:
         await asyncio.wait_for(proc.wait(), timeout=5.0)
+    # Best-effort reap after SIGKILL — nothing left to do if the wait still times out.
     except asyncio.TimeoutError:
         pass
 

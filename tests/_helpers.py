@@ -42,28 +42,33 @@ def kill_orphan_vllm(port: int, wait_s: float = 20.0) -> None:
         ) as r:
             if r.status != 200:
                 return
+    # Connection refused / timeout / non-200 means no orphan to kill.
     except Exception:
         return
     try:
         from xr_ai_vllm._docker import pid_on_port
         pid = pid_on_port(port)
+    # xr_ai_vllm not installed in this env, or pid_on_port couldn't introspect.
     except Exception:
         return
     if pid is None:
         return
     try:
         os.kill(pid, signal.SIGTERM)
+    # Process already exited between the port probe and the signal.
     except ProcessLookupError:
         return
     deadline = time.monotonic() + wait_s
     while time.monotonic() < deadline:
         try:
             os.kill(pid, 0)
+        # Signal-0 raised ESRCH — child has fully exited.
         except ProcessLookupError:
             return
         time.sleep(0.5)
     try:
         os.kill(pid, signal.SIGKILL)
+    # Exited between the SIGTERM grace loop and the SIGKILL fallback.
     except ProcessLookupError:
         pass
 
