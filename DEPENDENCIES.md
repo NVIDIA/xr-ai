@@ -147,10 +147,12 @@ xr-ai-tests  (tests/)
     └── pyyaml >=6.0    (only used by tests marked `gpu`)
     Multi-client / multi-agent integration tests over the IPC layer.
     Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
-    Also covers unit tests for the leaf util packages (launcher, logging, vllm).
-    Tests marked `gpu` additionally exercise NVENC / NVDEC via PyNvVideoCodec
-    (transitively pulled in by `video-mcp-server`); they're skipped cleanly
-    when the import or hardware is unavailable.
+    Also covers unit tests for the leaf util packages (launcher, logging, vllm)
+    and `gpu`-marked smoke tests (e.g. `test_gpu_stt_server.py`,
+    `test_gpu_video_mcp.py`) that spawn real ai-services via `uv run` or
+    exercise NVENC / NVDEC via PyNvVideoCodec (transitively pulled in by
+    `video-mcp-server`); skipped cleanly when the hardware / weights are
+    unavailable.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0
