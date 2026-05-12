@@ -60,6 +60,7 @@ async def _wait_ready(url: str, proc: subprocess.Popen, timeout: float) -> None:
             async with McpClient(url) as mcp:
                 await mcp.list_tools()
                 return
+        # Connect refused / handshake error while the server is still booting — retry.
         except Exception:
             await asyncio.sleep(0.1)
     raise TimeoutError(f"transcript_mcp_server at {url} not ready within {timeout}s")
