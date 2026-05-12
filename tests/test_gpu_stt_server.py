@@ -116,6 +116,7 @@ def _health_ok(port: int) -> bool:
             f"http://127.0.0.1:{port}/health", timeout=2,
         ) as r:
             return r.status == 200
+    # Connection refused / DNS / timeout during the poll loop — caller retries.
     except Exception:
         return False
 
