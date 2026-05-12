@@ -70,15 +70,42 @@ def _hf_path_for_voice(voice: str) -> tuple[str, str]:
 
 
 def _ensure_voice(voice: str, cache_dir: Path) -> tuple[Path, Path]:
-    """Return (onnx_path, json_path), downloading from HF if necessary."""
+    """Return (onnx_path, json_path), downloading from HF if necessary.
+
+    Failures are surfaced as a clear single-line error and SystemExit(1) at
+    startup — without this, a typo in the voice name only manifests as a
+    cryptic huggingface_hub stack trace on the first /v1/audio/speech call.
+    """
     from huggingface_hub import hf_hub_download
+    from huggingface_hub.errors import (
+        EntryNotFoundError,
+        LocalEntryNotFoundError,
+        RepositoryNotFoundError,
+    )
 
     hf_cache = cache_dir / "piper"
     hf_cache.mkdir(parents=True, exist_ok=True)
     onnx_hf, json_hf = _hf_path_for_voice(voice)
     logger.info("Resolving voice {!r} from {}…", voice, _HF_REPO)
-    onnx_path = Path(hf_hub_download(_HF_REPO, onnx_hf, cache_dir=str(hf_cache)))
-    json_path = Path(hf_hub_download(_HF_REPO, json_hf, cache_dir=str(hf_cache)))
+    try:
+        onnx_path = Path(hf_hub_download(_HF_REPO, onnx_hf, cache_dir=str(hf_cache)))
+        json_path = Path(hf_hub_download(_HF_REPO, json_hf, cache_dir=str(hf_cache)))
+    except (EntryNotFoundError, RepositoryNotFoundError) as exc:
+        logger.error(
+            "Voice {!r} not found in {} ({}). "
+            "Check the voice name — format is <locale>-<speaker>-<quality>, "
+            "e.g. en_US-lessac-medium.",
+            voice, _HF_REPO, exc.__class__.__name__,
+        )
+        sys.exit(1)
+    except LocalEntryNotFoundError:
+        logger.error(
+            "Voice {!r} is not in {} and downloads are disabled "
+            "(HF_HUB_OFFLINE / no network). Pre-fetch it on a connected host "
+            "or remove the offline restriction.",
+            voice, hf_cache,
+        )
+        sys.exit(1)
     logger.info("Voice files ready")
     return onnx_path, json_path
 
