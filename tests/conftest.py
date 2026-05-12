@@ -35,6 +35,13 @@ from xr_ai_agent          import ProcessorEndpoint
 from xr_media_hub.ipc     import ConnectorEndpoint, HubEndpoint
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "gpu: requires local GPU / Docker / NVENC; skipped in CI",
+    )
+
+
 # ── address fixtures ────────────────────────────────────────────────────────
 
 
