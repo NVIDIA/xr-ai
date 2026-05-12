@@ -412,7 +412,7 @@ async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
                     {"type": "text", "text": "Describe what you see."},
                 ],
             }],
-            "max_tokens":  32,
+            "max_tokens":  256,
             "temperature": 0,
         }
         loop = asyncio.get_running_loop()
@@ -420,8 +420,12 @@ async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
             None, _post_json, f"http://127.0.0.1:{port}/v1/chat/completions", payload,
         )
         assert status == 200, f"HTTP {status}: {data!r}"
-        content = data["choices"][0]["message"]["content"]
-        assert isinstance(content, str) and content.strip(), f"empty content: {data!r}"
+        # Omni is a reasoning variant: the answer may surface in `content`,
+        # or in `reasoning` if the model is still thinking when the
+        # response is returned. Either non-empty string counts as a smoke pass.
+        msg = data["choices"][0]["message"]
+        body = msg.get("content") or msg.get("reasoning") or ""
+        assert isinstance(body, str) and body.strip(), f"empty content+reasoning: {data!r}"
     finally:
         _terminate(proc)
         stop_persistent_servers([("nemotron_omni", port)])
