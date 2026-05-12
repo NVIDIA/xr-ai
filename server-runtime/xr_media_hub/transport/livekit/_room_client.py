@@ -94,6 +94,8 @@ class _ReturnAudioPipe:
             self._task.cancel()
         try:
             await self._task
+        # CancelledError is the expected success path; any other drainer error
+        # is irrelevant once the track is closing.
         except (asyncio.CancelledError, Exception):
             pass
 

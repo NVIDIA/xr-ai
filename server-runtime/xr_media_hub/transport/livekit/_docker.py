@@ -232,6 +232,8 @@ class LiveKitDocker:
             task.cancel()
         try:
             await task
+        # We just cancelled; CancelledError is the success path and any other
+        # drainer error is moot now that the container is gone.
         except (asyncio.CancelledError, Exception):
             pass
 
