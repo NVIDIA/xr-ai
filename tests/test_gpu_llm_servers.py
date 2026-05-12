@@ -262,12 +262,6 @@ async def test_llama_nemotron_tool_call(tmp_path: Path) -> None:
 # ── test 2: nemotron3_nano persistence ──────────────────────────────────────
 
 
-_N3_MODELS = [
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
-]
-
-
 async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
@@ -349,13 +343,6 @@ async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
 
 
 # ── test 3: nemotron_omni multimodal ────────────────────────────────────────
-
-
-_OMNI_MODELS = [
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4",
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8",
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
-]
 
 
 async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
