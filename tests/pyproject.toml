@@ -21,10 +21,15 @@ dependencies = [
     "transcript-mcp-server",
     "vlm-mcp-server",
     "render-mcp",
+    "video-mcp-server",
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "numpy>=1.24",
+    # GPU/MCP test deps — only exercised by tests marked `gpu`.
+    "fastmcp>=0.4",
+    "Pillow>=10.0",
+    "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
@@ -36,6 +41,7 @@ xr-ai-vllm            = { path = "../utils/xr-ai-vllm",                 editable
 transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable = true }
 vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
 render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }
+video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_tests"]

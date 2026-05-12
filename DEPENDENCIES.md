@@ -141,17 +141,23 @@ xr-ai-tests  (tests/)
     └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
     └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
     └── render-mcp              [editable: ../agent-mcp-servers/render-mcp]
+    └── video-mcp-server        [editable: ../agent-mcp-servers/video-mcp]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
+    └── fastmcp >=0.4   (only used by tests marked `gpu`)
+    └── Pillow >=10.0   (only used by tests marked `gpu`)
+    └── pyyaml >=6.0    (only used by tests marked `gpu`)
     Multi-client / multi-agent integration tests over the IPC layer.
     Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
     Also covers unit tests for the leaf util packages (launcher, logging, vllm),
     CI-viable subprocess tests for transcript-mcp-server and vlm-mcp-server
     (fastmcp pulled in transitively, vlm-mcp's upstream is mocked), the
     render-mcp adapter surface with a LOVR stub, and `gpu`-marked smoke
-    tests (e.g. `test_gpu_stt_server.py`) that spawn real ai-services via
-    `uv run` and need cached model weights.
+    tests (`test_gpu_stt_server.py`, `test_gpu_video_mcp.py`, etc.) that
+    spawn real ai-services via `uv run` or exercise NVENC / NVDEC via
+    PyNvVideoCodec; skipped cleanly when the import / hardware / weights
+    are unavailable.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0
