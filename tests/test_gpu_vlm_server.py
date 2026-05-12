@@ -28,15 +28,18 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _helpers import kill_orphan_vllm
+
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
 _REPO_ROOT       = Path(__file__).resolve().parent.parent
 _VLM_SERVER_DIR  = _REPO_ROOT / "ai-services" / "vlm-server"
 _DEFAULT_WEIGHTS = Path("~/.cache/huggingface/hub/models--nvidia--Cosmos-Reason1-7B").expanduser()
-_CONFIGURED_WEIGHTS = _REPO_ROOT / "ai-services" / "models" / "hub" / "models--nvidia--Cosmos-Reason1-7B"
 
-_STARTUP_TIMEOUT_S   = 240.0
+# 30 min — enough for a cold first-time weights download (~15 GB) plus
+# vLLM compilation. Cached runs complete in ~60 s.
+_STARTUP_TIMEOUT_S   = 1800.0
 _SHUTDOWN_TIMEOUT_S  = 30.0
 
 
@@ -60,10 +63,6 @@ def _tiny_png_bytes(size: int = 32) -> bytes:
     return sig + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
 
 
-def _weights_available() -> bool:
-    return _DEFAULT_WEIGHTS.exists() or _CONFIGURED_WEIGHTS.exists()
-
-
 async def _tcp_open(host: str, port: int, timeout: float = 0.5) -> bool:
     try:
         fut = asyncio.open_connection(host, port)
@@ -71,6 +70,7 @@ async def _tcp_open(host: str, port: int, timeout: float = 0.5) -> bool:
         writer.close()
         try:
             await writer.wait_closed()
+        # The probe only cares that the port accepted a connection; teardown errors are noise.
         except Exception:
             pass
         return True
@@ -97,11 +97,13 @@ async def _terminate(proc: asyncio.subprocess.Process) -> None:
     try:
         await asyncio.wait_for(proc.wait(), timeout=_SHUTDOWN_TIMEOUT_S)
         return
+    # SIGTERM didn't reap within the grace window; escalate to SIGKILL below.
     except asyncio.TimeoutError:
         pass
     proc.kill()
     try:
         await asyncio.wait_for(proc.wait(), timeout=5.0)
+    # Best-effort reap after SIGKILL — nothing left to do if the wait still times out.
     except asyncio.TimeoutError:
         pass
 
@@ -109,11 +111,6 @@ async def _terminate(proc: asyncio.subprocess.Process) -> None:
 async def test_vlm_server_chat_completions_smoke():
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
-    if not _weights_available():
-        pytest.skip(
-            "Cosmos-Reason1-7B weights not on disk; pre-download to "
-            f"{_DEFAULT_WEIGHTS} or {_CONFIGURED_WEIGHTS}",
-        )
     try:
         import httpx
     except ImportError:
@@ -121,11 +118,10 @@ async def test_vlm_server_chat_completions_smoke():
 
     port = _pick_free_port()
 
-    # Prefer the cache that already has the weights so vLLM doesn't redownload.
-    if _DEFAULT_WEIGHTS.exists():
-        model_cache = _DEFAULT_WEIGHTS.parents[1]  # ~/.cache/huggingface
-    else:
-        model_cache = _CONFIGURED_WEIGHTS.parents[1]
+    # Always point at the standard HF cache. vLLM uses cached weights if
+    # present and otherwise downloads on first start; either way the test
+    # passes without manual prereqs.
+    model_cache = _DEFAULT_WEIGHTS.parents[1]  # ~/.cache/huggingface
 
     with tempfile.TemporaryDirectory(prefix="vlm_smoke_") as td:
         td_path = Path(td)
@@ -187,3 +183,4 @@ async def test_vlm_server_chat_completions_smoke():
             assert isinstance(content, str) and content.strip(), f"empty content: {data!r}"
         finally:
             await _terminate(proc)
+            kill_orphan_vllm(port)
