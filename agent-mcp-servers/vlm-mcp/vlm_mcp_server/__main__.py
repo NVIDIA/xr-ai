@@ -4,7 +4,7 @@
 """
 VLM MCP server.
 
-Pure FastMCP — one tool at /mcp on port 8220. There are no REST endpoints,
+Pure FastMCP — one tool at /mcp on port 8240. There are no REST endpoints,
 no hub IPC subscription, and no `xr-ai-agent` runtime dependency.
 
 The single tool ``ask_image(question, image_path)`` reads a local PNG path,
@@ -31,7 +31,7 @@ Tool (FastMCP, mounted at /mcp)
 Config (vlm_mcp_server.yaml)
 ────────────────────────────
     host:                 0.0.0.0
-    port:                 8220
+    port:                 8240
     vlm_server:           http://localhost:8100
     vlm_request_timeout_s: 60.0
 """
@@ -214,7 +214,7 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     host                  = cfg.get("host", "0.0.0.0")
-    port                  = int(cfg.get("port", 8220))
+    port                  = int(cfg.get("port", 8240))
     vlm_server            = cfg.get("vlm_server", "http://localhost:8100")
     vlm_request_timeout_s = float(cfg.get("vlm_request_timeout_s", 60.0))
     enable_thinking       = bool(cfg.get("enable_thinking", False))
