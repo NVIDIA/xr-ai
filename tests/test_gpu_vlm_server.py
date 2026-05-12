@@ -36,7 +36,6 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 _REPO_ROOT       = Path(__file__).resolve().parent.parent
 _VLM_SERVER_DIR  = _REPO_ROOT / "ai-services" / "vlm-server"
 _DEFAULT_WEIGHTS = Path("~/.cache/huggingface/hub/models--nvidia--Cosmos-Reason1-7B").expanduser()
-_CONFIGURED_WEIGHTS = _REPO_ROOT / "ai-services" / "models" / "hub" / "models--nvidia--Cosmos-Reason1-7B"
 
 # 30 min — enough for a cold first-time weights download (~15 GB) plus
 # vLLM compilation. Cached runs complete in ~60 s.
@@ -62,10 +61,6 @@ def _tiny_png_bytes(size: int = 32) -> bytes:
     raw = b"".join(b"\x00" + bytes([(i * 8) & 0xFF] * size) for i in range(size))
     idat = zlib.compress(raw, 9)
     return sig + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
-
-
-def _weights_available() -> bool:
-    return _DEFAULT_WEIGHTS.exists() or _CONFIGURED_WEIGHTS.exists()
 
 
 async def _tcp_open(host: str, port: int, timeout: float = 0.5) -> bool:
