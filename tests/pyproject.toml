@@ -17,18 +17,24 @@ dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
     "xr-ai-vllm",
+    "video-mcp-server",
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "numpy>=1.24",
+    # GPU/MCP test deps — only exercised by tests marked `gpu`.
+    "fastmcp>=0.4",
+    "Pillow>=10.0",
+    "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
-xr-ai-agent    = { path = "../agent-sdk",               editable = true }
-xr-media-hub   = { path = "../server-runtime",          editable = true }
-xr-ai-launcher = { path = "../utils/xr-ai-launcher",   editable = true }
-xr-ai-logging  = { path = "../utils/xr-ai-logging",    editable = true }
-xr-ai-vllm     = { path = "../utils/xr-ai-vllm",       editable = true }
+xr-ai-agent      = { path = "../agent-sdk",                       editable = true }
+xr-media-hub     = { path = "../server-runtime",                  editable = true }
+xr-ai-launcher   = { path = "../utils/xr-ai-launcher",            editable = true }
+xr-ai-logging    = { path = "../utils/xr-ai-logging",             editable = true }
+xr-ai-vllm       = { path = "../utils/xr-ai-vllm",                editable = true }
+video-mcp-server = { path = "../agent-mcp-servers/video-mcp",     editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_tests"]
@@ -36,3 +42,6 @@ packages = ["xr_ai_tests"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["."]
+markers      = [
+    "gpu: requires NVENC / NVDEC capable GPU hardware",
+]

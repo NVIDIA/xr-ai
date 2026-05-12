@@ -133,17 +133,24 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
 xr-ai-tests  (tests/)
-    └── xr-ai-agent     [editable: ../agent-sdk]
-    └── xr-media-hub    [editable: ../server-runtime]
-    └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher]
-    └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
-    └── xr-ai-vllm      [editable: ../utils/xr-ai-vllm]
+    └── xr-ai-agent       [editable: ../agent-sdk]
+    └── xr-media-hub      [editable: ../server-runtime]
+    └── xr-ai-launcher    [editable: ../utils/xr-ai-launcher]
+    └── xr-ai-logging     [editable: ../utils/xr-ai-logging]
+    └── xr-ai-vllm        [editable: ../utils/xr-ai-vllm]
+    └── video-mcp-server  [editable: ../agent-mcp-servers/video-mcp]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
+    └── fastmcp >=0.4   (only used by tests marked `gpu`)
+    └── Pillow >=10.0   (only used by tests marked `gpu`)
+    └── pyyaml >=6.0    (only used by tests marked `gpu`)
     Multi-client / multi-agent integration tests over the IPC layer.
     Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
     Also covers unit tests for the leaf util packages (launcher, logging, vllm).
+    Tests marked `gpu` additionally exercise NVENC / NVDEC via PyNvVideoCodec
+    (transitively pulled in by `video-mcp-server`); they're skipped cleanly
+    when the import or hardware is unavailable.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0
