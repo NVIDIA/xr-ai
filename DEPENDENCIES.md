@@ -134,16 +134,23 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent     [editable: ../agent-sdk]
-    └── xr-media-hub    [editable: ../server-runtime]
+    └── xr-media-hub    [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
     └── xr-ai-vllm      [editable: ../utils/xr-ai-vllm]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
-    Multi-client / multi-agent integration tests over the IPC layer.
-    Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
-    Also covers unit tests for the leaf util packages (launcher, logging, vllm).
+    The unmarked suite is multi-client / multi-agent integration tests over
+    the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
+    NVENC required. Also covers unit tests for the leaf util packages
+    (launcher, logging, vllm).
+
+    Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
+    `-m "not gpu"` in CI). They import `livekit.rtc` directly to drive
+    `_room_client.py` and shell out to `docker` to manage a LiveKit
+    container — both pulled in transitively via `xr-media-hub` rather
+    than redeclared here.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0
