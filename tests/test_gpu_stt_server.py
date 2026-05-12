@@ -40,7 +40,9 @@ _HF_CACHE   = Path("~/.cache/huggingface").expanduser()
 _CANDIDATE_CACHES = (_REPO_CACHE, _HF_CACHE)
 _MODEL     = "nvidia/parakeet-tdt-0.6b-v3"
 
-_STARTUP_TIMEOUT_S   = 600.0   # cold model load can easily take minutes.
+# Generous cold-start budget — first run may download the ~600 MB
+# parakeet bundle from HF before model load.
+_STARTUP_TIMEOUT_S   = 900.0
 _SHUTDOWN_TIMEOUT_S  = 20.0
 
 
@@ -161,12 +163,9 @@ async def test_stt_server_transcribes_sine_wav(stt_yaml: tuple[Path, int]) -> No
         pytest.skip("uv not on PATH")
     if not _STT_DIR.exists():
         pytest.skip(f"stt-server source tree missing: {_STT_DIR}")
-    if _resolve_cached_cache_root() is None:
-        pytest.skip(
-            f"NeMo/HF weights for {_MODEL} not cached under any of "
-            f"{[str(p) for p in _CANDIDATE_CACHES]}; "
-            "run the stt server once outside the test to populate it.",
-        )
+
+    # The server downloads parakeet weights on first run into the resolved
+    # cache root (see stt_yaml fixture); subsequent runs reuse them.
 
     cfg_path, port = stt_yaml
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -114,22 +115,22 @@ def _post_speech(port: int, voice: str, text: str) -> bytes:
 
 
 async def test_piper_tts_smoke(tmp_path: Path) -> None:
+    if shutil.which("uv") is None:
+        pytest.skip("uv not on PATH")
     if not _PIPER_BIN.exists():
-        pytest.skip(
-            f"piper venv not present at {_PIPER_BIN} "
-            "(run `uv sync` in ai-services/tts/piper/)"
+        subprocess.run(
+            ["uv", "sync", "--directory", str(_PIPER_PROJECT)],
+            check=True,
         )
+        if not _PIPER_BIN.exists():
+            pytest.skip(f"uv sync did not produce {_PIPER_BIN}")
 
     ref_cfg     = yaml.safe_load(_PIPER_YAML.read_text())
     voice       = ref_cfg["voice"]
     model_cache = (_PIPER_YAML.parent / ref_cfg.get("model_cache", "../models")).resolve()
-    hf_cache    = model_cache / "piper"
-
-    if not _voice_cached(voice, hf_cache):
-        pytest.skip(
-            f"piper voice {voice!r} not cached under {hf_cache}; "
-            "pre-fetch it once by running piper_tts_server, then re-run this test"
-        )
+    # The piper server eagerly resolves + downloads the configured voice
+    # on startup (see ai-services/tts/piper/piper_tts_server/__main__.py),
+    # so we don't pre-check voice cache state here.
 
     port = _pick_port(_DEFAULT_PORT)
 
@@ -153,7 +154,9 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
     )
 
     try:
-        await _wait_for_port(port, proc=proc, timeout=45.0)
+        # First-run voice download (~50–200 MB) plus ONNX init can take a
+        # couple of minutes on a cold cache; reuse is sub-second.
+        await _wait_for_port(port, proc=proc, timeout=300.0)
         body = await asyncio.get_running_loop().run_in_executor(
             None, _post_speech, port, voice, "Hello, world.",
         )
