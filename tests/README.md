@@ -35,7 +35,21 @@ uv run pytest -v
 
 The same command runs in GitHub Actions on every push and pull request
 via [`.github/workflows/tests.yml`](../.github/workflows/tests.yml),
-matrixed across Python 3.11 and 3.12 on `ubuntu-latest`.
+matrixed across Python 3.11 and 3.12 on `ubuntu-latest`. CI invokes
+pytest with `-m "not gpu"` so anything that needs real hardware is left
+to the developer box.
+
+## GPU / Docker / NVENC tests
+
+Tests that need a real GPU, Docker, or NVENC carry the `gpu` marker and
+are skipped in CI. Run them locally with:
+
+```bash
+bash tests/run_local_gpu_tests.sh        # or pass extra pytest args
+```
+
+Mark new tests with `@pytest.mark.gpu` whenever they need any of those
+resources.
 
 ## Test taxonomy
 
