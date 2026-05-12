@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -92,11 +93,15 @@ def _post_speech(port: int, model: str, text: str) -> bytes:
 
 
 async def test_magpie_tts_smoke(tmp_path: Path) -> None:
+    if shutil.which("uv") is None:
+        pytest.skip("uv not on PATH")
     if not _MAGPIE_BIN.exists():
-        pytest.skip(
-            f"magpie venv not present at {_MAGPIE_BIN} "
-            "(run `uv sync` in ai-services/tts/magpie/)"
+        subprocess.run(
+            ["uv", "sync", "--directory", str(_MAGPIE_PROJECT)],
+            check=True,
         )
+        if not _MAGPIE_BIN.exists():
+            pytest.skip(f"uv sync did not produce {_MAGPIE_BIN}")
 
     ref_cfg     = yaml.safe_load(_MAGPIE_YAML.read_text())
     model_name  = ref_cfg["model"]
@@ -126,8 +131,9 @@ async def test_magpie_tts_smoke(tmp_path: Path) -> None:
     )
 
     try:
-        # NeMo first-load + CUDA init + cold weight download can take minutes.
-        await _wait_for_port(port, proc=proc, timeout=240.0)
+        # NeMo first-load + CUDA init + cold weight download can take a
+        # while; budget for a full ~1 GB pull on a fresh machine.
+        await _wait_for_port(port, proc=proc, timeout=900.0)
         body = await asyncio.get_running_loop().run_in_executor(
             None, _post_speech, port, model_name, "Hello, world.",
         )
