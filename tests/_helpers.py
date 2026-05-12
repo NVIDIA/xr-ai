@@ -17,11 +17,55 @@ scenario under verification.
 from __future__ import annotations
 
 import asyncio
+import os
+import signal
+import time
+import urllib.request
 from dataclasses import dataclass, field
 from typing import Callable
 
 from xr_ai_agent      import AudioChunk, DataMessage, ReturnAudioFlush
 from xr_media_hub.ipc import ConnectorEndpoint
+
+
+def kill_orphan_vllm(port: int, wait_s: float = 20.0) -> None:
+    """Kill a persistent vLLM child still listening on *port* after teardown.
+
+    The vlm/llm wrappers Popen ``vllm serve`` with ``start_new_session=True``
+    so the wrapper's SIGTERM can't reach it (production wants vLLM to outlive
+    a stack restart). Tests must clean that up explicitly or the next test
+    starts with the GPU full.
+    """
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/health", timeout=1.0,
+        ) as r:
+            if r.status != 200:
+                return
+    except Exception:
+        return
+    try:
+        from xr_ai_vllm._docker import pid_on_port
+        pid = pid_on_port(port)
+    except Exception:
+        return
+    if pid is None:
+        return
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + wait_s
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.5)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 @dataclass
