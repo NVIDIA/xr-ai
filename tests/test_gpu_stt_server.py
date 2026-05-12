@@ -36,7 +36,9 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _STT_DIR   = _REPO_ROOT / "ai-services" / "stt-server"
 _REPO_CACHE = _REPO_ROOT / "ai-services" / "models"
-_HF_CACHE   = Path("~/.cache/huggingface").expanduser()
+# Honor HF_HOME so callers with a non-default cache (e.g. a shared NAS or
+# a CI bind-mount) don't trigger a cold redownload.
+_HF_CACHE   = Path(os.environ.get("HF_HOME", "~/.cache/huggingface")).expanduser()
 _CANDIDATE_CACHES = (_REPO_CACHE, _HF_CACHE)
 _MODEL     = "nvidia/parakeet-tdt-0.6b-v3"
 
@@ -47,6 +49,9 @@ _SHUTDOWN_TIMEOUT_S  = 20.0
 
 
 def _pick_free_port() -> int:
+    # TOCTOU: another process can grab this port between bind() and the
+    # server's own bind(). Acceptable for a single-host dev test; would
+    # need a port-0 + parse-stdout pattern for hard determinism.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
@@ -140,6 +145,12 @@ def _terminate(proc: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(timeout=5)
+    # Drain stdout/stderr so the subprocess isn't blocked on a full pipe.
+    if proc.stdout is not None:
+        try:
+            proc.stdout.read()
+        except (ValueError, OSError):
+            pass  # pipe already closed by the kernel during teardown
 
 
 @pytest.fixture
