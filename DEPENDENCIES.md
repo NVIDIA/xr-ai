@@ -144,9 +144,10 @@ xr-ai-tests  (tests/)
     └── numpy >=1.24
     Multi-client / multi-agent integration tests over the IPC layer.
     Driven via ZMQ `ipc://` only — no Docker / LiveKit / NVENC required.
-    Also covers unit tests for the leaf util packages (launcher, logging, vllm)
-    and a CI-viable subprocess test for transcript-mcp-server (fastmcp pulled
-    in transitively).
+    Also covers unit tests for the leaf util packages (launcher, logging, vllm),
+    a CI-viable subprocess test for transcript-mcp-server (fastmcp pulled in
+    transitively), and `gpu`-marked smoke tests (e.g. `test_gpu_stt_server.py`)
+    that spawn real ai-services via `uv run` and need cached model weights.
 
 vlm-server  (ai-services/vlm-server/)
     └── vllm >=0.12.0

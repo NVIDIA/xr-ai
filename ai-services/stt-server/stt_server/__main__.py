@@ -219,7 +219,10 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
 
     app, backend = _build_app(cfg, model_cache)
 
-    # Warm up at startup so first request is instant.
+    # Load weights before serving so a bad model name / OOM crashes the
+    # process at startup instead of surfacing as HTTP 500 on the first
+    # client request. Doing this before uvicorn.Config() means the port
+    # never opens if the model can't be loaded.
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, backend._ensure_loaded)
 
