@@ -88,13 +88,14 @@ class _ReturnAudioPipe:
                 logger.exception("capture_frame failed")
 
     async def close(self) -> None:
-        # Signal the drainer to exit cleanly; it finishes any frame mid-capture.
-        try:
-            self._queue.put_nowait(None)
-        except asyncio.QueueFull:
-            pass
+        # Cancel rather than enqueue a sentinel — a bounded queue could drop
+        # the None and leak the drainer forever.
+        if not self._task.done():
+            self._task.cancel()
         try:
             await self._task
+        # CancelledError is the expected success path; any other drainer error
+        # is irrelevant once the track is closing.
         except (asyncio.CancelledError, Exception):
             pass
 
@@ -112,6 +113,8 @@ class RoomClient:
         self._room = rtc.Room()
         # track SID → streaming task; lets us cancel exactly the right task on unsubscribe.
         self._track_tasks: dict[str, asyncio.Task] = {}
+        # Tasks spawned by sync event callbacks; cancelled on disconnect().
+        self._pending_tasks: set[asyncio.Task] = set()
         self._stop = asyncio.Event()
         # Per-participant return audio: pid → (AudioSource, LocalTrackPublication, ReturnPipe).
         # Lazy-published on first send_return_audio for a pid; subscribe permissions
@@ -126,11 +129,11 @@ class RoomClient:
 
         @self._room.on("participant_connected")
         def _on_joined(participant: rtc.RemoteParticipant) -> None:
-            asyncio.ensure_future(self._handle_joined(participant))
+            self._spawn(self._handle_joined(participant))
 
         @self._room.on("participant_disconnected")
         def _on_left(participant: rtc.RemoteParticipant) -> None:
-            asyncio.ensure_future(self._handle_left(participant))
+            self._spawn(self._handle_left(participant))
 
         @self._room.on("track_subscribed")
         def _on_track(
@@ -161,7 +164,7 @@ class RoomClient:
         def _on_data(packet: rtc.DataPacket) -> None:
             if packet.participant is None:
                 return
-            asyncio.ensure_future(
+            self._spawn(
                 self._ep.push_data(
                     DataMessage(
                         participant_id=packet.participant.identity,
@@ -215,18 +218,29 @@ class RoomClient:
     def _start_track_task(self, sid: str, coro) -> None:
         # Cancel any existing task for this SID before starting a new one.
         self._cancel_track_task(sid)
-        self._track_tasks[sid] = asyncio.ensure_future(coro)
+        self._track_tasks[sid] = asyncio.create_task(coro, name=f"track-{sid}")
 
     def _cancel_track_task(self, sid: str) -> None:
         t = self._track_tasks.pop(sid, None)
         if t and not t.done():
             t.cancel()
 
+    def _spawn(self, coro) -> None:
+        """Track a fire-and-forget task so disconnect() can cancel orphans."""
+        task = asyncio.create_task(coro)
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
+
     async def disconnect(self) -> None:
         for t in self._track_tasks.values():
             t.cancel()
         await asyncio.gather(*self._track_tasks.values(), return_exceptions=True)
         self._track_tasks.clear()
+        pending = list(self._pending_tasks)
+        for t in pending:
+            t.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        self._pending_tasks.clear()
         # Close pacing pipes before dropping the entries so drainer tasks exit cleanly.
         await asyncio.gather(
             *(pipe.close() for _src, _pub, pipe in self._return_audio.values()),

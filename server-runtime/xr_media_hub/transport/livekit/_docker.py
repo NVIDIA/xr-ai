@@ -69,6 +69,7 @@ class LiveKitDocker:
         self._proc:   asyncio.subprocess.Process | None  = None
         self._output: deque[bytes] = deque()
         self._output_size: int = 0
+        self._log_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="xr_livekit_")
@@ -106,7 +107,7 @@ class LiveKitDocker:
         # Belt-and-suspenders: kill the container if Python exits without stop().
         atexit.register(self._atexit_kill)
 
-        asyncio.create_task(self._drain_logs(), name="livekit-logs")
+        self._log_task = asyncio.create_task(self._drain_logs(), name="livekit-logs")
         try:
             await self._wait_ready(self._cfg.lk_port_ws)
         except StartupError:
@@ -127,6 +128,7 @@ class LiveKitDocker:
 
         if proc.returncode is not None:
             logger.info("LiveKit container already exited (rc={})", proc.returncode)
+            await self._cancel_log_task()
             self._cleanup_tmpdir()
             return
 
@@ -154,6 +156,7 @@ class LiveKitDocker:
         except (asyncio.TimeoutError, Exception):
             pass
 
+        await self._cancel_log_task()
         self._cleanup_tmpdir()
 
     # ── internals ─────────────────────────────────────────────────────────────
@@ -216,7 +219,23 @@ class LiveKitDocker:
                 await asyncio.wait_for(proc.wait(), timeout=_STOP_TIMEOUT)
             except asyncio.TimeoutError:
                 pass
+        await self._cancel_log_task()
         self._cleanup_tmpdir()
+
+    async def _cancel_log_task(self) -> None:
+        """Cancel and await the log drainer task so no output lines are leaked."""
+        task = self._log_task
+        self._log_task = None
+        if task is None:
+            return
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        # We just cancelled; CancelledError is the success path and any other
+        # drainer error is moot now that the container is gone.
+        except (asyncio.CancelledError, Exception):
+            pass
 
     def _cleanup_tmpdir(self) -> None:
         if self._tmpdir:
