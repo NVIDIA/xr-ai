@@ -21,7 +21,7 @@ import pytest
 # libnvidia-encode.so.1 raises RuntimeError (not ImportError) — importorskip
 # would let it escape and break collection on CI boxes without NVENC.
 try:
-    import PyNvVideoCodec as pynvc
+    import PyNvVideoCodec  # noqa: F401  (import-only — used to detect NVENC availability)
 except (ImportError, RuntimeError, OSError) as exc:
     pytest.skip(f"PyNvVideoCodec unavailable: {exc}", allow_module_level=True)
 
@@ -82,8 +82,7 @@ def _make_recorder(out_dir: str) -> VideoRecorder:
         probe = recorder._create_encoder(640, 480)
         try:
             probe.EndEncode()
-        except Exception:
-            # EndEncode can fail if NVENC went away mid-probe; benign here.
+        except Exception:  # best-effort teardown if NVENC went away mid-probe
             pass
         del probe
     except Exception as e:
