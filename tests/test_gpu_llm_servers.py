@@ -119,6 +119,7 @@ def _health_ok(port: int, timeout: float = 2.0) -> bool:
             f"http://127.0.0.1:{port}/health", timeout=timeout,
         ) as r:
             return r.status == 200
+    # Connection refused / DNS / timeout while the server is still booting — caller retries.
     except Exception:
         return False
 
@@ -147,11 +148,13 @@ def _terminate(proc: subprocess.Popen) -> None:
     try:
         proc.wait(timeout=_SHUTDOWN_TIMEOUT_S)
         return
+    # SIGTERM didn't reap within the grace window; escalate to SIGKILL below.
     except subprocess.TimeoutExpired:
         pass
     proc.kill()
     try:
         proc.wait(timeout=5)
+    # Best-effort reap after SIGKILL — nothing left to do if the wait still times out.
     except subprocess.TimeoutExpired:
         pass
 
