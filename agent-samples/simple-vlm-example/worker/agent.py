@@ -378,11 +378,12 @@ class SimpleVlmAgent:
     async def _wait_for_camera_frame(
         self, pid: str, timeout: float,
     ) -> FrameSignal | None:
-        """Wait up to ``timeout`` seconds for any new FrameSignal for ``pid``.
+        """Wait up to ``timeout`` seconds for a fresh FrameSignal for ``pid``.
 
-        During the camera-start wait, age doesn't matter — any arriving frame
-        proves the camera is streaming.  The ``_is_fresh`` check is only for
-        the initial shortcut (skip camera start when already streaming).
+        We only accept signals that pass ``_is_fresh``.  A stale FrameSignal
+        from a track that has since stopped will still live in self._latest;
+        returning it makes ``request_frame`` deliver an 8x8 placeholder
+        because the underlying track is gone — the VLM then sees nothing.
         """
         ev = self._frame_events.setdefault(pid, asyncio.Event())
         t0 = asyncio.get_event_loop().time()
@@ -391,7 +392,7 @@ class SimpleVlmAgent:
         # TOCTOU: clear event, then re-check before blocking.
         ev.clear()
         sig = self._latest_signal(pid)
-        if sig is not None:
+        if sig is not None and self._is_fresh(sig):
             logger.info(
                 "camera frame pid={!r}  track={}  age_ms={:.0f}  (immediate)",
                 pid, sig.track_id, (now_us() - sig.pts_us) / 1_000,
@@ -420,9 +421,10 @@ class SimpleVlmAgent:
                 ev.clear()
                 continue
 
-            # Event fired — a new FrameSignal arrived.
+            # Event fired — a new FrameSignal arrived.  Still require freshness
+            # so we don't pick up a max-pts_us signal from a stopped track.
             sig = self._latest_signal(pid)
-            if sig is not None:
+            if sig is not None and self._is_fresh(sig):
                 logger.info(
                     "camera frame pid={!r}  track={}  age_ms={:.0f}  after {:.1f}s",
                     pid, sig.track_id, (now_us() - sig.pts_us) / 1_000,
