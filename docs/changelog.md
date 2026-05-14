@@ -9,6 +9,27 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-14 — `xr-ai-models` seam fully adopted by all in-tree workers
+
+`vlm-mcp`, `simple-vlm-example`, `xr-render-demo`, and `xr-ai-pipecat` now
+depend on `agent-sdk/xr-ai-models` and construct their LLM / VLM / STT / TTS
+clients from a per-sample `yaml/models.yaml` via `make_llm` / `make_vlm` /
+`make_stt` / `make_tts`.  Per-model quirks (`chat_template_kwargs.enable_thinking`,
+`thinking_budget`, `reasoning` vs `reasoning_content` field naming,
+served-model-name strings) live in built-in presets — no caller branches on
+backend, and swapping a model is a `kind:` + `base_url:` YAML edit.
+
+The AGENTS.md hard rule "All HTTP calls to AI services go through
+`agent-sdk/xr-ai-models`" is now enforceable in review with no remaining
+hand-rolled `httpx` callers of `/v1/chat/completions`,
+`/v1/audio/transcriptions`, or `/v1/audio/speech` in any worker or MCP
+server.  Top-level docs (`README.md`, `docs/ai-services.md`,
+`docs/adding-a-sample.md`, `AGENTS.md`) surface the `models.yaml` convention
+in the new-sample checklist and the per-service call examples.
+
+See PR #135 (Unit 1, SDK) and Units 2–5 (consumer migrations) for the
+individual diffs.
+
 ### 2026-05-14 — Introduce `agent-sdk/xr-ai-models` SDK; collapse hand-rolled httpx clients behind four protocols
 
 Before this change, every consumer of an AI service rolled its own `httpx`
