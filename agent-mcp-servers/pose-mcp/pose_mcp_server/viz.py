@@ -103,14 +103,20 @@ class RerunSink:
     ) -> None:
         self._ensure_connected()
         rr = self._rr
-        rr.set_time_seconds("frame_time", result.ts_us / 1_000_000.0)
+        # Rerun 0.22+ unified its time API: the old `set_time_seconds(name, t)`
+        # is now `set_time(name, timestamp=t)` for absolute wall-clock or
+        # `set_time(name, duration=t)` for elapsed time.  ts_us is a Unix
+        # microseconds timestamp from the worker so use the `timestamp=` form.
+        rr.set_time("frame_time", timestamp=result.ts_us / 1_000_000.0)
 
         if new_keyframe is not None:
             self._log_keyframe(new_keyframe, static=False)
             self._log_trajectory()
 
-        rr.log("/world/inliers",     rr.Scalar(float(result.num_inliers)))
-        rr.log("/world/num_keyframes", rr.Scalar(float(result.num_keyframes)))
+        # `Scalar` (singular) was renamed to `Scalars` (which takes a list)
+        # in 0.22+ — same semantics, slightly different ergonomics.
+        rr.log("/world/inliers",       rr.Scalars([float(result.num_inliers)]))
+        rr.log("/world/num_keyframes", rr.Scalars([float(result.num_keyframes)]))
 
         if result.pose is None:
             # Bootstrap or lost — clear the live camera entity so stale
