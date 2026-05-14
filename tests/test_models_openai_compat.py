@@ -361,7 +361,6 @@ async def test_stt_transcribe_pcm_converts_to_wav() -> None:
     sent = stub.last_request().content
     start = sent.find(b"RIFF")
     assert start >= 0
-    end = sent.find(b"\r\n", start + 4) or len(sent)
     extracted = sent[start:].split(b"\r\n", 1)[0]
     with wave.open(io.BytesIO(extracted), "rb") as wf:
         assert wf.getframerate() == 16000

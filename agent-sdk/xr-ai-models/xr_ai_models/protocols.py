@@ -100,7 +100,7 @@ class LLMService(Protocol):
         enable_thinking: bool = False,
         thinking_budget: int | None = None,
         timeout: float | None = None,
-    ) -> ChatResponse: ...
+    ) -> ChatResponse: pass
 
     def stream(
         self,
@@ -112,9 +112,9 @@ class LLMService(Protocol):
         enable_thinking: bool = False,
         thinking_budget: int | None = None,
         timeout: float | None = None,
-    ) -> AsyncIterator[str]: ...
+    ) -> AsyncIterator[str]: pass
 
-    async def close(self) -> None: ...
+    async def close(self) -> None: pass
 
 
 @runtime_checkable
@@ -130,7 +130,7 @@ class VLMService(Protocol):
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
-    ) -> ChatResponse: ...
+    ) -> ChatResponse: pass
 
     def stream(
         self,
@@ -141,9 +141,9 @@ class VLMService(Protocol):
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
-    ) -> AsyncIterator[str]: ...
+    ) -> AsyncIterator[str]: pass
 
-    async def close(self) -> None: ...
+    async def close(self) -> None: pass
 
 
 @runtime_checkable
@@ -155,9 +155,9 @@ class STTService(Protocol):
         sample_rate: int | None = None,
         channels: int = 1,
         timeout: float | None = None,
-    ) -> str: ...
+    ) -> str: pass
 
-    async def close(self) -> None: ...
+    async def close(self) -> None: pass
 
 
 @runtime_checkable
@@ -168,6 +168,6 @@ class TTSService(Protocol):
         *,
         response_format: str = "wav",
         timeout: float | None = None,
-    ) -> bytes: ...
+    ) -> bytes: pass
 
-    async def close(self) -> None: ...
+    async def close(self) -> None: pass
