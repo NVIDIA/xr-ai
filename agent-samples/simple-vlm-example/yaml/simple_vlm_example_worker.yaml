@@ -11,8 +11,9 @@ tts_server:  http://localhost:8105   # piper_tts_server
 # localization path entirely — the worker then doesn't even open a
 # FastMCP client.  When set, the worker pushes pose updates back to
 # the client on data topic "pose.update" at pose_hz frames per second.
-pose_mcp_url: http://localhost:8240/mcp
-pose_hz:      2.0
+pose_mcp_url:    http://localhost:8240/mcp
+pose_hz:         2.0   # throttle floor — pose-mcp won't be called faster than this
+pose_max_age_s:  0.6   # frames older than this (wall clock) are dropped, not processed
 
 # VLM backend — controls which vision model the worker uses.
 # "cosmos" (default) → vlm-server (Cosmos-Reason1-7B) on port 8100

@@ -100,6 +100,7 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         silence_duration      =float(cfg.get("silence_duration",      0.8)),
         min_speech            =float(cfg.get("min_speech",            0.3)),
         pose_hz               =float(cfg.get("pose_hz",               2.0)),
+        pose_max_age_s        =float(cfg.get("pose_max_age_s",         0.6)),
     )
 
     loop = asyncio.get_running_loop()

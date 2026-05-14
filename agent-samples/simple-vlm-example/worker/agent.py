@@ -95,6 +95,7 @@ class SimpleVlmAgent:
         camera_on_timeout_s: float = 15.0,
         camera_grace_s:      float = 5.0,
         pose_hz:             float = 2.0,
+        pose_max_age_s:      float = 0.6,
         pose_scratch_dir:    pathlib.Path = pathlib.Path("/dev/shm/xr-ai/pose-in"),
     ) -> None:
         self._ep   = ep
@@ -118,9 +119,16 @@ class SimpleVlmAgent:
         self._camera_grace_s    = camera_grace_s
 
         # Pose loop state — opportunistic, never triggers camera-on.
-        self._pose_period_s     = 1.0 / max(pose_hz, 0.1)
+        self._pose_min_period_s = 1.0 / max(pose_hz, 0.1)    # throttle floor
+        self._pose_max_age_s    = float(pose_max_age_s)      # drop if older
         self._pose_scratch_dir  = pose_scratch_dir
-        self._pose_last_pts: dict[str, int] = {}   # pid → last frame ts we sent
+        self._pose_last_pts: dict[str, int] = {}             # pid → last sent ts
+        # Event raised whenever a new FrameSignal arrives.  The pose loop
+        # waits on this rather than sleeping on a fixed timer — guarantees
+        # we always reach for the *latest* arrived frame, never a queued
+        # one.  asyncio.Event coalesces multiple sets into one wakeup, so
+        # bursts of incoming signals during a long inference don't queue.
+        self._pose_event = asyncio.Event()
         if self._pose is not None:
             self._pose_scratch_dir.mkdir(parents=True, exist_ok=True)
 
@@ -512,6 +520,11 @@ class SimpleVlmAgent:
         ev = self._frame_events.get(sig.participant_id)
         if ev is not None:
             ev.set()
+        # Wake the pose loop so it always reaches for the freshest signal.
+        # asyncio.Event coalesces multiple sets between processings, so a
+        # burst of incoming frames doesn't queue — the loop just picks the
+        # latest signal next time around.
+        self._pose_event.set()
 
     def _latest_signal(self, pid: str) -> FrameSignal | None:
         candidates = [v for k, v in self._latest.items() if k[0] == pid]
@@ -541,21 +554,32 @@ class SimpleVlmAgent:
     # ── pose path: opportunistic estimate_pose at ~pose_hz ────────────────────
 
     async def _pose_loop(self) -> None:
-        """Send the freshest available frame per pid to pose-mcp at a fixed
-        rate.  Never asks the client to turn the camera on — pose is a
-        bystander to the VLM flow and only acts on frames already arriving.
+        """Send the freshest available frame per pid to pose-mcp.  Wakes on
+        each new ``FrameSignal`` arrival (not on a timer), then throttles
+        to at most ``1 / pose_hz`` frames per second.
 
-        Pose results are pushed back on data topic ``pose.update`` with a
-        compact JSON payload the client can render in 3D space.
+        Stale frames (older than ``pose_max_age_s`` from wall clock) are
+        dropped so the viewer never falls behind the live stream — if
+        the pipeline gets behind we skip frames rather than queue them.
+
+        Never asks the client to turn the camera on — pose is a bystander
+        to the VLM flow and only acts on frames already arriving.
         """
         logger.info(
-            "pose loop running  period={:.2f}s  scratch={}",
-            self._pose_period_s, self._pose_scratch_dir,
+            "pose loop running  min_period={:.2f}s  max_age={:.2f}s  scratch={}",
+            self._pose_min_period_s, self._pose_max_age_s, self._pose_scratch_dir,
         )
         idle_logged = False
         try:
             while True:
-                await asyncio.sleep(self._pose_period_s)
+                # Block until a new frame arrives.  Short timeout so the
+                # "idle" log fires even when nothing is happening.
+                try:
+                    await asyncio.wait_for(self._pose_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    pass
+                self._pose_event.clear()
+
                 pids = {pid for pid, _ in self._latest}
                 if not pids:
                     if not idle_logged:
@@ -570,13 +594,27 @@ class SimpleVlmAgent:
                         logger.opt(exception=True).warning(
                             "pose iteration failed pid={!r}: {}", pid, exc,
                         )
+                # Throttle floor: if pose-mcp returned faster than the
+                # configured rate, give the camera time to produce a new
+                # frame before looping.  Any signals that arrive during
+                # this sleep coalesce into a single Event set, so we wake
+                # up to the latest one rather than processing a queue.
+                await asyncio.sleep(self._pose_min_period_s)
         except asyncio.CancelledError:
             raise
 
     async def _estimate_one(self, pid: str) -> None:
         assert self._pose is not None
         sig = self._latest_signal(pid)
-        if sig is None or not self._is_fresh(sig):
+        if sig is None:
+            return
+        # Wall-clock age check (separate from the VLM path's _is_fresh,
+        # which allows up to 2 s).  Pose lag compounds visually in Rerun,
+        # so we want sub-second freshness or we drop the frame outright —
+        # never let the pipeline get behind by waiting on a stale frame.
+        age_s = (now_us() - sig.pts_us) / 1_000_000.0
+        if age_s > self._pose_max_age_s:
+            logger.debug("pose: dropping stale frame pid={!r}  age={:.2f}s", pid, age_s)
             return
         if self._pose_last_pts.get(pid) == sig.pts_us:
             return   # we already sent this exact frame
