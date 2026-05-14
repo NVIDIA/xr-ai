@@ -263,22 +263,24 @@ export function renderBase(model) {
     selectRow.style.display = 'none';
   }
 
-  // ── Agent status ───────────────────────────────────────────────────────────
+  // ── Agent status (optional — some clients replace this with their own UI) ──
   const agentDot   = $('agent-status-dot');
   const agentLabel = $('agent-status-label');
 
-  if (!isConnected) {
-    agentDot.className     = 'state-dot disconnected';
-    agentLabel.textContent = '—';
-  } else if (model.agentStatus === 'processing') {
-    agentDot.className     = 'state-dot connecting';
-    agentLabel.textContent = 'Processing…';
-  } else if (model.agentStatus === 'idle') {
-    agentDot.className     = 'state-dot connected';
-    agentLabel.textContent = 'Idle';
-  } else {
-    agentDot.className     = 'state-dot disconnected';
-    agentLabel.textContent = 'Unknown';
+  if (agentDot && agentLabel) {
+    if (!isConnected) {
+      agentDot.className     = 'state-dot disconnected';
+      agentLabel.textContent = '—';
+    } else if (model.agentStatus === 'processing') {
+      agentDot.className     = 'state-dot connecting';
+      agentLabel.textContent = 'Processing…';
+    } else if (model.agentStatus === 'idle') {
+      agentDot.className     = 'state-dot connected';
+      agentLabel.textContent = 'Idle';
+    } else {
+      agentDot.className     = 'state-dot disconnected';
+      agentLabel.textContent = 'Unknown';
+    }
   }
 
   // ── Data channel ───────────────────────────────────────────────────────────

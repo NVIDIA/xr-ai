@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# STT server configuration for glasses-agent.
+# Parakeet TDT 0.6B v3 — fast, accurate English ASR on GPU or CPU.
+
+model:                nvidia/parakeet-tdt-0.6b-v3
+device:               cuda
+cuda_visible_devices: "1"   # GPU 0 is full (VLM + LLM); use GPU 1 alongside Nemotron-30B
+port:                 8103
+model_cache:          ../../../models

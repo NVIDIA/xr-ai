@@ -65,27 +65,30 @@ class VlmClient:
         self._enable_thinking = enable_thinking
         self._client = httpx.AsyncClient(timeout=timeout)
 
-    async def ask(self, image_data_url: str, question: str) -> str:
-        payload: dict = {
-            "model": "vlm",
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": image_data_url}},
-                    {"type": "text", "text": question},
-                ],
-            }],
-        }
+    def _build_payload(self, image_data_urls: list[str], question: str) -> dict:
+        content: list[dict] = [
+            {"type": "image_url", "image_url": {"url": u}} for u in image_data_urls
+        ]
+        content.append({"type": "text", "text": question})
+        payload: dict = {"model": "vlm", "messages": [{"role": "user", "content": content}]}
         if not self._enable_thinking:
-            # Suppresses <think>…</think> generation entirely for lower latency.
-            # Qwen2.5-VL (Cosmos-Reason1-7B) honours this template argument.
             payload["chat_template_kwargs"] = {"enable_thinking": False}
-        resp = await self._client.post(self._url, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+        return payload
+
+    def _parse_response(self, data: dict) -> str:
         content = data["choices"][0]["message"].get("content") or ""
-        # Belt-and-suspenders: strip any <think> that leaked through anyway.
         return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+
+    async def ask(self, image_data_url: str, question: str) -> str:
+        resp = await self._client.post(self._url, json=self._build_payload([image_data_url], question))
+        resp.raise_for_status()
+        return self._parse_response(resp.json())
+
+    async def ask_multi(self, image_data_urls: list[str], question: str) -> str:
+        """Send multiple frames in one request — Qwen2.5-VL treats them as a video sequence."""
+        resp = await self._client.post(self._url, json=self._build_payload(image_data_urls, question))
+        resp.raise_for_status()
+        return self._parse_response(resp.json())
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -205,6 +208,73 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
             "ask_image  q={!r}  image={}  -> {} chars",
             question[:80], path.name, len(answer),
         )
+        return answer.strip()
+
+    @mcp.tool()
+    async def ask_frames(question: str, image_paths: list[str]) -> str:
+        """
+        Ask the VLM a question about a short sequence of consecutive frames.
+
+        Sends all frames in a single request so the model can reason about
+        motion and change over time (Qwen2.5-VL treats multiple images as a
+        video sequence).  Use this instead of ``ask_image`` when temporal
+        context matters — e.g. detecting hand movements during a procedure.
+
+        Parameters
+        ----------
+        question
+            Question or instruction for the VLM, same as for ``ask_image``.
+        image_paths
+            2–5 absolute paths to local image files in chronological order.
+            Typically the last N paths returned by successive calls to
+            ``get_latest_frame``.
+
+        Returns
+        -------
+        str
+            The VLM's answer.  Returns a human-readable error string on failure.
+        """
+        if not image_paths:
+            return "ask_frames: image_paths is empty."
+
+        loop = asyncio.get_running_loop()
+        data_urls: list[str] = []
+        for image_path in image_paths:
+            p = pathlib.Path(image_path)
+            if not p.exists():
+                return f"ask_frames: file not found at {image_path!r}."
+            try:
+                url = await loop.run_in_executor(None, _load_jpeg_data_url, str(p))
+                data_urls.append(url)
+            except Exception as exc:
+                return f"ask_frames: failed to read {image_path!r}: {exc}"
+
+        try:
+            answer = await vlm.ask_multi(data_urls, question)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and len(data_urls) > 1:
+                # vLLM rejects multi-image without --limit-mm-per-prompt image=N.
+                # Fall back to the most recent (last) frame only.
+                logger.warning(
+                    "ask_frames: server rejected {} images (400) — "
+                    "falling back to last frame; set --limit-mm-per-prompt image={} "
+                    "on the vlm-server to enable multi-image",
+                    len(data_urls), len(data_urls),
+                )
+                try:
+                    answer = await vlm.ask(data_urls[-1], question)
+                except httpx.HTTPError as fallback_exc:
+                    logger.exception("ask_frames: fallback single-image also failed")
+                    return f"ask_frames: vlm-server request failed: {fallback_exc}"
+            else:
+                logger.exception("ask_frames: vlm-server HTTP error")
+                return f"ask_frames: vlm-server request failed: {exc}"
+        except httpx.HTTPError as exc:
+            logger.exception("ask_frames: vlm-server HTTP error")
+            return f"ask_frames: vlm-server request failed: {exc}"
+
+        logger.debug("ask_frames  q={!r}  frames={}  -> {} chars",
+                     question[:80], len(image_paths), len(answer))
         return answer.strip()
 
     return mcp

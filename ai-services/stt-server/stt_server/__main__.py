@@ -24,9 +24,12 @@ Config keys
 import argparse
 import asyncio
 import os
+import subprocess
 import sys
 import tempfile
 import threading
+import time
+import urllib.request
 import warnings
 from pathlib import Path
 
@@ -150,6 +153,12 @@ def _build_app(cfg: dict, model_cache: Path):
                     tmp.write(audio_bytes)
                     tmp_path = tmp.name
                 return backend.transcribe(tmp_path)
+            except Exception as exc:
+                # NeMo can throw on very short / noisy audio — return empty
+                # rather than letting the exception become a 500.
+                import logging as _log
+                _log.getLogger("stt_server").warning("transcribe failed: %s", exc)
+                return ""
             finally:
                 if tmp_path:
                     os.unlink(tmp_path)
@@ -177,22 +186,15 @@ def _health_ok(port: int) -> bool:
         return False
 
 
-async def _idle_until_stopped(port: int) -> None:
-    """Return when /health stops responding (server shut down externally)."""
-    loop = asyncio.get_running_loop()
-    while True:
-        await asyncio.sleep(5.0)
-        alive = await loop.run_in_executor(None, _health_ok, port)
-        if not alive:
-            break
-
-
 async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> None:
     import uvicorn
 
     if not cfg.get("model"):
         logger.error("'model' is required in config")
         sys.exit(1)
+
+    if cuda_devices := cfg.get("cuda_visible_devices"):
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
 
     model_cache = _resolve_model_cache(cfg, yaml_dir)
 
@@ -214,7 +216,9 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
         logger.info("STT server already running on :{} — reusing", port)
         if ready_file:
             ready_file.touch()
-        await _idle_until_stopped(port)
+        await asyncio.get_running_loop().run_in_executor(
+            None, _idle_until_stopped, f"http://127.0.0.1:{port}/health"
+        )
         return
 
     app, backend = _build_app(cfg, model_cache)
@@ -236,6 +240,18 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
     logger.info("Stopped.")
 
 
+def _idle_until_stopped(health_url: str) -> None:
+    """Keep the wrapper alive while the persisted server is still running."""
+    while True:
+        time.sleep(5)
+        try:
+            with urllib.request.urlopen(health_url, timeout=2) as r:
+                if r.status != 200:
+                    return
+        except Exception:
+            return
+
+
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
@@ -245,6 +261,8 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--_serve",     action="store_true",
+                   help=argparse.SUPPRESS)  # internal: actual server mode
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -254,7 +272,53 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
+    if ns._serve:
+        # Persistent server subprocess — loads model and serves until killed.
+        asyncio.run(_run(cfg, yaml_dir, ready_file=None))
+        return
+
+    # ── wrapper mode ──────────────────────────────────────────────────────────
+    port       = int(cfg.get("port", _DEFAULT_PORT))
+    health_url = f"http://127.0.0.1:{port}/health"
+
+    # Reuse an already-running server (survived a previous stack shutdown).
+    try:
+        with urllib.request.urlopen(health_url, timeout=3) as r:
+            already_up = r.status == 200
+    except Exception:
+        already_up = False
+
+    if already_up:
+        print(f"[stt_server] already running on port {port} — reusing", flush=True)
+        if ns.ready_file:
+            ns.ready_file.touch()
+        _idle_until_stopped(health_url)
+        return
+
+    # Spawn the actual server in its own process group so it outlives the
+    # launcher's killpg when the stack shuts down.
+    cmd = [sys.executable, "-m", "stt_server", "--_serve"]
+    if ns.config:
+        cmd += ["--config", str(ns.config)]
+    subprocess.Popen(cmd, start_new_session=True)
+
+    # Poll until healthy (model load takes ~20 s).
+    print(f"[stt_server] starting persistent server on port {port}…", flush=True)
+    for _ in range(120):
+        time.sleep(1)
+        try:
+            with urllib.request.urlopen(health_url, timeout=2) as r:
+                if r.status == 200:
+                    break
+        except Exception:
+            pass
+    else:
+        sys.exit("[stt_server] timed out waiting for server to become healthy")
+
+    print(f"[stt_server] Ready  →  http://localhost:{port}/v1", flush=True)
+    if ns.ready_file:
+        ns.ready_file.touch()
+    _idle_until_stopped(health_url)
 
 
 if __name__ == "__main__":
