@@ -9,6 +9,20 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-14 — CodeQL Advanced Setup (committed workflow) instead of Default Setup
+
+`Analyze (python)` and `Analyze (javascript-typescript)` are required status
+checks on `main`. With GitHub's Default Setup (the implicit
+`dynamic/github-code-scanning/codeql` workflow), CodeQL only runs when a PR's
+diff touches a configured language — so a PR whose diff is entirely C++/CMake
+or docs silently skipped analysis and the required contexts never reported,
+leaving the PR permanently `mergeStateStatus=BLOCKED` even with an approval
+and all visible checks green (first hit by PR #131). We've committed
+`.github/workflows/codeql.yml` so the matrix runs on every PR and posts both
+required contexts unconditionally. Default Setup must stay disabled in
+`Settings → Code security → Code scanning` — Advanced Setup and Default Setup
+cannot coexist.
+
 ### 2026-05-12 — `gpu` pytest marker + local-only dev script for hardware-bound tests
 
 Some components (Docker-backed vLLM lifecycle, NVENC paths, anything that
