@@ -33,6 +33,7 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `accelerated_features` (XFeat + LighterGlue) | torch.hub | Apache-2.0 | https://github.com/verlab/accelerated_features (pose-mcp-server only; pulled via torch.hub on first request) |
 | `opencv-python-headless` | 4.9.0 | Apache-2.0 | https://github.com/opencv/opencv-python (pose-mcp-server only; used for solvePnPRansac) |
 | `torch`        | 2.2.0    | BSD-3-Clause  | https://github.com/pytorch/pytorch (pose-mcp-server only) |
+| `rerun-sdk`    | 0.21+    | Apache-2.0 / MIT | https://github.com/rerun-io/rerun (pose-mcp-server `[viz]` extra; only imported when `rerun_addr` is configured) |
 
 ## Swift (iOS / visionOS client)
 

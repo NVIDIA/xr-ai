@@ -28,8 +28,8 @@ from pose_mcp_server.backends  import FrameFeatures, GeometryFrame
 from pose_mcp_server.geometry  import (compose_se3, invert_se3, make_se3,
                                        quat_to_rmat, rmat_to_quat,
                                        se3_rotation_deg, se3_translation)
-from pose_mcp_server.localizer import Localizer
-from pose_mcp_server.store     import KeyframeStore
+from pose_mcp_server.localizer import Localizer, PoseResult
+from pose_mcp_server.store     import Keyframe, KeyframeStore
 
 
 # ── geometry helpers ──────────────────────────────────────────────────────────
@@ -299,6 +299,51 @@ def test_localizer_recovers_known_pose(tmp_path: pathlib.Path):
     delta_deg   = se3_rotation_deg(make_se3(R_recovered, np.zeros(3)),
                                    make_se3(R,          np.zeros(3)))
     assert delta_deg < 1.0
+
+
+class _RecordingSink:
+    """VizSink double — records every on_frame call for assertions."""
+    def __init__(self) -> None:
+        self.frames: list[tuple[PoseResult, Keyframe | None]] = []
+
+    def on_load(self, keyframes: list[Keyframe]) -> None:
+        self.loaded = list(keyframes)
+
+    def on_frame(self, image_rgb, geom, result, new_keyframe):
+        self.frames.append((result, new_keyframe))
+
+
+def test_localizer_emits_viz_events(tmp_path: pathlib.Path):
+    """The viz sink must see the origin insertion, then a localized frame
+    against that origin, and exceptions from the sink must not break
+    localization."""
+    store = KeyframeStore(tmp_path)
+    geom  = _FakeGeometry()
+    feats = _FakeFeatures(W=geom.W, H=geom.H)
+    sink  = _RecordingSink()
+    loc   = Localizer(store=store, geometry=geom, features=feats,
+                      min_inliers=10, viz=sink)
+
+    img = _white_image(geom.W, geom.H)
+    r1 = loc.process(img, ts_us=1)
+    r2 = loc.process(img, ts_us=2)
+
+    # Both calls fired the sink; first was the origin insertion, second was
+    # a pure localization (no new keyframe because pose didn't drift).
+    assert len(sink.frames) == 2
+    res1, kf1 = sink.frames[0]
+    res2, kf2 = sink.frames[1]
+    assert res1.state == "empty" and kf1 is not None and kf1.id == 0
+    assert res2.state == "localized" and kf2 is None
+
+    # A sink that raises must not interrupt the localizer (viewer is debug
+    # UI; localization is the contract).
+    class _Boom:
+        def on_load(self, _): pass
+        def on_frame(self, *args, **kwargs): raise RuntimeError("kapow")
+    loc._viz = _Boom()
+    r3 = loc.process(img, ts_us=3)
+    assert r3.state == "localized"
 
 
 def test_localizer_persists_across_restart(tmp_path: pathlib.Path):

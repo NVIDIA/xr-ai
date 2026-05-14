@@ -6,6 +6,7 @@ from .backends   import (FeatureBackend, FrameFeatures, GeometryBackend,
                          GeometryFrame, MoGeBackend, XFeatBackend)
 from .localizer  import Localizer, PoseResult
 from .store      import Keyframe, KeyframeStore
+from .viz        import VizSink
 
 __all__ = [
     "build_app", "build_mcp",
@@ -14,4 +15,5 @@ __all__ = [
     "MoGeBackend", "XFeatBackend",
     "Localizer", "PoseResult",
     "Keyframe", "KeyframeStore",
+    "VizSink",
 ]

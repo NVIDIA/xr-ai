@@ -42,6 +42,9 @@ Config (pose_mcp_server.yaml)
     pnp_reproj_err_px:  4.0
     host:               0.0.0.0
     port:               8240
+    rerun_addr:         null              # e.g. "127.0.0.1:9876" to stream
+                                          # poses + point clouds to a Rerun
+                                          # viewer; null disables the sink.
 """
 from __future__ import annotations
 
@@ -146,6 +149,17 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
         device=cfg.get("device", "auto"),
         top_k=int(cfg.get("xfeat_top_k", 2048)),
     )
+
+    viz = None
+    rerun_addr = cfg.get("rerun_addr") or None
+    if rerun_addr:
+        from .viz import RerunSink
+        viz = RerunSink(addr=str(rerun_addr))
+        # Replay any pre-existing keyframes so the viewer shows the persistent
+        # map immediately on connect, not just frames going forward.
+        viz.on_load(store.all())
+        logger.info("pose-mcp: streaming to Rerun viewer at {}", rerun_addr)
+
     localizer = Localizer(
         store=store, geometry=geometry, features=features,
         max_keyframes     = int(cfg.get("max_keyframes",     200)),
@@ -153,6 +167,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
         min_rotation_deg  = float(cfg.get("min_rotation_deg",  20.0)),
         min_inliers       = int(cfg.get("min_inliers",        30)),
         pnp_reproj_err_px = float(cfg.get("pnp_reproj_err_px", 4.0)),
+        viz               = viz,
     )
 
     app = build_app(localizer, store)

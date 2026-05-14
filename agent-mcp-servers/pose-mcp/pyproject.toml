@@ -23,6 +23,11 @@ dependencies = [
     "xr-ai-logging",
 ]
 
+[project.optional-dependencies]
+# Pull in `rerun-sdk` only when the operator wants the live viewer.
+# `uv sync --extra viz` (or `pip install pose-mcp-server[viz]`) installs it.
+viz = ["rerun-sdk>=0.21"]
+
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 # MoGe ships no PyPI wheel as of writing; pull from upstream until one lands.

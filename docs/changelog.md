@@ -9,6 +9,31 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-14 — `pose-mcp-server` Rerun viewer sink (optional)
+
+Added a Rerun-based visualization sink to `pose-mcp-server` for live
+debugging of the persistent map and recovered poses.  Off by default;
+enabled by setting `rerun_addr: "host:port"` in the YAML, which also has
+to coincide with installing the optional `viz` extra (`uv sync --extra
+viz`).  When on, every `estimate_pose` call streams the recovered camera
+frustum, the current RGB frame, the keyframe point clouds (subsampled),
+and a trajectory polyline into a connected Rerun viewer.
+
+Rerun was chosen over hand-rolled three.js or PyVista because (a) it's
+Apache-2.0 / MIT dual-licensed, (b) it has first-class point-cloud +
+camera-frustum + image archetypes so the integration is ~150 lines, and
+(c) the viewer is a separate process the user can run anywhere on the
+LAN — no extra server-side network endpoint to expose.
+
+Architecture rules we enforced:
+* The `Localizer` accepts an optional `viz` parameter typed as the
+  `VizSink` Protocol.  Tests substitute a recording fake to assert the
+  empty / localized event shape without ever importing `rerun`.
+* `rerun` is lazy-imported inside `RerunSink._ensure_connected` so a
+  pose-mcp install without the extra still loads.
+* Sink exceptions are caught + logged but never propagated — the viewer
+  is debug UI and must not break localization.
+
 ### 2026-05-14 — `pose-mcp-server` for approximate persistent indoor localization
 
 Added a new MCP server, `agent-mcp-servers/pose-mcp/`, that takes one image

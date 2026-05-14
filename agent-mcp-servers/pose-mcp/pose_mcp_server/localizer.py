@@ -25,10 +25,15 @@ import time
 import cv2
 import numpy as np
 
+from typing import TYPE_CHECKING
+
 from .backends   import FeatureBackend, GeometryBackend
 from .geometry   import (compose_se3, invert_se3, make_se3,
                          rmat_to_quat, se3_rotation_deg, se3_translation)
 from .store      import Keyframe, KeyframeStore
+
+if TYPE_CHECKING:
+    from .viz    import VizSink
 
 
 @dataclasses.dataclass(frozen=True)
@@ -55,6 +60,7 @@ class Localizer:
         min_rotation_deg:   float = 20.0,
         min_inliers:        int   = 30,
         pnp_reproj_err_px:  float = 4.0,
+        viz:                "VizSink | None" = None,
     ) -> None:
         self._store              = store
         self._geometry           = geometry
@@ -64,6 +70,7 @@ class Localizer:
         self._min_rotation_deg   = min_rotation_deg
         self._min_inliers        = min_inliers
         self._pnp_reproj_err_px  = pnp_reproj_err_px
+        self._viz                = viz
 
     def process(self, image_rgb: np.ndarray, ts_us: int | None = None) -> PoseResult:
         if ts_us is None:
@@ -73,35 +80,40 @@ class Localizer:
 
         if len(self._store) == 0:
             origin = np.eye(4, dtype=np.float64)
-            self._store.append(
+            kf = self._store.append(
                 ts_us=ts_us, pose=origin, fov_deg=geom.fov_deg,
                 kp=feats.kp, desc=feats.desc,
                 pts3d=geom.points3d, mask=geom.mask,
             )
-            return PoseResult(
+            result = PoseResult(
                 state="empty", pose=origin,
                 translation=[0.0, 0.0, 0.0], quaternion=[1.0, 0.0, 0.0, 0.0],
                 fov_deg=geom.fov_deg, num_inliers=0,
-                num_keyframes=len(self._store), matched_kf_id=self._store.last().id,
+                num_keyframes=len(self._store), matched_kf_id=kf.id,
                 ts_us=ts_us,
             )
+            self._emit_viz(image_rgb, geom, result, kf)
+            return result
 
         best = self._best_pnp_against_keyframes(feats, geom)
 
         if best is None:
-            return PoseResult(
+            result = PoseResult(
                 state="bootstrap", pose=None,
                 translation=None, quaternion=None,
                 fov_deg=geom.fov_deg, num_inliers=0,
                 num_keyframes=len(self._store), matched_kf_id=None,
                 ts_us=ts_us,
             )
+            self._emit_viz(image_rgb, geom, result, None)
+            return result
 
         kf_id, T_world_cam, inliers = best
         kf = next(k for k in self._store.all() if k.id == kf_id)
 
+        new_kf: Keyframe | None = None
         if self._should_insert_keyframe(T_world_cam):
-            self._store.append(
+            new_kf = self._store.append(
                 ts_us=ts_us, pose=T_world_cam, fov_deg=geom.fov_deg,
                 kp=feats.kp, desc=feats.desc,
                 pts3d=geom.points3d, mask=geom.mask,
@@ -111,7 +123,7 @@ class Localizer:
 
         t = se3_translation(T_world_cam)
         q = rmat_to_quat(T_world_cam[:3, :3])
-        return PoseResult(
+        result = PoseResult(
             state="localized", pose=T_world_cam,
             translation=[float(t[0]), float(t[1]), float(t[2])],
             quaternion=[float(q[0]), float(q[1]), float(q[2]), float(q[3])],
@@ -119,6 +131,24 @@ class Localizer:
             num_keyframes=len(self._store), matched_kf_id=kf.id,
             ts_us=ts_us,
         )
+        self._emit_viz(image_rgb, geom, result, new_kf)
+        return result
+
+    def _emit_viz(
+        self,
+        image_rgb:    np.ndarray,
+        geom:         "GeometryFrame",          # noqa: F821
+        result:       PoseResult,
+        new_keyframe: Keyframe | None,
+    ) -> None:
+        if self._viz is None:
+            return
+        try:
+            self._viz.on_frame(image_rgb, geom, result, new_keyframe)
+        except Exception:
+            # The viewer is debugging UI — never let it break localization.
+            import logging
+            logging.getLogger(__name__).exception("viz sink raised; suppressed")
 
     # ── matching + PnP ──────────────────────────────────────────────────────
 

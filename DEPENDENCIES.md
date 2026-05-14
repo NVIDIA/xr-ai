@@ -132,6 +132,9 @@ pose-mcp-server  (agent-mcp-servers/pose-mcp/)
     └── torch >=2.2                    (MoGe + XFeat backbones)
     └── moge                            (Microsoft MoGe-2, MIT; pulled via git in tool.uv.sources)
     └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
+    Optional extra `[viz]`:
+    └── rerun-sdk >=0.21                (Apache-2.0; only imported when
+                                         `rerun_addr` is set in the YAML)
     Pure FastMCP at /mcp.  Approximate indoor monocular localization:
     estimate_pose returns 6DoF pose+quaternion anchored to a persistent
     keyframe map (first frame seen = origin).  Geometry from MoGe-2-ViT-S
