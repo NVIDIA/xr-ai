@@ -9,13 +9,51 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
-### 2026-05-12 — `FrameSink::InjectVideoFrame` gains a zero-copy overload
+### 2026-05-14 — Introduce `agent-sdk/xr-ai-models` SDK; collapse hand-rolled httpx clients behind four protocols
 
-The span-only `InjectVideoFrame(std::span<const std::byte>, …)` forced backends to allocate + memcpy the entire pixel buffer on every frame before they could construct an owning `livekit::VideoFrame`. On an embedded 32-bit ARMv7-A target (720p I420 @ 30 fps) this dominated per-frame cost at ~63 ms — the camera HAL collapsed to ~6 fps. Hardware-validated A/B against a new `InjectVideoFrame(std::vector<std::uint8_t>&&, …)` overload that moves the buffer directly into the SDK: total per-frame cost drops from ~70 ms to ~5 ms (14× speedup), matching the in-house baseline publisher.
+Before this change, every consumer of an AI service rolled its own `httpx`
+wrapper around `/v1/chat/completions` / `/v1/audio/transcriptions` /
+`/v1/audio/speech` — `VlmClient` existed in three places (vlm-mcp,
+simple-vlm-example/worker/services.py, xr-render-demo/worker/processors.py
+where four inline `httpx.post(.../v1/chat/completions)` sites duplicated the
+OpenAI request shape); `SttClient` / `TtsClient` lived in both
+xr-ai-pipecat and simple-vlm-example.  Per-model quirks
+(`chat_template_kwargs.enable_thinking`, `thinking_budget=1024` in the
+agentic loop, the `reasoning` vs `reasoning_content` field-name difference
+between vLLM's `nano_v3` and `nemotron_v3` reasoning parsers) leaked into
+every caller.  Swapping a model meant editing N files.
 
-**Design**: the overload is strictly additive. Default impl forwards to the span overload, so any backend that only overrides one path keeps working. Callers with read-only / shared buffers continue to use the span overload; owning callers get the fast path.
+The new `agent-sdk/xr-ai-models/` package introduces four service
+protocols — `LLMService`, `VLMService`, `STTService`, `TTSService` — and
+one `OpenAICompat*` implementation per protocol that covers every in-tree
+backend (vLLM-served VLM/LLMs, NeMo Parakeet STT, Piper/Magpie TTS) and
+any future OpenAI-compatible endpoint.  Worker code constructs services
+from a per-sample `yaml/models.yaml` via `make_llm` / `make_vlm` /
+`make_stt` / `make_tts`; built-in presets (`cosmos_vlm`,
+`llama_nemotron`, `nemotron3_nano`, `nemotron_omni`, `parakeet_stt`,
+`piper_tts`, `magpie_tts`) pre-fill the model-specific quirks so a sample
+entry only needs `kind: preset:<name>` + `base_url:`.
 
-The fix benefits every native C++ consumer (CloudXR, native game-engine plugins, embedded camera SDKs), not just embedded — the embedded case is just where the cost crosses from "wasteful" to "unusable". See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134) for the diagnostic methodology, on-device numbers, and the cross-platform impact estimate.
+`ChatResponse.reasoning` is the canonical reasoning surface; the
+`reasoning_field` knob normalizes `reasoning_content` (nemotron_v3) into
+that one name so callers do not branch.  `enable_thinking` and
+`thinking_budget` are typed kwargs on `chat()` that flatten into
+`chat_template_kwargs` on the wire — callers never construct that dict.
+
+**Why not LiteLLM or any-llm-sdk.** Both are excellent for cross-vendor
+fan-out but solve a problem we do not have yet — every in-tree backend
+already speaks OpenAI-compatible HTTP, and both libraries pass our most
+painful quirk (the reasoning-field name) straight through; we would still
+write the normalization layer on top.  They would also pull `openai`,
+`pydantic`, `tiktoken`, and friends into every worker venv.  The
+`factory.py::make_*` `kind` dispatch is the seam where a `LiteLLMBackend`
+slots in as a new `kind` later if/when Phase B brings true cross-vendor
+needs — protocols and callers do not change.
+
+This is Unit 1 of a multi-PR refactor.  Subsequent units migrate
+vlm-mcp, simple-vlm-example, xr-render-demo, and xr-ai-pipecat to depend
+on `xr-ai-models` instead of rolling their own clients.
+
 ### 2026-05-14 — CodeQL Advanced Setup (committed workflow) instead of Default Setup
 
 `Analyze (python)` and `Analyze (javascript-typescript)` are required status
@@ -29,6 +67,14 @@ and all visible checks green (first hit by PR #131). We've committed
 required contexts unconditionally. Default Setup must stay disabled in
 `Settings → Code security → Code scanning` — Advanced Setup and Default Setup
 cannot coexist.
+
+### 2026-05-12 — `FrameSink::InjectVideoFrame` gains a zero-copy overload
+
+The span-only `InjectVideoFrame(std::span<const std::byte>, …)` forced backends to allocate + memcpy the entire pixel buffer on every frame before they could construct an owning `livekit::VideoFrame`. On an embedded 32-bit ARMv7-A target (720p I420 @ 30 fps) this dominated per-frame cost at ~63 ms — the camera HAL collapsed to ~6 fps. Hardware-validated A/B against a new `InjectVideoFrame(std::vector<std::uint8_t>&&, …)` overload that moves the buffer directly into the SDK: total per-frame cost drops from ~70 ms to ~5 ms (14× speedup), matching the in-house baseline publisher.
+
+**Design**: the overload is strictly additive. Default impl forwards to the span overload, so any backend that only overrides one path keeps working. Callers with read-only / shared buffers continue to use the span overload; owning callers get the fast path.
+
+The fix benefits every native C++ consumer (CloudXR, native game-engine plugins, embedded camera SDKs), not just embedded — the embedded case is just where the cost crosses from "wasteful" to "unusable". See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134) for the diagnostic methodology, on-device numbers, and the cross-platform impact estimate.
 
 ### 2026-05-12 — `gpu` pytest marker + local-only dev script for hardware-bound tests
 
