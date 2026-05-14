@@ -381,6 +381,23 @@ vlm-server (8100, `persistent=True`), llama-nemotron-llm-server (8106, `persiste
 The three vLLM servers survive launcher restarts; use `--stop` to shut them down.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
+### glasses-agent  (agent-samples/glasses-agent/)
+
+Always-on AI assistant for smart glasses: background VLM observation loop,
+Silero VAD → STT → agentic tool-calling loop, TTS reply.  Supports
+demonstration recording and step-by-step guided playback.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `glasses-agent-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, fastmcp >=0.4, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts: hub, stt (8103), piper-tts (8105), nemotron3-nano-llm (8107),
+vlm-server (8100), llama-nemotron-llm (8106), vlm-mcp (8220),
+video-mcp (8210, recording disabled), transcript-mcp (8200), worker.
+Recording is disabled on the reference hardware (dual 48 GB Ada) due to
+NVENC OOM; only `get_latest_frame` (live IPC path) is exposed by video-mcp.
+
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
