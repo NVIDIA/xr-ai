@@ -67,19 +67,41 @@ class RerunSink:
     def _ensure_connected(self) -> None:
         if self._rr is not None:
             return
+        import numpy as np
         import rerun as rr  # heavy import deferred
-        rr.init(self._app_id)
-        # Rerun >=0.22's connect_grpc requires a full URI (scheme + /proxy
-        # path); accept either form in config so operators can write the
-        # short `host:port` they're used to.
+        from loguru import logger
         url = self._addr if "://" in self._addr else f"rerun+http://{self._addr}/proxy"
-        rr.connect_grpc(url)
-        # Long-lived axes anchor; users orient quickly with these visible.
-        rr.log(
-            "/world/origin",
-            rr.Transform3D(translation=[0.0, 0.0, 0.0]),
-            static=True,
-        )
+        logger.info("Rerun: connecting to {} (app_id={!r})", url, self._app_id)
+        rr.init(self._app_id)
+        # Force a 3D Spatial view rooted at /world so the operator always
+        # gets a viewport on connect.  Falls through to default blueprint
+        # if the rerun build doesn't expose this API (older / newer).
+        connect_kwargs = {}
+        try:
+            from rerun.blueprint import Blueprint, Spatial3DView, TimePanel, BlueprintPanel, SelectionPanel
+            connect_kwargs["default_blueprint"] = Blueprint(
+                Spatial3DView(origin="/world", name="pose-mcp world"),
+                collapse_panels=True,
+            )
+        except Exception as exc:
+            logger.debug("Rerun: skipping default_blueprint ({})", exc)
+        rr.connect_grpc(url, **connect_kwargs)
+        # Sanity sentinel: a visible 1×1×1 m anchor at the origin so the
+        # operator can immediately tell the viewer is wired correctly even
+        # before any frames arrive.  If you can't see this in Rerun, the
+        # connection is silently failing — check that the viewer is running
+        # and `rerun_addr` matches its bind address.
+        rr.log("/world/origin",
+               rr.Transform3D(translation=[0.0, 0.0, 0.0]), static=True)
+        anchor = np.array([
+            [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
+        ], dtype=np.float32)
+        rr.log("/world/origin/anchor",
+               rr.Points3D(positions=anchor,
+                           colors=np.array([[255,255,255],[255,0,0],[0,255,0],[0,0,255]],
+                                           dtype=np.uint8)),
+               static=True)
+        logger.info("Rerun: connected; sentinel logged at /world/origin")
         self._rr = rr
 
     def on_load(self, keyframes: list[Keyframe]) -> None:

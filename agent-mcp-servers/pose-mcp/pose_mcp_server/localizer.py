@@ -174,8 +174,10 @@ class Localizer:
             self._viz.on_frame(image_rgb, geom, result, new_keyframe)
         except Exception:
             # The viewer is debugging UI — never let it break localization.
-            import logging
-            logging.getLogger(__name__).exception("viz sink raised; suppressed")
+            # Route through loguru (not stdlib) so the user actually sees it
+            # alongside the rest of the [pose] log stream.
+            from loguru import logger
+            logger.opt(exception=True).error("viz sink raised; suppressed")
 
     # ── matching + PnP ──────────────────────────────────────────────────────
 
