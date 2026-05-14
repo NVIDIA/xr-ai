@@ -180,7 +180,10 @@ class Localizer:
         K:     np.ndarray,
     ) -> tuple[np.ndarray, int] | None:
         from .backends import FrameFeatures
-        kf_feats = FrameFeatures(kp=kf.kp, desc=kf.desc)
+        H, W = kf.pts3d.shape[:2]
+        kf_feats = FrameFeatures(
+            kp=kf.kp, desc=kf.desc, image_size=(int(W), int(H)),
+        )
         matches = self._features.match(kf_feats, feats)
         if matches.shape[0] < self._min_inliers:
             return None

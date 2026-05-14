@@ -33,6 +33,10 @@ class FrameFeatures:
     """One frame's local feature set."""
     kp:    np.ndarray   # (N, 2) float32 (x, y) in pixels
     desc:  np.ndarray   # (N, D) float32
+    # (width, height) of the source image — required by LightGlue's positional
+    # encoding.  Optional only so tests can construct synthetic feature sets;
+    # any real backend must populate it.
+    image_size: tuple[int, int] | None = None
 
 
 class GeometryBackend(Protocol):
@@ -152,11 +156,12 @@ class XFeatBackend:
     def extract(self, image_rgb: np.ndarray) -> FrameFeatures:
         self._ensure_loaded()
         torch = self._torch
+        H, W = image_rgb.shape[:2]
         with self._lock, torch.no_grad():
             out = self._model.detectAndCompute(self._to_tensor(image_rgb), top_k=self._top_k)[0]
         kp   = out["keypoints"].detach().cpu().numpy().astype(np.float32)
         desc = out["descriptors"].detach().cpu().numpy().astype(np.float32)
-        return FrameFeatures(kp=kp, desc=desc)
+        return FrameFeatures(kp=kp, desc=desc, image_size=(int(W), int(H)))
 
     def match(self, a: FrameFeatures, b: FrameFeatures) -> np.ndarray:
         self._ensure_loaded()
@@ -164,12 +169,19 @@ class XFeatBackend:
         # XFeat exposes match_lighterglue when LighterGlue weights are present;
         # fall back to its mutual-nearest descriptor matcher otherwise.
         if hasattr(self._model, "match_lighterglue"):
+            if a.image_size is None or b.image_size is None:
+                raise ValueError(
+                    "match_lighterglue requires image_size on both FrameFeatures "
+                    "— make sure keyframes were re-loaded after the backend update."
+                )
             with self._lock, torch.no_grad():
                 idx_a, idx_b = self._model.match_lighterglue(
                     {"keypoints":   torch.from_numpy(a.kp).to(self._device),
-                     "descriptors": torch.from_numpy(a.desc).to(self._device)},
+                     "descriptors": torch.from_numpy(a.desc).to(self._device),
+                     "image_size":  a.image_size},
                     {"keypoints":   torch.from_numpy(b.kp).to(self._device),
-                     "descriptors": torch.from_numpy(b.desc).to(self._device)},
+                     "descriptors": torch.from_numpy(b.desc).to(self._device),
+                     "image_size":  b.image_size},
                 )
             ia = idx_a.detach().cpu().numpy().astype(np.int32).reshape(-1)
             ib = idx_b.detach().cpu().numpy().astype(np.int32).reshape(-1)
