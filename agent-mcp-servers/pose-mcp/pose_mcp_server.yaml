@@ -10,9 +10,11 @@
 #
 # MCP endpoint: http://localhost:8240/mcp  (StreamableHTTP transport)
 
-# Where keyframes (metadata + per-keyframe arrays) live.  Survive process
+# Where keyframes (metadata + per-keyframe arrays) live.  Survives process
 # restart; clear by deleting the directory or calling the reset_map tool.
-map_dir: /var/lib/xr-ai/pose-map
+# Leading `~` is expanded against $HOME at startup.  Use any user-writable
+# path; /var/lib needs root and is intentionally not the default.
+map_dir: ~/.local/share/xr-ai/pose-map
 
 # Backend selection.  "auto" picks CUDA if available, otherwise CPU.
 device: auto

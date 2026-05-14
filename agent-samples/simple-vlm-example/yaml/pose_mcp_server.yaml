@@ -6,7 +6,7 @@
 # directory (or call the reset_map MCP tool) if you want the next session
 # to start a fresh world frame.
 
-map_dir: /var/lib/xr-ai/simple-vlm-example-pose-map
+map_dir: ~/.local/share/xr-ai/simple-vlm-example-pose-map
 
 device:             auto
 moge_model:         Ruicheng/moge-2-vit-small
