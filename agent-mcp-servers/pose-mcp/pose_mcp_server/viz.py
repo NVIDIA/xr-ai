@@ -155,16 +155,30 @@ class RerunSink:
         self._log_pose(path, kf.pose, static=static)
         # Lift the keyframe's stored point map into world coords and log a
         # subsampled cloud — full HxWx3 is too dense to display per kf.
-        pts_kf = kf.pts3d.reshape(-1, 3).astype(np.float32)
-        mask   = kf.mask.reshape(-1)
+        H, W = kf.pts3d.shape[:2]
+        pts_kf = kf.pts3d.reshape(H * W, 3).astype(np.float32)
+        mask   = kf.mask.reshape(H * W)
         pts_kf = pts_kf[mask]
+
+        # Per-point RGB sampled from the stored frame (when present) — gives
+        # the operator a scene-coloured cloud instead of Rerun's default.
+        colors: np.ndarray | None = None
+        if kf.image_rgb is not None and kf.image_rgb.shape[:2] == (H, W):
+            colors = kf.image_rgb.reshape(H * W, 3)[mask]
+
         if len(pts_kf) > self._live_max_pts:
             idx    = np.linspace(0, len(pts_kf) - 1, self._live_max_pts).astype(np.int64)
             pts_kf = pts_kf[idx]
+            if colors is not None:
+                colors = colors[idx]
+
         pts_world = (kf.pose[:3, :3] @ pts_kf.T).T + kf.pose[:3, 3]
+        log_kwargs = {"positions": pts_world.astype(np.float32)}
+        if colors is not None:
+            log_kwargs["colors"] = colors.astype(np.uint8)
         self._rr.log(
             f"{path}/points",
-            self._rr.Points3D(positions=pts_world.astype(np.float32)),
+            self._rr.Points3D(**log_kwargs),
             static=static,
         )
         # Maintain the trajectory polyline as keyframes accumulate.

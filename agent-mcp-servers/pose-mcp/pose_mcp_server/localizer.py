@@ -111,6 +111,7 @@ class Localizer:
                 ts_us=ts_us, pose=origin, fov_deg=geom.fov_deg,
                 kp=feats.kp, desc=feats.desc,
                 pts3d=geom.points3d, mask=geom.mask,
+                image_rgb=image_rgb,
             )
             result = PoseResult(
                 state="empty", pose=origin,
@@ -144,6 +145,7 @@ class Localizer:
                 ts_us=ts_us, pose=T_world_cam, fov_deg=geom.fov_deg,
                 kp=feats.kp, desc=feats.desc,
                 pts3d=geom.points3d, mask=geom.mask,
+                image_rgb=image_rgb,
             )
             while len(self._store) > self._max_keyframes:
                 self._store.evict_oldest()

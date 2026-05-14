@@ -12,6 +12,8 @@ Layout on disk::
       kf{id}/descriptors.npy       # (N, D) float32
       kf{id}/points3d.npy          # (H, W, 3) float16 metric points in keyframe frame
       kf{id}/mask.npy              # (H, W)   bool      where points3d is valid
+      kf{id}/image.png             # (H, W, 3) uint8 RGB — optional, used for
+                                   #   colouring the point cloud in viz sinks
 
 JSONL append + ``os.replace`` atomicity gives us a crash-safe map.
 """
@@ -25,6 +27,7 @@ import tempfile
 import time
 
 import numpy as np
+from PIL import Image as PILImage
 
 _MANIFEST_VERSION = 1
 
@@ -39,6 +42,10 @@ class Keyframe:
     desc:      np.ndarray   # (N, D) float32
     pts3d:     np.ndarray   # (H, W, 3) float16
     mask:      np.ndarray   # (H, W) bool
+    # RGB image the keyframe was built from.  Optional so legacy maps
+    # written before this field existed still load — viz sinks fall back
+    # to uncoloured point clouds when None.
+    image_rgb: np.ndarray | None = None   # (H, W, 3) uint8
 
 
 class KeyframeStore:
@@ -83,6 +90,11 @@ class KeyframeStore:
         for line in jl.read_text().splitlines():
             row = json.loads(line)
             kf_dir = self._kf_dir(row["id"])
+            img_path = kf_dir / "image.png"
+            image_rgb: np.ndarray | None = None
+            if img_path.exists():
+                with PILImage.open(img_path) as img:
+                    image_rgb = np.asarray(img.convert("RGB"))
             kf = Keyframe(
                 id      = int(row["id"]),
                 ts_us   = int(row["ts_us"]),
@@ -92,6 +104,7 @@ class KeyframeStore:
                 desc    = np.load(kf_dir / "descriptors.npy"),
                 pts3d   = np.load(kf_dir / "points3d.npy"),
                 mask    = np.load(kf_dir / "mask.npy"),
+                image_rgb = image_rgb,
             )
             self._keyframes.append(kf)
             self._next_id = max(self._next_id, kf.id + 1)
@@ -130,13 +143,14 @@ class KeyframeStore:
 
     def append(
         self, *,
-        ts_us:   int,
-        pose:    np.ndarray,
-        fov_deg: float,
-        kp:      np.ndarray,
-        desc:    np.ndarray,
-        pts3d:   np.ndarray,
-        mask:    np.ndarray,
+        ts_us:     int,
+        pose:      np.ndarray,
+        fov_deg:   float,
+        kp:        np.ndarray,
+        desc:      np.ndarray,
+        pts3d:     np.ndarray,
+        mask:      np.ndarray,
+        image_rgb: np.ndarray | None = None,
     ) -> Keyframe:
         kf = Keyframe(
             id=self._next_id, ts_us=int(ts_us),
@@ -146,6 +160,10 @@ class KeyframeStore:
             desc=np.ascontiguousarray(desc, dtype=np.float32),
             pts3d=np.ascontiguousarray(pts3d, dtype=np.float16),
             mask=np.ascontiguousarray(mask, dtype=bool),
+            image_rgb=(
+                np.ascontiguousarray(image_rgb, dtype=np.uint8)
+                if image_rgb is not None else None
+            ),
         )
         kf_dir = self._kf_dir(kf.id)
         kf_dir.mkdir(parents=True, exist_ok=True)
@@ -153,6 +171,12 @@ class KeyframeStore:
         np.save(kf_dir / "descriptors.npy", kf.desc)
         np.save(kf_dir / "points3d.npy",    kf.pts3d)
         np.save(kf_dir / "mask.npy",        kf.mask)
+        if kf.image_rgb is not None:
+            # PNG keeps the file small enough that 200-keyframe maps don't
+            # explode on disk (~300 KB / kf at 640x480 vs. ~1 MB raw .npy).
+            PILImage.fromarray(kf.image_rgb, "RGB").save(
+                kf_dir / "image.png", "PNG", optimize=True,
+            )
         # Append-then-flush: a crash between np.save() above and the JSONL
         # append leaves orphan kf{id} dirs but no half-recorded keyframes.
         # Orphans are harmless and easy to spot when cleaning the map dir.
