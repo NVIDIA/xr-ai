@@ -38,9 +38,9 @@ pnp_reproj_err_px:   4.0
 host: 0.0.0.0
 port: 8240
 
-# Optional Rerun viewer sink.  Set to a "host:port" address to stream camera
-# pose, frustum, RGB, and keyframe point clouds to a Rerun viewer.  Start the
-# viewer with `rerun --bind 0.0.0.0:9876` on the workstation and point this
-# at it (or run `rerun` and let it bind locally on 127.0.0.1:9876).
+# Optional Rerun viewer sink.  Start the viewer first (`rerun` — defaults
+# to gRPC on 127.0.0.1:9876) and point this at it.  Either form works:
+#   rerun_addr: 127.0.0.1:9876
+#   rerun_addr: rerun+http://127.0.0.1:9876/proxy
 # null / commented = sink disabled, no rerun-sdk import at runtime.
 rerun_addr: null

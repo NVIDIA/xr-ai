@@ -20,8 +20,10 @@ host: 0.0.0.0
 port: 8240
 
 # Uncomment to stream live poses + keyframe point clouds to a Rerun viewer
-# running on this host (start it with: `rerun --bind 127.0.0.1:9876`).
-# Requires the optional pose-mcp [viz] extra: `uv sync --extra viz` in
-# agent-mcp-servers/pose-mcp/.
-# rerun_addr: 127.0.0.1:9876
+# running on this host.  Start the viewer first (`rerun` — defaults to
+# gRPC on 127.0.0.1:9876).  Requires the optional pose-mcp [viz] extra:
+# `uv sync --extra viz` in agent-mcp-servers/pose-mcp/.
+# Either form works:
+#   rerun_addr: 127.0.0.1:9876
+#   rerun_addr: rerun+http://127.0.0.1:9876/proxy
 rerun_addr: null

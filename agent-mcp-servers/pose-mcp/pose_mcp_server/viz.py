@@ -69,7 +69,11 @@ class RerunSink:
             return
         import rerun as rr  # heavy import deferred
         rr.init(self._app_id)
-        rr.connect_grpc(self._addr)
+        # Rerun >=0.22's connect_grpc requires a full URI (scheme + /proxy
+        # path); accept either form in config so operators can write the
+        # short `host:port` they're used to.
+        url = self._addr if "://" in self._addr else f"rerun+http://{self._addr}/proxy"
+        rr.connect_grpc(url)
         # Long-lived axes anchor; users orient quickly with these visible.
         rr.log(
             "/world/origin",
