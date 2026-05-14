@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# video-mcp server configuration for glasses-agent.
+# recordings_dir not set — recording disabled on dual_48G_ada (NVENC OOM).
+# Only live tools are exposed: list_live_participants, get_latest_frame.
+# Historical tools (get_frame_from_time, query_video, etc.) are hidden.
+
+host: 0.0.0.0
+port: 8210
+out_dir: /tmp/xr_video_queries
+hub_pub:  ipc:///tmp/xr_hub_pub
+hub_push: ipc:///tmp/xr_hub_in
