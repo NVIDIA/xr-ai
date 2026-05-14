@@ -175,7 +175,11 @@ class XFeatBackend:
                     "— make sure keyframes were re-loaded after the backend update."
                 )
             with self._lock, torch.no_grad():
-                idx_a, idx_b = self._model.match_lighterglue(
+                # XFeat's `match_lighterglue` returns
+                #   (matched_kpts_a, matched_kpts_b, idx_pairs)
+                # where idx_pairs is already (M, 2) in (a, b) order — exactly
+                # what our `match` contract expects, so skip the first two.
+                _, _, idx_pairs = self._model.match_lighterglue(
                     {"keypoints":   torch.from_numpy(a.kp).to(self._device),
                      "descriptors": torch.from_numpy(a.desc).to(self._device),
                      "image_size":  a.image_size},
@@ -183,9 +187,9 @@ class XFeatBackend:
                      "descriptors": torch.from_numpy(b.desc).to(self._device),
                      "image_size":  b.image_size},
                 )
-            ia = idx_a.detach().cpu().numpy().astype(np.int32).reshape(-1)
-            ib = idx_b.detach().cpu().numpy().astype(np.int32).reshape(-1)
-            return np.stack([ia, ib], axis=1)
+            if hasattr(idx_pairs, "detach"):
+                idx_pairs = idx_pairs.detach().cpu().numpy()
+            return np.asarray(idx_pairs, dtype=np.int32).reshape(-1, 2)
         # Mutual nearest neighbour on L2-normalized descriptors.
         a_d = a.desc / (np.linalg.norm(a.desc, axis=1, keepdims=True) + 1e-9)
         b_d = b.desc / (np.linalg.norm(b.desc, axis=1, keepdims=True) + 1e-9)
