@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "simple-rag-example-worker"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "xr-ai-agent",
+    "xr-ai-logging",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "httpx>=0.27",
+    "fastmcp>=0.4",
+    "pyyaml>=6.0",
+]
+
+[tool.uv.sources]
+xr-ai-agent   = { path = "../../../agent-sdk", editable = true }
+xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
+
+[project.scripts]
+simple_rag_example_worker = "simple_rag_example_worker:run"
+
+[tool.hatch.build.targets.wheel]
+only-include = [
+    "simple_rag_example_worker.py",
+    "agent.py",
+    "audio.py",
+    "pixels.py",
+    "services.py",
+    "voice.py",
+]

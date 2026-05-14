@@ -291,6 +291,24 @@ def build_app(store: TranscriptStore):
     return build_mcp(store).http_app(path="/mcp")
 
 
+async def _serve(
+    transcripts_dir: str,
+    host: str,
+    port: int,
+    ready_file: pathlib.Path | None,
+) -> None:
+    store = TranscriptStore(transcripts_dir)
+    app   = build_app(store)
+    uv_cfg = uvicorn.Config(
+        app, host=host, port=port, log_level="warning", log_config=None,
+    )
+    server = uvicorn.Server(uv_cfg)
+    logger.info("transcript-mcp-server  mcp=/mcp  port={}  dir={}", port, transcripts_dir)
+    if ready_file:
+        ready_file.touch()
+    await server.serve()
+
+
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=pathlib.Path, default=None)
@@ -304,19 +322,15 @@ def run() -> None:
 
     setup_logging("transcript-mcp")
 
-    transcripts_dir = cfg.get("transcripts_dir", "/tmp/xr_transcripts")
+    _run_dir = os.environ.get("XR_RUN_DIR")
+    _default_transcripts = (
+        str(pathlib.Path(_run_dir) / "transcripts") if _run_dir else "/tmp/xr_transcripts"
+    )
+    transcripts_dir = cfg.get("transcripts_dir") or _default_transcripts
     host            = cfg.get("host", "0.0.0.0")
     port            = int(cfg.get("port", 8200))
 
-    store = TranscriptStore(transcripts_dir)
-    app   = build_app(store)
-
-    if ns.ready_file:
-        ready_path = ns.ready_file
-        app.add_event_handler("startup", lambda: ready_path.touch())
-
-    logger.info("transcript-mcp-server  mcp=/mcp  port={}  dir={}", port, transcripts_dir)
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    asyncio.run(_serve(transcripts_dir, host, port, ns.ready_file))
 
 
 if __name__ == "__main__":

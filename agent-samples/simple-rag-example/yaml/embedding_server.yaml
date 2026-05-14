@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# embedding-server configuration for simple-rag-example.
+# Auto-discovered by the launcher and passed as --config to embedding_server.
+#
+# Embeddings API: http://localhost:8109/v1/embeddings
+
+model: nvidia/llama-nemotron-embed-1b-v2
+port: 8109
+model_cache: ../../../models
+
+# embedding_dim is metadata for rag-mcp — vLLM always returns 2048-dim vectors.
+embedding_dim: 768
+
+# Co-tenancy: shares the GPU with VLM (8100, 0.75 util) and STT. The 1B embed
+# weights are small; 0.10 leaves a bounded vLLM reservation alongside the VLM.
+# Tune up/down if you split services across GPUs or hit OOM.
+gpu_memory_utilization: 0.10
+
+# vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
+vllm_backend: docker
+vllm_image:   nvcr.io/nvidia/vllm:26.04-py3

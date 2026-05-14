@@ -1,0 +1,68 @@
+Dorapod — Owner's Manual
+
+Overview
+Dorapod is a hand-sized smart-assistant device shaped like a stylised
+AirPods-style case.  It listens to the user's voice, scans the surrounding
+environment with its onboard cameras and sensors, answers spoken
+questions, and replies in audio.  Dorapod is a prototype unit — it is
+NOT for sale.
+
+Appearance
+The body of Dorapod is a rounded, oval-shaped case made of light blue
+soft-touch silicone, similar in form factor to a wireless-earbud charging
+case.  The word "Doraemon" is embossed in slightly darker blue letters
+across the upper face.  A horizontal red band runs across the front, just
+above the middle.  Centred on the red band sits a small yellow bell with
+a vertical slit down its face and a tiny loop on top — this bell is the
+device's primary control button.  Below the red band, occupying most of
+the lower front face, is a large white panel with a smile-shaped concave
+curve cut into its lower edge — this is the front pocket.  On the right
+side of the case, a small metallic carabiner-style clip and a short
+silver chain dangle from the body; clipped to the end of the chain is the
+"pancake pendant" — a circular, golden-brown puck about the size of a
+coin with a darker brown disc inset at its centre, intended to evoke a
+dorayaki pancake.  Dorapod's overall colour palette is light blue, red,
+yellow, white, and pancake-brown.
+
+Components
+- Main body: light blue silicone case with embossed "Doraemon" text.
+- Red band: horizontal accent stripe across the front of the case.
+- Yellow bell: control button mounted on the red band.
+- Front pocket: white smile-shaped recess on the lower front face,
+  sized to hold the pancake pendant.
+- Pancake pendant: round, two-tone brown disc shaped like a dorayaki,
+  attached to the body by a short silver chain and a carabiner clip.
+- Chain and clip: a small carabiner secures the pancake pendant to the
+  right side of the case and lets the pendant be detached for charging.
+
+How to use Dorapod
+(1) Take the pancake pendant from the chain on the right side and slot
+    it into the smile-shaped white front pocket on the front of the case.
+    The pendant should sit flush with the surface of the pocket.
+(2) Press the yellow bell on the red band once.  Dorapod will activate,
+    begin scanning the environment with its onboard cameras and
+    microphones, and listen for the user's voice.
+(3) Speak the question or request out loud.  Dorapod will process the
+    audio together with what it sees in the surroundings, then reply
+    out loud through its built-in speaker.
+(4) When finished, press the yellow bell again to stop Dorapod, or
+    leave it idle — it will return to standby on its own.
+
+Charging
+Dorapod is powered by the pancake pendant.  To recharge:
+(1) Detach the pancake pendant from the front pocket (or from its
+    chain) and hold it firmly in the palm of your hand for about
+    10 minutes.  The pendant warms up from body heat — this is what
+    actually replenishes its charge.
+(2) Once the pendant feels warm to the touch, slot it back into the
+    front pocket of Dorapod.  The device is now ready to use again.
+Note: charging by hand heat is the only supported method.  Do not place
+the pendant on an external heater, stove, or hot surface.
+
+Important notes
+- Dorapod is a prototype unit and is NOT for sale.  Do not attempt to
+  purchase or resell.
+- The pancake pendant is required for operation.  Without the pendant
+  inserted in the front pocket, pressing the yellow bell has no effect.
+- Always keep the pendant attached to the carabiner chain when not in
+  use so it is not lost.

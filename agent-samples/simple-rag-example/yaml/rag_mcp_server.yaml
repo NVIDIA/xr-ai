@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# RAG MCP server configuration for simple-rag-example.
+# Auto-discovered by the launcher and passed as --config to rag_mcp_server.
+#
+# MCP endpoint: http://localhost:8240/mcp
+
+# Corpus: the docs/ folder next to this sample.  Relative paths are resolved
+# relative to this config file's directory (i.e. yaml/).
+docs_dir: ../docs
+
+host: 0.0.0.0
+port: 8240
+
+chunk_size:   1000
+chunk_overlap:  80
+
+# Dense retrieval via embedding-server.
+embedding_server: http://localhost:8109
+embedding_dim: 768
+min_score: 0.3
+request_timeout_s: 30.0

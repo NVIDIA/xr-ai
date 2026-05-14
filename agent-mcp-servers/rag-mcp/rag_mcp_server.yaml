@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# RAG MCP server reference configuration.
+# Copy to your agent sample's yaml/ directory as rag_mcp_server.yaml and edit.
+#
+# MCP endpoint: http://localhost:8240/mcp  (StreamableHTTP transport)
+#
+# Tools exposed:
+#   retrieve(query, top_k)  — returns top-k dense-retrieval chunks with source + score
+#   list_documents()        — returns filenames of all indexed files
+
+# Path to the directory of .txt / .md files to index.
+# Relative paths are resolved relative to this config file's directory.
+# Override at runtime with the RAG_DOCS_DIR environment variable.
+docs_dir: ./docs
+
+host: 0.0.0.0
+port: 8240
+
+# Chunking parameters — increase chunk_size for more context per result,
+# decrease for finer-grained retrieval.
+chunk_size:    400
+chunk_overlap:  80
+
+# Embedding server (embedding-server at ai-services/embedding-server/).
+embedding_server: http://localhost:8109
+
+# Matryoshka truncation dimension — must match embedding_server.yaml embedding_dim.
+# vLLM returns 2048-dim vectors; only the first embedding_dim dims are used.
+embedding_dim: 768
+
+# Chunks scoring below this cosine similarity are excluded from retrieve results.
+min_score: 0.3
+
+# HTTP timeout for calls to the embedding server.
+request_timeout_s: 30.0

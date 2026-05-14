@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# vlm-server configuration for simple-rag-example.
+# Auto-discovered by the launcher and passed as --config to vlm_server.
+
+model:       nvidia/Cosmos-Reason1-7B
+port:        8100
+model_cache: ../../../models
+
+# Co-tenant on the same GPU as embedding-server (8109); below the vlm-server
+# package default (0.85) to leave vLLM reservation headroom for the embed model.
+gpu_memory_utilization: 0.75
+
+# vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
+# See ai-services/vlm-server/vlm_server.yaml for the full toggle docs.
+vllm_backend: docker
+vllm_image:   nvcr.io/nvidia/vllm:26.04-py3

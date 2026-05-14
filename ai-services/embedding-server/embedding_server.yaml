@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# embedding-server — vLLM configuration.
+# OpenAI-compatible embeddings API at http://localhost:8109/v1  (served-model-name: "embed")
+# Endpoint: POST /v1/embeddings  (input text → float vector)
+
+model: nvidia/llama-nemotron-embed-1b-v2
+
+host: "0.0.0.0"
+port: 8109
+hf_token: ""
+
+# Shared weight cache — resolves relative to this YAML.
+model_cache: ../../../models
+
+# Pin to a specific GPU (or comma-separated list for multi-GPU).
+# Unset to use all GPUs visible to the process.
+# cuda_visible_devices: "0"
+
+# vLLM knobs.
+max_num_seqs:           32
+tensor_parallel_size:   1
+max_model_len:          8192
+# Low utilization by default — the 1B model is small and leaves headroom for
+# the other vLLM servers (VLM, LLM) sharing the same GPU.  Raise to 0.30–0.40
+# if this server runs on a dedicated GPU.
+gpu_memory_utilization: 0.20
+enforce_eager:          false
+
+# Matryoshka truncation dimension used by consumers (rag-mcp-server).
+# This model natively supports 384 / 512 / 768 / 1024 / 2048 dims.
+# 768 is a good quality/size balance.
+# NOTE: this key is NOT passed to vLLM — vLLM always returns full 2048-dim
+# vectors.  Consumers must truncate to this dimension before comparing.
+embedding_dim: 768
+
+# vLLM runtime — pip-installed vllm (default) or NGC docker container.
+#   pip     — vllm CLI from this wrapper's venv (today's behavior)
+#   docker  — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …`
+# Both honor the same config keys above; only the runtime hosting vllm differs.
+# docker mode requires Docker Engine + NVIDIA Container Toolkit and a
+# `docker login nvcr.io` (or NGC_API_KEY in the environment).
+vllm_backend: docker
+
+# Container image used when vllm_backend: docker.  Override to pin a different
+# tag, an internal mirror, or a custom build.
+vllm_image: nvcr.io/nvidia/vllm:26.04-py3

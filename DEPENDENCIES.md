@@ -64,11 +64,11 @@ xr-ai-logging  (utils/xr-ai-logging/)
 
 xr-ai-vllm  (utils/xr-ai-vllm/)
     └── (stdlib only — zero runtime deps)
-    Pluggable vLLM hosting for the four vLLM-backed services.  Dispatches to
+    Pluggable vLLM hosting for the vLLM-backed inference servers.  Dispatches to
     either pip-installed `vllm serve` or `docker run nvcr.io/nvidia/vllm:<tag>`
     based on each YAML's `vllm_backend:` key.  Stays stdlib-only so docker mode
     does not pull vllm/torch/etc. into the wrapper's venv just to manage a
-    container.  Imported by the four vllm wrappers and by the orchestrator
+    container.  Imported by the vllm wrappers and by the orchestrator
     `--stop` flow.
 
 xr-media-hub  (server-runtime/)
@@ -84,6 +84,23 @@ xr-media-hub  (server-runtime/)
     └── pyyaml >=6.0
     └── cryptography >=42.0
     PyNvVideoCodec >=1.0 (NVENC H.264 encoder; used when video_recording.enabled: true)
+
+rag-mcp-server  (agent-mcp-servers/rag-mcp/)
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    └── numpy >=1.24
+    └── httpx >=0.27
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
+    Dense vector retrieval over a configurable directory of .txt/.md files;
+    calls embedding-server (port 8109) at startup to embed corpus chunks and
+    at query time to embed the user query.  Embeddings are cached to disk in a
+    .npz file invalidated by a hash of (doc mtimes + embedding_dim + model name).
+    Tools: retrieve(query, top_k) → chunks with source + cosine score;
+           list_documents() → indexed filenames.
+    Corpus path: ``docs_dir`` YAML key or RAG_DOCS_DIR env var.
+    Depends on: embedding-server (ai-services/embedding-server/).
 
 transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     └── uvicorn[standard] >=0.29
@@ -244,6 +261,20 @@ piper-tts-server  (ai-services/tts/piper/)
     └── pyyaml >=6.0
     Voices: rhasspy/piper-voices on HuggingFace (ONNX, auto-downloaded)
     Trade-off vs magpie: ~100 ms/sentence on CPU vs. 2-5 s; no GPU needed.
+
+embedding-server  (ai-services/embedding-server/)
+    └── vllm >=0.12.0
+    └── hf-transfer >=0.1.4
+    └── pyyaml >=6.0
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-vllm     [editable: ../../utils/xr-ai-vllm]
+    Model: nvidia/llama-nemotron-embed-1b-v2 (vLLM, --runner pooling --convert embed).
+    Exposes /v1/embeddings (OpenAI-compatible); no chat/completions endpoint.
+    Matryoshka model — returns 2048-dim vectors; consumers truncate to their
+    configured embedding_dim (default 768).  gpu_memory_utilization default
+    is 0.20 — model is only 1B params and should share GPU with VLM/LLM servers.
+    vllm_backend: pip|docker — same dispatch as the other vllm-backed services.
+    Depended on by: rag-mcp-server, simple-rag-example.
 ```
 
 ---
@@ -259,6 +290,8 @@ piper-tts-server  (ai-services/tts/piper/)
 | `ai-services/llm/llama_nemotron/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `ai-services/llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (GPU-selected) | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} | vLLM (pip or docker) — multimodal text+video |
+| `ai-services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) — /v1/embeddings only |
+| `agent-mcp-servers/rag-mcp/` | `rag-mcp-server` | `rag_mcp_server` | 8240 | — | Pure FastMCP (dense retrieval via embedding-server on 8109) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
@@ -332,6 +365,50 @@ vlm-server (8100, `persistent=True`), llama-nemotron-llm-server (8106, `persiste
 The three vLLM servers survive launcher restarts; use `--stop` to shut them down.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
+### simple-rag-example  (agent-samples/simple-rag-example/)
+
+Vision Q&A with optional doc grounding: audio → STT → query; text → query;
+"ping" → default-prompt query.  For every query the agent always calls
+rag-mcp retrieve (dense vector search via embedding-server, ~10–50 ms) and
+requests a camera frame in parallel.  When chunks are returned they are
+prepended to the VLM user turn as reference text; when none score above the
+cosine threshold the agent answers from the camera feed alone, behaving
+exactly like simple-vlm-example.  Reply goes back as `vlm.response` text and
+sentence-batched Piper TTS audio.  No guidance mode, no monitoring loop —
+purely reactive and one-shot.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `simple-rag-example` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `simple-rag-example-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
+
+Worker calls stt-server (8103), vlm-server (8100), piper-tts-server (8105),
+and rag-mcp-server (8240) — no model weights or retrieval code in-process.
+Source documents live in `agent-samples/simple-rag-example/docs/` (served by
+rag-mcp, configurable via ``docs_dir`` in rag_mcp_server.yaml).
+Ports: 8240 rag-mcp, 8109 embedding-server (new — started before rag-mcp).
+VRAM: Cosmos-Reason1-7B (8100) at 0.75 GPU util + llama-nemotron-embed-1b-v2 (8109) at 0.10 GPU util.
+
+### rag-agent  (agent-samples/rag-agent/)
+
+Procedure-compliance assistant combining live vision and RAG: audio → STT →
+query; text → query; "ping" → default-prompt query.  Relevant document chunks
+are retrieved via the rag-mcp-server (dense vector retrieval via
+embedding-server), then both the chunks and the latest camera frame are
+forwarded to the VLM, which compares what it sees against the retrieved
+procedures and reports compliance.  Reply goes back as `rag.response` text and
+sentence-batched Piper TTS audio.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `rag-agent` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `rag-agent-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
+
+Worker calls stt-server (8103), vlm-server (8100), piper-tts-server (8105),
+and rag-mcp-server (8240) — no model weights or retrieval code in-process.
+Source documents live in `agent-samples/rag-agent/docs/` (served by rag-mcp,
+configurable via ``docs_dir`` in rag_mcp_server.yaml).
+
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
@@ -364,8 +441,8 @@ updated in the same commit**.
 | `agent-sdk/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
-| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
-| `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
+| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`) | All vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`, `ai-services/embedding-server/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
+| `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni,embedding-server}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
 | Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `_PERSISTENT_SERVERS` in `agent-samples/xr-render-demo/main.py` |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
