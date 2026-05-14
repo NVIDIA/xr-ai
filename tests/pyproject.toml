@@ -14,6 +14,7 @@ dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-agent",
     "xr-ai-models",
+    "xr-ai-pipecat",
     "xr-media-hub",
     "xr-ai-launcher",
     "xr-ai-logging",
@@ -36,6 +37,7 @@ dependencies = [
 [tool.uv.sources]
 xr-ai-agent           = { path = "../agent-sdk",                        editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
+xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable = true }
 xr-media-hub          = { path = "../server-runtime",                   editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }
 xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }

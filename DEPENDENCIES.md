@@ -46,6 +46,7 @@ xr-ai-agent  (agent-sdk/)
 xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     └── xr-ai-agent   [editable: ..]
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models  [editable: ../xr-ai-models]
     └── pipecat-ai >=0.0.46
     └── numpy >=1.24
     └── scipy >=1.11
@@ -54,6 +55,9 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     Optional Pipecat transport bridge: connects ProcessorEndpoint (ZMQ IPC)
     to a Pipecat frame pipeline. Resamples hub float32 audio → 16 kHz int16
     for STT; converts TTS int16 PCM back to float32 AudioChunks for return.
+    SttClient / TtsClient are thin wrappers around xr-ai-models'
+    OpenAICompatSTT / OpenAICompatTTS — PCM→WAV conversion is handled by
+    the SDK. httpx is retained for http_probe() readiness checks.
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
@@ -150,6 +154,7 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
+    └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
