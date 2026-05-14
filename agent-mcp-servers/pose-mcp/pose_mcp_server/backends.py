@@ -64,11 +64,18 @@ class MoGeBackend:
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return
+        import time
         import torch
+        from loguru import logger
         from moge.model.v2 import MoGeModel
         device = _resolve_device(self._device)
-        # MoGe-2 weights live on HuggingFace; from_pretrained handles caching.
+        logger.info(
+            "MoGe: loading {} on {} (first call — may download weights from HuggingFace)",
+            self._model_name, device,
+        )
+        t0 = time.monotonic()
         m = MoGeModel.from_pretrained(self._model_name).to(device).eval()
+        logger.info("MoGe: ready  ({:.1f}s)", time.monotonic() - t0)
         self._model  = m
         self._device = device
         self._torch  = torch
@@ -116,14 +123,19 @@ class XFeatBackend:
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return
+        import time
         import torch
+        from loguru import logger
         device = _resolve_device(self._device)
+        logger.info("XFeat: loading on {} via torch.hub …", device)
+        t0 = time.monotonic()
         m = torch.hub.load(
             "verlab/accelerated_features",
             "XFeat", pretrained=True, top_k=self._top_k,
         )
         # XFeat keeps internal params as buffers; move once and keep them put.
         m = m.to(device)
+        logger.info("XFeat: ready  ({:.1f}s)", time.monotonic() - t0)
         self._model  = m
         self._device = device
         self._torch  = torch

@@ -100,9 +100,9 @@ def build_mcp(localizer: Localizer, store: KeyframeStore) -> FastMCP:
         except Exception as exc:
             logger.exception("estimate_pose failed for {}", image_path)
             return {"error": f"localization failed: {exc}"}
-        logger.debug(
-            "estimate_pose  {} → state={} inliers={} kfs={}",
-            image_path, result.state, result.num_inliers, result.num_keyframes,
+        logger.info(
+            "estimate_pose  state={}  inliers={}  kfs={}  fov={:.1f}°",
+            result.state, result.num_inliers, result.num_keyframes, result.fov_deg,
         )
         return {
             "state":         result.state,

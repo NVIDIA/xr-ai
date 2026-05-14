@@ -548,15 +548,26 @@ class SimpleVlmAgent:
         Pose results are pushed back on data topic ``pose.update`` with a
         compact JSON payload the client can render in 3D space.
         """
+        logger.info(
+            "pose loop running  period={:.2f}s  scratch={}",
+            self._pose_period_s, self._pose_scratch_dir,
+        )
+        idle_logged = False
         try:
             while True:
                 await asyncio.sleep(self._pose_period_s)
                 pids = {pid for pid, _ in self._latest}
+                if not pids:
+                    if not idle_logged:
+                        logger.info("pose loop idle — no participants with frames yet")
+                        idle_logged = True
+                    continue
+                idle_logged = False
                 for pid in pids:
                     try:
                         await self._estimate_one(pid)
                     except Exception as exc:
-                        logger.opt(exception=True).debug(
+                        logger.opt(exception=True).warning(
                             "pose iteration failed pid={!r}: {}", pid, exc,
                         )
         except asyncio.CancelledError:
@@ -581,18 +592,31 @@ class SimpleVlmAgent:
         img.save(tmp_path, format="PNG")
         tmp_path.replace(out_path)
 
+        t0 = time.monotonic()
         try:
             result = await self._pose.estimate_pose(
                 str(out_path), timestamp_us=frame.pts_us,
             )
         except Exception as exc:
-            logger.debug("pose-mcp call failed pid={!r}: {}", pid, exc)
+            logger.warning("pose-mcp call failed pid={!r}: {}", pid, exc)
             return
         self._pose_last_pts[pid] = sig.pts_us
+        dt_ms = (time.monotonic() - t0) * 1000.0
 
         if result.get("error"):
-            logger.debug("pose-mcp error pid={!r}: {}", pid, result["error"])
+            logger.warning("pose-mcp error pid={!r}: {}", pid, result["error"])
             return
+
+        # First successful result per pid is loud (so the operator sees the
+        # pipeline came up); steady-state is one INFO per call so the logs
+        # stay readable.  Drop pose_hz in the YAML if 2 Hz is too chatty.
+        logger.info(
+            "pose  pid={!r}  state={}  t={}  q={}  inliers={}  kfs={}  ({:.0f} ms)",
+            pid, result.get("state"),
+            _fmt3(result.get("translation_m")),
+            _fmt4(result.get("quaternion")),
+            result.get("num_inliers"), result.get("num_keyframes"), dt_ms,
+        )
 
         await self._ep.send_return_data(DataMessage(
             participant_id=pid,
@@ -633,3 +657,15 @@ class SimpleVlmAgent:
 
 def _safe_pid(pid: str) -> str:
     return "".join(c if c.isalnum() or c in "-_." else "_" for c in pid)
+
+
+def _fmt3(v):
+    if v is None:
+        return "—"
+    return "[{:+.2f}, {:+.2f}, {:+.2f}]".format(*v)
+
+
+def _fmt4(v):
+    if v is None:
+        return "—"
+    return "[{:+.2f}, {:+.2f}, {:+.2f}, {:+.2f}]".format(*v)
