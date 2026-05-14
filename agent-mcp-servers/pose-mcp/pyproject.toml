@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pose-mcp-server"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "uvicorn[standard]>=0.29",
+    "fastmcp>=0.4",
+    "pyyaml>=6.0",
+    "Pillow>=10.0",
+    "numpy>=1.24",
+    "opencv-python-headless>=4.9",
+    "torch>=2.2",
+    # Monocular metric geometry (MIT). Provides point map + intrinsics in one
+    # forward pass; lets us avoid asking the caller for camera calibration.
+    "moge",
+    "xr-ai-logging",
+]
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+# MoGe ships no PyPI wheel as of writing; pull from upstream until one lands.
+moge          = { git = "https://github.com/microsoft/MoGe.git", rev = "main" }
+
+[project.scripts]
+pose_mcp_server = "pose_mcp_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pose_mcp_server"]

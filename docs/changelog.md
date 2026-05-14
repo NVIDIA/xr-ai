@@ -9,6 +9,37 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-14 — `pose-mcp-server` for approximate persistent indoor localization
+
+Added a new MCP server, `agent-mcp-servers/pose-mcp/`, that takes one image
+per call and returns a 6DoF pose + quaternion in the world frame of a
+persistent keyframe map.  Designed for "approximate indoor localization",
+not real-time SLAM: callers can hand us frames at any rate; the first frame
+ever seen becomes the map origin; subsequent frames are localized against
+stored keyframes via XFeat + LighterGlue feature matches and OpenCV
+`solvePnPRansac`.  Map persists under `map_dir` so the world frame is
+stable across process restarts; eviction is FIFO once `max_keyframes`
+is reached.
+
+Component choices were constrained by needing fully permissive licensing for
+commercial use:
+
+* Monocular geometry — **MoGe-2-ViT-S** (Microsoft, MIT).  Picked over
+  MASt3R / DUSt3R (CC-BY-NC) and DepthAnything-V2-Base/Large/Giant
+  (CC-BY-NC for the larger checkpoints).  MoGe returns metric point map +
+  intrinsics from a single forward, so callers don't need to supply camera
+  calibration.
+* Feature extraction + matching — **XFeat + LighterGlue** (Apache-2.0).
+  Picked over SuperPoint + SuperGlue (research-only license).  Loaded via
+  `torch.hub` on first request, no PyPI dependency.
+* Pose solve — **OpenCV solvePnPRansac** (Apache-2.0).
+
+Backends are lazy-loaded so the server is cheap to start; the
+`Localizer` consumes them through a Protocol, which lets unit tests
+substitute deterministic fakes and exercise the empty → bootstrap →
+localized state machine and the cross-restart map reload without any
+GPU or model download.
+
 ### 2026-05-12 — `gpu` pytest marker + local-only dev script for hardware-bound tests
 
 Some components (Docker-backed vLLM lifecycle, NVENC paths, anything that

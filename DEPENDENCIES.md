@@ -122,6 +122,23 @@ render-mcp-server  (agent-mcp-servers/render-mcp/)
     cloudxr-runtime must start before render-mcp (serial launch order);
     cloudxr.env is read synchronously via load_cloudxr_env at start_xr time.
 
+pose-mcp-server  (agent-mcp-servers/pose-mcp/)
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    └── Pillow >=10.0
+    └── numpy >=1.24
+    └── opencv-python-headless >=4.9   (PnP RANSAC)
+    └── torch >=2.2                    (MoGe + XFeat backbones)
+    └── moge                            (Microsoft MoGe-2, MIT; pulled via git in tool.uv.sources)
+    └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
+    Pure FastMCP at /mcp.  Approximate indoor monocular localization:
+    estimate_pose returns 6DoF pose+quaternion anchored to a persistent
+    keyframe map (first frame seen = origin).  Geometry from MoGe-2-ViT-S
+    (metric point map + intrinsics), feature matching from XFeat +
+    LighterGlue (loaded via torch.hub on first request), 6DoF solve from
+    OpenCV solvePnPRansac.  Map persists under map_dir across restarts.
+
 oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (load_cloudxr_env)
     └── isaacteleop                                (headless OpenXR + HeadTracker)
@@ -263,6 +280,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
+| `agent-mcp-servers/pose-mcp/` | `pose-mcp-server` | `pose_mcp_server` | 8240 | MoGe-2-ViT-S + XFeat (HF + torch.hub on first call) | Pure FastMCP — monocular indoor localization with persistent keyframe map |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved

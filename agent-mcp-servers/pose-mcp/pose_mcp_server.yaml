@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Pose MCP server reference configuration.
+#
+# Approximate indoor monocular localization. Each call to estimate_pose
+# returns a 6DoF pose anchored to the map's first keyframe. The map persists
+# across restarts in `map_dir`. Delete that directory (or call reset_map) to
+# start over.
+#
+# MCP endpoint: http://localhost:8240/mcp  (StreamableHTTP transport)
+
+# Where keyframes (metadata + per-keyframe arrays) live.  Survive process
+# restart; clear by deleting the directory or calling the reset_map tool.
+map_dir: /var/lib/xr-ai/pose-map
+
+# Backend selection.  "auto" picks CUDA if available, otherwise CPU.
+device: auto
+
+# MoGe model variant.  ViT-S (35M) keeps cold start under a few seconds;
+# ViT-B (104M) is more accurate but heavier.
+moge_model: Ruicheng/moge-2-vit-small
+
+# Map growth controls.
+max_keyframes:       200    # hard cap; oldest evicted when reached
+min_translation_m:   0.30   # insert new keyframe when pose translates more than this
+min_rotation_deg:    20.0   # ...or rotates more than this
+
+# PnP RANSAC thresholds.
+min_inliers:         30     # below this we report state="lost"
+pnp_reproj_err_px:   4.0
+
+# Server bind.
+host: 0.0.0.0
+port: 8240

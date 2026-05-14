@@ -29,6 +29,10 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `livekit-api`  | 0.7.0    | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
+| `moge` (MoGe-2) | main    | MIT           | https://github.com/microsoft/MoGe (pose-mcp-server only; pulled from git) |
+| `accelerated_features` (XFeat + LighterGlue) | torch.hub | Apache-2.0 | https://github.com/verlab/accelerated_features (pose-mcp-server only; pulled via torch.hub on first request) |
+| `opencv-python-headless` | 4.9.0 | Apache-2.0 | https://github.com/opencv/opencv-python (pose-mcp-server only; used for solvePnPRansac) |
+| `torch`        | 2.2.0    | BSD-3-Clause  | https://github.com/pytorch/pytorch (pose-mcp-server only) |
 
 ## Swift (iOS / visionOS client)
 

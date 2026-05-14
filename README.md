@@ -232,7 +232,7 @@ Under the hood, the orchestrator launches twelve concurrent processes —
 hub, CloudXR runtime, STT / TTS / VLM / two LLM servers, four MCP servers,
 and the worker — wired together by a Pipecat pipeline that pairs a fast
 Llama-8B for quick-acks with a Nemotron-30B agentic tool-calling loop over
-`render-mcp` / `oxr-mcp` / `vlm-mcp` / `video-mcp`. Full process map,
+`render-mcp` / `oxr-mcp` / `vlm-mcp` / `video-mcp` / `pose-mcp`. Full process map,
 agentic-loop details, and the XR session lifecycle:
 [`docs/xr-render-demo.md`](docs/xr-render-demo.md).
 
