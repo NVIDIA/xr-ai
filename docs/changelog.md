@@ -15,7 +15,7 @@ The span-only `InjectVideoFrame(std::span<const std::byte>, …)` forced backend
 
 **Design**: the overload is strictly additive. Default impl forwards to the span overload, so any backend that only overrides one path keeps working. Callers with read-only / shared buffers continue to use the span overload; owning callers get the fast path.
 
-The fix benefits every native C++ consumer (CloudXR, native game-engine plugins, embedded camera SDKs), not just embedded — the embedded case is just where the cost crosses from "wasteful" to "unusable". See `client-samples/native/STREAMKIT_FEEDBACK.md` finding #12 for the diagnostic methodology, on-device numbers, and the cross-platform impact estimate.
+The fix benefits every native C++ consumer (CloudXR, native game-engine plugins, embedded camera SDKs), not just embedded — the embedded case is just where the cost crosses from "wasteful" to "unusable". See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134) for the diagnostic methodology, on-device numbers, and the cross-platform impact estimate.
 
 ### 2026-05-12 — `gpu` pytest marker + local-only dev script for hardware-bound tests
 
@@ -38,7 +38,7 @@ The stub at `client-samples/native/StreamKit/src/Backends/LiveKit/LiveKitBackend
 
 **Design**: shared_ptr (not unique_ptr) holds the opaque LiveKit handles so the destructor is well-defined in translation units that don't include the SDK headers (stub mode). The `livekit::VideoSource(width, height)` ctor requires explicit dimensions, so the LiveKit-backed FrameSink can't honour the "track is published on `StartCamera`" interpretation — instead `StartCamera` arms state and the track is created + published on the first injected frame (consistent with FrameSink's documented contract).
 
-**Left out (called out in the README's "Constraints" table)**: platform mic capture (no portable C++ API), platform camera open (same), `FetchToken` HTTP (host overrides), `AudioConfig::MicrophoneMode` AEC/AGC/NS mapping (would need `AudioProcessingModule`). See `client-samples/native/STREAMKIT_FEEDBACK.md` for the cross-SDK API friction surfaced during the integration.
+**Left out (called out in the README's "Constraints" table)**: platform mic capture (no portable C++ API), platform camera open (same), `FetchToken` HTTP (host overrides), `AudioConfig::MicrophoneMode` AEC/AGC/NS mapping (would need `AudioProcessingModule`). See [issue #134](https://github.com/NVIDIA/xr-ai/issues/134) for the cross-SDK API friction surfaced during the integration.
 
 ### 2026-05-10 — TLS by default; canonicalize the same-origin wss:// proxy; drop the client-side `secure` toggle
 

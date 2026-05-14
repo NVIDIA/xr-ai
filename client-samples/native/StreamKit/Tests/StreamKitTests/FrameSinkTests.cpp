@@ -33,7 +33,7 @@ struct SpanOnlySink : streamkit::FrameSink {
     int64_t last_ts = -1;
 
     void InjectVideoFrame(std::span<const std::byte> data,
-                          int width, int height, int /*stride*/,
+                          int width, int height,
                           streamkit::PixelFormat format,
                           int64_t timestamp_us) override {
         ++span_calls;
@@ -51,14 +51,14 @@ struct BothOverloadsSink : streamkit::FrameSink {
     std::size_t last_move_capacity = 0;
 
     void InjectVideoFrame(std::span<const std::byte> /*data*/,
-                          int /*width*/, int /*height*/, int /*stride*/,
+                          int /*width*/, int /*height*/,
                           streamkit::PixelFormat /*format*/,
                           int64_t /*timestamp_us*/) override {
         ++span_calls;
     }
 
     void InjectVideoFrame(std::vector<std::uint8_t>&& data,
-                          int /*width*/, int /*height*/, int /*stride*/,
+                          int /*width*/, int /*height*/,
                           streamkit::PixelFormat /*format*/,
                           int64_t /*timestamp_us*/) override {
         ++move_calls;
@@ -80,7 +80,7 @@ int main() {
         SpanOnlySink sink;
         streamkit::FrameSink& base = sink;
         std::vector<std::uint8_t> buffer(1024, std::uint8_t{0xAB});
-        base.InjectVideoFrame(std::move(buffer), 32, 16, 32,
+        base.InjectVideoFrame(std::move(buffer), 32, 16,
                               PixelFormat::kI420, 12345);
         SK_EXPECT_EQ(sink.span_calls, 1);
         SK_EXPECT_EQ(sink.last_span_size, std::size_t{1024});
@@ -95,7 +95,7 @@ int main() {
     {
         BothOverloadsSink sink;
         std::vector<std::uint8_t> buffer(2048);
-        sink.InjectVideoFrame(std::move(buffer), 64, 32, 64,
+        sink.InjectVideoFrame(std::move(buffer), 64, 32,
                               PixelFormat::kNV12, 999);
         SK_EXPECT_EQ(sink.move_calls, 1);
         SK_EXPECT_EQ(sink.span_calls, 0);
@@ -109,7 +109,7 @@ int main() {
         std::vector<std::uint8_t> buffer(512);
         std::span<const std::byte> view(
             reinterpret_cast<const std::byte*>(buffer.data()), buffer.size());
-        sink.InjectVideoFrame(view, 16, 8, 16, PixelFormat::kRGBA, 1);
+        sink.InjectVideoFrame(view, 16, 8, PixelFormat::kRGBA, 1);
         SK_EXPECT_EQ(sink.span_calls, 1);
         SK_EXPECT_EQ(sink.move_calls, 0);
     }

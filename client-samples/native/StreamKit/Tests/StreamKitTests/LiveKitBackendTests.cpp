@@ -14,9 +14,12 @@
 
 #include "streamkit/Config/BackendConfiguration.h"
 #include "streamkit/ConnectionState.h"
+#include "streamkit/FrameSink.h"
 #include "streamkit/StreamSession.h"
 
 #include <cstddef>
+#include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 int main() {
@@ -62,6 +65,35 @@ int main() {
 
     session.Disconnect();
     SK_EXPECT_EQ(states.size(), std::size_t{6});  // unchanged
+
+    // ── Buffer-size validation in the move overload — packed contract.
+    //    Reconnect, arm the camera, then push a deliberately-wrong-size
+    //    buffer. LiveKitBackend throws std::invalid_argument. Validation
+    //    runs in stub mode because it sits before the
+    //    STREAMKIT_HAVE_LIVEKIT-gated SDK calls.
+    session.Connect();
+    session.StartCamera();
+    auto* sink = dynamic_cast<streamkit::FrameSink*>(session.GetBackend());
+    SK_EXPECT(sink != nullptr);
+
+    // 16×16 I420 packed = 16*16 + 2 * (8*8) = 384 bytes.
+    // Pass 100 bytes to force the mismatch.
+    bool threw_invalid = false;
+    try {
+        std::vector<std::uint8_t> too_small(100);
+        sink->InjectVideoFrame(std::move(too_small), 16, 16,
+                               streamkit::PixelFormat::kI420, 0);
+    } catch (const std::invalid_argument&) {
+        threw_invalid = true;
+    }
+    SK_EXPECT(threw_invalid);
+
+    // Correct size goes through (stub-mode no-op past the validation).
+    std::vector<std::uint8_t> packed(384);
+    sink->InjectVideoFrame(std::move(packed), 16, 16,
+                           streamkit::PixelFormat::kI420, 0);
+
+    session.Disconnect();
 
     return 0;
 }

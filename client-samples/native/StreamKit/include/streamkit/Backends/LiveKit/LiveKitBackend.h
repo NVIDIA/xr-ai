@@ -89,7 +89,6 @@ public:
     void InjectVideoFrame(std::span<const std::byte> data,
                           int width,
                           int height,
-                          int stride,
                           PixelFormat format,
                           int64_t timestamp_us) override;
 
@@ -100,7 +99,6 @@ public:
     void InjectVideoFrame(std::vector<std::uint8_t>&& data,
                           int width,
                           int height,
-                          int stride,
                           PixelFormat format,
                           int64_t timestamp_us) override;
 

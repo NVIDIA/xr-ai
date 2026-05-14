@@ -78,6 +78,28 @@ livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
 }
 #endif // STREAMKIT_HAVE_LIVEKIT
 
+// Required tightly-packed buffer size for a frame of the given dimensions
+// and format. I420 / NV12 round chroma plane dimensions up to the next
+// even pixel, matching the 4:2:0 subsampling spec.
+std::size_t PackedFrameSize(int width, int height, PixelFormat format) {
+    const auto pixels =
+        static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    switch (format) {
+        case PixelFormat::kI420:
+        case PixelFormat::kNV12: {
+            const auto chroma_w =
+                (static_cast<std::size_t>(width)  + 1) / 2;
+            const auto chroma_h =
+                (static_cast<std::size_t>(height) + 1) / 2;
+            return pixels + 2 * chroma_w * chroma_h;
+        }
+        case PixelFormat::kRGBA:
+        case PixelFormat::kBGRA:
+            return pixels * 4;
+    }
+    return 0;  // unreachable
+}
+
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,30 +304,39 @@ void LiveKitBackend::StopCamera() {
 void LiveKitBackend::InjectVideoFrame(std::span<const std::byte> data,
                                       int width,
                                       int height,
-                                      int stride,
                                       PixelFormat format,
                                       int64_t timestamp_us) {
     // Span entrypoint: own the buffer so we can move it through. Hot-path
     // callers should use the std::vector&& overload to avoid this copy.
     std::vector<std::uint8_t> buffer(data.size());
     std::memcpy(buffer.data(), data.data(), data.size());
-    InjectVideoFrame(std::move(buffer), width, height, stride, format, timestamp_us);
+    InjectVideoFrame(std::move(buffer), width, height, format, timestamp_us);
 }
 
 void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
                                       int width,
                                       int height,
-                                      int stride,
                                       PixelFormat format,
                                       int64_t timestamp_us) {
-    (void)stride;  // The C++ SDK reads tightly packed planes; callers must
-                   // pre-pack if their stride differs from `width *
-                   // bytes_per_pixel` for their format.
     if (!is_connected_.load()) {
         throw NotConnectedError{};
     }
     if (!camera_armed_.load()) {
         return;
+    }
+
+    // FrameSink's contract is packed buffers — validate the byte count
+    // matches what a packed frame of the declared dimensions / format
+    // requires. Catches the common "did the caller forget to repack
+    // their padded HAL or GPU readback buffer?" mistake.
+    const auto expected = PackedFrameSize(width, height, format);
+    if (data.size() != expected) {
+        throw std::invalid_argument(
+            "InjectVideoFrame: buffer size " + std::to_string(data.size())
+            + " does not match the packed size " + std::to_string(expected)
+            + " expected for the given dimensions and format. "
+              "FrameSink requires tightly packed input — repack padded "
+              "buffers before calling.");
     }
 
 #if STREAMKIT_HAVE_LIVEKIT

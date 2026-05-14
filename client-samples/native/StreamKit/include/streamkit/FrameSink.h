@@ -60,18 +60,28 @@ public:
     /// \param data         Pointer to the first byte of pixel data.
     /// \param width        Frame width in pixels.
     /// \param height       Frame height in pixels.
-    /// \param stride       Row stride in bytes (may be > width * bytes_per_pixel).
     /// \param format       Pixel layout of `data`.
     /// \param timestamp_us Capture timestamp in microseconds (monotonic clock).
     ///
-    /// A BufferCapturer-backed LocalVideoTrack is created and published on the
-    /// first call. Subsequent calls deliver frames to the already-published track.
+    /// The buffer must be tightly packed for the declared dimensions and
+    /// format — no per-row padding. Callers receiving padded buffers from
+    /// a camera HAL or GPU readback must repack before calling. Backends
+    /// validate the buffer size against `width × height × bytes_per_pixel`
+    /// for the format and throw `std::invalid_argument` on mismatch.
     ///
-    /// Throws NotConnectedError if not connected.
+    /// A BufferCapturer-backed LocalVideoTrack is created and published on
+    /// the first call. Subsequent calls deliver frames to the already-
+    /// published track.
+    ///
+    /// Throws `NotConnectedError` if not connected. Silently drops the
+    /// frame when the backend's camera capture isn't armed (e.g. after
+    /// `StopCamera()` or before the first `StartCamera()`) — this
+    /// matches the iOS `FrameInjectable` behaviour and avoids exception
+    /// spam during transient stop/restart sequences on a real-time
+    /// capture thread.
     virtual void InjectVideoFrame(std::span<const std::byte> data,
                                   int width,
                                   int height,
-                                  int stride,
                                   PixelFormat format,
                                   int64_t timestamp_us) = 0;
 
@@ -98,16 +108,16 @@ public:
     /// are unaffected — both overloads are always visible at the base
     /// type.
     ///
-    /// Throws NotConnectedError if not connected.
+    /// Buffer-size, packing, and lifecycle behaviour match the span
+    /// overload above — see its docstring for details.
     virtual void InjectVideoFrame(std::vector<std::uint8_t>&& data,
                                   int width,
                                   int height,
-                                  int stride,
                                   PixelFormat format,
                                   int64_t timestamp_us) {
         std::span<const std::byte> as_span(
             reinterpret_cast<const std::byte*>(data.data()), data.size());
-        InjectVideoFrame(as_span, width, height, stride, format, timestamp_us);
+        InjectVideoFrame(as_span, width, height, format, timestamp_us);
     }
 };
 

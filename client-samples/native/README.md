@@ -58,13 +58,13 @@ Each test is a standalone executable that asserts and exits non-zero on failure 
 |---|---|
 | Connect / Disconnect + state mapping | ✅ implemented |
 | Data channel `Send` + `_agent.status` interception | ✅ implemented |
-| Video publish via `FrameSink::InjectVideoFrame` | ✅ implemented — first frame creates the track. Real-time callers should use the `std::vector<uint8_t>&&` overload to avoid a 1.4 MB per-frame copy. See finding #12 in `STREAMKIT_FEEDBACK.md`. |
+| Video publish via `FrameSink::InjectVideoFrame` | ✅ implemented — first frame creates the track. Real-time callers should use the `std::vector<uint8_t>&&` overload to avoid a 1.4 MB per-frame copy. See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134). |
 | Microphone capture | ⚠️ no built-in path; subclass and feed `audio_source_` from a platform mic loop |
 | Platform camera open | ⚠️ no built-in path; host opens its camera and pushes frames via FrameSink |
 | `LiveKitConfig::token_url` HTTP fetch | ⚠️ not implemented; pass `LiveKitConfig::token` inline or override `FetchToken` |
 | `AudioConfig::MicrophoneMode` mapping | ⚠️ unapplied — the C++ SDK has no AEC/AGC/NS toggles on `AudioSource` |
 
-The mismatches above against the Swift / Kotlin / JS backends are summarised in [`STREAMKIT_FEEDBACK.md`](STREAMKIT_FEEDBACK.md).
+The mismatches above against the Swift / Kotlin / JS backends are summarised in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134) — a partner-side audit of the integration with one entry per friction point.
 
 ---
 
