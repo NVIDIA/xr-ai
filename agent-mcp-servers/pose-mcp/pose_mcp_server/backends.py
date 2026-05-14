@@ -129,9 +129,13 @@ class XFeatBackend:
         device = _resolve_device(self._device)
         logger.info("XFeat: loading on {} via torch.hub …", device)
         t0 = time.monotonic()
+        # trust_repo=True skips the interactive y/N prompt torch.hub
+        # introduced in 1.12 — without it, headless subprocesses (e.g. running
+        # under xr-ai-launcher with no TTY) silently hang on first load.
         m = torch.hub.load(
             "verlab/accelerated_features",
             "XFeat", pretrained=True, top_k=self._top_k,
+            trust_repo=True,
         )
         # XFeat keeps internal params as buffers; move once and keep them put.
         m = m.to(device)
