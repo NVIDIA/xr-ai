@@ -32,7 +32,7 @@ Tools (FastMCP, mounted at /mcp)
 
 Config (pose_mcp_server.yaml)
 ─────────────────────────────
-    map_dir:            ~/.local/share/xr-ai/pose-map  # `~` is expanded
+    map_dir:            /tmp/xr-ai/pose-map           # `~` is expanded
     device:             auto              # "auto" | "cpu" | "cuda" | "cuda:0"
     moge_model:         Ruicheng/moge-2-vit-small
     max_keyframes:      200
@@ -136,10 +136,10 @@ def build_app(localizer: Localizer, store: KeyframeStore):
 
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
-    # Expand `~` so configs can use the conventional XDG-ish per-user path
-    # without forcing a hardcoded /home/<user>/… into version control.
+    # `~` is expanded so configs can opt into a per-user path without baking
+    # a hardcoded /home/<user>/… into version control.
     map_dir = pathlib.Path(
-        cfg.get("map_dir", "~/.local/share/xr-ai/pose-map")
+        cfg.get("map_dir", "/tmp/xr-ai/pose-map")
     ).expanduser()
     host    = cfg.get("host", "0.0.0.0")
     port    = int(cfg.get("port", 8240))

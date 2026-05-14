@@ -12,9 +12,11 @@
 
 # Where keyframes (metadata + per-keyframe arrays) live.  Survives process
 # restart; clear by deleting the directory or calling the reset_map tool.
-# Leading `~` is expanded against $HOME at startup.  Use any user-writable
-# path; /var/lib needs root and is intentionally not the default.
-map_dir: ~/.local/share/xr-ai/pose-map
+# Default is /tmp so the server runs unprivileged out of the box; point it
+# at a persistent location (`~/.local/share/xr-ai/pose-map`, `/var/lib/...`
+# under your service user, etc.) once you want the map to outlive reboots.
+# Leading `~` is expanded against $HOME at startup.
+map_dir: /tmp/xr-ai/pose-map
 
 # Backend selection.  "auto" picks CUDA if available, otherwise CPU.
 device: auto
