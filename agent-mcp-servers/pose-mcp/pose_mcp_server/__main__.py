@@ -154,6 +154,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
     features = XFeatBackend(
         device=cfg.get("device", "auto"),
         top_k=int(cfg.get("xfeat_top_k", 2048)),
+        min_conf=float(cfg.get("lighterglue_min_conf", 0.05)),
     )
 
     viz = None

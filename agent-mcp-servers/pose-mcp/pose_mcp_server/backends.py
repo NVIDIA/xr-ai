@@ -163,11 +163,22 @@ class XFeatBackend:
     calls and serializes them behind a lock.
     """
 
-    def __init__(self, *, device: str, top_k: int = 2048) -> None:
-        self._device = device
-        self._top_k  = top_k
-        self._model  = None
-        self._lock   = threading.Lock()
+    def __init__(
+        self, *,
+        device:   str,
+        top_k:    int   = 2048,
+        min_conf: float = 0.05,
+    ) -> None:
+        self._device   = device
+        self._top_k    = top_k
+        # LighterGlue's default min_conf=0.1 is aggressive on indoor / low-
+        # texture scenes — most legitimate matches sit around 0.05–0.15 and
+        # get filtered out, leaving 0–5 matches per pair.  0.05 keeps the
+        # filter on enough to drop obviously-bad matches while letting PnP
+        # see real correspondences.
+        self._min_conf = float(min_conf)
+        self._model    = None
+        self._lock     = threading.Lock()
 
     def _ensure_loaded(self) -> None:
         if self._model is not None:
@@ -200,12 +211,20 @@ class XFeatBackend:
 
     def extract(self, image_rgb: np.ndarray) -> FrameFeatures:
         self._ensure_loaded()
+        from loguru import logger
         torch = self._torch
         H, W = image_rgb.shape[:2]
         with self._lock, torch.no_grad():
             out = self._model.detectAndCompute(self._to_tensor(image_rgb), top_k=self._top_k)[0]
         kp   = out["keypoints"].detach().cpu().numpy().astype(np.float32)
         desc = out["descriptors"].detach().cpu().numpy().astype(np.float32)
+        # Sanity log: if this drops far below top_k on every frame the scene
+        # is too low-texture for matching to ever work.
+        if kp.shape[0] < self._top_k // 4:
+            logger.debug(
+                "XFeat extracted only {} / {} features from {}x{} image",
+                kp.shape[0], self._top_k, W, H,
+            )
         return FrameFeatures(kp=kp, desc=desc, image_size=(int(W), int(H)))
 
     def match(self, a: FrameFeatures, b: FrameFeatures) -> np.ndarray:
@@ -220,10 +239,6 @@ class XFeatBackend:
                     "— make sure keyframes were re-loaded after the backend update."
                 )
             with self._lock, torch.no_grad():
-                # XFeat's `match_lighterglue` returns
-                #   (matched_kpts_a, matched_kpts_b, idx_pairs)
-                # where idx_pairs is already (M, 2) in (a, b) order — exactly
-                # what our `match` contract expects, so skip the first two.
                 _, _, idx_pairs = self._model.match_lighterglue(
                     {"keypoints":   torch.from_numpy(a.kp).to(self._device),
                      "descriptors": torch.from_numpy(a.desc).to(self._device),
@@ -231,6 +246,7 @@ class XFeatBackend:
                     {"keypoints":   torch.from_numpy(b.kp).to(self._device),
                      "descriptors": torch.from_numpy(b.desc).to(self._device),
                      "image_size":  b.image_size},
+                    min_conf=self._min_conf,
                 )
             if hasattr(idx_pairs, "detach"):
                 idx_pairs = idx_pairs.detach().cpu().numpy()

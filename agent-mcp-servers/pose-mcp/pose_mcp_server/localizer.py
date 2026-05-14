@@ -102,6 +102,8 @@ class Localizer:
             return result
 
         feats = self._features.extract(image_rgb)
+        from loguru import logger
+        logger.debug("current frame  features={}", feats.kp.shape[0])
 
         if len(self._store) == 0:
             origin = np.eye(4, dtype=np.float64)
@@ -201,10 +203,11 @@ class Localizer:
                 continue
             if best is None or inliers > best[2]:
                 best = (kf.id, T_world_cam, inliers)
-        # Emit one line per pose attempt: lets the operator see at a glance
-        # whether matches / mask validity / PnP is the bottleneck.  Cheap —
-        # ~1 line per estimate_pose call.
-        logger.info("PnP attempts  [{}]", "  ".join(attempts) or "<no keyframes>")
+        logger.info(
+            "PnP attempts  feats={}  [{}]",
+            feats.kp.shape[0],
+            "  ".join(attempts) or "<no keyframes>",
+        )
         return best
 
     def _pnp_against_keyframe(
