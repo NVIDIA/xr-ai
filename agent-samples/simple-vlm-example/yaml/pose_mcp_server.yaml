@@ -9,7 +9,7 @@
 map_dir: /tmp/xr-ai/simple-vlm-example-pose-map
 
 device:             auto
-moge_model:         Ruicheng/moge-2-vit-small
+moge_model:         Ruicheng/moge-2-vits-normal
 max_keyframes:      200
 min_translation_m:  0.30
 min_rotation_deg:   20.0

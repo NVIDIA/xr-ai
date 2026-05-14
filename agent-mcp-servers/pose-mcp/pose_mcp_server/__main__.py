@@ -34,7 +34,7 @@ Config (pose_mcp_server.yaml)
 ─────────────────────────────
     map_dir:            /tmp/xr-ai/pose-map           # `~` is expanded
     device:             auto              # "auto" | "cpu" | "cuda" | "cuda:0"
-    moge_model:         Ruicheng/moge-2-vit-small
+    moge_model:         Ruicheng/moge-2-vits-normal
     max_keyframes:      200
     min_translation_m:  0.30
     min_rotation_deg:   20.0
@@ -146,7 +146,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
 
     store = KeyframeStore(map_dir)
     geometry = MoGeBackend(
-        model_name=cfg.get("moge_model", "Ruicheng/moge-2-vit-small"),
+        model_name=cfg.get("moge_model", "Ruicheng/moge-2-vits-normal"),
         device=cfg.get("device", "auto"),
     )
     features = XFeatBackend(
