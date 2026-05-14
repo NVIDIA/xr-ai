@@ -130,6 +130,9 @@ pose-mcp-server  (agent-mcp-servers/pose-mcp/)
     └── numpy >=1.24
     └── opencv-python-headless >=4.9   (PnP RANSAC)
     └── torch >=2.2                    (MoGe + XFeat backbones)
+    └── kornia >=0.7                   (Apache-2.0; XFeat's match_lighterglue
+                                         path requires it for the LightGlue
+                                         decoder)
     └── moge                            (Microsoft MoGe-2, MIT; pulled via git in tool.uv.sources)
     └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
     Optional extra `[viz]`:

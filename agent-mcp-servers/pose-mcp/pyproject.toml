@@ -17,6 +17,9 @@ dependencies = [
     "numpy>=1.24",
     "opencv-python-headless>=4.9",
     "torch>=2.2",
+    # XFeat's `match_lighterglue` pulls kornia's LightGlue path; without
+    # it we fall back to plain mutual-NN matching which is much weaker.
+    "kornia>=0.7",
     # Monocular metric geometry (MIT). Provides point map + intrinsics in one
     # forward pass; lets us avoid asking the caller for camera calibration.
     "moge",
