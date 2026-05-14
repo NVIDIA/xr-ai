@@ -11,21 +11,16 @@ from __future__ import annotations
 import base64
 import io
 import wave
-from pathlib import Path
-
 import pytest
 
 from _stub_openai import StubOpenAI
 
 from xr_ai_models import (
-    Capabilities,
     ChatMessage,
-    ImagePart,
     OpenAICompatLLM,
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
-    TextPart,
     ToolDef,
 )
 
