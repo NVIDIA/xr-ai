@@ -6,6 +6,9 @@
 A :class:`Localizer` wraps a :class:`KeyframeStore` plus the two backends and
 exposes ``process(image_rgb, ts_us)``.  Result states:
 
+* ``"calibrating"`` — the geometry backend is still pinning its FOV prior;
+                 no keyframes are created yet so the world frame doesn't
+                 get anchored to a wrong intrinsic.
 * ``"empty"``   — map had zero keyframes; this call inserted the origin.
                  No pose returned (the origin frame *is* the pose, but we
                  surface it explicitly).
@@ -83,6 +86,21 @@ class Localizer:
         if ts_us is None:
             ts_us = int(time.time() * 1_000_000)
         geom  = self._geometry(image_rgb)
+
+        # If the geometry backend exposes a calibration flag and isn't done
+        # yet, defer everything — anchoring the world frame to a keyframe
+        # built with a wrong intrinsic poisons the rest of the session.
+        if getattr(self._geometry, "is_calibrated", True) is False:
+            result = PoseResult(
+                state="calibrating", pose=None,
+                translation=None, quaternion=None,
+                fov_deg=geom.fov_deg, num_inliers=0,
+                num_keyframes=len(self._store), matched_kf_id=None,
+                ts_us=ts_us,
+            )
+            self._emit_viz(image_rgb, geom, result, None)
+            return result
+
         feats = self._features.extract(image_rgb)
 
         if len(self._store) == 0:

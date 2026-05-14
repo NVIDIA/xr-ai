@@ -313,6 +313,56 @@ class _RecordingSink:
         self.frames.append((result, new_keyframe))
 
 
+class _CalibratingGeometry(_FakeGeometry):
+    """Drop-in `_FakeGeometry` that mimics MoGe's calibration window."""
+    def __init__(self, *args, calibration_frames: int = 3, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._left = calibration_frames
+
+    @property
+    def is_calibrated(self) -> bool:
+        return self._left <= 0
+
+    def __call__(self, image_rgb):
+        if self._left > 0:
+            self._left -= 1
+        return super().__call__(image_rgb)
+
+
+def test_localizer_defers_origin_until_calibrated(tmp_path: pathlib.Path):
+    """While the geometry backend reports `is_calibrated=False` the localizer
+    must stay in `calibrating` and never create the origin keyframe — that
+    would anchor the world frame to a wrong intrinsic.
+
+    Real-backend semantics: calibration "completes" *during* the Nth call
+    (the sample is appended, the median is pinned), so by the time the
+    localizer checks ``is_calibrated`` after that call the answer is True.
+    The first ``calibration_frames - 1`` process() calls return
+    ``state="calibrating"``; the Nth seeds the origin and returns
+    ``state="empty"``.
+    """
+    store = KeyframeStore(tmp_path)
+    geom  = _CalibratingGeometry(calibration_frames=3)
+    feats = _FakeFeatures(W=geom.W, H=geom.H)
+    loc   = Localizer(store=store, geometry=geom, features=feats, min_inliers=10)
+
+    img = _white_image(geom.W, geom.H)
+    for i in range(2):
+        r = loc.process(img, ts_us=i)
+        assert r.state == "calibrating", f"frame {i}: expected calibrating, got {r.state}"
+        assert r.num_keyframes == 0
+        assert r.pose is None
+
+    # Third call: backend flips to calibrated mid-call → origin is seeded.
+    r3 = loc.process(img, ts_us=100)
+    assert r3.state == "empty"
+    assert r3.num_keyframes == 1
+
+    # Fourth call should localize against the now-existing origin keyframe.
+    r4 = loc.process(img, ts_us=200)
+    assert r4.state == "localized"
+
+
 def test_localizer_emits_viz_events(tmp_path: pathlib.Path):
     """The viz sink must see the origin insertion, then a localized frame
     against that origin, and exceptions from the sink must not break

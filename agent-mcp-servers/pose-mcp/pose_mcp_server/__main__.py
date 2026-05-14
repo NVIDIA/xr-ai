@@ -149,6 +149,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
         model_name=cfg.get("moge_model", "Ruicheng/moge-2-vits-normal"),
         device=cfg.get("device", "auto"),
         fov_x_deg=cfg.get("camera_fov_deg") or None,
+        calibration_frames=int(cfg.get("fov_calibration_frames", 8)),
     )
     features = XFeatBackend(
         device=cfg.get("device", "auto"),

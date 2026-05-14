@@ -61,15 +61,33 @@ class MoGeBackend:
 
     def __init__(
         self, *,
-        model_name: str,
-        device:     str,
-        fov_x_deg:  float | None = None,
+        model_name:          str,
+        device:              str,
+        fov_x_deg:           float | None = None,
+        calibration_frames:  int          = 8,
     ) -> None:
-        self._model_name = model_name
-        self._device     = device
-        self._fov_x_deg  = fov_x_deg
-        self._model      = None  # lazy; loaded on first __call__
-        self._lock       = threading.Lock()
+        self._model_name         = model_name
+        self._device             = device
+        self._model              = None  # lazy; loaded on first __call__
+        self._lock               = threading.Lock()
+        # FOV calibration.  If the operator provided `fov_x_deg` we skip
+        # calibration entirely and pin that value forever.  Otherwise we
+        # let MoGe guess on the first `calibration_frames` frames, collect
+        # its estimates, and pin the median — robust to the occasional
+        # extreme outlier on a low-texture frame.
+        self._calibration_frames = max(1, int(calibration_frames))
+        self._fov_samples: list[float] = []
+        self._pinned_fov: float | None = (
+            float(fov_x_deg) if fov_x_deg is not None else None
+        )
+
+    @property
+    def is_calibrated(self) -> bool:
+        return self._pinned_fov is not None
+
+    @property
+    def pinned_fov_deg(self) -> float | None:
+        return self._pinned_fov
 
     def _ensure_loaded(self) -> None:
         if self._model is not None:
@@ -92,25 +110,40 @@ class MoGeBackend:
 
     def __call__(self, image_rgb: np.ndarray) -> GeometryFrame:
         self._ensure_loaded()
+        from loguru import logger
         torch = self._torch
         H, W = image_rgb.shape[:2]
         tensor = torch.from_numpy(
             np.ascontiguousarray(image_rgb).transpose(2, 0, 1).astype(np.float32) / 255.0
         ).to(self._device)
-        # If the operator gave us the camera's true FOV, pass it through as a
-        # prior so MoGe stops guessing per-frame.  Without this, FOV estimates
-        # on flat indoor scenes swing by 2-3x between adjacent frames and PnP
-        # against the first keyframe can never line up.
+        # Once pinned, hand MoGe the FOV as a prior so its points are
+        # consistent with that intrinsic.  Before pinning, let it guess.
         infer_kwargs = {}
-        if self._fov_x_deg is not None:
-            infer_kwargs["fov_x"] = float(self._fov_x_deg)
+        if self._pinned_fov is not None:
+            infer_kwargs["fov_x"] = float(self._pinned_fov)
         with self._lock, torch.no_grad():
             out = self._model.infer(tensor, **infer_kwargs)
-        points = out["points"].detach().cpu().numpy()             # (H, W, 3)
-        mask   = out["mask"].detach().cpu().numpy().astype(bool)  # (H, W)
+        points = out["points"].detach().cpu().numpy()
+        mask   = out["mask"].detach().cpu().numpy().astype(bool)
         # MoGe normalizes intrinsics so fov_x = 2 * arctan(0.5 / K[0,0]).
         K      = out["intrinsics"].detach().cpu().numpy()
         fov_deg = float(2.0 * np.degrees(np.arctan(0.5 / float(K[0, 0]))))
+
+        if self._pinned_fov is None:
+            self._fov_samples.append(fov_deg)
+            logger.info(
+                "MoGe FOV calibration  sample {}/{}  fov={:.1f}°",
+                len(self._fov_samples), self._calibration_frames, fov_deg,
+            )
+            if len(self._fov_samples) >= self._calibration_frames:
+                pinned = float(np.median(self._fov_samples))
+                self._pinned_fov = pinned
+                logger.info(
+                    "MoGe FOV pinned to {:.1f}° (median of {} samples; range {:.1f}°–{:.1f}°)",
+                    pinned, len(self._fov_samples),
+                    min(self._fov_samples), max(self._fov_samples),
+                )
+
         return GeometryFrame(
             points3d=points.astype(np.float32),
             mask=mask,

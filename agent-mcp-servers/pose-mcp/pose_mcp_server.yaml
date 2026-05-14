@@ -25,12 +25,17 @@ device: auto
 # ViT-B (104M) is more accurate but heavier.
 moge_model: Ruicheng/moge-2-vits-normal
 
-# Horizontal FOV (degrees) of your camera.  When unset, MoGe estimates it
-# per frame from the image content — fine for varied outdoor scenes, but
-# on flat indoor walls / desks MoGe's estimate swings 2-3× between adjacent
-# frames and breaks PnP.  If you see `state=bootstrap` forever with the
-# `fov=…` in the log moving around, set this to your camera's true FOV.
-# Typical values:
+# Horizontal FOV (degrees) of your camera.
+#
+# Default behaviour (unset): the server starts in `state="calibrating"`
+# and lets MoGe estimate FOV on the first `fov_calibration_frames` frames.
+# Once that many estimates have been collected, the *median* is pinned and
+# used as a prior for every subsequent inference, locking the world frame
+# to a stable intrinsic.  No keyframes are created during calibration so
+# the origin never anchors to a wrong K.
+#
+# If you already know the camera FOV, set it here to skip calibration
+# entirely.  Typical values:
 #   laptop webcam        : ~60
 #   USB webcam (Logitech): ~70-78
 #   phone main camera    : ~65-75
@@ -38,6 +43,10 @@ moge_model: Ruicheng/moge-2-vits-normal
 # Wipe the map after changing this so old keyframes (which were built with
 # the wrong FOV) don't poison localization.
 camera_fov_deg:
+
+# How many frames to sample before pinning FOV.  More = more robust median
+# but a longer cold start.  8 ≈ 4 s at 2 Hz; usually fine for indoor.
+fov_calibration_frames: 8
 
 # Map growth controls.
 max_keyframes:       200    # hard cap; oldest evicted when reached

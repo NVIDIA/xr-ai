@@ -11,10 +11,13 @@ map_dir: /tmp/xr-ai/simple-vlm-example-pose-map
 device:             auto
 moge_model:         Ruicheng/moge-2-vits-normal
 
-# Camera horizontal FOV (degrees).  Strongly recommended for indoor use —
-# without it MoGe guesses per-frame and the estimate swings wildly on flat
-# scenes, breaking PnP.  Typical: 60-78 for laptop/USB webcams.
-camera_fov_deg:     70
+# Leave `camera_fov_deg` unset to auto-calibrate: pose-mcp will collect
+# MoGe's FOV estimates for the first `fov_calibration_frames` frames and
+# pin the median — works for any phone / webcam / headset camera without
+# the operator needing to know the intrinsic.  Override by uncommenting
+# and setting an explicit value (skip calibration).
+# camera_fov_deg: 70
+fov_calibration_frames: 8
 
 max_keyframes:      200
 min_translation_m:  0.30
