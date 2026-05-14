@@ -6,8 +6,9 @@
 #
 # This server is a pure FastMCP wrapper around vlm-server (ai-services/vlm-server/).
 # It exposes one MCP tool — ask_image(question, image_path) — that reads a local
-# image file and POSTs it to vlm-server's OpenAI-compatible chat-completions
-# endpoint. There is no hub IPC subscription and no `xr-ai-agent` dependency.
+# image file and forwards it to vlm-server's OpenAI-compatible chat-completions
+# endpoint via the xr-ai-models SDK. There is no hub IPC subscription and no
+# `xr-ai-agent` dependency.
 #
 # The MCP endpoint is served at http://<host>:<port>/mcp via StreamableHTTP.
 # Use the URL WITHOUT a trailing slash — Starlette's strict path matching
@@ -17,11 +18,15 @@
 host:                  0.0.0.0
 port:                  8240
 
-# URL of the vlm-server (ai-services/vlm-server/). The MCP tool forwards the
-# loaded image + the LLM's question to this service over HTTP.
-vlm_server:            http://localhost:8100
+# Model configuration — identifies the VLM backend by logical name "vlm".
+# The cosmos_vlm preset targets ai-services/vlm-server/ (Cosmos-Reason1-7B
+# via vLLM). Only base_url needs to be set here; the preset fills in the rest.
+models:
+  vlm:
+    kind:     preset:cosmos_vlm
+    base_url: http://localhost:8100
 
-# httpx timeout applied to each POST /v1/chat/completions call to vlm-server.
+# httpx timeout applied to each call to vlm-server.
 vlm_request_timeout_s: 60.0
 
 # Whether to let the VLM produce chain-of-thought reasoning before answering.

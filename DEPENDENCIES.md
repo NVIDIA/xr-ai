@@ -107,6 +107,18 @@ transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
     Storage: JSONL files per participant in configurable transcripts_dir.
 
+vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    └── Pillow >=10.0
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
+    Pure FastMCP — one tool at /mcp (no REST). Reads a local image file,
+    encodes it as a JPEG data URL, and calls vlm-server via xr-ai-models
+    ``OpenAICompatVLM``. Back-compat: legacy ``vlm_server:`` URL key is
+    still accepted with a deprecation warning.
+
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
@@ -279,6 +291,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
+| `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
