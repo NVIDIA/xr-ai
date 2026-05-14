@@ -59,9 +59,15 @@ class MoGeBackend:
     behind ``_lock`` because the model isn't thread-safe.
     """
 
-    def __init__(self, *, model_name: str, device: str) -> None:
+    def __init__(
+        self, *,
+        model_name: str,
+        device:     str,
+        fov_x_deg:  float | None = None,
+    ) -> None:
         self._model_name = model_name
         self._device     = device
+        self._fov_x_deg  = fov_x_deg
         self._model      = None  # lazy; loaded on first __call__
         self._lock       = threading.Lock()
 
@@ -91,14 +97,20 @@ class MoGeBackend:
         tensor = torch.from_numpy(
             np.ascontiguousarray(image_rgb).transpose(2, 0, 1).astype(np.float32) / 255.0
         ).to(self._device)
+        # If the operator gave us the camera's true FOV, pass it through as a
+        # prior so MoGe stops guessing per-frame.  Without this, FOV estimates
+        # on flat indoor scenes swing by 2-3x between adjacent frames and PnP
+        # against the first keyframe can never line up.
+        infer_kwargs = {}
+        if self._fov_x_deg is not None:
+            infer_kwargs["fov_x"] = float(self._fov_x_deg)
         with self._lock, torch.no_grad():
-            out = self._model.infer(tensor)
+            out = self._model.infer(tensor, **infer_kwargs)
         points = out["points"].detach().cpu().numpy()             # (H, W, 3)
         mask   = out["mask"].detach().cpu().numpy().astype(bool)  # (H, W)
-        K      = out["intrinsics"].detach().cpu().numpy()         # 3x3 normalized
-        # MoGe normalizes intrinsics to image dimensions; fx is in [0, 1] of W.
-        fx = float(K[0, 0]) * W
-        fov_deg = float(2.0 * np.degrees(np.arctan(0.5 * W / fx)))
+        # MoGe normalizes intrinsics so fov_x = 2 * arctan(0.5 / K[0,0]).
+        K      = out["intrinsics"].detach().cpu().numpy()
+        fov_deg = float(2.0 * np.degrees(np.arctan(0.5 / float(K[0, 0]))))
         return GeometryFrame(
             points3d=points.astype(np.float32),
             mask=mask,

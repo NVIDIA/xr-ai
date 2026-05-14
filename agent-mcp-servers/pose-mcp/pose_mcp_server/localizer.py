@@ -58,7 +58,8 @@ class Localizer:
         max_keyframes:      int   = 200,
         min_translation_m:  float = 0.30,
         min_rotation_deg:   float = 20.0,
-        min_inliers:        int   = 30,
+        min_inliers:        int   = 15,
+        min_matches:        int   = 8,
         pnp_reproj_err_px:  float = 4.0,
         viz:                "VizSink | None" = None,
     ) -> None:
@@ -68,6 +69,12 @@ class Localizer:
         self._max_keyframes      = max_keyframes
         self._min_translation_m  = min_translation_m
         self._min_rotation_deg   = min_rotation_deg
+        # Two thresholds, not one: `min_matches` is the floor on raw 2D-2D
+        # correspondences XFeat+LighterGlue returns; `min_inliers` is the
+        # floor on PnP-RANSAC inliers.  Conflating them (which the first
+        # cut did at 30) makes the localizer reject many legitimate matches
+        # before PnP gets a chance to filter them.
+        self._min_matches        = min_matches
         self._min_inliers        = min_inliers
         self._pnp_reproj_err_px  = pnp_reproj_err_px
         self._viz                = viz
@@ -157,20 +164,29 @@ class Localizer:
         feats: "FrameFeatures",   # noqa: F821
         geom:  "GeometryFrame",   # noqa: F821
     ) -> tuple[int, np.ndarray, int] | None:
+        from loguru import logger
         best: tuple[int, np.ndarray, int] | None = None
         K = self._intrinsics_from_fov(geom.fov_deg, geom.width, geom.height)
+        attempts: list[str] = []
         for kf in self._store.all():
             try:
-                pnp = self._pnp_against_keyframe(kf, feats, K)
-            except cv2.error:
+                outcome = self._pnp_against_keyframe(kf, feats, K)
+            except cv2.error as exc:
+                attempts.append(f"kf{kf.id}=cv2.error({exc})")
                 continue
-            if pnp is None:
+            if isinstance(outcome, str):
+                attempts.append(f"kf{kf.id}={outcome}")
                 continue
-            T_world_cam, inliers = pnp
+            T_world_cam, inliers = outcome
+            attempts.append(f"kf{kf.id}=inliers={inliers}")
             if inliers < self._min_inliers:
                 continue
             if best is None or inliers > best[2]:
                 best = (kf.id, T_world_cam, inliers)
+        # Emit one line per pose attempt: lets the operator see at a glance
+        # whether matches / mask validity / PnP is the bottleneck.  Cheap —
+        # ~1 line per estimate_pose call.
+        logger.info("PnP attempts  [{}]", "  ".join(attempts) or "<no keyframes>")
         return best
 
     def _pnp_against_keyframe(
@@ -178,30 +194,30 @@ class Localizer:
         kf:    Keyframe,
         feats: "FrameFeatures",       # noqa: F821
         K:     np.ndarray,
-    ) -> tuple[np.ndarray, int] | None:
+    ) -> tuple[np.ndarray, int] | str:
+        """Returns ``(T_world_cam, inliers)`` on success, or a short string
+        describing why this keyframe was rejected — lets the caller emit a
+        single diagnostic line covering all attempts."""
         from .backends import FrameFeatures
         H, W = kf.pts3d.shape[:2]
         kf_feats = FrameFeatures(
             kp=kf.kp, desc=kf.desc, image_size=(int(W), int(H)),
         )
         matches = self._features.match(kf_feats, feats)
-        if matches.shape[0] < self._min_inliers:
-            return None
+        if matches.shape[0] < self._min_matches:
+            return f"matches={matches.shape[0]}<min"
 
-        # Lift keyframe 2D matches into the keyframe's local 3D using its
-        # stored point map.  Discard matches that landed on MoGe's invalid
-        # mask — those are sky / glass / unreliable depth.
         kf_xy   = kf.kp[matches[:, 0]]
         cur_xy  = feats.kp[matches[:, 1]]
-        H, W    = kf.pts3d.shape[:2]
         ix = np.clip(np.round(kf_xy[:, 0]).astype(np.int32), 0, W - 1)
         iy = np.clip(np.round(kf_xy[:, 1]).astype(np.int32), 0, H - 1)
         valid = kf.mask[iy, ix]
-        if int(valid.sum()) < self._min_inliers:
-            return None
+        n_valid = int(valid.sum())
+        if n_valid < self._min_matches:
+            return f"matches={matches.shape[0]} valid={n_valid}<min"
 
-        pts3d_kf = kf.pts3d[iy[valid], ix[valid]].astype(np.float32)   # (M, 3) in keyframe frame
-        pts2d    = cur_xy[valid].astype(np.float32)                    # (M, 2) in current image
+        pts3d_kf = kf.pts3d[iy[valid], ix[valid]].astype(np.float32)
+        pts2d    = cur_xy[valid].astype(np.float32)
 
         ok, rvec, tvec, inliers = cv2.solvePnPRansac(
             objectPoints=pts3d_kf.reshape(-1, 1, 3),
@@ -210,14 +226,15 @@ class Localizer:
             iterationsCount=200, reprojectionError=self._pnp_reproj_err_px,
             confidence=0.999, flags=cv2.SOLVEPNP_EPNP,
         )
-        if not ok or inliers is None or len(inliers) < self._min_inliers:
-            return None
+        n_pnp = 0 if inliers is None else int(len(inliers))
+        if not ok or n_pnp < self._min_inliers:
+            return f"matches={matches.shape[0]} valid={n_valid} pnp={n_pnp}<min"
 
         R, _ = cv2.Rodrigues(rvec)
-        T_cam_kf      = make_se3(R, tvec.ravel())          # keyframe frame → current camera
-        T_kf_cam      = invert_se3(T_cam_kf)               # current camera in keyframe frame
-        T_world_cam   = compose_se3(kf.pose, T_kf_cam)     # promote to world
-        return T_world_cam, int(len(inliers))
+        T_cam_kf      = make_se3(R, tvec.ravel())
+        T_kf_cam      = invert_se3(T_cam_kf)
+        T_world_cam   = compose_se3(kf.pose, T_kf_cam)
+        return T_world_cam, n_pnp
 
     @staticmethod
     def _intrinsics_from_fov(fov_deg: float, width: int, height: int) -> np.ndarray:

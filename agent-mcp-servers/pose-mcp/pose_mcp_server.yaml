@@ -25,6 +25,20 @@ device: auto
 # ViT-B (104M) is more accurate but heavier.
 moge_model: Ruicheng/moge-2-vits-normal
 
+# Horizontal FOV (degrees) of your camera.  When unset, MoGe estimates it
+# per frame from the image content — fine for varied outdoor scenes, but
+# on flat indoor walls / desks MoGe's estimate swings 2-3× between adjacent
+# frames and breaks PnP.  If you see `state=bootstrap` forever with the
+# `fov=…` in the log moving around, set this to your camera's true FOV.
+# Typical values:
+#   laptop webcam        : ~60
+#   USB webcam (Logitech): ~70-78
+#   phone main camera    : ~65-75
+#   GoPro / action cam   : ~120
+# Wipe the map after changing this so old keyframes (which were built with
+# the wrong FOV) don't poison localization.
+camera_fov_deg:
+
 # Map growth controls.
 max_keyframes:       200    # hard cap; oldest evicted when reached
 min_translation_m:   0.30   # insert new keyframe when pose translates more than this

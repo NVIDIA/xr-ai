@@ -10,10 +10,17 @@ map_dir: /tmp/xr-ai/simple-vlm-example-pose-map
 
 device:             auto
 moge_model:         Ruicheng/moge-2-vits-normal
+
+# Camera horizontal FOV (degrees).  Strongly recommended for indoor use —
+# without it MoGe guesses per-frame and the estimate swings wildly on flat
+# scenes, breaking PnP.  Typical: 60-78 for laptop/USB webcams.
+camera_fov_deg:     70
+
 max_keyframes:      200
 min_translation_m:  0.30
 min_rotation_deg:   20.0
-min_inliers:        30
+min_matches:        8
+min_inliers:        15
 pnp_reproj_err_px:  4.0
 
 host: 0.0.0.0
