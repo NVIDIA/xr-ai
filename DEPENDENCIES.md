@@ -333,10 +333,18 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0 |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, fastmcp >=0.4 |
 
-Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
-(8105) over HTTP — no model weights loaded in-process.
+Worker calls stt-server (8103), vlm-server (8100), piper-tts-server
+(8105) over HTTP, and pose-mcp-server (8240) over FastMCP / StreamableHTTP
+— no model weights loaded in-process.
+
+The orchestrator runs a 6th process, `pose-mcp-server`, alongside the AI
+services.  At ~`pose_hz` (2 Hz default) the worker grabs the freshest
+available frame per participant, calls `estimate_pose`, and pushes the
+result back to the client on data topic `pose.update`.  Comment the
+`pose` Process out of `main.py` (and unset `pose_mcp_url` in the worker
+YAML) to skip localization entirely.
 
 ### model-servers  (agent-samples/model-servers/)
 

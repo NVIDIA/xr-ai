@@ -51,9 +51,11 @@ from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
                           ParticipantEvent, ProcessorEndpoint)
 from xr_ai_logging import print_task_done_banner
 
+import pathlib
+
 from audio import chunks_to_wav, now_us, rms, wav_to_chunks
 from pixels import encode_image, frame_to_pil
-from services import SttClient, TtsClient, VlmClient
+from services import PoseClient, SttClient, TtsClient, VlmClient
 from voice import VoiceState
 
 
@@ -83,6 +85,7 @@ class SimpleVlmAgent:
         vlm: VlmClient,
         tts: TtsClient,
         *,
+        pose:               PoseClient | None = None,
         default_prompt:     str   = "Describe what you see.",
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
         silence_threshold:  float = 0.01,
@@ -91,11 +94,14 @@ class SimpleVlmAgent:
         frame_max_age_s:     float = 2.0,
         camera_on_timeout_s: float = 15.0,
         camera_grace_s:      float = 5.0,
+        pose_hz:             float = 2.0,
+        pose_scratch_dir:    pathlib.Path = pathlib.Path("/dev/shm/xr-ai/pose-in"),
     ) -> None:
-        self._ep  = ep
-        self._stt = stt
-        self._vlm = vlm
-        self._tts = tts
+        self._ep   = ep
+        self._stt  = stt
+        self._vlm  = vlm
+        self._tts  = tts
+        self._pose = pose
 
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
@@ -110,6 +116,13 @@ class SimpleVlmAgent:
         self._frame_max_age_us  = int(frame_max_age_s * 1_000_000)
         self._camera_on_timeout = camera_on_timeout_s
         self._camera_grace_s    = camera_grace_s
+
+        # Pose loop state — opportunistic, never triggers camera-on.
+        self._pose_period_s     = 1.0 / max(pose_hz, 0.1)
+        self._pose_scratch_dir  = pose_scratch_dir
+        self._pose_last_pts: dict[str, int] = {}   # pid → last frame ts we sent
+        if self._pose is not None:
+            self._pose_scratch_dir.mkdir(parents=True, exist_ok=True)
 
         self._voice:  dict[str, VoiceState]              = {}
         self._latest: dict[tuple[str, str], FrameSignal] = {}
@@ -525,16 +538,98 @@ class SimpleVlmAgent:
         if timer and not timer.done():
             timer.cancel()
 
+    # ── pose path: opportunistic estimate_pose at ~pose_hz ────────────────────
+
+    async def _pose_loop(self) -> None:
+        """Send the freshest available frame per pid to pose-mcp at a fixed
+        rate.  Never asks the client to turn the camera on — pose is a
+        bystander to the VLM flow and only acts on frames already arriving.
+
+        Pose results are pushed back on data topic ``pose.update`` with a
+        compact JSON payload the client can render in 3D space.
+        """
+        try:
+            while True:
+                await asyncio.sleep(self._pose_period_s)
+                pids = {pid for pid, _ in self._latest}
+                for pid in pids:
+                    try:
+                        await self._estimate_one(pid)
+                    except Exception as exc:
+                        logger.opt(exception=True).debug(
+                            "pose iteration failed pid={!r}: {}", pid, exc,
+                        )
+        except asyncio.CancelledError:
+            raise
+
+    async def _estimate_one(self, pid: str) -> None:
+        assert self._pose is not None
+        sig = self._latest_signal(pid)
+        if sig is None or not self._is_fresh(sig):
+            return
+        if self._pose_last_pts.get(pid) == sig.pts_us:
+            return   # we already sent this exact frame
+        frame = await self._ep.request_frame(sig)
+        if frame is None:
+            return
+
+        img = frame_to_pil(frame)
+        out_path = self._pose_scratch_dir / f"{_safe_pid(pid)}.png"
+        # Save to a sibling tmp + rename so pose-mcp can never read a half-
+        # written PNG if the loop races itself on an unexpectedly slow GPU.
+        tmp_path = out_path.with_suffix(".png.tmp")
+        img.save(tmp_path, format="PNG")
+        tmp_path.replace(out_path)
+
+        try:
+            result = await self._pose.estimate_pose(
+                str(out_path), timestamp_us=frame.pts_us,
+            )
+        except Exception as exc:
+            logger.debug("pose-mcp call failed pid={!r}: {}", pid, exc)
+            return
+        self._pose_last_pts[pid] = sig.pts_us
+
+        if result.get("error"):
+            logger.debug("pose-mcp error pid={!r}: {}", pid, result["error"])
+            return
+
+        await self._ep.send_return_data(DataMessage(
+            participant_id=pid,
+            topic="pose.update",
+            pts_us=frame.pts_us,
+            data=json.dumps({
+                "state":         result.get("state"),
+                "translation_m": result.get("translation_m"),
+                "quaternion":    result.get("quaternion"),
+                "num_inliers":   result.get("num_inliers"),
+                "num_keyframes": result.get("num_keyframes"),
+                "ts_us":         result.get("ts_us"),
+            }).encode(),
+        ))
+
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def run(self) -> None:
+        pose_task: asyncio.Task | None = None
+        if self._pose is not None:
+            pose_task = asyncio.create_task(self._pose_loop(), name="pose-loop")
         try:
             await self._ep.run()
         finally:
-            # Cancel any pending grace-period off timers.
+            if pose_task is not None:
+                pose_task.cancel()
+                try:
+                    await pose_task
+                except (asyncio.CancelledError, Exception):
+                    pass
             for t in self._camera_off_timers.values():
                 t.cancel()
 
     def shutdown(self) -> None:
         self._ep.stop()
         self._ep.close()
+
+
+def _safe_pid(pid: str) -> str:
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in pid)

@@ -26,15 +26,20 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 
 _PROCESSES: list[Process] = [
-    Process("hub",    "../../server-runtime",        "xr_media_hub",
+    Process("hub",    "../../server-runtime",                  "xr_media_hub",
             config="yaml/xr_media_hub.yaml"),
-    Process("vlm",    "../../ai-services/vlm-server", "vlm_server",
+    Process("vlm",    "../../ai-services/vlm-server",           "vlm_server",
             config="yaml/vlm_server.yaml"),
-    Process("stt",    "../../ai-services/stt-server", "stt_server",
+    Process("stt",    "../../ai-services/stt-server",           "stt_server",
             config="yaml/stt_server.yaml"),
-    Process("tts",    "../../ai-services/tts/piper",  "piper_tts_server",
+    Process("tts",    "../../ai-services/tts/piper",            "piper_tts_server",
             config="yaml/piper_tts_server.yaml"),
-    Process("worker", "worker",                       "simple_vlm_example_worker",
+    # Pose-mcp must start before the worker so PoseClient finds it on the
+    # health probe; comment this Process out (and `pose_mcp_url` in the
+    # worker YAML) to skip the localization path entirely.
+    Process("pose",   "../../agent-mcp-servers/pose-mcp",        "pose_mcp_server",
+            config="yaml/pose_mcp_server.yaml"),
+    Process("worker", "worker",                                  "simple_vlm_example_worker",
             config="yaml/simple_vlm_example_worker.yaml"),
 ]
 

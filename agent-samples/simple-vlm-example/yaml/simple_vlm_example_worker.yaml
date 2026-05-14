@@ -7,6 +7,13 @@
 stt_server:  http://localhost:8103
 tts_server:  http://localhost:8105   # piper_tts_server
 
+# pose-mcp endpoint.  Set to null (or comment out) to disable the
+# localization path entirely — the worker then doesn't even open a
+# FastMCP client.  When set, the worker pushes pose updates back to
+# the client on data topic "pose.update" at pose_hz frames per second.
+pose_mcp_url: http://localhost:8240/mcp
+pose_hz:      2.0
+
 # VLM backend — controls which vision model the worker uses.
 # "cosmos" (default) → vlm-server (Cosmos-Reason1-7B) on port 8100
 # "omni"             → nemotron_omni (Nemotron-3-Nano-Omni-30B) on port 8108
