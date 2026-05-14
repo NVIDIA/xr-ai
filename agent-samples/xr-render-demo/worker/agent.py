@@ -16,10 +16,10 @@ from fastmcp import Client as McpClient
 from loguru import logger
 from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent
+from xr_ai_models import LLMService, STTService, TTSService, ToolDef
 
 from config import WorkerConfig
 from processors import RenderSceneProcessor, _tool_payload, build_pipeline
-from xr_ai_pipecat.services import SttClient, TtsClient
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 _XR_SESSION_STARTED_TOPIC = "xr.session.started"
@@ -31,9 +31,20 @@ def _now_us() -> int:
 
 
 class RenderDemoAgent:
-    def __init__(self, cfg: WorkerConfig, render: McpClient, oxr: McpClient,
-                 vlm: McpClient, video: McpClient,
-                 prompt_path: Path, tools_openai: list) -> None:
+    def __init__(
+        self,
+        cfg:        WorkerConfig,
+        render:     McpClient,
+        oxr:        McpClient,
+        vlm:        McpClient,
+        video:      McpClient,
+        prompt_path: Path,
+        tools:      list[ToolDef],
+        llm:        LLMService,
+        agent_llm:  LLMService,
+        stt:        STTService,
+        tts:        TTSService,
+    ) -> None:
         self._cfg    = cfg
         self._render = render
         self._oxr    = oxr
@@ -47,10 +58,8 @@ class RenderDemoAgent:
 
         self._scene = RenderSceneProcessor(
             self._transport, cfg, render, oxr, vlm, video,
-            prompt_path, tools_openai=tools_openai,
+            prompt_path, tools=tools, llm=llm, agent_llm=agent_llm,
         )
-        stt = SttClient(cfg.stt_server)
-        tts = TtsClient(cfg.tts_server)
         self._pipeline, self._pipeline_task = build_pipeline(
             self._transport, stt, tts, self._scene,
         )

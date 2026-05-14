@@ -358,7 +358,12 @@ forwarding.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | — |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-logging` [editable] | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0, silero-vad >=5.1 |
+
+Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
+`yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
+`make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
+a transitive dep of `xr-ai-pipecat` and `fastmcp`.
 
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency

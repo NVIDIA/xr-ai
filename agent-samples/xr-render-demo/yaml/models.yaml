@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# xr-render-demo model configuration.
+# Each entry maps a logical name to a preset + base_url.
+# Presets live in agent-sdk/xr-ai-models/xr_ai_models/presets/.
+
+llm:
+  kind: preset:llama_nemotron
+  base_url: http://localhost:8106
+
+agent_llm:
+  kind: preset:nemotron3_nano
+  base_url: http://localhost:8107
+
+stt:
+  kind: preset:parakeet_stt
+  base_url: http://localhost:8103
+
+tts:
+  kind: preset:piper_tts
+  base_url: http://localhost:8105
+
+vlm:
+  kind: preset:cosmos_vlm
+  base_url: http://localhost:8100
