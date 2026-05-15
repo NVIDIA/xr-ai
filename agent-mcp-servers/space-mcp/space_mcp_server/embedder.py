@@ -41,10 +41,15 @@ class DinoV2Embedder:
         self._lock       = threading.Lock()
         # Filled in after the first load.
         self.embedding_dim: int = 0
+        # Sticky failure: once loading fails we cache the exception and
+        # re-raise it on every call instead of retrying-and-spamming-logs.
+        self._load_error: Exception | None = None
 
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return
+        if self._load_error is not None:
+            raise self._load_error
         import torch
         from loguru import logger
         from transformers import AutoImageProcessor, AutoModel
@@ -54,8 +59,16 @@ class DinoV2Embedder:
             self._model_name, device,
         )
         t0 = time.monotonic()
-        self._processor = AutoImageProcessor.from_pretrained(self._model_name)
-        m = AutoModel.from_pretrained(self._model_name).to(device).eval()
+        try:
+            self._processor = AutoImageProcessor.from_pretrained(self._model_name)
+            m = AutoModel.from_pretrained(self._model_name).to(device).eval()
+        except Exception as exc:
+            self._load_error = exc
+            logger.opt(exception=True).error(
+                "DINOv2: load failed; subsequent calls will raise the same error "
+                "without re-trying (restart the server to retry).",
+            )
+            raise
         self._model        = m
         self._device       = device
         self._torch        = torch

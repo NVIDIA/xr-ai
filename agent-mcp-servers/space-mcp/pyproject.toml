@@ -16,6 +16,10 @@ dependencies = [
     "Pillow>=10.0",
     "numpy>=1.24",
     "torch>=2.2",
+    # `transformers.AutoImageProcessor` resamples + normalizes the input
+    # through torchvision under the hood — without this you hit
+    # `AutoImageProcessor requires the Torchvision library`.
+    "torchvision>=0.17",
     # DINOv2 (Apache-2.0) is loaded through `transformers` so we avoid
     # vendoring model code; same path the wider HF ecosystem uses.
     "transformers>=4.40",
