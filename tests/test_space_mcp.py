@@ -197,3 +197,18 @@ def test_reset_wipes_store(tmp_path):
     store.reset()
     assert len(store) == 0
     assert len(RegionStore(tmp_path)) == 0
+
+
+def test_remember_objects_merges_and_persists(tmp_path):
+    store = RegionStore(tmp_path)
+    store.insert(np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32), ts_us=0)
+    store.remember_objects(0, ["sofa", "lamp"], ts_us=100)
+    store.remember_objects(0, ["LAMP", "Plant"], ts_us=200)   # case-insensitive merge
+
+    r = RegionStore(tmp_path).get(0)
+    names = {o["name"]: o for o in r.objects}
+    assert set(names) == {"sofa", "lamp", "plant"}
+    # "lamp" was seen twice (case-insensitive), so its count bumped.
+    assert names["lamp"]["frame_count"] == 2
+    assert names["sofa"]["frame_count"] == 1
+    assert names["lamp"]["ts_last"] == 200

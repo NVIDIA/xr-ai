@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# space-mcp config for simple-vlm-example.
+# Topological place memory: persists per-region centroids + topology
+# under map_dir.  Wipe that directory (or call the reset_map MCP tool)
+# to start a fresh map.
+
+map_dir: /tmp/xr-ai/simple-vlm-example-space-map
+
+device:                auto
+dinov2_model:          facebook/dinov2-small
+match_threshold:       0.78
+new_region_min_streak: 3
+centroid_alpha:        0.05
+
+host: 0.0.0.0
+port: 8245
+
+# Stream the topological-graph + object catalog to a Rerun viewer.
+# Start the viewer first (`rerun` — defaults to gRPC on 127.0.0.1:9876).
+rerun_addr: 127.0.0.1:9876

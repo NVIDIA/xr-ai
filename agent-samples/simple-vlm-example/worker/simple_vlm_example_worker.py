@@ -46,8 +46,8 @@ from xr_ai_agent import ProcessorEndpoint
 from xr_ai_logging import setup_logging
 
 from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmAgent
-from services import (PoseClient, SttClient, TtsClient, VlmClient,
-                      wait_for_health, wait_for_pose_mcp)
+from services import (PoseClient, SpaceClient, SttClient, TtsClient, VlmClient,
+                      wait_for_health, wait_for_pose_mcp, wait_for_space_mcp)
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -77,12 +77,17 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     pose_url = cfg.get("pose_mcp_url") or None
     pose: PoseClient | None = PoseClient(pose_url) if pose_url else None
 
+    # Optional space-mcp path (topological place memory + object recall).
+    space_url = cfg.get("space_mcp_url") or None
+    space: SpaceClient | None = SpaceClient(space_url) if space_url else None
+
     await wait_for_health({
         "STT": stt.health_url,
         "VLM": vlm.health_url,
         "TTS": tts.health_url,
     })
     await wait_for_pose_mcp(pose)
+    await wait_for_space_mcp(space)
 
     if ready_file:
         ready_file.touch()
@@ -91,6 +96,7 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     agent = SimpleVlmAgent(
         ep, stt, vlm, tts,
         pose                  =pose,
+        space                 =space,
         default_prompt        =cfg.get("default_prompt",        "Describe what you see."),
         system_prompt         =cfg.get("system_prompt",         DEFAULT_SYSTEM_PROMPT),
         frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),
@@ -101,6 +107,8 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         min_speech            =float(cfg.get("min_speech",            0.3)),
         pose_hz               =float(cfg.get("pose_hz",               2.0)),
         pose_max_age_s        =float(cfg.get("pose_max_age_s",         0.6)),
+        space_hz              =float(cfg.get("space_hz",               1.0)),
+        space_max_age_s       =float(cfg.get("space_max_age_s",        1.5)),
     )
 
     loop = asyncio.get_running_loop()
@@ -114,6 +122,8 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         agent.shutdown()
         if pose is not None:
             await pose.close()
+        if space is not None:
+            await space.close()
     logger.info("simple-vlm-example stopped")
 
 

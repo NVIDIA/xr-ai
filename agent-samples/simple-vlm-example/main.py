@@ -34,12 +34,17 @@ _PROCESSES: list[Process] = [
             config="yaml/stt_server.yaml"),
     Process("tts",    "../../ai-services/tts/piper",            "piper_tts_server",
             config="yaml/piper_tts_server.yaml"),
-    # Pose-mcp must start before the worker so PoseClient finds it on the
-    # health probe; comment this Process out (and `pose_mcp_url` in the
-    # worker YAML) to skip the localization path entirely.
-    Process("pose",   "../../agent-mcp-servers/pose-mcp",        "pose_mcp_server",
-            config="yaml/pose_mcp_server.yaml"),
-    Process("worker", "worker",                                  "simple_vlm_example_worker",
+    # Pose-mcp (metric 6DoF) is disabled by default on this branch — the
+    # space-mcp path below is the recommended starting point.  Uncomment
+    # this Process and set `pose_mcp_url` in the worker YAML to run both.
+    # Process("pose",  "../../agent-mcp-servers/pose-mcp",         "pose_mcp_server",
+    #         config="yaml/pose_mcp_server.yaml"),
+    # Space-mcp = topological place memory + VLM-driven object catalog.
+    # Must start before the worker so SpaceClient finds it on the health
+    # probe; comment out + clear `space_mcp_url` to disable.
+    Process("space",  "../../agent-mcp-servers/space-mcp",        "space_mcp_server",
+            config="yaml/space_mcp_server.yaml"),
+    Process("worker", "worker",                                   "simple_vlm_example_worker",
             config="yaml/simple_vlm_example_worker.yaml"),
 ]
 

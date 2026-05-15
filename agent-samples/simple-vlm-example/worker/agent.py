@@ -55,7 +55,7 @@ import pathlib
 
 from audio import chunks_to_wav, now_us, rms, wav_to_chunks
 from pixels import encode_image, frame_to_pil
-from services import PoseClient, SttClient, TtsClient, VlmClient
+from services import PoseClient, SpaceClient, SttClient, TtsClient, VlmClient
 from voice import VoiceState
 
 
@@ -86,6 +86,7 @@ class SimpleVlmAgent:
         tts: TtsClient,
         *,
         pose:               PoseClient | None = None,
+        space:              SpaceClient | None = None,
         default_prompt:     str   = "Describe what you see.",
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
         silence_threshold:  float = 0.01,
@@ -97,12 +98,16 @@ class SimpleVlmAgent:
         pose_hz:             float = 2.0,
         pose_max_age_s:      float = 0.6,
         pose_scratch_dir:    pathlib.Path = pathlib.Path("/dev/shm/xr-ai/pose-in"),
+        space_hz:            float = 1.0,
+        space_max_age_s:     float = 1.5,
+        space_scratch_dir:   pathlib.Path = pathlib.Path("/dev/shm/xr-ai/space-in"),
     ) -> None:
-        self._ep   = ep
-        self._stt  = stt
-        self._vlm  = vlm
-        self._tts  = tts
-        self._pose = pose
+        self._ep    = ep
+        self._stt   = stt
+        self._vlm   = vlm
+        self._tts   = tts
+        self._pose  = pose
+        self._space = space
 
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
@@ -131,6 +136,17 @@ class SimpleVlmAgent:
         self._pose_event = asyncio.Event()
         if self._pose is not None:
             self._pose_scratch_dir.mkdir(parents=True, exist_ok=True)
+
+        # Space loop — topological place memory.  Slower than pose: place
+        # changes are second-scale.  Reuses the shared `_pose_event` so
+        # both loops wake on the same frame source.
+        self._space_min_period_s = 1.0 / max(space_hz, 0.05)
+        self._space_max_age_s    = float(space_max_age_s)
+        self._space_scratch_dir  = space_scratch_dir
+        self._space_last_pts: dict[str, int] = {}
+        self._space_described_regions: set[int] = set()   # regions we've VLM'd
+        if self._space is not None:
+            self._space_scratch_dir.mkdir(parents=True, exist_ok=True)
 
         self._voice:  dict[str, VoiceState]              = {}
         self._latest: dict[tuple[str, str], FrameSignal] = {}
@@ -670,21 +686,185 @@ class SimpleVlmAgent:
             }).encode(),
         ))
 
+    # ── space path: opportunistic process_frame against space-mcp ────────────
+
+    async def _space_loop(self) -> None:
+        """Topological place memory loop — calls space-mcp.process_frame at
+        ~space_hz on the freshest available frame.  On a state of
+        ``created`` or ``transitioned`` (to a region we haven't described
+        yet), kick off a VLM caption + remember_objects call in the
+        background so the current loop iteration isn't blocked."""
+        logger.info(
+            "space loop running  min_period={:.2f}s  max_age={:.2f}s",
+            self._space_min_period_s, self._space_max_age_s,
+        )
+        idle_logged = False
+        try:
+            while True:
+                try:
+                    await asyncio.wait_for(self._pose_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    pass
+                # Don't clear the event here — pose loop also listens; whoever
+                # finishes first leaves it set for the other if more frames
+                # arrived since.  Both loops will fall through on stale
+                # frames and short-circuit, so the cost of "extra wakeups"
+                # is one cheap check each.
+                pids = {pid for pid, _ in self._latest}
+                if not pids:
+                    if not idle_logged:
+                        logger.info("space loop idle — no participants with frames yet")
+                        idle_logged = True
+                    await asyncio.sleep(self._space_min_period_s)
+                    continue
+                idle_logged = False
+                for pid in pids:
+                    try:
+                        await self._space_one(pid)
+                    except Exception as exc:
+                        logger.opt(exception=True).warning(
+                            "space iteration failed pid={!r}: {}", pid, exc,
+                        )
+                await asyncio.sleep(self._space_min_period_s)
+        except asyncio.CancelledError:
+            raise
+
+    async def _space_one(self, pid: str) -> None:
+        assert self._space is not None
+        sig = self._latest_signal(pid)
+        if sig is None:
+            return
+        age_s = (now_us() - sig.pts_us) / 1_000_000.0
+        if age_s > self._space_max_age_s:
+            return
+        if self._space_last_pts.get(pid) == sig.pts_us:
+            return
+        frame = await self._ep.request_frame(sig)
+        if frame is None:
+            return
+
+        img      = frame_to_pil(frame)
+        out_path = self._space_scratch_dir / f"{_safe_pid(pid)}.png"
+        tmp_path = out_path.with_suffix(".png.tmp")
+        img.save(tmp_path, format="PNG")
+        tmp_path.replace(out_path)
+
+        t0 = time.monotonic()
+        try:
+            result = await self._space.process_frame(
+                str(out_path), timestamp_us=frame.pts_us,
+            )
+        except Exception as exc:
+            logger.warning("space-mcp call failed pid={!r}: {}", pid, exc)
+            return
+        self._space_last_pts[pid] = sig.pts_us
+        dt_ms = (time.monotonic() - t0) * 1000.0
+
+        if result.get("error"):
+            logger.warning("space-mcp error pid={!r}: {}", pid, result["error"])
+            return
+
+        state     = result.get("state")
+        region_id = result.get("region_id")
+        logger.info(
+            "space  pid={!r}  state={}  region={}  name={!r}  conf={:.3f}  regions={}  ({:.0f} ms)",
+            pid, state, region_id, result.get("region_name"),
+            float(result.get("confidence", 0.0) or 0.0),
+            result.get("num_regions"), dt_ms,
+        )
+
+        # Push the snapshot back to the client on a data topic so the UI
+        # can render "you are in region 3" or whatever.
+        await self._ep.send_return_data(DataMessage(
+            participant_id=pid,
+            topic="space.update",
+            pts_us=frame.pts_us,
+            data=json.dumps({
+                "state":             state,
+                "region_id":         region_id,
+                "region_name":       result.get("region_name"),
+                "confidence":        result.get("confidence"),
+                "num_regions":       result.get("num_regions"),
+                "transitioned_from": result.get("transitioned_from"),
+                "ts_us":             result.get("ts_us"),
+            }).encode(),
+        ))
+
+        # On entering a new region (created or first-time visited):
+        # describe it via the VLM in the background so we don't block the
+        # loop.  Skip if we've already catalogued objects for this region.
+        if region_id is None:
+            return
+        wants_describe = (
+            state == "created"
+            or (state == "transitioned" and region_id not in self._space_described_regions)
+        )
+        if wants_describe:
+            self._space_described_regions.add(region_id)
+            asyncio.create_task(
+                self._describe_region_with_vlm(pid, region_id, frame),
+                name=f"describe-r{region_id}",
+            )
+
+    async def _describe_region_with_vlm(
+        self, pid: str, region_id: int, frame,
+    ) -> None:
+        """VLM → JSON-list-of-objects → space.remember_objects.
+
+        Runs as a background task because the VLM call can take seconds;
+        we don't want to stall the space loop.  Parsing is defensive — if
+        the VLM doesn't emit clean JSON we fall back to splitting on
+        commas / newlines and just keep the first 10 tokens.
+        """
+        assert self._space is not None
+        image_url = encode_image(frame_to_pil(frame))
+        prompt = (
+            "List the most prominent physical objects visible in this scene. "
+            "Reply with ONLY a JSON array of lowercase strings, each at most "
+            "3 words, maximum 10 entries. Example: [\"sofa\", \"lamp\", \"window\"]."
+        )
+        try:
+            text = await self._vlm.collect(image_url, prompt, system_prompt="")
+        except Exception as exc:
+            logger.warning("VLM describe failed region={}: {}", region_id, exc)
+            self._space_described_regions.discard(region_id)
+            return
+        names = _parse_object_list(text)
+        if not names:
+            logger.warning("VLM returned no parseable objects for region={}: {!r}",
+                           region_id, text[:120])
+            return
+        try:
+            r = await self._space.remember_objects(
+                region_id, names, timestamp_us=now_us(),
+            )
+        except Exception as exc:
+            logger.warning("remember_objects failed region={}: {}", region_id, exc)
+            return
+        logger.info(
+            "described region {}  objects={}  total_in_region={}",
+            region_id, names, len(r.get("objects", [])),
+        )
+
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def run(self) -> None:
-        pose_task: asyncio.Task | None = None
+        pose_task:  asyncio.Task | None = None
+        space_task: asyncio.Task | None = None
         if self._pose is not None:
             pose_task = asyncio.create_task(self._pose_loop(), name="pose-loop")
+        if self._space is not None:
+            space_task = asyncio.create_task(self._space_loop(), name="space-loop")
         try:
             await self._ep.run()
         finally:
-            if pose_task is not None:
-                pose_task.cancel()
-                try:
-                    await pose_task
-                except (asyncio.CancelledError, Exception):
-                    pass
+            for t in (pose_task, space_task):
+                if t is not None:
+                    t.cancel()
+                    try:
+                        await t
+                    except (asyncio.CancelledError, Exception):
+                        pass
             for t in self._camera_off_timers.values():
                 t.cancel()
 
@@ -707,3 +887,38 @@ def _fmt4(v):
     if v is None:
         return "—"
     return "[{:+.2f}, {:+.2f}, {:+.2f}, {:+.2f}]".format(*v)
+
+
+def _parse_object_list(text: str) -> list[str]:
+    """Best-effort parse of a VLM response into a list of object names.
+
+    Tries strict JSON first (the prompt asks for it); falls back to a
+    permissive comma/newline split that strips brackets, quotes, and
+    bullet markers.  Caps the result at 10 entries — anything more is
+    usually the VLM hallucinating.
+    """
+    import re
+    text = text.strip()
+    # 1. Strict: find the first JSON array in the response.
+    m = re.search(r"\[.*?\]", text, re.DOTALL)
+    if m:
+        try:
+            arr = json.loads(m.group(0))
+            if isinstance(arr, list):
+                names = [str(x).strip().lower() for x in arr if str(x).strip()]
+                return names[:10]
+        except json.JSONDecodeError:
+            pass
+    # 2. Permissive: strip outer brackets if any, split on common delimiters.
+    body = re.sub(r"^[\[\]\s]+|[\[\]\s]+$", "", text)
+    parts = re.split(r"[,\n]", body)
+    names: list[str] = []
+    for p in parts:
+        # Strip numbered-list prefixes ("1.", "2)", "- "), then quotes / bullets.
+        token = re.sub(r"^\s*\d+[\.\)]\s*", "", p)
+        token = token.strip().strip("\"'-*•").strip().lower()
+        if token and len(token) <= 40:
+            names.append(token)
+        if len(names) >= 10:
+            break
+    return names

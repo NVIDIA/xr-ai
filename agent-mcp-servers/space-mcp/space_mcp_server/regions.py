@@ -174,6 +174,33 @@ class RegionStore:
         self._flush()
         return True
 
+    def remember_objects(
+        self, region_id: int, names: list[str], *, ts_us: int,
+    ) -> Region | None:
+        """Merge ``names`` into the region's object catalog.
+
+        Existing entries (matched by lowercased exact name) get their
+        ``frame_count`` bumped and ``ts_last`` refreshed; unseen names are
+        appended.  Persists on every change so the catalog survives a crash.
+        """
+        r = self.get(region_id)
+        if r is None:
+            return None
+        seen = {o["name"].lower(): o for o in r.objects if isinstance(o, dict)}
+        for raw in names:
+            key = str(raw).strip().lower()
+            if not key:
+                continue
+            if key in seen:
+                seen[key]["frame_count"] = int(seen[key].get("frame_count", 0)) + 1
+                seen[key]["ts_last"]     = int(ts_us)
+            else:
+                obj = {"name": key, "frame_count": 1, "ts_last": int(ts_us)}
+                seen[key] = obj
+                r.objects.append(obj)
+        self._flush()
+        return r
+
     def rename(self, region_id: int, name: str | None) -> Region | None:
         r = self.get(region_id)
         if r is None:

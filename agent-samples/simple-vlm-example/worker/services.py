@@ -42,6 +42,25 @@ class VlmClient:
         self.chat_url   = base + "/v1/chat/completions"
         self._model     = model_name
 
+    async def collect(
+        self,
+        image_url: str,
+        query: str,
+        *,
+        system_prompt: str = "",
+        max_chars:     int = 2000,
+    ) -> str:
+        """Non-streaming wrapper around `stream` — concatenates SSE chunks
+        into a single response string.  Cheap convenience for short
+        structured outputs (e.g. JSON object lists) where we don't want
+        the caller to manage a token loop."""
+        buf: list[str] = []
+        async for tok in self.stream(image_url, query, system_prompt=system_prompt):
+            buf.append(tok)
+            if sum(len(s) for s in buf) > max_chars:
+                break
+        return "".join(buf).strip()
+
     async def stream(
         self,
         image_url: str,
@@ -100,6 +119,86 @@ class TtsClient:
                 logger.error("tts {}: {}", resp.status_code, resp.text[:300])
             resp.raise_for_status()
             return resp.content
+
+
+class SpaceClient:
+    """FastMCP client for space-mcp's topological place-memory tools.
+
+    Long-lived MCP connection; reopens transparently on a dropped call.
+    Set ``url`` to ``None`` to disable the space path entirely.
+    """
+
+    def __init__(self, url: str) -> None:
+        self._url    = url.rstrip("/")
+        self._client: Any = None
+        self._lock   = asyncio.Lock()
+
+    @property
+    def health_url(self) -> str:
+        return self._url
+
+    async def _ensure_open(self) -> None:
+        if self._client is not None:
+            return
+        from fastmcp import Client
+        self._client = Client(self._url)
+        await self._client.__aenter__()
+
+    async def _aclose(self) -> None:
+        if self._client is not None:
+            try:
+                await self._client.__aexit__(None, None, None)
+            finally:
+                self._client = None
+
+    async def _call(self, tool: str, args: dict) -> dict:
+        async with self._lock:
+            try:
+                await self._ensure_open()
+                result = await self._client.call_tool(tool, args)
+            except Exception:
+                await self._aclose()
+                raise
+        if hasattr(result, "data") and result.data is not None:
+            return result.data
+        try:
+            return json.loads(result.content[0].text)
+        except Exception:
+            return {"error": "unparseable space-mcp response"}
+
+    async def process_frame(self, image_path: str, timestamp_us: int = 0) -> dict:
+        return await self._call("process_frame", {
+            "image_path": image_path, "timestamp_us": timestamp_us,
+        })
+
+    async def remember_objects(
+        self, region_id: int, names: list[str], timestamp_us: int = 0,
+    ) -> dict:
+        return await self._call("remember_objects", {
+            "region_id": int(region_id),
+            "names":     list(names),
+            "timestamp_us": int(timestamp_us),
+        })
+
+    async def close(self) -> None:
+        async with self._lock:
+            await self._aclose()
+
+
+async def wait_for_space_mcp(client: "SpaceClient | None") -> None:
+    """Poll until ``list_regions`` answers — proves FastMCP is up."""
+    if client is None:
+        return
+    while True:
+        try:
+            await client._ensure_open()
+            await client._client.call_tool("list_regions", {})
+            logger.info("SPACE ready")
+            return
+        except Exception as exc:
+            logger.info("still waiting for SPACE: {}", exc.__class__.__name__)
+            await client._aclose()
+            await asyncio.sleep(5.0)
 
 
 class PoseClient:

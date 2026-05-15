@@ -63,6 +63,7 @@ from xr_ai_logging import setup_logging
 from .embedder import DinoV2Embedder
 from .regions  import RegionStore
 from .tracker  import Tracker
+from .viz      import RerunSink, VizSink
 
 
 def _load_image_rgb(path: pathlib.Path) -> np.ndarray:
@@ -70,7 +71,11 @@ def _load_image_rgb(path: pathlib.Path) -> np.ndarray:
         return np.asarray(img.convert("RGB"))
 
 
-def build_mcp(tracker: Tracker, store: RegionStore) -> FastMCP:
+def build_mcp(
+    tracker: Tracker,
+    store:   RegionStore,
+    viz:     VizSink | None = None,
+) -> FastMCP:
     mcp = FastMCP("space-mcp")
 
     @mcp.tool()
@@ -107,6 +112,11 @@ def build_mcp(tracker: Tracker, store: RegionStore) -> FastMCP:
             "process_frame  state={}  region={}  conf={:.3f}  regions={}",
             r.state, r.region_id, r.confidence, r.num_regions,
         )
+        if viz is not None:
+            try:
+                viz.on_process(r, store.all(), rgb)
+            except Exception:                                       # noqa: BLE001
+                logger.opt(exception=True).error("viz sink raised; suppressed")
         return {
             "state":             r.state,
             "region_id":         r.region_id,
@@ -159,6 +169,52 @@ def build_mcp(tracker: Tracker, store: RegionStore) -> FastMCP:
         }
 
     @mcp.tool()
+    def remember_objects(region_id: int, names: list[str], timestamp_us: int = 0) -> dict:
+        """Merge a list of object names into the region's catalog.
+
+        ``names`` is matched against existing entries (case-insensitive
+        exact) — known names get their frame count bumped and ts_last
+        refreshed, unseen names are appended.  Intended to be driven by
+        a VLM caption step in the agent worker, not by hand.
+        """
+        import time as _time
+        ts_us = timestamp_us or int(_time.time() * 1_000_000)
+        r = store.remember_objects(int(region_id), list(names), ts_us=ts_us)
+        if r is None:
+            return {"error": f"no region with id {region_id}"}
+        if viz is not None:
+            try:
+                viz.on_objects(r)
+            except Exception:                                       # noqa: BLE001
+                logger.opt(exception=True).error("viz sink raised; suppressed")
+        return {
+            "id":      r.id,
+            "name":    r.name,
+            "objects": r.objects,
+        }
+
+    @mcp.tool()
+    def find_object(name: str) -> dict:
+        """Reverse lookup: every region whose object catalog contains
+        ``name`` (case-insensitive substring match).  Returns hits sorted
+        by descending ``frame_count``."""
+        needle = name.strip().lower()
+        if not needle:
+            return {"error": "empty query"}
+        hits: list[dict] = []
+        for r in store.all():
+            for o in r.objects:
+                obj_name = str(o.get("name", "")).lower()
+                if needle in obj_name:
+                    hits.append({
+                        "region_id":   r.id,
+                        "region_name": r.name,
+                        "object":      o,
+                    })
+        hits.sort(key=lambda h: int(h["object"].get("frame_count", 0)), reverse=True)
+        return {"query": needle, "hits": hits}
+
+    @mcp.tool()
     def label_region(region_id: int, name: str) -> dict:
         """Set a human-friendly name for a region (e.g. "kitchen").  Pass
         an empty string to clear the name."""
@@ -178,8 +234,12 @@ def build_mcp(tracker: Tracker, store: RegionStore) -> FastMCP:
     return mcp
 
 
-def build_app(tracker: Tracker, store: RegionStore):
-    return build_mcp(tracker, store).http_app(path="/mcp")
+def build_app(
+    tracker: Tracker,
+    store:   RegionStore,
+    viz:     VizSink | None = None,
+):
+    return build_mcp(tracker, store, viz=viz).http_app(path="/mcp")
 
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
@@ -201,7 +261,14 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
         centroid_alpha       =float(cfg.get("centroid_alpha",       0.05)),
     )
 
-    app = build_app(tracker, store)
+    viz: VizSink | None = None
+    rerun_addr = cfg.get("rerun_addr") or None
+    if rerun_addr:
+        viz = RerunSink(addr=str(rerun_addr))
+        viz.on_load(store.all())
+        logger.info("space-mcp: streaming topological map to Rerun at {}", rerun_addr)
+
+    app = build_app(tracker, store, viz=viz)
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 

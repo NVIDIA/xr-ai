@@ -7,13 +7,19 @@
 stt_server:  http://localhost:8103
 tts_server:  http://localhost:8105   # piper_tts_server
 
-# pose-mcp endpoint.  Set to null (or comment out) to disable the
-# localization path entirely — the worker then doesn't even open a
-# FastMCP client.  When set, the worker pushes pose updates back to
-# the client on data topic "pose.update" at pose_hz frames per second.
-pose_mcp_url:    http://localhost:8240/mcp
-pose_hz:         2.0   # throttle floor — pose-mcp won't be called faster than this
-pose_max_age_s:  0.6   # frames older than this (wall clock) are dropped, not processed
+# pose-mcp endpoint (metric 6DoF).  Disabled by default on this branch —
+# uncomment + uncomment the matching Process in main.py to also run the
+# metric pose pipeline alongside space-mcp.
+# pose_mcp_url:   http://localhost:8240/mcp
+pose_hz:         2.0
+pose_max_age_s:  0.6
+
+# space-mcp endpoint (topological place memory + VLM-driven object catalog).
+# When set, the worker pushes region transitions back on data topic
+# "space.update" and on new regions fires a VLM call to enumerate objects.
+space_mcp_url:   http://localhost:8245/mcp
+space_hz:        1.0      # place changes are slow; 1 Hz is plenty
+space_max_age_s: 1.5      # drop frames older than this from wall clock
 
 # VLM backend — controls which vision model the worker uses.
 # "cosmos" (default) → vlm-server (Cosmos-Reason1-7B) on port 8100

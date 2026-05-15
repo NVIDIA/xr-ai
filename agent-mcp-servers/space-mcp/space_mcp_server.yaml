@@ -38,3 +38,10 @@ centroid_alpha:    0.05
 
 host:              0.0.0.0
 port:              8245
+
+# Optional Rerun viewer sink.  Start the viewer first (`rerun` — defaults to
+# gRPC on 127.0.0.1:9876) and point this at it.  Either form works:
+#   rerun_addr: 127.0.0.1:9876
+#   rerun_addr: rerun+http://127.0.0.1:9876/proxy
+# null / commented = no Rerun output.
+rerun_addr:        null
