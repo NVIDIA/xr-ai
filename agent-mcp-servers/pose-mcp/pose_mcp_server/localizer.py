@@ -70,7 +70,7 @@ class Localizer:
         loop_search_every:  int   = 30,
         loop_min_distance_m: float = 1.0,
         loop_min_inliers:   int   = 40,
-        image_max_edge:     int   = 384,
+        image_max_edge:     int   = 192,
     ) -> None:
         self._store              = store
         self._geometry           = geometry

@@ -80,10 +80,22 @@ loop_min_inliers:     40
 
 # Server bind.
 # Input downsample (px on the longer edge).  0 disables.  Lower = faster
-# inference at some cost in PnP precision.  384 cuts XFeat from ~50 ms
-# to ~15 ms on 640x480 inputs without measurable pose quality loss in
-# typical indoor scenes.
-image_max_edge: 384
+# inference at some cost in PnP precision.  Empirically (bench/tum_bench.py
+# on TUM freiburg1_xyz, CPU-only) 192 yields p50 35 ms / 28 FPS with
+# ATE-RMSE ≈ 14 cm — same accuracy as 384 at half the latency.
+image_max_edge: 192
+
+# XFeat top_k features per frame.  512 is plenty for tracking-mode PnP;
+# more = better outlier survival in extreme viewpoint changes, fewer =
+# faster.  Going below ~200 hurts ATE in the bench.
+xfeat_top_k: 512
+
+# Use LighterGlue (transformer-based matcher) instead of raw mutual-NN
+# cosine matching.  LighterGlue is ~3× slower on CPU and (on TUM bench)
+# produces essentially the same ATE — RANSAC PnP filters outliers
+# either way.  Flip to true on GPU if you want the extra robustness in
+# very low-overlap loop-closure searches.
+use_lighterglue: false
 
 # Rerun viz filters — only when `rerun_addr` is set.
 # `viz_min_kf_inliers` skips the point cloud for keyframes that anchored

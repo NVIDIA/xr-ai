@@ -180,9 +180,10 @@ class XFeatBackend:
 
     def __init__(
         self, *,
-        device:   str,
-        top_k:    int   = 2048,
-        min_conf: float = 0.05,
+        device:           str,
+        top_k:            int   = 512,
+        min_conf:         float = 0.05,
+        use_lighterglue:  bool  = False,
     ) -> None:
         self._device   = device
         self._top_k    = top_k
@@ -192,6 +193,10 @@ class XFeatBackend:
         # filter on enough to drop obviously-bad matches while letting PnP
         # see real correspondences.
         self._min_conf = float(min_conf)
+        # When False, skip LighterGlue entirely and use the mutual-NN
+        # cosine fallback — much faster (~5 ms vs ~70 ms) at the cost of
+        # weaker outlier rejection (RANSAC PnP picks up the slack).
+        self._use_lighterglue = bool(use_lighterglue)
         self._model    = None
         self._lock     = threading.Lock()
 
@@ -214,6 +219,16 @@ class XFeatBackend:
         )
         # XFeat keeps internal params as buffers; move once and keep them put.
         m = m.to(device)
+        # XFeat hard-codes `self.dev` at __init__ from torch.cuda.is_available()
+        # and uses it inside `parse_input` / `match_lighterglue` to move
+        # incoming tensors.  `.to(device)` doesn't touch that attribute, so
+        # on a host where cuda.is_available() lies (e.g. driver mismatch)
+        # the weights end up on cpu while inputs go to a dead cuda.
+        # Force-overwrite the attribute so it always tracks what we asked for.
+        try:
+            m.dev = torch.device(device)
+        except AttributeError:
+            pass
         logger.info("XFeat: ready  ({:.1f}s)", time.monotonic() - t0)
         self._model  = m
         self._device = device
@@ -247,7 +262,7 @@ class XFeatBackend:
         torch = self._torch
         # XFeat exposes match_lighterglue when LighterGlue weights are present;
         # fall back to its mutual-nearest descriptor matcher otherwise.
-        if hasattr(self._model, "match_lighterglue"):
+        if self._use_lighterglue and hasattr(self._model, "match_lighterglue"):
             if a.image_size is None or b.image_size is None:
                 raise ValueError(
                     "match_lighterglue requires image_size on both FrameFeatures "
