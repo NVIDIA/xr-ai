@@ -334,12 +334,10 @@ def test_localizer_defers_origin_until_calibrated(tmp_path: pathlib.Path):
     must stay in `calibrating` and never create the origin keyframe — that
     would anchor the world frame to a wrong intrinsic.
 
-    Real-backend semantics: calibration "completes" *during* the Nth call
-    (the sample is appended, the median is pinned), so by the time the
-    localizer checks ``is_calibrated`` after that call the answer is True.
-    The first ``calibration_frames - 1`` process() calls return
-    ``state="calibrating"``; the Nth seeds the origin and returns
-    ``state="empty"``.
+    The localizer now checks ``is_calibrated`` *before* running geometry,
+    so the first N calls all return ``state="calibrating"`` (samples 1..N
+    are still being collected at the start of each).  The (N+1)th call
+    starts with the backend already pinned and seeds the origin.
     """
     store = KeyframeStore(tmp_path)
     geom  = _CalibratingGeometry(calibration_frames=3)
@@ -347,20 +345,20 @@ def test_localizer_defers_origin_until_calibrated(tmp_path: pathlib.Path):
     loc   = Localizer(store=store, geometry=geom, features=feats, min_inliers=10)
 
     img = _white_image(geom.W, geom.H)
-    for i in range(2):
+    for i in range(3):
         r = loc.process(img, ts_us=i)
         assert r.state == "calibrating", f"frame {i}: expected calibrating, got {r.state}"
         assert r.num_keyframes == 0
         assert r.pose is None
 
-    # Third call: backend flips to calibrated mid-call → origin is seeded.
-    r3 = loc.process(img, ts_us=100)
-    assert r3.state == "empty"
-    assert r3.num_keyframes == 1
+    # Fourth call: backend already calibrated → origin seeded, state=empty.
+    r4 = loc.process(img, ts_us=100)
+    assert r4.state == "empty"
+    assert r4.num_keyframes == 1
 
-    # Fourth call should localize against the now-existing origin keyframe.
-    r4 = loc.process(img, ts_us=200)
-    assert r4.state == "localized"
+    # Fifth call should localize against the now-existing origin keyframe.
+    r5 = loc.process(img, ts_us=200)
+    assert r5.state == "localized"
 
 
 def test_localizer_emits_viz_events(tmp_path: pathlib.Path):

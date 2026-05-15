@@ -90,12 +90,10 @@ class Localizer:
     def process(self, image_rgb: np.ndarray, ts_us: int | None = None) -> PoseResult:
         if ts_us is None:
             ts_us = int(time.time() * 1_000_000)
-        geom  = self._geometry(image_rgb)
 
-        # If the geometry backend exposes a calibration flag and isn't done
-        # yet, defer everything — anchoring the world frame to a keyframe
-        # built with a wrong intrinsic poisons the rest of the session.
+        # While calibrating, every call must run MoGe to collect FOV samples.
         if getattr(self._geometry, "is_calibrated", True) is False:
+            geom = self._geometry(image_rgb)
             result = PoseResult(
                 state="calibrating", pose=None,
                 translation=None, quaternion=None,
@@ -106,11 +104,21 @@ class Localizer:
             self._emit_viz(image_rgb, geom, result, None)
             return result
 
-        feats = self._features.extract(image_rgb)
         from loguru import logger
-        logger.debug("current frame  features={}", feats.kp.shape[0])
+        feats = self._features.extract(image_rgb)
+        H, W = image_rgb.shape[:2]
+        # After calibration the FOV is pinned; reuse it to compute K instead
+        # of paying for a MoGe forward pass on every frame.  Fall back to a
+        # live MoGe call if the backend doesn't expose pinned_fov_deg (test
+        # fakes, future backends) or returned None for some reason.
+        pinned_fov = getattr(self._geometry, "pinned_fov_deg", None)
+        if pinned_fov is None:
+            pinned_fov = self._geometry(image_rgb).fov_deg
 
         if len(self._store) == 0:
+            # First post-calibration call: seed origin (needs MoGe for the
+            # keyframe's points3d).
+            geom = self._geometry(image_rgb)
             origin = np.eye(4, dtype=np.float64)
             kf = self._store.append(
                 ts_us=ts_us, pose=origin, fov_deg=geom.fov_deg,
@@ -128,37 +136,38 @@ class Localizer:
             self._emit_viz(image_rgb, geom, result, kf)
             return result
 
-        best = self._best_pnp_against_keyframes(feats, geom)
+        best = self._best_pnp_against_keyframes(feats, pinned_fov, W, H)
 
         if best is None:
-            # Tracking failed AND full search failed — drop the track id so
-            # the next call starts with a fresh full search rather than
-            # repeatedly trying the same dead keyframe.
             self._last_matched_kf_id = None
+            stub_geom = self._stub_geom(pinned_fov, W, H)
             result = PoseResult(
                 state="bootstrap", pose=None,
                 translation=None, quaternion=None,
-                fov_deg=geom.fov_deg, num_inliers=0,
+                fov_deg=pinned_fov, num_inliers=0,
                 num_keyframes=len(self._store), matched_kf_id=None,
                 ts_us=ts_us,
             )
-            self._emit_viz(image_rgb, geom, result, None)
+            self._emit_viz(image_rgb, stub_geom, result, None)
             return result
 
         kf_id, T_world_cam, inliers = best
         kf = next(k for k in self._store.all() if k.id == kf_id)
-        self._last_matched_kf_id = kf.id   # cheap tracking handoff
+        self._last_matched_kf_id = kf.id
 
         new_kf: Keyframe | None = None
+        viz_geom = self._stub_geom(pinned_fov, W, H)
         if self._should_insert_keyframe(T_world_cam):
+            # Insertion is the only time we still need MoGe on the hot path.
+            geom = self._geometry(image_rgb)
             new_kf = self._store.append(
                 ts_us=ts_us, pose=T_world_cam, fov_deg=geom.fov_deg,
                 kp=feats.kp, desc=feats.desc,
                 pts3d=geom.points3d, mask=geom.mask,
                 image_rgb=image_rgb,
             )
-            # Inserted keyframe is now the best tracking anchor.
             self._last_matched_kf_id = new_kf.id
+            viz_geom = geom
             while len(self._store) > self._max_keyframes:
                 self._store.evict_oldest()
 
@@ -168,12 +177,24 @@ class Localizer:
             state="localized", pose=T_world_cam,
             translation=[float(t[0]), float(t[1]), float(t[2])],
             quaternion=[float(q[0]), float(q[1]), float(q[2]), float(q[3])],
-            fov_deg=geom.fov_deg, num_inliers=inliers,
+            fov_deg=pinned_fov, num_inliers=inliers,
             num_keyframes=len(self._store), matched_kf_id=kf.id,
             ts_us=ts_us,
         )
-        self._emit_viz(image_rgb, geom, result, new_kf)
+        self._emit_viz(image_rgb, viz_geom, result, new_kf)
         return result
+
+    @staticmethod
+    def _stub_geom(fov_deg: float, W: int, H: int) -> "GeometryFrame":      # noqa: F821
+        """Lightweight GeometryFrame for viz on tracking-only calls — viz
+        only needs ``fov_deg``/``width``/``height`` to draw the camera
+        frustum + image plane, not the full point map."""
+        from .backends import GeometryFrame
+        return GeometryFrame(
+            points3d=np.zeros((H, W, 3), dtype=np.float32),
+            mask=np.zeros((H, W), dtype=bool),
+            fov_deg=fov_deg, width=W, height=H,
+        )
 
     def _emit_viz(
         self,
@@ -197,11 +218,13 @@ class Localizer:
 
     def _best_pnp_against_keyframes(
         self,
-        feats: "FrameFeatures",   # noqa: F821
-        geom:  "GeometryFrame",   # noqa: F821
+        feats:   "FrameFeatures",   # noqa: F821
+        fov_deg: float,
+        W:       int,
+        H:       int,
     ) -> tuple[int, np.ndarray, int] | None:
         from loguru import logger
-        K = self._intrinsics_from_fov(geom.fov_deg, geom.width, geom.height)
+        K = self._intrinsics_from_fov(fov_deg, W, H)
         keyframes = self._store.all()
 
         # Tracking pass: re-try the keyframe we matched last.  On the common

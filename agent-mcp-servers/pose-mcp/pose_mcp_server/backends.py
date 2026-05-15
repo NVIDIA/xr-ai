@@ -65,11 +65,18 @@ class MoGeBackend:
         device:              str,
         fov_x_deg:           float | None = None,
         calibration_frames:  int          = 8,
+        border_px:           int          = 20,
     ) -> None:
         self._model_name         = model_name
         self._device             = device
         self._model              = None  # lazy; loaded on first __call__
         self._lock               = threading.Lock()
+        # MoGe's depth is unreliable in the outermost ~20 px of every frame:
+        # the receptive field falls off there, and flat surfaces visibly
+        # "fold in" toward the camera.  Zero out the validity mask in that
+        # margin so those pixels never participate in PnP or the rendered
+        # point cloud.  Set to 0 to disable; tune up for wider-FOV cameras.
+        self._border_px          = max(0, int(border_px))
         # FOV calibration.  If the operator provided `fov_x_deg` we skip
         # calibration entirely and pin that value forever.  Otherwise we
         # let MoGe guess on the first `calibration_frames` frames, collect
@@ -125,6 +132,14 @@ class MoGeBackend:
             out = self._model.infer(tensor, **infer_kwargs)
         points = out["points"].detach().cpu().numpy()
         mask   = out["mask"].detach().cpu().numpy().astype(bool)
+        # Drop the unreliable border before downstream code ever sees the
+        # mask — keyframe storage, PnP lookup, and viz all use this field.
+        if self._border_px > 0:
+            b = self._border_px
+            mask[:b, :] = False
+            mask[-b:, :] = False
+            mask[:, :b] = False
+            mask[:, -b:] = False
         # MoGe normalizes intrinsics so fov_x = 2 * arctan(0.5 / K[0,0]).
         K      = out["intrinsics"].detach().cpu().numpy()
         fov_deg = float(2.0 * np.degrees(np.arctan(0.5 / float(K[0, 0]))))
