@@ -22,10 +22,11 @@ dependencies = [
     "vlm-mcp-server",
     "render-mcp",
     "video-mcp-server",
-    # pose-mcp-server: pulled in only for unit tests (math + persistence).
-    # The MoGe/XFeat backends require GPU + multi-GB model weights and are
-    # exercised by GPU-marked tests only.
-    "pose-mcp-server",
+    # pose-mcp-server is intentionally NOT in the tests venv on this
+    # branch — its `gtsam` dependency pins numpy<2 while space-mcp's
+    # `rerun-sdk` pins numpy>=2, so the two can't coexist in one venv.
+    # pose-mcp's unit tests live on the `feat/pose-mcp-server` branch
+    # where space-mcp + rerun-sdk aren't installed.
     "space-mcp-server",
     # Test runner.
     "pytest>=8.0",
@@ -47,7 +48,6 @@ transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable
 vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
 render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }
 video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
-pose-mcp-server       = { path = "../agent-mcp-servers/pose-mcp",       editable = true }
 space-mcp-server      = { path = "../agent-mcp-servers/space-mcp",      editable = true }
 
 [tool.hatch.build.targets.wheel]

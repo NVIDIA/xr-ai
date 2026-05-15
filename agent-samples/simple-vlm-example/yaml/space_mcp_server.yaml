@@ -18,9 +18,7 @@ host: 0.0.0.0
 port: 8245
 
 # Stream the topological-graph + object catalog to a Rerun viewer.
-# Requires the [viz] extra of space-mcp:
-#     cd agent-mcp-servers/space-mcp && uv sync --extra viz
-# Launch the viewer FROM THE SAME VENV so the binary + SDK versions match:
+# Launch the viewer from the space-mcp venv so the binary + SDK match:
 #     uv run --directory agent-mcp-servers/space-mcp rerun
 # Otherwise the viewer drops messages with
 #     `Bad chunk schema: Missing row_id column`.

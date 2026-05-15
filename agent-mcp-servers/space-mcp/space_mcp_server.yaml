@@ -39,10 +39,10 @@ centroid_alpha:    0.05
 host:              0.0.0.0
 port:              8245
 
-# Optional Rerun viewer sink.  IMPORTANT — the viewer binary version must
-# match this venv's `rerun-sdk` version, or the viewer will spam
-# `Bad chunk schema: Missing row_id column` and drop every message.
-# Easiest fix: launch the viewer from this venv:
+# Rerun viewer sink.  IMPORTANT — the viewer binary version must match
+# this venv's `rerun-sdk` version, or the viewer drops every LogMsg with
+# `Bad chunk schema: Missing row_id column`.  Launch the viewer from
+# this venv so binary + SDK match:
 #     uv run --directory agent-mcp-servers/space-mcp rerun
 # Either rerun_addr form works:
 #   rerun_addr: 127.0.0.1:9876

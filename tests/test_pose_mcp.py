@@ -24,6 +24,13 @@ import pathlib
 import numpy as np
 import pytest
 
+# pose-mcp-server is intentionally not installed in this branch's tests
+# venv (its `gtsam` dep pins numpy<2; space-mcp's `rerun-sdk` needs
+# numpy>=2; the two can't coexist).  These tests live canonically on the
+# `feat/pose-mcp-server` branch.  Skip cleanly when the package is
+# absent so the file stays valuable on whichever branch has pose-mcp.
+pytest.importorskip("pose_mcp_server")
+
 from pose_mcp_server.backends  import FrameFeatures, GeometryFrame
 from pose_mcp_server.geometry  import (compose_se3, invert_se3, make_se3,
                                        quat_to_rmat, rmat_to_quat,
