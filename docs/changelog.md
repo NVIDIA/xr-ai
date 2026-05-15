@@ -9,6 +9,51 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-15 — `space-mcp-server`: topological place memory
+
+Added a sibling MCP server, `agent-mcp-servers/space-mcp/`, that
+answers *coarse* localization questions ("which place am I in", "which
+places touch this one") rather than metric 6DoF pose.  Designed to
+work alongside `pose-mcp-server`, not replace it — operators pick
+which server (or both) to wire into their sample based on the
+agent's needs.
+
+Motivation: the metric pose pipeline is sensitive to monocular depth
+inconsistency frame-to-frame and to wrong FOV priors — both unavoidable
+on flat / featureless scenes.  For an agent that just needs to know
+"the user is back in the kitchen, here's what they keep there", we
+don't need pixel-perfect 3D — a topological map of places + an object
+catalog per place is enough and is dramatically more robust.
+
+Pipeline:
+* DINOv2 (Apache-2.0, `facebook/dinov2-small` default) → 384-D L2-
+  normalized global descriptor per frame.
+* Online region tracker: cosine-sim against every existing region
+  centroid; if best match ≥ `match_threshold` (=0.78) snap to that
+  region and update its centroid via running-mean (`centroid_alpha`).
+* Otherwise buffer the un-matched descriptors; only commit a new
+  region once `new_region_min_streak` consecutive frames cluster
+  tightly (kills spurious rooms from a single off-angle frame).
+* Region transitions accrue edges in a topological graph.
+
+Tools (FastMCP at `/mcp` on port 8245):
+* `process_frame(image_path, timestamp_us=0)` — only model-running
+  tool; updates the map and returns the inferred region.
+* `where_am_i()` — current region + neighbours + objects (last is a
+  stub until the VLM-driven object cataloger lands).
+* `list_regions()` / `describe_region(id)` — read-only inspection.
+* `label_region(id, name)` — operator-friendly room names.
+* `reset_map()` — wipe everything.
+
+Persistence: `<map_dir>/regions.jsonl` — one row per region, atomic
+rewrite on every change.  Round-tripped by
+`test_regions_persist_across_restart` + `test_label_region_persists`.
+
+Eight unit tests use a deterministic scripted-descriptor fake embedder
+to exercise the Tracker state machine (seeded / snapped / pending_new /
+created / transitioned) and the persistence layer without ever
+touching DINOv2.
+
 ### 2026-05-15 — `pose-mcp-server` loop closure via GTSAM pose graph
 
 Added real loop-closure / global-drift-correction backed by GTSAM

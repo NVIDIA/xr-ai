@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "space-mcp-server"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "uvicorn[standard]>=0.29",
+    "fastmcp>=0.4",
+    "pyyaml>=6.0",
+    "Pillow>=10.0",
+    "numpy>=1.24",
+    "torch>=2.2",
+    # DINOv2 (Apache-2.0) is loaded through `transformers` so we avoid
+    # vendoring model code; same path the wider HF ecosystem uses.
+    "transformers>=4.40",
+    "xr-ai-logging",
+]
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+
+[project.scripts]
+space_mcp_server = "space_mcp_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["space_mcp_server"]

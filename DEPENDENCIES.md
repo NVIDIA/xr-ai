@@ -149,6 +149,25 @@ pose-mcp-server  (agent-mcp-servers/pose-mcp/)
     LighterGlue (loaded via torch.hub on first request), 6DoF solve from
     OpenCV solvePnPRansac.  Map persists under map_dir across restarts.
 
+space-mcp-server  (agent-mcp-servers/space-mcp/)
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    └── Pillow >=10.0
+    └── numpy >=1.24
+    └── torch >=2.2                    (DINOv2 forward)
+    └── transformers >=4.40            (Apache-2.0; loads DINOv2 weights from HF)
+    └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
+    Pure FastMCP at /mcp.  Topological place memory: each frame is
+    embedded with DINOv2 (Apache-2.0, facebook/dinov2-small by default),
+    matched against the centroid of every known region by cosine
+    similarity, and either snapped to the best match or seeded as a new
+    region.  Region transitions add edges in a persistent topological
+    graph.  Sister tool to pose-mcp — answers "which place am I in"
+    rather than "where in metres".  Robust to depth / FOV pathologies
+    because no metric depth is ever computed; tools never lift pixels
+    into 3D.  Map persists under map_dir across restarts.
+
 oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (load_cloudxr_env)
     └── isaacteleop                                (headless OpenXR + HeadTracker)
