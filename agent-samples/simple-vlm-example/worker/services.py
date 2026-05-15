@@ -137,14 +137,28 @@ class PoseClient:
             finally:
                 self._client = None
 
-    async def estimate_pose(self, image_path: str, timestamp_us: int = 0) -> dict:
+    async def estimate_pose(
+        self,
+        image_path: str,
+        timestamp_us: int = 0,
+        *,
+        prior_orientation: list[float] | None = None,
+    ) -> dict:
+        """Call pose-mcp's `estimate_pose` tool.
+
+        ``prior_orientation`` is an optional 3x3 row-major rotation matrix
+        (flattened to 9 floats) representing the camera's orientation in
+        the previous pose-mcp frame, as integrated from the device IMU
+        between calls.  pose-mcp uses it as the rotation component of
+        the PnP initial guess.
+        """
+        args: dict = {"image_path": image_path, "timestamp_us": timestamp_us}
+        if prior_orientation is not None:
+            args["prior_orientation"] = list(prior_orientation)
         async with self._lock:
             try:
                 await self._ensure_open()
-                result = await self._client.call_tool(
-                    "estimate_pose",
-                    {"image_path": image_path, "timestamp_us": timestamp_us},
-                )
+                result = await self._client.call_tool("estimate_pose", args)
             except Exception:
                 # Drop the broken connection so the next call retries fresh.
                 await self._aclose()
@@ -157,6 +171,25 @@ class PoseClient:
             return json.loads(result.content[0].text)
         except Exception:
             return {"error": "unparseable pose-mcp response"}
+
+    async def set_camera_fov(self, fov_x_deg: float) -> dict:
+        """Pin pose-mcp's horizontal FOV to a known value (e.g. from
+        client-published camera metadata).  ``0`` clears the pin."""
+        async with self._lock:
+            try:
+                await self._ensure_open()
+                result = await self._client.call_tool(
+                    "set_camera_fov", {"fov_x_deg": float(fov_x_deg)},
+                )
+            except Exception:
+                await self._aclose()
+                raise
+        if hasattr(result, "data") and result.data is not None:
+            return result.data
+        try:
+            return json.loads(result.content[0].text)
+        except Exception:
+            return {"error": "unparseable response"}
 
     async def close(self) -> None:
         async with self._lock:

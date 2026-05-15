@@ -46,6 +46,7 @@ import re
 import time
 
 import httpx
+import numpy as np
 from loguru import logger
 from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
                           ParticipantEvent, ProcessorEndpoint)
@@ -132,6 +133,15 @@ class SimpleVlmAgent:
         if self._pose is not None:
             self._pose_scratch_dir.mkdir(parents=True, exist_ok=True)
 
+        # IMU + camera-meta state pushed by the web client publisher.
+        # `_imu[pid]` holds a rolling orientation (device ← world) integrated
+        # from the gyro stream; we pass this to pose-mcp as an initial
+        # guess so PnP converges faster + drops fewer frames.  Pure gyro
+        # is sufficient — even uncorrected drift is well below the
+        # inter-frame motion magnitude PnP needs to recover.
+        self._imu: dict[str, dict] = {}
+        self._camera_meta: dict[str, dict] = {}
+
         self._voice:  dict[str, VoiceState]              = {}
         self._latest: dict[tuple[str, str], FrameSignal] = {}
 
@@ -205,6 +215,16 @@ class SimpleVlmAgent:
     # ── data path: text → query (with "ping" → default prompt) ────────────────
 
     async def _on_data(self, msg: DataMessage) -> None:
+        # IMU + camera-meta from the web client publisher.  These are
+        # JSON-encoded best-effort messages on dedicated topics; intercept
+        # them BEFORE the free-text dispatch path so they don't surface as
+        # user "queries" against the VLM.
+        if msg.topic == "imu":
+            self._ingest_imu(msg.participant_id, msg.data)
+            return
+        if msg.topic == "camera_meta":
+            self._ingest_camera_meta(msg.participant_id, msg.data)
+            return
         try:
             text = msg.data.decode(errors="replace").strip()
         except Exception:
@@ -213,6 +233,88 @@ class SimpleVlmAgent:
             return
         logger.info("data query  pid={!r}  {!r}", msg.participant_id, text[:80])
         await self._dispatch_query(msg.participant_id, text, pts_us=msg.pts_us)
+
+    # ── IMU / camera meta ingest ──────────────────────────────────────────────
+
+    def _ingest_imu(self, pid: str, payload: bytes) -> None:
+        """Parse a batch from the web client's IMU publisher and integrate
+        gyro into a rolling orientation prior for ``pid``.
+
+        We keep things deliberately simple: pure gyro integration in the
+        device frame.  Accelerometer is buffered for future tilt correction
+        but not used in this pass — even uncorrected gyro is enough to give
+        pose-mcp a small enough initial-guess error for PnP to converge
+        faster.
+        """
+        try:
+            data = json.loads(payload.decode("utf-8", errors="replace"))
+        except Exception:
+            return
+        samples_g = data.get("g") or []
+        dt_ms     = float(data.get("dt", 16))
+        if not samples_g:
+            return
+        st = self._imu.setdefault(pid, {
+            "orient": np.eye(3, dtype=np.float64),   # device frame ← world
+            "last_seen_us": 0,
+            "samples_seen": 0,
+        })
+        dt_s = max(1e-4, dt_ms / 1000.0)
+        for g in samples_g:
+            wx, wy, wz = float(g[0]), float(g[1]), float(g[2])
+            # First-order rotation matrix update: R_new = R · exp(skew(ω) dt).
+            # For small dt this is well-approximated by R · (I + skew(ω) dt),
+            # but using Rodrigues handles larger samples (e.g. 50 ms ones)
+            # without numerical drift.
+            theta = np.array([wx, wy, wz]) * dt_s
+            angle = float(np.linalg.norm(theta))
+            if angle < 1e-9:
+                continue
+            axis = theta / angle
+            K = np.array([
+                [0,        -axis[2],  axis[1]],
+                [ axis[2],  0,       -axis[0]],
+                [-axis[1],  axis[0],  0      ],
+            ])
+            dR = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+            st["orient"] = st["orient"] @ dR
+            st["samples_seen"] += 1
+        st["last_seen_us"] = int(data.get("t", 0)) * 1000
+
+    def _ingest_camera_meta(self, pid: str, payload: bytes) -> None:
+        """Stash the camera metadata the client published once on startup
+        and — when we can guess a sensible FOV from it — pin pose-mcp's
+        intrinsics so it can skip the MoGe-based per-frame estimation
+        (which is the biggest source of pose ambiguity on indoor flat
+        scenes).
+
+        Heuristic: width/height + facingMode → typical FOV bucket.  Errs
+        on the conservative side (slightly under typical) — too-narrow
+        FOV produces over-large 3D distances, which is less catastrophic
+        than a too-wide FOV (which collapses points toward the camera).
+        """
+        try:
+            data = json.loads(payload.decode("utf-8", errors="replace"))
+        except Exception:
+            return
+        self._camera_meta[pid] = data
+        logger.info(
+            "camera meta  pid={!r}  {}x{} fps={} facing={} label={!r}",
+            pid, data.get("width"), data.get("height"),
+            data.get("frame_rate"), data.get("facing"),
+            (data.get("label") or "")[:50],
+        )
+        fov = _guess_fov_from_meta(data)
+        if fov is not None and self._pose is not None:
+            asyncio.create_task(self._push_fov_to_pose(fov))
+
+    async def _push_fov_to_pose(self, fov_deg: float) -> None:
+        assert self._pose is not None
+        try:
+            r = await self._pose.set_camera_fov(fov_deg)
+            logger.info("pose-mcp FOV pinned to {:.1f}° (response={})", fov_deg, r)
+        except Exception as exc:
+            logger.warning("pose-mcp set_camera_fov failed: {}", exc)
 
     # ── interruptable query dispatch ──────────────────────────────────────────
 
@@ -630,10 +732,19 @@ class SimpleVlmAgent:
         img.save(tmp_path, format="PNG")
         tmp_path.replace(out_path)
 
+        # Snapshot the latest gyro-integrated orientation as a PnP prior.
+        # `_ingest_imu` is keeping this fresh in the background — we just
+        # read it.  No prior is sent for clients that don't publish IMU.
+        prior_R = None
+        st = self._imu.get(pid)
+        if st is not None and st["samples_seen"] > 0:
+            prior_R = list(float(x) for x in st["orient"].flatten())
+
         t0 = time.monotonic()
         try:
             result = await self._pose.estimate_pose(
                 str(out_path), timestamp_us=frame.pts_us,
+                prior_orientation=prior_R,
             )
         except Exception as exc:
             logger.warning("pose-mcp call failed pid={!r}: {}", pid, exc)
@@ -695,6 +806,33 @@ class SimpleVlmAgent:
 
 def _safe_pid(pid: str) -> str:
     return "".join(c if c.isalnum() or c in "-_." else "_" for c in pid)
+
+
+def _guess_fov_from_meta(meta: dict) -> float | None:
+    """Coarse FOV-x guess from the published camera metadata.
+
+    The web platform doesn't expose true intrinsics on `MediaTrackSettings`,
+    so we triangulate from facingMode + resolution + the user-agent.
+    Numbers are typical of consumer cameras as of 2026 — well-tuned
+    enough to seed pose-mcp's K matrix and skip the (noisier) MoGe
+    per-frame estimation, but the operator can always run a proper
+    calibration and call ``pose-mcp.set_camera_fov`` directly to
+    override.
+    """
+    facing = (meta.get("facing") or "").lower()
+    ua     = (meta.get("user_agent") or "").lower()
+    width  = int(meta.get("width") or 0)
+    height = int(meta.get("height") or 0)
+    if width <= 0 or height <= 0:
+        return None
+    # Rough device class — affects expected sensor + lens.
+    if "iphone" in ua or "ipad" in ua:
+        # iPhone main camera ≈ 26 mm equiv ⇒ ~67° H-FOV; front ≈ 75°.
+        return 75.0 if facing == "user" else 67.0
+    if "android" in ua and ("mobile" in ua or "phone" in ua):
+        return 72.0 if facing == "user" else 68.0
+    # Laptop webcams cluster around 55-65° H-FOV.
+    return 60.0
 
 
 def _fmt3(v):

@@ -297,6 +297,19 @@ export class LiveKitBackend {
   }
 
   /**
+   * Returns the underlying ``MediaStreamTrack`` of the active camera, or
+   * ``null`` if the camera isn't running.  Lets higher layers (the IMU /
+   * camera-meta publisher, for instance) read ``getSettings()`` /
+   * ``getCapabilities()`` off the live track without poking through
+   * private fields.
+   *
+   * @returns {MediaStreamTrack | null}
+   */
+  getLocalVideoMediaTrack() {
+    return this.#videoTrack?.mediaStreamTrack ?? null;
+  }
+
+  /**
    * Unpublishes and stops the local video track.
    *
    * Resolves silently if the camera was never started.

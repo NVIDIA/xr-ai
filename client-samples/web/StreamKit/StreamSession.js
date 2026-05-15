@@ -193,6 +193,18 @@ export class StreamSession {
   }
 
   /**
+   * Returns the underlying `MediaStreamTrack` for the active local camera,
+   * or `null` if no camera is running.  Useful for reading `getSettings()`
+   * / `getCapabilities()` off the actual track (e.g. for camera-meta
+   * publishing or local preview rendering).
+   *
+   * @returns {MediaStreamTrack | null}
+   */
+  getLocalVideoMediaTrack() {
+    return this.#backend.getLocalVideoMediaTrack?.() ?? null;
+  }
+
+  /**
    * Sends binary (or string) data to remote participants.
    *
    * Forwarded directly to the backend's `send()`. Keep individual messages

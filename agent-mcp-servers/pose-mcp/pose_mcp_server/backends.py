@@ -96,6 +96,23 @@ class MoGeBackend:
     def pinned_fov_deg(self) -> float | None:
         return self._pinned_fov
 
+    def set_pinned_fov_deg(self, fov_deg: float | None) -> None:
+        """Externally pin the FOV — e.g. when the client publishes its
+        camera metadata, the worker can extract a known FOV (lookup
+        table or resolution-based heuristic) and call this to short-
+        circuit MoGe's per-frame estimation.
+
+        Pass ``None`` to clear and resume MoGe-based calibration.
+        """
+        from loguru import logger
+        self._pinned_fov  = (None if fov_deg is None else float(fov_deg))
+        # Reset the calibration buffer so a new pin doesn't get averaged
+        # with stale samples on the next inference.
+        self._fov_samples.clear()
+        if self._pinned_fov is not None:
+            logger.info("MoGe FOV externally pinned to {:.1f}° (skipping calibration)",
+                        self._pinned_fov)
+
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return

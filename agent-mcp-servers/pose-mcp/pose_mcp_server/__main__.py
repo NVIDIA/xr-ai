@@ -80,7 +80,11 @@ def build_mcp(
     mcp = FastMCP("pose-mcp")
 
     @mcp.tool()
-    def estimate_pose(image_path: str, timestamp_us: int = 0) -> dict:
+    def estimate_pose(
+        image_path: str,
+        timestamp_us: int = 0,
+        prior_orientation: list[float] | None = None,
+    ) -> dict:
         """Return an approximate 6DoF pose for *image_path* in the persistent
         map's world frame.
 
@@ -92,6 +96,13 @@ def build_mcp(
             Optional Unix-microseconds timestamp; defaults to the server's
             wall clock.  Stored with the keyframe (if one is created) so
             callers can correlate poses with their own frame stream.
+        prior_orientation
+            Optional 9-element row-major 3x3 rotation matrix representing
+            the camera's orientation in the previous pose-mcp frame
+            (typically from an IMU gyro integration on the client).
+            Used as the rotation component of the PnP initial guess —
+            cuts iterations and improves convergence on near-degenerate
+            scenes.
         """
         path = pathlib.Path(image_path)
         if not path.exists():
@@ -100,8 +111,15 @@ def build_mcp(
             rgb = _load_image_rgb(path)
         except Exception as exc:
             return {"error": f"failed to load image: {exc}"}
+        prior_R = None
+        if prior_orientation is not None and len(prior_orientation) == 9:
+            try:
+                prior_R = np.asarray(prior_orientation, dtype=np.float64).reshape(3, 3)
+            except Exception:
+                prior_R = None
         try:
-            result = localizer.process(rgb, ts_us=timestamp_us or None)
+            result = localizer.process(rgb, ts_us=timestamp_us or None,
+                                       prior_orientation=prior_R)
         except Exception as exc:
             logger.exception("estimate_pose failed for {}", image_path)
             return {"error": f"localization failed: {exc}"}
@@ -119,6 +137,24 @@ def build_mcp(
             "matched_kf_id": result.matched_kf_id,
             "ts_us":         result.ts_us,
         }
+
+    @mcp.tool()
+    def set_camera_fov(fov_x_deg: float) -> dict:
+        """Externally pin the horizontal camera FOV (degrees).
+
+        Use this when the upstream agent has reliable intrinsics for the
+        camera (e.g. a phone model lookup or a calibration target).  Pose-
+        mcp will skip MoGe's auto-calibration window and use this value
+        directly to build the K matrix for PnP.
+
+        Pass 0 or a negative value to clear and resume MoGe-based
+        calibration.
+        """
+        if hasattr(localizer._geometry, "set_pinned_fov_deg"):
+            value = float(fov_x_deg) if fov_x_deg and fov_x_deg > 0 else None
+            localizer._geometry.set_pinned_fov_deg(value)
+            return {"ok": True, "pinned_fov_deg": value}
+        return {"error": "geometry backend does not support FOV pinning"}
 
     @mcp.tool()
     def get_map_stats() -> dict:

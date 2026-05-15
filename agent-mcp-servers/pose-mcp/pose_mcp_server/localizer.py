@@ -107,6 +107,11 @@ class Localizer:
         self._loop_min_inliers   = int(loop_min_inliers)
         self._frames_since_loop_check = 0
 
+        # IMU-derived rotation prior — when present, used by PnP-RANSAC as
+        # the initial rotation guess.  Doesn't change the algebra; just
+        # gives the solver a faster start.  Reset on every process() call.
+        self._prior_R: np.ndarray | None = None
+
         # Input downsample.  Set to 0 to disable.  XFeat scales ~linearly
         # with pixel count; MoGe is more fixed-cost but still benefits.
         # 384 max edge on a 640x480 input cuts XFeat from ~50 ms to ~15 ms
@@ -116,10 +121,17 @@ class Localizer:
         # because PnP only ever sees them in pairs (kf 2D ↔ current 2D).
         self._image_max_edge = max(0, int(image_max_edge))
 
-    def process(self, image_rgb: np.ndarray, ts_us: int | None = None) -> PoseResult:
+    def process(
+        self,
+        image_rgb: np.ndarray,
+        ts_us: int | None = None,
+        *,
+        prior_orientation: np.ndarray | None = None,
+    ) -> PoseResult:
         if ts_us is None:
             ts_us = int(time.time() * 1_000_000)
         image_rgb = self._maybe_downsample(image_rgb)
+        self._prior_R = prior_orientation   # consumed by _pnp_against_keyframe
 
         # While calibrating, every call must run MoGe to collect FOV samples.
         if getattr(self._geometry, "is_calibrated", True) is False:
@@ -471,12 +483,33 @@ class Localizer:
         pts3d_kf = kf.pts3d[iy[valid], ix[valid]].astype(np.float32)
         pts2d    = cur_xy[valid].astype(np.float32)
 
+        # PnP initial guess from the IMU prior (when caller supplied one).
+        # The prior is the *current* camera's orientation relative to the
+        # tracked keyframe's; pass it as ``rvec`` via Rodrigues.  We don't
+        # have a translation prior, so leave ``tvec`` zero and let RANSAC
+        # find it.  SOLVEPNP_ITERATIVE is the only flag that respects
+        # `useExtrinsicGuess`, so we switch to it when a prior is present.
+        guess_rvec: np.ndarray | None = None
+        guess_tvec: np.ndarray | None = None
+        use_guess  = False
+        flags      = cv2.SOLVEPNP_EPNP
+        prior_R    = self._prior_R
+        if prior_R is not None and prior_R.shape == (3, 3):
+            try:
+                guess_rvec, _ = cv2.Rodrigues(prior_R.astype(np.float64))
+                guess_tvec    = np.zeros((3, 1), dtype=np.float64)
+                use_guess     = True
+                flags         = cv2.SOLVEPNP_ITERATIVE
+            except Exception:
+                pass
         ok, rvec, tvec, inliers = cv2.solvePnPRansac(
             objectPoints=pts3d_kf.reshape(-1, 1, 3),
             imagePoints =pts2d.reshape(-1, 1, 2),
             cameraMatrix=K, distCoeffs=None,
             iterationsCount=200, reprojectionError=self._pnp_reproj_err_px,
-            confidence=0.999, flags=cv2.SOLVEPNP_EPNP,
+            confidence=0.999, flags=flags,
+            useExtrinsicGuess=use_guess,
+            rvec=guess_rvec, tvec=guess_tvec,
         )
         n_pnp = 0 if inliers is None else int(len(inliers))
         if not ok or n_pnp < self._min_inliers:
