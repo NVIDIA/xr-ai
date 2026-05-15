@@ -264,9 +264,18 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
     viz: VizSink | None = None
     rerun_addr = cfg.get("rerun_addr") or None
     if rerun_addr:
-        viz = RerunSink(addr=str(rerun_addr))
-        viz.on_load(store.all())
-        logger.info("space-mcp: streaming topological map to Rerun at {}", rerun_addr)
+        try:
+            viz = RerunSink(addr=str(rerun_addr))
+            viz.on_load(store.all())
+            logger.info("space-mcp: streaming topological map to Rerun at {}", rerun_addr)
+        except ImportError as exc:
+            # Operator forgot `uv sync --extra viz`; don't crash the server.
+            logger.warning(
+                "space-mcp: rerun-sdk not installed — running without Rerun output. "
+                "Run `uv sync --extra viz` in agent-mcp-servers/space-mcp to enable. ({})",
+                exc,
+            )
+            viz = None
 
     app = build_app(tracker, store, viz=viz)
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")

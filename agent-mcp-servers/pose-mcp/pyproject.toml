@@ -32,7 +32,10 @@ dependencies = [
 [project.optional-dependencies]
 # Pull in `rerun-sdk` only when the operator wants the live viewer.
 # `uv sync --extra viz` (or `pip install pose-mcp-server[viz]`) installs it.
-viz = ["rerun-sdk>=0.21"]
+# Keep the rerun-sdk pin aligned with space-mcp/pyproject.toml — the SDK
+# and viewer wire format have to match exactly, and we want a single
+# `uv run rerun` viewer to work for both pose-mcp and space-mcp recordings.
+viz = ["rerun-sdk>=0.32,<0.33"]
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }

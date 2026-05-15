@@ -18,5 +18,11 @@ host: 0.0.0.0
 port: 8245
 
 # Stream the topological-graph + object catalog to a Rerun viewer.
-# Start the viewer first (`rerun` — defaults to gRPC on 127.0.0.1:9876).
+# Requires the [viz] extra of space-mcp:
+#     cd agent-mcp-servers/space-mcp && uv sync --extra viz
+# Launch the viewer FROM THE SAME VENV so the binary + SDK versions match:
+#     uv run --directory agent-mcp-servers/space-mcp rerun
+# Otherwise the viewer drops messages with
+#     `Bad chunk schema: Missing row_id column`.
+# Set to null to disable the viz path entirely.
 rerun_addr: 127.0.0.1:9876

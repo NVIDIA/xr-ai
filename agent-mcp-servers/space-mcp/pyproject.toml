@@ -23,11 +23,17 @@ dependencies = [
     # DINOv2 (Apache-2.0) is loaded through `transformers` so we avoid
     # vendoring model code; same path the wider HF ecosystem uses.
     "transformers>=4.40",
-    # Rerun viewer integration — topological-graph visualization of the
-    # region map.  Apache-2.0 / MIT dual-licensed.
-    "rerun-sdk>=0.21",
     "xr-ai-logging",
 ]
+
+[project.optional-dependencies]
+# Rerun viewer integration (Apache-2.0 / MIT).  Kept optional because
+# rerun-sdk requires numpy>=2 while pose-mcp's gtsam dep pins numpy<2 —
+# the two servers can therefore not share a single venv if both pull
+# rerun-sdk as a hard dep, and the tests venv installs both editably.
+# Install with: `uv sync --extra viz` (and launch the viewer from THIS
+# venv so the SDK and `rerun` binary versions match the schema).
+viz = ["rerun-sdk>=0.32,<0.33"]
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
