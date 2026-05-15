@@ -43,6 +43,11 @@ export function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** @returns {boolean} */
+export function isQuestBrowser() {
+  return /OculusBrowser/.test(navigator.userAgent || '');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera enumeration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +72,12 @@ export async function enumerateCameras(model, render) {
         devices  = await navigator.mediaDevices.enumerateDevices();
         cameras  = devices.filter(d => d.kind === 'videoinput');
       } catch { /* permission denied — proceed with anonymous devices */ }
+    }
+
+    // Accessing a non-passthrough camera on Quest breaks the mediaDevices stack
+    // until headset reboot, so this filters the camera picker to passthrough only.
+    if (isQuestBrowser()) {
+      cameras = cameras.filter(d => !/\bfront\b/i.test(d.label));
     }
 
     const list = cameras.map((d, i) => ({
