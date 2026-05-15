@@ -20,6 +20,9 @@ dependencies = [
     # XFeat's `match_lighterglue` pulls kornia's LightGlue path; without
     # it we fall back to plain mutual-NN matching which is much weaker.
     "kornia>=0.7",
+    # Pose graph optimization (BSD-3, Georgia Tech).  Used to redistribute
+    # accumulated drift across keyframes whenever a loop closure is detected.
+    "gtsam>=4.2.1",
     # Monocular metric geometry (MIT). Provides point map + intrinsics in one
     # forward pass; lets us avoid asking the caller for camera calibration.
     "moge",

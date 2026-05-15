@@ -9,6 +9,54 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-15 — `pose-mcp-server` loop closure via GTSAM pose graph
+
+Added real loop-closure / global-drift-correction backed by GTSAM
+(BSD-3) and `LevenbergMarquardtOptimizer`.  Previously the localizer's
+"tracking + exhaustive-search fallback" already re-anchored to the
+best-matching keyframe when the camera revisited a mapped area, but it
+never reconciled accumulated drift across the rest of the keyframe
+chain.
+
+New components:
+* `pose_mcp_server/pgo.py` — `PoseGraph` + `PoseEdge` dataclass with
+  GTSAM-backed `optimize()` that takes ``{kf_id: 4x4}`` and returns the
+  post-optimization map.  Sequential chain edges + loop closures are
+  persisted under `<map_dir>/edges.jsonl` (append + atomic rewrite on
+  eviction, like the existing keyframes.jsonl).
+* `KeyframeStore.update_poses(...)` — applies optimized poses back to
+  the in-memory list and rewrites the keyframes JSONL atomically.
+  Local per-keyframe arrays (`points3d`, `kp`, `desc`, `mask`, image)
+  are unchanged — they're in the keyframe's *own* frame and aren't
+  affected by changes to its world transform.
+* `Localizer` extensions:
+  - Records a sequential edge `tracked_kf → new_kf` on every keyframe
+    insertion, weighting noise by the tracking inlier count.
+  - Every `loop_search_every` (=30) localized frames, runs a wide
+    PnP search against keyframes farther than `loop_min_distance_m`
+    (=1 m) from the tracked one.  A match with at least
+    `loop_min_inliers` (=40) becomes a `kind="loop"` edge whose
+    relative pose is computed from the two PnP observations of the
+    current camera:  ``T_tracked_cand = T_tracked_cam · inv(T_cand_cam)``.
+  - Re-runs PGO after every new edge.  Origin keyframe (lowest id) is
+    pinned with a `PriorFactorPose3` so the gauge is fixed; eviction
+    drops all edges touching the victim kf to keep the graph
+    consistent.
+
+Reset / wipe: `reset_map` MCP tool now wipes both the keyframe store
+and the pose graph; deleting `map_dir` clears everything together.
+
+Two new tests:
+* `test_pose_graph_loop_closure_corrects_drift` — synthetic 4-keyframe
+  ring with a +0.3 m Y-drift in the chain and a clean loop-closure
+  back to the origin.  Verifies the optimizer's `final_err < initial_err`
+  and that kf3's Y coordinate is pulled back >50 % of the way.
+* `test_pose_graph_edges_persist_across_restart` — edges JSONL
+  reloads byte-for-byte (same src/dst/kind/inliers + rel_pose).
+
+GTSAM 4.2.1 ships cp312 wheels on PyPI as of 2026-05; pinned as a
+hard dependency (not optional) since loop closure is now core.
+
 ### 2026-05-14 — `pose-mcp-server` Rerun viewer sink (optional)
 
 Added a Rerun-based visualization sink to `pose-mcp-server` for live

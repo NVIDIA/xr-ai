@@ -192,6 +192,38 @@ class KeyframeStore:
         self._next_id += 1
         return kf
 
+    def update_poses(self, new_poses: dict[int, np.ndarray]) -> int:
+        """Replace the world poses of one or more keyframes in-place and
+        rewrite the JSONL atomically.  Returns the count actually changed.
+
+        Keyframe-local data (points3d / keypoints / descriptors / mask /
+        image) is in the keyframe's *own* frame and is unaffected by a
+        change to its world←keyframe transform — so we never have to
+        rewrite the per-keyframe arrays here.
+        """
+        if not new_poses:
+            return 0
+        changed = 0
+        for i, kf in enumerate(self._keyframes):
+            if kf.id in new_poses:
+                self._keyframes[i] = dataclasses.replace(
+                    kf, pose=np.asarray(new_poses[kf.id], dtype=np.float64).reshape(4, 4),
+                )
+                changed += 1
+        if changed == 0:
+            return 0
+        tmp = self._root / "keyframes.jsonl.tmp"
+        with tmp.open("w", encoding="utf-8") as f:
+            for kf in self._keyframes:
+                f.write(json.dumps({
+                    "id":      kf.id,
+                    "ts_us":   kf.ts_us,
+                    "pose":    kf.pose.tolist(),
+                    "fov_deg": kf.fov_deg,
+                }) + "\n")
+        os.replace(tmp, self._root / "keyframes.jsonl")
+        return changed
+
     def evict_oldest(self) -> None:
         if not self._keyframes:
             return

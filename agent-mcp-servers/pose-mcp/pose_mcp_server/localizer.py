@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING
 from .backends   import FeatureBackend, GeometryBackend
 from .geometry   import (compose_se3, invert_se3, make_se3,
                          rmat_to_quat, se3_rotation_deg, se3_translation)
+from .pgo        import PoseEdge, PoseGraph
 from .store      import Keyframe, KeyframeStore
 
 if TYPE_CHECKING:
@@ -65,6 +66,10 @@ class Localizer:
         min_matches:        int   = 8,
         pnp_reproj_err_px:  float = 4.0,
         viz:                "VizSink | None" = None,
+        pose_graph:         PoseGraph | None = None,
+        loop_search_every:  int   = 30,
+        loop_min_distance_m: float = 1.0,
+        loop_min_inliers:   int   = 40,
     ) -> None:
         self._store              = store
         self._geometry           = geometry
@@ -86,6 +91,20 @@ class Localizer:
         # it first next time.  Successful track = O(1) match instead of O(N).
         # When tracking fails we fall back to the full brute-force search.
         self._last_matched_kf_id: int | None = None
+
+        # Pose graph + loop closure trigger config.  Without a `pose_graph`
+        # the localizer behaves exactly as before (no edges recorded, no
+        # PGO runs).  With one, sequential chain edges are added at each
+        # keyframe insertion and every `loop_search_every` localized frames
+        # we run a wide search against all keyframes farther than
+        # `loop_min_distance_m` from the tracked one — any match with at
+        # least `loop_min_inliers` becomes a loop-closure edge and triggers
+        # a Levenberg-Marquardt pass.
+        self._pose_graph         = pose_graph
+        self._loop_search_every  = max(1, int(loop_search_every))
+        self._loop_min_dist_m    = float(loop_min_distance_m)
+        self._loop_min_inliers   = int(loop_min_inliers)
+        self._frames_since_loop_check = 0
 
     def process(self, image_rgb: np.ndarray, ts_us: int | None = None) -> PoseResult:
         if ts_us is None:
@@ -155,6 +174,21 @@ class Localizer:
         kf = next(k for k in self._store.all() if k.id == kf_id)
         self._last_matched_kf_id = kf.id
 
+        # Periodic loop-closure probe.  Cheap relative to MoGe + most of the
+        # cost goes away when the map is small.  See ``_try_loop_closure`` for
+        # the criteria; if it adds an edge we'll run PGO below.
+        loop_added = False
+        if self._pose_graph is not None:
+            self._frames_since_loop_check += 1
+            if self._frames_since_loop_check >= self._loop_search_every:
+                self._frames_since_loop_check = 0
+                loop_added = self._try_loop_closure(
+                    feats, pinned_fov, W, H,
+                    tracked_kf=kf, T_kf_cam=invert_se3(
+                        invert_se3(kf.pose) @ T_world_cam
+                    ),
+                )
+
         new_kf: Keyframe | None = None
         viz_geom = self._stub_geom(pinned_fov, W, H)
         if self._should_insert_keyframe(T_world_cam):
@@ -168,8 +202,25 @@ class Localizer:
             )
             self._last_matched_kf_id = new_kf.id
             viz_geom = geom
+            # Sequential-chain edge: from the keyframe we localized against
+            # to this newly-inserted one.  Constraint comes straight from the
+            # pose chain we just used (T_kf_newkf = inv(kf.pose) @ new.pose).
+            if self._pose_graph is not None:
+                rel = invert_se3(kf.pose) @ new_kf.pose
+                self._pose_graph.add(PoseEdge(
+                    src_id=kf.id, dst_id=new_kf.id,
+                    rel_pose=rel, inliers=inliers, kind="chain",
+                ))
             while len(self._store) > self._max_keyframes:
+                victim = self._store.all()[0]
                 self._store.evict_oldest()
+                if self._pose_graph is not None:
+                    self._pose_graph.drop_edges_touching(victim.id)
+
+        # Re-optimize when anything changed: new chain edge, new loop edge,
+        # or both.  Cheap on small graphs; capped by GTSAM's max-iters.
+        if self._pose_graph is not None and (loop_added or new_kf is not None):
+            self._run_pgo()
 
         t = se3_translation(T_world_cam)
         q = rmat_to_quat(T_world_cam[:3, :3])
@@ -183,6 +234,98 @@ class Localizer:
         )
         self._emit_viz(image_rgb, viz_geom, result, new_kf)
         return result
+
+    def _try_loop_closure(
+        self,
+        feats:      "FrameFeatures",   # noqa: F821
+        fov_deg:    float,
+        W:          int,
+        H:          int,
+        tracked_kf: Keyframe,
+        T_kf_cam:   np.ndarray,
+    ) -> bool:
+        """Search keyframes that are pose-distant from the tracked one for
+        a match with the current frame.  A successful match becomes a
+        loop-closure edge ``tracked_kf -> matched_kf`` whose relative pose
+        comes from the two PnP observations of the current camera.
+
+        Returns True when an edge was added.
+        """
+        from loguru import logger
+        assert self._pose_graph is not None
+
+        K = self._intrinsics_from_fov(fov_deg, W, H)
+        tracked_t = tracked_kf.pose[:3, 3]
+        # Only consider keyframes whose pose is far from the tracked one.
+        # Nearby keyframes already constrain the local neighbourhood through
+        # the chain — re-observing them adds little.
+        candidates = [
+            kf for kf in self._store.all()
+            if kf.id != tracked_kf.id
+            and float(np.linalg.norm(kf.pose[:3, 3] - tracked_t)) > self._loop_min_dist_m
+        ]
+        if not candidates:
+            return False
+
+        best: tuple[Keyframe, np.ndarray, int] | None = None
+        for cand in candidates:
+            try:
+                outcome = self._pnp_against_keyframe(cand, feats, K)
+            except cv2.error:
+                continue
+            if isinstance(outcome, str):
+                continue
+            T_world_cam_cand, inliers = outcome
+            if inliers < self._loop_min_inliers:
+                continue
+            if best is None or inliers > best[2]:
+                best = (cand, T_world_cam_cand, inliers)
+
+        if best is None:
+            return False
+
+        cand, T_world_cam_from_cand, inliers = best
+        # Two observations of the same camera position.  Combine them into
+        # a tracked→cand keyframe-to-keyframe constraint:
+        #   T_tracked_cand = T_tracked_cam * inv(T_cand_cam)
+        # = T_tracked_cam (from tracking) composed with the inverse of the
+        # transform from cand into the camera (from loop observation).
+        T_cand_cam = invert_se3(cand.pose) @ T_world_cam_from_cand
+        rel = T_kf_cam @ invert_se3(T_cand_cam)   # tracked frame → cand frame
+        self._pose_graph.add(PoseEdge(
+            src_id=tracked_kf.id, dst_id=cand.id,
+            rel_pose=rel, inliers=int(inliers), kind="loop",
+        ))
+        logger.info(
+            "loop closure  kf{} ↔ kf{}  inliers={}  distance_m={:.2f}",
+            tracked_kf.id, cand.id, inliers,
+            float(np.linalg.norm(cand.pose[:3, 3] - tracked_t)),
+        )
+        return True
+
+    def _run_pgo(self) -> None:
+        from loguru import logger
+        if self._pose_graph is None or len(self._pose_graph) == 0:
+            return
+        keyframes = self._store.all()
+        if not keyframes:
+            return
+        origin_id = min(kf.id for kf in keyframes)
+        current = {kf.id: kf.pose.copy() for kf in keyframes}
+        try:
+            new_poses, _info = self._pose_graph.optimize(current, origin_id=origin_id)
+        except Exception as exc:                                  # noqa: BLE001
+            logger.opt(exception=True).warning("PGO failed; keeping pre-opt poses ({})", exc)
+            return
+        # Only write back where the optimizer actually moved the pose, to
+        # avoid spurious JSONL rewrites when nothing converged.
+        moved: dict[int, np.ndarray] = {}
+        for kf_id, new_pose in new_poses.items():
+            old = current[kf_id]
+            if not np.allclose(old, new_pose, atol=1e-6):
+                moved[kf_id] = new_pose
+        if moved:
+            self._store.update_poses(moved)
 
     @staticmethod
     def _stub_geom(fov_deg: float, W: int, H: int) -> "GeometryFrame":      # noqa: F821

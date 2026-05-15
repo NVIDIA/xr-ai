@@ -25,6 +25,12 @@ device: auto
 # ViT-B (104M) is more accurate but heavier.
 moge_model: Ruicheng/moge-2-vits-normal
 
+# Border (px) of MoGe's depth output to discard — receptive field falls off
+# at image edges and surfaces visibly fold in there.  Tune higher for very
+# wide-FOV cameras.  Wipe the map after changing — old keyframes use the
+# previous setting.
+border_px: 20
+
 # Horizontal FOV (degrees) of your camera.
 #
 # Default behaviour (unset): the server starts in `state="calibrating"`
@@ -54,8 +60,23 @@ min_translation_m:   0.30   # insert new keyframe when pose translates more than
 min_rotation_deg:    20.0   # ...or rotates more than this
 
 # PnP RANSAC thresholds.
-min_inliers:         30     # below this we report state="lost"
+min_matches:         8      # raw 2D-2D match floor (XFeat+LighterGlue output)
+min_inliers:         15     # PnP-RANSAC inlier floor for a valid pose
 pnp_reproj_err_px:   4.0
+
+# Loop closure + pose graph optimization (GTSAM, BSD-3).
+#   pgo:                    set false to skip PGO entirely (no edges recorded)
+#   loop_search_every:      every N localized frames, try matching against
+#                           keyframes pose-distant from the tracked one
+#   loop_min_distance_m:    skip candidates closer than this to the tracked
+#                           keyframe — they're already locally constrained
+#   loop_min_inliers:       PnP inlier floor for a hit to count as a loop
+#                           closure (higher than min_inliers because false
+#                           loop closures distort the whole map)
+pgo:                  true
+loop_search_every:    30
+loop_min_distance_m:  1.0
+loop_min_inliers:     40
 
 # Server bind.
 host: 0.0.0.0

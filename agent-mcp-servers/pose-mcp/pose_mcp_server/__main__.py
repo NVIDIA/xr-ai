@@ -63,6 +63,7 @@ from xr_ai_logging import setup_logging
 
 from .backends    import MoGeBackend, XFeatBackend
 from .localizer   import Localizer
+from .pgo         import PoseGraph
 from .store       import KeyframeStore
 
 
@@ -71,7 +72,11 @@ def _load_image_rgb(path: pathlib.Path) -> np.ndarray:
         return np.asarray(img.convert("RGB"))
 
 
-def build_mcp(localizer: Localizer, store: KeyframeStore) -> FastMCP:
+def build_mcp(
+    localizer:   Localizer,
+    store:       KeyframeStore,
+    pose_graph:  PoseGraph | None = None,
+) -> FastMCP:
     mcp = FastMCP("pose-mcp")
 
     @mcp.tool()
@@ -125,14 +130,20 @@ def build_mcp(localizer: Localizer, store: KeyframeStore) -> FastMCP:
         """Wipe the persistent map.  Next ``estimate_pose`` call seeds the
         origin keyframe."""
         store.reset()
+        if pose_graph is not None:
+            pose_graph.clear()
         logger.warning("pose-mcp: map wiped")
         return {"ok": True, "num_keyframes": 0}
 
     return mcp
 
 
-def build_app(localizer: Localizer, store: KeyframeStore):
-    return build_mcp(localizer, store).http_app(path="/mcp")
+def build_app(
+    localizer:  Localizer,
+    store:      KeyframeStore,
+    pose_graph: PoseGraph | None = None,
+):
+    return build_mcp(localizer, store, pose_graph=pose_graph).http_app(path="/mcp")
 
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
@@ -145,11 +156,13 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
     port    = int(cfg.get("port", 8240))
 
     store = KeyframeStore(map_dir)
+    pose_graph = PoseGraph(map_dir / "edges.jsonl") if cfg.get("pgo", True) else None
     geometry = MoGeBackend(
         model_name=cfg.get("moge_model", "Ruicheng/moge-2-vits-normal"),
         device=cfg.get("device", "auto"),
         fov_x_deg=cfg.get("camera_fov_deg") or None,
         calibration_frames=int(cfg.get("fov_calibration_frames", 8)),
+        border_px=int(cfg.get("border_px", 20)),
     )
     features = XFeatBackend(
         device=cfg.get("device", "auto"),
@@ -169,15 +182,20 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
 
     localizer = Localizer(
         store=store, geometry=geometry, features=features,
-        max_keyframes     = int(cfg.get("max_keyframes",     200)),
-        min_translation_m = float(cfg.get("min_translation_m", 0.30)),
-        min_rotation_deg  = float(cfg.get("min_rotation_deg",  20.0)),
-        min_inliers       = int(cfg.get("min_inliers",        30)),
-        pnp_reproj_err_px = float(cfg.get("pnp_reproj_err_px", 4.0)),
-        viz               = viz,
+        max_keyframes      = int(cfg.get("max_keyframes",     200)),
+        min_translation_m  = float(cfg.get("min_translation_m", 0.30)),
+        min_rotation_deg   = float(cfg.get("min_rotation_deg",  20.0)),
+        min_inliers        = int(cfg.get("min_inliers",        15)),
+        min_matches        = int(cfg.get("min_matches",        8)),
+        pnp_reproj_err_px  = float(cfg.get("pnp_reproj_err_px", 4.0)),
+        viz                = viz,
+        pose_graph         = pose_graph,
+        loop_search_every  = int(cfg.get("loop_search_every",   30)),
+        loop_min_distance_m= float(cfg.get("loop_min_distance_m", 1.0)),
+        loop_min_inliers   = int(cfg.get("loop_min_inliers",   40)),
     )
 
-    app = build_app(localizer, store)
+    app = build_app(localizer, store, pose_graph=pose_graph)
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 

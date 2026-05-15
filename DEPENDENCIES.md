@@ -133,6 +133,10 @@ pose-mcp-server  (agent-mcp-servers/pose-mcp/)
     └── kornia >=0.7                   (Apache-2.0; XFeat's match_lighterglue
                                          path requires it for the LightGlue
                                          decoder)
+    └── gtsam >=4.2                    (BSD-3 / Georgia Tech; Levenberg-
+                                         Marquardt over the keyframe pose
+                                         graph for loop closure / drift
+                                         correction)
     └── moge                            (Microsoft MoGe-2, MIT; pulled via git in tool.uv.sources)
     └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
     Optional extra `[viz]`:

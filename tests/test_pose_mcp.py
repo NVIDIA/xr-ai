@@ -29,6 +29,7 @@ from pose_mcp_server.geometry  import (compose_se3, invert_se3, make_se3,
                                        quat_to_rmat, rmat_to_quat,
                                        se3_rotation_deg, se3_translation)
 from pose_mcp_server.localizer import Localizer, PoseResult
+from pose_mcp_server.pgo       import PoseEdge, PoseGraph
 from pose_mcp_server.store     import Keyframe, KeyframeStore
 
 
@@ -392,6 +393,68 @@ def test_localizer_emits_viz_events(tmp_path: pathlib.Path):
     loc._viz = _Boom()
     r3 = loc.process(img, ts_us=3)
     assert r3.state == "localized"
+
+
+def test_pose_graph_loop_closure_corrects_drift(tmp_path: pathlib.Path):
+    """A four-keyframe ring (kf0..kf3) where the sequential chain disagrees
+    with a kf3→kf0 loop-closure edge.  Run PGO and verify the optimizer
+    redistributes the drift so kf3's optimized world pose is closer to the
+    loop-closure prediction than to the chain-only prediction."""
+    pg = PoseGraph(tmp_path / "edges.jsonl")
+
+    # Truth: identity ring at 1 m spacing along +X — kf0 at origin, kf1 at
+    # +1 X, kf2 at +1 X again, kf3 at +1 X.  But the chain "drifts" by
+    # +0.3 m on Y between kf2 and kf3 (a mistake), so the chain-only kf3
+    # pose is at (3, 0.3, 0).  The loop closure observes kf3 -> kf0 directly
+    # and says they're 3 m apart on X with no Y offset.
+    I = np.eye(4)
+    def T(x, y, z): return make_se3(np.eye(3), [x, y, z])
+
+    kf_poses = {
+        0: T(0, 0, 0),
+        1: T(1, 0, 0),
+        2: T(2, 0, 0),
+        3: T(3, 0.3, 0),   # drifted
+    }
+
+    # Chain edges (use what the drifted poses imply).
+    pg.add(PoseEdge(0, 1, invert_se3(kf_poses[0]) @ kf_poses[1], inliers=200))
+    pg.add(PoseEdge(1, 2, invert_se3(kf_poses[1]) @ kf_poses[2], inliers=200))
+    pg.add(PoseEdge(2, 3, invert_se3(kf_poses[2]) @ kf_poses[3], inliers=200))
+
+    # Loop closure: kf3 sees kf0 (or vice versa) without the Y drift.
+    pg.add(PoseEdge(3, 0, invert_se3(T(3, 0, 0)) @ T(0, 0, 0),
+                    inliers=300, kind="loop"))
+
+    new_poses, info = pg.optimize(kf_poses, origin_id=0)
+    assert info["final_err"] < info["initial_err"]
+
+    # kf3's optimized Y should be much closer to 0 than to 0.3.
+    drifted_y = float(kf_poses[3][1, 3])
+    fixed_y   = float(new_poses[3][1, 3])
+    assert abs(fixed_y) < abs(drifted_y) * 0.5, (
+        f"PGO didn't redistribute drift: kf3 Y went from {drifted_y:.3f} → {fixed_y:.3f}"
+    )
+
+    # Origin must not have moved (hard prior).
+    np.testing.assert_allclose(new_poses[0], kf_poses[0], atol=1e-6)
+
+
+def test_pose_graph_edges_persist_across_restart(tmp_path: pathlib.Path):
+    """Edges written by one PoseGraph instance must reload on the next."""
+    edges_path = tmp_path / "edges.jsonl"
+    pg = PoseGraph(edges_path)
+    pg.add(PoseEdge(0, 1, make_se3(np.eye(3), [1.0, 0.0, 0.0]), inliers=42))
+    pg.add(PoseEdge(1, 2, make_se3(np.eye(3), [0.0, 1.0, 0.0]),
+                    inliers=100, kind="loop"))
+    del pg
+
+    pg2 = PoseGraph(edges_path)
+    assert len(pg2) == 2
+    e0, e1 = pg2.edges()
+    assert (e0.src_id, e0.dst_id, e0.kind, e0.inliers) == (0, 1, "chain", 42)
+    assert (e1.src_id, e1.dst_id, e1.kind, e1.inliers) == (1, 2, "loop", 100)
+    np.testing.assert_allclose(e0.rel_pose[:3, 3], [1.0, 0.0, 0.0])
 
 
 def test_localizer_persists_across_restart(tmp_path: pathlib.Path):

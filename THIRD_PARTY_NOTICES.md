@@ -34,6 +34,7 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `opencv-python-headless` | 4.9.0 | Apache-2.0 | https://github.com/opencv/opencv-python (pose-mcp-server only; used for solvePnPRansac) |
 | `torch`        | 2.2.0    | BSD-3-Clause  | https://github.com/pytorch/pytorch (pose-mcp-server only) |
 | `kornia`       | 0.7+     | Apache-2.0    | https://github.com/kornia/kornia (pose-mcp-server only; required by XFeat's LightGlue matcher) |
+| `gtsam`        | 4.2+     | BSD-3-Clause  | https://github.com/borglab/gtsam (pose-mcp-server only; Levenberg-Marquardt pose graph optimization for loop closure) |
 | `rerun-sdk`    | 0.21+    | Apache-2.0 / MIT | https://github.com/rerun-io/rerun (pose-mcp-server `[viz]` extra; only imported when `rerun_addr` is configured) |
 
 ## Swift (iOS / visionOS client)
