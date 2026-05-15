@@ -79,6 +79,21 @@ loop_min_distance_m:  1.0
 loop_min_inliers:     40
 
 # Server bind.
+# Input downsample (px on the longer edge).  0 disables.  Lower = faster
+# inference at some cost in PnP precision.  384 cuts XFeat from ~50 ms
+# to ~15 ms on 640x480 inputs without measurable pose quality loss in
+# typical indoor scenes.
+image_max_edge: 384
+
+# Rerun viz filters — only when `rerun_addr` is set.
+# `viz_min_kf_inliers` skips the point cloud for keyframes that anchored
+# with fewer PnP inliers than this (their pose is still rendered so the
+# trajectory stays continuous).  Bumps the visual signal-to-noise ratio.
+# `viz_max_depth_m` drops keyframe points whose Z is beyond this (MoGe's
+# far field hallucinates structure that smears across the viewer).
+viz_min_kf_inliers: 60
+viz_max_depth_m:    8.0
+
 host: 0.0.0.0
 port: 8240
 

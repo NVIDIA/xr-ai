@@ -174,7 +174,11 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
     rerun_addr = cfg.get("rerun_addr") or None
     if rerun_addr:
         from .viz import RerunSink
-        viz = RerunSink(addr=str(rerun_addr))
+        viz = RerunSink(
+            addr=str(rerun_addr),
+            min_kf_inliers=int(cfg.get("viz_min_kf_inliers", 60)),
+            max_depth_m   =float(cfg.get("viz_max_depth_m",  8.0)),
+        )
         # Replay any pre-existing keyframes so the viewer shows the persistent
         # map immediately on connect, not just frames going forward.
         viz.on_load(store.all())
@@ -193,6 +197,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
         loop_search_every  = int(cfg.get("loop_search_every",   30)),
         loop_min_distance_m= float(cfg.get("loop_min_distance_m", 1.0)),
         loop_min_inliers   = int(cfg.get("loop_min_inliers",   40)),
+        image_max_edge     = int(cfg.get("image_max_edge",     384)),
     )
 
     app = build_app(localizer, store, pose_graph=pose_graph)

@@ -440,6 +440,43 @@ def test_pose_graph_loop_closure_corrects_drift(tmp_path: pathlib.Path):
     np.testing.assert_allclose(new_poses[0], kf_poses[0], atol=1e-6)
 
 
+def test_inliers_persist_with_keyframe(tmp_path: pathlib.Path):
+    """Each keyframe records the PnP inlier count it was anchored with —
+    the viz sink filters on this to skip marginal reconstructions, so
+    the value has to survive a round trip through the JSONL."""
+    store = KeyframeStore(tmp_path)
+    args = _fake_kf_args(1)
+    store.append(**args, inliers=237)
+    store.append(**_fake_kf_args(2))   # default 0
+
+    reloaded = KeyframeStore(tmp_path)
+    assert reloaded.all()[0].inliers == 237
+    assert reloaded.all()[1].inliers == 0
+
+
+def test_localizer_downsamples_input(tmp_path: pathlib.Path):
+    """When ``image_max_edge`` is set, the localizer must shrink the
+    incoming image before it ever reaches the geometry or feature
+    backends — that's where the speed win comes from."""
+    seen_shapes: list[tuple[int, int]] = []
+
+    class _RecordingGeom(_FakeGeometry):
+        def __call__(self, image_rgb):
+            seen_shapes.append(image_rgb.shape[:2])
+            return super().__call__(image_rgb)
+
+    store = KeyframeStore(tmp_path)
+    geom  = _RecordingGeom(W=320, H=240)   # backend's own resolution
+    feats = _FakeFeatures(W=geom.W, H=geom.H)
+    loc   = Localizer(store=store, geometry=geom, features=feats,
+                      min_inliers=10, image_max_edge=128)
+
+    big_img = np.zeros((480, 640, 3), dtype=np.uint8)
+    loc.process(big_img, ts_us=1)
+    # 640x480 with max_edge=128 → scale = 0.2 → 128x96.
+    assert seen_shapes[0] == (96, 128)
+
+
 def test_pose_graph_edges_persist_across_restart(tmp_path: pathlib.Path):
     """Edges written by one PoseGraph instance must reload on the next."""
     edges_path = tmp_path / "edges.jsonl"

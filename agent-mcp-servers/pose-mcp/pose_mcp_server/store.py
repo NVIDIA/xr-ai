@@ -46,6 +46,11 @@ class Keyframe:
     # written before this field existed still load — viz sinks fall back
     # to uncoloured point clouds when None.
     image_rgb: np.ndarray | None = None   # (H, W, 3) uint8
+    # PnP inlier count at the moment this keyframe was anchored — used as
+    # a per-keyframe confidence signal so the viz sink can filter out
+    # keyframes that were inserted from a marginal localization.  0 by
+    # default (covers the origin, which has no PnP, and legacy maps).
+    inliers:   int = 0
 
 
 class KeyframeStore:
@@ -105,6 +110,7 @@ class KeyframeStore:
                 pts3d   = np.load(kf_dir / "points3d.npy"),
                 mask    = np.load(kf_dir / "mask.npy"),
                 image_rgb = image_rgb,
+                inliers = int(row.get("inliers", 0)),
             )
             self._keyframes.append(kf)
             self._next_id = max(self._next_id, kf.id + 1)
@@ -151,6 +157,7 @@ class KeyframeStore:
         pts3d:     np.ndarray,
         mask:      np.ndarray,
         image_rgb: np.ndarray | None = None,
+        inliers:   int = 0,
     ) -> Keyframe:
         kf = Keyframe(
             id=self._next_id, ts_us=int(ts_us),
@@ -164,6 +171,7 @@ class KeyframeStore:
                 np.ascontiguousarray(image_rgb, dtype=np.uint8)
                 if image_rgb is not None else None
             ),
+            inliers=int(inliers),
         )
         kf_dir = self._kf_dir(kf.id)
         kf_dir.mkdir(parents=True, exist_ok=True)
@@ -185,6 +193,7 @@ class KeyframeStore:
             "ts_us":   kf.ts_us,
             "pose":    kf.pose.tolist(),
             "fov_deg": kf.fov_deg,
+            "inliers": kf.inliers,
         }
         with (self._root / "keyframes.jsonl").open("a", encoding="utf-8") as f:
             f.write(json.dumps(row) + "\n")
@@ -212,16 +221,7 @@ class KeyframeStore:
                 changed += 1
         if changed == 0:
             return 0
-        tmp = self._root / "keyframes.jsonl.tmp"
-        with tmp.open("w", encoding="utf-8") as f:
-            for kf in self._keyframes:
-                f.write(json.dumps({
-                    "id":      kf.id,
-                    "ts_us":   kf.ts_us,
-                    "pose":    kf.pose.tolist(),
-                    "fov_deg": kf.fov_deg,
-                }) + "\n")
-        os.replace(tmp, self._root / "keyframes.jsonl")
+        self._rewrite_jsonl()
         return changed
 
     def evict_oldest(self) -> None:
@@ -232,13 +232,21 @@ class KeyframeStore:
         for p in kf_dir.glob("*"):
             p.unlink()
         kf_dir.rmdir()
-        # Rewrite JSONL without the evicted row.  Atomic via tmp+rename.
+        self._rewrite_jsonl()
+
+    def _rewrite_jsonl(self) -> None:
+        """Atomic rewrite of the keyframes JSONL — shared between
+        ``update_poses`` and ``evict_oldest`` so they don't fall out of
+        sync on what fields the row carries."""
         tmp = self._root / "keyframes.jsonl.tmp"
         with tmp.open("w", encoding="utf-8") as f:
             for kf in self._keyframes:
                 f.write(json.dumps({
-                    "id": kf.id, "ts_us": kf.ts_us,
-                    "pose": kf.pose.tolist(), "fov_deg": kf.fov_deg,
+                    "id":      kf.id,
+                    "ts_us":   kf.ts_us,
+                    "pose":    kf.pose.tolist(),
+                    "fov_deg": kf.fov_deg,
+                    "inliers": kf.inliers,
                 }) + "\n")
         os.replace(tmp, self._root / "keyframes.jsonl")
 

@@ -55,12 +55,22 @@ class RerunSink:
         application_id: str = "pose-mcp",
         addr:           str = "127.0.0.1:9876",
         live_max_pts:   int = 8000,
+        min_kf_inliers: int = 0,
+        max_depth_m:    float = 8.0,
     ) -> None:
-        self._app_id        = application_id
-        self._addr          = addr
-        self._live_max_pts  = live_max_pts
-        self._traj:         list[list[float]] = []
-        self._rr            = None  # lazy
+        self._app_id          = application_id
+        self._addr            = addr
+        self._live_max_pts    = live_max_pts
+        # Filter out marginal keyframes from the rendered reconstruction.
+        # The origin (id == 0) always passes — its `inliers` is 0 by design
+        # but it's the gauge anchor and we always want it visible.
+        self._min_kf_inliers  = max(0, int(min_kf_inliers))
+        # Drop keyframe points farther than this (metres) from the keyframe
+        # camera — MoGe's depth gets unreliable past mid-range and produces
+        # hallucinated long-distance points that smear across the viewer.
+        self._max_depth_m     = float(max_depth_m)
+        self._traj:           list[list[float]] = []
+        self._rr              = None  # lazy
 
     # ── lifecycle ──────────────────────────────────────────────────────────
 
@@ -151,20 +161,38 @@ class RerunSink:
     # ── helpers ────────────────────────────────────────────────────────────
 
     def _log_keyframe(self, kf: Keyframe, *, static: bool) -> None:
+        # High-confidence filter: marginal keyframes (PnP inlier count below
+        # the threshold) get their pose logged but no point cloud — they're
+        # tracking-anchors, not reconstruction-quality observations.  The
+        # origin (id 0) always renders so the viewer has a coordinate frame.
         path = f"/world/keyframes/kf_{kf.id:06d}"
         self._log_pose(path, kf.pose, static=static)
-        # Lift the keyframe's stored point map into world coords and log a
-        # subsampled cloud — full HxWx3 is too dense to display per kf.
+        if kf.id != 0 and kf.inliers < self._min_kf_inliers:
+            return
+
         H, W = kf.pts3d.shape[:2]
         pts_kf = kf.pts3d.reshape(H * W, 3).astype(np.float32)
         mask   = kf.mask.reshape(H * W)
-        pts_kf = pts_kf[mask]
 
         # Per-point RGB sampled from the stored frame (when present) — gives
         # the operator a scene-coloured cloud instead of Rerun's default.
         colors: np.ndarray | None = None
         if kf.image_rgb is not None and kf.image_rgb.shape[:2] == (H, W):
             colors = kf.image_rgb.reshape(H * W, 3)[mask]
+        pts_kf = pts_kf[mask]
+
+        # Drop points whose depth (Z in keyframe camera frame) is outside
+        # a trusted range.  MoGe's far field is mostly hallucinated and
+        # the very-near field is dominated by occluders.
+        if self._max_depth_m > 0 and pts_kf.size:
+            z = pts_kf[:, 2]
+            ok = (z > 0.05) & (z < self._max_depth_m)
+            pts_kf = pts_kf[ok]
+            if colors is not None:
+                colors = colors[ok]
+
+        if not pts_kf.size:
+            return
 
         if len(pts_kf) > self._live_max_pts:
             idx    = np.linspace(0, len(pts_kf) - 1, self._live_max_pts).astype(np.int64)
