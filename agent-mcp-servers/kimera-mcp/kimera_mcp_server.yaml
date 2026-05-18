@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Watch-folder shim around Kimera-VIO.  The MCP server exposes the
+# same tool surface as pose-mcp (`estimate_pose`, `get_map_stats`,
+# `reset_map`) so existing callers don't change.  Each `estimate_pose`
+# call stages the frame + recent IMU into an EuRoC-style folder under
+# `dataset_dir` and invokes `stereoVIOEuroc` inside the kimera_vio
+# docker image on a sliding window of recent frames; the last pose in
+# the resulting `traj_vio.csv` is returned.
+
+dataset_dir:        /tmp/xr-ai/kimera-dataset    # cam0/data, imu0/data.csv, sensor.yaml live here
+output_dir:         /tmp/xr-ai/kimera-output     # traj_vio.csv + frontend logs land here
+docker_image:       kimera_vio
+params_folder_in_image: /root/Kimera-VIO/params/EurocMono   # or .../Euroc for stereo
+
+# Sliding window — every estimate_pose call invokes Kimera over the
+# last N frames currently in cam0/data.  Bigger window = more accurate
+# but slower per-call; smaller = cheaper but more re-init drift.  100
+# frames at 30 fps = ~3 s of context.
+window_frames:      100
+
+# Process every Nth incoming frame to keep the dataset folder bounded
+# and the per-call docker run latency tolerable.  1 = process every
+# frame, 3 = ~10 FPS at a 30 FPS input rate.
+frame_skip:         1
+
+host:               0.0.0.0
+port:               8250

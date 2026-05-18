@@ -31,4 +31,18 @@ RUN git clone https://github.com/MIT-SPARK/Kimera-VIO.git && \
 # fails the image build, not the first runtime invocation.
 RUN /root/Kimera-VIO/build/stereoVIOEuroc --help 2>&1 | head -5 || true
 
+# Make Kimera-VIO + params readable by non-root users (the watch-folder
+# shim runs the container as the host operator's UID so output files
+# aren't root-owned and can't be cleaned up).
+RUN chmod -R a+rX /root && chmod a+x /root
+
+# Pre-patch a copy of EurocMono with autoInitialize=1 so live-stream
+# callers don't need ground truth at startup.  kimera-mcp's runner
+# points --params_folder_path at /opt/kimera-params/EurocMonoLive.
+RUN mkdir -p /opt/kimera-params && \
+    cp -r /root/Kimera-VIO/params/EurocMono /opt/kimera-params/EurocMonoLive && \
+    sed -i 's/^autoInitialize: 0/autoInitialize: 1/' \
+        /opt/kimera-params/EurocMonoLive/BackendParams.yaml && \
+    chmod -R a+rX /opt/kimera-params
+
 WORKDIR /root/Kimera-VIO

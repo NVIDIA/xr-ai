@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kimera-mcp-server"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "uvicorn[standard]>=0.29",
+    "fastmcp>=0.4",
+    "pyyaml>=6.0",
+    "Pillow>=10.0",
+    "numpy>=1.24",
+    "xr-ai-logging",
+]
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+
+[project.scripts]
+kimera_mcp_server = "kimera_mcp_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kimera_mcp_server"]
