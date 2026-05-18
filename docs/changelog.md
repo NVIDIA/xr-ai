@@ -54,6 +54,17 @@ This is Unit 1 of a multi-PR refactor.  Subsequent units migrate
 vlm-mcp, simple-vlm-example, xr-render-demo, and xr-ai-pipecat to depend
 on `xr-ai-models` instead of rolling their own clients.
 
+`VLMService` also exposes `ask_video(video, question)`, mirroring
+`ask_image`.  The wire format is a `{"type": "video_url", "video_url":
+{...}}` content part — what vLLM's Qwen2.5-VL serving expects when
+`--limit-mm-per-prompt {"video": >=1}` is set.  `cosmos_vlm` declares
+`capabilities: { vision, video }` because Cosmos-Reason1-7B is a
+Qwen2.5-VL fine-tune primarily designed for video reasoning; video is
+opt-in at the server because vLLM reserves tens of GiB of activation
+memory for it at startup.  Callers that haven't enabled video on their
+spec get a `ValueError` from `ask_video` rather than a silent server
+500.
+
 ### 2026-05-14 — CodeQL Advanced Setup (committed workflow) instead of Default Setup
 
 `Analyze (python)` and `Analyze (javascript-typescript)` are required status

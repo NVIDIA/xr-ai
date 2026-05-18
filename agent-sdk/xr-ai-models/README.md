@@ -62,7 +62,7 @@ Built-in presets — see `xr_ai_models/presets/`:
 
 | Preset | Service it targets | Notes |
 |---|---|---|
-| `cosmos_vlm`     | vlm-server               | `enable_thinking=false` by default |
+| `cosmos_vlm`     | vlm-server               | image + video; `enable_thinking=false` by default. Video requires vlm-server's `max_videos_per_prompt >= 1` |
 | `llama_nemotron` | llama-nemotron-llm-server | OpenAI tool calling via llama3_json (server-side) |
 | `nemotron3_nano` | nemotron3-nano-llm-server | reasoning field: `reasoning` |
 | `nemotron_omni`  | nemotron-omni-llm-server  | reasoning field: `reasoning_content`, vision + video |
@@ -101,6 +101,9 @@ class LLMService(Protocol):
 class VLMService(Protocol):
     capabilities: Capabilities
     async def ask_image(self, image, question, *, system_prompt="",
+                        max_tokens=None, temperature=None,
+                        timeout=None) -> ChatResponse: ...
+    async def ask_video(self, video, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
                         timeout=None) -> ChatResponse: ...
 

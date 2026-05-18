@@ -22,6 +22,8 @@ from .protocols import (
     ToolCall,
     ToolDef,
     TTSService,
+    VideoInput,
+    VideoPart,
     VLMService,
 )
 from .openai_compat import (
@@ -53,6 +55,8 @@ __all__ = [
     "ToolCall",
     "ToolDef",
     "TTSService",
+    "VideoInput",
+    "VideoPart",
     "VLMService",
     "OpenAICompatLLM",
     "OpenAICompatSTT",

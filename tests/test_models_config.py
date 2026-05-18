@@ -120,6 +120,8 @@ vlm:
     assert spec.default_extras == {
         "chat_template_kwargs": {"enable_thinking": False},
     }
+    assert spec.capabilities.get("vision") is True
+    assert spec.capabilities.get("video")  is True
 
 
 def test_stt_and_tts_presets(tmp_path) -> None:

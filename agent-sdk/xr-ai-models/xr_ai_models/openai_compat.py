@@ -32,6 +32,8 @@ from .protocols import (
     TextPart,
     ToolCall,
     ToolDef,
+    VideoInput,
+    VideoPart,
 )
 
 
@@ -63,6 +65,8 @@ def _part_to_openai(part: ContentPart) -> dict[str, Any]:
         return {"type": "text", "text": part.text}
     if isinstance(part, ImagePart):
         return {"type": "image_url", "image_url": {"url": part.url}}
+    if isinstance(part, VideoPart):
+        return {"type": "video_url", "video_url": {"url": part.url}}
     raise TypeError(f"unsupported content part: {type(part).__name__}")
 
 
@@ -138,6 +142,39 @@ def _normalize_image(image: ImageInput) -> str:
         b = bytes(image)
         return _to_data_url(b, _sniff_mime(b))
     raise TypeError(f"unsupported image input: {type(image).__name__}")
+
+
+_VIDEO_SUFFIXES = {
+    ".mp4":  "video/mp4",
+    ".m4v":  "video/mp4",
+    ".webm": "video/webm",
+    ".mov":  "video/quicktime",
+    ".mkv":  "video/x-matroska",
+}
+
+
+def _sniff_video_mime(data: bytes) -> str:
+    # ISO BMFF (mp4/mov/m4v): bytes 4..8 == "ftyp"; webm: EBML magic 1A 45 DF A3.
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        return "video/mp4"
+    if data[:4] == b"\x1a\x45\xdf\xa3":
+        return "video/webm"
+    return "application/octet-stream"
+
+
+def _video_mime_from_suffix(p: Path) -> str:
+    return _VIDEO_SUFFIXES.get(p.suffix.lower(), "application/octet-stream")
+
+
+def _normalize_video(video: VideoInput) -> str:
+    if isinstance(video, str):
+        return video
+    if isinstance(video, Path):
+        return _to_data_url(video.read_bytes(), _video_mime_from_suffix(video))
+    if isinstance(video, (bytes, bytearray, memoryview)):
+        b = bytes(video)
+        return _to_data_url(b, _sniff_video_mime(b))
+    raise TypeError(f"unsupported video input: {type(video).__name__}")
 
 
 def _pcm_to_wav(pcm: bytes, sample_rate: int, channels: int) -> bytes:
@@ -368,6 +405,42 @@ class OpenAICompatVLM:
     ) -> ChatResponse:
         return await self._llm.chat(
             self._build_messages(image, question, system_prompt),
+            max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+        )
+
+    def _build_video_messages(
+        self, video: VideoInput, question: str, system_prompt: str
+    ) -> list[ChatMessage]:
+        url = _normalize_video(video)
+        msgs: list[ChatMessage] = []
+        if system_prompt:
+            msgs.append(ChatMessage(role="system", content=system_prompt))
+        msgs.append(
+            ChatMessage(
+                role="user",
+                content=[VideoPart(url=url), TextPart(text=question)],
+            )
+        )
+        return msgs
+
+    async def ask_video(
+        self,
+        video: VideoInput,
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+    ) -> ChatResponse:
+        if not self.capabilities.video:
+            raise ValueError(
+                "this VLM was constructed with capabilities.video=False; "
+                "flip the preset / spec to declare video support before "
+                "calling ask_video"
+            )
+        return await self._llm.chat(
+            self._build_video_messages(video, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
         )
 

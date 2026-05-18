@@ -19,6 +19,9 @@ from typing import Any, AsyncIterator, Literal, Protocol, Sequence, runtime_chec
 ImageInput = bytes | Path | str
 """bytes, filesystem path, ``data:`` URL, or ``http(s)://`` URL."""
 
+VideoInput = bytes | Path | str
+"""bytes, filesystem path, ``data:`` URL, or ``http(s)://`` URL."""
+
 
 @dataclass(frozen=True)
 class TextPart:
@@ -32,7 +35,13 @@ class ImagePart:
     type: Literal["image_url"] = "image_url"
 
 
-ContentPart = TextPart | ImagePart
+@dataclass(frozen=True)
+class VideoPart:
+    url: str
+    type: Literal["video_url"] = "video_url"
+
+
+ContentPart = TextPart | ImagePart | VideoPart
 
 
 @dataclass(frozen=True)
@@ -124,6 +133,17 @@ class VLMService(Protocol):
     async def ask_image(
         self,
         image: ImageInput,
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+    ) -> ChatResponse: pass
+
+    async def ask_video(
+        self,
+        video: VideoInput,
         question: str,
         *,
         system_prompt: str = "",

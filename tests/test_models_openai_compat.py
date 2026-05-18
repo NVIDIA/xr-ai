@@ -16,6 +16,7 @@ import pytest
 from _stub_openai import StubOpenAI
 
 from xr_ai_models import (
+    Capabilities,
     ChatMessage,
     OpenAICompatLLM,
     OpenAICompatSTT,
@@ -327,6 +328,77 @@ async def test_vlm_default_extras_propagate() -> None:
         await vlm.ask_image(_PNG_HEADER, "?")
     body = stub.last_json()
     assert body["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+# ── VLM: video ────────────────────────────────────────────────────────────
+
+
+# ISO BMFF header: 4 bytes box size, "ftyp" magic, "isom" major brand,
+# minor version, then "isom"/"mp42" compat brands. Smallest plausible mp4 prefix.
+_MP4_HEADER = (
+    b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00"
+    b"isomiso2avc1mp41" + b"\x00" * 8
+)
+_WEBM_HEADER = b"\x1a\x45\xdf\xa3" + b"\x00" * 24
+
+
+async def test_vlm_ask_video_with_bytes_sniffs_mp4_and_builds_data_url() -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(content="a person walks left")
+    async with OpenAICompatVLM(
+        "http://stub", "vlm",
+        capabilities=Capabilities(vision=True, video=True),
+        client=stub.client(),
+    ) as vlm:
+        resp = await vlm.ask_video(_MP4_HEADER, "what happens?")
+    assert resp.content == "a person walks left"
+
+    body  = stub.last_json()
+    parts = body["messages"][0]["content"]
+    assert parts[0]["type"] == "video_url"
+    url = parts[0]["video_url"]["url"]
+    assert url.startswith("data:video/mp4;base64,")
+    assert base64.b64decode(url.split(",", 1)[1]) == _MP4_HEADER
+    assert parts[1] == {"type": "text", "text": "what happens?"}
+
+
+async def test_vlm_ask_video_with_path_uses_suffix_mime(tmp_path) -> None:
+    p = tmp_path / "clip.webm"
+    p.write_bytes(_WEBM_HEADER)
+    stub = StubOpenAI()
+    async with OpenAICompatVLM(
+        "http://stub", "vlm",
+        capabilities=Capabilities(vision=True, video=True),
+        client=stub.client(),
+    ) as vlm:
+        await vlm.ask_video(p, "?")
+    body = stub.last_json()
+    url = body["messages"][0]["content"][0]["video_url"]["url"]
+    assert url.startswith("data:video/webm;base64,")
+
+
+async def test_vlm_ask_video_with_string_passes_through_url() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatVLM(
+        "http://stub", "vlm",
+        capabilities=Capabilities(vision=True, video=True),
+        client=stub.client(),
+    ) as vlm:
+        await vlm.ask_video("https://example.com/clip.mp4", "?")
+    body = stub.last_json()
+    assert body["messages"][0]["content"][0]["video_url"]["url"] == \
+        "https://example.com/clip.mp4"
+
+
+async def test_vlm_ask_video_raises_when_capability_off() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatVLM(
+        "http://stub", "vlm",
+        capabilities=Capabilities(vision=True),
+        client=stub.client(),
+    ) as vlm:
+        with pytest.raises(ValueError, match="video"):
+            await vlm.ask_video(_MP4_HEADER, "?")
 
 
 # ── STT ───────────────────────────────────────────────────────────────────
