@@ -13,6 +13,11 @@ on:
   schedule:
     - cron: "0 4 * * *"  # 04:00 UTC daily
   workflow_dispatch:
+  # Also fire on PRs that edit this workflow itself, so changes to the
+  # CI definition get exercised against the GPU runner before merge.
+  pull_request:
+    paths:
+      - .github/workflows/nightly-xr-ai-test.yml
 
 # Queue overlapping runs instead of cancelling; the previous nightly
 # may still be running when the next cron fires on a busy GPU host.
