@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Llama-Nemotron LLM server configuration for glasses-agent-langchain.
+# Handles: quick-ack classification, agentic tool-calling loop,
+#          demo summary generation, and memory condensation.
+# Single GPU, shares with VLM — keep total gpu_memory_utilization <= 0.95.
+
+model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+port: 8106
+host: 0.0.0.0
+hf_token: ""
+cuda_visible_devices: "0"
+# 0.45 × 47 GiB = 21.2 GiB budget: ~15 GiB weights + ~0.5 GiB KV cache (max_model_len=4096).
+# VLM gets 0.43 on the same GPU → 20.2 GiB. STT ~5 GiB. Total ≈ 46.4 GiB — fits in 47 GiB.
+gpu_memory_utilization: 0.45
+enforce_eager: true
+max_model_len: 4096
+model_cache: ../../../models
+
+# Tool calling via vLLM's llama3_json parser.
+tool_call_parser: llama3_json

@@ -52,6 +52,7 @@ endpoint and no local GPU is required for the agent or hub.
 |---|---|
 | model-servers (all 4 models) | ~70 GB |
 | simple-vlm-example (standalone) | ~23 GB |
+| glasses-agent / glasses-agent-langchain / glasses-agent-nat | ~70 GB |
 | xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -234,6 +235,45 @@ vLLM process is started.
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
 for the full option list.
+
+---
+
+### Glasses agent (smart-glasses assistant)
+
+Always-on voice + vision assistant for smart glasses. It maintains a rolling
+scene memory, answers live and past-context questions, records demonstrations,
+and guides the user through recorded steps.
+
+The baseline Python implementation is:
+
+```bash
+cd agent-samples/glasses-agent
+uv sync
+uv run glasses_agent
+```
+
+The LangChain variant keeps the same process stack and feature surface, but
+uses LangChain for the ordinary LLM/tool-calling loop. MCP tools are loaded
+with `langchain-mcp-adapters` so request-time tools are native LangChain tools
+rather than a sample-local schema wrapper:
+
+```bash
+cd agent-samples/glasses-agent-langchain
+uv sync
+uv run glasses_agent_langchain
+```
+
+The NAT variant keeps LangChain out of the loop and wraps the ordinary
+LLM/tool-calling loop as a native NeMo Agent Toolkit function:
+
+```bash
+cd agent-samples/glasses-agent-nat
+uv sync
+uv run glasses_agent_nat
+```
+
+All variants start hub, STT, TTS, VLM, two LLM servers, VLM/video/transcript
+MCP servers, and the worker.
 
 ---
 
