@@ -88,6 +88,13 @@ class KimeraLiveClient:
         self._sock:    socket.socket | None = None
         self._lock     = threading.Lock()
         self._started  = False
+        # Remember the last intrinsics so an auto-reconnect after a
+        # crash can re-apply them without depending on a caller refresh.
+        self._last_intrinsics: tuple | None = None
+        # Reentry guard — prevents the auto-reconnect path from
+        # itself triggering another reconnect on the intrinsics
+        # re-apply if the new container is still flaky.
+        self._in_reconnect = False
 
     # ── lifecycle ──────────────────────────────────────────────────────
 
@@ -112,13 +119,17 @@ class KimeraLiveClient:
             self._sock_path.unlink()
         except FileNotFoundError:
             pass
-        # Best-effort: remove a leftover container of the same name.
+        # If the named container is still around from a previous crash,
+        # capture its logs *before* removing it so we can see why it
+        # died.  We drop --rm so the next crash leaves the container
+        # around for the same reason.
+        self._dump_logs()
         subprocess.run(
             ["docker", "rm", "-f", self._container],
             check=False, capture_output=True,
         )
         cmd = [
-            "docker", "run", "-d", "--rm",
+            "docker", "run", "-d",
             "--name", self._container,
             "--user", f"{os.getuid()}:{os.getgid()}",
             "-v", f"{self._sock_dir}:/sock:rw",
@@ -167,6 +178,9 @@ class KimeraLiveClient:
                 except Exception: pass
                 self._sock = None
         self._started = False
+        # Capture the container's stderr in case it died for a reason
+        # we want to debug after shutdown.  Best-effort — never raises.
+        self._dump_logs()
         subprocess.run(
             ["docker", "rm", "-f", self._container],
             check=False, capture_output=True,
@@ -180,12 +194,14 @@ class KimeraLiveClient:
         k1: float = 0.0, k2: float = 0.0,
         p1: float = 0.0, p2: float = 0.0,
     ) -> None:
-        payload = struct.pack(
-            "<II8d",
+        # Cache so a crash-recovery reconnect can re-apply them without
+        # waiting for the caller to send another camera_meta.
+        self._last_intrinsics = (
             int(width), int(height),
             float(fx), float(fy), float(cx), float(cy),
             float(k1), float(k2), float(p1), float(p2),
         )
+        payload = struct.pack("<II8d", *self._last_intrinsics)
         rt, body = self._roundtrip(_MSG_INTRINSICS, payload)
         if rt != _RSP_OK:
             raise KimeraLiveError(self._decode_err(rt, body, "INTRINSICS"))
@@ -237,20 +253,86 @@ class KimeraLiveClient:
     # ── low-level transport ────────────────────────────────────────────
 
     def _roundtrip(self, msg_type: int, payload: bytes) -> tuple[int, bytes]:
-        with self._lock:
-            if self._sock is None:
-                raise KimeraLiveError("not connected")
-            hdr = _HDR.pack(msg_type, len(payload), 0)
-            try:
-                self._sock.sendall(hdr + payload)
-                rsp_hdr = self._recv_exact(_HDR.size)
-            except (OSError, KimeraLiveError) as exc:
-                self._sock = None
-                self._started = False
-                raise KimeraLiveError(f"socket error: {exc}") from exc
-            r_type, r_len, _ = _HDR.unpack(rsp_hdr)
-            body = self._recv_exact(r_len) if r_len > 0 else b""
-            return r_type, body
+        """Send a request and read its response.  If the socket has
+        died (because ``kimera_live_vio`` crashed mid-stream), we
+        respawn the container, re-apply the last intrinsics, and retry
+        once.  The retry only fires for non-handshake messages, so a
+        broken pipe during PING surfaces as a clean error instead of
+        looping forever."""
+        for attempt in (0, 1):
+            with self._lock:
+                if self._sock is None and attempt > 0:
+                    # First attempt already failed; the previous block
+                    # cleared _sock and tried to reconnect.  Don't retry
+                    # again from inside the lock.
+                    raise KimeraLiveError("not connected")
+                if self._sock is not None:
+                    hdr = _HDR.pack(msg_type, len(payload), 0)
+                    try:
+                        self._sock.sendall(hdr + payload)
+                        rsp_hdr = self._recv_exact(_HDR.size)
+                        r_type, r_len, _ = _HDR.unpack(rsp_hdr)
+                        body = self._recv_exact(r_len) if r_len > 0 else b""
+                        return r_type, body
+                    except (OSError, KimeraLiveError) as exc:
+                        # Mark connection dead but keep the lock so the
+                        # outer caller doesn't race with a recover.
+                        try: self._sock.close()
+                        except Exception: pass
+                        self._sock    = None
+                        self._started = False
+                        last_exc      = exc
+                else:
+                    last_exc = KimeraLiveError("not connected")
+
+            # Drop the lock before doing the recovery, which itself
+            # acquires the lock when it reconnects.
+            if (attempt == 0
+                    and msg_type != _MSG_PING
+                    and not self._in_reconnect):
+                logger.warning(
+                    "[kimera-live] socket dead ({}), reconnecting…", last_exc,
+                )
+                try:
+                    self._reconnect()
+                except Exception as exc:
+                    raise KimeraLiveError(
+                        f"reconnect after socket error failed: {exc}",
+                    ) from exc
+                continue
+            raise KimeraLiveError(f"socket error: {last_exc}") from last_exc
+
+        # Unreachable — both loop iterations either return or raise.
+        raise KimeraLiveError("unreachable")
+
+    def _reconnect(self) -> None:
+        """Tear down the dead container, spawn a new one, re-apply the
+        cached intrinsics so the next FRAME has a working pipeline.
+
+        Reentry-guarded: inner calls to _roundtrip() during this
+        method won't themselves trigger another reconnect, so a
+        chronically-crashing binary surfaces as an error to the caller
+        instead of an infinite loop."""
+        self._in_reconnect = True
+        try:
+            self._started = False
+            self.start()
+            if self._last_intrinsics is not None:
+                try:
+                    payload = struct.pack("<II8d", *self._last_intrinsics)
+                    rt, body = self._roundtrip(_MSG_INTRINSICS, payload)
+                    if rt != _RSP_OK:
+                        logger.warning(
+                            "[kimera-live] failed to re-apply intrinsics "
+                            "after reconnect: {}",
+                            self._decode_err(rt, body, "INTRINSICS"),
+                        )
+                except KimeraLiveError as exc:
+                    logger.warning(
+                        "[kimera-live] re-apply intrinsics failed: {}", exc,
+                    )
+        finally:
+            self._in_reconnect = False
 
     def _recv_exact(self, n: int) -> bytes:
         assert self._sock is not None
