@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# kimera-mcp config for simple-vlm-example.
+#
+# Wraps MIT-SPARK Kimera-VIO (BSD-2-Clause) running in the `kimera_vio`
+# docker image.  The worker pushes camera frames + IMU samples here at
+# `kimera_hz`; each call invokes Kimera over the current sliding-window
+# dataset folder and returns the latest pose.
+#
+# Build the docker image first (see agent-mcp-servers/kimera-mcp/README.md):
+#     cd /tmp/Kimera-VIO
+#     docker build -f Dockerfile_20_04 -t kimera_vio_deps .
+#     docker build -f <repo>/agent-mcp-servers/kimera-mcp/scripts/Dockerfile.kimera \
+#                  -t kimera_vio .
+
+dataset_dir:  /tmp/xr-ai/simple-vlm-example-kimera-dataset
+output_dir:   /tmp/xr-ai/simple-vlm-example-kimera-output
+docker_image: kimera_vio
+params_folder_in_image: /opt/kimera-params/EurocMonoLive
+
+# Sliding window — how many recent frames stay in the staging folder
+# (and therefore get re-processed on each estimate_pose call).  Bigger =
+# more inertial / visual context for Kimera; smaller = lower per-call
+# latency.
+window_frames: 100
+
+# Default intrinsics.  The web client publishes camera_meta on first
+# `startCamera`; the worker derives K from facingMode + UA and calls
+# kimera-mcp.set_camera_intrinsics to override these.
+default_width:  640
+default_height: 480
+default_fx:     458.654
+default_fy:     457.296
+default_cx:     367.215
+default_cy:     248.375
+
+host: 0.0.0.0
+port: 8250

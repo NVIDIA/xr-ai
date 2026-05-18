@@ -27,6 +27,13 @@ import {
   LiveKitConfig,
 } from '/StreamKit/index.js';
 
+import {
+  ensureMotionPermission,
+  startImuPublisher,
+  stopImuPublisher,
+  publishCameraMeta,
+} from './imu.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -468,6 +475,19 @@ export async function startCamera(model, { render, showError, enumerateCameras: 
   try {
     await model.session?.startCamera(cameraConfig);
     model.isCameraActive = true;
+    // One-shot camera description so the server can match the device
+    // against a known intrinsics table and skip MoGe's FOV calibration.
+    const track = model.session?.getLocalVideoMediaTrack?.() ?? null;
+    publishCameraMeta(model.session, track);
+    // IMU stream: free orientation prior for pose-mcp.  On iOS the
+    // permission request has to ride a user gesture — we already had
+    // one (the user clicked the camera button), so this is the right
+    // place to ask.  Permission failures fall through silently and we
+    // simply don't publish IMU, which is fine; pose-mcp degrades to
+    // pure visual tracking.
+    if (await ensureMotionPermission()) {
+      startImuPublisher(model.session);
+    }
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
   }
@@ -481,6 +501,7 @@ export async function stopCamera(model, render, showError) {
   } catch (err) {
     showError(err instanceof StreamError ? err.message : String(err));
   }
+  stopImuPublisher();
   model.isCameraActive = false;
   render();
 }
