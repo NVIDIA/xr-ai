@@ -176,10 +176,16 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
     client = KimeraLiveClient(
         sock_dir              =sock_dir,
         docker_image          =cfg.get("docker_image", "kimera_vio"),
+        deps_image            =cfg.get("deps_image", "kimera_vio_deps"),
         container_name        =cfg.get("container_name", "xr_ai_kimera_live"),
         params_folder_in_image=cfg.get("params_folder_in_image",
                                        "/opt/kimera-params/EurocMonoLive"),
         startup_timeout_s     =float(cfg.get("startup_timeout_s", 30.0)),
+        build_if_missing      =bool(cfg.get("build_if_missing", True)),
+        kimera_vio_repo       =cfg.get("kimera_vio_repo",
+                                       "https://github.com/MIT-SPARK/Kimera-VIO.git"),
+        kimera_vio_src_cache  =pathlib.Path(cfg.get(
+            "kimera_vio_src_cache", "~/.cache/xr-ai/Kimera-VIO")),
     )
 
     # If a default intrinsics block is present, push it eagerly so the

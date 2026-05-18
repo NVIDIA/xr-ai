@@ -49,8 +49,13 @@ Same shape as `pose-mcp`, so callers swap by changing one URL:
 
 ## Build
 
-Two-stage build because upstream `Dockerfile_20_04` only installs
-*dependencies*, not Kimera-VIO itself:
+**You don't have to run this manually.**  On first start, kimera-mcp
+checks for the `kimera_vio` docker image and, if it's missing, clones
+Kimera-VIO into `~/.cache/xr-ai/Kimera-VIO` and runs both docker
+builds itself.  Set `build_if_missing: false` in the YAML if you'd
+rather fail fast in sandboxed environments.
+
+If you do want to do it by hand (or pre-cache the image for CI):
 
 ```bash
 cd /tmp && git clone --depth 1 https://github.com/MIT-SPARK/Kimera-VIO.git

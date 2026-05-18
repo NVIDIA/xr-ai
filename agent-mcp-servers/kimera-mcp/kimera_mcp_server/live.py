@@ -26,6 +26,8 @@ import time
 import numpy as np
 from loguru import logger
 
+from .build import ensure_image
+
 
 # Wire-format type IDs (must match kimera_live_vio.cpp).
 _MSG_PING       = 1
@@ -64,16 +66,24 @@ class KimeraLiveClient:
         self, *,
         sock_dir:        pathlib.Path,
         docker_image:    str  = "kimera_vio",
+        deps_image:      str  = "kimera_vio_deps",
         container_name:  str  = "xr_ai_kimera_live",
         params_folder_in_image: str = "/opt/kimera-params/EurocMonoLive",
         startup_timeout_s: float = 30.0,
+        build_if_missing:   bool = True,
+        kimera_vio_repo:    str  = "https://github.com/MIT-SPARK/Kimera-VIO.git",
+        kimera_vio_src_cache: pathlib.Path = pathlib.Path("~/.cache/xr-ai/Kimera-VIO"),
     ) -> None:
         self._sock_dir   = pathlib.Path(sock_dir).expanduser()
         self._sock_path  = self._sock_dir / "kimera-vio.sock"
         self._image      = docker_image
+        self._deps_image = deps_image
         self._container  = container_name
         self._params     = params_folder_in_image
         self._timeout    = float(startup_timeout_s)
+        self._build_if_missing     = bool(build_if_missing)
+        self._kimera_vio_repo      = kimera_vio_repo
+        self._kimera_vio_src_cache = pathlib.Path(kimera_vio_src_cache).expanduser()
 
         self._sock:    socket.socket | None = None
         self._lock     = threading.Lock()
@@ -84,9 +94,18 @@ class KimeraLiveClient:
     def start(self) -> None:
         """Start the docker container (idempotent) and connect to its
         socket.  Blocks until the binary is reachable or
-        ``startup_timeout_s`` elapses."""
+        ``startup_timeout_s`` elapses.  Builds the docker image on the
+        fly if ``build_if_missing`` is enabled and ``docker_image``
+        is not already present on the host."""
         if self._started:
             return
+        if self._build_if_missing:
+            ensure_image(
+                image_tag=self._image,
+                deps_tag =self._deps_image,
+                src_cache=self._kimera_vio_src_cache,
+                repo_url =self._kimera_vio_repo,
+            )
         self._sock_dir.mkdir(parents=True, exist_ok=True)
         # Clean up any stale socket from a prior run.
         try:

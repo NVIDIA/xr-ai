@@ -26,3 +26,7 @@ kimera_mcp_server = "kimera_mcp_server.__main__:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["kimera_mcp_server"]
+# Ship the docker build context (Dockerfile.kimera + the streaming
+# C++ wrapper source) alongside the package so `ensure_image` can
+# find them at runtime under both editable and wheel installs.
+force-include = { "scripts" = "kimera_mcp_server/_scripts" }
