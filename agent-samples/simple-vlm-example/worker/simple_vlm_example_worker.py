@@ -101,6 +101,7 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         min_speech            =float(cfg.get("min_speech",            0.3)),
         kimera_hz             =float(cfg.get("kimera_hz",             2.0)),
         kimera_max_age_s      =float(cfg.get("kimera_max_age_s",      1.0)),
+        kimera_track_max_edge =int(  cfg.get("kimera_track_max_edge", 320)),
     )
 
     loop = asyncio.get_running_loop()

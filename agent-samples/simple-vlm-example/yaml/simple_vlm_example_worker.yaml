@@ -17,6 +17,13 @@ kimera_mcp_url:   http://localhost:8250/mcp
 kimera_hz:        2.0
 kimera_max_age_s: 1.0
 
+# LiveKit dynamically scales track resolution (simulcast / adaptive
+# bitrate); Kimera asserts on mid-stream resolution changes.  We
+# resize every frame to a fixed longest-edge size before pushing it,
+# keeping the source aspect ratio.  Lower = faster tracking, fewer
+# features (320 is a good default for phone cameras).
+kimera_track_max_edge: 320
+
 # VLM backend — controls which vision model the worker uses.
 # "cosmos" (default) → vlm-server (Cosmos-Reason1-7B) on port 8100
 # "omni"             → nemotron_omni (Nemotron-3-Nano-Omni-30B) on port 8108

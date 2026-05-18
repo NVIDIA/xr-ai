@@ -47,6 +47,7 @@ import time
 
 import httpx
 from loguru import logger
+from PIL import Image
 from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
                           ParticipantEvent, ProcessorEndpoint)
 from xr_ai_logging import print_task_done_banner
@@ -97,6 +98,13 @@ class SimpleVlmAgent:
         kimera_hz:           float = 2.0,
         kimera_max_age_s:    float = 1.0,
         kimera_scratch_dir:  pathlib.Path = pathlib.Path("/dev/shm/xr-ai/kimera-in"),
+        # Tracking resolution — LiveKit can deliver the same track at
+        # different resolutions over the session lifetime (simulcast /
+        # adaptive bitrate), and Kimera asserts on mid-stream resolution
+        # changes.  We resize every frame to a fixed longest-edge size
+        # before pushing to kimera-mcp, keeping the source aspect ratio,
+        # so the pipeline only ever sees a single resolution.
+        kimera_track_max_edge: int = 320,
     ) -> None:
         self._ep     = ep
         self._stt    = stt
@@ -126,6 +134,7 @@ class SimpleVlmAgent:
         self._kimera_min_period_s = 1.0 / max(kimera_hz, 0.1)
         self._kimera_max_age_s    = float(kimera_max_age_s)
         self._kimera_scratch_dir  = kimera_scratch_dir
+        self._kimera_track_max_edge = max(64, int(kimera_track_max_edge))
         self._kimera_last_pts: dict[str, int] = {}    # pid → last frame ts sent
         self._kimera_event        = asyncio.Event()
         self._imu_pending: list[list[float]] = []     # rows: [ts_ms, gx, gy, gz, ax, ay, az]
@@ -274,31 +283,51 @@ class SimpleVlmAgent:
             asyncio.create_task(self._push_intrinsics_to_kimera(pid, data))
 
     async def _push_intrinsics_to_kimera(self, pid: str, meta: dict) -> None:
-        """Derive a pinhole K from the camera_meta payload + a FOV guess,
-        push to kimera-mcp via ``set_camera_intrinsics``.  No-op if width
-        / height aren't available."""
+        """Derive a pinhole K for the tracking resolution and push it
+        to kimera-mcp.  We don't care what dimensions LiveKit actually
+        delivers — every frame gets resized to ``kimera_track_max_edge``
+        on its longest side before being sent, so the intrinsics that
+        matter are the ones for the *tracked* size, not the source."""
         assert self._kimera is not None
-        w  = int(meta.get("width")  or 0)
-        h  = int(meta.get("height") or 0)
-        if w <= 0 or h <= 0:
+        src_w = int(meta.get("width")  or 0)
+        src_h = int(meta.get("height") or 0)
+        if src_w <= 0 or src_h <= 0:
             return
         fov_x = _guess_fov_from_meta(meta) or 60.0
-        # Pinhole intrinsics from FOV + image dimensions, principal point
-        # at the centre.  Square pixels assumed (almost always true).
+        track_w, track_h = self._kimera_track_size(src_w, src_h)
+        # Pinhole intrinsics for the tracked resolution.  fov_x is a
+        # property of the lens, not the resolution, so it's the same on
+        # both sides — fx just scales with the new image width.
         import math
-        fx = 0.5 * w / math.tan(0.5 * math.radians(fov_x))
+        fx = 0.5 * track_w / math.tan(0.5 * math.radians(fov_x))
         fy = fx
-        cx = w / 2.0
-        cy = h / 2.0
+        cx = track_w / 2.0
+        cy = track_h / 2.0
         try:
             r = await self._kimera.set_camera_intrinsics(
-                width=w, height=h, fx=fx, fy=fy, cx=cx, cy=cy,
+                width=track_w, height=track_h, fx=fx, fy=fy, cx=cx, cy=cy,
             )
-            logger.info("kimera intrinsics set  {}x{}  fx={:.1f} ({:.0f}° FOV)  resp={}",
-                        w, h, fx, fov_x, r)
+            logger.info(
+                "kimera intrinsics set  source {}x{} -> tracked {}x{}  "
+                "fx={:.1f} ({:.0f}° FOV)  resp={}",
+                src_w, src_h, track_w, track_h, fx, fov_x, r,
+            )
             self._camera_intrinsics_set.add(pid)
         except Exception as exc:
             logger.warning("kimera set_camera_intrinsics failed: {}", exc)
+
+    def _kimera_track_size(self, src_w: int, src_h: int) -> tuple[int, int]:
+        """Compute the longest-edge=``kimera_track_max_edge`` size that
+        preserves the source aspect ratio.  Rounded to even pixels in
+        both axes so the downstream image converters stay happy."""
+        m = self._kimera_track_max_edge
+        if src_w >= src_h:
+            w = m
+            h = max(2, int(round(src_h * (m / src_w))))
+        else:
+            h = m
+            w = max(2, int(round(src_w * (m / src_h))))
+        return (w & ~1, h & ~1)
 
     # ── interruptable query dispatch ──────────────────────────────────────────
 
@@ -690,7 +719,15 @@ class SimpleVlmAgent:
         if frame is None:
             return
 
-        img      = frame_to_pil(frame)
+        img = frame_to_pil(frame)
+        # LiveKit can deliver this track at varying resolutions over
+        # the session.  Resize to a fixed tracking size that matches
+        # what we already pushed via set_camera_intrinsics, so Kimera
+        # only ever sees one resolution and its internal CHECKs on
+        # image size hold.
+        track_w, track_h = self._kimera_track_size(img.width, img.height)
+        if (img.width, img.height) != (track_w, track_h):
+            img = img.resize((track_w, track_h), Image.Resampling.BILINEAR)
         out_path = self._kimera_scratch_dir / f"{_safe_pid(pid)}.png"
         tmp_path = out_path.with_suffix(".png.tmp")
         img.save(tmp_path, format="PNG")
