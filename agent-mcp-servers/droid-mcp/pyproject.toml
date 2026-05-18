@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "droid-mcp-server"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "uvicorn[standard]>=0.29",
+    "fastmcp>=0.4",
+    "pyyaml>=6.0",
+    "Pillow>=10.0",
+    "numpy>=1.24",
+    "xr-ai-logging",
+    # droid-slam itself is NOT a pip dep — it's installed via the
+    # scripts/setup_droid.sh script which clones the upstream repo and
+    # builds its CUDA extensions against the host's PyTorch.  We import
+    # `droid_slam` lazily so this package's `uv sync` step doesn't fail
+    # on a GPU-less developer box.
+    "torch>=2.1",
+    "torchvision>=0.16",
+]
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+
+[project.scripts]
+droid_mcp_server = "droid_mcp_server.__main__:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["droid_mcp_server"]

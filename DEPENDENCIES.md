@@ -132,6 +132,22 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     OpenXR session; runs alongside LOVR's rendering session.
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
+droid-mcp-server  (agent-mcp-servers/droid-mcp/)
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── fastmcp >=0.4
+    └── uvicorn[standard] >=0.29
+    └── pyyaml >=6.0
+    └── Pillow >=10.0
+    └── numpy >=1.24
+    └── torch >=2.1
+    └── torchvision >=0.16
+    Out-of-band: `droid_slam` (princeton-vl/DROID-SLAM, BSD-3-Clause)
+    installed by scripts/setup_droid.sh which clones the upstream repo
+    and builds its CUDA correlation + DBA extensions against the same
+    torch we just installed.  Pretrained weights downloaded to
+    ~/.cache/xr-ai/droid.pth.  Imported lazily so the package still
+    `uv sync`s on a GPU-less developer box.
+
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
@@ -263,6 +279,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
+| `agent-mcp-servers/droid-mcp/` | `droid-mcp-server` | `droid_mcp_server` | 8260 | DROID-SLAM (BSD-3-Clause) | FastMCP wrapper around princeton-vl/DROID-SLAM; CUDA-only.  `droid_slam` itself is installed out-of-band via `scripts/setup_droid.sh` (clones the upstream repo + builds its CUDA extensions). |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
