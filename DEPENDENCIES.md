@@ -132,6 +132,22 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     OpenXR session; runs alongside LOVR's rendering session.
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
+kimera-mcp-server  (agent-mcp-servers/kimera-mcp/)
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── fastmcp >=0.4
+    └── uvicorn[standard] >=0.29
+    └── pyyaml >=6.0
+    └── Pillow >=10.0
+    └── numpy >=1.24
+    └── rerun-sdk >=0.32,<0.33  (live trajectory + frustum viz; opt-in via rerun_addr)
+    Out-of-band: MIT-SPARK Kimera-VIO (BSD-2-Clause) and its dependency
+    stack (GTSAM, OpenGV, DBoW2, Kimera-RPGO) live inside the
+    `kimera_vio` docker image, built from
+    `scripts/Dockerfile.kimera` over the upstream `kimera_vio_deps`
+    image.  The MCP server spawns the container at startup and talks
+    to the `kimera_live_vio` streaming binary over an AF_UNIX socket
+    bind-mounted from the host.
+
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)

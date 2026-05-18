@@ -52,6 +52,7 @@ from PIL import Image
 from xr_ai_logging import setup_logging
 
 from .live import KimeraLiveClient, KimeraLiveError
+from .viz  import RerunSink
 
 
 def _load_image_gray(path: pathlib.Path) -> np.ndarray:
@@ -61,7 +62,8 @@ def _load_image_gray(path: pathlib.Path) -> np.ndarray:
         return np.asarray(img.convert("L"), dtype=np.uint8)
 
 
-def build_mcp(client: KimeraLiveClient, cfg: dict) -> FastMCP:
+def build_mcp(client: KimeraLiveClient, cfg: dict,
+              sink: RerunSink | None = None) -> FastMCP:
     mcp   = FastMCP("kimera-mcp")
     state = {"frames_sent": 0, "intrinsics": None}
 
@@ -94,13 +96,16 @@ def build_mcp(client: KimeraLiveClient, cfg: dict) -> FastMCP:
                 "frames_sent":   state["frames_sent"],
                 "ts_ns":         pose.ts_ns,
             }
-        return {
+        result = {
             "state":         pose.state,
             "translation_m": list(pose.translation),
             "quaternion":    list(pose.quaternion),
             "frames_sent":   state["frames_sent"],
             "ts_ns":         pose.ts_ns,
         }
+        if sink is not None:
+            sink.log_pose_dict(result, gray=gray)
+        return result
 
     @mcp.tool()
     def push_imu(samples: list[list[float]]) -> dict:
@@ -139,6 +144,10 @@ def build_mcp(client: KimeraLiveClient, cfg: dict) -> FastMCP:
                                    fx=float(fx), fy=float(fy),
                                    cx=float(cx), cy=float(cy))
         state["frames_sent"] = 0
+        if sink is not None:
+            sink.set_intrinsics(width=int(width), height=int(height),
+                                fx=float(fx), fy=float(fy),
+                                cx=float(cx), cy=float(cy))
         return {"ok": True, "intrinsics": state["intrinsics"]}
 
     @mcp.tool()
@@ -156,14 +165,17 @@ def build_mcp(client: KimeraLiveClient, cfg: dict) -> FastMCP:
         except KimeraLiveError as exc:
             return {"error": str(exc)}
         state["frames_sent"] = 0
+        if sink is not None:
+            sink.reset()
         logger.warning("kimera-mcp: live pipeline reset")
         return {"ok": True}
 
     return mcp
 
 
-def build_app(client: KimeraLiveClient, cfg: dict):
-    return build_mcp(client, cfg).http_app(path="/mcp")
+def build_app(client: KimeraLiveClient, cfg: dict,
+              sink: RerunSink | None = None):
+    return build_mcp(client, cfg, sink=sink).http_app(path="/mcp")
 
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
@@ -216,14 +228,25 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
         except (NotImplementedError, RuntimeError):
             pass  # not available on this platform
 
+    sink: RerunSink | None = None
+    rerun_addr = cfg.get("rerun_addr")
+    if rerun_addr:
+        init_size = (
+            int(default_intr["width"])  if default_intr else 640,
+            int(default_intr["height"]) if default_intr else 480,
+        )
+        sink = RerunSink(addr=str(rerun_addr), image_size=init_size)
+
     if default_intr is not None:
         try:
             client.set_intrinsics(**default_intr)
             logger.info("[kimera-mcp] applied default intrinsics: {}", default_intr)
+            if sink is not None:
+                sink.set_intrinsics(**default_intr)
         except KimeraLiveError as exc:
             logger.warning("[kimera-mcp] default intrinsics rejected: {}", exc)
 
-    app    = build_app(client, cfg)
+    app    = build_app(client, cfg, sink=sink)
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 

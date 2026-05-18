@@ -16,6 +16,11 @@ dependencies = [
     "Pillow>=10.0",
     "numpy>=1.24",
     "xr-ai-logging",
+    # Live trajectory + frustum visualisation.  Pinned to a single 0.32
+    # line so a viewer launched from this venv matches the schema we
+    # log with.  Sink stays disabled until `rerun_addr` is set, so
+    # GPU-less developer boxes don't depend on a running viewer.
+    "rerun-sdk>=0.32,<0.33",
 ]
 
 [tool.uv.sources]

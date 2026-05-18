@@ -71,6 +71,25 @@ Final image is ~5 GB.  After build the streaming binary is at
 `/usr/local/bin/kimera_live_vio` and the legacy batch binary is still
 at `/root/Kimera-VIO/build/stereoVIOEuroc`.
 
+## Visualisation
+
+Same Rerun pattern as the other pose backends in this repo.  Set
+`rerun_addr: "localhost:9876"` in the YAML, then in the same venv:
+
+```bash
+uv run rerun --connect rerun+http://localhost:9876/proxy
+```
+
+before starting the MCP server.  The Python side logs every pose that
+comes back from the C++ binary:
+
+* live camera frustum at `world/camera` (driven by `set_camera_intrinsics`)
+* current grayscale frame at `world/camera/image`
+* trajectory polyline at `world/trail`
+
+Viewer failures are tolerated — a flaky / disconnected viewer demotes
+the sink to a no-op rather than tanking the pose path.
+
 ## Status
 
 Verified end-to-end on the bench box:

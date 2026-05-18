@@ -3,6 +3,7 @@
 
 from .__main__ import build_app, build_mcp
 from .live     import KimeraLiveClient, KimeraLiveError, LivePose
+from .viz      import RerunSink
 
 __all__ = [
     "build_app",
@@ -10,4 +11,5 @@ __all__ = [
     "KimeraLiveClient",
     "KimeraLiveError",
     "LivePose",
+    "RerunSink",
 ]
