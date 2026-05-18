@@ -432,6 +432,44 @@ video-mcp (8210, recording disabled), transcript-mcp (8200), worker.
 Recording is disabled on the reference hardware (dual 48 GB Ada) due to
 NVENC OOM; only `get_latest_frame` (live IPC path) is exposed by video-mcp.
 
+### glasses-agent-langchain  (agent-samples/glasses-agent-langchain/)
+
+LangChain variant of `glasses-agent`.  The process stack, IPC, VAD, STT/TTS,
+background VLM observation, memory, demonstration recording, and guidance
+logic are copied from `glasses-agent`; the ordinary request-time LLM/tool loop
+uses LangChain `create_agent` + `ChatOpenAI`, with MCP tools loaded through
+`langchain-mcp-adapters` for LangChain-native tool objects.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent-langchain` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `glasses-agent-langchain-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, fastmcp >=0.4, langchain >=1.0, langchain-core >=1.0, langchain-openai >=1.0, langchain-mcp-adapters >=0.2.2, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts the same services as `glasses-agent`: hub, stt (8103), piper-tts
+(8105), nemotron3-nano-llm (8107), vlm-server (8100),
+llama-nemotron-llm (8106), vlm-mcp (8240), video-mcp (8210,
+recording disabled), transcript-mcp (8200), worker.
+
+### glasses-agent-nat  (agent-samples/glasses-agent-nat/)
+
+NeMo Agent Toolkit variant of `glasses-agent`.  The process stack, IPC, VAD,
+STT/TTS, background VLM observation, memory, demonstration recording, guidance
+logic, and MCP tool clients are copied from `glasses-agent`; the ordinary
+request-time LLM/tool loop is wrapped as a native NAT `LambdaFunction`.
+LangChain is intentionally not part of this worker.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent-nat` | `xr-ai-launcher`, `xr-ai-logging` | - |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, fastmcp >=0.4, nvidia-nat-core >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts the same services as `glasses-agent`: hub, stt (8103), piper-tts
+(8105), nemotron3-nano-llm (8107), vlm-server (8100),
+llama-nemotron-llm (8106), vlm-mcp (8240), video-mcp (8210,
+recording disabled), transcript-mcp (8200), worker.  `nvidia-nat-core`
+still brings a broad workflow/runtime dependency tree; avoid adding the
+top-level `nvidia-nat` meta package unless CLI/plugin extras are required.
+
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM

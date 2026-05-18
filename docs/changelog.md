@@ -744,6 +744,27 @@ backbone — which the NGC image doesn't bundle — loads cleanly. The
 knob is `cfg["extra_pip"]`-overridable for version pinning. pip-mode
 silently ignores it (deps belong in `pyproject.toml` there).
 
+### 2026-05-15 — Add no-LangChain NAT variant for the glasses agent
+
+`agent-samples/glasses-agent-nat/` is a source copy of `glasses-agent` that
+keeps the XR process stack, IPC, VAD, STT/TTS, background VLM observation,
+memory, demo recording, guidance logic, and MCP clients unchanged while moving
+the ordinary request-time LLM/tool loop behind a native NeMo Agent Toolkit
+`LambdaFunction`. The worker depends on `nvidia-nat-core`, not the top-level
+`nvidia-nat` meta package and not LangChain, because this experiment is meant
+to evaluate NAT's native function/workflow boundary without changing agent
+behavior.
+
+### 2026-05-14 — Keep `glasses-agent` baseline intact; add LangChain variant as separate sample
+
+`agent-samples/glasses-agent-langchain/` is a source copy of
+`glasses-agent` that replaces only the ordinary request-time LLM/tool loop
+with LangChain `create_agent` + `ChatOpenAI`. The XR process stack, IPC,
+VAD, STT/TTS, background VLM observation, memory, demo recording, and guidance
+logic remain custom Python. This keeps the baseline implementation available
+for direct comparison while letting the LangChain integration be tested
+without changing the existing sample's behavior.
+
 ### 2026-05-14 — `xr-ai-models` seam adopted by migrated workers; one migration pending
 
 `vlm-mcp` (#139), `xr-render-demo` (#140), and `xr-ai-pipecat` (#137) now
