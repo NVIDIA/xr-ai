@@ -4,49 +4,43 @@
 """
 kimera-mcp server.
 
-Watch-folder wrapper around MIT-SPARK Kimera-VIO.  Exposes the same
-MCP tool surface as pose-mcp (`estimate_pose`, `get_map_stats`,
-`reset_map`, `push_imu`, `set_camera_intrinsics`) so existing callers
-swap by flipping a single config URL.
-
-Each ``estimate_pose`` call:
-  1. Atomically writes the incoming frame as
-     ``<dataset_dir>/mav0/cam0/data/<ts_ns>.png`` + appends to
-     ``cam0/data.csv``.
-  2. Optionally consumes any IMU samples that arrived via ``push_imu``
-     since the last call and appends them to ``imu0/data.csv``.
-  3. Invokes Kimera-VIO in the ``kimera_vio`` docker image over the
-     window of recent frames currently on disk.
-  4. Parses the latest pose out of Kimera's ``traj_vio.csv`` and
-     returns it.
+Thin FastMCP front-end for ``kimera_live_vio`` — a long-running
+Kimera-VIO pipeline in the ``kimera_vio`` docker image, talking to us
+over an AF_UNIX socket.  The container is spawned at startup and torn
+down on shutdown.
 
 Tools (FastMCP, mounted at /mcp)
 ────────────────────────────────
   estimate_pose(image_path, timestamp_us=0) → dict
-      state         : "ok" | "uninitialized" | "lost"
-      translation_m : [x, y, z]   world ← camera
-      quaternion    : [w, x, y, z]
-      num_frames    : frames currently staged
-      ts_ns         : nanosecond timestamp echo
+      Streams the grayscale frame to the pipeline; returns the latest
+      pose the backend has produced so far.  Fields:
+          state         : "ok" | "uninitialized" | "lost"
+          translation_m : [x, y, z]   world ← camera
+          quaternion    : [w, x, y, z]
+          ts_ns         : nanosecond timestamp of the returned pose
 
   push_imu(samples) → dict
       samples is a list of [ts_ms, gx, gy, gz, ax, ay, az].
-      Appended to imu0/data.csv on the next estimate_pose.
+      Forwarded immediately to the pipeline (no buffering on this side).
 
   set_camera_intrinsics(width, height, fx, fy, cx, cy) → dict
-      Rewrites cam0/sensor.yaml so Kimera uses these intrinsics.
+      Restarts the pipeline with the new K.  Call once after the web
+      client posts its camera_meta payload.
 
   get_map_stats() → dict
-      Cheap snapshot.
+      Cheap snapshot (frames pushed, pipeline up?).
 
   reset_map() → dict
-      Wipe staged data and any previous trajectory output.
+      Tear down the current pipeline.  The next frame rebuilds with
+      the most recent intrinsics (or the YAML defaults if none).
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import atexit
 import pathlib
+import signal
 
 import numpy as np
 import uvicorn
@@ -57,152 +51,182 @@ from PIL import Image
 
 from xr_ai_logging import setup_logging
 
-from .dataset import CameraIntrinsics, EurocDatasetWriter
-from .runner  import KimeraRunner
+from .live import KimeraLiveClient, KimeraLiveError
 
 
-def _load_image_rgb(path: pathlib.Path) -> np.ndarray:
+def _load_image_gray(path: pathlib.Path) -> np.ndarray:
+    """Load an image as 8-bit grayscale (the format kimera_live_vio
+    expects on the wire)."""
     with Image.open(path) as img:
-        return np.asarray(img.convert("RGB"))
+        return np.asarray(img.convert("L"), dtype=np.uint8)
 
 
-def build_mcp(writer: EurocDatasetWriter, runner: KimeraRunner,
-              cfg: dict) -> FastMCP:
-    mcp = FastMCP("kimera-mcp")
-    window_frames = int(cfg.get("window_frames", 100))
-    state = {"frame_skip": int(cfg.get("frame_skip", 1)),
-             "seen_frames": 0}
+def build_mcp(client: KimeraLiveClient, cfg: dict) -> FastMCP:
+    mcp   = FastMCP("kimera-mcp")
+    state = {"frames_sent": 0, "intrinsics": None}
 
     @mcp.tool()
     def estimate_pose(image_path: str, timestamp_us: int = 0) -> dict:
-        """Stage the frame, invoke Kimera, return the latest pose."""
+        """Push the frame to the live pipeline and return the latest pose."""
         path = pathlib.Path(image_path)
         if not path.exists():
             return {"error": f"image not found: {image_path!r}"}
         try:
-            rgb = _load_image_rgb(path)
+            gray = _load_image_gray(path)
         except Exception as exc:
             return {"error": f"failed to load image: {exc}"}
 
-        state["seen_frames"] += 1
-        if state["frame_skip"] > 1 and (state["seen_frames"] % state["frame_skip"]) != 0:
-            return {"state": "skipped", "translation_m": None, "quaternion": None,
-                    "num_frames": writer.num_frames, "ts_ns": 0}
+        ts_ns = (
+            int(timestamp_us) * 1000 if timestamp_us
+            else int(__import__("time").time() * 1e9)
+        )
+        try:
+            pose = client.send_frame(ts_ns=ts_ns, gray=gray)
+        except KimeraLiveError as exc:
+            return {"error": str(exc)}
+        state["frames_sent"] += 1
 
-        ts_ns = int(timestamp_us) * 1000 if timestamp_us else int(__import__("time").time() * 1e9)
-        writer.append_frame(ts_ns, rgb)
-
-        pose = runner.run_once(num_frames=writer.num_frames)
-        if pose is None:
-            return {"state": "uninitialized" if writer.num_frames < 8 else "lost",
-                    "translation_m": None, "quaternion": None,
-                    "num_frames": writer.num_frames, "ts_ns": ts_ns}
-
-        t = pose.pose[:3, 3]
+        if not pose.have_pose:
+            return {
+                "state":         pose.state,
+                "translation_m": None,
+                "quaternion":    None,
+                "frames_sent":   state["frames_sent"],
+                "ts_ns":         pose.ts_ns,
+            }
         return {
-            "state":         "ok",
-            "translation_m": [float(t[0]), float(t[1]), float(t[2])],
+            "state":         pose.state,
+            "translation_m": list(pose.translation),
             "quaternion":    list(pose.quaternion),
-            "num_frames":    writer.num_frames,
+            "frames_sent":   state["frames_sent"],
             "ts_ns":         pose.ts_ns,
         }
 
     @mcp.tool()
     def push_imu(samples: list[list[float]]) -> dict:
-        """Append IMU samples to the staged dataset.
+        """Forward IMU samples to the live pipeline.
 
         Each sample is a 7-element list: [ts_ms, gx, gy, gz, ax, ay, az].
         Gyro in rad/s, accel in m/s².  Timestamps in milliseconds (the
-        worker converts the web client's batched JSON into this form).
+        worker converts the web client's batched JSON to this form).
         """
-        n = 0
+        out: list[tuple[int, tuple[float, ...]]] = []
         for s in samples:
             if len(s) != 7:
                 continue
             ts_ns = int(float(s[0]) * 1_000_000.0)
-            writer.append_imu(ts_ns, (s[1], s[2], s[3]), (s[4], s[5], s[6]))
-            n += 1
+            out.append((ts_ns, (s[1], s[2], s[3], s[4], s[5], s[6])))
+        try:
+            n = client.push_imu(out)
+        except KimeraLiveError as exc:
+            return {"error": str(exc)}
         return {"appended": n}
 
     @mcp.tool()
     def set_camera_intrinsics(width: int, height: int,
                               fx: float, fy: float,
                               cx: float, cy: float) -> dict:
-        """Rewrite cam0/sensor.yaml with the operator-provided intrinsics
-        (e.g. from the web client's `camera_meta` topic + a FOV heuristic).
-        Wipes the current dataset because old frames assume the old K."""
-        intr = CameraIntrinsics(width=int(width), height=int(height),
-                                fx=float(fx), fy=float(fy),
-                                cx=float(cx), cy=float(cy))
-        writer.reset()
-        writer._intrinsics = intr      # in-place — re-init writes the new yaml
-        writer._init_layout()
-        return {"ok": True, "intrinsics": dataclasses_to_dict(intr)}
+        """Restart the live pipeline with these intrinsics (zero
+        distortion — phone cameras after JS-level cropping are close
+        enough to pinhole for VIO bootstrap)."""
+        try:
+            client.set_intrinsics(width=int(width), height=int(height),
+                                  fx=float(fx), fy=float(fy),
+                                  cx=float(cx), cy=float(cy))
+        except KimeraLiveError as exc:
+            return {"error": str(exc)}
+        state["intrinsics"] = dict(width=int(width), height=int(height),
+                                   fx=float(fx), fy=float(fy),
+                                   cx=float(cx), cy=float(cy))
+        state["frames_sent"] = 0
+        return {"ok": True, "intrinsics": state["intrinsics"]}
 
     @mcp.tool()
     def get_map_stats() -> dict:
         return {
-            "num_frames":      writer.num_frames,
-            "window_frames":   window_frames,
-            "dataset_dir":     str(writer.root),
-            "latest_ts_ns":    writer.latest_ts_ns,
-            "frames_seen":     state["seen_frames"],
+            "frames_sent":   state["frames_sent"],
+            "intrinsics":    state["intrinsics"],
+            "socket_path":   str(client._sock_path),     # noqa: SLF001
         }
 
     @mcp.tool()
     def reset_map() -> dict:
-        writer.reset()
-        state["seen_frames"] = 0
-        logger.warning("kimera-mcp: dataset wiped")
-        return {"ok": True, "num_frames": 0}
+        try:
+            client.reset()
+        except KimeraLiveError as exc:
+            return {"error": str(exc)}
+        state["frames_sent"] = 0
+        logger.warning("kimera-mcp: live pipeline reset")
+        return {"ok": True}
 
     return mcp
 
 
-def dataclasses_to_dict(obj) -> dict:
-    import dataclasses as _dc
-    return _dc.asdict(obj) if _dc.is_dataclass(obj) else dict(obj)
-
-
-def build_app(writer: EurocDatasetWriter, runner: KimeraRunner, cfg: dict):
-    return build_mcp(writer, runner, cfg).http_app(path="/mcp")
+def build_app(client: KimeraLiveClient, cfg: dict):
+    return build_mcp(client, cfg).http_app(path="/mcp")
 
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
-    dataset_dir = pathlib.Path(cfg.get("dataset_dir", "/tmp/xr-ai/kimera-dataset")).expanduser()
-    output_dir  = pathlib.Path(cfg.get("output_dir",  "/tmp/xr-ai/kimera-output")).expanduser()
-    host        = cfg.get("host", "0.0.0.0")
-    port        = int(cfg.get("port", 8250))
+    sock_dir = pathlib.Path(
+        cfg.get("sock_dir", "/tmp/xr-ai/kimera-sock"),
+    ).expanduser()
+    host = cfg.get("host", "0.0.0.0")
+    port = int(cfg.get("port", 8250))
 
-    # Default intrinsics — operator overrides via set_camera_intrinsics or
-    # the worker's camera_meta heuristic.  EuRoC-ish numbers as a starting
-    # point so even unconfigured first frames are sane.
-    default_intr = CameraIntrinsics(
-        width=int(cfg.get("default_width",  640)),
-        height=int(cfg.get("default_height", 480)),
-        fx=float(cfg.get("default_fx", 458.654)),
-        fy=float(cfg.get("default_fy", 457.296)),
-        cx=float(cfg.get("default_cx", 367.215)),
-        cy=float(cfg.get("default_cy", 248.375)),
-    )
-    writer = EurocDatasetWriter(
-        dataset_dir, intrinsics=default_intr,
-        window_frames=int(cfg.get("window_frames", 100)),
-    )
-    runner = KimeraRunner(
-        dataset_dir=dataset_dir, output_dir=output_dir,
-        docker_image=cfg.get("docker_image", "kimera_vio"),
+    client = KimeraLiveClient(
+        sock_dir              =sock_dir,
+        docker_image          =cfg.get("docker_image", "kimera_vio"),
+        container_name        =cfg.get("container_name", "xr_ai_kimera_live"),
         params_folder_in_image=cfg.get("params_folder_in_image",
-                                       "/root/Kimera-VIO/params/EurocMono"),
+                                       "/opt/kimera-params/EurocMonoLive"),
+        startup_timeout_s     =float(cfg.get("startup_timeout_s", 30.0)),
     )
-    app = build_app(writer, runner, cfg)
+
+    # If a default intrinsics block is present, push it eagerly so the
+    # pipeline is up before the first frame.  The worker overrides this
+    # once the web client posts its camera_meta.
+    default_intr = None
+    if "default_fx" in cfg:
+        default_intr = dict(
+            width =int(cfg.get("default_width",  640)),
+            height=int(cfg.get("default_height", 480)),
+            fx    =float(cfg["default_fx"]),
+            fy    =float(cfg.get("default_fy", cfg["default_fx"])),
+            cx    =float(cfg.get("default_cx", cfg.get("default_width",  640) / 2)),
+            cy    =float(cfg.get("default_cy", cfg.get("default_height", 480) / 2)),
+        )
+
+    logger.info("kimera-mcp-server  sock_dir={}  port={}", sock_dir, port)
+    client.start()
+    # Belt-and-braces shutdown: uvicorn's signal handlers can leave the
+    # container alive if the process exits before our finally: runs.
+    # Register atexit + explicit SIGINT/SIGTERM so the docker container
+    # never outlives this MCP server.
+    atexit.register(client.stop)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, client.stop)
+        except (NotImplementedError, RuntimeError):
+            pass  # not available on this platform
+
+    if default_intr is not None:
+        try:
+            client.set_intrinsics(**default_intr)
+            logger.info("[kimera-mcp] applied default intrinsics: {}", default_intr)
+        except KimeraLiveError as exc:
+            logger.warning("[kimera-mcp] default intrinsics rejected: {}", exc)
+
+    app    = build_app(client, cfg)
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
-    logger.info("kimera-mcp-server  dataset={}  port={}", dataset_dir, port)
     if ready_file:
         ready_file.touch()
-    await server.serve()
+    try:
+        await server.serve()
+    finally:
+        client.stop()
 
 
 def run() -> None:

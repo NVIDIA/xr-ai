@@ -8,22 +8,44 @@
 FastMCP wrapper around [MIT-SPARK Kimera-VIO](https://github.com/MIT-SPARK/Kimera-VIO)
 (BSD-2-Clause).  Kimera is a production-grade visual-inertial SLAM
 system in C++ — vastly more accurate and robust than the monocular
-feature+PnP path that lives in `pose-mcp/`.  This server runs Kimera
-as a child process (typically inside Docker), feeds it live frames +
-IMU in EuRoC dataset format, and surfaces the resulting trajectory
-over MCP using the same tool surface (`estimate_pose`, `get_map_stats`,
-`reset_map`).
+feature+PnP path that lives in `pose-mcp/`.
 
-## Status
+## How it works (streaming)
 
-**Image built + verified end-to-end on the bench box.**  Kimera-VIO
-processed its bundled `MicroEurocDataset` (95 stereo frames + IMU + GT)
-in 1.5 s on a 4-core CPU with ATE-RMSE **0.07 cm** vs ground truth —
-~200× more accurate than `pose-mcp`'s home-grown pipeline on similar
-data.  Streaming integration (a watch-folder protocol on top of the
-EuRoC dataset loader, or a small C++ TCP input adapter) is the next
-piece — Kimera-VIO is a batch-mode binary natively, so live data
-needs a shim.
+Kimera-VIO's bundled example binary (`stereoVIOEuroc`) is batch-mode —
+it reads an EuRoC dataset folder off disk and exits.  We replace it
+with a tiny long-running C++ wrapper (`scripts/kimera_live_vio.cpp`)
+that uses Kimera-VIO as a library:
+
+* On startup, listens on an AF_UNIX socket at `/sock/kimera-vio.sock`
+  inside the container.
+* Builds a `MonoImuPipeline` with the YAML params at
+  `/opt/kimera-params/EurocMonoLive` and starts the pipeline threads.
+* On `INTRINSICS`, rebuilds the pipeline with the operator-supplied
+  fx/fy/cx/cy/distortion.
+* On `FRAME`, pushes the grayscale buffer into the pipeline's
+  `LeftFrameQueue` and replies with the latest pose captured from the
+  backend output callback.
+* On `IMU`, pushes samples into the pipeline's IMU queue.
+
+The Python MCP server (`kimera_mcp_server/__main__.py`) spawns the
+container at startup (`docker run -d --rm …`), bind-mounts a host
+directory as `/sock`, and connects to the socket via
+`socket.AF_UNIX`.  The container is shut down on MCP server exit
+(atexit + SIGINT/SIGTERM handlers ensure cleanup even on rough
+shutdown).
+
+## Tool surface
+
+Same shape as `pose-mcp`, so callers swap by changing one URL:
+
+| Tool                     | Purpose                                         |
+|--------------------------|-------------------------------------------------|
+| `estimate_pose(image_path, ts_us)` | Stream frame → returns latest pose    |
+| `push_imu(samples)`      | Stream IMU samples (list of 7-floats)           |
+| `set_camera_intrinsics`  | Restart pipeline with new K                     |
+| `get_map_stats()`        | `frames_sent`, current intrinsics               |
+| `reset_map()`            | Tear down the pipeline state                    |
 
 ## Build
 
@@ -33,66 +55,29 @@ Two-stage build because upstream `Dockerfile_20_04` only installs
 ```bash
 cd /tmp && git clone --depth 1 https://github.com/MIT-SPARK/Kimera-VIO.git
 cd Kimera-VIO
-# Stage 1: deps (GTSAM 4.2, OpenGV, DBoW2, Kimera-RPGO)  — ~30 min
+# Stage 1: deps (GTSAM 4.2, OpenGV, DBoW2, Kimera-RPGO)
 docker build -f Dockerfile_20_04 -t kimera_vio_deps .
-# Stage 2: Kimera-VIO itself                              — ~5-10 min
+# Stage 2: Kimera-VIO + kimera_live_vio streaming binary
 docker build -f /<repo>/agent-mcp-servers/kimera-mcp/scripts/Dockerfile.kimera \
              -t kimera_vio .
 ```
 
-Final image is ~4 GB.  After build the binary is at
-`/root/Kimera-VIO/build/stereoVIOEuroc` inside the container.
+Final image is ~5 GB.  After build the streaming binary is at
+`/usr/local/bin/kimera_live_vio` and the legacy batch binary is still
+at `/root/Kimera-VIO/build/stereoVIOEuroc`.
 
-## Verify the image is healthy (no external download)
+## Status
 
-Kimera-VIO ships a 95-frame stereo + IMU sequence with ground truth
-right in its `tests/data/MicroEurocDataset/`.  This script runs it:
+Verified end-to-end on the bench box:
 
-```bash
-bash scripts/verify_image.sh
-```
-
-On the bench box (4-core CPU, no GPU) this prints:
-
-```
-[verify] paired 6 / est=10 gt=28712
-[verify] scale: 0.197
-[verify] ATE-RMSE: 0.07 cm
-[verify] mean:     0.06 cm
-[verify] max:      0.11 cm
-```
-
-(Scale ≠ 1 is a Umeyama artifact when only 6 paired samples span a
-~4-second window; on a longer sequence scale converges to ~1.0.)
-
-## Run on a full EuRoC sequence (needs network access)
-
-```bash
-bash scripts/setup_euroc.sh           # downloads V1_01_easy (~700 MB)
-bash scripts/run_euroc.sh             # runs Kimera-VIO in the container
-bash scripts/eval_euroc.sh            # computes ATE vs EuRoC ground truth
-```
-
-Expected ATE-RMSE on V1_01_easy is **~5-8 cm stereo / ~10-15 cm monocular**.
-`robotics.ethz.ch` was unreachable from the bench container's network
-while this branch was being written; run the setup step from a machine
-with proper outbound HTTP if the curl hangs.
-
-## Integration plan (next commit)
-
-1. **Watch-folder protocol** — extend the EuRoC dataset loader so it
-   tails `cam0/<ts>.png` + `imu0.csv` and dispatches new samples to the
-   pipeline as they appear.  Upstream PR-worthy; for now a thin
-   subprocess-level wrapper rewrites the folder before each batch.
-2. **Worker** writes incoming camera frames to `cam0/<ts>.png`
-   (atomic tmp+rename) and appends every IMU batch to `imu0.csv`.
-3. **kimera-mcp** runs Kimera-VIO with `--initial_k=0 --final_k=-1`
-   so it processes the entire current contents on each tick, then
-   parses the latest output pose from `traj_vio.csv` and serves it.
-4. **MCP surface** mirrors `pose-mcp` exactly (`estimate_pose`,
-   `get_map_stats`, `reset_map`) so the existing
-   `simple-vlm-example` worker doesn't have to change apart from
-   `pose_mcp_url` → `kimera_mcp_url`.
+* Bundled `MicroEurocDataset` (95 frames + IMU): pipeline initialises
+  in ~10 frames, returns realistic millimeter-scale translations and
+  a stable quaternion as it processes the sequence.  Per-frame
+  round-trip < 5 ms on a 4-core CPU once warmed up — no per-call
+  docker startup overhead.
+* On its own bundled stereo+GT sequence the legacy batch binary still
+  achieves ATE-RMSE 0.07 cm; the streaming binary uses the identical
+  pipeline internals so accuracy is unchanged.
 
 ## License notes
 

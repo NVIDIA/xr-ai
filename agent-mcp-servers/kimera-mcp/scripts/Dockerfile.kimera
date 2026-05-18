@@ -1,22 +1,25 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Build Kimera-VIO itself on top of the deps-only image produced by
-# Kimera-VIO's upstream Dockerfile_20_04.  Tag the deps image as
-# `kimera_vio_deps` first:
+# Build Kimera-VIO + a long-running streaming wrapper (`kimera_live_vio`)
+# on top of the deps-only image produced by Kimera-VIO's upstream
+# Dockerfile_20_04.  Tag the deps image as `kimera_vio_deps` first:
 #
 #     cd /tmp/Kimera-VIO
 #     docker build -f Dockerfile_20_04 -t kimera_vio_deps .
 #     docker build -f /path/to/this/Dockerfile.kimera -t kimera_vio .
+#
+# The live-VIO binary listens on an AF_UNIX socket; the MCP server
+# bind-mounts a host directory into /sock and connects to
+# /sock/kimera-vio.sock.
 
 FROM kimera_vio_deps
 
 WORKDIR /root
 
-# Pull Kimera-VIO + its ORB vocabulary, build with the same CMake flags
-# the upstream Jenkins build uses.  The binary that ends up at
-# /root/Kimera-VIO/build/stereoVIOEuroc is what scripts/run_euroc.sh
-# invokes.
+# Pull Kimera-VIO + build it with the same CMake flags upstream uses,
+# producing libkimera_vio.so under build/.  We link our streaming
+# wrapper against this in the next step.
 RUN git clone https://github.com/MIT-SPARK/Kimera-VIO.git && \
     cd Kimera-VIO && \
     mkdir build && \
@@ -27,22 +30,46 @@ RUN git clone https://github.com/MIT-SPARK/Kimera-VIO.git && \
           .. && \
     make -j$(nproc)
 
-# Smoke test — print the help banner during build so a broken binary
-# fails the image build, not the first runtime invocation.
+# Smoke test the legacy batch binary so a broken Kimera build fails the
+# image build, not the first runtime invocation.
 RUN /root/Kimera-VIO/build/stereoVIOEuroc --help 2>&1 | head -5 || true
 
-# Make Kimera-VIO + params readable by non-root users (the watch-folder
-# shim runs the container as the host operator's UID so output files
-# aren't root-owned and can't be cleaned up).
-RUN chmod -R a+rX /root && chmod a+x /root
-
 # Pre-patch a copy of EurocMono with autoInitialize=1 so live-stream
-# callers don't need ground truth at startup.  kimera-mcp's runner
-# points --params_folder_path at /opt/kimera-params/EurocMonoLive.
+# callers don't need ground truth at startup.  The live binary points
+# --params_folder_path here by default.
 RUN mkdir -p /opt/kimera-params && \
     cp -r /root/Kimera-VIO/params/EurocMono /opt/kimera-params/EurocMonoLive && \
     sed -i 's/^autoInitialize: 0/autoInitialize: 1/' \
         /opt/kimera-params/EurocMonoLive/BackendParams.yaml && \
     chmod -R a+rX /opt/kimera-params
 
+# Copy and build the streaming wrapper.  It links against
+# libkimera_vio.so and the same dependency stack Kimera itself uses.
+COPY kimera_live_vio.cpp /root/kimera_live_vio.cpp
+RUN g++ -std=c++17 -O2 -DNDEBUG \
+        -I /root/Kimera-VIO/include \
+        -I /usr/include/opencv4 \
+        -I /usr/include/eigen3 \
+        -I /usr/local/include \
+        -Wl,-rpath,/root/Kimera-VIO/build -Wl,-rpath,/usr/local/lib \
+        /root/kimera_live_vio.cpp \
+        -L /root/Kimera-VIO/build -lkimera_vio \
+        -L /usr/local/lib -lgtsam \
+        -lopencv_core -lopencv_imgcodecs -lopencv_imgproc \
+        -lgflags -lglog -lpthread \
+        -o /usr/local/bin/kimera_live_vio && \
+    chmod a+rx /usr/local/bin/kimera_live_vio
+
+# Make the build tree + linked .so readable/runnable by non-root users.
+# Containers run as the host operator's UID so output (and the socket)
+# end up owner-correct on the host bind-mount.
+RUN chmod -R a+rX /root && chmod a+x /root && \
+    chmod -R a+rX /root/Kimera-VIO/build
+
+# Default entrypoint runs the live binary.  Override --socket_path /
+# --params_folder_path via `docker run` to suit.
+ENV LD_LIBRARY_PATH=/root/Kimera-VIO/build:${LD_LIBRARY_PATH}
 WORKDIR /root/Kimera-VIO
+ENTRYPOINT ["/usr/local/bin/kimera_live_vio"]
+CMD ["--socket_path=/sock/kimera-vio.sock", \
+     "--params_folder_path=/opt/kimera-params/EurocMonoLive"]

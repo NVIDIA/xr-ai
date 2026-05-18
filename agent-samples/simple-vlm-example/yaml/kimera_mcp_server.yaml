@@ -4,9 +4,9 @@
 # kimera-mcp config for simple-vlm-example.
 #
 # Wraps MIT-SPARK Kimera-VIO (BSD-2-Clause) running in the `kimera_vio`
-# docker image.  The worker pushes camera frames + IMU samples here at
-# `kimera_hz`; each call invokes Kimera over the current sliding-window
-# dataset folder and returns the latest pose.
+# docker image as a long-running streaming pipeline.  The MCP server
+# spawns the container at startup; frames + IMU + intrinsics travel
+# over an AF_UNIX socket bind-mounted from the host.
 #
 # Build the docker image first (see agent-mcp-servers/kimera-mcp/README.md):
 #     cd /tmp/Kimera-VIO
@@ -14,20 +14,22 @@
 #     docker build -f <repo>/agent-mcp-servers/kimera-mcp/scripts/Dockerfile.kimera \
 #                  -t kimera_vio .
 
-dataset_dir:  /tmp/xr-ai/simple-vlm-example-kimera-dataset
-output_dir:   /tmp/xr-ai/simple-vlm-example-kimera-output
-docker_image: kimera_vio
+# Host directory that holds the AF_UNIX socket the live binary exposes.
+# Bind-mounted into the container as /sock.  Must be writable by the
+# user running this MCP server.
+sock_dir:      /tmp/xr-ai/kimera-sock
+
+docker_image:  kimera_vio
+container_name: xr_ai_kimera_live
 params_folder_in_image: /opt/kimera-params/EurocMonoLive
 
-# Sliding window — how many recent frames stay in the staging folder
-# (and therefore get re-processed on each estimate_pose call).  Bigger =
-# more inertial / visual context for Kimera; smaller = lower per-call
-# latency.
-window_frames: 100
+# Wait at most this many seconds for the container to bind its socket.
+startup_timeout_s: 30.0
 
-# Default intrinsics.  The web client publishes camera_meta on first
-# `startCamera`; the worker derives K from facingMode + UA and calls
-# kimera-mcp.set_camera_intrinsics to override these.
+# Default intrinsics — pushed eagerly so the pipeline is initialised
+# before the first frame.  The web client publishes camera_meta on
+# first `startCamera`; the worker derives K from facingMode + UA and
+# calls kimera-mcp.set_camera_intrinsics to override these.
 default_width:  640
 default_height: 480
 default_fx:     458.654

@@ -726,7 +726,7 @@ class SimpleVlmAgent:
             "kimera  pid={!r}  state={}  t={}  frames={}  ({:.0f} ms)",
             pid, state,
             _fmt3(t) if t else "—",
-            result.get("num_frames"), dt_ms,
+            result.get("frames_sent"), dt_ms,
         )
         # Push to the client on data topic "pose.update" so the UI can
         # render position / orientation alongside the VLM stream.
@@ -739,7 +739,7 @@ class SimpleVlmAgent:
                 "state":         state,
                 "translation_m": t,
                 "quaternion":    result.get("quaternion"),
-                "num_frames":    result.get("num_frames"),
+                "frames_sent":    result.get("frames_sent"),
                 "ts_ns":         result.get("ts_ns"),
             }).encode(),
         ))

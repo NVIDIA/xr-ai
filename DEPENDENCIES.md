@@ -263,6 +263,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
+| `agent-mcp-servers/kimera-mcp/` | `kimera-mcp-server` | `kimera_mcp_server` | 8250 | — | FastMCP front-end for MIT-SPARK Kimera-VIO; spawns `kimera_vio` docker container running `kimera_live_vio` (streaming AF_UNIX socket) |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
