@@ -43,6 +43,7 @@ from PIL import Image
 from xr_ai_logging import setup_logging
 
 from .backend import DroidBackend
+from .viz     import RerunSink
 
 
 def _load_image_gray(path: pathlib.Path,
@@ -58,7 +59,8 @@ def _load_image_gray(path: pathlib.Path,
         return np.asarray(img, dtype=np.uint8)
 
 
-def build_mcp(backend: DroidBackend, cfg: dict) -> FastMCP:
+def build_mcp(backend: DroidBackend, cfg: dict,
+              sink: RerunSink | None = None) -> FastMCP:
     mcp   = FastMCP("droid-mcp")
     state = {"intrinsics": None}
 
@@ -80,13 +82,16 @@ def build_mcp(backend: DroidBackend, cfg: dict) -> FastMCP:
             pose = backend.track(ts_ns=ts_ns, gray=gray)
         except Exception as exc:
             return {"error": str(exc)}
-        return {
+        result = {
             "state":         pose.state,
             "translation_m": list(pose.translation) if pose.have_pose else None,
             "quaternion":    list(pose.quaternion)  if pose.have_pose else None,
             "frames_sent":   backend.frames_seen,
             "ts_ns":         pose.ts_ns,
         }
+        if sink is not None and pose.have_pose:
+            sink.log_pose_dict(result, gray=gray)
+        return result
 
     @mcp.tool()
     def push_imu(samples: list[list[float]]) -> dict:
@@ -108,6 +113,11 @@ def build_mcp(backend: DroidBackend, cfg: dict) -> FastMCP:
         state["intrinsics"] = dict(width=int(width), height=int(height),
                                    fx=float(fx), fy=float(fy),
                                    cx=float(cx), cy=float(cy))
+        if sink is not None:
+            K = np.array([[fx, 0,  cx],
+                          [0,  fy, cy],
+                          [0,  0,   1]], dtype=np.float64)
+            sink.set_intrinsics(K)
         return {"ok": True, "intrinsics": state["intrinsics"]}
 
     @mcp.tool()
@@ -122,13 +132,16 @@ def build_mcp(backend: DroidBackend, cfg: dict) -> FastMCP:
     @mcp.tool()
     def reset_map() -> dict:
         backend.reset()
+        if sink is not None:
+            sink.reset()
         return {"ok": True}
 
     return mcp
 
 
-def build_app(backend: DroidBackend, cfg: dict):
-    return build_mcp(backend, cfg).http_app(path="/mcp")
+def build_app(backend: DroidBackend, cfg: dict,
+              sink: RerunSink | None = None):
+    return build_mcp(backend, cfg, sink=sink).http_app(path="/mcp")
 
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
@@ -147,19 +160,26 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
         buffer      =int(cfg.get("buffer", 512)),
     )
 
+    sink: RerunSink | None = None
+    rerun_addr = cfg.get("rerun_addr")
+    if rerun_addr:
+        sink = RerunSink(addr=str(rerun_addr), image_size=(img_w, img_h))
+
     # Push default intrinsics so the first frame doesn't fail with
     # "set_intrinsics first" if the worker isn't fast enough.
     if "default_fx" in cfg:
-        backend.set_intrinsics(
-            width =img_w,
-            height=img_h,
-            fx    =float(cfg["default_fx"]),
-            fy    =float(cfg.get("default_fy", cfg["default_fx"])),
-            cx    =float(cfg.get("default_cx", img_w / 2.0)),
-            cy    =float(cfg.get("default_cy", img_h / 2.0)),
-        )
+        fx = float(cfg["default_fx"])
+        fy = float(cfg.get("default_fy", fx))
+        cx = float(cfg.get("default_cx", img_w / 2.0))
+        cy = float(cfg.get("default_cy", img_h / 2.0))
+        backend.set_intrinsics(width=img_w, height=img_h,
+                               fx=fx, fy=fy, cx=cx, cy=cy)
+        if sink is not None:
+            sink.set_intrinsics(np.array([[fx, 0, cx],
+                                          [0, fy, cy],
+                                          [0,  0,  1]], dtype=np.float64))
 
-    app    = build_app(backend, cfg)
+    app    = build_app(backend, cfg, sink=sink)
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 

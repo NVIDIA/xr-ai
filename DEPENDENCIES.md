@@ -141,6 +141,7 @@ droid-mcp-server  (agent-mcp-servers/droid-mcp/)
     └── numpy >=1.24
     └── torch >=2.1
     └── torchvision >=0.16
+    └── rerun-sdk >=0.32,<0.33  (live trajectory + frustum viz; opt-in via rerun_addr)
     Out-of-band: `droid_slam` (princeton-vl/DROID-SLAM, BSD-3-Clause)
     installed by scripts/setup_droid.sh which clones the upstream repo
     and builds its CUDA correlation + DBA extensions against the same

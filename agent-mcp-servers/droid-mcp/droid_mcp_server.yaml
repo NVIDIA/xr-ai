@@ -34,3 +34,10 @@ default_cy:    120.0
 
 host:          0.0.0.0
 port:          8260
+
+# Optional Rerun viewer for live trajectory + frustum + camera image.
+# Start the viewer in the same venv first:
+#     uv run rerun --connect rerun+http://localhost:9876/proxy
+# Then unset / re-set this to point at the viewer's host:port.
+# Comment out (or leave null) to disable visualisation entirely.
+rerun_addr:    null   # "localhost:9876" to enable

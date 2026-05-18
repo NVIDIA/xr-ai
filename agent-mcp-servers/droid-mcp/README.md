@@ -67,6 +67,24 @@ Listens on `http://localhost:8260/mcp`.  Same MCP surface as the
 other pose servers, so the existing `simple-vlm-example` worker
 points at it by flipping one URL in its YAML.
 
+## Visualisation
+
+Set `rerun_addr: "localhost:9876"` in the YAML, then start a Rerun
+viewer in the same venv before launching the server:
+
+```bash
+uv run rerun --connect rerun+http://localhost:9876/proxy
+uv run python -m droid_mcp_server --config droid_mcp_server.yaml
+```
+
+The server logs:
+* live camera frustum at `world/camera` (driven by `set_camera_intrinsics`)
+* current frame at `world/camera/image`
+* trajectory polyline at `world/trail`
+
+Failures are tolerated — if the viewer goes away mid-session the sink
+demotes itself to a no-op rather than tearing down the pose path.
+
 ## Status
 
 **Scaffolded but not GPU-tested in this repo.**  The bench box used

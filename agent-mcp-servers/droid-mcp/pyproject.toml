@@ -23,6 +23,9 @@ dependencies = [
     # on a GPU-less developer box.
     "torch>=2.1",
     "torchvision>=0.16",
+    # Live trajectory + camera viz.  Pinned to a single 0.32 line so a
+    # viewer launched from this venv matches the schema we log with.
+    "rerun-sdk>=0.32,<0.33",
 ]
 
 [tool.uv.sources]
