@@ -5,21 +5,14 @@
 
 Two complementary scenarios:
 
-1. **Historical / NVDEC path** (``test_get_frame_from_time_returns_valid_png``):
-   synthesises an NVENC-encoded H.264 chunk on disk in the layout the hub
-   recorder writes (chunk + JSON sidecar + ``.identity``), boots
-   ``video_mcp_server`` against that directory, and queries
-   ``get_frame_from_time`` to force the NVDEC decode + Pillow PNG re-encode
-   path.
+1. ``test_get_frame_from_time_returns_valid_png`` — historical path:
+   synthesises an NVENC chunk on disk and queries ``get_frame_from_time``.
+2. ``test_get_latest_frame_via_live_hub`` — realtime path: rounds a
+   synthetic NV12 frame through a live hub to ``get_latest_frame``.
 
-2. **Realtime path through the hub** (``test_get_latest_frame_via_live_hub``):
-   spins up an in-process ``HubEndpoint``, points ``video_mcp_server`` at
-   the same IPC sockets, has a ``ConnectorEndpoint`` publish a synthetic
-   NV12 frame, and queries ``get_latest_frame`` to round-trip the hub PUB
-   → video-mcp ``ProcessorEndpoint`` → ``FrameRequest`` → ``FrameData``
-   path.
-
-Skipped cleanly when PyNvVideoCodec or NVENC/NVDEC hardware is missing.
+IPC mechanics (FRAME_SIGNAL / FRAME_REQUEST / FRAME_DATA) live in
+``video_mcp_server/__main__.py``. Skipped when PyNvVideoCodec or NVENC/
+NVDEC hardware is missing.
 """
 from __future__ import annotations
 
@@ -46,9 +39,9 @@ except (ImportError, RuntimeError, OSError) as exc:
 PIL_Image = pytest.importorskip("PIL.Image")
 pytest.importorskip("fastmcp")
 
-from fastmcp                import Client as McpClient  # noqa: E402
-from xr_ai_agent            import PixelFormat  # noqa: E402
-from xr_media_hub.ipc       import ConnectorEndpoint  # noqa: E402
+from fastmcp import Client as McpClient  # noqa: E402
+from xr_ai_agent import PixelFormat  # noqa: E402
+from xr_media_hub.ipc import ConnectorEndpoint  # noqa: E402
 
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
@@ -277,6 +270,9 @@ async def test_get_latest_frame_via_live_hub(
     )
     try:
         await _wait_ready(ready, proc, timeout=30.0)
+        # ready-file is touched before video-mcp's SUB has finished the ZMQ
+        # subscription handshake against the hub PUB; give it one hop.
+        await settle()
 
         await conn.register()
         await conn.notify_participant_joined(pid)
@@ -296,8 +292,9 @@ async def test_get_latest_frame_via_live_hub(
             participant_id = pid,
             track_id       = "cam",
         )
-        # PUB→SUB hop for the FRAME_SIGNAL the provider needs to cache
-        # before fetch_latest can issue its FRAME_REQUEST.
+        # Two hops to drain: connector PUSH → hub, then hub PUB → video-mcp
+        # SUB where the ProcessorEndpoint caches the FRAME_SIGNAL so the
+        # subsequent fetch_latest can resolve it.
         await settle()
         await settle()
 
@@ -323,9 +320,9 @@ async def test_get_latest_frame_via_live_hub(
         conn.stop()
         try:
             conn.close()
-        # Connector teardown can race with the hub closing the shm segment;
-        # the OS-level unlink may already be gone. Don't fail the test on it.
         except FileNotFoundError:
+            # Connector teardown can race with the hub closing the shm
+            # segment; the OS-level unlink may already be gone.
             pass
         proc.terminate()
         try:
