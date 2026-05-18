@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: nightly XR AI test
+
+# Runs the `gpu`-marked pytest suite on a self-hosted runner labelled
+# `gpu`. These tests need real GPU / Docker / NVENC hardware and are
+# filtered out of the default `tests` workflow (which targets
+# `ubuntu-latest`). Mirrors the local `tests/run_local_gpu_tests.sh`
+# entry point.
+
+on:
+  schedule:
+    - cron: "0 4 * * *"  # 04:00 UTC daily
+  workflow_dispatch:
+
+# Queue overlapping runs instead of cancelling; the previous nightly
+# may still be running when the next cron fires on a busy GPU host.
+concurrency:
+  group: nightly-xr-ai-test
+  cancel-in-progress: false
+
+jobs:
+  pytest:
+    name: pytest (gpu)
+    runs-on: gpu
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39  # v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            tests/pyproject.toml
+            tests/uv.lock
+            agent-sdk/pyproject.toml
+            server-runtime/pyproject.toml
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync test workspace
+        working-directory: tests
+        run: uv sync --python 3.12
+
+      - name: Run gpu-marked tests
+        working-directory: tests
+        run: uv run pytest -v --tb=short --color=yes -m gpu

@@ -9,6 +9,26 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-18 — `nightly XR AI test` workflow on self-hosted `gpu` runner
+
+The `gpu`-marked pytest suite (`tests/test_gpu_*.py`,
+`tests/test_integration_livekit.py`, `tests/test_local_render_mcp.py`)
+is filtered out of the default `tests` workflow because it needs real
+GPU / Docker / NVENC hardware that the `ubuntu-latest` runners don't
+provide — see the 2026-05-12 entry for why the marker was introduced.
+Until now the suite ran only via `tests/run_local_gpu_tests.sh` on
+developer boxes, which meant regressions could slip into `main` between
+ad-hoc local runs.
+
+A new `.github/workflows/nightly-xr-ai-test.yml` runs the same suite at
+04:00 UTC every day (and on-demand via `workflow_dispatch`) on a
+self-hosted runner registered with the `gpu` label. The job mirrors
+`tests.yml` — `uv sync` + `pytest -m gpu` from `tests/` — at Python
+3.12 only, since these tests are GPU-bound rather than
+Python-version-bound and doubling the matrix would just double GPU-hour
+cost without new coverage. Concurrency is set to queue (not cancel)
+overlapping runs so a long nightly finishes before the next cron fires.
+
 ### 2026-05-14 — `xr-ai-models` seam adopted by migrated workers; one migration pending
 
 `vlm-mcp` (#139), `xr-render-demo` (#140), and `xr-ai-pipecat` (#137) now
