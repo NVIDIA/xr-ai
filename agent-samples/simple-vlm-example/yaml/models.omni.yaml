@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron-Omni VLM profile for simple-vlm-example.
+# To activate: set  models_yaml: yaml/models.omni.yaml
+# in simple_vlm_example_worker.yaml.
+#
+# Nemotron-Omni uses model_name "llm" (the vLLM --served-model-name default)
+# on port 8108 instead of the Cosmos vlm-server on 8100.
+
+stt:
+  kind:     preset:parakeet_stt
+  base_url: http://localhost:8103
+
+vlm:
+  kind:       openai_compat
+  category:   vlm
+  base_url:   http://localhost:8108
+  model_name: llm
+  capabilities:
+    streaming: true
+    vision:    true
+
+tts:
+  kind:     preset:piper_tts
+  base_url: http://localhost:8105

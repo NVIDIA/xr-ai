@@ -4,19 +4,10 @@
 # Simple VLM example worker configuration.
 # Auto-discovered by the launcher and passed as --config to the worker process.
 
-stt_server:  http://localhost:8103
-tts_server:  http://localhost:8105   # piper_tts_server
-
-# VLM backend — controls which vision model the worker uses.
-# "cosmos" (default) → vlm-server (Cosmos-Reason1-7B) on port 8100
-# "omni"             → nemotron_omni (Nemotron-3-Nano-Omni-30B) on port 8108
-#
-# Changing this also changes which AI service the orchestrator launches.
-# The vlm_server and vlm_model_name keys below override the backend defaults
-# if you need to point at a non-standard port or served-model-name.
-vlm_backend: cosmos
-# vlm_server:     http://localhost:8100   # override default URL
-# vlm_model_name: vlm                     # override default model name
+# Path to models.yaml (resolved relative to this file's directory).
+# Switch to yaml/models.omni.yaml to use Nemotron-Omni on port 8108
+# instead of Cosmos on port 8100.
+models_yaml: yaml/models.yaml
 
 # Sent to the VLM whenever the client posts the literal text "ping".
 default_prompt: "Describe what you see."

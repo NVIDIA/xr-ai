@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Default model endpoints for simple-vlm-example (Cosmos VLM profile).
+# To use the Nemotron-Omni backend instead, point models_yaml at
+# yaml/models.omni.yaml in simple_vlm_example_worker.yaml.
+
+stt:
+  kind:     preset:parakeet_stt
+  base_url: http://localhost:8103
+
+vlm:
+  kind:     preset:cosmos_vlm
+  base_url: http://localhost:8100
+
+tts:
+  kind:     preset:piper_tts
+  base_url: http://localhost:8105

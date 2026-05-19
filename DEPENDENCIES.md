@@ -333,10 +333,13 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0 |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 |
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
-(8105) over HTTP — no model weights loaded in-process.
+(8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
+in-process.  Model endpoints are configured via `yaml/models.yaml`
+(default: Cosmos profile) or `yaml/models.omni.yaml` (Nemotron-Omni
+on port 8108).
 
 ### model-servers  (agent-samples/model-servers/)
 
