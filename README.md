@@ -102,6 +102,17 @@ starts everything.  Heavier demos (`xr-render-demo`) split model loading from
 the demo itself: start `model-servers` once, then run the demo as many times
 as you like without reloading weights.
 
+Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
+abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS
+behind four service protocols.  Each sample ships a `yaml/models.yaml` that
+names the logical models the worker needs (`llm`, `vlm`, `stt`, …) with
+preset references that pre-fill model-specific quirks (reasoning-field
+aliasing, `chat_template_kwargs`, served-model-name strings).  Workers call
+`make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
+"stt")` / `make_tts(config, "tts")` — no hand-rolled httpx clients, no model
+quirks leaking out of the SDK.  Full quickstart and the built-in preset
+table: [`agent-sdk/xr-ai-models/README.md`](agent-sdk/xr-ai-models/README.md).
+
 ## Quickstart
 
 Every sample follows the same pattern: **start the server, then connect a

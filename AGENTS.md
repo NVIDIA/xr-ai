@@ -13,8 +13,9 @@ historical decisions in `docs/changelog.md`.
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
-agent-sdk/          # Two packages:
+agent-sdk/          # Three packages:
                     #   xr-ai-agent   — IPC client library (pyzmq + msgpack only)
+                    #   xr-ai-models  — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-pipecat — optional Pipecat transport bridge (heavier deps)
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
@@ -35,8 +36,16 @@ docs/               # Topic deep-dives + changelog
   LiveKit, FastAPI, or uvicorn. `agent-sdk/xr-ai-pipecat` is a separate
   optional package with heavier deps (pipecat-ai, scipy, numpy, httpx,
   fastmcp); it bridges `ProcessorEndpoint` to Pipecat pipelines.
+- **All HTTP calls to AI services go through `agent-sdk/xr-ai-models`.**
+  Workers and MCP servers depend on its four protocols
+  (`LLMService`, `VLMService`, `STTService`, `TTSService`) and construct
+  clients from a per-sample `yaml/models.yaml` via `make_llm` /
+  `make_vlm` / `make_stt` / `make_tts`.  Hand-rolled `httpx` clients
+  against `/v1/chat/completions`, `/v1/audio/transcriptions`, or
+  `/v1/audio/speech` are forbidden — model quirks belong in this one
+  package's presets, not in callers.
 - **Workers never import from `server-runtime` or `xr_ai_launcher`.** Only
-  `xr_ai_agent` + task-specific libs (numpy, torch, …).
+  `xr_ai_agent` + `xr_ai_models` + task-specific libs (numpy, torch, …).
 - **MCP servers are the agent's only interface to XR data and rendering.**
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml`. See `docs/credentials.md`.
@@ -91,6 +100,7 @@ mechanically:
 - [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` — entry point + (optional) split helpers
 - [ ] `agent-samples/<name>/yaml/xr_media_hub.yaml` — hub config
 - [ ] `agent-samples/<name>/yaml/<command>.yaml` — one per process that needs config
+- [ ] `agent-samples/<name>/yaml/models.yaml` — logical model names + preset references (see `agent-sdk/xr-ai-models/README.md`)
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
 - [ ] `README.md` updated — sample tour and quickstart
 
@@ -114,8 +124,9 @@ Hard rules (also in `DEPENDENCIES.md`):
 
 - `utils/xr-ai-launcher/` has zero runtime dependencies — stdlib only. Keep it that way.
 - `utils/xr-ai-logging/` depends only on `loguru>=0.7`. Used by every process via `setup_logging()`.
-- `agent-sdk/` (`xr-ai-agent`) depends only on `pyzmq` + `msgpack`.
-- Agent workers import only from `xr_ai_agent` (and task-specific libs).
+- `agent-sdk/xr-ai-agent` depends only on `pyzmq` + `msgpack`.
+- `agent-sdk/xr-ai-models` depends only on `xr-ai-logging` + `httpx` + `pyyaml`. No vendor SDKs.
+- Agent workers import only from `xr_ai_agent` + `xr_ai_models` (and task-specific libs).
 - Agent workers must never import from `xr_media_hub` or `xr_ai_launcher`.
 - Don't add abstractions until needed by two concrete use-cases.
 

@@ -1,15 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""End-to-end GPU test for the video-mcp server.
+"""End-to-end GPU tests for the video-mcp server.
 
-Synthesises a short NVENC-encoded H.264 chunk on disk in the on-disk layout
-the hub recorder writes (chunk + JSON sidecar + ``.identity`` sidecar),
-boots ``video_mcp_server`` against that directory in a subprocess, and
-asks it to retrieve a frame via the ``get_frame_from_time`` MCP tool —
-exercising the NVDEC decode + Pillow PNG re-encode path end-to-end.
+Two complementary scenarios:
 
-Skipped cleanly when PyNvVideoCodec or NVENC/NVDEC hardware is missing.
+1. ``test_get_frame_from_time_returns_valid_png`` — historical path:
+   synthesises an NVENC chunk on disk and queries ``get_frame_from_time``.
+2. ``test_get_latest_frame_via_live_hub`` — realtime path: rounds a
+   synthetic NV12 frame through a live hub to ``get_latest_frame``.
+
+IPC mechanics (FRAME_SIGNAL / FRAME_REQUEST / FRAME_DATA) live in
+``video_mcp_server/__main__.py``. Skipped when PyNvVideoCodec or NVENC/
+NVDEC hardware is missing.
 """
 from __future__ import annotations
 
@@ -37,6 +40,8 @@ PIL_Image = pytest.importorskip("PIL.Image")
 pytest.importorskip("fastmcp")
 
 from fastmcp import Client as McpClient  # noqa: E402
+from xr_ai_agent import PixelFormat  # noqa: E402
+from xr_media_hub.ipc import ConnectorEndpoint  # noqa: E402
 
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
@@ -204,6 +209,121 @@ async def test_get_frame_from_time_returns_valid_png(tmp_path: pathlib.Path) -> 
         assert payload["width"]  == _WIDTH
         assert payload["height"] == _HEIGHT
     finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+async def test_get_latest_frame_via_live_hub(
+    tmp_path:   pathlib.Path,
+    hub_addrs:  tuple[str, str],
+    hub,                                            # noqa: ARG001 — fixture starts the in-process HubEndpoint
+    settle,
+) -> None:
+    """Round-trip a frame through the hub to ``get_latest_frame``.
+
+    Exercises the realtime path the historical test bypasses: connector
+    PUSH → hub PUB → video-mcp ``ProcessorEndpoint`` SUB → ``FRAME_REQUEST``
+    → ``FRAME_DATA`` → PNG. ``recordings_dir`` is omitted so the server
+    builds ``store=None`` and exposes ``get_latest_frame`` instead of the
+    historical tools.
+    """
+    pid       = f"gpu_live_{uuid.uuid4().hex[:8]}"
+    out_dir   = tmp_path / "queries"
+    out_dir.mkdir()
+
+    hub_pull_addr, hub_pub_addr = hub_addrs
+
+    # The conftest's `make_connector` factory caps max_frame_bytes at 64 KiB;
+    # 320×240 NV12 is 115 200 B, so we instantiate ConnectorEndpoint directly
+    # with a 2 MiB slot — well above one frame, well below NV12 4K (≈12 MiB).
+    conn = ConnectorEndpoint(
+        push_addr       = hub_pull_addr,
+        sub_addr        = hub_pub_addr,
+        connector_id    = f"conn_{uuid.uuid4().hex[:8]}",
+        shm_name        = f"xr_test_{uuid.uuid4().hex[:10]}",
+        num_slots       = 4,
+        max_frame_bytes = 2 * 1024 * 1024,
+    )
+
+    port     = _free_port()
+    cfg_path = tmp_path / "video_mcp_server.yaml"
+    ready    = tmp_path / "video_mcp.ready"
+    # recordings_dir intentionally omitted → store=None → get_latest_frame is
+    # the only frame-fetching tool registered.
+    cfg_path.write_text(yaml.safe_dump({
+        "out_dir":  str(out_dir),
+        "hub_pub":  hub_pub_addr,
+        "hub_push": hub_pull_addr,
+        "host":     "127.0.0.1",
+        "port":     port,
+        "gpu_id":   0,
+    }))
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "video_mcp_server",
+         "--config", str(cfg_path), "--ready-file", str(ready)],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    try:
+        await _wait_ready(ready, proc, timeout=30.0)
+        # ready-file is touched before video-mcp's SUB has finished the ZMQ
+        # subscription handshake against the hub PUB; give it one hop.
+        await settle()
+
+        await conn.register()
+        await conn.notify_participant_joined(pid)
+        # Let the hub finish processing the registration + join before the
+        # first FRAME_SIGNAL — otherwise the hub may drop the frame because
+        # the pid → connector mapping isn't installed yet.
+        await settle()
+
+        pts_us  = int(time.time() * 1_000_000)
+        frame   = _synthetic_nv12(0)
+        await conn.push_frame(
+            data           = frame.tobytes(),
+            width          = _WIDTH,
+            height         = _HEIGHT,
+            fmt            = PixelFormat.NV12,
+            pts_us         = pts_us,
+            participant_id = pid,
+            track_id       = "cam",
+        )
+        # Two hops to drain: connector PUSH → hub, then hub PUB → video-mcp
+        # SUB where the ProcessorEndpoint caches the FRAME_SIGNAL so the
+        # subsequent fetch_latest can resolve it.
+        await settle()
+        await settle()
+
+        url = f"http://127.0.0.1:{port}/mcp"
+        async with McpClient(url) as client:
+            res = await client.call_tool("get_latest_frame", {"participant_id": pid})
+
+        payload = getattr(res, "data", None) or getattr(res, "structured_content", None)
+        assert isinstance(payload, dict), f"unexpected tool result: {res!r}"
+        assert "error" not in payload, f"tool error: {payload.get('error')}"
+
+        png_path = pathlib.Path(payload["path"])
+        assert png_path.exists(), f"PNG not written: {png_path}"
+        with PIL_Image.open(png_path) as img:
+            img.load()
+            assert img.format == "PNG"
+            assert img.size == (_WIDTH, _HEIGHT)
+
+        assert payload["width"]        == _WIDTH
+        assert payload["height"]       == _HEIGHT
+        assert payload["timestamp_us"] == pts_us
+    finally:
+        conn.stop()
+        try:
+            conn.close()
+        except FileNotFoundError:
+            # Connector teardown can race with the hub closing the shm
+            # segment; the OS-level unlink may already be gone.
+            pass
         proc.terminate()
         try:
             proc.wait(timeout=10)
