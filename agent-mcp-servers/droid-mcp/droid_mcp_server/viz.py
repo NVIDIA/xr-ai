@@ -11,9 +11,12 @@ pose-estimation path.
 
 The viewer runs out of process — start it from the same uv venv:
 
-    uv run rerun --connect rerun+http://localhost:9876/proxy
+    uv run rerun
 
-then point ``rerun_addr`` in the YAML at the same host:port.
+(no flags — the viewer's default mode is a gRPC server on
+``localhost:9876`` which is what the SDK pushes to via
+``rr.connect_grpc``).  Then point ``rerun_addr`` in the YAML at the
+same host:port.
 """
 from __future__ import annotations
 

@@ -73,9 +73,14 @@ Set `rerun_addr: "localhost:9876"` in the YAML, then start a Rerun
 viewer in the same venv before launching the server:
 
 ```bash
-uv run rerun --connect rerun+http://localhost:9876/proxy
-uv run python -m droid_mcp_server --config droid_mcp_server.yaml
+uv run rerun                                                # in one terminal
+uv run python -m droid_mcp_server --config droid_mcp_server.yaml  # in another
 ```
+
+(No `--connect` on the viewer.  That flag makes the viewer act as a
+client connecting *to* a remote server.  We want the viewer to be
+the gRPC server — its default mode on port 9876 — so the SDK can
+push to it.)
 
 The server logs:
 * live camera frustum at `world/camera` (driven by `set_camera_intrinsics`)
