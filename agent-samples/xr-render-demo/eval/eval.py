@@ -1,10 +1,10 @@
 #!/usr/bin/env -S uv run --quiet --with httpx --with fastmcp --with pyyaml --script
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # /// script
 # requires-python = ">=3.11"
 # dependencies = ["httpx", "fastmcp>=0.4", "pyyaml"]
 # ///
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 """
 agent-llm eval harness for xr-render-demo. Talks to the running stack
 (no mocks for the LLMs / MCP servers — render-mcp tools are fake-succeeded
@@ -13,7 +13,6 @@ so the harness never mutates the live LOVR scene).
 Usage:
   ./eval.py                  # run all built-in cases against system.txt
   ./eval.py "Move it down"   # one ad-hoc query, prints raw response
-  ./eval.py --live-pose      # use live oxr-mcp head pose (requires XR session)
   ./eval.py --prompt PATH    # try an alternate prompt file
 
 By default reads ../worker/prompts/system.txt (the live xr-render-demo
@@ -45,7 +44,6 @@ _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve
 AGENT_LLM   = f"{_WORKER_CFG.agent_llm_server}/v1/chat/completions"  # overridable via --agent-llm
 AGENT_MODEL = "llm"                                                   # overridable via --agent-model
 AGENT_KEY   = ""                                                      # overridable via --agent-api-key / NGC_API_KEY
-QUICK_LLM   = f"{_WORKER_CFG.llm_server}/v1/chat/completions"
 RENDER_MCP  = f"{_WORKER_CFG.render_mcp}/mcp"
 OXR_MCP     = f"{_WORKER_CFG.oxr_mcp}/mcp"
 VLM_MCP     = f"{_WORKER_CFG.vlm_mcp}/mcp"
@@ -56,7 +54,7 @@ VIDEO_MCP   = f"{_WORKER_CFG.video_mcp}/mcp"
 WORKER_MANAGED = {"start_xr", "get_health"}
 
 # Mirror the worker's WorkerConfig defaults — same fixture pose for every
-# test unless --live-pose is set, so prompt regressions are reproducible.
+# test, so prompt regressions are reproducible.
 DEFAULT_POSE = {
     "is_valid": True,
     "position": {"x": 0.0, "y": 1.6, "z": 0.0},
@@ -1291,37 +1289,6 @@ async def _discover_tools() -> list[dict]:
     return tools
 
 
-async def _live_pose() -> dict:
-    try:
-        async with McpClient(OXR_MCP) as c:
-            r = await c.call_tool("get_head_pose", {})
-            data = r.data if hasattr(r, "data") else r.content[0].text
-            if isinstance(data, str):
-                data = json.loads(data)
-            if data.get("is_valid"):
-                return data
-    except Exception as exc:
-        print(f"WARN: live pose failed: {exc} — using fixture pose", file=sys.stderr)
-    return DEFAULT_POSE
-
-
-async def _live_scene() -> list[dict]:
-    try:
-        async with McpClient(RENDER_MCP) as c:
-            r = await c.call_tool("get_scene_state", {})
-            data = r.data if hasattr(r, "data") else r.content[0].text
-            if isinstance(data, str):
-                data = json.loads(data)
-            objs = data.get("objects", [])
-            return [{"id": o["id"], "type": o["type"],
-                     "pos":   [o["position"][k] for k in "xyz"],
-                     "color": [o["color"][k]    for k in "rgb"],
-                     "size":  o.get("size", 0.1)} for o in objs]
-    except Exception as exc:
-        print(f"WARN: live scene failed: {exc}", file=sys.stderr)
-        return []
-
-
 def _format_recent_moves(moves: list[tuple] | None) -> str:
     """Render the same `[Recent moves]` block the worker injects.  Each
     `moves` entry is (obj_id, (px, py, pz), (nx, ny, nz)).
@@ -1813,8 +1780,6 @@ async def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("query", nargs="?", help="ad-hoc query (skips case suite)")
     p.add_argument("--prompt", type=Path, default=SYS_PROMPT)
-    p.add_argument("--live-pose",  action="store_true")
-    p.add_argument("--live-scene", action="store_true")
     p.add_argument("--thinking", action="store_true")
     p.add_argument("--verbose",  action="store_true")
     # agent-LLM endpoint overrides — default to whatever the worker yaml
@@ -1847,14 +1812,13 @@ async def main() -> None:
     tool_names = [t["function"]["name"] for t in tools]
     print(f"TOOLS:  {tool_names}")
 
-    pose = await _live_pose() if args.live_pose else DEFAULT_POSE
+    pose = DEFAULT_POSE
     if args.verbose:
         print("POSE:", json.dumps(pose))
 
     async with httpx.AsyncClient() as http:
         if args.query:
-            scene = await _live_scene() if args.live_scene else []
-            r = await _run_one(http, system_prompt, tools, scene, pose,
+            r = await _run_one(http, system_prompt, tools, [], pose,
                                args.query, thinking=args.thinking)
             print(json.dumps(r, indent=2))
             return

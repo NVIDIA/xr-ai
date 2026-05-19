@@ -42,17 +42,8 @@ tool-schema discovery and fail open if absent.
 # All built-in cases against the current system.txt
 agent-samples/xr-render-demo/eval/eval.py
 
-# One ad-hoc query (prints the raw LLM response).  Add --live-scene
-# to feed the real render-mcp scene state instead of an empty scene;
-# only meaningful with --query.
+# One ad-hoc query (prints the raw LLM response)
 agent-samples/xr-render-demo/eval/eval.py "Move the cube up 30 cm"
-agent-samples/xr-render-demo/eval/eval.py --live-scene "What's there?"
-
-# Real headset pose instead of the canonical (0, 1.6, 0) fixture
-agent-samples/xr-render-demo/eval/eval.py --live-pose
-
-# Print the resolved pose at startup (useful with --live-pose)
-agent-samples/xr-render-demo/eval/eval.py --live-pose --verbose
 
 # Score a prompt file other than the live worker's system.txt — e.g.
 # main's version, a draft, or a checkout from another branch.
