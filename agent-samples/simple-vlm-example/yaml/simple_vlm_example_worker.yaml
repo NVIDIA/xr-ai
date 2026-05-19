@@ -7,23 +7,6 @@
 stt_server:  http://localhost:8103
 tts_server:  http://localhost:8105   # piper_tts_server
 
-# kimera-mcp endpoint (MIT-SPARK Kimera-VIO in docker).  When set, the
-# worker pushes camera frames + IMU samples here at kimera_hz and
-# publishes pose updates back to the client on data topic "pose.update".
-# Unset (or null) to disable the SLAM path entirely — and also comment
-# out the `kimera` Process in main.py if you want to skip running the
-# server at all.
-kimera_mcp_url:   http://localhost:8250/mcp
-kimera_hz:        2.0
-kimera_max_age_s: 1.0
-
-# LiveKit dynamically scales track resolution (simulcast / adaptive
-# bitrate); Kimera asserts on mid-stream resolution changes.  We
-# resize every frame to a fixed longest-edge size before pushing it,
-# keeping the source aspect ratio.  Lower = faster tracking, fewer
-# features (320 is a good default for phone cameras).
-kimera_track_max_edge: 320
-
 # VLM backend — controls which vision model the worker uses.
 # "cosmos" (default) → vlm-server (Cosmos-Reason1-7B) on port 8100
 # "omni"             → nemotron_omni (Nemotron-3-Nano-Omni-30B) on port 8108

@@ -46,8 +46,7 @@ from xr_ai_agent import ProcessorEndpoint
 from xr_ai_logging import setup_logging
 
 from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmAgent
-from services import (KimeraClient, SttClient, TtsClient, VlmClient,
-                      wait_for_health, wait_for_kimera_mcp)
+from services import SttClient, TtsClient, VlmClient, wait_for_health
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -72,17 +71,11 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
                     model_name=cfg.get("vlm_model_name", vlm_default_model))
     tts = TtsClient(cfg.get("tts_server", "http://localhost:8105"))
 
-    # Optional kimera-mcp path.  Skip entirely if `kimera_mcp_url` is
-    # null/missing so the worker still runs without the SLAM server.
-    kimera_url = cfg.get("kimera_mcp_url") or None
-    kimera: KimeraClient | None = KimeraClient(kimera_url) if kimera_url else None
-
     await wait_for_health({
         "STT": stt.health_url,
         "VLM": vlm.health_url,
         "TTS": tts.health_url,
     })
-    await wait_for_kimera_mcp(kimera)
 
     if ready_file:
         ready_file.touch()
@@ -90,18 +83,14 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     ep    = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     agent = SimpleVlmAgent(
         ep, stt, vlm, tts,
-        kimera                =kimera,
-        default_prompt        =cfg.get("default_prompt",        "Describe what you see."),
-        system_prompt         =cfg.get("system_prompt",         DEFAULT_SYSTEM_PROMPT),
-        frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),
-        camera_on_timeout_s   =float(cfg.get("camera_on_timeout_s",  10.0)),
-        camera_grace_s        =float(cfg.get("camera_grace_s",         5.0)),
-        silence_threshold     =float(cfg.get("silence_threshold",     0.01)),
-        silence_duration      =float(cfg.get("silence_duration",      0.8)),
-        min_speech            =float(cfg.get("min_speech",            0.3)),
-        kimera_hz             =float(cfg.get("kimera_hz",             2.0)),
-        kimera_max_age_s      =float(cfg.get("kimera_max_age_s",      1.0)),
-        kimera_track_max_edge =int(  cfg.get("kimera_track_max_edge", 320)),
+        default_prompt      =cfg.get("default_prompt",      "Describe what you see."),
+        system_prompt       =cfg.get("system_prompt",       DEFAULT_SYSTEM_PROMPT),
+        frame_max_age_s     =float(cfg.get("frame_max_age_s",      2.0)),
+        camera_on_timeout_s =float(cfg.get("camera_on_timeout_s", 10.0)),
+        camera_grace_s      =float(cfg.get("camera_grace_s",       5.0)),
+        silence_threshold   =float(cfg.get("silence_threshold",    0.01)),
+        silence_duration    =float(cfg.get("silence_duration",     0.8)),
+        min_speech          =float(cfg.get("min_speech",           0.3)),
     )
 
     loop = asyncio.get_running_loop()
@@ -113,8 +102,6 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         await agent.run()
     finally:
         agent.shutdown()
-        if kimera is not None:
-            await kimera.close()
     logger.info("simple-vlm-example stopped")
 
 

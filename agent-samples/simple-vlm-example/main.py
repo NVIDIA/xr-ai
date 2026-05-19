@@ -34,12 +34,6 @@ _PROCESSES: list[Process] = [
             config="yaml/stt_server.yaml"),
     Process("tts",    "../../ai-services/tts/piper",  "piper_tts_server",
             config="yaml/piper_tts_server.yaml"),
-    # kimera-mcp wraps MIT-SPARK Kimera-VIO (in docker).  Must start
-    # before the worker so the readiness probe finds it.  Comment out
-    # and unset `kimera_mcp_url` in the worker YAML to skip the SLAM
-    # path entirely.
-    Process("kimera", "../../agent-mcp-servers/kimera-mcp", "kimera_mcp_server",
-            config="yaml/kimera_mcp_server.yaml"),
     Process("worker", "worker",                       "simple_vlm_example_worker",
             config="yaml/simple_vlm_example_worker.yaml"),
 ]
