@@ -96,13 +96,8 @@ def serve(
     service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
     helper can find it.
 
-    *extra_pip* is docker-mode only: a list of pip-installable package
-    specs that get installed into the container right before ``vllm
-    serve`` runs (same shell line that already installs ``hf_transfer``).
-    Use it for models whose architecture imports a wheel the NGC image
-    doesn't bundle — e.g. ``["mamba-ssm", "causal-conv1d"]`` for
-    Nemotron-Omni's hybrid SSM backbone. Silently ignored in pip mode
-    (deps belong in the wrapper's pyproject.toml there).
+    *extra_pip* (docker mode only): packages to pip-install into the
+    container before ``vllm serve``. Ignored in pip mode.
     """
     vllm_argv: list[str] = [
         "vllm", "serve", model,

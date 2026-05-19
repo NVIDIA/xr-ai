@@ -89,16 +89,10 @@ def build_run_argv(
     argv += ["-v", f"{model_cache}:{model_cache}"]
 
     argv.append(image)
-    # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
-    # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
+    # NGC image doesn't ship hf_transfer; HF_HUB_ENABLE_HF_TRANSFER=1 needs it.
     install_cmds = ["pip install -q hf_transfer"]
     if extra_pip:
-        # extra_pip is the seam for models whose architecture needs a wheel
-        # the NGC image doesn't bundle (e.g. mamba-ssm for Nemotron-Omni's
-        # hybrid backbone). Use --no-build-isolation so the source build
-        # can see the container's pre-installed torch — mamba-ssm and its
-        # causal_conv1d peer both `import torch` from setup.py at config
-        # time, and pip's default isolated build env doesn't have it.
+        # --no-build-isolation: extras like mamba-ssm import torch from setup.py.
         install_cmds.append(
             f"pip install -q --no-build-isolation {shlex.join(extra_pip)}"
         )

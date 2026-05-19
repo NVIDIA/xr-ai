@@ -13,12 +13,19 @@ dependencies = [
     "vllm>=0.8.0",
     "pyyaml>=6.0",
     "hf-transfer>=0.1.4",
+    # Hybrid SSM backbone deps; vLLM doesn't pull them in transitively.
+    "mamba-ssm>=2.2.0",
+    "causal-conv1d>=1.4.0",
     "xr-ai-logging",
     "xr-ai-vllm",
 ]
 
 [project.scripts]
 nemotron_omni_llm_server = "nemotron_omni_llm_server.__main__:run"
+
+[tool.uv]
+# Both packages import torch from setup.py; isolated build env has none.
+no-build-isolation-package = ["mamba-ssm", "causal-conv1d"]
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
