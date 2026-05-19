@@ -29,6 +29,12 @@ dependencies = [
     # block below.
     "torch>=2.1,<2.5",
     "torchvision>=0.16,<0.20",
+    # torch's metadata doesn't always pull cuDNN as a hard transitive
+    # (it's "optional" in some wheels), but the cu118 binary links
+    # libtorch_cuda.so → libcudnn.so.9 with DT_NEEDED, so loading
+    # torch fails at import time if it's missing.  Pin >=9 to match
+    # the cu118 wheel's expected ABI.
+    "nvidia-cudnn-cu11>=9.0",
     # Live trajectory + camera viz.  Pinned to a single 0.32 line so a
     # viewer launched from this venv matches the schema we log with.
     "rerun-sdk>=0.32,<0.33",
