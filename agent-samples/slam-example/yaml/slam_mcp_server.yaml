@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# droid-mcp config.
+#
+# DROID-SLAM is monocular deep SLAM (princeton-vl/DROID-SLAM, BSD-3).
+# CUDA-only.  Run scripts/setup_droid.sh once to clone DROID, build its
+# CUDA extensions, and download the checkpoint.
+
+# Pretrained checkpoint.  Downloaded by setup_droid.sh into this path.
+weights_path:  ~/.cache/xr-ai/droid.pth
+
+# Tracking resolution.  DROID's runtime scales near-linearly with
+# pixel count; 320x240 is the published "real-time" config that runs
+# at ~20 FPS on a 3090.
+image_width:   320
+image_height:  240
+
+# CUDA device used for the model.
+device:        cuda:0
+
+# Internal video buffer length (in frames).  Cap on the keyframe graph
+# size DROID will hold before pruning.  Bump for longer trajectories
+# if VRAM allows.
+buffer:        512
+
+# Default intrinsics for the tracking resolution.  Sane phone-camera
+# defaults; the caller overrides via set_camera_intrinsics once the
+# real K is known.
+default_fx:    229.0
+default_fy:    229.0
+default_cx:    160.0
+default_cy:    120.0
+
+host:          0.0.0.0
+port:          8260
+
+# Optional Rerun viewer for live trajectory + frustum + camera image.
+# Start the viewer (no flags — its default mode is a gRPC server on
+# port 9876, which is what the SDK pushes to) in the same venv:
+#     uv run rerun
+# then point this at the viewer's host:port.  Leave null to disable
+# visualisation entirely (sink becomes a no-op).
+rerun_addr:    null   # "localhost:9876" to enable
