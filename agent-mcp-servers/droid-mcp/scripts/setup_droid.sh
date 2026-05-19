@@ -35,6 +35,46 @@ mkdir -p "$CACHE_DIR"
 
 echo "[setup-droid] cache dir: $CACHE_DIR"
 
+# 0. Preflight: nvcc on PATH and torch CUDA major-version match.
+#    PyTorch's build_extensions() refuses to compile when the major
+#    version of `nvcc --version` doesn't match `torch.version.cuda`,
+#    and the error it surfaces (one line buried in a 30-line traceback)
+#    is easy to miss.  Catch it here with a clear, actionable message.
+if ! command -v nvcc >/dev/null 2>&1; then
+    echo "[setup-droid] ERROR: nvcc not on PATH — install a CUDA toolkit (apt install cuda-toolkit-12-* or download from developer.nvidia.com) and re-run."
+    exit 2
+fi
+NVCC_VER="$(nvcc --version | sed -n 's/.*release \([0-9][0-9]*\)\..*/\1/p' | head -1)"
+TORCH_VER="$(python -c 'import torch, sys; v = torch.version.cuda or ""; sys.stdout.write(v.split(".")[0])' 2>/dev/null)"
+if [[ -z "$TORCH_VER" || -z "$NVCC_VER" ]]; then
+    echo "[setup-droid] WARN: could not detect CUDA versions (nvcc=$NVCC_VER torch=$TORCH_VER); continuing anyway."
+elif [[ "$NVCC_VER" != "$TORCH_VER" ]]; then
+    cat >&2 <<EOF
+[setup-droid] ERROR: CUDA major-version mismatch.
+                nvcc  reports CUDA $NVCC_VER.x  (\`$(command -v nvcc)\`)
+                torch reports CUDA $TORCH_VER.x ($(python -c 'import torch; print(torch.version.cuda)' 2>/dev/null))
+              PyTorch refuses to compile CUDA extensions across major versions.
+
+              Pick one fix:
+
+              (A) Self-contained — re-install torch with a CUDA wheel that matches nvcc:
+                    cd agent-mcp-servers/droid-mcp
+                    uv pip install --reinstall \\
+                        --index-url https://download.pytorch.org/whl/cu${NVCC_VER}8 \\
+                        'torch>=2.1,<2.5' 'torchvision>=0.16,<0.20'
+                  (cu118 / cu121 / cu124 etc.; pick the one closest to your nvcc.
+                   torch >=2.5 dropped CUDA 11 wheels, hence the <2.5 cap when nvcc is 11.x.)
+
+              (B) System — install a CUDA toolkit matching the torch wheel
+                  (CUDA $TORCH_VER.x) and put its bin/ first on PATH.
+                  Driver permitting, multiple CUDA toolkits coexist fine.
+
+              Then \`rm -rf $DROID_SRC\` to force a clean recompile, and
+              re-run \`uv run slam_example\`.
+EOF
+    exit 2
+fi
+
 # 1. Clone DROID-SLAM source.
 if [[ ! -d "$DROID_SRC/.git" ]]; then
     echo "[setup-droid] cloning DROID-SLAM …"
@@ -45,7 +85,7 @@ fi
 
 # 2. Build the CUDA extensions + install as an editable package so
 #    `import droid_slam` works inside the droid-mcp venv.
-echo "[setup-droid] building CUDA extensions …"
+echo "[setup-droid] building CUDA extensions (nvcc=$NVCC_VER, torch CUDA=$TORCH_VER) …"
 ( cd "$DROID_SRC" && python setup.py install )
 
 # 3. Fetch the pretrained checkpoint.
