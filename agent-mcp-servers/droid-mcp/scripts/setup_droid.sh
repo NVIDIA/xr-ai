@@ -50,8 +50,37 @@ fi
 # whole script before any of the preflight messages can print.
 set +o pipefail
 NVCC_VER="$(nvcc --version | sed -n 's/.*release \([0-9][0-9]*\)\..*/\1/p' | head -1)"
-TORCH_VER="$(python -c 'import torch, sys; v = torch.version.cuda or ""; sys.stdout.write(v.split(".")[0])' 2>/dev/null || true)"
+# Probe torch — capture stderr too so we can show the real error if
+# import fails (the common case here is a libnccl ABI mismatch when
+# an older system NCCL is ahead of torch/lib on LD_LIBRARY_PATH).
+TORCH_PROBE="$(python -c 'import torch, sys; sys.stdout.write(torch.version.cuda or "")' 2>&1)"
 set -o pipefail
+TORCH_VER="${TORCH_PROBE%%.*}"
+# If the probe contains the substring "Error", import failed.
+if echo "$TORCH_PROBE" | grep -q -E '(Error|Traceback)' >/dev/null; then
+    cat >&2 <<EOF
+[setup-droid] ERROR: torch is installed but won't import in this venv.
+
+              Probe output:
+              $(echo "$TORCH_PROBE" | sed 's/^/                  /')
+
+              Common cause: an older system NCCL / CUDA on LD_LIBRARY_PATH is
+              shadowing the torch wheel's bundled libnccl.so.2.  Look for the
+              symbol name in the error above — if it's an ncclCommXxx symbol,
+              your system NCCL is older than the one torch needs.
+
+              Fixes:
+
+              (A) Remove the system CUDA libdir from LD_LIBRARY_PATH for this
+                  shell (cleanest if torch's bundled libs are self-sufficient):
+                      unset LD_LIBRARY_PATH
+                      uv run slam_example
+
+              (B) Edit ~/.bashrc to drop the /usr/local/cuda-*/lib64 entry,
+                  or switch it to the toolkit version matching torch.
+EOF
+    exit 2
+fi
 if [[ -z "$TORCH_VER" || -z "$NVCC_VER" ]]; then
     echo "[setup-droid] WARN: could not detect CUDA versions (nvcc=$NVCC_VER torch=$TORCH_VER); continuing anyway."
 elif [[ "$NVCC_VER" != "$TORCH_VER" ]]; then
