@@ -4,8 +4,9 @@
 # droid-mcp config.
 #
 # DROID-SLAM is monocular deep SLAM (princeton-vl/DROID-SLAM, BSD-3).
-# CUDA-only.  Run scripts/setup_droid.sh once to clone DROID, build its
-# CUDA extensions, and download the checkpoint.
+# CUDA-only.  On first launch the server runs scripts/setup_droid.sh
+# automatically to clone DROID, compile its CUDA extensions, and
+# download the checkpoint — see `auto_install` below to opt out.
 
 # Pretrained checkpoint.  Downloaded by setup_droid.sh into this path.
 weights_path:  ~/.cache/xr-ai/droid.pth
@@ -34,6 +35,13 @@ default_cy:    120.0
 
 host:          0.0.0.0
 port:          8260
+
+# Auto-install droid_slam on first launch if `import droid_slam` fails.
+# Runs scripts/setup_droid.sh which clones princeton-vl/DROID-SLAM,
+# compiles its CUDA extensions against this venv's torch, and
+# downloads weights (~5-10 min on first run; idempotent afterwards).
+# Set to false in sandboxed environments where you'd rather fail fast.
+auto_install:  true
 
 # Optional Rerun viewer for live trajectory + frustum + camera image.
 # Start the viewer (no flags — its default mode is a gRPC server on

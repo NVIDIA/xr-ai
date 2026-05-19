@@ -43,6 +43,7 @@ from PIL import Image
 from xr_ai_logging import setup_logging
 
 from .backend import DroidBackend
+from .build   import ensure_droid_installed
 from .viz     import RerunSink
 
 
@@ -147,6 +148,13 @@ def build_app(backend: DroidBackend, cfg: dict,
 async def _serve(cfg: dict, ready_file: pathlib.Path | None) -> None:
     host = cfg.get("host", "0.0.0.0")
     port = int(cfg.get("port", 8260))
+
+    # Auto-install droid_slam on first launch if it isn't importable.
+    # Set `auto_install: false` in the YAML to opt out (e.g. on
+    # sandboxed CI hosts) and fail fast instead of running the clone +
+    # CUDA-compile + weights download flow implicitly.
+    if bool(cfg.get("auto_install", True)):
+        ensure_droid_installed()
 
     weights = cfg.get("weights_path", "~/.cache/xr-ai/droid.pth")
     weights = str(pathlib.Path(weights).expanduser())

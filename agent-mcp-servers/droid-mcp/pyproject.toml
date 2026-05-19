@@ -36,3 +36,6 @@ droid_mcp_server = "droid_mcp_server.__main__:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["droid_mcp_server"]
+# Ship setup_droid.sh alongside the package so `ensure_droid_installed`
+# can find it at runtime under both editable and wheel installs.
+force-include = { "scripts" = "droid_mcp_server/_scripts" }

@@ -35,14 +35,20 @@ need rough localisation.
 ```bash
 cd agent-mcp-servers/droid-mcp
 uv sync
-uv run bash scripts/setup_droid.sh   # clones DROID, builds CUDA exts, fetches weights
 ```
 
+That's it for the explicit step.  On first server launch, if
+`import droid_slam` fails, the MCP server runs `scripts/setup_droid.sh`
+automatically — clones princeton-vl/DROID-SLAM into
+`~/.cache/xr-ai/DROID-SLAM`, compiles its CUDA extensions against the
+torch wheel `uv sync` just installed, and downloads the pretrained
+checkpoint (~250 MB) to `~/.cache/xr-ai/droid.pth`.  First-run takes
+5-10 minutes on a typical CUDA host; subsequent starts are immediate.
+
 The setup script needs an NVIDIA driver + matching CUDA toolkit on
-PATH, `g++`, and `ninja-build`.  It clones DROID-SLAM into
-`~/.cache/xr-ai/DROID-SLAM`, builds its CUDA extensions linked against
-the PyTorch we just installed, and downloads the pretrained checkpoint
-to `~/.cache/xr-ai/droid.pth`.
+PATH, `g++`, and `ninja-build`.  Set `auto_install: false` in the
+YAML to disable this and fail fast on sandboxed CI hosts where the
+implicit build isn't wanted.
 
 ## Tool surface
 
