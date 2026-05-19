@@ -140,7 +140,8 @@ async def test_vlm_server_chat_completions_smoke():
             "enforce_eager": True,  # skip CUDA graph capture for faster smoke
             "max_images_per_prompt": 1,
             "max_videos_per_prompt": 0,
-            "vllm_backend": "pip",
+            # docker backend: nvcc + flashinfer are pre-built in the NGC image.
+            "vllm_backend": "docker",
         }
         cfg_yaml.write_text(yaml.safe_dump(cfg))
 

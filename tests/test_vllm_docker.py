@@ -78,6 +78,7 @@ class TestBuildRunArgv:
             hf_token="tok123",
             cuda_visible_devices=None,
             extra_env=None,
+            extra_pip=None,
             vllm_argv=["vllm", "serve", "my-model", "--host", "0.0.0.0", "--port", "8100"],
         )
 
@@ -145,6 +146,27 @@ class TestBuildRunArgv:
     def test_image_present(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert "nvcr.io/nvidia/vllm:26.04-py3" in argv
+
+    def test_no_extra_pip_runs_only_hf_transfer_install(self, tmp_path):
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        # bash -c "<install>... && vllm serve ..." — the install is the last
+        # argv entry; with no extra_pip there must be exactly one pip line.
+        bash_cmd = argv[-1]
+        assert bash_cmd.count("pip install ") == 1
+        assert "hf_transfer" in bash_cmd
+        assert "--no-build-isolation" not in bash_cmd
+
+    def test_extra_pip_uses_no_build_isolation(self, tmp_path):
+        # mamba-ssm and causal-conv1d both `import torch` from setup.py at
+        # config time — pip's default isolated build env has no torch and
+        # the source build aborts. The extra_pip install path must pass
+        # --no-build-isolation so the build sees the container's torch.
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["extra_pip"] = ["mamba-ssm", "causal-conv1d"]
+        argv = build_run_argv(**kwargs)
+        bash_cmd = argv[-1]
+        assert "pip install -q hf_transfer" in bash_cmd
+        assert "pip install -q --no-build-isolation mamba-ssm causal-conv1d" in bash_cmd
 
 
 class TestContainerHelpers:
