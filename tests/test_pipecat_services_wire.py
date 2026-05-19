@@ -14,7 +14,6 @@ import json
 import wave
 
 from _stub_openai import StubOpenAI
-from xr_ai_models.openai_compat import OpenAICompatSTT, OpenAICompatTTS
 from xr_ai_pipecat.services import SttClient, TtsClient
 
 
@@ -38,17 +37,11 @@ def _parse_wav_header(data: bytes) -> dict:
 
 
 def _wire_stt_client(stub: StubOpenAI) -> SttClient:
-    """Return a SttClient whose underlying SDK client uses the stub transport."""
-    client = SttClient.__new__(SttClient)
-    client._stt = OpenAICompatSTT("http://stub", client=stub.client())
-    return client
+    return SttClient("http://stub", client=stub.client())
 
 
 def _wire_tts_client(stub: StubOpenAI) -> TtsClient:
-    """Return a TtsClient whose underlying SDK client uses the stub transport."""
-    client = TtsClient.__new__(TtsClient)
-    client._tts = OpenAICompatTTS("http://stub", client=stub.client())
-    return client
+    return TtsClient("http://stub", client=stub.client())
 
 
 # ── SttClient wire tests ──────────────────────────────────────────────────────

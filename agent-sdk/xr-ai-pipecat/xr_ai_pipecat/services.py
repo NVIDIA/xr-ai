@@ -25,8 +25,18 @@ class SttClient:
     the ``(base_url, timeout)`` constructor signature used by existing callers.
     """
 
-    def __init__(self, base_url: str, timeout: float = 30.0) -> None:
-        self._stt = OpenAICompatSTT(base_url, timeout=timeout)
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 30.0,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._stt = OpenAICompatSTT(base_url, timeout=timeout, client=client)
+
+    @property
+    def health_url(self) -> str:
+        return self._stt.health_url
 
     async def transcribe(
         self, audio_data: bytes, sample_rate: int, channels: int = 1,
@@ -55,8 +65,18 @@ class TtsClient:
     the ``(base_url, timeout)`` constructor signature used by existing callers.
     """
 
-    def __init__(self, base_url: str, timeout: float = 30.0) -> None:
-        self._tts = OpenAICompatTTS(base_url, timeout=timeout)
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 30.0,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._tts = OpenAICompatTTS(base_url, timeout=timeout, client=client)
+
+    @property
+    def health_url(self) -> str:
+        return self._tts.health_url
 
     async def synthesize(self, text: str) -> bytes:
         return await self._tts.synthesize(text)
