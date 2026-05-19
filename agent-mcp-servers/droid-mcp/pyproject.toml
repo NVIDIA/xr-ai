@@ -35,6 +35,13 @@ dependencies = [
     # torch fails at import time if it's missing.  Pin >=9 to match
     # the cu118 wheel's expected ABI.
     "nvidia-cudnn-cu11>=9.0",
+    # DROID-SLAM's setup.py uses classic `from setuptools import setup`;
+    # uv doesn't install setuptools / wheel in PEP 517 venvs by default,
+    # so the CUDA-extension compile fails with ModuleNotFoundError.
+    # ninja makes the compile parallel + much faster.
+    "setuptools>=65",
+    "wheel>=0.40",
+    "ninja>=1.11",
     # Live trajectory + camera viz.  Pinned to a single 0.32 line so a
     # viewer launched from this venv matches the schema we log with.
     "rerun-sdk>=0.32,<0.33",
