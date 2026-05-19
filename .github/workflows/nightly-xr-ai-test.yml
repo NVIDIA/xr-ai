@@ -35,6 +35,42 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Discover CUDA toolkit
+        # Prefer CUDA 13.0 (current target), but fall back through the
+        # usual symlinks and finally whatever `nvcc` is on PATH so we
+        # don't pin the workflow to a single host layout.
+        run: |
+          set -euo pipefail
+          candidates=(
+            "/usr/local/cuda-13.0"
+            "/usr/local/cuda-13"
+            "/usr/local/cuda"
+            "${CUDA_HOME:-}"
+          )
+          for c in "${candidates[@]}"; do
+            [[ -z "$c" ]] && continue
+            if [[ -x "$c/bin/nvcc" ]]; then
+              echo "Selected CUDA toolkit: $c"
+              echo "CUDA_HOME=$c" >> "$GITHUB_ENV"
+              echo "$c/bin" >> "$GITHUB_PATH"
+              exit 0
+            fi
+          done
+          if nvcc_path="$(command -v nvcc)"; then
+            cuda_home="$(dirname "$(dirname "$nvcc_path")")"
+            echo "Selected CUDA toolkit (from PATH): $cuda_home"
+            echo "CUDA_HOME=$cuda_home" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "::error::No CUDA toolkit found in candidates or on PATH"
+          exit 1
+
+      - name: Check CUDA compiler
+        run: |
+          which nvcc
+          nvcc --version
+          nvcc --list-gpu-arch | grep compute_89
+
       - name: Install uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39  # v3
         with:
