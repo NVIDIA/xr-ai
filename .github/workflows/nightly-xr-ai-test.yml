@@ -51,15 +51,21 @@ jobs:
             [[ -z "$c" ]] && continue
             if [[ -x "$c/bin/nvcc" ]]; then
               echo "Selected CUDA toolkit: $c"
-              echo "CUDA_HOME=$c" >> "$GITHUB_ENV"
-              echo "$c/bin" >> "$GITHUB_PATH"
+              echo "CUDA_HOME=$c"             >> "$GITHUB_ENV"
+              # CUDACXX is the env var FlashInfer / torch.cpp_extension /
+              # cmake all honor. Setting it explicitly stops downstream
+              # JIT compilers from guessing (and previously baking the
+              # wrong absolute path into build.ninja).
+              echo "CUDACXX=$c/bin/nvcc"      >> "$GITHUB_ENV"
+              echo "$c/bin"                   >> "$GITHUB_PATH"
               exit 0
             fi
           done
           if nvcc_path="$(command -v nvcc)"; then
             cuda_home="$(dirname "$(dirname "$nvcc_path")")"
             echo "Selected CUDA toolkit (from PATH): $cuda_home"
-            echo "CUDA_HOME=$cuda_home" >> "$GITHUB_ENV"
+            echo "CUDA_HOME=$cuda_home"       >> "$GITHUB_ENV"
+            echo "CUDACXX=$nvcc_path"         >> "$GITHUB_ENV"
             exit 0
           fi
           echo "::error::No CUDA toolkit found in candidates or on PATH"
@@ -87,6 +93,31 @@ jobs:
       - name: Sync test workspace
         working-directory: tests
         run: uv sync --python 3.12
+
+      - name: Scrub stale FlashInfer build caches
+        # On the persistent `gpu` runner, FlashInfer caches its JIT
+        # compile output under /ephemeral/cache/flashinfer. The cached
+        # build.ninja files bake in the absolute path of nvcc at
+        # generation time — so once the host's nvcc moves (e.g. an old
+        # `/usr/bin/nvcc` install was removed in favour of CUDA 13.0),
+        # `ninja -f build.ninja` fails with exit 127 / "nvcc: not found".
+        # Drop any cached build dir that still references a stale path so
+        # FlashInfer regenerates it against the current $CUDACXX.
+        run: |
+          set -euo pipefail
+          roots=(
+            "/ephemeral/cache/flashinfer"
+            "$HOME/.cache/flashinfer"
+          )
+          for root in "${roots[@]}"; do
+            [[ -d "$root" ]] || continue
+            # Find build.ninja files that point at a now-missing nvcc.
+            while IFS= read -r f; do
+              dir="$(dirname "$f")"
+              echo "Scrubbing stale FlashInfer cache: $dir"
+              rm -rf "$dir"
+            done < <(grep -RIl --include='build.ninja' '/usr/bin/nvcc' "$root" 2>/dev/null || true)
+          done
 
       - name: Diagnose nvcc resolution for vLLM EngineCore
         # The workload subprocess (vLLM EngineCore) is two uv-run hops
@@ -123,7 +154,8 @@ jobs:
           PY
           echo
           echo "=== hunt for /usr/bin/nvcc in persistent caches ==="
-          for d in "$HOME/.cache/torch_extensions" "$HOME/.cache/vllm" \
+          for d in "/ephemeral/cache/flashinfer" "/ephemeral/cache/vllm" \
+                   "$HOME/.cache/torch_extensions" "$HOME/.cache/vllm" \
                    "$HOME/.cache/flashinfer" "$HOME/.triton" \
                    "ai-services/llm/llama_nemotron/.venv"; do
             if [ -d "$d" ]; then
