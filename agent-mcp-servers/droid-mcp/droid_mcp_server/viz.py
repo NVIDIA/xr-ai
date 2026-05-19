@@ -149,5 +149,5 @@ class RerunSink:
             return
         try:
             self._rr.log("world/trail", self._rr.Clear(recursive=False))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("[droid-viz] reset trail clear failed: {}", exc)

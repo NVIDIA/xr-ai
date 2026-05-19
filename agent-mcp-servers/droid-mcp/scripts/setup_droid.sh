@@ -110,6 +110,41 @@ EOF
     exit 2
 fi
 
+# 0b. GPU compute-capability vs nvcc-max-supported sanity check.  Ada
+#     (sm_89, RTX 40-series / L40) and Hopper (sm_90, H100) need
+#     nvcc >= 11.8.  Older nvcc dies with "Unsupported gpu architecture
+#     'compute_89'" deep in the build, easy to miss.  Catch it here.
+if command -v nvidia-smi >/dev/null 2>&1 && [[ -z "${TORCH_CUDA_ARCH_LIST:-}" ]]; then
+    set +o pipefail
+    GPU_CC="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits 2>/dev/null | head -1)"
+    NVCC_MINOR="$(nvcc --version | sed -n 's/.*release [0-9][0-9]*\.\([0-9][0-9]*\).*/\1/p' | head -1)"
+    set -o pipefail
+    GPU_CC_INT="${GPU_CC//.}"   # "8.9" -> "89"
+    if [[ -n "$GPU_CC_INT" && "$NVCC_VER" == "11" ]] \
+       && [[ "${NVCC_MINOR:-0}" =~ ^[0-9]+$ ]] \
+       && (( NVCC_MINOR < 8 )) \
+       && [[ "$GPU_CC_INT" =~ ^[0-9]+$ ]] \
+       && (( GPU_CC_INT > 86 )); then
+        cat >&2 <<EOF
+[setup-droid] WARN: GPU reports sm_${GPU_CC_INT} but nvcc 11.${NVCC_MINOR} only
+              supports up to sm_86 (Ampere).  The compile will fail with
+              "nvcc fatal: Unsupported gpu architecture 'compute_${GPU_CC_INT}'".
+
+              Pick one fix and re-run \`uv run slam_example\`:
+
+              (A) Constrain TORCH_CUDA_ARCH_LIST so PyTorch asks nvcc for an arch
+                  it supports.  The driver JIT-promotes at runtime to your real GPU:
+                      export TORCH_CUDA_ARCH_LIST="8.6+PTX"
+
+              (B) Install a newer nvcc (existing 11.5 stays in place):
+                      sudo apt install cuda-toolkit-11-8
+                      export PATH=/usr/local/cuda-11.8/bin:\$PATH
+
+              Continuing anyway in case you know what you're doing …
+EOF
+    fi
+fi
+
 # 1. Clone DROID-SLAM source.
 if [[ ! -d "$DROID_SRC/.git" ]]; then
     echo "[setup-droid] cloning DROID-SLAM …"

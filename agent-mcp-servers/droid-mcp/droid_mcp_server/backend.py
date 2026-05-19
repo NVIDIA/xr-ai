@@ -186,3 +186,7 @@ class DroidBackend:
     @property
     def has_intrinsics(self) -> bool:
         return self._intrinsics is not None
+
+    @property
+    def image_size(self) -> tuple[int, int]:
+        return self._image_size

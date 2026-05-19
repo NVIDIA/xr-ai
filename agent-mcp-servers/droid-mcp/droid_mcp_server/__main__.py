@@ -71,7 +71,7 @@ def build_mcp(backend: DroidBackend, cfg: dict,
         if not path.exists():
             return {"error": f"image not found: {image_path!r}"}
         try:
-            gray = _load_image_gray(path, backend._image_size)  # noqa: SLF001
+            gray = _load_image_gray(path, backend.image_size)
         except Exception as exc:
             return {"error": f"failed to load image: {exc}"}
 
@@ -127,7 +127,7 @@ def build_mcp(backend: DroidBackend, cfg: dict,
             "frames_sent":      backend.frames_seen,
             "intrinsics":       state["intrinsics"],
             "has_intrinsics":   backend.has_intrinsics,
-            "image_size":       list(backend._image_size),   # noqa: SLF001
+            "image_size":       list(backend.image_size),
         }
 
     @mcp.tool()

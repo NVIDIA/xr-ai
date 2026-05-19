@@ -36,7 +36,7 @@ import time
 
 from loguru import logger
 from PIL import Image
-from xr_ai_agent import DataMessage, FrameSignal, ProcessorEndpoint
+from xr_ai_agent import DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint
 
 from pixels      import frame_to_pil
 from slam_client import SlamClient
@@ -96,6 +96,7 @@ class SlamAgent:
 
         self._ep.on_data(self._on_data)
         self._ep.on_frame(self._on_frame)
+        self._ep.on_participant(self._on_participant)
 
         self._min_period_s   = 1.0 / max(slam_hz, 0.1)
         self._max_age_s      = float(slam_max_age_s)
@@ -218,6 +219,18 @@ class SlamAgent:
             )
         self._latest[key] = sig
         self._event.set()
+
+    async def _on_participant(self, event: ParticipantEvent) -> None:
+        # Drop per-pid state when a participant disconnects so the
+        # tracking dicts don't grow without bound across a long session
+        # of churning clients.
+        if event.joined:
+            return
+        pid = event.participant_id
+        for k in [k for k in self._latest if k[0] == pid]:
+            del self._latest[k]
+        self._last_pts_per_pid.pop(pid, None)
+        self._intrinsics_set.discard(pid)
 
     def _latest_signal(self, pid: str) -> FrameSignal | None:
         best: FrameSignal | None = None
@@ -354,5 +367,5 @@ class SlamAgent:
         self._event.set()
         try:
             self._ep.stop()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("ep.stop() during shutdown raised: {}", exc)
