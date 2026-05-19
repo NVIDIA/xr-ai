@@ -118,7 +118,13 @@ class SlamAgent:
     # ── frame-signal ingest ─────────────────────────────────────────────
 
     async def _on_frame(self, sig: FrameSignal) -> None:
-        self._latest[(sig.participant_id, sig.track_id)] = sig
+        key = (sig.participant_id, sig.track_id)
+        if key not in self._latest:
+            logger.info(
+                "first frame signal  pid={!r}  track={}  {}x{}",
+                sig.participant_id, sig.track_id, sig.width, sig.height,
+            )
+        self._latest[key] = sig
         self._event.set()
 
     def _latest_signal(self, pid: str) -> FrameSignal | None:
@@ -236,12 +242,25 @@ class SlamAgent:
     # ── lifecycle ───────────────────────────────────────────────────────
 
     async def run(self) -> None:
-        loop = asyncio.create_task(self._slam_loop(), name="slam-loop")
+        # The slam loop is a background task; `ep.run()` is the actual
+        # blocking call that drives the ZMQ subscription loop and
+        # dispatches `_on_frame` / `_on_data` callbacks.  Without it,
+        # the slam loop would sit idle forever because no FrameSignals
+        # ever arrive — that's the bug we hit on first launch.
+        slam_task = asyncio.create_task(self._slam_loop(), name="slam-loop")
         try:
-            await loop
-        except asyncio.CancelledError:
-            pass
+            await self._ep.run()
+        finally:
+            slam_task.cancel()
+            try:
+                await slam_task
+            except asyncio.CancelledError:
+                pass
 
     def shutdown(self) -> None:
         self._shutdown = True
         self._event.set()
+        try:
+            self._ep.stop()
+        except Exception:
+            pass
