@@ -21,15 +21,33 @@ dependencies = [
     # builds its CUDA extensions against the host's PyTorch.  We import
     # `droid_slam` lazily so this package's `uv sync` step doesn't fail
     # on a GPU-less developer box.
-    "torch>=2.1",
-    "torchvision>=0.16",
+    # cu118 wheels for both — that's the highest CUDA torch line that
+    # still works against older system nvcc / NCCL combos, which is the
+    # common case for boxes with stable CUDA 11.x toolkits.  Pinned
+    # below 2.5 because torch dropped cu118 wheels in that release.
+    # Operators with newer system CUDA can override via the override
+    # block below.
+    "torch>=2.1,<2.5",
+    "torchvision>=0.16,<0.20",
     # Live trajectory + camera viz.  Pinned to a single 0.32 line so a
     # viewer launched from this venv matches the schema we log with.
     "rerun-sdk>=0.32,<0.33",
 ]
 
+# Pull torch + torchvision from the PyTorch cu118 index so the wheel
+# we get bundles libnccl.so.2 compatible with hosts that still have a
+# CUDA 11.x toolkit on PATH.  `explicit = true` keeps everything else
+# coming from PyPI.  Override with a different index (cu121, cu124,
+# etc.) if your host has newer system CUDA.
+[[tool.uv.index]]
+name     = "pytorch-cu118"
+url      = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+torch         = { index = "pytorch-cu118" }
+torchvision   = { index = "pytorch-cu118" }
 
 [project.scripts]
 droid_mcp_server = "droid_mcp_server.__main__:run"
