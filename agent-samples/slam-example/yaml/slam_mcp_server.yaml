@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# space-mcp reference configuration.
+#
+# Topological place memory: each frame is embedded with DINOv2, matched
+# against the centroid of every known region by cosine similarity, and
+# either snapped to the best match (above `match_threshold`) or seeded
+# as a new region (no match good enough).  Transitions between regions
+# accrue edges in a topological graph.  The map persists across
+# restarts under `map_dir`.
+#
+# This server intentionally does *no* metric 6DoF estimation — it
+# answers "which room am I in / which rooms touch this one" rather than
+# "where am I in metres".  Pair with pose-mcp if you also need metric
+# pose; the two servers can run side by side.
+#
+# MCP endpoint: http://localhost:8245/mcp  (StreamableHTTP transport)
+
+map_dir:           /tmp/xr-ai/space-map
+
+device:            auto                        # "auto" | "cpu" | "cuda" | "cuda:0"
+
+# DINOv2 backbone for global descriptors.  ViT-S/14 is 22M params,
+# 384-D embedding; cold-start downloads ~90 MB from HuggingFace.
+dinov2_model:      facebook/dinov2-small
+
+# Online region tracking.
+match_threshold:   0.78    # cosine sim above this → "you're in this region"
+new_region_min_streak: 3   # need this many consecutive un-matched frames
+                           # before committing a new region (kills spurious
+                           # rooms from a single off-angle frame)
+
+# Centroid update: running weighted average with this decay on each new
+# sample.  Lower = centroid stays put after lots of samples (more
+# stable); higher = centroid drifts toward recent appearance.
+centroid_alpha:    0.05
+
+host:              0.0.0.0
+port:              8245
+
+# Rerun viewer sink.  IMPORTANT — the viewer binary version must match
+# this venv's `rerun-sdk` version, or the viewer drops every LogMsg with
+# `Bad chunk schema: Missing row_id column`.  Launch the viewer from
+# this venv so binary + SDK match:
+#     uv run --directory agent-mcp-servers/space-mcp rerun
+# Either rerun_addr form works:
+#   rerun_addr: 127.0.0.1:9876
+#   rerun_addr: rerun+http://127.0.0.1:9876/proxy
+# null / commented = no Rerun output.
+rerun_addr:        null

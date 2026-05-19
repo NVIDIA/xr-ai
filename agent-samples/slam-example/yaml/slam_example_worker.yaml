@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# slam-example worker configuration.
+# Auto-discovered by the launcher and passed as --config to the worker process.
+
+# SLAM backend MCP endpoint.  On feat/spatial-memory this is space-mcp
+# at 8245 — topological place memory (DINOv2), no metric pose, no IMU,
+# no intrinsics.  The worker emits ``place.update`` rather than the
+# ``pose.update`` that the metric-SLAM branches send.
+slam_mcp_url:        http://localhost:8245/mcp
+
+# Frame submit rate (frames per second).  Higher = lower latency,
+# more DINOv2 compute.  2 Hz is a good default for phone cameras
+# over LiveKit; space-mcp internally only updates on transitions.
+slam_hz:             2.0
+
+# Drop incoming frames older than this — keeps the place stream close
+# to real-time even when a process_frame call runs slow.
+slam_max_age_s:      1.0
+
+# Scratch directory for the PNGs the worker hands to space-mcp via
+# ``image_path``.  /dev/shm is RAM-backed so this is essentially free.
+slam_scratch_dir:    /dev/shm/xr-ai/slam-in
+
+# DINOv2 rescales to 224 px internally, so the input image size here
+# only bounds the on-wire PNG.  Keeping a fixed longest-edge size also
+# avoids re-encoding overhead when LiveKit changes track resolution
+# mid-session (simulcast / adaptive bitrate).
+slam_track_max_edge: 320
