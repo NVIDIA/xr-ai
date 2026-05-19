@@ -49,8 +49,9 @@ host: 0.0.0.0
 port: 8250
 
 # Optional Rerun viewer for live trajectory + frustum + camera image.
-# Start the viewer from the kimera-mcp venv first:
-#     uv run rerun --connect rerun+http://localhost:9876/proxy
+# Start the viewer (no flags — its default mode is a gRPC server on
+# port 9876, which is what the SDK pushes to) in the kimera-mcp venv:
+#     uv run rerun
 # then point this at the viewer's host:port.  Leave null to disable
 # visualisation entirely (sink becomes a no-op).
 rerun_addr:    null   # "localhost:9876" to enable

@@ -14,7 +14,11 @@ rest of the session — viz issues never tank the pose path.
 
 Start a viewer from the same venv before launching the MCP server:
 
-    uv run rerun --connect rerun+http://localhost:9876/proxy
+    uv run rerun
+
+(no flags — the viewer's default mode is a gRPC server on
+``localhost:9876`` which is what the SDK pushes to via
+``rr.connect_grpc``).
 """
 from __future__ import annotations
 
