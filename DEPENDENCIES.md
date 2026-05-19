@@ -248,19 +248,14 @@ nemotron-omni-llm-server  (ai-services/llm/nemotron_omni/)
     └── vllm >=0.8.0
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
-    └── mamba-ssm >=2.2.0       [no-build-isolation]
-    └── causal-conv1d >=1.4.0   [no-build-isolation]
     └── xr-ai-logging  [editable: ../../../utils/xr-ai-logging]
     └── xr-ai-vllm     [editable: ../../../utils/xr-ai-vllm]
     Model: nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} (vLLM)
     Multimodal (text + video). Non-persistent foreground wrapper; auto-selects
     quant by GPU compute capability (NVFP4 on Blackwell, FP8 on Ada/Hopper,
     BF16 via `use_bf16: true`). nemotron_v3 reasoning parser + qwen3_coder
-    tool-call parser handled server-side by vLLM. Mamba SSM backbone deps
-    (mamba-ssm, causal-conv1d) require `--no-build-isolation` because both
-    `import torch` from setup.py; `[tool.uv]` declares this in pyproject.toml.
-    vllm_backend: pip|docker — same dispatch as vlm-server; docker mode
-    pip-installs the mamba deps inside the NGC container via `extra_pip`.
+    tool-call parser handled server-side by vLLM.
+    vllm_backend: pip|docker — same dispatch as vlm-server.
 
 piper-tts-server  (ai-services/tts/piper/)
     └── piper-tts >=1.4.0

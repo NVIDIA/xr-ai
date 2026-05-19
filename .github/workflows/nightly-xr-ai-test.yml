@@ -36,7 +36,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Discover CUDA toolkit
-        # Prefer 13.0 but fall back so we don't pin to one host layout.
+        # Prefer CUDA 13.0 (current target), but fall back through the
+        # usual symlinks and finally whatever `nvcc` is on PATH so we
+        # don't pin the workflow to a single host layout.
         run: |
           set -euo pipefail
           candidates=(
@@ -50,7 +52,10 @@ jobs:
             if [[ -x "$c/bin/nvcc" ]]; then
               echo "Selected CUDA toolkit: $c"
               echo "CUDA_HOME=$c"             >> "$GITHUB_ENV"
-              # CUDACXX: FlashInfer / torch.cpp_extension / cmake all honor it.
+              # CUDACXX is the env var FlashInfer / torch.cpp_extension /
+              # cmake all honor. Setting it explicitly stops downstream
+              # JIT compilers from guessing (and previously baking the
+              # wrong absolute path into build.ninja).
               echo "CUDACXX=$c/bin/nvcc"      >> "$GITHUB_ENV"
               echo "$c/bin"                   >> "$GITHUB_PATH"
               exit 0
@@ -89,43 +94,28 @@ jobs:
         working-directory: tests
         run: uv sync --python 3.12
 
-      - name: Purge leftover GPU-holding processes and containers (pre)
-        # Persistent runner: scrub docker containers, pip-mode vLLM/wrappers,
-        # and stale FlashInfer build caches. Assert ≥30 GiB free after.
+      - name: Purge leftover xr-ai-vllm containers (pre)
+        # Containers are named `xr-ai-vllm-*` by the vLLM launcher. On a
+        # persistent self-hosted runner these can survive a previous run
+        # — most commonly the `test_nemotron3_nano_persistent` test,
+        # which intentionally leaves a long-lived vLLM container — and
+        # squat on GPU memory before this run's first test even starts.
+        # Wipe them, then assert we have most of the GPU back.
         run: |
           set -euo pipefail
-          echo "--- (1) xr-ai-vllm-* containers ---"
           leftovers=$(docker ps -aq --filter 'name=^xr-ai-vllm-' || true)
           if [ -n "$leftovers" ]; then
+            echo "Removing leftover containers:"
             docker ps -a --filter 'name=^xr-ai-vllm-' --format '  {{.Names}} ({{.Status}})'
             docker rm -f $leftovers
           else
-            echo "  (none)"
+            echo "No leftover xr-ai-vllm-* containers."
           fi
-          echo "--- (2) pip-backend vLLM + wrapper processes ---"
-          for pat in 'vllm serve' '_llm_server'; do
-            if pgrep -af "$pat" >/dev/null 2>&1; then
-              pgrep -af "$pat" | sed 's/^/  killing: /'
-              pkill -TERM -f "$pat" || true
-            fi
-          done
-          # Brief grace, then SIGKILL anything that ignored SIGTERM.
-          sleep 1
-          for pat in 'vllm serve' '_llm_server'; do
-            pkill -KILL -f "$pat" 2>/dev/null || true
-          done
-          echo "--- (3) stale FlashInfer build caches ---"
-          for root in /ephemeral/cache/flashinfer "$HOME/.cache/flashinfer"; do
-            [ -d "$root" ] || continue
-            while IFS= read -r f; do
-              d="$(dirname "$f")"
-              echo "  scrubbing $d"
-              rm -rf "$d"
-            done < <(grep -RIl --include='build.ninja' '/usr/bin/nvcc' "$root" 2>/dev/null || true)
-          done
-          echo "--- nvidia-smi ---"
+          echo "--- nvidia-smi free memory ---"
           nvidia-smi --query-gpu=index,name,memory.free,memory.total \
                      --format=csv,noheader
+          # Fail fast if something else is holding the GPU — better a
+          # clear error here than a confusing OOM from vLLM later.
           free_mib=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | head -n1)
           if [ "${free_mib:-0}" -lt 30000 ]; then
             echo "::error::Only ${free_mib} MiB free on GPU 0 — expected >=30000 MiB after purge"
@@ -137,20 +127,17 @@ jobs:
         working-directory: tests
         run: uv run pytest -v --tb=short --color=yes -m gpu
 
-      - name: Purge GPU-holding processes and containers (post)
-        # Same scrub as pre, so a failed run doesn't leak forward.
+      - name: Purge xr-ai-vllm containers (post)
+        # Always-run cleanup so a failed test (or a cancelled job) does
+        # not leak GPU memory into the next nightly run.
         if: always()
         run: |
           set -u
           leftovers=$(docker ps -aq --filter 'name=^xr-ai-vllm-' || true)
           if [ -n "$leftovers" ]; then
+            echo "Removing containers left running after tests:"
             docker ps -a --filter 'name=^xr-ai-vllm-' --format '  {{.Names}} ({{.Status}})'
             docker rm -f $leftovers || true
+          else
+            echo "No xr-ai-vllm-* containers to remove."
           fi
-          for pat in 'vllm serve' '_llm_server'; do
-            pkill -TERM -f "$pat" 2>/dev/null || true
-          done
-          sleep 1
-          for pat in 'vllm serve' '_llm_server'; do
-            pkill -KILL -f "$pat" 2>/dev/null || true
-          done
