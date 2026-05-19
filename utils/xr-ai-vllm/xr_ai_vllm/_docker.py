@@ -47,6 +47,7 @@ def build_run_argv(
     hf_token: str | None,
     cuda_visible_devices: str | None,
     extra_env: dict[str, str] | None,
+    extra_pip: list[str] | None,
     vllm_argv: list[str],
 ) -> list[str]:
     """Build the `docker run …` argv that hosts vllm.
@@ -89,9 +90,12 @@ def build_run_argv(
 
     argv.append(image)
     # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
-    # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
+    # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing. `extra_pip`
+    # is the seam for models whose architecture needs a wheel the NGC image
+    # doesn't bundle (e.g. mamba-ssm for Nemotron-Omni's hybrid backbone).
+    pip_pkgs = ["hf_transfer", *(extra_pip or [])]
     argv += ["bash", "-c",
-             f"pip install -q hf_transfer && {shlex.join(vllm_argv)}"]
+             f"pip install -q {shlex.join(pip_pkgs)} && {shlex.join(vllm_argv)}"]
     return argv
 
 
@@ -344,6 +348,7 @@ def run(
     hf_token: str | None,
     cuda_visible_devices: str | None,
     extra_env: dict[str, str] | None,
+    extra_pip: list[str] | None,
     ready_file: Path | None,
 ) -> None:
     if not _docker_available():
@@ -388,6 +393,7 @@ def run(
             hf_token=hf_token,
             cuda_visible_devices=cuda_visible_devices,
             extra_env=extra_env,
+            extra_pip=extra_pip,
             vllm_argv=vllm_argv,
         )
         print(
