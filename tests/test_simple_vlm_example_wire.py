@@ -20,9 +20,6 @@ from xr_ai_models import (
     OpenAICompatTTS,
     OpenAICompatVLM,
     load_models_config,
-    make_stt,
-    make_tts,
-    make_vlm,
 )
 
 
