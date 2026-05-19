@@ -44,8 +44,14 @@ if ! command -v nvcc >/dev/null 2>&1; then
     echo "[setup-droid] ERROR: nvcc not on PATH — install a CUDA toolkit (apt install cuda-toolkit-12-* or download from developer.nvidia.com) and re-run."
     exit 2
 fi
+# Run the version probes with pipefail OFF — `head -1` legitimately
+# closes its stdin early, which gives the upstream `sed` SIGPIPE.
+# Under `set -euo pipefail` that surfaces as exit 141 and kills the
+# whole script before any of the preflight messages can print.
+set +o pipefail
 NVCC_VER="$(nvcc --version | sed -n 's/.*release \([0-9][0-9]*\)\..*/\1/p' | head -1)"
-TORCH_VER="$(python -c 'import torch, sys; v = torch.version.cuda or ""; sys.stdout.write(v.split(".")[0])' 2>/dev/null)"
+TORCH_VER="$(python -c 'import torch, sys; v = torch.version.cuda or ""; sys.stdout.write(v.split(".")[0])' 2>/dev/null || true)"
+set -o pipefail
 if [[ -z "$TORCH_VER" || -z "$NVCC_VER" ]]; then
     echo "[setup-droid] WARN: could not detect CUDA versions (nvcc=$NVCC_VER torch=$TORCH_VER); continuing anyway."
 elif [[ "$NVCC_VER" != "$TORCH_VER" ]]; then
