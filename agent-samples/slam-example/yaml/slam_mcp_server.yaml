@@ -1,0 +1,117 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Pose MCP server reference configuration.
+#
+# Approximate indoor monocular localization. Each call to estimate_pose
+# returns a 6DoF pose anchored to the map's first keyframe. The map persists
+# across restarts in `map_dir`. Delete that directory (or call reset_map) to
+# start over.
+#
+# MCP endpoint: http://localhost:8240/mcp  (StreamableHTTP transport)
+
+# Where keyframes (metadata + per-keyframe arrays) live.  Survives process
+# restart; clear by deleting the directory or calling the reset_map tool.
+# Default is /tmp so the server runs unprivileged out of the box; point it
+# at a persistent location (`~/.local/share/xr-ai/pose-map`, `/var/lib/...`
+# under your service user, etc.) once you want the map to outlive reboots.
+# Leading `~` is expanded against $HOME at startup.
+map_dir: /tmp/xr-ai/pose-map
+
+# Backend selection.  "auto" picks CUDA if available, otherwise CPU.
+device: auto
+
+# MoGe model variant.  ViT-S (35M) keeps cold start under a few seconds;
+# ViT-B (104M) is more accurate but heavier.
+moge_model: Ruicheng/moge-2-vits-normal
+
+# Border (px) of MoGe's depth output to discard — receptive field falls off
+# at image edges and surfaces visibly fold in there.  Tune higher for very
+# wide-FOV cameras.  Wipe the map after changing — old keyframes use the
+# previous setting.
+border_px: 20
+
+# Horizontal FOV (degrees) of your camera.
+#
+# Default behaviour (unset): the server starts in `state="calibrating"`
+# and lets MoGe estimate FOV on the first `fov_calibration_frames` frames.
+# Once that many estimates have been collected, the *median* is pinned and
+# used as a prior for every subsequent inference, locking the world frame
+# to a stable intrinsic.  No keyframes are created during calibration so
+# the origin never anchors to a wrong K.
+#
+# If you already know the camera FOV, set it here to skip calibration
+# entirely.  Typical values:
+#   laptop webcam        : ~60
+#   USB webcam (Logitech): ~70-78
+#   phone main camera    : ~65-75
+#   GoPro / action cam   : ~120
+# Wipe the map after changing this so old keyframes (which were built with
+# the wrong FOV) don't poison localization.
+camera_fov_deg:
+
+# How many frames to sample before pinning FOV.  More = more robust median
+# but a longer cold start.  8 ≈ 4 s at 2 Hz; usually fine for indoor.
+fov_calibration_frames: 8
+
+# Map growth controls.
+max_keyframes:       200    # hard cap; oldest evicted when reached
+min_translation_m:   0.30   # insert new keyframe when pose translates more than this
+min_rotation_deg:    20.0   # ...or rotates more than this
+
+# PnP RANSAC thresholds.
+min_matches:         8      # raw 2D-2D match floor (XFeat+LighterGlue output)
+min_inliers:         15     # PnP-RANSAC inlier floor for a valid pose
+pnp_reproj_err_px:   4.0
+
+# Loop closure + pose graph optimization (GTSAM, BSD-3).
+#   pgo:                    set false to skip PGO entirely (no edges recorded)
+#   loop_search_every:      every N localized frames, try matching against
+#                           keyframes pose-distant from the tracked one
+#   loop_min_distance_m:    skip candidates closer than this to the tracked
+#                           keyframe — they're already locally constrained
+#   loop_min_inliers:       PnP inlier floor for a hit to count as a loop
+#                           closure (higher than min_inliers because false
+#                           loop closures distort the whole map)
+pgo:                  true
+loop_search_every:    30
+loop_min_distance_m:  1.0
+loop_min_inliers:     40
+
+# Server bind.
+# Input downsample (px on the longer edge).  0 disables.  Lower = faster
+# inference at some cost in PnP precision.  Empirically (bench/tum_bench.py
+# on TUM freiburg1_xyz, CPU-only) 192 yields p50 35 ms / 28 FPS with
+# ATE-RMSE ≈ 14 cm — same accuracy as 384 at half the latency.
+image_max_edge: 192
+
+# XFeat top_k features per frame.  512 is plenty for tracking-mode PnP;
+# more = better outlier survival in extreme viewpoint changes, fewer =
+# faster.  Going below ~200 hurts ATE in the bench.
+xfeat_top_k: 512
+
+# Use LighterGlue (transformer-based matcher) instead of raw mutual-NN
+# cosine matching.  LighterGlue is ~3× slower on CPU and (on TUM bench)
+# produces essentially the same ATE — RANSAC PnP filters outliers
+# either way.  Flip to true on GPU if you want the extra robustness in
+# very low-overlap loop-closure searches.
+use_lighterglue: false
+
+# Rerun viz filters — only when `rerun_addr` is set.
+# `viz_min_kf_inliers` skips the point cloud for keyframes that anchored
+# with fewer PnP inliers than this (their pose is still rendered so the
+# trajectory stays continuous).  Bumps the visual signal-to-noise ratio.
+# `viz_max_depth_m` drops keyframe points whose Z is beyond this (MoGe's
+# far field hallucinates structure that smears across the viewer).
+viz_min_kf_inliers: 60
+viz_max_depth_m:    8.0
+
+host: 0.0.0.0
+port: 8240
+
+# Optional Rerun viewer sink.  Start the viewer first (`rerun` — defaults
+# to gRPC on 127.0.0.1:9876) and point this at it.  Either form works:
+#   rerun_addr: 127.0.0.1:9876
+#   rerun_addr: rerun+http://127.0.0.1:9876/proxy
+# null / commented = sink disabled, no rerun-sdk import at runtime.
+rerun_addr: null
