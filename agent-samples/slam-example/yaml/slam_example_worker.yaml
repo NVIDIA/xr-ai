@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# slam-example worker configuration.
+# Auto-discovered by the launcher and passed as --config to the worker process.
+
+# SLAM backend MCP endpoint.  All three backends in this repo
+# (pose-mcp / kimera-mcp / droid-mcp) expose the same tool surface;
+# the URL below selects which one this worker drives.  On feat/kimera-vio
+# this is kimera-mcp at 8250.
+slam_mcp_url:        http://localhost:8250/mcp
+
+# Frame submit rate (frames per second).  Higher = lower latency,
+# more SLAM compute.  2 Hz is a good default for phone cameras over
+# LiveKit; the backend often runs internally at a higher keyframe rate.
+slam_hz:             2.0
+
+# Drop incoming frames older than this — keeps the pose stream close
+# to real-time even when an estimate_pose call runs slow.
+slam_max_age_s:      1.0
+
+# Scratch directory for the PNGs the worker hands to the SLAM backend
+# via `image_path`.  /dev/shm is RAM-backed so this is essentially free.
+slam_scratch_dir:    /dev/shm/xr-ai/slam-in
+
+# LiveKit can deliver a track at multiple resolutions over the session
+# (simulcast / adaptive bitrate); Kimera-VIO in particular asserts on
+# mid-stream resolution changes.  We resize every incoming frame to a
+# fixed longest-edge size before pushing, keeping aspect ratio.  Lower
+# = faster tracking, fewer features (320 is a good default for phones).
+slam_track_max_edge: 320

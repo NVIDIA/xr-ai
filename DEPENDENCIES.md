@@ -369,6 +369,25 @@ video-mcp (8210), render-mcp (8220), oxr-mcp (8230), worker.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
 
+### slam-example  (agent-samples/slam-example/)
+
+SLAM-only worker: receives video frames + IMU + camera_meta over the
+hub, pushes them to whichever SLAM MCP backend is wired on this
+branch, echoes the resulting pose back on data topic ``pose.update``.
+No VLM / STT / TTS — pure pose tracking.  The web client (same one
+simple-vlm-example serves) connects over LiveKit at port 8080.
+
+Branch ↔ backend matrix (only main.py + slam_mcp_server.yaml differ):
+* feat/pose-mcp-fast  → pose-mcp   (CPU, no IMU)
+* feat/spatial-memory → space-mcp  (topological, DINOv2)
+* feat/kimera-vio     → kimera-mcp (CPU C++ in docker, IMU)
+* feat/droid-mcp      → droid-mcp  (CUDA GPU, monocular)
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `slam-example` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `slam-example-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0, fastmcp >=0.4 |
+
 ---
 
 ## Change impact map
