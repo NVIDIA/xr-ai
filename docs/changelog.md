@@ -29,6 +29,45 @@ Python-version-bound and doubling the matrix would just double GPU-hour
 cost without new coverage. Concurrency is set to queue (not cancel)
 overlapping runs so a long nightly finishes before the next cron fires.
 
+**Runner hygiene.** The `gpu` label points at a persistent host, so
+state leaks across runs. Two layers of cleanup keep the suite robust:
+
+1. A workflow-level pre/post step force-removes every container named
+   `xr-ai-vllm-*` (the prefix the launcher uses) and asserts ≥ 30 GiB
+   of GPU memory is free at start — a clear hard error here beats a
+   confusing downstream vLLM OOM.
+2. An autouse pytest fixture in `tests/conftest.py` does the same scrub
+   around each `@pytest.mark.gpu` test. Per-test `finally` blocks
+   already call `stop_persistent_servers`, but those don't run if
+   pytest itself is killed or a fixture errors out — and any leak
+   between LLM tests on a single 46 GiB GPU OOMs the next one.
+
+**CUDA toolkit discovery.** A discovery step picks the toolkit from a
+priority list (`/usr/local/cuda-13.0`, `…-13`, `…`, `$CUDA_HOME`, then
+`which nvcc`) and exports `CUDA_HOME` plus `CUDACXX` via `$GITHUB_ENV`
+so downstream JIT compilers (FlashInfer, torch.cpp_extension, cmake)
+stop guessing. A follow-up step asserts the chosen `nvcc` supports
+`compute_89`, failing the run early on a misconfigured host.
+
+**vLLM tests use the docker backend.** Hosting vLLM in
+`nvcr.io/nvidia/vllm:26.04-py3` instead of pip means the host's CUDA /
+FlashInfer JIT toolchain (or its absence) no longer affects the tests
+— the container ships nvcc and a working FlashInfer build. The image's
+JIT cache lives at the runner's `/ephemeral/cache/flashinfer/...`,
+which is invisible to per-test setup; switching to the container side-
+steps it entirely.
+
+**`extra_pip` seam in `xr_ai_vllm.serve`.** The launcher already pip-
+installed `hf_transfer` into the NGC container before `vllm serve` ran
+(the image hard-errors with `HF_HUB_ENABLE_HF_TRANSFER=1` otherwise).
+That seam is generalised: `serve(..., extra_pip=[...])` is threaded
+through `_docker.run` → `build_run_argv` and appended to the same
+`pip install -q ... && vllm serve ...` shell line. `nemotron_omni`
+defaults `extra_pip=["mamba-ssm", "causal-conv1d"]` so its hybrid SSM
+backbone — which the NGC image doesn't bundle — loads cleanly. The
+knob is `cfg["extra_pip"]`-overridable for version pinning. pip-mode
+silently ignores it (deps belong in `pyproject.toml` there).
+
 ### 2026-05-14 — `xr-ai-models` seam adopted by migrated workers; one migration pending
 
 `vlm-mcp` (#139), `xr-render-demo` (#140), and `xr-ai-pipecat` (#137) now
