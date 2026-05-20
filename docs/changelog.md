@@ -156,6 +156,14 @@ that one name so callers do not branch.  `enable_thinking` and
 `thinking_budget` are typed kwargs on `chat()` that flatten into
 `chat_template_kwargs` on the wire — callers never construct that dict.
 
+**Wire-format note (vlm-mcp migration, #139).** Pre-migration, an
+explicit `enable_thinking=True` from a caller produced a request with no
+`chat_template_kwargs` key at all (the legacy `VlmClient` only emitted
+the key when *false*). Post-migration the SDK always emits
+`chat_template_kwargs: {"enable_thinking": <bool>}`. Functionally
+equivalent — the model still generates `<think>` tokens — but worth
+recording for anyone bisecting wire traces across the migration boundary.
+
 **Why not LiteLLM or any-llm-sdk.** Both are excellent for cross-vendor
 fan-out but solve a problem we do not have yet — every in-tree backend
 already speaks OpenAI-compatible HTTP, and both libraries pass our most

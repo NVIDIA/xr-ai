@@ -229,11 +229,12 @@ async def test_make_vlm_from_cfg_legacy_path(mock_vlm, png_path: Path):
     server, base_url = mock_vlm
     server.answer = "legacy answer"
 
-    vlm = _make_vlm_from_cfg({
+    vlm, timeout = _make_vlm_from_cfg({
         "vlm_server":            base_url,
         "vlm_request_timeout_s": 5.0,
         "enable_thinking":       False,
     })
+    assert timeout == 5.0
     mcp = build_mcp(vlm)
     try:
         result = await mcp.call_tool(
@@ -255,7 +256,7 @@ async def test_make_vlm_from_cfg_new_models_block(mock_vlm, png_path: Path):
     server, base_url = mock_vlm
     server.answer = "cosmos answer"
 
-    vlm = _make_vlm_from_cfg({
+    vlm, _ = _make_vlm_from_cfg({
         "models": {
             "vlm": {
                 "kind":     "preset:cosmos_vlm",
@@ -279,6 +280,12 @@ async def test_make_vlm_from_cfg_new_models_block(mock_vlm, png_path: Path):
     assert payload["model"] == "vlm"
     # cosmos_vlm preset sets enable_thinking=False by default.
     assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+async def test_make_vlm_from_cfg_missing_required_keys_raises():
+    """Neither models: nor vlm_server: present → ValueError."""
+    with pytest.raises(ValueError, match="must specify either"):
+        _make_vlm_from_cfg({})
 
 
 # ── stub-server wire-trace golden ─────────────────────────────────────────────

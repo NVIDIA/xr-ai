@@ -50,10 +50,8 @@ import argparse
 import asyncio
 import base64
 import io
-import os
 import pathlib
 import re
-import tempfile
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -65,19 +63,27 @@ from loguru import logger
 from PIL import Image
 
 from xr_ai_logging import setup_logging
-from xr_ai_models import ModelsConfig, VLMSpec, load_models_config, make_vlm
+from xr_ai_models import (
+    ModelsConfig,
+    VLMSpec,
+    load_models_config_from_dict,
+    make_vlm,
+)
 from xr_ai_models.config import KIND_OPENAI_COMPAT
 from xr_ai_models.protocols import VLMService
 
 
 # ── VLM factory ──────────────────────────────────────────────────────────────
 
-def _make_vlm_from_cfg(cfg: dict[str, Any]) -> VLMService:
+def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
     """Construct a VLMService from the server config dict.
 
     Accepts either the new ``models:`` block (forwarded to the SDK config
     loader) or the legacy ``vlm_server:`` URL key (back-compat; synthesises a
     ``cosmos_vlm``-equivalent spec so existing deployments need no changes).
+
+    Returns ``(vlm, request_timeout_s)`` so callers can surface the timeout
+    that was actually wired into the spec without re-reading ``cfg``.
     """
     models_block: dict[str, Any] | None = cfg.get("models")
     vlm_server: str | None = cfg.get("vlm_server")
@@ -101,17 +107,9 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> VLMService:
             extras["chat_template_kwargs"] = ctk
             vlm_entry["default_extras"] = extras
 
-        # Write to a temp file so load_models_config resolves presets via its
-        # public path — avoids reaching into private config APIs.
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as tmp:
-            yaml.dump({"vlm": vlm_entry}, tmp)
-            tmp_path = tmp.name
-        try:
-            config = load_models_config(tmp_path)
-        finally:
-            os.unlink(tmp_path)
+        config = load_models_config_from_dict(
+            {"vlm": vlm_entry}, source="vlm_mcp_server.yaml:models"
+        )
 
     elif vlm_server:
         logger.warning(
@@ -135,7 +133,7 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> VLMService:
             "or the legacy 'vlm_server:' key"
         )
 
-    return make_vlm(config, "vlm")
+    return make_vlm(config, "vlm"), vlm_request_timeout_s
 
 
 # ── image helpers ─────────────────────────────────────────────────────────────
@@ -268,9 +266,8 @@ def build_mcp(vlm: VLMService) -> FastMCP:
 async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     host = cfg.get("host", "0.0.0.0")
     port = int(cfg.get("port", 8240))
-    vlm_request_timeout_s = float(cfg.get("vlm_request_timeout_s", 60.0))
 
-    vlm = _make_vlm_from_cfg(cfg)
+    vlm, vlm_request_timeout_s = _make_vlm_from_cfg(cfg)
     mcp = build_mcp(vlm)
     app = mcp.http_app(path="/mcp")
 
