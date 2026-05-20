@@ -9,6 +9,40 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-20 — Hub releases held ring-buffer slots on participant leave (#143)
+
+`HubEndpoint` holds the latest SHM ring slot per `(participant_id,
+track_id)` so processors can fetch pixels on demand without an eager
+copy. The slot was only released when the *next* FRAME_SIGNAL for the
+same key arrived — so when a track ended (LiveKit `track_unsubscribed`
+or `participant_disconnected`), its last slot stayed held forever.
+After enough connect/publish/disconnect cycles the ring filled with
+abandoned slots and every subsequent frame from any participant was
+dropped at the connector with `Ring buffer full — dropped frame`.
+A new participant could publish video and the worker would log
+`tracks_seen=0` until the hub was restarted.
+
+**Fix.** The hub now releases every slot keyed by a participant when
+that participant's `PARTICIPANT_EVENT(joined=False)` arrives. The
+`notify_participant_left` path already fires on both `track_unsubscribed`
++ `participant_disconnected` (it is called from `_room_client._handle_left`),
+so no new message type is required. Reuses the established
+"release_slot without `view.data.release()`" pattern from the FRAME_SIGNAL
+branch — the connector's ring is still live at this point, so the
+memoryview does not need an explicit release.
+
+Also bumped `_DEFAULT_NUM_SLOTS` from 10 → 16 so a single ill-timed
+reconnect within the in-flight window between last frame and disconnect
+event can't still hit the ceiling. The slot is 12.4 MiB at the 4K NV12
+ceiling, so six extra slots adds ~75 MiB to the worst-case per-connector
+shm footprint — cheap insurance.
+
+**Out of scope.** Connector crash / OOM still leaks slots — `joined=False`
+is only emitted by the live `notify_participant_left` path, not by an
+unclean exit. A heartbeat or TTL scan would close that gap; deferred
+until there's evidence it matters in practice. The issue's reproduction
+is wholly covered by participant disconnect.
+
 ### 2026-05-18 — `nightly XR AI test` workflow on self-hosted `gpu` runner
 
 The `gpu`-marked pytest suite (`tests/test_gpu_*.py`,
