@@ -28,13 +28,12 @@ import pathlib
 import signal
 import time
 
-import yaml
-from fastmcp import Client as McpClient
 from xr_ai_logging import setup_logging
 
 from agent import GlassesAgent
 from config import WorkerConfig, load_config
 from memory import AgentMemory, Observation, Demonstration, DemoStep, TranscriptClient
+from nat_runtime import NatRuntime
 from processors import QueryProcessor
 
 log = logging.getLogger("glasses_agent_nat")
@@ -66,12 +65,12 @@ async def _http_probe(url: str) -> bool:
 
 
 async def _mcp_probe(mcp_url: str) -> bool:
-    """Check that the FastMCP endpoint is serving tools via StreamableHTTP."""
-    from fastmcp import Client as McpClient
+    """Check that the MCP HTTP endpoint is accepting connections."""
+    import httpx
     try:
-        async with McpClient(mcp_url) as client:
-            await client.list_tools()
-        return True
+        async with httpx.AsyncClient(timeout=3.0, follow_redirects=False) as c:
+            r = await c.get(mcp_url)
+            return r.status_code < 500 and r.status_code != 404
     except Exception:
         return False
 
@@ -94,74 +93,6 @@ async def _wait_for_all(probes_spec: dict[str, tuple]) -> None:
         if pending:
             log.info("still waiting for: %s", ", ".join(sorted(pending)))
             await asyncio.sleep(5.0)
-
-
-# ── tool discovery ────────────────────────────────────────────────────────────
-
-def _build_tools_openai(vlm_tools: list, video_tools: list) -> list:
-    """Convert MCP tool definitions to OpenAI tools=[...] format."""
-    tools = []
-    for t in list(vlm_tools) + list(video_tools):
-        schema = getattr(t, "inputSchema", None) or {"type": "object", "properties": {}}
-        tools.append({
-            "type": "function",
-            "function": {
-                "name":        t.name,
-                "description": (t.description or "").strip(),
-                "parameters":  schema,
-            },
-        })
-    return tools
-
-
-# ── system prompt ─────────────────────────────────────────────────────────────
-
-SYSTEM_PROMPT = """\
-You are an AI assistant integrated into smart glasses. You observe the world \
-through the wearer's camera and help them understand their environment, \
-remember past events, and learn from demonstrations.
-
-CONTEXT PROVIDED EACH TURN:
-- Scene summary: condensed description of recent observations
-- Recent observations: timestamped timeline of what you've seen
-- Available demonstrations: labeled procedures that were recorded
-- Latest camera frame path (when available — use ask_image if you need to examine it)
-- Conversation history (last 4 turns)
-
-CAPABILITIES:
-1. OBSERVE: Describe what the wearer is currently seeing using the latest frame
-2. REMEMBER: Answer questions about past observations from the timeline
-3. GUIDE: Guidance through stored demonstrations is handled automatically by the system \
-— do NOT attempt to replicate or describe steps yourself when asked to walk someone \
-through something.
-4. ANALYZE: Use ask_image to examine the current view or a past frame closely
-5. INVESTIGATE: Use get_frame_from_time to look at specific past moments
-
-BEHAVIOR:
-- Be concise — the wearer is doing things while listening.
-- Respond with 1-3 short sentences maximum unless giving step-by-step guidance.
-- Use the observations timeline to answer "what happened" questions before \
-fetching past frames with tools.
-- When asked to recall a demonstration, describe each step clearly.
-- When the user asks to walk through or demonstrate something, the guidance system \
-handles it automatically — confirm it has started, do not list the steps yourself.
-- If you're unsure about something in the current view, use ask_image with \
-the pre-fetched frame path from context.
-- Reference time (when user spoke) is provided so past-frame lookups are \
-anchored correctly — always pass it as reference_time_us.
-- Never invent or hallucinate observations — only report what you've actually seen.
-- CRITICAL: Never construct, guess, or fabricate an image file path. The ONLY \
-valid image_path for ask_image is one returned directly by get_latest_frame or \
-get_frame_from_time in the current turn. If no frame path is in context, call \
-get_latest_frame first.
-- CRITICAL: You have no ability to start or stop demo recording — that is \
-controlled entirely by the system detecting specific voice trigger phrases. \
-Never tell the user "recording has started" or "recording has stopped" unless \
-you can see [Recording active] in your context. If the user asks you to record \
-something, acknowledge the request and tell them to say "start recording" or \
-"record demo [name]" to trigger it.
-"""
-
 
 # ── startup memory restore ─────────────────────────────────────────────────────
 
@@ -254,32 +185,17 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         "transcript-mcp":("mcp", cfg.transcript_mcp.rstrip("/")    + "/mcp"),
     })
 
-    if ready_file:
-        ready_file.touch()
-
-    # ── connect to MCP servers + discover tools ───────────────────────────────
-    async with (
-        McpClient(cfg.vlm_mcp.rstrip("/")       + "/mcp") as vlm_mcp,
-        McpClient(cfg.video_mcp.rstrip("/")     + "/mcp") as video_mcp,
-    ):
-        vlm_tools, video_tools = [], []
-        for name, client, store in [
-            ("vlm-mcp",   vlm_mcp,   lambda t: vlm_tools.extend(t)),
-            ("video-mcp", video_mcp, lambda t: video_tools.extend(t)),
-        ]:
-            try:
-                tools = await client.list_tools()
-                store(tools)
-                log.info("%s tools: %s", name, [t.name for t in tools])
-            except Exception as exc:
-                log.warning("%s tool discovery failed: %s", name, exc)
-
-        tools_openai = _build_tools_openai(vlm_tools, video_tools)
-        log.info("tool-calling tools: %s", [t["function"]["name"] for t in tools_openai])
+    nat_runtime = await NatRuntime.create(cfg.nat_workflow_config)
+    agent: GlassesAgent | None = None
+    query_proc: QueryProcessor | None = None
+    transcript: TranscriptClient | None = None
+    try:
+        if ready_file:
+            ready_file.touch()
 
         # ── memory + transcript ───────────────────────────────────────────────
         memory     = AgentMemory(max_obs=cfg.vlm_obs_max)
-        transcript = TranscriptClient(cfg.transcript_mcp)
+        transcript = TranscriptClient(nat_runtime)
 
         # Restore from transcript-mcp.
         await _restore_memory(memory, transcript, cfg.transcript_source)
@@ -287,25 +203,24 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         # ── query processor ───────────────────────────────────────────────────
 
         async def _say(pid: str, text: str) -> None:
+            if agent is None:
+                return
             await agent.say(pid, text)
 
         async def _send_text(pid: str, text: str, topic: str) -> None:
+            if agent is None:
+                return
             await agent.send_text(pid, text, topic)
 
         query_proc = QueryProcessor(
             cfg           = cfg,
             memory        = memory,
-            vlm_client    = vlm_mcp,
-            video_client  = video_mcp,
-            system_prompt = SYSTEM_PROMPT,
-            tools_openai  = tools_openai,
+            nat_runtime   = nat_runtime,
             send_text     = _send_text,
             say           = _say,
         )
 
         # ── main agent ────────────────────────────────────────────────────────
-        # Pass the already-open MCP clients — GlassesAgent reuses the same
-        # connections rather than opening a second set.
         agent = GlassesAgent(
             cfg               = cfg,
             memory            = memory,
@@ -313,8 +228,7 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
             query_processor   = query_proc,
             stt_url           = cfg.stt_server,
             tts_url           = cfg.tts_server,
-            vlm_client        = vlm_mcp,
-            video_client      = video_mcp,
+            nat_runtime       = nat_runtime,
         )
 
         loop = asyncio.get_running_loop()
@@ -325,9 +239,14 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         try:
             await agent.run()
         finally:
-            agent.shutdown()
+            if agent is not None:
+                agent.shutdown()
+    finally:
+        if query_proc is not None:
             await query_proc.close()
+        if transcript is not None:
             await transcript.close()
+        await nat_runtime.close()
 
     log.info("glasses-agent-nat stopped")
 

@@ -20,6 +20,7 @@ class WorkerConfig:
     vlm_mcp:          str   # vlm-mcp base URL, e.g. http://localhost:8240
     video_mcp:        str   # video-mcp base URL, e.g. http://localhost:8210
     transcript_mcp:   str   # transcript-mcp base URL, e.g. http://localhost:8200
+    nat_workflow_config: pathlib.Path
 
     # Background VLM observation loop
     vlm_interval_s:            float
@@ -42,6 +43,13 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         with open(path) as f:
             data = yaml.safe_load(f) or {}
 
+    base_dir = path.parent if path else pathlib.Path(__file__).resolve().parent.parent
+    workflow_config = pathlib.Path(
+        data.get("nat_workflow_config", "yaml/glasses_agent_nat_workflow.yaml")
+    )
+    if not workflow_config.is_absolute():
+        workflow_config = (base_dir / workflow_config).resolve()
+
     return WorkerConfig(
         stt_server          = data.get("stt_server",          "http://localhost:8103"),
         tts_server          = data.get("tts_server",          "http://localhost:8105"),
@@ -50,6 +58,7 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         vlm_mcp             = data.get("vlm_mcp",             "http://localhost:8240"),
         video_mcp           = data.get("video_mcp",           "http://localhost:8210"),
         transcript_mcp      = data.get("transcript_mcp",      "http://localhost:8200"),
+        nat_workflow_config = workflow_config,
         vlm_interval_s            = float(data.get("vlm_interval_s",            1.0)),
         vlm_obs_max               = int(data.get("vlm_obs_max",               240)),
         condenser_interval_s      = float(data.get("condenser_interval_s",   60.0)),

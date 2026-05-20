@@ -17,8 +17,24 @@ from dataclasses import dataclass, field
 import json as _json
 
 from fastmcp import Client as McpClient
+from langchain_core.messages import SystemMessage
 
 log = logging.getLogger("glasses_agent_langchain.memory")
+
+
+_DEMO_LOOKUP_STOPWORDS = frozenset({
+    "a", "an", "and", "do", "for", "how", "me", "show", "step", "task",
+    "teach", "the", "through", "to", "walk",
+})
+
+
+def _normalize_demo_text(text: str) -> str:
+    clean = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
+    tokens = [
+        token for token in clean.split()
+        if token not in _DEMO_LOOKUP_STOPWORDS and not token.isdigit()
+    ]
+    return " ".join(tokens)
 
 
 # ── data types ────────────────────────────────────────────────────────────────
@@ -59,6 +75,7 @@ class Demonstration:
     name:             str
     started_at_us:    int
     ended_at_us:      int
+    task_index:       int                 = 0
     # Dense frame-by-frame VLM capture written during recording.
     recorded_frames:  list[RecordedFrame] = field(default_factory=list)
     # Voice narrations spoken by the user while demonstrating (timestamped).
@@ -67,6 +84,81 @@ class Demonstration:
     steps:            list[DemoStep]      = field(default_factory=list)
     summary:          str                 = ""
     instructions:     list[str]           = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ObservationSnapshot:
+    timestamp_us: int
+    time:         str
+    description:  str
+
+
+@dataclass(frozen=True)
+class DemoSnapshot:
+    task_index:   int
+    name:         str
+    step_count:   int
+    summary:      str
+    instructions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MemorySnapshot:
+    scene_summary:       str
+    recent_observations: tuple[ObservationSnapshot, ...]
+    demonstrations:      tuple[DemoSnapshot, ...]
+
+    def format_context(self) -> str:
+        """Format XR domain memory for model-visible context."""
+        parts: list[str] = []
+
+        if self.scene_summary:
+            parts.append(f"[Scene summary]\n{self.scene_summary}")
+        else:
+            parts.append("[Scene summary]\nNo scene summary available yet.")
+
+        if self.recent_observations:
+            lines = ["[Recent observations]"]
+            for obs in self.recent_observations:
+                lines.append(f"  {obs.time}  {obs.description}")
+            parts.append("\n".join(lines))
+        else:
+            parts.append("[Recent observations]\nNone yet.")
+
+        if self.demonstrations:
+            lines = ["[Available demonstrations]"]
+            for demo in self.demonstrations:
+                label = f"task {demo.task_index} -- {demo.name!r}"
+                lines.append(f"  {label}: {demo.step_count} steps")
+                if demo.summary:
+                    lines.append(f"    Summary: {demo.summary}")
+                if demo.instructions:
+                    lines.append("    Instructions:")
+                    for idx, instruction in enumerate(demo.instructions, start=1):
+                        lines.append(f"      {idx}. {instruction}")
+            parts.append("\n".join(lines))
+        else:
+            parts.append("[Available demonstrations]\nNone recorded yet.")
+
+        return "\n\n".join(parts)
+
+    def to_system_message(self) -> SystemMessage:
+        """Return the memory snapshot as a LangChain system message fragment."""
+        return SystemMessage(content=self.format_context())
+
+
+def parse_mcp_result(result) -> dict | list | str | None:
+    """Extract structured content or JSON text from a FastMCP tool result."""
+    structured = getattr(result, "structured_content", None)
+    if structured is not None:
+        return structured
+    items = getattr(result, "content", None) or []
+    if items and hasattr(items[0], "text"):
+        try:
+            return _json.loads(items[0].text)
+        except Exception:
+            return items[0].text
+    return None
 
 
 # ── AgentMemory ───────────────────────────────────────────────────────────────
@@ -84,6 +176,7 @@ class AgentMemory:
         self._scene_summary = ""
         self._demos: dict[str, Demonstration] = {}
         self._recording: Demonstration | None = None
+        self._next_task_index = 1
 
     # ── observations ──────────────────────────────────────────────────────────
 
@@ -97,8 +190,15 @@ class AgentMemory:
     def start_recording(self, name: str) -> None:
         """Begin a new demonstration recording."""
         ts = int(time.time() * 1_000_000)
-        self._recording = Demonstration(name=name, started_at_us=ts, ended_at_us=0)
-        log.info("demo recording started  name=%r", name)
+        task_index = self._next_task_index
+        self._next_task_index += 1
+        self._recording = Demonstration(
+            name=name,
+            started_at_us=ts,
+            ended_at_us=0,
+            task_index=task_index,
+        )
+        log.info("demo recording started  task=%d  name=%r", task_index, name)
 
     def add_voice_note(self, note: VoiceNote) -> None:
         """Store a voice narration captured while the user was demonstrating."""
@@ -141,6 +241,7 @@ class AgentMemory:
         """Delete all stored demonstrations. Returns count removed."""
         n = len(self._demos)
         self._demos.clear()
+        self._next_task_index = 1
         return n
 
     @property
@@ -154,6 +255,33 @@ class AgentMemory:
 
     # ── context building ──────────────────────────────────────────────────────
 
+    def snapshot(self, max_recent: int = 8) -> MemorySnapshot:
+        """Return a structured read-only snapshot for agent runtime context."""
+        recent = []
+        for obs in list(self._observations)[-max_recent:]:
+            ts_s = obs.timestamp_us / 1_000_000
+            recent.append(ObservationSnapshot(
+                timestamp_us = obs.timestamp_us,
+                time         = time.strftime("%H:%M:%S", time.localtime(ts_s)),
+                description  = obs.description,
+            ))
+
+        demos = []
+        for _, demo in self.list_demonstrations_with_indices():
+            demos.append(DemoSnapshot(
+                task_index   = demo.task_index,
+                name         = demo.name,
+                step_count   = len(demo.steps),
+                summary      = demo.summary,
+                instructions = tuple(demo.instructions),
+            ))
+
+        return MemorySnapshot(
+            scene_summary       = self._scene_summary,
+            recent_observations = tuple(recent),
+            demonstrations      = tuple(demos),
+        )
+
     def build_context(self, max_recent: int = 8) -> str:
         """Return a formatted string suitable for injection into the LLM context.
 
@@ -162,39 +290,7 @@ class AgentMemory:
         - Last N observation timeline entries.
         - Available demonstrations with step counts.
         """
-        parts: list[str] = []
-
-        # Scene summary.
-        if self._scene_summary:
-            parts.append(f"[Scene summary]\n{self._scene_summary}")
-        else:
-            parts.append("[Scene summary]\nNo scene summary available yet.")
-
-        # Recent observations timeline.
-        recent = list(self._observations)[-max_recent:]
-        if recent:
-            lines = ["[Recent observations]"]
-            for obs in recent:
-                # Format timestamp as seconds since epoch (readable).
-                ts_s = obs.timestamp_us / 1_000_000
-                hms  = time.strftime("%H:%M:%S", time.localtime(ts_s))
-                lines.append(f"  {hms}  {obs.description}")
-            parts.append("\n".join(lines))
-        else:
-            parts.append("[Recent observations]\nNone yet.")
-
-        # Available demonstrations.
-        if self._demos:
-            lines = ["[Available demonstrations]"]
-            for name, demo in self._demos.items():
-                lines.append(f"  {name!r}: {len(demo.steps)} steps")
-                if demo.summary:
-                    lines.append(f"    Summary: {demo.summary}")
-            parts.append("\n".join(lines))
-        else:
-            parts.append("[Available demonstrations]\nNone recorded yet.")
-
-        return "\n\n".join(parts)
+        return self.snapshot(max_recent=max_recent).format_context()
 
     # ── demonstration lookup ──────────────────────────────────────────────────
 
@@ -204,19 +300,52 @@ class AgentMemory:
     def list_demonstrations(self) -> list[str]:
         return list(self._demos.keys())
 
+    def list_demonstrations_with_indices(self) -> list[tuple[int, Demonstration]]:
+        return sorted(
+            ((demo.task_index, demo) for demo in self._demos.values()),
+            key=lambda item: item[0],
+        )
+
+    def get_demonstration_by_task_index(self, index: int) -> Demonstration | None:
+        for demo in self._demos.values():
+            if demo.task_index == index:
+                return demo
+        return None
+
     def find_demonstration_fuzzy(self, query: str) -> Demonstration | None:
-        """Simple case-insensitive substring match against demo names.
+        """Find a demo by normalized name or token overlap.
 
         Returns the first matching demo, or ``None`` if no match.
         """
-        q = query.lower()
-        for name, demo in self._demos.items():
-            if q in name.lower():
+        q = _normalize_demo_text(query)
+        if not q:
+            return None
+
+        # Prefer exact containment in either direction.
+        for _, demo in self.list_demonstrations_with_indices():
+            name = _normalize_demo_text(demo.name)
+            if q in name or name in q:
                 return demo
+
+        q_tokens = set(q.split())
+        best: tuple[int, Demonstration] | None = None
+        for _, demo in self.list_demonstrations_with_indices():
+            name_tokens = set(_normalize_demo_text(demo.name).split())
+            if not name_tokens:
+                continue
+            score = len(q_tokens & name_tokens)
+            if score and score >= max(1, min(2, len(name_tokens))):
+                if best is None or score > best[0]:
+                    best = (score, demo)
+        if best is not None:
+            return best[1]
         return None
 
     def restore_demonstration(self, demo: Demonstration) -> None:
         """Load a previously persisted demonstration into memory (startup restore)."""
+        if demo.task_index <= 0:
+            demo.task_index = self._next_task_index
+        self._next_task_index = max(self._next_task_index, demo.task_index + 1)
         self._demos[demo.name] = demo
 
     def restore_observation(self, obs: Observation) -> None:
@@ -238,14 +367,7 @@ class TranscriptClient:
         try:
             async with McpClient(self._mcp) as client:
                 result = await client.call_tool(tool, args)
-            # FastMCP returns CallToolResult; .content is the list of items.
-            items = getattr(result, "content", None) or []
-            if items and hasattr(items[0], "text"):
-                try:
-                    return _json.loads(items[0].text)
-                except Exception:
-                    return items[0].text
-            return None
+            return parse_mcp_result(result)
         except Exception as exc:
             log.warning("transcript-mcp call %s failed: %s", tool, exc)
             return None

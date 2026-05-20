@@ -128,6 +128,27 @@ unclean exit. A heartbeat or TTL scan would close that gap; deferred
 until there's evidence it matters in practice. The issue's reproduction
 is wholly covered by participant disconnect.
 
+### 2026-05-19 — Move bounded glasses NAT tasks into custom function groups
+
+`agent-samples/glasses-agent-nat/` now registers custom NAT function groups for
+bounded LLM/tool work while keeping XR event loops and mutable session state in
+the worker. `glasses_agent_tools` exposes a composite `describe_current_view`
+tool to the request-time `tool_calling_agent`; `glasses_worker_tasks` keeps
+recording analysis, observation condensation, and guidance completion checks
+inside NAT but hidden from the LLM-facing tool surface. The worker still owns
+VAD/STT/TTS, background scheduling, recording/guidance lifecycle, and
+`AgentMemory`.
+
+### 2026-05-18 — Make the glasses NAT sample NAT-native
+
+`agent-samples/glasses-agent-nat/` now uses a YAML-defined NeMo Agent Toolkit
+workflow for request-time tool use. VLM, video, and transcript MCP endpoints
+are configured as NAT `mcp_client` function groups; only an LLM-facing glasses
+tool group is exposed to the `tool_calling_agent`, while transcript remains an
+internal persistence/query path for memory restore and summaries. This removes the
+sample-local advertised-tool router mismatch and intentionally pulls in the
+NAT LangChain and MCP plugins required by `tool_calling_agent`.
+
 ### 2026-05-18 — `nightly XR AI test` workflow on self-hosted `gpu` runner
 
 The `gpu`-marked pytest suite (`tests/test_gpu_*.py`,

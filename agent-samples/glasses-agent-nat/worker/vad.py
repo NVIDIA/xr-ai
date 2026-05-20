@@ -127,6 +127,16 @@ class VadDetector:
                 "Silero VAD unavailable (%s) — using adaptive energy VAD", exc
             )
 
+    def reset(self) -> None:
+        """Drop any in-progress utterance without emitting it."""
+        self._buffer.clear()
+        self._buffer_samples = 0
+        self._speech_s = 0.0
+        self._silent_s = 0.0
+        self._speaking = False
+        self._pre_roll.clear()
+        self._silero_buf = np.zeros(0, np.float32)
+
     async def feed(self, float32_bytes: bytes, sample_rate: int, n_samples: int) -> None:
         """Process one chunk of float32 LE PCM audio from the XR hub.
 
