@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import pathlib
@@ -30,6 +31,7 @@ import time
 
 import yaml
 from fastmcp import Client as McpClient
+from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from xr_ai_logging import setup_logging
 
@@ -96,6 +98,34 @@ async def _wait_for_all(probes_spec: dict[str, tuple]) -> None:
             log.info("still waiting for: %s", ", ".join(sorted(pending)))
             await asyncio.sleep(5.0)
 
+
+def _guard_langchain_tools(tools: list[BaseTool]) -> list[BaseTool]:
+    guarded: list[BaseTool] = []
+    for tool in tools:
+        if tool.name != "ask_image":
+            guarded.append(tool)
+            continue
+
+        async def _call_ask_image(_tool: BaseTool = tool, **kwargs):
+            path = kwargs.get("image_path", "")
+            if not isinstance(path, str) or not path or not os.path.isfile(path):
+                return json.dumps({
+                    "error": (
+                        f"File not found: {path!r}. "
+                        "Call get_latest_frame or get_frame_from_time first to get a valid path."
+                    )
+                })
+            return await _tool.ainvoke(kwargs)
+
+        guarded.append(StructuredTool.from_function(
+            coroutine=_call_ask_image,
+            name=tool.name,
+            description=tool.description,
+            args_schema=tool.args_schema,
+            infer_schema=False,
+        ))
+    return guarded
+
 # ── system prompt ─────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """\
@@ -108,7 +138,7 @@ CONTEXT PROVIDED EACH TURN:
 - Recent observations: timestamped timeline of what you've seen
 - Available demonstrations: labeled procedures that were recorded
 - Latest camera frame path (when available — use ask_image if you need to examine it)
-- Conversation history (last 4 turns)
+- Conversation history is maintained by the LangChain/LangGraph runtime
 
 CAPABILITIES:
 1. OBSERVE: Describe what the wearer is currently seeing using the latest frame
@@ -257,7 +287,7 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
                 "url": cfg.video_mcp.rstrip("/") + "/mcp",
             },
         })
-        langchain_tools = await langchain_mcp.get_tools()
+        langchain_tools = _guard_langchain_tools(await langchain_mcp.get_tools())
         log.info("LangChain MCP tools: %s", [
             getattr(tool, "name", repr(tool)) for tool in langchain_tools
         ])

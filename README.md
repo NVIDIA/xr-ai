@@ -3,7 +3,9 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-<!-- TODO: hero image -->
+<p align="center">
+  <img src="client-samples/ios-visionos/StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif" alt="XR-AI simulator feed showing live XR media streaming" width="840">
+</p>
 
 # xr-ai
 
@@ -296,7 +298,13 @@ uv run glasses_agent
 The LangChain variant keeps the same process stack and feature surface, but
 uses LangChain for the ordinary LLM/tool-calling loop. MCP tools are loaded
 with `langchain-mcp-adapters` so request-time tools are native LangChain tools
-rather than a sample-local schema wrapper:
+rather than a sample-local schema wrapper; LangGraph checkpointing carries
+bounded conversation state while middleware injects current XR context per turn
+and validates image-tool paths before VLM calls. Quick acknowledgements, demo
+analysis, guidance Q&A, and scene condensation use structured LangChain model
+calls. Recorded demonstrations are
+also numbered as tasks, so users can ask for guidance by name or by saying
+`task 1`, `task 2`, and so on:
 
 ```bash
 cd agent-samples/glasses-agent-langchain
@@ -304,8 +312,12 @@ uv sync
 uv run glasses_agent_langchain
 ```
 
-The NAT variant keeps LangChain out of the loop and wraps the ordinary
-LLM/tool-calling loop as a native NeMo Agent Toolkit function:
+The NAT variant keeps the same glasses behavior while moving bounded LLM/tool
+work into NeMo Agent Toolkit functions. VLM/video/transcript MCP tools are
+declared as NAT `mcp_client` function groups in YAML; request-time answering
+uses NAT `tool_calling_agent`, and recording analysis, observation
+condensation, guidance checks, and current-view description are registered NAT
+function-group tools:
 
 ```bash
 cd agent-samples/glasses-agent-nat

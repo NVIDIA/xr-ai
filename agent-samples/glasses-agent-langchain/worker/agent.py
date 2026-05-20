@@ -33,13 +33,15 @@ import wave
 
 import httpx
 import numpy as np
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 
 from xr_ai_agent import (
     AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint
 )
 
 from config import WorkerConfig
-from memory import AgentMemory, Observation, RecordedFrame, TranscriptClient
+from memory import AgentMemory, Observation, RecordedFrame, TranscriptClient, parse_mcp_result
 from processors import QueryProcessor
 from vad import VadDetector
 
@@ -50,6 +52,34 @@ log        = logging.getLogger("glasses_agent_langchain.agent")
 _trace_log = logging.getLogger("glasses_agent_langchain.trace")  # shared with glasses_agent_langchain_worker
 
 _DEFAULT_PID = "web-client"
+
+_CONDENSER_SCHEMA = {
+    "name": "scene_context_summary",
+    "description": "Condense smart-glasses observations into a concise scene summary.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "overview": {
+                "type": "string",
+                "description": "A 1-2 sentence scene summary.",
+            },
+            "events": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "timestamp_us": {"type": "integer"},
+                        "time": {"type": "string"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["timestamp_us", "time", "description"],
+                },
+                "description": "The 3-6 most significant timestamped events.",
+            },
+        },
+        "required": ["overview", "events"],
+    },
+}
 
 
 def _now_us() -> int:
@@ -252,7 +282,7 @@ class GlassesAgent:
         log.info("data query  pid=%r  %r", pid, text[:80])
         self._user_query_active = True
         try:
-            await self._qproc.handle(text, pid, ref_us)
+            await self._qproc.handle(text, pid, ref_us, source="data")
         finally:
             self._user_query_active = False
 
@@ -491,7 +521,7 @@ class GlassesAgent:
             "ask_image", {"question": question, "image_path": frame_path}
         )
 
-        # ask_image returns a str, but _parse_mcp_result may JSON-decode it
+        # ask_image returns a str, but parse_mcp_result may JSON-decode it
         # into {"result": "..."} if the content happens to be valid JSON.
         if isinstance(description, dict):
             description = (description.get("result") or description.get("text")
@@ -532,26 +562,15 @@ class GlassesAgent:
             description  = desc,
         )
 
-    def _parse_mcp_result(self, result) -> dict | str | None:
-        structured = getattr(result, "structured_content", None)
-        if structured is not None:
-            return structured
-        items = getattr(result, "content", None) or []
-        if items and hasattr(items[0], "text"):
-            try:
-                return json.loads(items[0].text)
-            except Exception:
-                return items[0].text
-        return None
-
     async def _call_vlm(self, tool: str, args: dict) -> dict | str | None:
         """Call a vlm-mcp tool using the persistent client."""
         if self._vlm_client is None:
             return None
         try:
-            return self._parse_mcp_result(
+            result = parse_mcp_result(
                 await self._vlm_client.call_tool(tool, args)
             )
+            return result if isinstance(result, (dict, str)) else None
         except Exception as exc:
             log.error("vlm-mcp %s failed: %s", tool, exc)
             return None
@@ -561,9 +580,10 @@ class GlassesAgent:
         if self._video_client is None:
             return None
         try:
-            return self._parse_mcp_result(
+            result = parse_mcp_result(
                 await self._video_client.call_tool(tool, args)
             )
+            return result if isinstance(result, (dict, str)) else None
         except Exception as exc:
             log.error("video-mcp %s failed: %s", tool, exc)
             return None
@@ -585,7 +605,6 @@ class GlassesAgent:
 
     async def _condense_observations(self) -> None:
         """Condense the last 20 observations into a timestamped structured summary."""
-        import json as _json
         recent = list(self._memory._observations)[-20:]
         if not recent:
             return
@@ -597,52 +616,39 @@ class GlassesAgent:
             for o in recent
         )
 
-        body = {
-            "model": "llm",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a scene context summarizer for smart glasses. "
-                        "Given a timeline of camera observations (each tagged with "
-                        "[HH:MM:SS|timestamp_us]), output ONLY valid JSON in this shape:\n"
-                        '{"overview":"1-2 sentence scene summary","events":['
-                        '{"timestamp_us":<int>,"time":"HH:MM:SS","description":"brief event"}]}\n'
-                        "Include only the 3-6 most significant events. "
-                        "Use the exact timestamp_us values from the input."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"Observations:\n{obs_text}",
-                },
-            ],
-            "max_tokens": 256,
-            "temperature": 0.1,
-        }
+        system_content = (
+            "You are a scene context summarizer for smart glasses. "
+            "Given a timeline of camera observations, produce a concise structured "
+            "summary with the 3-6 most significant events. Use the exact "
+            "timestamp_us values from the input."
+        )
         try:
-            resp = await asyncio.wait_for(
-                self._http.post(
-                    self._cfg.llm_server.rstrip("/") + "/v1/chat/completions",
-                    json=body,
-                ),
+            llm = ChatOpenAI(
+                base_url=self._cfg.llm_server.rstrip("/") + "/v1",
+                api_key="EMPTY",
+                model="llm",
+                temperature=0.1,
+                max_tokens=256,
+                timeout=20.0,
+                max_retries=0,
+            )
+            structured_model = llm.with_structured_output(
+                _CONDENSER_SCHEMA,
+                include_raw=True,
+            )
+            result = await asyncio.wait_for(
+                structured_model.ainvoke([
+                    SystemMessage(content=system_content),
+                    HumanMessage(content=f"Observations:\n{obs_text}"),
+                ]),
                 timeout=20.0,
             )
-            if resp.is_error:
-                log.warning("condenser LLM %d: %s", resp.status_code, resp.text[:200])
+            structured = result.get("parsed") if isinstance(result, dict) else result
+            if not isinstance(structured, dict):
+                raw = result.get("raw") if isinstance(result, dict) else None
+                text = getattr(raw, "text", "") if raw is not None else ""
+                log.warning("condenser structured output failed: %s", text[:200])
                 return
-
-            raw = resp.json()["choices"][0]["message"]["content"].strip()
-            # Strip markdown fences if the model wrapped the JSON.
-            if raw.startswith("```"):
-                raw = raw.split("```")[1].lstrip("json").strip()
-
-            try:
-                structured = _json.loads(raw)
-            except Exception:
-                # Fallback: treat as plain text summary (no timestamps).
-                log.warning("condenser output not JSON — storing as plain text")
-                structured = {"overview": raw, "events": []}
 
             overview = structured.get("overview", "").strip()
             events   = structured.get("events", [])
@@ -668,7 +674,7 @@ class GlassesAgent:
                 self._transcript.add_entry(
                     self._cfg.transcript_source + ":scene_summary",
                     ts,
-                    _json.dumps(structured),
+                    json.dumps(structured),
                 )
             )
 

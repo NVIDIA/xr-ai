@@ -4,8 +4,8 @@
 """
 AgentMemory — in-process timeline of observations and recorded demonstrations.
 
-Also provides TranscriptClient, a thin HTTP client for the transcript-mcp
-server (source: add_entry / query_recent via FastMCP tool calls).
+Also provides TranscriptClient, a thin wrapper around the NAT transcript-mcp
+function group for source-scoped persistence and queries.
 """
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-import json as _json
-
-from fastmcp import Client as McpClient
+if TYPE_CHECKING:
+    from nat_runtime import NatRuntime
 
 log = logging.getLogger("glasses_agent_nat.memory")
 
@@ -229,23 +229,15 @@ class AgentMemory:
 # ── TranscriptClient ──────────────────────────────────────────────────────────
 
 class TranscriptClient:
-    """Client for transcript-mcp via FastMCP StreamableHTTP transport."""
+    """Client for transcript-mcp via the NAT MCP function group."""
 
-    def __init__(self, base_url: str) -> None:
-        self._mcp = base_url.rstrip("/") + "/mcp"
+    def __init__(self, runtime: NatRuntime) -> None:
+        self._runtime = runtime
 
     async def _call(self, tool: str, args: dict) -> dict | list | None:
         try:
-            async with McpClient(self._mcp) as client:
-                result = await client.call_tool(tool, args)
-            # FastMCP returns CallToolResult; .content is the list of items.
-            items = getattr(result, "content", None) or []
-            if items and hasattr(items[0], "text"):
-                try:
-                    return _json.loads(items[0].text)
-                except Exception:
-                    return items[0].text
-            return None
+            result = await self._runtime.call_tool("transcript_mcp", tool, args)
+            return result if isinstance(result, dict | list) else None
         except Exception as exc:
             log.warning("transcript-mcp call %s failed: %s", tool, exc)
             return None

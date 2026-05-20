@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import json
 import logging
 import time
 import wave
@@ -40,6 +39,7 @@ from xr_ai_agent import (
 
 from config import WorkerConfig
 from memory import AgentMemory, Observation, RecordedFrame, TranscriptClient
+from nat_runtime import NatRuntime
 from processors import QueryProcessor
 from vad import VadDetector
 
@@ -106,8 +106,7 @@ class GlassesAgent:
     query_processor:   QueryProcessor — handles transcribed utterances.
     stt_url:           STT server base URL (OpenAI-compatible /v1/audio/transcriptions).
     tts_url:           TTS server base URL (OpenAI-compatible /v1/audio/speech).
-    vlm_mcp_url:       vlm-mcp base URL — used by the background VLM loop.
-    video_mcp_url:     video-mcp base URL — used by the background VLM loop.
+    nat_runtime:       Shared NAT workflow/runtime for MCP-backed tools.
     """
 
     def __init__(
@@ -119,8 +118,7 @@ class GlassesAgent:
         *,
         stt_url:      str,
         tts_url:      str,
-        vlm_client,         # fastmcp.Client already open (shared with QueryProcessor)
-        video_client,       # fastmcp.Client already open (shared with QueryProcessor)
+        nat_runtime:  NatRuntime,
     ) -> None:
         self._cfg               = cfg
         self._memory            = memory
@@ -128,8 +126,7 @@ class GlassesAgent:
         self._qproc             = query_processor
         self._stt_url           = stt_url.rstrip("/")
         self._tts_url           = tts_url.rstrip("/")
-        self._vlm_client        = vlm_client
-        self._video_client      = video_client
+        self._nat_runtime       = nat_runtime
 
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
         self._ep.on_audio(self._on_audio)
@@ -152,6 +149,7 @@ class GlassesAgent:
 
         # Flag to pause background VLM loop when a user query is in flight.
         self._user_query_active = False
+        self._audio_suppressed_until_us = 0
 
         # Last observed frame timestamp and description (observation loop).
         # Instance variables so they can be reset on participant reconnect.
@@ -194,8 +192,20 @@ class GlassesAgent:
 
     async def _on_audio(self, chunk: AudioChunk) -> None:
         pid = chunk.participant_id or _DEFAULT_PID
+        if self._should_suppress_audio():
+            vad = self._vad.get(pid)
+            if vad is not None:
+                vad.reset()
+            return
         vad = self._get_vad(pid)
         await vad.feed(chunk.data, chunk.sample_rate, chunk.samples)
+
+    def _should_suppress_audio(self) -> bool:
+        return self._user_query_active or _now_us() < self._audio_suppressed_until_us
+
+    def _suppress_audio_for(self, seconds: float) -> None:
+        until = _now_us() + int(seconds * 1_000_000)
+        self._audio_suppressed_until_us = max(self._audio_suppressed_until_us, until)
 
     def _get_vad(self, pid: str) -> VadDetector:
         if pid not in self._vad:
@@ -211,6 +221,9 @@ class GlassesAgent:
 
     async def _handle_utterance(self, pid: str, pcm_bytes: bytes, sample_rate: int) -> None:
         """STT-transcribe a finalized utterance, then dispatch to QueryProcessor."""
+        if self._should_suppress_audio():
+            log.debug("ignoring utterance during assistant response")
+            return
         ref_us = _now_us()
         wav    = _chunks_to_wav(pcm_bytes, sample_rate)
         try:
@@ -237,6 +250,7 @@ class GlassesAgent:
             await self._qproc.handle(text, pid, ref_us)
         finally:
             self._user_query_active = False
+            self._suppress_audio_for(1.5)
 
     # ── data path: text → QueryProcessor ─────────────────────────────────────
 
@@ -255,6 +269,7 @@ class GlassesAgent:
             await self._qproc.handle(text, pid, ref_us)
         finally:
             self._user_query_active = False
+            self._suppress_audio_for(1.5)
 
     # ── participant tracking ──────────────────────────────────────────────────
 
@@ -491,8 +506,8 @@ class GlassesAgent:
             "ask_image", {"question": question, "image_path": frame_path}
         )
 
-        # ask_image returns a str, but _parse_mcp_result may JSON-decode it
-        # into {"result": "..."} if the content happens to be valid JSON.
+        # ask_image returns a str, but the NAT runtime may JSON-decode it into
+        # {"result": "..."} if the content happens to be valid JSON.
         if isinstance(description, dict):
             description = (description.get("result") or description.get("text")
                           or next(iter(description.values()), ""))
@@ -532,38 +547,18 @@ class GlassesAgent:
             description  = desc,
         )
 
-    def _parse_mcp_result(self, result) -> dict | str | None:
-        structured = getattr(result, "structured_content", None)
-        if structured is not None:
-            return structured
-        items = getattr(result, "content", None) or []
-        if items and hasattr(items[0], "text"):
-            try:
-                return json.loads(items[0].text)
-            except Exception:
-                return items[0].text
-        return None
-
     async def _call_vlm(self, tool: str, args: dict) -> dict | str | None:
-        """Call a vlm-mcp tool using the persistent client."""
-        if self._vlm_client is None:
-            return None
+        """Call a vlm-mcp tool through NAT."""
         try:
-            return self._parse_mcp_result(
-                await self._vlm_client.call_tool(tool, args)
-            )
+            return await self._nat_runtime.call_tool("vlm_mcp", tool, args)
         except Exception as exc:
             log.error("vlm-mcp %s failed: %s", tool, exc)
             return None
 
     async def _call_video(self, tool: str, args: dict) -> dict | str | None:
-        """Call a video-mcp tool using the persistent client."""
-        if self._video_client is None:
-            return None
+        """Call a video-mcp tool through NAT."""
         try:
-            return self._parse_mcp_result(
-                await self._video_client.call_tool(tool, args)
-            )
+            return await self._nat_runtime.call_tool("video_mcp", tool, args)
         except Exception as exc:
             log.error("video-mcp %s failed: %s", tool, exc)
             return None
@@ -584,80 +579,47 @@ class GlassesAgent:
                 log.exception("memory condenser error")
 
     async def _condense_observations(self) -> None:
-        """Condense the last 20 observations into a timestamped structured summary."""
+        """Condense the last 20 observations through the NAT worker task group."""
         import json as _json
         recent = list(self._memory._observations)[-20:]
         if not recent:
             return
 
-        # Include timestamp_us so the LLM can echo them back in the JSON output.
-        obs_text = "\n".join(
-            f"  [{time.strftime('%H:%M:%S', time.localtime(o.timestamp_us / 1e6))}|{o.timestamp_us}]  "
-            f"{o.description}"
-            for o in recent
-        )
-
-        body = {
-            "model": "llm",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a scene context summarizer for smart glasses. "
-                        "Given a timeline of camera observations (each tagged with "
-                        "[HH:MM:SS|timestamp_us]), output ONLY valid JSON in this shape:\n"
-                        '{"overview":"1-2 sentence scene summary","events":['
-                        '{"timestamp_us":<int>,"time":"HH:MM:SS","description":"brief event"}]}\n'
-                        "Include only the 3-6 most significant events. "
-                        "Use the exact timestamp_us values from the input."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"Observations:\n{obs_text}",
-                },
-            ],
-            "max_tokens": 256,
-            "temperature": 0.1,
-        }
         try:
-            resp = await asyncio.wait_for(
-                self._http.post(
-                    self._cfg.llm_server.rstrip("/") + "/v1/chat/completions",
-                    json=body,
+            structured = await asyncio.wait_for(
+                self._nat_runtime.call_tool(
+                    "glasses_worker_tasks",
+                    "condense_observations",
+                    {
+                        "observations": [
+                            {
+                                "timestamp_us": o.timestamp_us,
+                                "description": o.description,
+                            }
+                            for o in recent
+                        ]
+                    },
                 ),
                 timeout=20.0,
             )
-            if resp.is_error:
-                log.warning("condenser LLM %d: %s", resp.status_code, resp.text[:200])
+            if not isinstance(structured, dict):
                 return
-
-            raw = resp.json()["choices"][0]["message"]["content"].strip()
-            # Strip markdown fences if the model wrapped the JSON.
-            if raw.startswith("```"):
-                raw = raw.split("```")[1].lstrip("json").strip()
-
-            try:
-                structured = _json.loads(raw)
-            except Exception:
-                # Fallback: treat as plain text summary (no timestamps).
-                log.warning("condenser output not JSON — storing as plain text")
-                structured = {"overview": raw, "events": []}
 
             overview = structured.get("overview", "").strip()
             events   = structured.get("events", [])
+            summary_text = structured.get("summary_text", "").strip()
 
-            if not overview:
+            if not overview and not summary_text:
                 return
 
-            # Build the formatted text that goes into the LLM context.
-            lines = [overview]
-            for ev in events:
-                ts_us = ev.get("timestamp_us", 0)
-                hms   = ev.get("time", "")
-                desc  = ev.get("description", "")
-                lines.append(f"  [{hms} | {ts_us} µs] {desc}")
-            summary_text = "\n".join(lines)
+            if not summary_text:
+                lines = [overview]
+                for ev in events:
+                    ts_us = ev.get("timestamp_us", 0)
+                    hms   = ev.get("time", "")
+                    desc  = ev.get("description", "")
+                    lines.append(f"  [{hms} | {ts_us} us] {desc}")
+                summary_text = "\n".join(lines)
 
             self._memory.update_scene_summary(summary_text)
             _trace_log.info("CONDENSER  %s", summary_text.replace("\n", " | "))
@@ -693,6 +655,7 @@ class GlassesAgent:
     async def say(self, pid: str, text: str) -> None:
         """TTS → send audio back to participant."""
         try:
+            self._suppress_audio_for(max(2.0, min(8.0, len(text) / 18.0)))
             resp = await self._http.post(
                 self._tts_url + "/v1/audio/speech",
                 json={"input": text, "response_format": "wav"},
@@ -704,6 +667,7 @@ class GlassesAgent:
             wav = resp.content
             for chunk in _wav_to_chunks(wav, pid):
                 await self._ep.send_return_audio(chunk)
+            self._suppress_audio_for(1.5)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

@@ -8,8 +8,8 @@ Flow per utterance:
   1. Demo-mode detection (start / end / guidance request / guidance advance).
   2. _quick_ack() — fast Llama-Nemotron call: spoken ack + think=True/False.
   3. _agentic_loop() — LangChain agent loop over the existing MCP tools:
-       - Pre-fetch latest frame concurrently while building context.
-       - Context = memory.build_context() + frame path + conversation history.
+       - Pre-fetch latest frame concurrently while building runtime context.
+       - Context = AgentMemory snapshot + frame path via LangChain middleware.
        - Tools: ask_image (vlm-mcp), get_frame_from_time / get_video_stats /
                 list_recorded_participants (video-mcp).
        - Finish: LLM text response → TTS + data message to participant.
@@ -28,17 +28,32 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import string
 import time
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-import httpx
 from fastmcp import Client as McpClient
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware, AgentState, ModelRequest, ModelResponse
+from langchain_core.messages import HumanMessage, RemoveMessage, SystemMessage
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.runtime import Runtime
 
 from config import WorkerConfig
-from memory import AgentMemory, Demonstration, DemoStep, Observation, VoiceNote
+from memory import (
+    AgentMemory,
+    Demonstration,
+    DemoStep,
+    MemorySnapshot,
+    Observation,
+    VoiceNote,
+    parse_mcp_result,
+)
 
 log = logging.getLogger("glasses_agent_langchain.processors")
 
@@ -84,6 +99,7 @@ _DEMO_START_PHRASES = (
 _DEMO_END_PHRASES = (
     "that's it",
     "stop recording",
+    "finish recording",
     "end demonstration",
     "finished",
     "end recording",
@@ -125,37 +141,235 @@ _GUIDANCE_DONE_PHRASES = (
     "cancel",
 )
 
+_TASK_NUMBER_WORDS = {
+    "one": 1,
+    "first": 1,
+    "two": 2,
+    "second": 2,
+    "three": 3,
+    "third": 3,
+    "four": 4,
+    "fourth": 4,
+    "five": 5,
+    "fifth": 5,
+    "six": 6,
+    "sixth": 6,
+    "seven": 7,
+    "seventh": 7,
+    "eight": 8,
+    "eighth": 8,
+    "nine": 9,
+    "ninth": 9,
+    "ten": 10,
+    "tenth": 10,
+}
+
 _AGENT_RESPONSE_TOPIC = "agent.response"
 _AGENT_PROGRESS_TOPIC = "agent.progress"
+_HISTORY_TURNS = 4
+
+_QUICK_ACK_SCHEMA = {
+    "name": "quick_ack_decision",
+    "description": "Return a spoken acknowledgement and whether the request needs deeper thinking.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "ack": {
+                "type": "string",
+                "description": "A short natural spoken acknowledgement, 3-6 words.",
+            },
+            "think": {
+                "type": "boolean",
+                "description": "True if the request needs the large reasoning/tool agent.",
+            },
+        },
+        "required": ["ack", "think"],
+    },
+}
+
+_DEMO_ANALYSIS_SCHEMA = {
+    "name": "demo_analysis",
+    "description": "Summarize a recorded demonstration into voice-grounded instructions.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "overview": {
+                "type": "string",
+                "description": "One sentence describing the demonstrated procedure.",
+            },
+            "steps": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Chronological action steps grounded in voice notes.",
+            },
+        },
+        "required": ["overview", "steps"],
+    },
+}
+
+_GUIDANCE_RESPONSE_SCHEMA = {
+    "name": "guidance_response",
+    "description": "Answer a user's question while they are following a guidance step.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "reply": {
+                "type": "string",
+                "description": "A direct 1-2 sentence spoken answer.",
+            },
+        },
+        "required": ["reply"],
+    },
+}
 
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
 
 
-def _extract_json(text: str) -> str | None:
-    depth, start, in_string, escape = 0, -1, False, False
-    for i, ch in enumerate(text):
-        if in_string:
-            if escape:        escape = False
-            elif ch == "\\": escape = True
-            elif ch == '"':  in_string = False
-            continue
-        if ch == '"':   in_string = True; continue
-        if ch == "{":
-            if depth == 0: start = i
-            depth += 1
-        elif ch == "}":
-            if depth == 0: continue
-            depth -= 1
-            if depth == 0 and start >= 0:
-                return text[start:i + 1]
-    return None
-
-
 # ── QueryProcessor ────────────────────────────────────────────────────────────
 
 SendTextCb = Callable[[str, str, str], Awaitable[None]]  # (pid, text, topic)
+
+
+@dataclass(frozen=True)
+class GlassesRuntimeContext:
+    memory_snapshot:      MemorySnapshot
+    pid:                  str
+    ref_us:               int
+    needs_thinking:       bool = False
+    recording_name:       str | None = None
+    guidance_instruction: str | None = None
+    guidance_step:        int = 0
+    guidance_total:       int = 0
+    frame_path:           str | None = None
+    frame_description:    str | None = None
+
+
+class GuidanceTaskResolver:
+    """Pure helpers for deterministic task-number and task-name matching."""
+
+    @staticmethod
+    def extract_task_index(text: str) -> int | None:
+        lower = text.lower()
+        patterns = (
+            r"\btask\s*(\d+)\b",
+            r"\bnumber\s*(\d+)\b",
+            r"\btask\s+([a-z]+)\b",
+            r"\b([a-z]+)\s+task\b",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, lower)
+            if not match:
+                continue
+            value = match.group(1)
+            if value.isdigit():
+                return int(value)
+            if value in _TASK_NUMBER_WORDS:
+                return _TASK_NUMBER_WORDS[value]
+        stripped = lower.strip()
+        if stripped.isdigit():
+            return int(stripped)
+        return _TASK_NUMBER_WORDS.get(stripped)
+
+    @staticmethod
+    def strip_task_number_prefix(text: str) -> str:
+        text = re.sub(r"^\s*for\s+", "", text.strip())
+        text = re.sub(r"^\s*task\s+\d+\s+", "", text)
+        text = re.sub(
+            r"^\s*task\s+(" + "|".join(_TASK_NUMBER_WORDS) + r")\s+",
+            "",
+            text,
+        )
+        text = re.sub(r"^\s*task\s+", "", text)
+        return text.strip()
+
+
+def _format_glasses_runtime_context(ctx: GlassesRuntimeContext) -> str:
+    parts = [ctx.memory_snapshot.to_system_message().content]
+
+    if ctx.recording_name:
+        parts.append(f"[Recording active — demo: {ctx.recording_name!r}]")
+
+    if ctx.guidance_instruction:
+        parts.append(
+            f"[Guidance mode — step {ctx.guidance_step} of {ctx.guidance_total}]\n"
+            f"Current instruction: {ctx.guidance_instruction}\n"
+            "Help the user complete THIS step. Be concise and direct."
+        )
+
+    if ctx.pid:
+        parts.append(f"Participant: {ctx.pid}")
+    if ctx.ref_us:
+        parts.append(f"Reference time (when user spoke): {ctx.ref_us} µs")
+
+    if ctx.frame_path:
+        if ctx.frame_description:
+            parts.append(
+                f"[Current camera view — fresh as of this turn]\n{ctx.frame_description}\n"
+                f"(image path for ask_image: {ctx.frame_path})"
+            )
+        else:
+            parts.append(f"[Latest camera frame]\n{ctx.frame_path}")
+
+    return "\n\n".join(parts)
+
+
+def _trim_to_recent_turns(messages: list[Any]) -> list[Any] | None:
+    human_seen = 0
+    keep_from = 0
+    for idx in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[idx], HumanMessage):
+            human_seen += 1
+            if human_seen == _HISTORY_TURNS:
+                keep_from = idx
+                break
+    if human_seen < _HISTORY_TURNS or keep_from == 0:
+        return None
+    return [RemoveMessage(id=REMOVE_ALL_MESSAGES), *messages[keep_from:]]
+
+
+class _GlassesAgentMiddleware(AgentMiddleware[AgentState, GlassesRuntimeContext]):
+    def __init__(self, model_factory: Callable[[bool], ChatOpenAI]) -> None:
+        self._model_factory = model_factory
+
+    def before_model(
+        self, state: AgentState, runtime: Runtime[GlassesRuntimeContext]
+    ) -> dict[str, Any] | None:
+        trimmed = _trim_to_recent_turns(state["messages"])
+        if trimmed is None:
+            return None
+        return {"messages": trimmed}
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest[GlassesRuntimeContext],
+        handler: Callable[[ModelRequest[GlassesRuntimeContext]], Awaitable[ModelResponse[Any]]],
+    ) -> ModelResponse[Any]:
+        runtime_context = request.runtime.context
+        needs_thinking = bool(runtime_context and runtime_context.needs_thinking)
+
+        base_prompt = request.system_prompt or ""
+        if needs_thinking:
+            base_prompt = (
+                "Use your private <think> block to reason through the question. "
+                "NEVER output these thoughts in your final response - "
+                "only output a concise 1-3 sentence answer for the wearer.\n\n"
+                + base_prompt
+            )
+
+        if runtime_context is not None:
+            base_prompt = (
+                f"{base_prompt}\n\n"
+                "[Runtime XR context — use this before calling tools]\n"
+                f"{_format_glasses_runtime_context(runtime_context)}"
+            )
+
+        request = request.override(
+            model=self._model_factory(needs_thinking),
+            system_message=SystemMessage(content=base_prompt),
+        )
+        return await handler(request)
 
 
 class QueryProcessor:
@@ -168,7 +382,7 @@ class QueryProcessor:
         vlm_client:   McpClient,
         video_client: McpClient,
         system_prompt: str,
-        langchain_tools: list[Any],
+        langchain_tools: list[BaseTool],
         *,
         send_text:    SendTextCb,
         say:          Callable[[str, str], Awaitable[None]],   # (pid, text)
@@ -180,13 +394,11 @@ class QueryProcessor:
         self._system_prompt = system_prompt
         self._send_text    = send_text
         self._say          = say
-        self._http         = httpx.AsyncClient(timeout=180.0)
+        self._last_turn_by_pid: dict[str, tuple[str, str]] = {}
 
-        self._history:     list[tuple[str, str]] = []
-        self._history_max  = 4
-
-        self._langchain_tools:  list[Any] = langchain_tools
-        self._langchain_agents: dict[bool, Any]      = {}
+        self._langchain_tools:  list[BaseTool] = langchain_tools
+        self._langchain_agent_graph: Any | None = None
+        self._checkpointer = InMemorySaver()
 
         # Guidance mode state.
         self._guidance_demo: Demonstration | None = None
@@ -196,12 +408,15 @@ class QueryProcessor:
         self._guidance_step_obs_baseline:   int = 0
         self._guidance_monitor_idle_cycles: int = 0
         self._guidance_consecutive_yes:     int = 0  # consecutive 2-frame YES responses
+        self._pending_guidance_query_by_pid: dict[str, str] = {}
 
     async def handle(
         self,
         transcript: str,
         pid:        str,
         ref_us:     int,
+        *,
+        source:      str = "voice",
     ) -> None:
         """Entry point: dispatch one transcribed utterance."""
         text  = transcript.strip()
@@ -222,6 +437,16 @@ class QueryProcessor:
             _trace_log.info("DEMOS_CLEARED  count=%d", n)
             return
 
+        pending_key = pid or "default"
+        if pending_key in self._pending_guidance_query_by_pid:
+            demo = self._resolve_guidance_demo(lower)
+            if demo is not None:
+                self._pending_guidance_query_by_pid.pop(pending_key, None)
+                await self._start_guidance_demo(demo, pid)
+            else:
+                await self._ask_for_task_number(pid)
+            return
+
         # ── demo-end detection ───────────────────────────────────────────────
         if self._memory.recording and self._is_demo_end(lower):
             # If the utterance contains narration before the stop phrase, save it.
@@ -239,6 +464,9 @@ class QueryProcessor:
 
         # ── voice narration during recording ─────────────────────────────────
         if self._memory.recording is not None:
+            if source != "voice":
+                await self._answer_query_during_recording(text, pid, ref_us)
+                return
             import os as _os, json as _json, re as _re
             note = VoiceNote(timestamp_us=ref_us, text=text)
             self._memory.add_voice_note(note)
@@ -247,9 +475,10 @@ class QueryProcessor:
             rec      = self._memory.recording
             run_dir  = _os.environ.get("XR_RUN_DIR", "/tmp")
             safe     = _re.sub(r"[^a-zA-Z0-9_-]", "_", rec.name)[:40]
-            log_path = _os.path.join(run_dir, "recordings",
-                                     f"{safe}_{rec.started_at_us}.jsonl")
+            log_dir  = _os.path.join(run_dir, "recordings")
+            log_path = _os.path.join(log_dir, f"{safe}_{rec.started_at_us}.jsonl")
             try:
+                _os.makedirs(log_dir, exist_ok=True)
                 with open(log_path, "a", encoding="utf-8") as fh:
                     fh.write(_json.dumps({
                         "type":    "voice",
@@ -286,10 +515,12 @@ class QueryProcessor:
 
         # ── ordinary query ────────────────────────────────────────────────────
         try:
-            ack, needs_thinking = await self._quick_ack(text)
+            ack, needs_thinking = await self._quick_ack(text, pid)
         except Exception:
             log.exception("quick-ack failed")
             ack, needs_thinking = "", False
+        if not ack:
+            ack, needs_thinking = self._fallback_ack(text)
 
         if ack:
             await self._send_text(pid, ack, _AGENT_PROGRESS_TOPIC)
@@ -305,9 +536,7 @@ class QueryProcessor:
             response = "Something went wrong — please try again."
 
         if response:
-            self._history.append((text, response))
-            if len(self._history) > self._history_max:
-                self._history.pop(0)
+            self._last_turn_by_pid[pid or "default"] = (text, response)
             await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
             await self._say(pid, response)
 
@@ -332,12 +561,21 @@ class QueryProcessor:
             if phrase in lower:
                 # Everything after the triggering phrase is the name.
                 after = lower.split(phrase, 1)[1].strip().rstrip(string.punctuation).strip()
+                after = self._strip_task_number_prefix(after)
                 if after and len(after) > 2:
                     return after
                 # Bare trigger ("watch me") — generate a name from timestamp.
                 ts = time.strftime("%H%M%S")
                 return f"demo-{ts}"
         return None
+
+    @staticmethod
+    def _extract_task_index(text: str) -> int | None:
+        return GuidanceTaskResolver.extract_task_index(text)
+
+    @staticmethod
+    def _strip_task_number_prefix(text: str) -> str:
+        return GuidanceTaskResolver.strip_task_number_prefix(text)
 
     def _match_guidance_request(self, lower: str) -> str | None:
         """Return the user query if a guidance phrase is detected, else None."""
@@ -363,17 +601,44 @@ class QueryProcessor:
                 return True
         return False
 
+    async def _answer_query_during_recording(self, text: str, pid: str, ref_us: int) -> None:
+        recording = self._memory.recording
+        response_prefix = (
+            f"[Recording active — demo: {recording.name!r}]\n"
+            "Answer this typed question, but do not treat it as demo narration.\n\n"
+            if recording else ""
+        )
+        ack, _ = self._fallback_ack(text)
+        await self._send_text(pid, ack, _AGENT_PROGRESS_TOPIC)
+        await self._say(pid, ack)
+        try:
+            response = await self._agentic_loop(
+                response_prefix + text,
+                pid,
+                ref_us=ref_us,
+                needs_thinking=True,
+            )
+        except Exception:
+            log.exception("recording data query failed")
+            response = "Something went wrong — please try again."
+        if response:
+            await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
+            await self._say(pid, response)
+
     # ── demo actions ──────────────────────────────────────────────────────────
 
     async def _handle_demo_start(self, name: str, pid: str) -> None:
         self._memory.start_recording(name)
+        task_index = self._memory.recording.task_index if self._memory.recording else 0
         response = (
-            f"Recording '{name}'. Go ahead and demonstrate — "
+            f"Okay, start recording task {task_index}: '{name}'. Go ahead and demonstrate — "
             "I'm watching your hands and will capture each step."
         )
+        await self._send_text(pid, response, _AGENT_PROGRESS_TOPIC)
         await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
         await self._say(pid, response)
-        _trace_log.info("DEMO_START  name=%s", name)
+        log.info("demo start response  pid=%r  %s", pid, response)
+        _trace_log.info("DEMO_START  task=%d  name=%s", task_index, name)
 
     async def _handle_demo_end(self, pid: str, ref_us: int) -> None:
         demo = self._memory.finish_recording()
@@ -392,7 +657,12 @@ class QueryProcessor:
             return
 
         n_frames = len(demo.recorded_frames)
-        _trace_log.info("DEMO_END  name=%s  frames=%d", demo.name, n_frames)
+        _trace_log.info(
+            "DEMO_END  task=%d  name=%s  frames=%d",
+            demo.task_index,
+            demo.name,
+            n_frames,
+        )
 
         await self._send_text(
             pid, f"Got it — {n_frames} frames captured. Analyzing now…",
@@ -476,11 +746,14 @@ class QueryProcessor:
         _trace_log.info("DEMO_INSTRUCTIONS  %s",
                         " | ".join(f"{i+1}:{s[:40]}" for i, s in enumerate(instructions)))
 
-        response = f"Saved '{demo.name}' with {n} steps."
+        response = f"Saved task {demo.task_index} '{demo.name}' with {n} steps."
         if overview:
             response += f" {overview}"
         await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
-        await self._say(pid, f"Saved demonstration '{demo.name}' with {n} steps.")
+        await self._say(
+            pid,
+            f"Saved task {demo.task_index}, '{demo.name}', with {n} steps.",
+        )
 
     async def _analyze_recording(
         self, demo: Demonstration
@@ -581,61 +854,44 @@ class QueryProcessor:
             '{"overview": "one sentence", "steps": ["step 1", "step 2", ...]}'
         )
 
-        messages: list[dict] = [
-            {"role": "system", "content": system_content},
-            {
-                "role": "user",
-                "content": (
-                    f"Demo: {demo.name!r}\n\n"
-                    f"Timeline ({len(timeline)} entries):\n\n"
-                    f"{desc_block}\n\n"
-                    "Output the JSON."
-                ),
-            },
-        ]
-
-        for iteration in range(1):  # single-shot: no tools, just synthesize
-            body = {
-                "model":       "llm",
-                "messages":    messages,
-                "max_tokens":  1024,
-                "temperature": 0.0,
-                # Thinking disabled: with tools + thinking the model consumes its
-                # entire token budget on internal reasoning and returns empty content.
-                "chat_template_kwargs": {"enable_thinking": False},
-            }
-            try:
-                resp = await asyncio.wait_for(
-                    self._http.post(
-                        self._cfg.agent_llm_server.rstrip("/") + "/v1/chat/completions",
-                        json=body,
-                    ),
-                    timeout=90.0,
+        user_content = (
+            f"Demo: {demo.name!r}\n\n"
+            f"Timeline ({len(timeline)} entries):\n\n"
+            f"{desc_block}\n\n"
+            "Return the structured overview and steps."
+        )
+        try:
+            structured = self._agent_llm(
+                needs_thinking=False,
+                max_tokens=1024,
+                timeout=90.0,
+            ).with_structured_output(_DEMO_ANALYSIS_SCHEMA, include_raw=True)
+            result = await asyncio.wait_for(
+                structured.ainvoke([
+                    SystemMessage(content=system_content),
+                    HumanMessage(content=user_content),
+                ]),
+                timeout=90.0,
+            )
+            obj = result.get("parsed") if isinstance(result, dict) else result
+            if isinstance(obj, dict):
+                overview = str(obj.get("overview", "")).strip()
+                steps = [
+                    str(step).strip()
+                    for step in obj.get("steps", [])
+                    if str(step).strip()
+                ]
+                _trace_log.info(
+                    "ANALYSIS_RESULT  overview=%s  steps=%d",
+                    overview[:120],
+                    len(steps),
                 )
-                if resp.is_error:
-                    log.error("analysis LLM %d: %s", resp.status_code, resp.text[:300])
-                    break
-            except Exception:
-                log.exception("analysis LLM call failed iteration %d", iteration)
-                break
-
-            raw       = (resp.json()["choices"][0]["message"].get("content") or "").strip()
-            _trace_log.info("ANALYSIS_RAW  len=%d  raw=%s", len(raw), raw[:300])
-            content   = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
-            search_in = content if content else raw
-
-            _trace_log.info("ANALYSIS_RESULT  %s", search_in[:300])
-            json_str = _extract_json(search_in)
-            if json_str:
-                try:
-                    obj      = json.loads(json_str)
-                    overview = obj.get("overview", "").strip()
-                    steps    = [str(s).strip() for s in obj.get("steps", [])
-                                if str(s).strip()]
-                    return overview, steps
-                except Exception:
-                    pass
-            log.warning("analysis: JSON parse failed: %s", search_in[:300])
+                return overview, steps
+            raw = result.get("raw") if isinstance(result, dict) else None
+            raw_text = self._message_text(raw) if raw is not None else ""
+            log.warning("analysis structured output failed: %s", raw_text[:300])
+        except Exception:
+            log.exception("analysis LLM call failed")
 
         return "", []
 
@@ -643,18 +899,44 @@ class QueryProcessor:
 
     async def _handle_guidance_request(self, query: str, pid: str) -> None:
         """Find a matching demo and enter guidance mode."""
-        # Look for a demo name mentioned in the query, or use the first available.
-        demo = self._memory.find_demonstration_fuzzy(query)
+        demo = self._resolve_guidance_demo(query)
         if demo is None:
-            demos = self._memory.list_demonstrations()
-            if demos:
-                demo = self._memory.get_demonstration(demos[0])
-        if demo is None:
-            response = "I don't have any recorded demonstrations yet. Show me first!"
+            if not self._memory.list_demonstrations_with_indices():
+                response = "I don't have any recorded demonstrations yet. Show me first!"
+                await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
+                await self._say(pid, response)
+                return
+            self._pending_guidance_query_by_pid[pid or "default"] = query
+            await self._ask_for_task_number(pid)
+            return
+
+        if not demo.steps:
+            response = f"The demonstration '{demo.name}' has no steps recorded."
             await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
             await self._say(pid, response)
             return
 
+        await self._start_guidance_demo(demo, pid)
+
+    def _resolve_guidance_demo(self, query: str) -> Demonstration | None:
+        task_index = self._extract_task_index(query)
+        if task_index is not None:
+            return self._memory.get_demonstration_by_task_index(task_index)
+        return self._memory.find_demonstration_fuzzy(query)
+
+    async def _ask_for_task_number(self, pid: str) -> None:
+        demos = self._memory.list_demonstrations_with_indices()
+        if not demos:
+            response = "I don't have any recorded demonstrations yet. Show me first!"
+        else:
+            choices = ", ".join(
+                f"task {idx} -- {demo.name}" for idx, demo in demos
+            )
+            response = f"Please tell me the task number: {choices}."
+        await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
+        await self._say(pid, response)
+
+    async def _start_guidance_demo(self, demo: Demonstration, pid: str) -> None:
         if not demo.steps:
             response = f"The demonstration '{demo.name}' has no steps recorded."
             await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
@@ -669,7 +951,12 @@ class QueryProcessor:
 
         self._guidance_demo = demo
         self._guidance_step = 0
-        _trace_log.info("GUIDANCE_START  demo=%s  steps=%d", demo.name, len(demo.steps))
+        _trace_log.info(
+            "GUIDANCE_START  task=%d  demo=%s  steps=%d",
+            demo.task_index,
+            demo.name,
+            len(demo.steps),
+        )
         await self._speak_current_guidance_step(pid)
         self._start_guidance_monitor(pid)
 
@@ -716,19 +1003,14 @@ class QueryProcessor:
         # completion. Ask the VLM what it actually sees, then let the LLM judge.
         frame_path = await self._get_latest_frame_path(pid, ref_us=0)
 
-        messages: list[dict] = [
-            {
-                "role": "system",
-                "content": (
-                    f"You are guiding someone through a procedure. "
-                    f"They are on step {step_num} of {total}: \"{instruction}\". "
-                    "Answer their question honestly in 1-2 short sentences based on "
-                    "what the camera currently shows. Be direct — if it is not done "
-                    "correctly, say so clearly."
-                ),
-            },
-        ]
-        user_content: list[dict] = []
+        system_content = (
+            f"You are guiding someone through a procedure. "
+            f"They are on step {step_num} of {total}: \"{instruction}\". "
+            "Answer their question honestly in 1-2 short sentences based on "
+            "what the camera currently shows. Be direct — if it is not done "
+            "correctly, say so clearly."
+        )
+        user_parts: list[str] = []
         if frame_path:
             try:
                 result = await asyncio.wait_for(
@@ -749,38 +1031,32 @@ class QueryProcessor:
                     result = (result.get("result") or result.get("text")
                               or next(iter(result.values()), ""))
                 if isinstance(result, str) and result.strip():
-                    user_content.append({
-                        "type": "text",
-                        "text": (
-                            f"What the camera sees: {result.strip()}\n\n"
-                            f"User question: {transcript}"
-                        ),
-                    })
+                    user_parts.append(f"What the camera sees: {result.strip()}")
             except (asyncio.TimeoutError, Exception):
                 pass
-        if not user_content:
-            user_content.append({"type": "text", "text": transcript})
-        messages.append({"role": "user", "content": user_content})
-
-        body = {
-            "model": "llm",
-            "messages": messages,
-            "max_tokens": 100,
-            "temperature": 0.1,
-        }
+        user_parts.append(f"User question: {transcript}")
         try:
-            resp = await asyncio.wait_for(
-                self._http.post(
-                    self._cfg.llm_server.rstrip("/") + "/v1/chat/completions",
-                    json=body,
-                ),
+            structured = self._quick_llm(max_tokens=120, timeout=10.0).with_structured_output(
+                _GUIDANCE_RESPONSE_SCHEMA,
+                include_raw=True,
+            )
+            result = await asyncio.wait_for(
+                structured.ainvoke([
+                    SystemMessage(content=system_content),
+                    HumanMessage(content="\n\n".join(user_parts)),
+                ]),
                 timeout=10.0,
             )
-            if not resp.is_error:
-                reply = resp.json()["choices"][0]["message"]["content"].strip()
-                if reply:
-                    await self._send_text(pid, reply, _AGENT_RESPONSE_TOPIC)
-                    await self._say(pid, reply)
+            obj = result.get("parsed") if isinstance(result, dict) else result
+            reply = ""
+            if isinstance(obj, dict):
+                reply = str(obj.get("reply", "")).strip()
+            if not reply and isinstance(result, dict):
+                raw = result.get("raw")
+                reply = self._message_text(raw) if raw is not None else ""
+            if reply:
+                await self._send_text(pid, reply, _AGENT_RESPONSE_TOPIC)
+                await self._say(pid, reply)
         except Exception:
             log.exception("guidance question failed")
 
@@ -920,7 +1196,7 @@ class QueryProcessor:
 
     # ── quick-ack ─────────────────────────────────────────────────────────────
 
-    async def _quick_ack(self, transcript: str) -> tuple[str, bool]:
+    async def _quick_ack(self, transcript: str, pid: str = "") -> tuple[str, bool]:
         """Fast call to Llama-Nemotron: returns (ack_text, needs_thinking).
 
         think=True for: questions about past events, spatial/visual analysis,
@@ -928,66 +1204,65 @@ class QueryProcessor:
         think=False for: simple current-view questions, greetings, acknowledgements.
         """
         context = ""
-        if self._history:
-            last_user, last_agent = self._history[-1]
+        last_turn = self._last_turn_by_pid.get(pid or "default")
+        if last_turn:
+            last_user, last_agent = last_turn
             context = f"[Previous turn] User: {last_user} / Agent: {last_agent}\n"
 
-        body = {
-            "model": "llm",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        'Output ONLY one JSON object: {"ack": "<spoken phrase>", "think": false}\n'
-                        "ack: a SHORT natural spoken acknowledgment (3-6 words, no period). "
-                        "Sound like a helpful smart-glasses assistant about to START working on it. "
-                        "ALWAYS use present or future tense — the task is NOT done yet. "
-                        "NEVER use past tense. "
-                        "Examples: 'On it.' / 'Let me look.' / 'Sure, checking now.' / "
-                        "'Let me think about that.' / 'Looking back at that.' / 'Got it.'\n"
-                        "think: true if ANY of:\n"
-                        "  (A) questions about past events, what happened earlier, or recall "
-                        "('what was that?', 'what did I see earlier?', 'did I do that?')\n"
-                        "  (B) spatial or visual analysis that requires examining an image "
-                        "('what is that?', 'describe what I see', 'is there a ...?')\n"
-                        "  (C) questions about demonstrations or procedures "
-                        "('how many steps?', 'what was step 2?')\n"
-                        "  (D) corrections, follow-ups, or ambiguous references "
-                        "('no, not that', 'the one I saw earlier')\n"
-                        "think: false for: greetings, simple yes/no, acknowledgements, "
-                        "immediate next-step advances in guidance."
-                    ),
-                },
-                {"role": "user", "content": context + transcript},
-            ],
-            "max_tokens": 40,
-            "temperature": 0.0,
-        }
+        system_content = (
+            "ack: a SHORT natural spoken acknowledgment (3-6 words, no period). "
+            "Sound like a helpful smart-glasses assistant about to START working on it. "
+            "ALWAYS use present or future tense — the task is NOT done yet. "
+            "NEVER use past tense. "
+            "Examples: 'On it.' / 'Let me look.' / 'Sure, checking now.' / "
+            "'Let me think about that.' / 'Looking back at that.' / 'Got it.'\n"
+            "think: true if ANY of:\n"
+            "  (A) questions about past events, what happened earlier, or recall "
+            "('what was that?', 'what did I see earlier?', 'did I do that?')\n"
+            "  (B) spatial or visual analysis that requires examining an image "
+            "('what is that?', 'describe what I see', 'is there a ...?')\n"
+            "  (C) questions about demonstrations or procedures "
+            "('how many steps?', 'what was step 2?')\n"
+            "  (D) corrections, follow-ups, or ambiguous references "
+            "('no, not that', 'the one I saw earlier')\n"
+            "think: false for: greetings, simple yes/no, acknowledgements, "
+            "immediate next-step advances in guidance."
+        )
         try:
-            resp = await asyncio.wait_for(
-                self._http.post(
-                    self._cfg.llm_server.rstrip("/") + "/v1/chat/completions",
-                    json=body,
-                ),
+            structured = self._quick_llm(max_tokens=80, timeout=8.0).with_structured_output(
+                _QUICK_ACK_SCHEMA,
+                include_raw=True,
+            )
+            result = await asyncio.wait_for(
+                structured.ainvoke([
+                    SystemMessage(content=system_content),
+                    HumanMessage(content=context + transcript),
+                ]),
                 timeout=8.0,
             )
-            if not resp.is_error:
-                raw = resp.json()["choices"][0]["message"]["content"].strip()
-                obj_text = _extract_json(raw)
-                if obj_text:
-                    try:
-                        obj   = json.loads(obj_text)
-                        ack   = str(obj.get("ack", "")).strip()
-                        think = bool(obj.get("think", False))
-                        log.info("quick-ack: %r  think=%s", ack, think)
-                        _trace_log.info("ACK   %s  [think=%s]", ack, think)
-                        return ack, think
-                    except json.JSONDecodeError:
-                        pass
-                return raw, False
+            obj = result.get("parsed") if isinstance(result, dict) else result
+            if isinstance(obj, dict):
+                ack = str(obj.get("ack", "")).strip()
+                think = bool(obj.get("think", False))
+                if ack:
+                    log.info("quick-ack: %r  think=%s", ack, think)
+                    _trace_log.info("ACK   %s  [think=%s]", ack, think)
+                    return ack, think
+            raw = result.get("raw") if isinstance(result, dict) else None
+            text = self._message_text(raw) if raw is not None else ""
+            return text, False
         except Exception:
             log.debug("quick-ack call failed", exc_info=True)
         return "", False
+
+    @staticmethod
+    def _fallback_ack(transcript: str) -> tuple[str, bool]:
+        lower = transcript.lower()
+        if any(word in lower for word in ("look", "see", "image", "picture", "view", "describe")):
+            return "Let me look.", True
+        if "?" in transcript or any(lower.startswith(prefix) for prefix in ("what", "where", "how", "why", "can you")):
+            return "Let me check.", True
+        return "On it.", True
 
     # ── agentic loop ──────────────────────────────────────────────────────────
 
@@ -1038,47 +1313,57 @@ class QueryProcessor:
         for tool, args in candidates:
             try:
                 result = await self._video.call_tool(tool, args)
-                data = _tool_payload(result)
+                data = parse_mcp_result(result)
                 if isinstance(data, dict) and "path" in data:
                     return data["path"]
             except Exception as exc:
                 log.debug("pre-fetch frame via %s failed: %s", tool, exc)
         return None
 
-    def _langchain_agent(self, needs_thinking: bool):
-        agent = self._langchain_agents.get(needs_thinking)
-        if agent is not None:
-            return agent
+    def _quick_llm(self, *, max_tokens: int = 128, timeout: float = 30.0) -> ChatOpenAI:
+        return ChatOpenAI(
+            base_url=self._cfg.llm_server.rstrip("/") + "/v1",
+            api_key="EMPTY",
+            model="llm",
+            temperature=0.0,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            max_retries=0,
+        )
 
-        system_content = self._system_prompt
-        if needs_thinking:
-            system_content = (
-                "Use your private <think> block to reason through the question. "
-                "NEVER output these thoughts in your final response - "
-                "only output a concise 1-3 sentence answer for the wearer.\n\n"
-                + system_content
-            )
-
+    def _agent_llm(
+        self, *, needs_thinking: bool = False, max_tokens: int | None = None, timeout: float = 180.0
+    ) -> ChatOpenAI:
         chat_template_kwargs: dict[str, Any] = {"enable_thinking": needs_thinking}
         if needs_thinking:
             chat_template_kwargs["thinking_budget"] = 1024
 
-        model = ChatOpenAI(
+        return ChatOpenAI(
             base_url=self._cfg.agent_llm_server.rstrip("/") + "/v1",
             api_key="EMPTY",
             model="llm",
             temperature=0.0,
-            max_tokens=1024 if needs_thinking else 512,
-            timeout=180.0,
+            max_tokens=max_tokens or (1024 if needs_thinking else 512),
+            timeout=timeout,
             max_retries=0,
             extra_body={"chat_template_kwargs": chat_template_kwargs},
         )
+
+    def _langchain_agent(self):
+        if self._langchain_agent_graph is not None:
+            return self._langchain_agent_graph
+
         agent = create_agent(
-            model=model,
+            model=self._agent_llm(needs_thinking=False),
             tools=self._langchain_tools,
-            system_prompt=system_content,
+            system_prompt=self._system_prompt,
+            middleware=[_GlassesAgentMiddleware(lambda needs: self._agent_llm(
+                needs_thinking=needs
+            ))],
+            context_schema=GlassesRuntimeContext,
+            checkpointer=self._checkpointer,
         )
-        self._langchain_agents[needs_thinking] = agent
+        self._langchain_agent_graph = agent
         return agent
 
     @staticmethod
@@ -1115,11 +1400,21 @@ class QueryProcessor:
         return ""
 
     async def _invoke_langchain_agent(
-        self, user_content: str, *, needs_thinking: bool
+        self,
+        transcript: str,
+        *,
+        pid: str,
+        runtime_context: GlassesRuntimeContext,
+        needs_thinking: bool,
     ) -> str:
-        result = await self._langchain_agent(needs_thinking).ainvoke(
-            {"messages": [{"role": "user", "content": user_content}]},
-            config={"recursion_limit": _MAX_LOOP * 2 + 2},
+        thread_id = f"participant:{pid or 'default'}"
+        result = await self._langchain_agent().ainvoke(
+            {"messages": [{"role": "user", "content": transcript}]},
+            config={
+                "recursion_limit": _MAX_LOOP * 2 + 2,
+                "configurable": {"thread_id": thread_id},
+            },
+            context=runtime_context,
         )
         return self._langchain_response_text(result)
 
@@ -1139,58 +1434,40 @@ class QueryProcessor:
         # Pre-fetch the latest frame and get a fresh VLM description concurrently.
         frame_task = asyncio.create_task(self._prefetch_frame_description(pid, ref_us))
 
-        # Build context from memory.
-        ctx_parts: list[str] = []
-        ctx_parts.append(self._memory.build_context(max_recent=8))
-
+        recording_name: str | None = None
         if self._memory.recording is not None:
-            ctx_parts.append(
-                f"[Recording active — demo: {self._memory.recording.name!r}]"
-            )
+            recording_name = self._memory.recording.name
 
+        guidance_instruction: str | None = None
+        guidance_step = 0
+        guidance_total = 0
         if self._guidance_demo is not None:
-            total       = len(self._guidance_demo.steps)
-            step_num    = self._guidance_step + 1
-            instruction = self._instruction_for_step(self._guidance_demo)
-            ctx_parts.append(
-                f"[Guidance mode — step {step_num} of {total}]\n"
-                f"Current instruction: {instruction}\n"
-                f"Help the user complete THIS step. Be concise and direct."
-            )
-
-        if pid:
-            ctx_parts.append(f"Participant: {pid}")
-        if ref_us:
-            ctx_parts.append(f"Reference time (when user spoke): {ref_us} µs")
-
-        if self._history:
-            hist_lines: list[str] = []
-            for u, a in self._history:
-                hist_lines.append(f"  User: {u}")
-                hist_lines.append(f"  Agent: {a}")
-            ctx_parts.append("[Recent conversation]\n" + "\n".join(hist_lines))
+            guidance_total = len(self._guidance_demo.steps)
+            guidance_step = self._guidance_step + 1
+            guidance_instruction = self._instruction_for_step(self._guidance_demo)
 
         # Await the pre-fetched frame + fresh VLM description.
         frame_path, frame_desc = await frame_task
-        if frame_path:
-            if frame_desc:
-                ctx_parts.append(
-                    f"[Current camera view — fresh as of this turn]\n{frame_desc}\n"
-                    f"(image path for ask_image: {frame_path})"
-                )
-            else:
-                ctx_parts.append(f"[Latest camera frame]\n{frame_path}")
-
-        context = "\n\n".join(ctx_parts)
-        _trace_log.info("CTX   %s", context.replace("\n", " | ")[:500])
-
-        user_content = (
-            f"[Context - use this before calling tools]\n"
-            f"{context}\n\n"
-            f"[User request]\n{transcript}"
+        runtime_context = GlassesRuntimeContext(
+            memory_snapshot      = self._memory.snapshot(max_recent=8),
+            pid                  = pid,
+            ref_us               = ref_us,
+            needs_thinking       = needs_thinking,
+            recording_name       = recording_name,
+            guidance_instruction = guidance_instruction,
+            guidance_step        = guidance_step,
+            guidance_total       = guidance_total,
+            frame_path           = frame_path,
+            frame_description    = frame_desc,
         )
+        context_text = _format_glasses_runtime_context(runtime_context)
+        _trace_log.info("CTX   %s", context_text.replace("\n", " | ")[:500])
+
         response = await self._invoke_langchain_agent(
-            user_content, needs_thinking=needs_thinking
+            transcript,
+            pid=pid,
+            runtime_context=runtime_context,
+            needs_thinking=needs_thinking,
         )
         if not response and needs_thinking:
             log.warning(
@@ -1198,7 +1475,10 @@ class QueryProcessor:
                 "retrying without thinking"
             )
             response = await self._invoke_langchain_agent(
-                user_content, needs_thinking=False
+                transcript,
+                pid=pid,
+                runtime_context=runtime_context,
+                needs_thinking=False,
             )
         _trace_log.info("RESP  %s", response or "Done.")
         return response or "Done."
@@ -1208,7 +1488,7 @@ class QueryProcessor:
     ) -> dict | str | None:
         try:
             result = await client.call_tool(tool, args)
-            return _tool_payload(result)
+            return parse_mcp_result(result)
         except Exception as exc:
             if not silent:
                 log.error("mcp %s failed: %s", tool, exc)
@@ -1217,21 +1497,5 @@ class QueryProcessor:
     async def close(self) -> None:
         if self._guidance_monitor_task and not self._guidance_monitor_task.done():
             self._guidance_monitor_task.cancel()
-        await self._http.aclose()
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def _tool_payload(result) -> dict | list | str | None:
-    # Prefer structured_content when FastMCP populates it (newer versions).
-    structured = getattr(result, "structured_content", None)
-    if structured is not None:
-        return structured
-    # Fall back to parsing the first TextContent item.
-    items = getattr(result, "content", None) or []
-    if items and hasattr(items[0], "text"):
-        try:
-            return json.loads(items[0].text)
-        except Exception:
-            return items[0].text
-    return None
