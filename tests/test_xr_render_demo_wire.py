@@ -16,8 +16,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 # Add the worker directory to sys.path so we can import its modules.
 _WORKER_DIR = (
     Path(__file__).resolve().parent.parent
