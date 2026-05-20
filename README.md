@@ -102,6 +102,17 @@ starts everything.  Heavier demos (`xr-render-demo`) split model loading from
 the demo itself: start `model-servers` once, then run the demo as many times
 as you like without reloading weights.
 
+Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
+abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS
+behind four service protocols.  Each sample ships a `yaml/models.yaml` that
+names the logical models the worker needs (`llm`, `vlm`, `stt`, …) with
+preset references that pre-fill model-specific quirks (reasoning-field
+aliasing, `chat_template_kwargs`, served-model-name strings).  Workers call
+`make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
+"stt")` / `make_tts(config, "tts")` — no hand-rolled httpx clients, no model
+quirks leaking out of the SDK.  Full quickstart and the built-in preset
+table: [`agent-sdk/xr-ai-models/README.md`](agent-sdk/xr-ai-models/README.md).
+
 ## Quickstart
 
 Every sample follows the same pattern: **start the server, then connect a
@@ -201,17 +212,23 @@ after a moment, and you hear the reply through your speakers.
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
 
-**Remote model** — to use a model on another machine or a cloud NIM
-endpoint, set `vlm_server` (and optionally `vlm_model_name`) in the
-sample's worker YAML (e.g., `simple_vlm_example_worker.yaml`):
+**Remote model** — create a models overlay that points the VLM at your
+remote endpoint, then tell the worker to use it:
 
 ```yaml
-vlm_server:     http://192.168.1.42:8100   # or https://your-nim-endpoint
-vlm_model_name: vlm                        # served-model-name on that host
+# yaml/models.custom.yaml — overlay for a remote VLM endpoint
+vlm:
+  kind:     preset:cosmos_vlm
+  base_url: https://your-remote-vlm.example.com
 ```
 
-When pointing at a remote model, `vlm_server.yaml` is unused — you can
-remove the `vlm_server` entry from the launcher's process list so no local
+```yaml
+# yaml/simple_vlm_example_worker.yaml — point the worker at the overlay
+models_yaml: yaml/models.custom.yaml
+```
+
+When pointing at a remote model, `vlm_server.yaml` is unused — remove
+the `vlm_server` entry from the launcher's process list so no local
 vLLM process is started.
 
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see

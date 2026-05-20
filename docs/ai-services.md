@@ -78,52 +78,53 @@ cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./yaml/video_mcp_serv
 Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 `yaml/<command>.yaml` in the sample root and passes it as `--config`.
 
-## Calling the servers from a worker
+## Calling these from a worker
+
+Workers do not hand-roll `httpx` clients against these endpoints.  They
+depend on [`agent-sdk/xr-ai-models`](../agent-sdk/xr-ai-models/README.md),
+load a per-sample `yaml/models.yaml`, and construct service clients via
+`make_llm` / `make_vlm` / `make_stt` / `make_tts`.  The SDK encapsulates the
+OpenAI-compatible wire format and the per-model quirks (reasoning-field
+aliasing, `chat_template_kwargs`, served-model-name strings) so callers
+never branch on backend.
 
 ```python
-import httpx
+from xr_ai_models import load_models_config, make_llm, ChatMessage
 
-# STT — POST multipart/form-data
-async with httpx.AsyncClient() as client:
-    resp = await client.post(
-        "http://localhost:8103/v1/audio/transcriptions",
-        files={"file": ("audio.wav", wav_bytes, "audio/wav")},
-        data={"response_format": "json"},
+config = load_models_config("yaml/models.yaml")
+async with make_llm(config, "agent_llm") as llm:
+    resp = await llm.chat(
+        [ChatMessage(role="user", content="hello")],
+        max_tokens=128,
+        enable_thinking=True,
     )
-    transcript = resp.json()["text"]
-
-# TTS — POST JSON
-async with httpx.AsyncClient() as client:
-    resp = await client.post(
-        "http://localhost:8104/v1/audio/speech",
-        json={"input": "Hello from XR.", "response_format": "wav"},
-    )
-    wav_bytes = resp.content
-
-# VLM — POST JSON with base64 image
-async with httpx.AsyncClient() as client:
-    resp = await client.post(
-        "http://localhost:8100/v1/chat/completions",
-        json={"model": "vlm", "messages": [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": image_data_url}},
-            {"type": "text", "text": "What do you see?"},
-        ]}]},
-    )
-    answer = resp.json()["choices"][0]["message"]["content"]
-
-# LLM — POST JSON (pure-text chat completion)
-# Ports: 8106 llama_nemotron | 8107 nemotron3_nano.
-# The HTTP contract is identical across both; swap the port to swap
-# backends with no worker-side code changes.
-async with httpx.AsyncClient() as client:
-    resp = await client.post(
-        "http://localhost:8106/v1/chat/completions",
-        json={"model": "llm", "messages": [
-            {"role": "user", "content": "Say OK"},
-        ], "max_tokens": 16},
-    )
-    answer = resp.json()["choices"][0]["message"]["content"]
+    print(resp.content, resp.reasoning)
 ```
+
+A matching `models.yaml` for the four built-in service backends:
+
+```yaml
+agent_llm:
+  kind:     preset:nemotron3_nano
+  base_url: http://localhost:8107
+
+vlm:
+  kind:     preset:cosmos_vlm
+  base_url: http://localhost:8100
+
+stt:
+  kind:     preset:parakeet_stt
+  base_url: http://localhost:8103
+
+tts:
+  kind:     preset:piper_tts
+  base_url: http://localhost:8105
+```
+
+Swapping a backend is a `kind:` + `base_url:` edit in YAML; worker code does
+not change.  Full protocol surface, the preset table, and the explicit
+(no-preset) spec are in
+[`agent-sdk/xr-ai-models/README.md`](../agent-sdk/xr-ai-models/README.md).
 
 ## vLLM model persistence
 

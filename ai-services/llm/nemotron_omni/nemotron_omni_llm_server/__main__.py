@@ -31,6 +31,12 @@ Config keys (nemotron_omni_llm_server.yaml)
     vllm_backend:             str    "pip" (default) or "docker".
     vllm_image:               str    NGC image when vllm_backend=docker
                                      (default: nvcr.io/nvidia/vllm:26.04-py3).
+    extra_pip:                list   Pip packages installed into the NGC
+                                     container before `vllm serve` runs
+                                     (docker backend only; default:
+                                     ["mamba-ssm", "causal-conv1d"] since
+                                     Nemotron-Omni's hybrid SSM backbone
+                                     requires both at model-load time).
 """
 import argparse
 import json
@@ -132,6 +138,12 @@ def run() -> None:
     video_frames  = int(cfg.get("video_num_frames", _DEFAULT_FRAMES))
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
+    # Nemotron-Omni's hybrid SSM/Transformer backbone imports `mamba_ssm`
+    # at model-load time, and `causal_conv1d` is its required CUDA-kernel
+    # peer dep. Neither ships in the NGC vLLM image, so we install both
+    # into the container before `vllm serve` runs. Configurable via YAML
+    # for users who want to pin specific versions or add more wheels.
+    extra_pip     = cfg.get("extra_pip", ["mamba-ssm", "causal-conv1d"])
 
     cuda_devices = cfg.get("cuda_visible_devices")
     if cuda_devices is not None:
@@ -179,6 +191,7 @@ def run() -> None:
         model_cache=model_cache,
         hf_token=hf_token or None,
         cuda_visible_devices=cuda_devices,
+        extra_pip=extra_pip,
         ready_file=ns.ready_file,
     )
 

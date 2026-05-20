@@ -39,6 +39,7 @@ from .config import (
     TTSSpec,
     VLMSpec,
     load_models_config,
+    load_models_config_from_dict,
 )
 from .factory import make_llm, make_stt, make_tts, make_vlm
 
@@ -68,6 +69,7 @@ __all__ = [
     "TTSSpec",
     "VLMSpec",
     "load_models_config",
+    "load_models_config_from_dict",
     "make_llm",
     "make_stt",
     "make_tts",

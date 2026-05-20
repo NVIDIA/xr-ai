@@ -8,8 +8,8 @@ Pure FastMCP — one tool at /mcp on port 8240. There are no REST endpoints,
 no hub IPC subscription, and no `xr-ai-agent` runtime dependency.
 
 The single tool ``ask_image(question, image_path)`` reads a local PNG path,
-encodes it as a JPEG data URL, and POSTs to vlm-server's OpenAI-compatible
-``/v1/chat/completions`` endpoint. The model's answer is returned verbatim.
+encodes it as a JPEG data URL, and calls the VLM via ``xr-ai-models``
+``OpenAICompatVLM``. The model's answer is returned verbatim.
 
 Typical two-step agent flow
 ───────────────────────────
@@ -32,8 +32,17 @@ Config (vlm_mcp_server.yaml)
 ────────────────────────────
     host:                 0.0.0.0
     port:                 8240
+    models:
+      vlm:
+        kind:     preset:cosmos_vlm
+        base_url: http://localhost:8100
+    vlm_request_timeout_s: 60.0
+    enable_thinking: false
+
+Legacy config (still accepted; emits a deprecation warning):
     vlm_server:           http://localhost:8100
     vlm_request_timeout_s: 60.0
+    enable_thinking: false
 """
 from __future__ import annotations
 
@@ -44,6 +53,7 @@ import io
 import pathlib
 import re
 from contextlib import asynccontextmanager
+from typing import Any
 
 import httpx
 import uvicorn
@@ -53,42 +63,77 @@ from loguru import logger
 from PIL import Image
 
 from xr_ai_logging import setup_logging
+from xr_ai_models import (
+    ModelsConfig,
+    VLMSpec,
+    load_models_config_from_dict,
+    make_vlm,
+)
+from xr_ai_models.config import KIND_OPENAI_COMPAT
+from xr_ai_models.protocols import VLMService
 
 
-# ── VLM HTTP client ───────────────────────────────────────────────────────────
+# ── VLM factory ──────────────────────────────────────────────────────────────
 
-class VlmClient:
-    """Thin async client for vlm-server's OpenAI-compatible chat endpoint."""
+def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
+    """Construct a VLMService from the server config dict.
 
-    def __init__(self, base_url: str, timeout: float, enable_thinking: bool = False) -> None:
-        self._url = base_url.rstrip("/") + "/v1/chat/completions"
-        self._enable_thinking = enable_thinking
-        self._client = httpx.AsyncClient(timeout=timeout)
+    Accepts either the new ``models:`` block (forwarded to the SDK config
+    loader) or the legacy ``vlm_server:`` URL key (back-compat; synthesises a
+    ``cosmos_vlm``-equivalent spec so existing deployments need no changes).
 
-    async def ask(self, image_data_url: str, question: str) -> str:
-        payload: dict = {
-            "model": "vlm",
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": image_data_url}},
-                    {"type": "text", "text": question},
-                ],
-            }],
-        }
-        if not self._enable_thinking:
-            # Suppresses <think>…</think> generation entirely for lower latency.
-            # Qwen2.5-VL (Cosmos-Reason1-7B) honours this template argument.
-            payload["chat_template_kwargs"] = {"enable_thinking": False}
-        resp = await self._client.post(self._url, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        content = data["choices"][0]["message"].get("content") or ""
-        # Belt-and-suspenders: strip any <think> that leaked through anyway.
-        return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+    Returns ``(vlm, request_timeout_s)`` so callers can surface the timeout
+    that was actually wired into the spec without re-reading ``cfg``.
+    """
+    models_block: dict[str, Any] | None = cfg.get("models")
+    vlm_server: str | None = cfg.get("vlm_server")
+    vlm_request_timeout_s = float(cfg.get("vlm_request_timeout_s", 60.0))
+    enable_thinking = bool(cfg.get("enable_thinking", False))
 
-    async def close(self) -> None:
-        await self._client.aclose()
+    if models_block:
+        vlm_entry = dict(models_block.get("vlm") or {})
+        if not vlm_entry:
+            raise ValueError("models.vlm is missing or empty in vlm_mcp_server.yaml")
+
+        if "timeout" not in vlm_entry:
+            vlm_entry["timeout"] = vlm_request_timeout_s
+
+        # The cosmos_vlm preset defaults enable_thinking to False; an explicit
+        # top-level true must reach the wire by overriding default_extras.
+        if enable_thinking:
+            extras = dict(vlm_entry.get("default_extras") or {})
+            ctk = dict(extras.get("chat_template_kwargs") or {})
+            ctk["enable_thinking"] = True
+            extras["chat_template_kwargs"] = ctk
+            vlm_entry["default_extras"] = extras
+
+        config = load_models_config_from_dict(
+            {"vlm": vlm_entry}, source="vlm_mcp_server.yaml:models"
+        )
+
+    elif vlm_server:
+        logger.warning(
+            "vlm_mcp_server.yaml: 'vlm_server' key is deprecated — "
+            "migrate to a 'models:' block with kind: preset:cosmos_vlm"
+        )
+        chat_template_kwargs: dict[str, Any] = {"enable_thinking": enable_thinking}
+        spec = VLMSpec(
+            kind=KIND_OPENAI_COMPAT,
+            base_url=vlm_server,
+            model_name="vlm",
+            capabilities={"streaming": True, "vision": True},
+            default_extras={"chat_template_kwargs": chat_template_kwargs},
+            timeout=vlm_request_timeout_s,
+        )
+        config = ModelsConfig(entries={"vlm": spec})
+
+    else:
+        raise ValueError(
+            "vlm_mcp_server.yaml must specify either a 'models:' block "
+            "or the legacy 'vlm_server:' key"
+        )
+
+    return make_vlm(config, "vlm"), vlm_request_timeout_s
 
 
 # ── image helpers ─────────────────────────────────────────────────────────────
@@ -109,7 +154,7 @@ def _load_jpeg_data_url(image_path: str, quality: int = 85) -> str:
 
 # ── FastMCP build ─────────────────────────────────────────────────────────────
 
-def build_mcp(vlm: VlmClient) -> FastMCP:
+def build_mcp(vlm: VLMService) -> FastMCP:
     """Return a FastMCP server with the single ``ask_image`` tool bound."""
     mcp = FastMCP("vlm-mcp")
 
@@ -179,8 +224,8 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
           blocked even for large frames.
         - The tool does NOT maintain conversation history. Each call is
           independent; pass relevant context in ``question`` if needed.
-        - vlm-server must be running at the ``vlm_server`` URL configured in
-          ``vlm_mcp_server.yaml`` (default: http://localhost:8100).
+        - vlm-server must be running at the ``base_url`` configured under
+          ``models.vlm`` in ``vlm_mcp_server.yaml`` (default: http://localhost:8100).
         """
         if not image_path:
             return "ask_image: image_path is empty — call video_mcp.get_frame_from_time first."
@@ -196,16 +241,22 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
             return f"ask_image: failed to read image at {image_path!r}: {exc}"
 
         try:
-            answer = await vlm.ask(data_url, question)
+            response = await vlm.ask_image(data_url, question)
+            content = response.content
         except httpx.HTTPError as exc:
             logger.exception("ask_image: vlm-server HTTP error")
             return f"ask_image: vlm-server request failed: {exc}"
 
+        # Belt-and-suspenders: strip any <think> that leaked through despite
+        # enable_thinking=False — cosmos_vlm preset sets this to False but
+        # some model revisions may still emit reasoning tokens.
+        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+
         logger.debug(
             "ask_image  q={!r}  image={}  -> {} chars",
-            question[:80], path.name, len(answer),
+            question[:80], path.name, len(content),
         )
-        return answer.strip()
+        return content
 
     return mcp
 
@@ -213,13 +264,10 @@ def build_mcp(vlm: VlmClient) -> FastMCP:
 # ── server ────────────────────────────────────────────────────────────────────
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
-    host                  = cfg.get("host", "0.0.0.0")
-    port                  = int(cfg.get("port", 8240))
-    vlm_server            = cfg.get("vlm_server", "http://localhost:8100")
-    vlm_request_timeout_s = float(cfg.get("vlm_request_timeout_s", 60.0))
-    enable_thinking       = bool(cfg.get("enable_thinking", False))
+    host = cfg.get("host", "0.0.0.0")
+    port = int(cfg.get("port", 8240))
 
-    vlm = VlmClient(vlm_server, timeout=vlm_request_timeout_s, enable_thinking=enable_thinking)
+    vlm, vlm_request_timeout_s = _make_vlm_from_cfg(cfg)
     mcp = build_mcp(vlm)
     app = mcp.http_app(path="/mcp")
 
@@ -246,8 +294,8 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     server = uvicorn.Server(config)
 
     logger.info(
-        "vlm-mcp-server  port={}  vlm_server={}  timeout={:.1f}s",
-        port, vlm_server, vlm_request_timeout_s,
+        "vlm-mcp-server  port={}  timeout={:.1f}s",
+        port, vlm_request_timeout_s,
     )
     if ready_file:
         ready_file.touch()

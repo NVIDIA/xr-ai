@@ -3,13 +3,14 @@
 
 """Unit tests for vlm-mcp's FastMCP wrapper around vlm-server.
 
-vlm-mcp is a pure HTTP wrapper — no GPU, no hub IPC. These tests stand up an
-in-process aiohttp mock for the upstream vlm-server `/v1/chat/completions`
-endpoint, wire vlm-mcp's ``VlmClient`` at it, and exercise the ``ask_image``
-MCP tool against a synthetic PNG.
+vlm-mcp is a pure HTTP wrapper — no GPU, no hub IPC. These tests exercise the
+``ask_image`` MCP tool and the ``_make_vlm_from_cfg`` factory.
 
-Both the wire-shape contract (data URL encoding, prompt forwarding, model
-field, ``enable_thinking`` knob) and the response-relay path are covered.
+Wire-shape contract (data URL encoding, prompt forwarding, model field,
+``enable_thinking`` knob) and the response-relay path are covered using both
+the ``StubOpenAI`` httpx mock-transport (for wire assertions without a running
+server) and an in-process aiohttp server (for the legacy back-compat path and
+the unreachable-server error path).
 """
 from __future__ import annotations
 
@@ -18,14 +19,24 @@ import socket
 import struct
 import zlib
 from pathlib import Path
+from typing import Any
 
 import pytest
 from aiohttp import web
 
-from vlm_mcp_server.__main__ import VlmClient, _load_jpeg_data_url, build_mcp
+from xr_ai_models.openai_compat import OpenAICompatVLM
+
+from vlm_mcp_server.__main__ import (
+    _load_jpeg_data_url,
+    _make_vlm_from_cfg,
+    build_mcp,
+)
+from _stub_openai import StubOpenAI
 
 pytestmark = pytest.mark.asyncio
 
+
+# ── helpers ────────────────────────────────────────────────────────────────────
 
 def _pick_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -59,7 +70,7 @@ class _MockVlmServer:
         body = await request.json()
         self.requests.append(body)
         return web.json_response({
-            "choices": [{"message": {"content": self.answer}}],
+            "choices": [{"message": {"content": self.answer}, "finish_reason": "stop"}],
         })
 
     async def start(self) -> str:
@@ -76,6 +87,8 @@ class _MockVlmServer:
         if self.runner is not None:
             await self.runner.cleanup()
 
+
+# ── fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 async def mock_vlm():
@@ -94,6 +107,20 @@ def png_path(tmp_path: Path) -> Path:
     return p
 
 
+def _stub_vlm(stub: StubOpenAI, *, enable_thinking: bool = False) -> OpenAICompatVLM:
+    """Build an OpenAICompatVLM wired to *stub* — no real server needed."""
+    extras: dict[str, Any] = {"chat_template_kwargs": {"enable_thinking": enable_thinking}}
+    return OpenAICompatVLM(
+        base_url="http://stub",
+        model_name="vlm",
+        default_extras=extras,
+        timeout=5.0,
+        client=stub.client(timeout=5.0),
+    )
+
+
+# ── image helper tests ─────────────────────────────────────────────────────────
+
 async def test_load_jpeg_data_url_emits_data_url(png_path: Path):
     url = _load_jpeg_data_url(str(png_path))
     assert url.startswith("data:image/jpeg;base64,")
@@ -106,96 +133,198 @@ async def test_load_jpeg_data_url_emits_data_url(png_path: Path):
     assert raw[-2:] == b"\xff\xd9"
 
 
-async def test_ask_image_relays_response_and_request_shape(mock_vlm, png_path: Path):
-    server, base_url = mock_vlm
-    vlm = VlmClient(base_url, timeout=5.0, enable_thinking=False)
-    try:
+# ── wire-shape golden tests (StubOpenAI) ──────────────────────────────────────
+
+async def test_ask_image_relays_response_and_request_shape(png_path: Path):
+    """Wire shape with enable_thinking=False (default / cosmos_vlm preset default)."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content="a cat sitting on a mat")
+    async with _stub_vlm(stub, enable_thinking=False) as vlm:
         mcp = build_mcp(vlm)
+
         result = await mcp.call_tool(
             "ask_image",
             {"question": "what is in this image?", "image_path": str(png_path)},
         )
-    finally:
-        await vlm.close()
+        text = result.structured_content["result"]
+        assert text == "a cat sitting on a mat"
 
-    # FastMCP returns the str directly under structured_content['result'].
-    text = result.structured_content["result"]
-    assert text == "a cat sitting on a mat"
+        payload = stub.last_json()
+        assert payload["model"] == "vlm"
+        # enable_thinking=False must surface as chat_template_kwargs on the wire.
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
 
-    assert len(server.requests) == 1
-    payload = server.requests[0]
-    assert payload["model"] == "vlm"
-    # enable_thinking=False must surface as chat_template_kwargs to suppress <think>.
-    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
-
-    msgs = payload["messages"]
-    assert len(msgs) == 1 and msgs[0]["role"] == "user"
-    parts = msgs[0]["content"]
-    image_part = next(p for p in parts if p["type"] == "image_url")
-    text_part  = next(p for p in parts if p["type"] == "text")
-    assert text_part["text"] == "what is in this image?"
-    assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
+        msgs = payload["messages"]
+        assert len(msgs) == 1 and msgs[0]["role"] == "user"
+        parts = msgs[0]["content"]
+        image_part = next(p for p in parts if p["type"] == "image_url")
+        text_part  = next(p for p in parts if p["type"] == "text")
+        assert text_part["text"] == "what is in this image?"
+        assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
-async def test_ask_image_enable_thinking_omits_template_kwarg(mock_vlm, png_path: Path):
-    """When enable_thinking=True, the chat_template_kwargs key must NOT appear."""
-    server, base_url = mock_vlm
-    vlm = VlmClient(base_url, timeout=5.0, enable_thinking=True)
-    try:
+async def test_ask_image_enable_thinking_sets_template_kwarg_true(png_path: Path):
+    """When enable_thinking=True, chat_template_kwargs.enable_thinking is True on the wire."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content="the answer is yes")
+    async with _stub_vlm(stub, enable_thinking=True) as vlm:
         mcp = build_mcp(vlm)
         await mcp.call_tool(
             "ask_image",
             {"question": "describe", "image_path": str(png_path)},
         )
-    finally:
-        await vlm.close()
-    assert "chat_template_kwargs" not in server.requests[0]
+        payload = stub.last_json()
+        # enable_thinking=True must be explicit on the wire.
+        assert payload["chat_template_kwargs"] == {"enable_thinking": True}
 
 
-async def test_ask_image_strips_think_block(mock_vlm, png_path: Path):
-    server, base_url = mock_vlm
-    server.answer = "<think>let me look</think>\n  the answer is yes  "
-    vlm = VlmClient(base_url, timeout=5.0)
-    try:
+async def test_ask_image_strips_think_block(png_path: Path):
+    """<think>…</think> blocks are stripped from the VLM response."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content="<think>let me look</think>\n  the answer is yes  ")
+    async with _stub_vlm(stub) as vlm:
         mcp = build_mcp(vlm)
         result = await mcp.call_tool(
             "ask_image",
             {"question": "q?", "image_path": str(png_path)},
         )
-    finally:
-        await vlm.close()
     assert result.structured_content["result"] == "the answer is yes"
 
 
-async def test_ask_image_missing_path_returns_error_string():
+# ── error / edge-case tests ───────────────────────────────────────────────────
+
+async def test_ask_image_missing_path_returns_error_string(png_path: Path):
     """Missing image_path is a user error — must not raise, returns guidance."""
-    vlm = VlmClient("http://127.0.0.1:1", timeout=1.0)
-    try:
+    stub = StubOpenAI()
+    async with _stub_vlm(stub) as vlm:
         mcp = build_mcp(vlm)
-        # Empty string → guidance error.
+
         empty = await mcp.call_tool("ask_image", {"question": "q", "image_path": ""})
         assert empty.structured_content["result"].startswith("ask_image: image_path is empty")
-        # Non-existent file → file-not-found error.
+
         missing = await mcp.call_tool(
             "ask_image",
             {"question": "q", "image_path": "/nonexistent/path/should/not/exist.png"},
         )
         assert "file not found" in missing.structured_content["result"]
-    finally:
-        await vlm.close()
 
 
 async def test_ask_image_http_error_returns_error_string(png_path: Path):
-    """When vlm-server is unreachable, the tool returns an error string —
-    it must never raise into the agent's tool-call loop."""
-    # Point the client at a closed port.
-    vlm = VlmClient(f"http://127.0.0.1:{_pick_free_port()}", timeout=1.0)
-    try:
+    """When vlm-server returns 5xx, the tool returns an error string."""
+    stub = StubOpenAI()
+    stub.set_chat_status(500)
+    async with _stub_vlm(stub) as vlm:
         mcp = build_mcp(vlm)
         result = await mcp.call_tool(
             "ask_image",
             {"question": "q", "image_path": str(png_path)},
         )
+    assert result.structured_content["result"].startswith("ask_image: vlm-server request failed")
+
+
+# ── legacy back-compat path (vlm_server: URL key) ────────────────────────────
+
+async def test_make_vlm_from_cfg_legacy_path(mock_vlm, png_path: Path):
+    """Legacy vlm_server: URL key synthesises a working VLMService."""
+    server, base_url = mock_vlm
+    server.answer = "legacy answer"
+
+    vlm, timeout = _make_vlm_from_cfg({
+        "vlm_server":            base_url,
+        "vlm_request_timeout_s": 5.0,
+        "enable_thinking":       False,
+    })
+    assert timeout == 5.0
+    mcp = build_mcp(vlm)
+    try:
+        result = await mcp.call_tool(
+            "ask_image",
+            {"question": "legacy q", "image_path": str(png_path)},
+        )
     finally:
         await vlm.close()
-    assert result.structured_content["result"].startswith("ask_image: vlm-server request failed")
+
+    assert result.structured_content["result"] == "legacy answer"
+    assert len(server.requests) == 1
+    payload = server.requests[0]
+    assert payload["model"] == "vlm"
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+async def test_make_vlm_from_cfg_new_models_block(mock_vlm, png_path: Path):
+    """New models: block with preset:cosmos_vlm produces correct wire shape."""
+    server, base_url = mock_vlm
+    server.answer = "cosmos answer"
+
+    vlm, _ = _make_vlm_from_cfg({
+        "models": {
+            "vlm": {
+                "kind":     "preset:cosmos_vlm",
+                "base_url": base_url,
+            },
+        },
+        "vlm_request_timeout_s": 5.0,
+        "enable_thinking":       False,
+    })
+    mcp = build_mcp(vlm)
+    try:
+        result = await mcp.call_tool(
+            "ask_image",
+            {"question": "cosmos q", "image_path": str(png_path)},
+        )
+    finally:
+        await vlm.close()
+
+    assert result.structured_content["result"] == "cosmos answer"
+    payload = server.requests[0]
+    assert payload["model"] == "vlm"
+    # cosmos_vlm preset sets enable_thinking=False by default.
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+async def test_make_vlm_from_cfg_missing_required_keys_raises():
+    """Neither models: nor vlm_server: present → ValueError."""
+    with pytest.raises(ValueError, match="must specify either"):
+        _make_vlm_from_cfg({})
+
+
+# ── stub-server wire-trace golden ─────────────────────────────────────────────
+
+async def test_wire_trace_golden_matches_pre_migration_shape(png_path: Path):
+    """Assert the SDK produces the same JSON body shape as the pre-migration VlmClient.
+
+    Pre-migration golden (captured from VlmClient.ask with enable_thinking=False):
+      - model: "vlm"
+      - messages: [{"role": "user", "content": [image_url_part, text_part]}]
+      - chat_template_kwargs: {"enable_thinking": false}
+
+    The cosmos_vlm preset's default_extras carry the same chat_template_kwargs,
+    so the wire body is identical.
+    """
+    stub = StubOpenAI()
+    stub.set_chat_message(content="answer")
+    async with _stub_vlm(stub, enable_thinking=False) as vlm:
+        mcp = build_mcp(vlm)
+        await mcp.call_tool(
+            "ask_image",
+            {"question": "test question", "image_path": str(png_path)},
+        )
+
+    body = stub.last_json()
+
+    # Model field — must be "vlm" (matches pre-migration VlmClient hard-coded string).
+    assert body["model"] == "vlm"
+
+    # chat_template_kwargs — present and has enable_thinking=false (matches pre-migration).
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
+
+    # Message structure — single user turn with image_url first, text second.
+    assert len(body["messages"]) == 1
+    msg = body["messages"][0]
+    assert msg["role"] == "user"
+    parts = msg["content"]
+    assert len(parts) == 2
+    assert parts[0]["type"] == "image_url"
+    assert parts[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert parts[1]["type"] == "text"
+    assert parts[1]["text"] == "test question"

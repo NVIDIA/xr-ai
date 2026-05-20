@@ -123,6 +123,8 @@ class LLMService(Protocol):
         timeout: float | None = None,
     ) -> AsyncIterator[str]: pass
 
+    async def health(self) -> bool: pass
+
     async def close(self) -> None: pass
 
 
@@ -163,6 +165,8 @@ class VLMService(Protocol):
         timeout: float | None = None,
     ) -> AsyncIterator[str]: pass
 
+    async def health(self) -> bool: pass
+
     async def close(self) -> None: pass
 
 
@@ -177,6 +181,8 @@ class STTService(Protocol):
         timeout: float | None = None,
     ) -> str: pass
 
+    async def health(self) -> bool: pass
+
     async def close(self) -> None: pass
 
 
@@ -189,5 +195,7 @@ class TTSService(Protocol):
         response_format: str = "wav",
         timeout: float | None = None,
     ) -> bytes: pass
+
+    async def health(self) -> bool: pass
 
     async def close(self) -> None: pass

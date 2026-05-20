@@ -46,6 +46,7 @@ xr-ai-agent  (agent-sdk/)
 xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     └── xr-ai-agent   [editable: ..]
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models  [editable: ../xr-ai-models]
     └── pipecat-ai >=0.0.46
     └── numpy >=1.24
     └── scipy >=1.11
@@ -54,6 +55,9 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     Optional Pipecat transport bridge: connects ProcessorEndpoint (ZMQ IPC)
     to a Pipecat frame pipeline. Resamples hub float32 audio → 16 kHz int16
     for STT; converts TTS int16 PCM back to float32 AudioChunks for return.
+    SttClient / TtsClient are thin wrappers around xr-ai-models'
+    OpenAICompatSTT / OpenAICompatTTS — PCM→WAV conversion is handled by
+    the SDK. httpx is retained for http_probe() readiness checks.
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
@@ -107,6 +111,18 @@ transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
     Storage: JSONL files per participant in configurable transcripts_dir.
 
+vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    └── Pillow >=10.0
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
+    Pure FastMCP — one tool at /mcp (no REST). Reads a local image file,
+    encodes it as a JPEG data URL, and calls vlm-server via xr-ai-models
+    ``OpenAICompatVLM``. Back-compat: legacy ``vlm_server:`` URL key is
+    still accepted with a deprecation warning.
+
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
@@ -150,6 +166,7 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
+    └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
@@ -279,6 +296,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
+| `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -328,10 +346,13 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0 |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 |
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
-(8105) over HTTP — no model weights loaded in-process.
+(8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
+in-process.  Model endpoints are configured via `yaml/models.yaml`
+(default: Cosmos profile) or `yaml/models.omni.yaml` (Nemotron-Omni
+on port 8108).
 
 ### model-servers  (agent-samples/model-servers/)
 

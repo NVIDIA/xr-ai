@@ -109,10 +109,25 @@ def load_models_config(path: Path | str) -> ModelsConfig:
     raw = yaml.safe_load(Path(path).read_text()) or {}
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: top-level must be a mapping")
+    return load_models_config_from_dict(raw, source=str(path))
+
+
+def load_models_config_from_dict(
+    raw: dict[str, Any], *, source: str = "<dict>"
+) -> ModelsConfig:
+    """Build a :class:`ModelsConfig` from an already-parsed mapping.
+
+    Same semantics as :func:`load_models_config` minus the file I/O — callers
+    that already hold the mapping (e.g. an embedded YAML block in a larger
+    config) can skip the disk round-trip. ``source`` is only used to label
+    validation errors.
+    """
+    if not isinstance(raw, dict):
+        raise ValueError(f"{source}: top-level must be a mapping")
     entries: dict[str, Spec] = {}
     for name, body in raw.items():
         if not isinstance(body, dict):
-            raise ValueError(f"{path}: entry {name!r} must be a mapping")
+            raise ValueError(f"{source}: entry {name!r} must be a mapping")
         entries[name] = _build_spec(name, body)
     return ModelsConfig(entries=entries)
 
