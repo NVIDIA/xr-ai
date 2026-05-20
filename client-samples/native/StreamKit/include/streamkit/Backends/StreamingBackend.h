@@ -118,6 +118,12 @@ public:
     /// Begin camera capture and publish a video track.
     /// Throws CameraRequiresConnectionError if called before Connect() succeeds.
     /// A failure here does NOT affect the connection.
+    ///
+    /// `CameraConfig::facing` and `CameraConfig::device_id` are only honoured
+    /// by backends that open a camera themselves. Backends without a
+    /// portable camera-open path (the built-in C++ `LiveKitBackend`) ignore
+    /// both fields and expect frames to be pushed via
+    /// `FrameSink::InjectVideoFrame`. See `CameraConfig.h`.
     virtual void StartCamera(const CameraConfig& config = CameraConfig::Default()) = 0;
 
     /// Stop camera capture and unpublish the video track.

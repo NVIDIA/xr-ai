@@ -34,6 +34,7 @@ What's covered:
 | `streamkit_mapping_tests` | `ConnectionState` enum basic ops. |
 | `streamkit_agent_status_tests` | `_agent.status` JSON extractor — canonical / missing-key / truncated / empty-value / empty-payload cases. |
 | `streamkit_frame_sink_tests` | `FrameSink`'s move-overload default impl correctly forwards to the span overload; backends that override both bypass the forwarder. |
+| `streamkit_audio_sink_tests` | `AudioSink::InjectAudioFrame` delivers every parameter verbatim and dispatches correctly through an `AudioSink&` reference. |
 | `streamkit_session_tests` | Full `StreamSession` lifecycle through a `MockBackend` — connect / start audio / start camera / send / receive / agent status / disconnect, verifying event-hook fan-out. |
 | `streamkit_livekit_backend_tests` | `LiveKitBackend` state-change dedupe — no spurious initial `kDisconnected` on first `Connect()`, no doubled `kConnected` after a successful connect, idempotent `Disconnect()`. |
 
@@ -59,8 +60,9 @@ Each test is a standalone executable that asserts and exits non-zero on failure 
 | Connect / Disconnect + state mapping | ✅ implemented |
 | Data channel `Send` + `_agent.status` interception | ✅ implemented |
 | Video publish via `FrameSink::InjectVideoFrame` | ✅ implemented — first frame creates the track. Real-time callers should use the `std::vector<uint8_t>&&` overload to avoid a 1.4 MB per-frame copy. See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134). |
-| Microphone capture | ⚠️ no built-in path; subclass and feed `audio_source_` from a platform mic loop |
-| Platform camera open | ⚠️ no built-in path; host opens its camera and pushes frames via FrameSink |
+| Audio publish via `AudioSink::InjectAudioFrame` | ✅ implemented — `StartAudio()` creates the track; host pushes PCM frames |
+| Platform mic open | ⚠️ no built-in path; host opens its mic and pushes PCM frames via AudioSink |
+| Platform camera open | ⚠️ no built-in path; host opens its camera and pushes frames via FrameSink. `CameraConfig::facing` / `device_id` are inert here — the host chooses the camera |
 | `LiveKitConfig::token_url` HTTP fetch | ⚠️ not implemented; pass `LiveKitConfig::token` inline or override `FetchToken` |
 | `AudioConfig::MicrophoneMode` mapping | ⚠️ unapplied — the C++ SDK has no AEC/AGC/NS toggles on `AudioSource` |
 

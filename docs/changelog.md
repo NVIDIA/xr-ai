@@ -9,6 +9,33 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-20 — Native StreamKit: `AudioSink` mixin + `CameraConfig::Facing` contract (#134)
+
+Two design decisions in response to partner findings on the native C++
+StreamKit integration (PR #131 → issue #134):
+
+**`AudioSink` mixin alongside `FrameSink`.** The C++ SDK ships no built-in
+mic capture and the previous path required subclassing `LiveKitBackend` to
+reach the private `audio_source_` member — fragile and tied to
+implementation details. Added a public `AudioSink` interface with a single
+`InjectAudioFrame(pcm, rate, channels, samples_per_channel, ts)` entry
+point; `LiveKitBackend` now implements it. Shape mirrors `FrameSink` (and
+Swift's `AudioInjectable`) rather than introducing a unified `MediaSink`
+because audio and video have different validation rules, different real-time
+characteristics, and different zero-copy stories — collapsing them produces
+a leaky abstraction at no readability gain. No zero-copy `&&` overload on
+audio: a 10 ms @ 48 kHz mono PCM frame is ~960 bytes, well below the 1.4 MB
+per-frame threshold that justified `FrameSink`'s second overload.
+
+**`CameraConfig::Facing` documented as built-in-camera-open-only.** The
+`facing` / `device_id` fields are honoured by backends that open a camera
+themselves (iOS / Android / Web) and inert in the built-in C++ backend,
+which has no portable camera-open path. Considered splitting `CameraConfig`
+per-platform; rejected because it would fork the cross-platform shape that
+every other client depends on. Kept the struct identical everywhere and
+made the contract explicit in `CameraConfig.h` and `StreamingBackend.h`
+docstrings — silently inert on backends that can't act on it.
+
 ### 2026-05-20 — Hub releases held ring-buffer slots on participant leave (#143)
 
 `HubEndpoint` holds the latest SHM ring slot per `(participant_id,

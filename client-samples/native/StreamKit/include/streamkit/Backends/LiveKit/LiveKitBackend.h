@@ -23,6 +23,7 @@
 #include <string>
 #include <string_view>
 
+#include "streamkit/AudioSink.h"
 #include "streamkit/Backends/StreamingBackend.h"
 #include "streamkit/Config/BackendConfiguration.h"
 #include "streamkit/FrameSink.h"
@@ -52,10 +53,13 @@ namespace streamkit {
 ///   3. Push frames via the `FrameSink` interface — the first call lazily
 ///      creates the LocalVideoTrack and publishes it.
 ///
-/// The same lifecycle applies to audio, except no corresponding `AudioSink`
-/// is exposed. Subclass and override `StartAudio` to wire a platform mic into
-/// the underlying `livekit::AudioSource`.
-class LiveKitBackend : public StreamingBackend, public FrameSink {
+/// Audio follows the same shape via the `AudioSink` interface:
+///   1. Open the platform mic / audio capture source (out of scope here).
+///   2. Call `session.StartAudio()` to arm the backend and publish the track.
+///   3. Push PCM frames via `AudioSink::InjectAudioFrame`.
+class LiveKitBackend : public StreamingBackend,
+                       public FrameSink,
+                       public AudioSink {
 public:
     explicit LiveKitBackend(const LiveKitConfig& config);
     ~LiveKitBackend() override;
@@ -100,6 +104,17 @@ public:
                           int width,
                           int height,
                           PixelFormat format,
+                          int64_t timestamp_us) override;
+
+    // ── AudioSink ──────────────────────────────────────────────────────────
+
+    /// Push a PCM audio frame into the published audio track. The track is
+    /// created in StartAudio(); InjectAudioFrame requires StartAudio() to
+    /// have been called and silently drops otherwise (matches FrameSink).
+    void InjectAudioFrame(std::span<const std::int16_t> pcm,
+                          int sample_rate,
+                          int channels,
+                          int samples_per_channel,
                           int64_t timestamp_us) override;
 
 private:
