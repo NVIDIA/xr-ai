@@ -40,6 +40,7 @@ agent-samples/<name>/
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── xr_media_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
+│   ├── models.yaml                 ← logical model names + preset references
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
@@ -47,6 +48,14 @@ agent-samples/<name>/
     ├── agent.py                    ← <CamelName>Agent class
     └── …                           ← split helpers as needed (audio.py, services.py, …)
 ```
+
+`yaml/models.yaml` names the logical models the worker needs (`llm`,
+`vlm`, `stt`, `tts`, or any sample-specific name) with `kind:
+preset:<name>` + `base_url:` entries.  The worker passes its path to
+`load_models_config(...)` and constructs services via `make_llm` /
+`make_vlm` / `make_stt` / `make_tts` from `xr_ai_models`.  Schema, preset
+table, and the explicit (no-preset) spec are in
+[`agent-sdk/xr-ai-models/README.md`](../agent-sdk/xr-ai-models/README.md).
 
 When the worker is small (≲ 100 lines) keep it as a single file —
 `worker/<snake_name>_worker.py` containing everything. Only split once
@@ -99,11 +108,13 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
+    "xr-ai-models",
     # add task-specific deps here: numpy, torch, etc.
 ]
 
 [tool.uv.sources]
-xr-ai-agent = { path = "../../../agent-sdk", editable = true }
+xr-ai-agent  = { path = "../../../agent-sdk",              editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
 <snake_name>_worker = "<snake_name>_worker:run"

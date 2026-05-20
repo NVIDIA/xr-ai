@@ -505,7 +505,7 @@ class OpenAICompatSTT:
         channels: int = 1,
         timeout: float | None = None,
     ) -> str:
-        wav_bytes = _pcm_to_wav(audio, sample_rate, channels) if sample_rate else audio
+        wav_bytes = _pcm_to_wav(audio, sample_rate, channels) if sample_rate is not None else audio
         kwargs: dict[str, Any] = {
             "files":   {"file": ("audio.wav", wav_bytes, "audio/wav")},
             "data":    {"response_format": "json"},
