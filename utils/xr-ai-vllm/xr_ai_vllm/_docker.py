@@ -149,6 +149,28 @@ def container_running(name: str) -> bool:
         return False
 
 
+def remove_container(name: str) -> bool:
+    """``docker rm`` *name* if it exists; return True if the container was removed.
+
+    Called by ``stop_persistent_servers`` after ``stop_container`` so the next
+    launch goes through a full ``docker run`` and picks up any YAML config
+    changes (``--limit-mm-per-prompt``, ``extra_pip``, etc.). A missing
+    docker binary or a stale-but-already-gone container is non-fatal.
+    """
+    if not container_exists(name):
+        return False
+    try:
+        subprocess.run(
+            ["docker", "rm", name],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        return True
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+
 def stop_container(name: str, timeout_s: int = 20) -> bool:
     """Stop container *name* if it exists; return True if a container was stopped."""
     if not container_exists(name):
