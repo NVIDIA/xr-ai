@@ -242,12 +242,17 @@ export class LiveKitBackend {
    * @returns {Promise<void>}
    */
   async stopAudio() {
-    if (!this.#audioTrack) return;
-    if (this.#room) {
-      await this.#room.localParticipant.unpublishTrack(this.#audioTrack);
-    }
-    this.#audioTrack.stop();
+    const track = this.#audioTrack;
+    if (!track) return;
     this.#audioTrack = null;
+
+    try {
+      if (this.#room && this.#room.state === 'connected') {
+        await this.#room.localParticipant.unpublishTrack(track);
+      }
+    } finally {
+      track.stop();
+    }
   }
 
   /**
@@ -374,6 +379,8 @@ export class LiveKitBackend {
         room.removeAllListeners();
         await room.disconnect();
       }
+    } catch (err) {
+      console.warn('LiveKitBackend: room.disconnect() failed', err);
     } finally {
       for (const el of this.#audioElements.values()) el.remove();
       this.#audioElements.clear();
