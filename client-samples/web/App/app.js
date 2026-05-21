@@ -116,23 +116,26 @@ async function startCamera() {
   if (model.isCameraActive) {
     try {
       releasePreviewStream();
-      // Match LiveKit's default selection (facingMode: 'user') when no specific
-      // deviceId is chosen, so the preview and the published track land on the
-      // same physical camera. The cleaner fix — cloning the LiveKit publish
-      // track instead of opening a second getUserMedia — requires StreamKit
-      // accessors and lands in PR #153.
+      // No facingMode default — let the browser pick the same camera LiveKit
+      // picks (both calls use `{video: true}` when no deviceId is selected,
+      // so they converge on the system default). When the user has explicitly
+      // chosen a camera in the dropdown, both pin to that deviceId.
       const constraints = model.selectedCameraId
         ? { video: { deviceId: { exact: model.selectedCameraId } } }
-        : { video: { facingMode: 'user' } };
+        : { video: true };
       _previewStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoEl = $('camera-preview');
       videoEl.srcObject = _previewStream;
 
-      // Mirror by default (desktop/laptop webcams report no facingMode but are
-      // selfie cameras). Only the explicit back-camera case skips the flip.
+      // Default: do NOT mirror — XR / glasses / mobile-back-camera capture
+      // should preserve real-world orientation (left = left, right = right).
+      // Only flip when the camera is explicitly user-facing (front mobile cam,
+      // `facingMode === 'user'`). Desktop selfie webcams typically report no
+      // facingMode and stay unmirrored; users who want the FaceTime-style
+      // mirror UX on a desktop webcam can add a manual toggle later.
       const track = _previewStream.getVideoTracks()[0];
       const facingMode = track?.getSettings?.()?.facingMode ?? '';
-      videoEl.style.transform = facingMode === 'environment' ? '' : 'scaleX(-1)';
+      videoEl.style.transform = facingMode === 'user' ? 'scaleX(-1)' : '';
     } catch { /* preview failure is non-fatal */ }
   }
   render();
