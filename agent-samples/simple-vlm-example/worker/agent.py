@@ -47,6 +47,7 @@ import time
 
 import httpx
 from loguru import logger
+import numpy as np
 from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
                           ParticipantEvent, ProcessorEndpoint)
 from xr_ai_logging import print_task_done_banner
@@ -86,11 +87,9 @@ class SimpleVlmAgent:
         *,
         default_prompt:     str   = "Describe what you see.",
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
-        silence_threshold:  float = 0.01,
         silence_duration:   float = 0.8,
         min_speech:         float = 0.3,
         silero_threshold:   float = 0.5,
-        vad_noise_mult:     float = 4.0,
         frame_max_age_s:     float = 2.0,
         camera_on_timeout_s: float = 15.0,
         camera_grace_s:      float = 5.0,
@@ -107,11 +106,9 @@ class SimpleVlmAgent:
 
         self._default_prompt    = default_prompt
         self._system_prompt     = system_prompt
-        self._vad_silence_threshold = silence_threshold
         self._vad_silence_s         = silence_duration
         self._vad_min_s             = min_speech
         self._vad_silero_threshold  = silero_threshold
-        self._vad_noise_mult        = vad_noise_mult
         self._frame_max_age_us  = int(frame_max_age_s * 1_000_000)
         self._camera_on_timeout = camera_on_timeout_s
         self._camera_grace_s    = camera_grace_s
@@ -130,7 +127,10 @@ class SimpleVlmAgent:
     async def _on_audio(self, chunk: AudioChunk) -> None:
         vs = self._get_voice(chunk.participant_id)
         assert vs.vad is not None
-        await vs.vad.feed(chunk.data, chunk.sample_rate, chunk.samples)
+        # Hub delivers float32 LE PCM; VadDetector takes int16 LE PCM.
+        f32  = np.frombuffer(chunk.data, dtype=np.float32)
+        i16  = (np.clip(f32, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+        await vs.vad.feed(i16, chunk.sample_rate)
 
     def _get_voice(self, pid: str) -> VoiceState:
         vs = self._voice.get(pid)
@@ -139,11 +139,9 @@ class SimpleVlmAgent:
             vs.vad = VadDetector(
                 on_utterance      = lambda audio, sr, _pid=pid: self._on_vad_utterance(_pid, audio, sr),
                 on_speech_start   = lambda _pid=pid: self._on_vad_speech_start(_pid),
-                silence_threshold = self._vad_silence_threshold,
                 silence_duration  = self._vad_silence_s,
                 min_speech        = self._vad_min_s,
                 silero_threshold  = self._vad_silero_threshold,
-                vad_noise_mult    = self._vad_noise_mult,
             )
             self._voice[pid] = vs
         return vs

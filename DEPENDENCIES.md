@@ -92,15 +92,14 @@ xr-ai-vllm  (utils/xr-ai-vllm/)
 
 xr-ai-vad  (utils/xr-ai-vad/)
     └── numpy >=1.24
-    └── silero-vad >=5.1
+    └── silero-vad >=5.1  (pulls torch + onnxruntime transitively)
     Shared per-participant Silero VAD utterance detector for agent workers
-    that ingest microphone audio.  ONNX backend — no torch / GPU required
-    at runtime.  Falls back to an adaptive energy gate when silero-vad
-    fails to load.  Consumes raw float32 PCM bytes (the format
-    ``AudioChunk.data`` uses) and emits int16 PCM utterance bytes via an
-    async ``on_utterance`` callback; an optional ``on_speech_start`` hook
-    fires when speech first crosses ``min_speech`` for speculative
-    downstream warmup (e.g. start the camera before STT completes).
+    that ingest microphone audio.  Uses the ONNX backend (no GPU required
+    at runtime).  Consumes raw int16 PCM bytes and emits int16 PCM utterance
+    bytes via an async ``on_utterance`` callback; an optional
+    ``on_speech_start`` hook fires when speech first crosses ``min_speech``
+    for speculative downstream warmup (e.g. start the camera before STT
+    completes).
 
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]
@@ -392,7 +391,7 @@ forwarding.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | — |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-logging` [editable] | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0, silero-vad >=5.1 |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-logging` [editable], `xr-ai-vad` [editable] | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /

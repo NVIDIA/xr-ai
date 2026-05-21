@@ -9,6 +9,36 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-21 — `xr-ai-vad` is Silero-only; `xr-render-demo` migrated
+
+Dropped the adaptive-energy fallback path that shipped in the initial
+`utils/xr-ai-vad/` introduction and migrated `agent-samples/xr-render-demo`
+to use the shared detector.
+
+**Silero-only, no fallback.** The initial cut shipped Silero with an
+adaptive-energy gate kicking in if `silero-vad` failed to load. That extra
+codepath came with its own knobs (`silence_threshold`, `vad_noise_mult`),
+its own state (`_noise_floor`), and silently degraded the worker behaviour
+when something went wrong with the model. The fallback wasn't asked for;
+the detector now raises at construction if the model can't be loaded so the
+failure is loud, and the public surface shrinks to just Silero knobs
+(`silero_threshold`, `silence_duration`, `min_speech`).
+
+**Canonical input is int16 PCM.** Previously `feed()` took float32 LE
+bytes plus an explicit sample count so it matched
+`AudioChunk.data`. Pipecat's `InputAudioRawFrame.audio` is int16 at
+16 kHz, and converting to int16 is the natural buffering format (the
+detector emits int16 in `on_utterance`). The signature is now
+`feed(pcm_int16, sample_rate)`; simple-vlm-example does the
+trivial float32→int16 conversion at the call site.
+
+**`xr-render-demo` migrated.** Its previous bespoke
+`SttProcessor._feed` duplicated the detector loop. It now constructs a
+`VadDetector`, feeds Pipecat's int16 PCM through it, and runs STT +
+filler filtering + `TranscriptionFrame` push from the
+`on_utterance` callback. Both samples now share one Silero implementation
+behind `xr-ai-vad`.
+
 ### 2026-05-21 — `utils/xr-ai-vad/` shared Silero VAD utility
 
 Extracted the Silero-VAD utterance detector into a new shared utility
@@ -30,26 +60,12 @@ doesn't fit there. `utils/xr-ai-vad/` mirrors the shape of
 silero-vad), opt-in via per-sample `[tool.uv.sources]`, no leak into
 samples that don't process voice.
 
-**Why raw bytes in/out (no `xr-ai-agent` dep).** The detector takes
-`(float32_bytes, sample_rate, n_samples)` and emits int16 PCM via
-callback. Mirrors the glasses reference exactly. Keeps the
-`utils/` → `agent-sdk/` direction unbroken and leaves the door open for
-the `xr-render-demo` migration (int16-PCM input) to use the same
-package without an `AudioChunk` dependency edge.
-
 **`on_speech_start` hook added vs. the glasses original.** The previous
 `simple-vlm-example` VAD path fired a speculative camera-warmup the
 moment `speech_s` crossed `min_speech`. The callback-only finalize API
 in the glasses original had no equivalent, so the migration would have
 been a behavior regression. Added a one-shot per-utterance
 `on_speech_start` callback to preserve it.
-
-**`xr-render-demo` deferred.** Its silero is wedged into a Pipecat
-`FrameProcessor` with int16-PCM inputs, inline STT calls, downstream
-`TranscriptionFrame` pushes, filler-phrase filtering, and trace
-logging. Extracting it requires either a pipecat wrapper around the
-new detector or pulling the detection loop out and re-threading the
-FrameProcessor around it — invasive and out of scope for this PR.
 
 ### 2026-05-20 — Native StreamKit: `AudioSink` mixin + `CameraConfig::Facing` contract (#134)
 

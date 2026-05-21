@@ -33,11 +33,8 @@ frame_max_age_s:      5.0   # frame older than this is considered stale; agent r
 camera_on_timeout_s: 30.0   # give up waiting for a fresh frame after this many seconds
 camera_grace_s:       5.0   # keep camera on this long after a query (avoids restart on follow-ups)
 
-# Voice Activity Detection — Silero VAD (ONNX) with an adaptive energy fallback.
+# Voice Activity Detection — Silero VAD (ONNX backend).
 # Tune if STT triggers too early or misses speech.
 silero_threshold:  0.5    # Silero speech-probability gate (0..1); lower = more sensitive
 silence_duration:  0.8    # seconds of silence that ends an utterance
 min_speech:        0.3    # minimum seconds of speech before STT is called
-# Energy-fallback tunables (only used when silero-vad fails to load):
-silence_threshold: 0.01   # float32 RMS floor for the fallback energy gate
-vad_noise_mult:    4.0    # multiplier over the adaptive noise floor

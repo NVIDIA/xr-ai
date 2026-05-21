@@ -3,9 +3,8 @@
 
 """Shared Silero-VAD utterance detector for xr-ai agent workers.
 
-Consumes float32 PCM bytes (the format XR Media Hub ``AudioChunk.data`` uses)
-and emits int16 PCM utterance bytes via an async callback when speech ends.
-Falls back to an adaptive energy gate when ``silero-vad`` is unavailable.
+Consumes int16 LE PCM bytes and emits int16 PCM utterance bytes via an
+async callback when speech ends.
 """
 from xr_ai_vad.detector import OnSpeechStartCb, OnUtteranceCb, VadDetector
 

@@ -21,12 +21,10 @@ class WorkerConfig:
     vlm_mcp:    str   # base URL, e.g. http://localhost:8240
     video_mcp:  str   # base URL, e.g. http://localhost:8210
 
-    # VAD
-    silence_threshold: float
+    # VAD (Silero, ONNX).
     silence_duration:  float
     min_speech:        float
     silero_threshold:  float   # Silero speech probability gate (0..1)
-    vad_noise_mult:    float   # adaptive energy fallback multiplier
 
 
 def load_config(path: pathlib.Path | None) -> WorkerConfig:
@@ -53,9 +51,7 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         oxr_mcp     = data.get("oxr_mcp_url",     "http://localhost:8230"),
         vlm_mcp     = data.get("vlm_mcp_url",     "http://localhost:8240"),
         video_mcp   = data.get("video_mcp_url",   "http://localhost:8210"),
-        silence_threshold = float(data.get("silence_threshold", 0.005)),
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),
         silero_threshold  = float(data.get("silero_threshold",  0.5)),
-        vad_noise_mult    = float(data.get("vad_noise_mult",    4.0)),
     )

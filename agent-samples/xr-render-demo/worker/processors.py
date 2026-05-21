@@ -8,7 +8,7 @@ Pipeline:
   InputTransport → SttProcessor → RenderSceneProcessor → TtsProcessor → OutputTransport
 
 SttProcessor
-  Silero VAD (falls back to adaptive energy) → per-utterance STT → TranscriptionFrame.
+  xr-ai-vad Silero detector → per-utterance STT → TranscriptionFrame.
 
 RenderSceneProcessor
   TranscriptionFrame → parallel quick-ack + multi-step agentic loop.
@@ -32,7 +32,6 @@ import time
 import uuid
 from pathlib import Path
 
-import numpy as np
 from fastmcp import Client as McpClient
 from loguru import logger
 from pipecat.frames.frames import (
@@ -45,18 +44,12 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-try:
-    import torch as _torch
-    _TORCH_AVAILABLE = True
-except ImportError:
-    _torch = None           # type: ignore[assignment]
-    _TORCH_AVAILABLE = False
-
 from xr_ai_agent import DataMessage
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, STTService, TTSService, ToolCall, ToolDef
 from xr_ai_pipecat.audio import stream_sentences_to_audio
 from xr_ai_pipecat.transport import XRMediaHubTransport, SAMPLE_RATE
+from xr_ai_vad import VadDetector
 
 from config import WorkerConfig
 
@@ -67,9 +60,6 @@ from config import WorkerConfig
 # ``xr_render_demo_worker.main()``; everything else is unaffected.
 _trace_log = logger.bind(trace=True)
 
-_SILERO_WINDOW  = 512    # 32 ms at 16 kHz
-_MAX_UTT_S      = 30.0
-_PRE_ROLL_CHUNKS = 10   # ~320 ms pre-roll; prepended when speech onset is detected
 _MAX_LOOP       = 10     # visual queries need up to 5 steps; give headroom
 _FILLER_PHRASES = frozenset({
     "mm-hmm", "mm hmm", "uh huh", "uh-huh", "uh", "um", "ah", "oh", "eh",
@@ -120,7 +110,12 @@ def _now_us() -> int:
 # ── SttProcessor ──────────────────────────────────────────────────────────────
 
 class SttProcessor(FrameProcessor):
-    """Silero VAD (with adaptive energy fallback) + utterance-level STT."""
+    """xr-ai-vad Silero detector + utterance-level STT.
+
+    Audio frames are fed through the shared ``VadDetector``; when an
+    utterance completes, the detector's ``on_utterance`` callback runs STT
+    and pushes a ``TranscriptionFrame`` downstream.
+    """
 
     def __init__(
         self,
@@ -134,116 +129,29 @@ class SttProcessor(FrameProcessor):
         self._transport = transport
         self._cfg       = cfg
 
-        self._buffer:        list[bytes] = []
-        self._buffer_samples = 0
-        self._speech_s  = 0.0
-        self._silent_s  = 0.0
-        self._speaking  = False
-        self._stt_busy  = False
-        # Circular pre-roll: always keep the last N chunks before speech onset.
-        # Prepended to the utterance buffer so the first word's attack is captured.
-        self._pre_roll:  list[bytes] = []
-
-        self._silero = None
-        try:
-            from silero_vad import load_silero_vad
-            self._silero = load_silero_vad(onnx=True)
-            logger.info("Silero VAD loaded")
-        except Exception as exc:
-            logger.warning("Silero VAD unavailable ({}) — using adaptive energy VAD", exc)
-
-        self._silero_buf:  np.ndarray = np.zeros(0, np.float32)
-        self._noise_floor: float = 0.001
+        self._vad = VadDetector(
+            on_utterance     = self._on_utterance,
+            silence_duration = cfg.silence_duration,
+            min_speech       = cfg.min_speech,
+            silero_threshold = cfg.silero_threshold,
+        )
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, InputAudioRawFrame):
-            await self._feed(frame)
+            # Pipecat delivers int16 PCM at SAMPLE_RATE — pass through directly.
+            await self._vad.feed(frame.audio, SAMPLE_RATE)
         else:
             await self.push_frame(frame, direction)
 
-    async def _feed(self, frame: InputAudioRawFrame) -> None:
-        pcm     = frame.audio
-        n_s     = len(pcm) // 2
-        chunk_s = n_s / max(SAMPLE_RATE, 1)
-
-        if self._silero is not None and _TORCH_AVAILABLE:
-            f32 = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-            self._silero_buf = np.concatenate([self._silero_buf, f32])
-            speech_prob = 0.0
-            while len(self._silero_buf) >= _SILERO_WINDOW:
-                window = self._silero_buf[:_SILERO_WINDOW]
-                self._silero_buf = self._silero_buf[_SILERO_WINDOW:]
-                tensor = _torch.from_numpy(np.ascontiguousarray(window))
-                speech_prob = max(speech_prob,
-                                  float(self._silero(tensor, SAMPLE_RATE)))
-            is_speech = speech_prob > self._cfg.silero_threshold
-        else:
-            arr = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-            rms = float(np.sqrt(np.mean(arr ** 2))) if len(arr) else 0.0
-            if not self._speaking and not self._buffer:
-                self._noise_floor = 0.95 * self._noise_floor + 0.05 * rms
-            eff_thr   = max(self._cfg.silence_threshold,
-                            self._noise_floor * self._cfg.vad_noise_mult)
-            is_speech = rms >= eff_thr
-
-        if is_speech:
-            if not self._speaking:
-                logger.info("speech START")
-                self._speaking = True
-                # Prepend pre-roll so the first word's attack isn't clipped.
-                if self._pre_roll:
-                    pre_bytes = b"".join(self._pre_roll)
-                    self._buffer.insert(0, pre_bytes)
-                    self._buffer_samples += len(pre_bytes) // 2
-                    self._pre_roll.clear()
-            self._buffer.append(pcm)
-            self._buffer_samples += n_s
-            self._speech_s += chunk_s
-            self._silent_s  = 0.0
-        else:
-            if self._speaking:
-                self._buffer.append(pcm)
-                self._buffer_samples += n_s
-                self._silent_s += chunk_s
-            else:
-                # Not speaking — maintain a rolling pre-roll window.
-                self._pre_roll.append(pcm)
-                if len(self._pre_roll) > _PRE_ROLL_CHUNKS:
-                    self._pre_roll.pop(0)
-
-        utt_s = self._buffer_samples / max(SAMPLE_RATE, 1)
-        if self._speaking and utt_s > _MAX_UTT_S:
-            logger.info("max utterance length — finalising")
-            await self._finalize()
-            return
-
-        if (self._speaking
-                and self._speech_s >= self._cfg.min_speech
-                and self._silent_s >= self._cfg.silence_duration
-                and not self._stt_busy):
-            await self._finalize()
-
-    async def _finalize(self) -> None:
-        if not self._buffer:
-            self._speaking = False
-            return
-        audio_bytes = b"".join(self._buffer)
-        self._buffer.clear()
-        self._buffer_samples = 0
-        self._speaking  = False
-        self._silent_s  = 0.0
-        self._speech_s  = 0.0
-        self._stt_busy  = True
-        dur_s = len(audio_bytes) // 2 / max(SAMPLE_RATE, 1)
+    async def _on_utterance(self, audio_bytes: bytes, sample_rate: int) -> None:
+        dur_s = (len(audio_bytes) // 2) / max(sample_rate, 1)
         logger.info("transcribing {:.1f}s", dur_s)
         try:
-            text = await self._stt.transcribe(audio_bytes, sample_rate=SAMPLE_RATE)
+            text = await self._stt.transcribe(audio_bytes, sample_rate=sample_rate)
         except Exception:
             logger.exception("STT failed")
             return
-        finally:
-            self._stt_busy = False
         if not text:
             logger.debug("STT returned empty ({:.1f}s audio) — VAD may have caught noise", dur_s)
             return

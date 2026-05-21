@@ -15,28 +15,12 @@ oxr_mcp_url:    http://localhost:8230
 vlm_mcp_url:    http://localhost:8240
 video_mcp_url:  http://localhost:8210
 
-# ── Voice activity detection (used to slice utterances for STT) ──────────────
-# The effective speech threshold is: max(silence_threshold, noise_floor × vad_noise_mult)
-# where noise_floor is a slow per-participant EMA of RMS during confirmed silence.
-# This means the threshold automatically rises in noisy rooms so background noise
-# doesn't keep the VAD open forever.
-#
-# silence_threshold: hard floor — threshold never drops below this.
-#   In a quiet room the adaptive floor stays well below this value, so this
-#   effectively acts as a fixed threshold. In a noisy room the adaptive floor
-#   takes over.
-#
-# vad_noise_mult: how many × above the noise floor speech must be to count.
-#   4.0 works well for most environments.  Raise (e.g. 6.0) if the VAD still
-#   triggers on non-speech; lower (e.g. 3.0) if quiet speech is being missed.
-#
+# ── Voice activity detection (Silero VAD, ONNX backend) ──────────────────────
 # silence_duration: seconds of trailing silence that ends an utterance.
 # min_speech: minimum cumulative speech before STT fires (filters short blips).
-silence_threshold: 0.005
-vad_noise_mult:    4.0
+# silero_threshold: speech-probability gate (0..1). Lower = more sensitive
+#   (catches quieter/faster speech). Default 0.5 often misses the onset of a
+#   word; 0.3 captures it earlier.
 silence_duration:  0.8
 min_speech:        0.15
-# Silero speech-probability gate. Lower = more sensitive (catches quieter/faster speech).
-# Default 0.5 often misses the onset of a word; 0.3 captures it earlier.
 silero_threshold:  0.3
-

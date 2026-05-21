@@ -118,9 +118,7 @@ LiveKit mic (int16 PCM) → hub IPC (float32) → XRMediaHubTransport.input()
                          prepended to the utterance buffer on speech onset
                          so the first word's attack isn't clipped
       VAD                Silero (ONNX, 512-sample / 32 ms windows,
-                         probability threshold)
-                         fallback if Silero unavailable: adaptive energy
-                         (tracks noise floor, multiplier-gated threshold)
+                         probability threshold) via shared xr-ai-vad util
       accumulates        audio while speaking
       finalizes when     silence ≥ 0.8s AND speech ≥ 0.15s
                          OR max utterance length (30s) hit

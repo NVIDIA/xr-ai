@@ -3,10 +3,10 @@
 
 """Unit tests for the xr-ai-vad utterance detector.
 
-These tests exercise the state machine end-to-end via the adaptive-energy
-fallback path so they pass without the silero-vad ONNX model.  The energy
-gate is forced active by sabotaging the loaded silero model so the public
-API is exercised exactly as a worker would call it.
+These tests exercise the state machine end-to-end with the Silero classifier
+swapped for a deterministic stub.  The stub looks at the int16 PCM bytes it
+receives and returns a probability of 0.9 for non-zero audio (speech) and
+0.0 for silence, so the VadDetector boundary contract is unchanged.
 """
 from __future__ import annotations
 
@@ -21,23 +21,36 @@ from xr_ai_vad import VadDetector
 SR        = 16_000
 CHUNK_S   = 0.02            # 20 ms chunks (matches XR hub default cadence)
 CHUNK_N   = int(SR * CHUNK_S)
-SILENT    = (np.zeros(CHUNK_N, np.float32)).tobytes()
+SILENT    = (np.zeros(CHUNK_N, np.int16)).tobytes()
 
 
 def _tone_bytes(amp: float, n: int = CHUNK_N) -> bytes:
-    """One 20 ms chunk of a 1 kHz sine at the given amplitude."""
+    """One 20 ms chunk of a 1 kHz sine at the given amplitude as int16 PCM."""
     t = np.arange(n, dtype=np.float32) / SR
-    return (amp * np.sin(2 * np.pi * 1000.0 * t)).astype(np.float32).tobytes()
+    f32 = amp * np.sin(2 * np.pi * 1000.0 * t)
+    return (f32 * 32767).astype(np.int16).tobytes()
 
 
-def _force_energy_fallback(vad: VadDetector) -> None:
-    """Disable silero so the energy gate is the sole classifier under test."""
-    vad._silero = None  # type: ignore[attr-defined]
+class _StubSilero:
+    """Stand-in for the silero model: speech prob is high when audio is loud."""
+
+    def __init__(self, threshold_rms: float = 0.005) -> None:
+        self._threshold = threshold_rms
+
+    def __call__(self, tensor, sample_rate: int) -> float:
+        arr = tensor.numpy() if hasattr(tensor, "numpy") else np.asarray(tensor)
+        rms = float(np.sqrt(np.mean(arr.astype(np.float32) ** 2))) if arr.size else 0.0
+        return 0.9 if rms >= self._threshold else 0.0
+
+
+def _install_stub(vad: VadDetector) -> None:
+    """Replace the loaded silero model with a deterministic stub."""
+    vad._silero = _StubSilero()  # type: ignore[attr-defined]
 
 
 async def _feed_many(vad: VadDetector, n: int, chunk: bytes) -> None:
     for _ in range(n):
-        await vad.feed(chunk, SR, CHUNK_N)
+        await vad.feed(chunk, SR)
 
 
 @pytest.mark.asyncio
@@ -50,12 +63,11 @@ async def test_finalize_after_silence_emits_utterance():
 
     vad = VadDetector(
         on_utterance      = on_utt,
-        silence_threshold = 0.005,
         silence_duration  = 0.10,   # short to keep the test fast
         min_speech        = 0.06,
-        vad_noise_mult    = 2.0,
+        silero_threshold  = 0.5,
     )
-    _force_energy_fallback(vad)
+    _install_stub(vad)
 
     # 8 × 20 ms = 160 ms of speech (> min_speech).
     await _feed_many(vad, 8, _tone_bytes(0.5))
@@ -65,7 +77,6 @@ async def test_finalize_after_silence_emits_utterance():
     assert len(received) == 1
     audio, sr = received[0]
     assert sr == SR
-    # Output is int16 PCM — total bytes should match the audio held.
     assert len(audio) % 2 == 0
     # Sanity: utterance contains the speech we fed in (>= 160 ms worth).
     assert len(audio) // 2 >= int(SR * 0.16)
@@ -89,12 +100,11 @@ async def test_speech_start_fires_once_at_min_speech_crossing():
     vad = VadDetector(
         on_utterance      = on_utt,
         on_speech_start   = on_start,
-        silence_threshold = 0.005,
         silence_duration  = 0.10,
         min_speech        = 0.06,
-        vad_noise_mult    = 2.0,
+        silero_threshold  = 0.5,
     )
-    _force_energy_fallback(vad)
+    _install_stub(vad)
 
     # 10 × 20 ms = 200 ms of speech — well past min_speech (60 ms).
     await _feed_many(vad, 10, _tone_bytes(0.5))
@@ -123,12 +133,11 @@ async def test_below_min_speech_does_not_emit():
 
     vad = VadDetector(
         on_utterance      = on_utt,
-        silence_threshold = 0.005,
         silence_duration  = 0.10,
         min_speech        = 0.5,    # 500 ms — well above what we'll feed
-        vad_noise_mult    = 2.0,
+        silero_threshold  = 0.5,
     )
-    _force_energy_fallback(vad)
+    _install_stub(vad)
 
     # 4 × 20 ms = 80 ms of speech, below min_speech.
     await _feed_many(vad, 4, _tone_bytes(0.5))
@@ -147,12 +156,11 @@ async def test_reset_drops_in_progress_utterance():
 
     vad = VadDetector(
         on_utterance      = on_utt,
-        silence_threshold = 0.005,
         silence_duration  = 0.10,
         min_speech        = 0.06,
-        vad_noise_mult    = 2.0,
+        silero_threshold  = 0.5,
     )
-    _force_energy_fallback(vad)
+    _install_stub(vad)
 
     await _feed_many(vad, 8, _tone_bytes(0.5))
     vad.reset()

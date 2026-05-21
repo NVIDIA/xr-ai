@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Audio helpers: float32 PCM ⇄ WAV."""
+"""Audio helpers: int16 PCM ⇄ WAV; WAV → float32 AudioChunk."""
 from __future__ import annotations
 
 import io
