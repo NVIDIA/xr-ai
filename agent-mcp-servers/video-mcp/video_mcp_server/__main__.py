@@ -64,6 +64,7 @@ import argparse
 import asyncio
 import ctypes
 import json
+import os
 import pathlib
 import time
 
@@ -647,7 +648,9 @@ def build_app(
 
 async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     recordings_dir_raw = cfg.get("recordings_dir", "")
-    out_dir            = pathlib.Path(cfg.get("out_dir", "/tmp/xr_video_queries"))
+    _run_dir = os.environ.get("XR_RUN_DIR")
+    _default_out = str(pathlib.Path(_run_dir) / "frames") if _run_dir else "/tmp/xr_video_queries"
+    out_dir    = pathlib.Path(cfg.get("out_dir") or _default_out)
     hub_pub            = cfg.get("hub_pub",  _DEFAULT_HUB_PUB)
     hub_push           = cfg.get("hub_push", _DEFAULT_HUB_PUSH)
     host               = cfg.get("host", "0.0.0.0")
