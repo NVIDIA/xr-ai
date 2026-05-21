@@ -311,6 +311,9 @@ def run() -> None:
                 if r.status == 200:
                     break
         except Exception:
+            # Server still coming up — connection refused / timeout is the
+            # expected case for the first ~20s while NeMo loads. Retry
+            # silently; the for/else below handles the hard timeout.
             pass
     else:
         sys.exit("[stt_server] timed out waiting for server to become healthy")
