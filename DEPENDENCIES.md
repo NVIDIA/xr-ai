@@ -90,6 +90,18 @@ xr-ai-vllm  (utils/xr-ai-vllm/)
     container.  Imported by the four vllm wrappers and by the orchestrator
     `--stop` flow.
 
+xr-ai-vad  (utils/xr-ai-vad/)
+    └── numpy >=1.24
+    └── silero-vad >=5.1
+    Shared per-participant Silero VAD utterance detector for agent workers
+    that ingest microphone audio.  ONNX backend — no torch / GPU required
+    at runtime.  Falls back to an adaptive energy gate when silero-vad
+    fails to load.  Consumes raw float32 PCM bytes (the format
+    ``AudioChunk.data`` uses) and emits int16 PCM utterance bytes via an
+    async ``on_utterance`` callback; an optional ``on_speech_start`` hook
+    fires when speech first crosses ``min_speech`` for speculative
+    downstream warmup (e.g. start the camera before STT completes).
+
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]
     └── pyzmq >=26.0
@@ -170,6 +182,7 @@ xr-ai-tests  (tests/)
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
+    └── xr-ai-vad               [editable: ../utils/xr-ai-vad]
     └── xr-ai-vllm              [editable: ../utils/xr-ai-vllm]
     └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
     └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
@@ -346,7 +359,7 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]`, `xr-ai-vad [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded

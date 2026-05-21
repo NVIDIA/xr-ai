@@ -13,6 +13,7 @@ dependencies = [
     "xr-ai-agent",
     "xr-ai-logging",
     "xr-ai-models",
+    "xr-ai-vad",
     "numpy>=1.24",
     "Pillow>=10.0",
     "pyyaml>=6.0",
@@ -22,6 +23,7 @@ dependencies = [
 xr-ai-agent   = { path = "../../../agent-sdk", editable = true }
 xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 xr-ai-models  = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-vad     = { path = "../../../utils/xr-ai-vad", editable = true }
 
 [project.scripts]
 simple_vlm_example_worker = "simple_vlm_example_worker:run"

@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-vad"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+# Shared Silero-VAD utterance detector used by agent workers that ingest
+# microphone audio.  ONNX backend — no torch / GPU required at runtime.
+# Adaptive energy-based VAD is used as a fallback when silero is unavailable.
+dependencies = [
+    "numpy>=1.24",
+    "silero-vad>=5.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_vad"]

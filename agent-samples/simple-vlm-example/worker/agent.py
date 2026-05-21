@@ -51,8 +51,9 @@ from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
                           ParticipantEvent, ProcessorEndpoint)
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import STTService, TTSService, VLMService
+from xr_ai_vad import VadDetector
 
-from audio import chunks_to_wav, now_us, rms, wav_to_chunks
+from audio import int16_pcm_to_wav, now_us, wav_to_chunks
 from pixels import encode_image, frame_to_pil
 from voice import VoiceState
 
@@ -88,6 +89,8 @@ class SimpleVlmAgent:
         silence_threshold:  float = 0.01,
         silence_duration:   float = 0.8,
         min_speech:         float = 0.3,
+        silero_threshold:   float = 0.5,
+        vad_noise_mult:     float = 4.0,
         frame_max_age_s:     float = 2.0,
         camera_on_timeout_s: float = 15.0,
         camera_grace_s:      float = 5.0,
@@ -104,9 +107,11 @@ class SimpleVlmAgent:
 
         self._default_prompt    = default_prompt
         self._system_prompt     = system_prompt
-        self._vad_threshold     = silence_threshold
-        self._vad_silence_s     = silence_duration
-        self._vad_min_s         = min_speech
+        self._vad_silence_threshold = silence_threshold
+        self._vad_silence_s         = silence_duration
+        self._vad_min_s             = min_speech
+        self._vad_silero_threshold  = silero_threshold
+        self._vad_noise_mult        = vad_noise_mult
         self._frame_max_age_us  = int(frame_max_age_s * 1_000_000)
         self._camera_on_timeout = camera_on_timeout_s
         self._camera_grace_s    = camera_grace_s
@@ -123,55 +128,49 @@ class SimpleVlmAgent:
     # ── audio path: VAD → STT → query ─────────────────────────────────────────
 
     async def _on_audio(self, chunk: AudioChunk) -> None:
-        pid = chunk.participant_id
-        vs  = self._get_voice(pid, chunk.sample_rate, chunk.channels)
+        vs = self._get_voice(chunk.participant_id)
+        assert vs.vad is not None
+        await vs.vad.feed(chunk.data, chunk.sample_rate, chunk.samples)
 
-        chunk_s = chunk.samples / max(chunk.sample_rate, 1)
-        if rms(chunk.data) >= self._vad_threshold:
-            vs.chunks.append(chunk)
-            vs.speech_s += chunk_s
-            vs.silent_s  = 0.0
-        else:
-            if vs.chunks:
-                vs.chunks.append(chunk)
-            vs.silent_s += chunk_s
+    def _get_voice(self, pid: str) -> VoiceState:
+        vs = self._voice.get(pid)
+        if vs is None:
+            vs = VoiceState()
+            vs.vad = VadDetector(
+                on_utterance      = lambda audio, sr, _pid=pid: self._on_vad_utterance(_pid, audio, sr),
+                on_speech_start   = lambda _pid=pid: self._on_vad_speech_start(_pid),
+                silence_threshold = self._vad_silence_threshold,
+                silence_duration  = self._vad_silence_s,
+                min_speech        = self._vad_min_s,
+                silero_threshold  = self._vad_silero_threshold,
+                vad_noise_mult    = self._vad_noise_mult,
+            )
+            self._voice[pid] = vs
+        return vs
 
-        # Speculative camera-on: the moment speech crosses min_speech, tell
-        # the client to start the camera so it warms up in parallel with the
-        # user finishing their sentence and STT processing.  By the time the
-        # query dispatches the camera is usually already streaming.
-        if (vs.speech_s >= self._vad_min_s
-                and vs.speech_s - chunk_s < self._vad_min_s
-                and not vs.transcribing):
-            old_timer = self._camera_off_timers.pop(pid, None)
-            if old_timer and not old_timer.done():
-                old_timer.cancel()
-            asyncio.create_task(self._ensure_camera_on(pid))
+    async def _on_vad_speech_start(self, pid: str) -> None:
+        """Speculative camera warmup the moment speech crosses min_speech.
 
-        if (vs.silent_s  >= self._vad_silence_s
-                and vs.speech_s >= self._vad_min_s
-                and not vs.transcribing):
-            utterance   = vs.chunks[:]
-            vs.chunks   = []
-            vs.speech_s = vs.silent_s = 0.0
-            vs.transcribing = True
-            asyncio.create_task(self._handle_audio_utterance(pid, utterance, vs))
-        elif (vs.silent_s >= self._vad_silence_s
-                and vs.speech_s < self._vad_min_s
-                and vs.chunks):
-            vs.chunks   = []
-            vs.speech_s = 0.0
+        Fires while the user is still talking — by the time STT finishes,
+        the camera is usually already streaming.  Skipped if a transcription
+        for this pid is already in flight (the prior camera-on still applies).
+        """
+        vs = self._voice.get(pid)
+        if vs is None or vs.transcribing:
+            return
+        old_timer = self._camera_off_timers.pop(pid, None)
+        if old_timer and not old_timer.done():
+            old_timer.cancel()
+        await self._ensure_camera_on(pid)
 
-    def _get_voice(self, pid: str, sample_rate: int = 16000, channels: int = 1) -> VoiceState:
-        if pid not in self._voice:
-            self._voice[pid] = VoiceState(sample_rate=sample_rate, channels=channels)
-        return self._voice[pid]
-
-    async def _handle_audio_utterance(
-        self, pid: str, chunks: list[AudioChunk], vs: VoiceState,
-    ) -> None:
+    async def _on_vad_utterance(self, pid: str, audio_bytes: bytes, sample_rate: int) -> None:
+        vs = self._voice.get(pid)
+        if vs is None or vs.transcribing:
+            return
+        vs.transcribing = True
         try:
-            text = (await self._stt.transcribe(chunks_to_wav(chunks))).strip()
+            wav = int16_pcm_to_wav(audio_bytes, sample_rate)
+            text = (await self._stt.transcribe(wav)).strip()
             if not text:
                 return
             logger.info("audio query  pid={!r}  {!r}", pid, text[:80])

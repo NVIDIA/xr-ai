@@ -27,9 +27,11 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     frame_max_age_s:           2.0   # frames older than this trigger a camera-on request
     camera_on_timeout_s:      15.0   # how long to wait for a fresh frame after startCamera
     camera_grace_s:            5.0   # keep camera on this long after a query (avoids restart on follow-ups)
-    silence_threshold:          0.01  # float32 RMS below which audio is silence
+    silero_threshold:           0.5   # Silero speech probability gate (0..1)
+    silence_threshold:          0.01  # float32 RMS for adaptive energy fallback only
     silence_duration:           0.8   # seconds of silence that ends an utterance
     min_speech:                 0.3   # minimum seconds of speech before STT fires
+    vad_noise_mult:             4.0   # multiplier over adaptive noise floor (fallback only)
 """
 from __future__ import annotations
 
@@ -77,6 +79,8 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         silence_threshold     =float(cfg.get("silence_threshold",     0.01)),
         silence_duration      =float(cfg.get("silence_duration",      0.8)),
         min_speech            =float(cfg.get("min_speech",            0.3)),
+        silero_threshold      =float(cfg.get("silero_threshold",      0.5)),
+        vad_noise_mult        =float(cfg.get("vad_noise_mult",        4.0)),
     )
 
     loop = asyncio.get_running_loop()

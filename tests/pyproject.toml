@@ -18,6 +18,7 @@ dependencies = [
     "xr-media-hub",
     "xr-ai-launcher",
     "xr-ai-logging",
+    "xr-ai-vad",
     "xr-ai-vllm",
     # MCP servers exercised by subprocess tests (fastmcp pulled in transitively).
     "transcript-mcp-server",
@@ -41,6 +42,7 @@ xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable
 xr-media-hub          = { path = "../server-runtime",                   editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }
 xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }
+xr-ai-vad             = { path = "../utils/xr-ai-vad",                  editable = true }
 xr-ai-vllm            = { path = "../utils/xr-ai-vllm",                 editable = true }
 transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable = true }
 vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }

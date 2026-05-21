@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Audio helpers: float32 PCM ⇄ WAV, RMS for VAD."""
+"""Audio helpers: float32 PCM ⇄ WAV."""
 from __future__ import annotations
 
 import io
@@ -17,22 +17,14 @@ def now_us() -> int:
     return time.time_ns() // 1_000
 
 
-def rms(data: bytes) -> float:
-    arr = np.frombuffer(data, dtype=np.float32)
-    return float(np.sqrt(np.mean(arr ** 2))) if len(arr) else 0.0
-
-
-def chunks_to_wav(chunks: list[AudioChunk]) -> bytes:
-    """Concatenate float32 IPC chunks into a single 16-bit PCM WAV blob for STT."""
-    raw = b"".join(c.data for c in chunks)
-    arr = np.frombuffer(raw, dtype=np.float32)
-    pcm = (np.clip(arr, -1.0, 1.0) * 32767).astype(np.int16)
+def int16_pcm_to_wav(pcm_bytes: bytes, sample_rate: int, channels: int = 1) -> bytes:
+    """Wrap raw int16 PCM bytes in a single-channel WAV container for STT."""
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
-        wf.setnchannels(chunks[0].channels)
+        wf.setnchannels(channels)
         wf.setsampwidth(2)
-        wf.setframerate(chunks[0].sample_rate)
-        wf.writeframes(pcm.tobytes())
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_bytes)
     return buf.getvalue()
 
 

@@ -9,6 +9,48 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-21 — `utils/xr-ai-vad/` shared Silero VAD utility
+
+Extracted the Silero-VAD utterance detector into a new shared utility
+package and migrated `agent-samples/simple-vlm-example` to use it,
+replacing the worker's inline RMS energy gate.
+
+**Why a shared `utils/` package (not per-sample copies).** Silero VAD
+already exists in two trees on different branches — `xr-render-demo`
+(pipecat-coupled, on main) and `glasses-agent-nat` (clean async API,
+on a separate branch in active dev). Adding it to `simple-vlm-example`
+made a third near-identical copy the obvious next step. The shape is
+small and stable enough (one class, two async callbacks) to live behind
+one API; copies were the wrong default.
+
+**Why `utils/` not `agent-sdk/`.** `agent-sdk/xr-ai-models/` is the
+HTTP-client seam for AI inference services. Local DSP on raw PCM bytes
+doesn't fit there. `utils/xr-ai-vad/` mirrors the shape of
+`utils/xr-ai-logging/`: focused dependency footprint (numpy +
+silero-vad), opt-in via per-sample `[tool.uv.sources]`, no leak into
+samples that don't process voice.
+
+**Why raw bytes in/out (no `xr-ai-agent` dep).** The detector takes
+`(float32_bytes, sample_rate, n_samples)` and emits int16 PCM via
+callback. Mirrors the glasses reference exactly. Keeps the
+`utils/` → `agent-sdk/` direction unbroken and leaves the door open for
+the `xr-render-demo` migration (int16-PCM input) to use the same
+package without an `AudioChunk` dependency edge.
+
+**`on_speech_start` hook added vs. the glasses original.** The previous
+`simple-vlm-example` VAD path fired a speculative camera-warmup the
+moment `speech_s` crossed `min_speech`. The callback-only finalize API
+in the glasses original had no equivalent, so the migration would have
+been a behavior regression. Added a one-shot per-utterance
+`on_speech_start` callback to preserve it.
+
+**`xr-render-demo` deferred.** Its silero is wedged into a Pipecat
+`FrameProcessor` with int16-PCM inputs, inline STT calls, downstream
+`TranscriptionFrame` pushes, filler-phrase filtering, and trace
+logging. Extracting it requires either a pipecat wrapper around the
+new detector or pulling the detection loop out and re-threading the
+FrameProcessor around it — invasive and out of scope for this PR.
+
 ### 2026-05-20 — Native StreamKit: `AudioSink` mixin + `CameraConfig::Facing` contract (#134)
 
 Two design decisions in response to partner findings on the native C++

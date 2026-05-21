@@ -68,9 +68,9 @@ Suggested split (used by `simple-vlm-example`):
 |---|---|
 | `<snake>_worker.py` | Entry point: config parsing, signal handling, lifecycle |
 | `agent.py` | The agent class — IPC callbacks and orchestration |
-| `audio.py` | WAV/PCM helpers, RMS, pixel-format conversion (rename if not audio) |
+| `audio.py` | WAV/PCM helpers, pixel-format conversion (rename if not audio) |
 | `services.py` | Thin HTTP/MCP clients for external services + readiness probe |
-| `voice.py` | Per-participant VAD/streaming-STT bookkeeping (when applicable) |
+| `voice.py` | Per-participant bookkeeping for `xr-ai-vad`'s `VadDetector` + in-flight STT/response state (when applicable) |
 
 ## Orchestrator `pyproject.toml`
 
