@@ -28,6 +28,9 @@ model_cache: ../../../../models
 gpu_memory_utilization: 0.43
 enforce_eager: true
 max_videos_per_prompt: 0
+# 4 fits within the default max_model_len=8192 (each Qwen2.5-VL image is
+# ~1.5k tokens). Raise both together if multi-image turns get larger.
+max_images_per_prompt: 4
 
 # vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
 # See ai-services/vlm-server/vlm_server.yaml for the full toggle docs.
