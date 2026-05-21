@@ -70,6 +70,34 @@ unclean exit. A heartbeat or TTL scan would close that gap; deferred
 until there's evidence it matters in practice. The issue's reproduction
 is wholly covered by participant disconnect.
 
+### 2026-05-21 — Glasses agent: keep NAT variant, drop baseline + LangChain forks
+
+Three glasses-agent variants existed side-by-side during the
+request-time-loop comparison: a custom Python baseline (`glasses-agent`),
+a LangChain variant (`glasses-agent-langchain`), and the NAT variant
+(`glasses-agent-nat`). The comparison concluded — NAT is the variant
+we keep. The other two trees were near-duplicates (~80% shared
+`agent.py` / `memory.py` / `vad.py` / `processors.py`) and were carrying
+their own copies of every YAML, fork-rotting in parallel.
+
+**Kept**: `agent-samples/glasses-agent-nat/`. NeMo Agent Toolkit owns the
+request-time `tool_calling_agent` workflow; VLM/video/transcript MCP are
+declared as NAT `mcp_client` function groups in YAML;
+`glasses_agent_tools` exposes the composite `describe_current_view` tool
+to the LLM; `glasses_worker_tasks` keeps recording analysis,
+observation condensation, and guidance completion checks inside NAT but
+hidden from the LLM-facing surface. The worker still owns VAD, STT/TTS,
+background scheduling, recording / guidance lifecycle, and `AgentMemory`.
+All AI-service HTTP routes through `agent-sdk/xr-ai-models` per the
+repo-wide rule.
+
+**Dropped**: `agent-samples/glasses-agent/`,
+`agent-samples/glasses-agent-langchain/`, the four historical changelog
+entries that staged the comparison (NAT-native, no-LangChain NAT variant,
+LangChain variant as separate sample, custom function groups within the
+NAT sample). All four sub-decisions are subsumed by the NAT variant
+that remains.
+
 ### 2026-05-18 — `nightly XR AI test` workflow on self-hosted `gpu` runner
 
 The `gpu`-marked pytest suite (`tests/test_gpu_*.py`,

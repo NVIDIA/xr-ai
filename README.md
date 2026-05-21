@@ -3,7 +3,9 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-<!-- TODO: hero image -->
+<p align="center">
+  <img src="client-samples/ios-visionos/StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif" alt="XR-AI simulator feed showing live XR media streaming" width="840">
+</p>
 
 # xr-ai
 
@@ -52,6 +54,7 @@ endpoint and no local GPU is required for the agent or hub.
 |---|---|
 | model-servers (all 4 models) | ~70 GB |
 | simple-vlm-example (standalone) | ~23 GB |
+| glasses-agent-nat | ~70 GB |
 | xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -234,6 +237,29 @@ vLLM process is started.
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
 for the full option list.
+
+---
+
+### Glasses agent (smart-glasses assistant)
+
+Always-on voice + vision assistant for smart glasses. It maintains a rolling
+scene memory, answers live and past-context questions, records demonstrations,
+and guides the user through recorded steps.
+
+Bounded LLM/tool work runs through NeMo Agent Toolkit functions:
+VLM/video/transcript MCP tools are declared as NAT `mcp_client` function
+groups in YAML; request-time answering uses NAT `tool_calling_agent`, and
+recording analysis, observation condensation, guidance checks, and
+current-view description are registered NAT function-group tools.
+
+```bash
+cd agent-samples/glasses-agent-nat
+uv sync
+uv run glasses_agent_nat
+```
+
+Starts hub, STT, TTS, VLM, two LLM servers, VLM/video/transcript MCP
+servers, and the worker.
 
 ---
 

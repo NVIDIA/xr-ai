@@ -369,6 +369,35 @@ vlm-server (8100, `persistent=True`), llama-nemotron-llm-server (8106, `persiste
 The three vLLM servers survive launcher restarts; use `--stop` to shut them down.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
+### glasses-agent-nat  (agent-samples/glasses-agent-nat/)
+
+Always-on AI assistant for smart glasses: background VLM observation loop,
+Silero VAD → STT → request-time agentic tool-calling, TTS reply, with
+demonstration recording and step-by-step guided playback. Bounded LLM/tool
+work runs through NeMo Agent Toolkit functions: the YAML workflow declares
+VLM/video/transcript MCP endpoints as NAT `mcp_client` function groups,
+exposes a custom `glasses_agent_tools` group to the request-time
+`tool_calling_agent`, and uses an internal `glasses_worker_tasks` group for
+recording analysis, observation condensation, and guidance completion checks.
+The tool-calling agent uses the NAT LangChain plugin internally.
+
+All AI-service HTTP routes through `agent-sdk/xr-ai-models` per the repo
+rule — LLM, STT, and TTS endpoints come from this sample's `yaml/models.yaml`
+(presets: nemotron3_nano ×2, parakeet_stt, piper_tts).
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent-nat` | `xr-ai-launcher`, `xr-ai-logging` | - |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-models`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts: hub, stt (8103), piper-tts (8105), nemotron3-nano-llm (8107),
+vlm-server (8100), llama-nemotron-llm (8106), vlm-mcp (8240),
+video-mcp (8210, recording disabled), transcript-mcp (8200), worker.
+Recording is disabled on the reference hardware (dual 48 GB Ada) due to
+NVENC OOM; only `get_latest_frame` (live IPC path) is exposed by video-mcp.
+The NAT workflow config also supports `nat validate`, `nat serve`,
+`nat mcp serve`, and MCP client inspection for the configured function groups.
+
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM

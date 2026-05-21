@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Logical model names consumed by glasses-agent-nat.
+# `agent_llm`  — used by analyze_recording (reasoning + JSON).
+# `worker_llm` — used by condense_observations (small, fast).
+# `stt`        — utterance transcription in the always-on audio path.
+# `tts`        — speech synthesis for spoken assistant replies.
+
+agent_llm:
+  kind:     preset:nemotron3_nano
+  base_url: http://localhost:8107
+
+worker_llm:
+  kind:     preset:nemotron3_nano
+  base_url: http://localhost:8106
+
+stt:
+  kind:     preset:parakeet_stt
+  base_url: http://localhost:8103
+
+tts:
+  kind:     preset:piper_tts
+  base_url: http://localhost:8105
