@@ -193,15 +193,12 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
         logger.error("'model' is required in config")
         sys.exit(1)
 
-    if cuda_devices := cfg.get("cuda_visible_devices"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
-
-    model_cache = _resolve_model_cache(cfg, yaml_dir)
-
     # GPU selection — set before any CUDA init.
     cuda_vis = cfg.get("cuda_visible_devices")
     if cuda_vis is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_vis)
+
+    model_cache = _resolve_model_cache(cfg, yaml_dir)
 
     # Direct NeMo and HuggingFace to the shared model directory.
     os.environ["NEMO_CACHE_DIR"] = str(model_cache / "nemo")
