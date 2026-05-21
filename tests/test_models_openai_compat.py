@@ -190,6 +190,42 @@ async def test_llm_chat_tool_calls_parsed_from_response() -> None:
     assert resp.finish_reason == "tool_calls"
 
 
+async def test_llm_chat_assistant_tool_call_only_turn_sends_null_content() -> None:
+    """Assistant turn that carries only tool_calls (no text) must serialize
+    ``content: null`` on the wire, not ``content: ""`` — the OpenAI spec allows
+    null and some vLLM versions reject the empty-string form. Mirrors the
+    pre-SDK ``content or None`` wire shape.
+    """
+    from xr_ai_models import ToolCall  # local import: only used in this case
+
+    stub = StubOpenAI()
+    stub.set_chat_message(content="follow-up")
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(),
+    ) as llm:
+        await llm.chat([
+            ChatMessage(role="user", content="weather in Paris?"),
+            ChatMessage(
+                role="assistant",
+                content="",
+                tool_calls=[ToolCall(
+                    id="call_abc",
+                    name="get_weather",
+                    arguments='{"city":"Paris"}',
+                )],
+            ),
+            ChatMessage(role="tool", content="22C, clear", tool_call_id="call_abc"),
+        ])
+    body = stub.last_json()
+    assistant_msg = body["messages"][1]
+    assert assistant_msg["role"] == "assistant"
+    assert assistant_msg["content"] is None
+    assert assistant_msg["tool_calls"][0]["function"]["name"] == "get_weather"
+    # And a plain text turn still gets its content through unchanged.
+    user_msg = body["messages"][0]
+    assert user_msg["content"] == "weather in Paris?"
+
+
 async def test_llm_chat_sends_bearer_when_api_key_env_set(monkeypatch) -> None:
     monkeypatch.setenv("STUB_API_KEY", "sk-test-123")
     stub = StubOpenAI()

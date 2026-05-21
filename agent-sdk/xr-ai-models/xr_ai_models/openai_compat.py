@@ -43,7 +43,14 @@ from .protocols import (
 def _msg_to_openai(msg: ChatMessage) -> dict[str, Any]:
     out: dict[str, Any] = {"role": msg.role}
     if isinstance(msg.content, str):
-        out["content"] = msg.content
+        # OpenAI spec lets `content` be null on assistant tool-call-only turns,
+        # and some vLLM versions are strict about not seeing an empty string
+        # there. Match the pre-SDK wire shape by sending null when there's no
+        # text and the turn is carrying tool_calls instead.
+        if not msg.content and msg.tool_calls:
+            out["content"] = None
+        else:
+            out["content"] = msg.content
     else:
         out["content"] = [_part_to_openai(p) for p in msg.content]
     if msg.tool_calls:

@@ -212,17 +212,23 @@ after a moment, and you hear the reply through your speakers.
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
 
-**Remote model** — to use a model on another machine or a cloud NIM
-endpoint, set `vlm_server` (and optionally `vlm_model_name`) in the
-sample's worker YAML (e.g., `simple_vlm_example_worker.yaml`):
+**Remote model** — create a models overlay that points the VLM at your
+remote endpoint, then tell the worker to use it:
 
 ```yaml
-vlm_server:     http://192.168.1.42:8100   # or https://your-nim-endpoint
-vlm_model_name: vlm                        # served-model-name on that host
+# yaml/models.custom.yaml — overlay for a remote VLM endpoint
+vlm:
+  kind:     preset:cosmos_vlm
+  base_url: https://your-remote-vlm.example.com
 ```
 
-When pointing at a remote model, `vlm_server.yaml` is unused — you can
-remove the `vlm_server` entry from the launcher's process list so no local
+```yaml
+# yaml/simple_vlm_example_worker.yaml — point the worker at the overlay
+models_yaml: yaml/models.custom.yaml
+```
+
+When pointing at a remote model, `vlm_server.yaml` is unused — remove
+the `vlm_server` entry from the launcher's process list so no local
 vLLM process is started.
 
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see

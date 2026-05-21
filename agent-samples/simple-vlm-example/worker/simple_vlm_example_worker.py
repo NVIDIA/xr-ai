@@ -21,17 +21,15 @@ Agent → client:
 
 Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
 ----------------------------------------------------------------------
-    stt_server:        http://localhost:8103
-    vlm_server:        http://localhost:8100
-    tts_server:        http://localhost:8105   # piper_tts_server
-    default_prompt:    "Describe what you see."
-    system_prompt:          <multiline string>   # role/style guidance for the VLM
-    frame_max_age_s:       2.0   # frames older than this trigger a camera-on request
-    camera_on_timeout_s:  15.0   # how long to wait for a fresh frame after startCamera
-    camera_grace_s:        5.0   # keep camera on this long after a query (avoids restart on follow-ups)
-    silence_threshold:      0.01  # float32 RMS below which audio is silence
-    silence_duration:       0.8   # seconds of silence that ends an utterance
-    min_speech:             0.3   # minimum seconds of speech before STT fires
+    models_yaml:           yaml/models.yaml   # path to models config (relative to yaml dir)
+    default_prompt:        "Describe what you see."
+    system_prompt:              <multiline string>   # role/style guidance for the VLM
+    frame_max_age_s:           2.0   # frames older than this trigger a camera-on request
+    camera_on_timeout_s:      15.0   # how long to wait for a fresh frame after startCamera
+    camera_grace_s:            5.0   # keep camera on this long after a query (avoids restart on follow-ups)
+    silence_threshold:          0.01  # float32 RMS below which audio is silence
+    silence_duration:           0.8   # seconds of silence that ends an utterance
+    min_speech:                 0.3   # minimum seconds of speech before STT fires
 """
 from __future__ import annotations
 
@@ -44,9 +42,9 @@ import yaml
 from loguru import logger
 from xr_ai_agent import ProcessorEndpoint
 from xr_ai_logging import setup_logging
+from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
 
 from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmAgent
-from services import SttClient, TtsClient, VlmClient, wait_for_health
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -55,26 +53,15 @@ _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     setup_logging("worker")
 
-    # VLM backend selection.
-    # "cosmos" → vlm-server on port 8100 (Cosmos-Reason1-7B, model="vlm")
-    # "omni"   → nemotron_omni on port 8108 (Nemotron-Omni-30B, model="llm")
-    backend = cfg.get("vlm_backend", "cosmos")
-    if backend == "omni":
-        vlm_default_url   = "http://localhost:8108"
-        vlm_default_model = "llm"
-    else:
-        vlm_default_url   = "http://localhost:8100"
-        vlm_default_model = "vlm"
+    # models_yaml is resolved relative to cwd (the sample root, where the launcher runs).
+    models_yaml_path = cfg.get("models_yaml", "yaml/models.yaml")
+    models_cfg = load_models_config(models_yaml_path)
 
-    stt = SttClient(cfg.get("stt_server", "http://localhost:8103"))
-    vlm = VlmClient(cfg.get("vlm_server", vlm_default_url),
-                    model_name=cfg.get("vlm_model_name", vlm_default_model))
-    tts = TtsClient(cfg.get("tts_server", "http://localhost:8105"))
-    await wait_for_health({
-        "STT": stt.health_url,
-        "VLM": vlm.health_url,
-        "TTS": tts.health_url,
-    })
+    stt = make_stt(models_cfg, "stt")
+    vlm = make_vlm(models_cfg, "vlm")
+    tts = make_tts(models_cfg, "tts")
+
+    await _wait_for_health(stt=stt, vlm=vlm, tts=tts)
 
     if ready_file:
         ready_file.touch()
@@ -101,7 +88,31 @@ async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         await agent.run()
     finally:
         agent.shutdown()
+        for svc in (stt, vlm, tts):
+            await svc.close()  # type: ignore[attr-defined]
     logger.info("simple-vlm-example stopped")
+
+
+async def _wait_for_health(**services: object) -> None:
+    """Block until every service's health endpoint reports healthy."""
+    pending: dict[str, object] = dict(services)
+    while pending:
+        results = await asyncio.gather(
+            *(svc.health() for svc in pending.values()),
+            return_exceptions=True,
+        )
+        still_waiting = {
+            name: svc
+            for (name, svc), ok in zip(pending.items(), results)
+            if not (isinstance(ok, bool) and ok)
+        }
+        for name in pending:
+            if name not in still_waiting:
+                logger.info("{} ready", name)
+        pending = still_waiting
+        if pending:
+            logger.info("still waiting for: {}", ", ".join(sorted(pending)))
+            await asyncio.sleep(5.0)
 
 
 def run() -> None:

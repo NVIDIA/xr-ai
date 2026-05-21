@@ -111,6 +111,18 @@ transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
     Storage: JSONL files per participant in configurable transcripts_dir.
 
+vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    └── Pillow >=10.0
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
+    Pure FastMCP — one tool at /mcp (no REST). Reads a local image file,
+    encodes it as a JPEG data URL, and calls vlm-server via xr-ai-models
+    ``OpenAICompatVLM``. Back-compat: legacy ``vlm_server:`` URL key is
+    still accepted with a deprecation warning.
+
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
@@ -284,6 +296,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
+| `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -333,10 +346,13 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0 |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 |
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
-(8105) over HTTP — no model weights loaded in-process.
+(8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
+in-process.  Model endpoints are configured via `yaml/models.yaml`
+(default: Cosmos profile) or `yaml/models.omni.yaml` (Nemotron-Omni
+on port 8108).
 
 ### model-servers  (agent-samples/model-servers/)
 
@@ -363,7 +379,12 @@ forwarding.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | — |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent` | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-logging` [editable] | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0, silero-vad >=5.1 |
+
+Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
+`yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
+`make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
+a transitive dep of `xr-ai-pipecat` and `fastmcp`.
 
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
