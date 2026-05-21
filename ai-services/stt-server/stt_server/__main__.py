@@ -246,6 +246,9 @@ def _idle_until_stopped(health_url: str) -> None:
                 if r.status != 200:
                     return
         except Exception:
+            # Any urlopen failure — connection refused, timeout, socket
+            # error — means the persisted server is gone; exit so the
+            # wrapper subprocess can be reaped.
             return
 
 
