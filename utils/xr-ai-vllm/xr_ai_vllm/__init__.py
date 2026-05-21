@@ -177,7 +177,19 @@ def stop_persistent_servers(
         if container_name:
             print(f"  [{label}] stopping container {container_name}…", flush=True)
             if _docker.stop_container(container_name):
-                print(f"  [{label}] stopped", flush=True)
+                # Remove the container so a restart picks up any config changes.
+                # Without removal, `docker start` reuses the old container with
+                # its baked-in argv (including stale --limit-mm-per-prompt etc).
+                try:
+                    import subprocess as _sp
+                    _sp.run(["docker", "rm", container_name],
+                            check=True,
+                            stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+                    print(f"  [{label}] stopped and removed", flush=True)
+                except Exception:
+                    print(f"  [{label}] stopped (rm failed — "
+                          f"run `docker rm {container_name}` to apply config changes)",
+                          flush=True)
             else:
                 print(f"  [{label}] docker stop failed — check `docker ps -a`",
                       flush=True)
