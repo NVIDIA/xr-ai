@@ -232,3 +232,15 @@ a streaming client connects. LOVR cannot start before then.
    → `_xr_started` is already True → skip spawn, send `render.ready`
    immediately
 ```
+
+## Eval harness
+
+Offline regression suite for the agentic loop, run against the live model
+stack (no LLM/MCP mocks; render-mcp tools are fake-succeeded so the live
+LOVR scene is not mutated). See
+[`agent-samples/xr-render-demo/eval/README.md`](../agent-samples/xr-render-demo/eval/README.md)
+for the case format and the watch-mode loop. Run with:
+
+```bash
+agent-samples/xr-render-demo/eval/eval.py
+```
