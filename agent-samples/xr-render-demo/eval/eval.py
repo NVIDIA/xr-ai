@@ -1760,10 +1760,6 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
 _MAX_STEPS = 10
 
 
-def _max_steps_for(_case: dict) -> int:
-    return _MAX_STEPS
-
-
 def _check_prompt_eval_overlap(
     system_prompt: str, cases: list[dict]
 ) -> tuple[set[str], list[str]]:
@@ -1823,6 +1819,10 @@ async def main() -> None:
     p.add_argument("--prompt", type=Path, default=SYS_PROMPT)
     p.add_argument("--thinking", action="store_true")
     p.add_argument("--verbose",  action="store_true")
+    p.add_argument("--strict-overlap", action="store_true",
+                   help="fail (rc=2) if any case fixture overlaps with the "
+                        "system prompt's worked examples — turn on in CI to "
+                        "guard against silent train-on-test drift")
     # agent-LLM endpoint overrides — default to whatever the worker yaml
     # points at (local vLLM on 8107 in dev); set to point at
     # build.nvidia.com etc. when scoring against a hosted model.
@@ -1880,6 +1880,11 @@ async def main() -> None:
             for line in overlap_issues:
                 print(line)
             print()
+            if args.strict_overlap:
+                print(f"--strict-overlap set: aborting with rc=2 "
+                      f"({len(overlap_names)} overlapping case(s))",
+                      file=sys.stderr)
+                sys.exit(2)
 
         results = []
         for c in cases:
@@ -1890,7 +1895,7 @@ async def main() -> None:
             try:
                 r = await _run_one(http, system_prompt, tools, scene_c, pose_c,
                                    c["user"], thinking=args.thinking,
-                                   max_steps=_max_steps_for(c))
+                                   max_steps=_MAX_STEPS)
             except Exception as exc:
                 r = {"latency_s": 0.0, "tool_calls": [], "content": "",
                      "reasoning": ""}

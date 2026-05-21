@@ -8,7 +8,7 @@
 #
 # Usage: ./eval_watch.sh [PROMPT_PATH]
 
-set -u
+set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_PROMPT="$HERE/../worker/prompts/system.txt"
@@ -17,6 +17,7 @@ PROMPT="${1:-$DEFAULT_PROMPT}"
 LOG=/tmp/eval_loop.log
 LOCK=/tmp/eval_watch.pid
 EVAL="$HERE/eval.py"
+WORKER="$HERE/../worker"
 SELF="$(readlink -f "$0")"
 DEBOUNCE_SECS=10
 
@@ -78,7 +79,12 @@ trigger() {
         echo "  $(date '+%H:%M:%S')  prompt=$PROMPT"
         echo "═══════════════════════════════════════════════════════════════"
     } >> "$LOG"
-    setsid "$EVAL" --verbose --prompt "$PROMPT" >> "$LOG" 2>&1 &
+    # Reuse the worker's already-resolved venv so we don't go through
+    # the shebang's `uv run --script` path (which re-checks pypi for
+    # the inline dep list every invocation, adding 0–N seconds of
+    # latency and a hard fail under sandboxed / offline environments).
+    setsid uv run --project "$WORKER" python "$EVAL" \
+        --verbose --prompt "$PROMPT" >> "$LOG" 2>&1 &
     running_pid=$!
 }
 
@@ -97,6 +103,14 @@ trigger
 
 while true; do
     hash=$(file_hash)
+    # Editors / language servers can atomic-replace the file (write
+    # tmp → rename), leaving sha1sum to briefly see ENOENT and emit
+    # nothing.  Treat empty as "skip this tick" to avoid spurious
+    # restarts.
+    if [[ -z "$hash" ]]; then
+        sleep 1
+        continue
+    fi
     now=$(date +%s)
     if [[ "$hash" != "$last_hash" ]]; then
         echo "  ── change detected at $(date '+%H:%M:%S') (sha ${last_hash:0:8} → ${hash:0:8}) ──" >> "$LOG"
