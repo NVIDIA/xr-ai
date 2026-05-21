@@ -114,6 +114,20 @@ code change. A change is not done until the docs reflect it. This applies to
 new packages, changed entry points, new quickstart flows, renamed commands,
 and new config files.
 
+## Prompt-driven samples: write eval cases
+
+When a sample's behaviour is driven by an LLM prompt (e.g.
+`agent-samples/xr-render-demo/`):
+
+- When you add or change a rule in `system.txt`, add or update a case
+  in the sample's `eval/` harness in the same edit. A rule without a
+  case is unverified.
+- **Don't train on the test set.** Don't reuse a prompt's worked-
+  example specifics (coordinates, colors, shapes, trigger phrases) in
+  a case fixture, or vice versa — that makes the eval a memorization
+  check. The harness audits this at startup and warns; clear the
+  warning by changing the prompt example, not the case.
+
 ## Dependency discipline
 
 `DEPENDENCIES.md` at the repo root is the authoritative dependency map.
