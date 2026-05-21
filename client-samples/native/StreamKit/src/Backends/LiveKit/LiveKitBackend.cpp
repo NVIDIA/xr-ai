@@ -264,8 +264,12 @@ void LiveKitBackend::StopAudio() {
     }
     audio_track_.reset();
     audio_source_.reset();
-    audio_armed_.store(false);
 #endif
+    // Disarm in both real and stub builds — `StartAudio()` sets `audio_armed_`
+    // in both branches, so `StopAudio()` must clear it in both branches too,
+    // otherwise stub builds never satisfy the "silently drops…after
+    // `StopAudio()`" contract documented on `AudioSink::InjectAudioFrame`.
+    audio_armed_.store(false);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

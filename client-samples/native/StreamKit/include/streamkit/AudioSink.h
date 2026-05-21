@@ -44,8 +44,12 @@ public:
     /// Push a single PCM audio frame into the published audio track.
     ///
     /// \param pcm                  Interleaved signed-16-bit little-endian PCM
-    ///                             samples. Length must equal
-    ///                             `channels * samples_per_channel * 2` bytes.
+    ///                             samples, viewed as `std::span<const int16_t>`.
+    ///                             `pcm.size()` is the **sample (element) count**
+    ///                             and must equal `channels * samples_per_channel`.
+    ///                             (Equivalently, the underlying byte length is
+    ///                             `channels * samples_per_channel * sizeof(int16_t)`,
+    ///                             but the span carries element count, not bytes.)
     /// \param sample_rate          Sample rate in Hz (e.g. 48000).
     /// \param channels             Channel count (1 = mono, 2 = stereo).
     /// \param samples_per_channel  Samples per channel in this frame
@@ -54,8 +58,8 @@ public:
     ///                             (monotonic clock).
     ///
     /// WebRTC expects ~10 ms frames; callers driving from a HAL that delivers
-    /// longer chunks should slice before calling. Backends validate the byte
-    /// count against `channels * samples_per_channel * 2` and throw
+    /// longer chunks should slice before calling. Backends validate
+    /// `pcm.size() == channels * samples_per_channel` and throw
     /// `std::invalid_argument` on mismatch.
     ///
     /// Throws `NotConnectedError` if not connected. Silently drops the frame
