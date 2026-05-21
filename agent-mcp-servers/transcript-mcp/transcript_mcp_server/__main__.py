@@ -54,7 +54,9 @@ Config (transcript_mcp_server.yaml)
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import os
 import pathlib
 
 import uvicorn
@@ -304,19 +306,26 @@ def run() -> None:
 
     setup_logging("transcript-mcp")
 
-    transcripts_dir = cfg.get("transcripts_dir", "/tmp/xr_transcripts")
+    _run_dir = os.environ.get("XR_RUN_DIR")
+    _default_transcripts = (
+        str(pathlib.Path(_run_dir) / "transcripts") if _run_dir else "/tmp/xr_transcripts"
+    )
+    transcripts_dir = cfg.get("transcripts_dir") or _default_transcripts
     host            = cfg.get("host", "0.0.0.0")
     port            = int(cfg.get("port", 8200))
 
     store = TranscriptStore(transcripts_dir)
     app   = build_app(store)
 
-    if ns.ready_file:
-        ready_path = ns.ready_file
-        app.add_event_handler("startup", lambda: ready_path.touch())
+    async def _serve() -> None:
+        config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+        server = uvicorn.Server(config)
+        logger.info("transcript-mcp-server  mcp=/mcp  port={}  dir={}", port, transcripts_dir)
+        if ns.ready_file:
+            ns.ready_file.touch()
+        await server.serve()
 
-    logger.info("transcript-mcp-server  mcp=/mcp  port={}  dir={}", port, transcripts_dir)
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    asyncio.run(_serve())
 
 
 if __name__ == "__main__":
