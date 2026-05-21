@@ -85,6 +85,11 @@ two ways to handle it (`tail` the log of the running watcher, or
 spawn — that decision stays with the caller, which keeps the behavior
 predictable across users / sandboxes / CI runners.
 
+`eval_watch.sh` is Linux-only. The single-instance guard reads
+`/proc/<pid>/cmdline` to confirm the stored PID is the watcher (not
+some unrelated process that recycled the same PID); macOS has no
+`/proc`, so the script will not run there.
+
 Score history at a glance:
 
 ```bash

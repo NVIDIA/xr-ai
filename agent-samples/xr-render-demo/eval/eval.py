@@ -77,6 +77,47 @@ ROLLED_HEAD_POSE = {
     "pitch_deg": 4.3,
 }
 
+def _became(prim_type: str | None = None,
+            *,
+            r_min: float | None = None,
+            g_min: float | None = None,
+            b_min: float | None = None):
+    """Predicate factory: returns a checker that asserts at least one
+    add_primitive / update_primitive call sets ``prim_type`` AND each
+    requested colour channel reaches the given lower bound.  Facets may
+    appear in one call or be split across calls (e.g. shape on one
+    update, colour on another).  All requested facets must be observed
+    for the predicate to pass."""
+    requirements: dict[str, str | float] = {}
+    if prim_type is not None:
+        requirements["prim_type"] = prim_type
+    for ch, thresh in (("r", r_min), ("g", g_min), ("b", b_min)):
+        if thresh is not None:
+            requirements[ch] = thresh
+
+    def _pred(muts: list[dict]) -> tuple[bool, str]:
+        seen = dict.fromkeys(requirements, False)
+        for tc in muts:
+            if tc["function"]["name"] not in ("add_primitive", "update_primitive"):
+                continue
+            args = tc["function"]["arguments"]
+            args = json.loads(args) if isinstance(args, str) else args
+            for key, expected in requirements.items():
+                if key == "prim_type":
+                    if args.get("prim_type") == expected:
+                        seen[key] = True
+                else:
+                    v = args.get(key)
+                    if v is not None and float(v) >= float(expected):
+                        seen[key] = True
+        if all(seen.values()):
+            return True, f"saw {requirements}"
+        missing = [k for k, v in seen.items() if not v]
+        return False, f"missing facets: {missing} (wanted {requirements})"
+
+    return _pred
+
+
 def _stacked_vertically(muts: list[dict]) -> tuple[bool, str]:
     """Predicate for ``stack_*`` cases: every add_primitive must share the
     same x/z column and have distinct y values, regardless of absolute
@@ -659,14 +700,11 @@ CASES = [
         "scene": [{"id": "sphere-0", "type": "sphere",
                    "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1}],
         "user":  "Turn the sphere into a cube.",
-        # Either path is fine: update_primitive(prim_type=box) OR
-        # remove + add. result mode allows extras by default, so both
-        # are accepted as long as a cube exists at the end.
-        "result": [
-            # Accept either a re-typing of sphere-0, or removing it.
-            # We assert ONE of these mutations is present; the harness
-            # `result` is set-style so partial matches are fine.
-        ],
+        # Either path is fine — update_primitive(prim_type=box) OR
+        # remove + add(prim_type=box).  Predicate enforces "a cube
+        # exists at the end" without pinning which path the LLM picked.
+        "result": [],
+        "predicate": _became(prim_type="box"),
     },
 
     # ── 1m above the cube ─────────────────────────────────────────────────────
@@ -848,8 +886,11 @@ CASES = [
                    "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1}],
         "user":  "Make the sphere a blue cube.",
         # Either path is fine (update with prim_type+colour, or remove+add).
-        # Empty result asserts "≥1 mutating call happened".
+        # Predicate enforces "a cube exists" AND "blue channel ≥ 0.5
+        # somewhere in the mutations" without pinning which call carries
+        # which facet.
         "result": [],
+        "predicate": _became(prim_type="box", b_min=0.5),
     },
 
     # ── pitched up: above me is gravity-aligned ───────────────────────────────
