@@ -116,18 +116,23 @@ async function startCamera() {
   if (model.isCameraActive) {
     try {
       releasePreviewStream();
+      // Match LiveKit's default selection (facingMode: 'user') when no specific
+      // deviceId is chosen, so the preview and the published track land on the
+      // same physical camera. The cleaner fix — cloning the LiveKit publish
+      // track instead of opening a second getUserMedia — requires StreamKit
+      // accessors and lands in PR #153.
       const constraints = model.selectedCameraId
         ? { video: { deviceId: { exact: model.selectedCameraId } } }
-        : { video: true };
+        : { video: { facingMode: 'user' } };
       _previewStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoEl = $('camera-preview');
       videoEl.srcObject = _previewStream;
 
-      // Mirror the preview only for front-facing cameras — back cameras should
-      // show the same orientation the server receives (no transform).
+      // Mirror by default (desktop/laptop webcams report no facingMode but are
+      // selfie cameras). Only the explicit back-camera case skips the flip.
       const track = _previewStream.getVideoTracks()[0];
       const facingMode = track?.getSettings?.()?.facingMode ?? '';
-      videoEl.style.transform = facingMode === 'user' ? 'scaleX(-1)' : '';
+      videoEl.style.transform = facingMode === 'environment' ? '' : 'scaleX(-1)';
     } catch { /* preview failure is non-fatal */ }
   }
   render();
