@@ -2,33 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # xr-render-demo worker configuration.
-# Paths and addresses resolve as-is.
+# Paths resolve relative to this file's directory.
 
-# ── render-mcp HTTP API ───────────────────────────────────────────────────────
-# Worker hits the FastAPI surface (POST /xr/start, /sphere/radius, /sphere/color,
-# /sphere/position, /sphere/reset). LLM agents would talk to /mcp instead —
-# see render_mcp.yaml.
+# ── AI model services ─────────────────────────────────────────────────────────
+# Model endpoints (URLs, presets, timeouts) are declared in models.yaml and
+# loaded via xr-ai-models.  Edit that file to change which model runs where.
+models_yaml: yaml/models.yaml
+
+# ── MCP server base URLs ──────────────────────────────────────────────────────
 render_mcp_url: http://localhost:8220
-
-# ── oxr-mcp HTTP API ──────────────────────────────────────────────────────────
-# Worker GETs /pose once per utterance to translate the LLM's user-frame
-# coords into world-frame before forwarding to render-mcp.
-oxr_mcp_url: http://localhost:8230
-
-# ── llm-server (quick ack / classification) ──────────────────────────────────
-# Llama-Nemotron 8B — quick ack, think classification, validation, still-working.
-# Better instruction following than Minitron; LMFE for reliable JSON output.
-llm_server: http://localhost:8106
-
-# ── agent-llm-server (reasoning + tool calling) ──────────────────────────────
-# Nemotron-3-Nano 30B via vLLM — tool calling via qwen3_coder parser,
-# reasoning via nano_v3 parser. Requires Blackwell GPU (B200 / RTX PRO 6000).
-agent_llm_server: http://localhost:8107
-
-# ── STT ───────────────────────────────────────────────────────────────────────
-# Worker POSTs each detected utterance to this server's
-# /v1/audio/transcriptions endpoint (OpenAI-compatible).
-stt_server: http://localhost:8103
+oxr_mcp_url:    http://localhost:8230
+vlm_mcp_url:    http://localhost:8240
+video_mcp_url:  http://localhost:8210
 
 # ── Voice activity detection (used to slice utterances for STT) ──────────────
 # The effective speech threshold is: max(silence_threshold, noise_floor × vad_noise_mult)
@@ -54,12 +39,4 @@ min_speech:        0.15
 # Silero speech-probability gate. Lower = more sensitive (catches quieter/faster speech).
 # Default 0.5 often misses the onset of a word; 0.3 captures it earlier.
 silero_threshold:  0.3
-
-# ── Sphere position bounds (enforced by the worker) ──────────────────────────
-# The LLM emits raw (x, y, z) for sphere.position commands; the worker clamps
-# each axis to a reasonable range before forwarding so the LLM can't yeet the
-# sphere out of reach. See _POS_BOUNDS in xr_render_demo_worker/__main__.py.
-#
-# (No knob here yet — bounds live in code; expose if you ever need to widen
-# them per-deployment.)
 

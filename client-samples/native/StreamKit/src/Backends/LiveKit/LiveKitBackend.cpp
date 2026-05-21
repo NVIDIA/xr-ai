@@ -239,8 +239,8 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
 
 #if STREAMKIT_HAVE_LIVEKIT
     // 48 kHz mono, 0 ms queue: the SDK's documented real-time-capture mode.
-    // Mic frames must be driven externally — the C++ SDK ships no platform
-    // capture; subclass to reach `audio_source_` from a platform mic loop.
+    // Mic frames are pushed by the host via AudioSink::InjectAudioFrame —
+    // the C++ SDK ships no built-in platform capture.
     // MicrophoneMode is not applied: the C++ SDK does not surface
     // AEC / AGC / NS toggles on AudioSource — software DSP would go
     // through AudioProcessingModule, tracked as a follow-up.
@@ -252,6 +252,7 @@ void LiveKitBackend::StartAudio(const AudioConfig& config) {
     audio_armed_.store(true);
 #else
     (void)config;
+    audio_armed_.store(true);
 #endif
 }
 
@@ -263,8 +264,12 @@ void LiveKitBackend::StopAudio() {
     }
     audio_track_.reset();
     audio_source_.reset();
-    audio_armed_.store(false);
 #endif
+    // Disarm in both real and stub builds — `StartAudio()` sets `audio_armed_`
+    // in both branches, so `StopAudio()` must clear it in both branches too,
+    // otherwise stub builds never satisfy the "silently drops…after
+    // `StopAudio()`" contract documented on `AudioSink::InjectAudioFrame`.
+    audio_armed_.store(false);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -368,6 +373,51 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
     (void)width;
     (void)height;
     (void)format;
+    (void)timestamp_us;
+#endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AudioSink
+// ─────────────────────────────────────────────────────────────────────────────
+
+void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
+                                      int sample_rate,
+                                      int channels,
+                                      int samples_per_channel,
+                                      int64_t timestamp_us) {
+    if (!is_connected_.load()) {
+        throw NotConnectedError{};
+    }
+    if (!audio_armed_.load()) {
+        return;
+    }
+
+    const auto expected =
+        static_cast<std::size_t>(channels) *
+        static_cast<std::size_t>(samples_per_channel);
+    if (pcm.size() != expected) {
+        throw std::invalid_argument(
+            "InjectAudioFrame: sample count " + std::to_string(pcm.size())
+            + " does not match channels * samples_per_channel = "
+            + std::to_string(expected));
+    }
+
+#if STREAMKIT_HAVE_LIVEKIT
+    livekit::AudioFrame frame(sample_rate, channels, samples_per_channel,
+                              pcm.data());
+    std::shared_ptr<livekit::AudioSource> source;
+    {
+        std::lock_guard<std::mutex> lock(tracks_mutex_);
+        source = audio_source_;
+    }
+    if (source) {
+        source->captureFrame(frame, timestamp_us);
+    }
+#else
+    (void)sample_rate;
+    (void)channels;
+    (void)samples_per_channel;
     (void)timestamp_us;
 #endif
 }

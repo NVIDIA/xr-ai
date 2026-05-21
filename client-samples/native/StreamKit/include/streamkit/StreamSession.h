@@ -127,8 +127,9 @@ public:
 
     // ── Advanced ──────────────────────────────────────────────────────────
 
-    /// Returns the underlying backend. Cast to FrameSink* to inject video
-    /// frames from an external camera source.
+    /// Returns the underlying backend. Cast to `FrameSink*` to inject video
+    /// frames from an external camera, or to `AudioSink*` to inject PCM
+    /// frames from an external microphone.
     StreamingBackend* GetBackend() { return backend_.get(); }
 
 private:

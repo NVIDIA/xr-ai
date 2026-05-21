@@ -7,77 +7,88 @@ Thin async clients for stt-server and tts-server, plus generic readiness probes.
 from __future__ import annotations
 
 import asyncio
-import io
-import wave
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 import httpx
 from fastmcp import Client as McpClient
 from loguru import logger
 
+from xr_ai_models.openai_compat import OpenAICompatSTT, OpenAICompatTTS
+
 
 # ── STT ───────────────────────────────────────────────────────────────────────
 
 class SttClient:
-    """OpenAI-compatible /v1/audio/transcriptions client."""
+    """OpenAI-compatible /v1/audio/transcriptions client.
 
-    def __init__(self, base_url: str, timeout: float = 30.0) -> None:
-        base = base_url.rstrip("/")
-        self.health_url     = base + "/health"
-        self.transcribe_url = base + "/v1/audio/transcriptions"
-        self._client        = httpx.AsyncClient(timeout=timeout)
+    Thin wrapper around :class:`xr_ai_models.OpenAICompatSTT` that preserves
+    the ``(base_url, timeout)`` constructor signature used by existing callers.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 30.0,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._stt = OpenAICompatSTT(base_url, timeout=timeout, client=client)
+
+    @property
+    def health_url(self) -> str:
+        return self._stt.health_url
 
     async def transcribe(
         self, audio_data: bytes, sample_rate: int, channels: int = 1,
     ) -> str:
-        wav_bytes = _pcm_to_wav(audio_data, sample_rate, channels)
-        resp = await self._client.post(
-            self.transcribe_url,
-            files={"file": ("audio.wav", wav_bytes, "audio/wav")},
-            data={"response_format": "json"},
+        # sample_rate triggers PCM→WAV conversion inside the SDK client.
+        return await self._stt.transcribe(
+            audio_data, sample_rate=sample_rate, channels=channels,
         )
-        if resp.is_error:
-            logger.error("stt {}: {}", resp.status_code, resp.text[:300])
-        resp.raise_for_status()
-        return resp.json().get("text", "")
 
     async def close(self) -> None:
-        await self._client.aclose()
+        await self._stt.close()
 
+    async def __aenter__(self) -> "SttClient":
+        return self
 
-def _pcm_to_wav(pcm_data: bytes, sample_rate: int, channels: int) -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm_data)
-    return buf.getvalue()
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.close()
 
 
 # ── TTS ───────────────────────────────────────────────────────────────────────
 
 class TtsClient:
-    """OpenAI-compatible /v1/audio/speech client."""
+    """OpenAI-compatible /v1/audio/speech client.
 
-    def __init__(self, base_url: str, timeout: float = 30.0) -> None:
-        base = base_url.rstrip("/")
-        self.health_url     = base + "/health"
-        self.synthesize_url = base + "/v1/audio/speech"
-        self._client        = httpx.AsyncClient(timeout=timeout)
+    Thin wrapper around :class:`xr_ai_models.OpenAICompatTTS` that preserves
+    the ``(base_url, timeout)`` constructor signature used by existing callers.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 30.0,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._tts = OpenAICompatTTS(base_url, timeout=timeout, client=client)
+
+    @property
+    def health_url(self) -> str:
+        return self._tts.health_url
 
     async def synthesize(self, text: str) -> bytes:
-        resp = await self._client.post(
-            self.synthesize_url,
-            json={"input": text, "response_format": "wav"},
-        )
-        if resp.is_error:
-            logger.error("tts {}: {}", resp.status_code, resp.text[:300])
-        resp.raise_for_status()
-        return resp.content
+        return await self._tts.synthesize(text)
 
     async def close(self) -> None:
-        await self._client.aclose()
+        await self._tts.close()
+
+    async def __aenter__(self) -> "TtsClient":
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.close()
 
 
 # ── readiness probes ──────────────────────────────────────────────────────────

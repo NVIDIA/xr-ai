@@ -37,7 +37,7 @@ ReturnAudioCallback      = Callable[[AudioChunk],        Awaitable[None]]
 ReturnDataCallback       = Callable[[DataMessage],       Awaitable[None]]
 ReturnAudioFlushCallback = Callable[[ReturnAudioFlush],  Awaitable[None]]
 
-_DEFAULT_NUM_SLOTS       = 10
+_DEFAULT_NUM_SLOTS       = 16
 _DEFAULT_MAX_FRAME_BYTES = 12_441_600  # 4K NV12
 
 
@@ -81,7 +81,7 @@ class ConnectorEndpoint:
         sub_addr        : Hub's PUB address  — connector subscribes for return traffic.
         connector_id    : Unique ID for this connector. Defaults to a UUID.
         shm_name        : Shared-memory segment name. Defaults to xr_conn_<connector_id>.
-        num_slots       : Ring buffer slot count (default 10).
+        num_slots       : Ring buffer slot count (default 16).
         max_frame_bytes : Max bytes per slot (default 4K NV12 = 12 441 600).
         """
         self._connector_id = connector_id or uuid.uuid4().hex

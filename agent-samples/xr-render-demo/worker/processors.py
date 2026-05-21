@@ -26,11 +26,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import string
 import time
+import uuid
 from pathlib import Path
 
-import httpx
 import numpy as np
 from fastmcp import Client as McpClient
 from loguru import logger
@@ -53,8 +54,8 @@ except ImportError:
 
 from xr_ai_agent import DataMessage
 from xr_ai_logging import print_task_done_banner
+from xr_ai_models import ChatMessage, LLMService, STTService, TTSService, ToolCall, ToolDef
 from xr_ai_pipecat.audio import stream_sentences_to_audio
-from xr_ai_pipecat.services import SttClient, TtsClient
 from xr_ai_pipecat.transport import XRMediaHubTransport, SAMPLE_RATE
 
 from config import WorkerConfig
@@ -123,7 +124,7 @@ class SttProcessor(FrameProcessor):
 
     def __init__(
         self,
-        stt: SttClient,
+        stt: STTService,
         transport: XRMediaHubTransport,
         cfg: WorkerConfig,
         **kwargs,
@@ -237,7 +238,7 @@ class SttProcessor(FrameProcessor):
         dur_s = len(audio_bytes) // 2 / max(SAMPLE_RATE, 1)
         logger.info("transcribing {:.1f}s", dur_s)
         try:
-            text = await self._stt.transcribe(audio_bytes, SAMPLE_RATE)
+            text = await self._stt.transcribe(audio_bytes, sample_rate=SAMPLE_RATE)
         except Exception:
             logger.exception("STT failed")
             return
@@ -297,7 +298,9 @@ class RenderSceneProcessor(FrameProcessor):
         vlm:         McpClient,
         video:       McpClient,
         prompt_path: Path,
-        tools_openai: list,   # OpenAI tool definitions built from MCP discovery
+        tools:       list[ToolDef],  # ToolDef list built from MCP discovery
+        llm:         LLMService,
+        agent_llm:   LLMService,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -316,8 +319,9 @@ class RenderSceneProcessor(FrameProcessor):
         self._quick_ack_cache  = self._quick_ack_path.read_text(encoding="utf-8").strip()
         self._still_work_cache = self._still_work_path.read_text(encoding="utf-8").strip()
         self._validate_cache   = self._validate_path.read_text(encoding="utf-8").strip()
-        self._tools_openai     = tools_openai
-        self._http           = httpx.AsyncClient(timeout=180.0)
+        self._tools            = tools
+        self._llm              = llm
+        self._agent_llm        = agent_llm
 
         self._pending:    tuple[str, str, int] | None = None  # (text, pid, ref_us)
         self._lock        = asyncio.Lock()
@@ -475,39 +479,30 @@ class RenderSceneProcessor(FrameProcessor):
             last_user, last_agent = self._history[-1]
             context = f"[Previous turn] User: {last_user} / Agent: {last_agent}\n"
 
-        body = {
-            "model": "llm",
-            "messages": [
-                {"role": "system", "content": self._read_prompt(
-                    self._quick_ack_path, "_quick_ack_cache")},
-                {"role": "user", "content": context + transcript},
-            ],
-            "max_tokens": 40,
-            "temperature": 0.0,
-        }
+        messages = [
+            ChatMessage(role="system", content=self._read_prompt(
+                self._quick_ack_path, "_quick_ack_cache")),
+            ChatMessage(role="user", content=context + transcript),
+        ]
         try:
             resp = await asyncio.wait_for(
-                self._http.post(
-                    self._cfg.llm_server.rstrip("/") + "/v1/chat/completions",
-                    json=body,
-                ),
+                self._llm.chat(messages, max_tokens=40, temperature=0.0),
                 timeout=8.0,
             )
-            if not resp.is_error:
-                raw = resp.json()["choices"][0]["message"]["content"].strip()
-                obj_text = _extract_json(raw)
-                if obj_text:
-                    try:
-                        obj = json.loads(obj_text)
-                        ack   = str(obj.get("ack", "")).strip()
-                        think = bool(obj.get("think", False))
-                        logger.info("quick-ack: {!r}  think={}", ack, think)
-                        _trace_log.info("ACK   {}  [think={}]", ack, think)
-                        return ack, think
-                    except json.JSONDecodeError:
-                        pass
-                # Fallback: treat raw text as ack, no thinking
-                return raw, False
+            raw = resp.content.strip()
+            obj_text = _extract_json(raw)
+            if obj_text:
+                try:
+                    obj = json.loads(obj_text)
+                    ack   = str(obj.get("ack", "")).strip()
+                    think = bool(obj.get("think", False))
+                    logger.info("quick-ack: {!r}  think={}", ack, think)
+                    _trace_log.info("ACK   {}  [think={}]", ack, think)
+                    return ack, think
+                except json.JSONDecodeError:
+                    pass
+            # Fallback: treat raw text as ack, no thinking
+            return raw, False
         except Exception as exc:
             logger.warning("quick-ack failed: {}", exc)
         return "", False
@@ -541,25 +536,16 @@ class RenderSceneProcessor(FrameProcessor):
             user_content += f"\n\nWhat the AI is currently reasoning through:\n{thinking}"
 
         base = self._read_prompt(self._still_work_path, "_still_work_cache")
-        body = {
-            "model": "llm",
-            "messages": [
-                {"role": "system", "content": base + avoid},
-                {"role": "user", "content": user_content},
-            ],
-            "max_tokens": 24,
-            "temperature": 0.9,
-        }
+        messages = [
+            ChatMessage(role="system", content=base + avoid),
+            ChatMessage(role="user", content=user_content),
+        ]
         try:
             resp = await asyncio.wait_for(
-                self._http.post(
-                    self._cfg.llm_server.rstrip("/") + "/v1/chat/completions",
-                    json=body,
-                ),
+                self._llm.chat(messages, max_tokens=24, temperature=0.9),
                 timeout=6.0,
             )
-            if not resp.is_error:
-                return resp.json()["choices"][0]["message"]["content"].strip()
+            return resp.content.strip()
         except Exception as exc:
             logger.debug("still-working message failed: {}", exc)
         return ""
@@ -593,36 +579,27 @@ class RenderSceneProcessor(FrameProcessor):
         Returns (ok, issue). Defaults to ok=True on any failure so a broken
         validator never blocks the response.
         """
-        body = {
-            "model": "llm",
-            "messages": [
-                {"role": "system", "content": self._read_prompt(
-                    self._validate_path, "_validate_cache")},
-                {"role": "user", "content": (
-                    f"Request: {transcript}\n"
-                    f"Current scene: {json.dumps(post_scene or {})}"
-                )},
-            ],
-            "max_tokens": 60,
-            "temperature": 0.0,
-        }
+        messages = [
+            ChatMessage(role="system", content=self._read_prompt(
+                self._validate_path, "_validate_cache")),
+            ChatMessage(role="user", content=(
+                f"Request: {transcript}\n"
+                f"Current scene: {json.dumps(post_scene or {})}"
+            )),
+        ]
         try:
             resp = await asyncio.wait_for(
-                self._http.post(
-                    self._cfg.llm_server.rstrip("/") + "/v1/chat/completions",
-                    json=body,
-                ),
+                self._llm.chat(messages, max_tokens=60, temperature=0.0),
                 timeout=8.0,
             )
-            if not resp.is_error:
-                raw = resp.json()["choices"][0]["message"]["content"].strip()
-                obj_text = _extract_json(raw)
-                if obj_text:
-                    obj = json.loads(obj_text)
-                    ok    = bool(obj.get("ok", True))
-                    issue = str(obj.get("issue", ""))
-                    logger.debug("validation: ok={}  issue={!r}", ok, issue)
-                    return ok, issue
+            raw = resp.content.strip()
+            obj_text = _extract_json(raw)
+            if obj_text:
+                obj = json.loads(obj_text)
+                ok    = bool(obj.get("ok", True))
+                issue = str(obj.get("issue", ""))
+                logger.debug("validation: ok={}  issue={!r}", ok, issue)
+                return ok, issue
         except Exception:
             logger.opt(exception=True).debug(
                 "validation call failed — defaulting to ok",
@@ -753,58 +730,45 @@ class RenderSceneProcessor(FrameProcessor):
                 + system_content
             )
 
-        messages: list[dict] = [
-            {"role": "system", "content": system_content},
-            {
-                "role": "user",
-                "content": (
+        messages: list[ChatMessage] = [
+            ChatMessage(role="system", content=system_content),
+            ChatMessage(
+                role="user",
+                content=(
                     f"[Pre-fetched context — do not call get_scene_state or "
                     f"get_head_pose unless you need to refresh after changes]\n"
                     f"{context}\n\n"
                     f"[Request]\n{transcript}"
                 ),
-            },
+            ),
         ]
 
         for iteration in range(_MAX_LOOP):
-            body = {
-                "model": "llm",
-                "messages": messages,
-                "tools": self._tools_openai,
+            try:
                 # thinking off: 1024 covers any tool-call JSON.
                 # thinking on: budget=1024 gives room for step-by-step arithmetic;
                 # 2048 total leaves 1024 for the tool-call response.
-                "max_tokens": 2048 if needs_thinking else 1024,
-                "temperature": 0.0,
-                "chat_template_kwargs": {
-                    "enable_thinking": needs_thinking,
-                    **({"thinking_budget": 1024} if needs_thinking else {}),
-                },
-            }
-            try:
-                resp = await self._http.post(
-                    self._cfg.agent_llm_server.rstrip("/") + "/v1/chat/completions",
-                    json=body,
+                resp = await self._agent_llm.chat(
+                    messages,
+                    tools=self._tools,
+                    max_tokens=2048 if needs_thinking else 1024,
+                    temperature=0.0,
+                    enable_thinking=needs_thinking,
+                    thinking_budget=1024 if needs_thinking else None,
                 )
-                if resp.is_error:
-                    logger.error("agent-llm {}: {}", resp.status_code, resp.text[:300])
-                    break
             except Exception:
                 logger.exception("agent-llm call failed on iteration {}", iteration)
                 break
 
-            choice  = resp.json()["choices"][0]
-            message = choice["message"]
-            finish  = choice.get("finish_reason", "")
+            finish     = resp.finish_reason or ""
+            tool_calls = resp.tool_calls or []
+            content    = resp.content.strip()
 
-            # Capture the 30B's reasoning content and share it with the
-            # still-working loop so progress updates reflect actual reasoning steps.
-            reasoning = (message.get("reasoning_content") or "").strip()
+            # Share the 30B's reasoning with the still-working loop so progress
+            # updates reflect what the model is actually working on.
+            reasoning = (resp.reasoning or "").strip()
             if reasoning and thinking_ctx is not None:
                 thinking_ctx[0] = reasoning
-
-            tool_calls = message.get("tool_calls") or []
-            content    = (message.get("content") or "").strip()
 
             logger.debug(
                 "agent-llm iter={}  finish={}  tool_calls={}  content={!r}",
@@ -828,8 +792,7 @@ class RenderSceneProcessor(FrameProcessor):
                 # of using the tool_calls field.  Two shapes seen in practice:
                 #   (a) bare name:  "get_head_pose"
                 #   (b) JSON obj:   {"name": "update_primitive", "arguments": {...}}
-                import uuid as _uuid
-                all_names = {t["function"]["name"] for t in self._tools_openai}
+                all_names = {t.name for t in self._tools}
                 recovered: dict | None = None
 
                 if content in all_names:
@@ -851,32 +814,28 @@ class RenderSceneProcessor(FrameProcessor):
 
                 if recovered:
                     logger.warning("text-format tool call {!r} — recovering", recovered["name"])
-                    tool_calls = [{
-                        "id":       f"call_{_uuid.uuid4().hex[:12]}",
-                        "type":     "function",
-                        "function": {
-                            "name":      recovered["name"],
-                            "arguments": json.dumps(recovered["arguments"]),
-                        },
-                    }]
+                    tool_calls = [ToolCall(
+                        id=f"call_{uuid.uuid4().hex[:12]}",
+                        name=recovered["name"],
+                        arguments=json.dumps(recovered["arguments"]),
+                    )]
                 else:
                     # Genuine final response.
                     _trace_log.info("RESP  {}", content or "Done.")
                     return content or "Done."
 
             # Add the assistant's tool-call message to the conversation.
-            messages.append({
-                "role":       "assistant",
-                "content":    content or None,
-                "tool_calls": tool_calls,
-            })
+            messages.append(ChatMessage(
+                role="assistant",
+                content=content or "",
+                tool_calls=list(tool_calls),
+            ))
 
             # Execute each tool call and append results.
             for tc in tool_calls:
-                name     = tc["function"]["name"]
-                args_str = tc["function"].get("arguments", "{}")
+                name = tc.name
                 try:
-                    args = json.loads(args_str)
+                    args = json.loads(tc.arguments)
                 except json.JSONDecodeError:
                     args = {}
 
@@ -901,11 +860,11 @@ class RenderSceneProcessor(FrameProcessor):
                 logger.info("tool result  tool={}  {}", name, result_str[:200])
                 _trace_log.info("RES   [{}] {} → {}", iteration, name, result_str[:300])
 
-                messages.append({
-                    "role":         "tool",
-                    "tool_call_id": tc["id"],
-                    "content":      result_str,
-                })
+                messages.append(ChatMessage(
+                    role="tool",
+                    content=result_str,
+                    tool_call_id=tc.id,
+                ))
 
         return "Done."
 
@@ -927,7 +886,6 @@ class RenderSceneProcessor(FrameProcessor):
             # Guard against fabricated paths: the model must call
             # get_frame_from_time first and use the returned path.
             if tool == "ask_image":
-                import os
                 path = args.get("image_path", "")
                 if path and not os.path.isfile(path):
                     return {
@@ -971,7 +929,8 @@ class RenderSceneProcessor(FrameProcessor):
             logger.exception("send failed  topic={}", topic)
 
     async def close(self) -> None:
-        await self._http.aclose()
+        await self._llm.close()
+        await self._agent_llm.close()
 
 
 # ── TtsProcessor ─────────────────────────────────────────────────────────────
@@ -981,7 +940,7 @@ class TtsProcessor(FrameProcessor):
 
     def __init__(
         self,
-        tts: TtsClient,
+        tts: TTSService,
         transport: XRMediaHubTransport,
         **kwargs,
     ):
@@ -1015,8 +974,8 @@ class TtsProcessor(FrameProcessor):
 
 def build_pipeline(
     transport:   XRMediaHubTransport,
-    stt:         SttClient,
-    tts:         TtsClient,
+    stt:         STTService,
+    tts:         TTSService,
     scene:       RenderSceneProcessor,
 ) -> tuple[Pipeline, PipelineTask]:
     stt_proc = SttProcessor(stt, transport, scene._cfg)

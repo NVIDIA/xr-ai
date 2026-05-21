@@ -69,6 +69,7 @@ def serve(
     hf_token: str | None = None,
     cuda_visible_devices: str | None = None,
     extra_env: dict[str, str] | None = None,
+    extra_pip: list[str] | None = None,
     ready_file: Path | None = None,
 ) -> None:
     """Launch vLLM via *backend* (`"pip"` or `"docker"`).
@@ -94,6 +95,14 @@ def serve(
     *container_name* is only consulted in docker mode. Use a stable,
     service-specific name (e.g. ``xr-ai-vllm-<entry-point>``) so the stop
     helper can find it.
+
+    *extra_pip* is docker-mode only: a list of pip-installable package
+    specs that get installed into the container right before ``vllm
+    serve`` runs (same shell line that already installs ``hf_transfer``).
+    Use it for models whose architecture imports a wheel the NGC image
+    doesn't bundle — e.g. ``["mamba-ssm", "causal-conv1d"]`` for
+    Nemotron-Omni's hybrid SSM backbone. Silently ignored in pip mode
+    (deps belong in the wrapper's pyproject.toml there).
     """
     vllm_argv: list[str] = [
         "vllm", "serve", model,
@@ -124,6 +133,7 @@ def serve(
             hf_token=hf_token,
             cuda_visible_devices=cuda_visible_devices,
             extra_env=extra_env,
+            extra_pip=extra_pip,
             ready_file=ready_file,
         )
     else:

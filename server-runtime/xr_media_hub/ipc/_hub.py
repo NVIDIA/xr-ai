@@ -102,7 +102,9 @@ class HubEndpoint:
         self._participant_connector: dict[str, str] = {}
         # (participant_id, track_id) → (ring, SlotView) of the latest frame.
         # The slot is held open (not released) until the next frame for the same
-        # track arrives, so pixels can be copied on demand without eager allocation.
+        # track arrives, the participant disconnects, or the hub shuts down — so
+        # pixels can be copied on demand without eager allocation while still
+        # bounding ring occupancy across participant churn.
         self._latest_slots: dict[tuple[str, str], tuple[ShmRingBuffer, SlotView]] = {}
 
         self._frame_cbs:       list[FrameCallback]       = []
@@ -271,6 +273,13 @@ class HubEndpoint:
                 self._participant_connector[msg.participant_id] = msg.connector_id
             else:
                 self._participant_connector.pop(msg.participant_id, None)
+                # Release any slots held for this participant's tracks. Without
+                # this the ring fills up after enough connect/publish/disconnect
+                # cycles and every subsequent frame is dropped (issue #143).
+                stale = [k for k in self._latest_slots if k[0] == msg.participant_id]
+                for k in stale:
+                    ring, view = self._latest_slots.pop(k)
+                    ring.release_slot(view.signal.slot)
             for cb in self._participant_cbs:
                 await cb(msg)
             await self._pub.send_multipart([b"participant", encode(MsgType.PARTICIPANT_EVENT, msg)])

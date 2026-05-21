@@ -12,16 +12,14 @@ import yaml
 
 @dataclass(frozen=True)
 class WorkerConfig:
-    # Services
-    stt_server:       str
-    tts_server:       str
-    llm_server:       str   # quick-ack LLM (Llama-Nemotron, port 8106)
-    agent_llm_server: str   # tool-calling LLM (Nemotron-3-Nano, port 8107)
-    render_mcp:       str   # base URL, e.g. http://localhost:8220
-    oxr_mcp:          str   # base URL, e.g. http://localhost:8230
-    vlm_server:       str   # VLM inference server, e.g. http://localhost:8100
-    vlm_mcp:          str   # base URL, e.g. http://localhost:8240
-    video_mcp:        str   # base URL, e.g. http://localhost:8210
+    # Path to the models.yaml file (resolved relative to the worker YAML).
+    models_yaml: str
+
+    # MCP server base URLs — not in scope for xr-ai-models.
+    render_mcp: str   # base URL, e.g. http://localhost:8220
+    oxr_mcp:    str   # base URL, e.g. http://localhost:8230
+    vlm_mcp:    str   # base URL, e.g. http://localhost:8240
+    video_mcp:  str   # base URL, e.g. http://localhost:8210
 
     # VAD
     silence_threshold: float
@@ -37,16 +35,24 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         with open(path) as f:
             data = yaml.safe_load(f) or {}
 
+    # Resolve models_yaml relative to the config file's directory so the path
+    # works regardless of where the worker process is launched from. Note:
+    # when ``path`` is None (no --config), the default "yaml/models.yaml" is
+    # interpreted relative to CWD — the launcher always passes an absolute
+    # --config, so this only bites bare ``uv run xr_render_demo_worker`` runs
+    # from outside the worker directory.
+    models_yaml_raw = data.get("models_yaml", "yaml/models.yaml")
+    if path and not pathlib.Path(models_yaml_raw).is_absolute():
+        models_yaml = str(path.parent / models_yaml_raw)
+    else:
+        models_yaml = models_yaml_raw
+
     return WorkerConfig(
-        stt_server       = data.get("stt_server",        "http://localhost:8103"),
-        tts_server       = data.get("tts_server",        "http://localhost:8105"),
-        llm_server       = data.get("llm_server",        "http://localhost:8106"),
-        agent_llm_server = data.get("agent_llm_server",  "http://localhost:8107"),
-        render_mcp       = data.get("render_mcp_url",    "http://localhost:8220"),
-        oxr_mcp          = data.get("oxr_mcp_url",       "http://localhost:8230"),
-        vlm_server       = data.get("vlm_server",         "http://localhost:8100"),
-        vlm_mcp          = data.get("vlm_mcp_url",       "http://localhost:8240"),
-        video_mcp        = data.get("video_mcp_url",     "http://localhost:8210"),
+        models_yaml = models_yaml,
+        render_mcp  = data.get("render_mcp_url",  "http://localhost:8220"),
+        oxr_mcp     = data.get("oxr_mcp_url",     "http://localhost:8230"),
+        vlm_mcp     = data.get("vlm_mcp_url",     "http://localhost:8240"),
+        video_mcp   = data.get("video_mcp_url",   "http://localhost:8210"),
         silence_threshold = float(data.get("silence_threshold", 0.005)),
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),

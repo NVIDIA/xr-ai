@@ -20,7 +20,8 @@ from pathlib import Path
 from fastmcp import Client as McpClient
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_pipecat.services import http_probe, mcp_probe, wait_for_services
+from xr_ai_models import ToolDef, load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_pipecat.services import mcp_probe, wait_for_services
 
 from agent import RenderDemoAgent
 from config import WorkerConfig, load_config
@@ -34,38 +35,24 @@ _TRACE_FILE = "/tmp/xr-agent-trace.log"
 _WORKER_MANAGED_TOOLS = frozenset({"start_xr", "get_health"})
 
 
-def _tool_param_sig(input_schema: dict) -> str:
-    props = (input_schema or {}).get("properties", {})
-    if not props:
-        return ""
-    return ", ".join(
-        f"{k}: {v.get('type', 'any')}" for k, v in props.items()
-    )
-
-
-def _build_tools_openai(render_tools: list, oxr_tools: list,
-                        vlm_tools: list = (), video_tools: list = ()) -> list:
-    """Convert MCP tool definitions to the OpenAI tools=[...] format."""
-    tools = []
+def _build_tools(render_tools: list, oxr_tools: list,
+                 vlm_tools: list = (), video_tools: list = ()) -> list[ToolDef]:
+    """Convert MCP tool definitions to ToolDef objects for the SDK."""
+    tools: list[ToolDef] = []
     all_tools = list(oxr_tools) + list(render_tools) + list(vlm_tools) + list(video_tools)
     for t in all_tools:
         if t.name in _WORKER_MANAGED_TOOLS:
             continue
         schema = getattr(t, "inputSchema", None) or {"type": "object", "properties": {}}
-        tools.append({
-            "type": "function",
-            "function": {
-                "name":        t.name,
-                "description": (t.description or "").strip(),
-                "parameters":  schema,
-            },
-        })
+        tools.append(ToolDef(
+            name=t.name,
+            description=(t.description or "").strip(),
+            parameters=schema,
+        ))
     return tools
 
 
 _PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
-
-
 
 
 async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> None:
@@ -85,20 +72,29 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
     )
     logger.bind(trace=True).info("=== trace started ===")
 
-    await wait_for_services({
-        "STT":       http_probe(cfg.stt_server.rstrip("/")       + "/health"),
-        "TTS":       http_probe(cfg.tts_server.rstrip("/")       + "/health"),
-        "LLM":       http_probe(cfg.llm_server.rstrip("/")       + "/health"),
-        "agent-LLM": http_probe(cfg.agent_llm_server.rstrip("/") + "/health"),
-        # VLM server /health only returns 200 AFTER model weights are fully
-        # loaded — this ensures GPU 0 memory has settled before LOVR starts
-        # its Vulkan device, preventing the transient OOM race condition.
-        "VLM":       http_probe(cfg.vlm_server.rstrip("/")       + "/health"),
-        "render-mcp":mcp_probe(cfg.render_mcp.rstrip("/")  + "/mcp"),
-        "oxr-mcp":   mcp_probe(cfg.oxr_mcp.rstrip("/")    + "/mcp"),
-        "vlm-mcp":   mcp_probe(cfg.vlm_mcp.rstrip("/")    + "/mcp"),
-        "video-mcp": mcp_probe(cfg.video_mcp.rstrip("/")  + "/mcp"),
-    })
+    models_cfg  = load_models_config(cfg.models_yaml)
+    llm         = make_llm(models_cfg, "llm")
+    agent_llm   = make_llm(models_cfg, "agent_llm")
+    stt         = make_stt(models_cfg, "stt")
+    tts         = make_tts(models_cfg, "tts")
+    vlm_service = make_vlm(models_cfg, "vlm")
+
+    # VLM /health only returns 200 after weights are fully loaded — this ensures
+    # GPU 0 memory has settled before LOVR starts its Vulkan device, preventing
+    # the transient OOM race condition.
+    probes = {
+        "LLM":       llm.health,
+        "agent-LLM": agent_llm.health,
+        "STT":       stt.health,
+        "TTS":       tts.health,
+        "VLM":       vlm_service.health,
+        "render-mcp":mcp_probe(cfg.render_mcp.rstrip("/") + "/mcp"),
+        "oxr-mcp":   mcp_probe(cfg.oxr_mcp.rstrip("/")   + "/mcp"),
+        "vlm-mcp":   mcp_probe(cfg.vlm_mcp.rstrip("/")   + "/mcp"),
+        "video-mcp": mcp_probe(cfg.video_mcp.rstrip("/") + "/mcp"),
+    }
+    await wait_for_services(probes)
+    await vlm_service.close()
 
     if ready_file:
         ready_file.touch()
@@ -106,28 +102,29 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
     async with (
         McpClient(cfg.render_mcp.rstrip("/") + "/mcp") as render,
         McpClient(cfg.oxr_mcp.rstrip("/")    + "/mcp") as oxr,
-        McpClient(cfg.vlm_mcp.rstrip("/")    + "/mcp") as vlm,
+        McpClient(cfg.vlm_mcp.rstrip("/")    + "/mcp") as vlm_mcp,
         McpClient(cfg.video_mcp.rstrip("/")  + "/mcp") as video,
     ):
         render_tools, oxr_tools, vlm_tools, video_tools = [], [], [], []
         for name, client, store in [
-            ("render-mcp", render, lambda t: render_tools.extend(t)),
-            ("oxr-mcp",    oxr,    lambda t: oxr_tools.extend(t)),
-            ("vlm-mcp",    vlm,    lambda t: vlm_tools.extend(t)),
-            ("video-mcp",  video,  lambda t: video_tools.extend(t)),
+            ("render-mcp", render,  lambda t: render_tools.extend(t)),
+            ("oxr-mcp",    oxr,     lambda t: oxr_tools.extend(t)),
+            ("vlm-mcp",    vlm_mcp, lambda t: vlm_tools.extend(t)),
+            ("video-mcp",  video,   lambda t: video_tools.extend(t)),
         ]:
             try:
-                tools = await client.list_tools()
-                store(tools)
-                logger.info("{} tools: {}", name, [t.name for t in tools])
+                discovered = await client.list_tools()
+                store(discovered)
+                logger.info("{} tools: {}", name, [t.name for t in discovered])
             except Exception as exc:
                 logger.warning("{} tool discovery failed: {}", name, exc)
 
-        tools_openai = _build_tools_openai(render_tools, oxr_tools, vlm_tools, video_tools)
-        logger.info("tool-calling tools: {}", [t["function"]["name"] for t in tools_openai])
+        tools = _build_tools(render_tools, oxr_tools, vlm_tools, video_tools)
+        logger.info("tool-calling tools: {}", [t.name for t in tools])
 
         agent = RenderDemoAgent(
-            cfg, render, oxr, vlm, video, _PROMPT_FILE, tools_openai
+            cfg, render, oxr, vlm_mcp, video,
+            _PROMPT_FILE, tools, llm, agent_llm, stt, tts,
         )
 
         loop = asyncio.get_running_loop()

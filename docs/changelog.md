@@ -9,13 +9,213 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
-### 2026-05-12 — `FrameSink::InjectVideoFrame` gains a zero-copy overload
+### 2026-05-20 — Native StreamKit: `AudioSink` mixin + `CameraConfig::Facing` contract (#134)
 
-The span-only `InjectVideoFrame(std::span<const std::byte>, …)` forced backends to allocate + memcpy the entire pixel buffer on every frame before they could construct an owning `livekit::VideoFrame`. On an embedded 32-bit ARMv7-A target (720p I420 @ 30 fps) this dominated per-frame cost at ~63 ms — the camera HAL collapsed to ~6 fps. Hardware-validated A/B against a new `InjectVideoFrame(std::vector<std::uint8_t>&&, …)` overload that moves the buffer directly into the SDK: total per-frame cost drops from ~70 ms to ~5 ms (14× speedup), matching the in-house baseline publisher.
+Two design decisions in response to partner findings on the native C++
+StreamKit integration (PR #131 → issue #134):
 
-**Design**: the overload is strictly additive. Default impl forwards to the span overload, so any backend that only overrides one path keeps working. Callers with read-only / shared buffers continue to use the span overload; owning callers get the fast path.
+**`AudioSink` mixin alongside `FrameSink`.** The C++ SDK ships no built-in
+mic capture and the previous path required subclassing `LiveKitBackend` to
+reach the private `audio_source_` member — fragile and tied to
+implementation details. Added a public `AudioSink` interface with a single
+`InjectAudioFrame(pcm, rate, channels, samples_per_channel, ts)` entry
+point; `LiveKitBackend` now implements it. Shape mirrors `FrameSink` (and
+Swift's `AudioInjectable`) rather than introducing a unified `MediaSink`
+because audio and video have different validation rules, different real-time
+characteristics, and different zero-copy stories — collapsing them produces
+a leaky abstraction at no readability gain. No zero-copy `&&` overload on
+audio: a 10 ms @ 48 kHz mono PCM frame is ~960 bytes, well below the 1.4 MB
+per-frame threshold that justified `FrameSink`'s second overload.
 
-The fix benefits every native C++ consumer (CloudXR, native game-engine plugins, embedded camera SDKs), not just embedded — the embedded case is just where the cost crosses from "wasteful" to "unusable". See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134) for the diagnostic methodology, on-device numbers, and the cross-platform impact estimate.
+**`CameraConfig::Facing` documented as built-in-camera-open-only.** The
+`facing` / `device_id` fields are honoured by backends that open a camera
+themselves (iOS / Android / Web) and inert in the built-in C++ backend,
+which has no portable camera-open path. Considered splitting `CameraConfig`
+per-platform; rejected because it would fork the cross-platform shape that
+every other client depends on. Kept the struct identical everywhere and
+made the contract explicit in `CameraConfig.h` and `StreamingBackend.h`
+docstrings — silently inert on backends that can't act on it.
+
+### 2026-05-20 — Hub releases held ring-buffer slots on participant leave (#143)
+
+`HubEndpoint` holds the latest SHM ring slot per `(participant_id,
+track_id)` so processors can fetch pixels on demand without an eager
+copy. The slot was only released when the *next* FRAME_SIGNAL for the
+same key arrived — so when a track ended (LiveKit `track_unsubscribed`
+or `participant_disconnected`), its last slot stayed held forever.
+After enough connect/publish/disconnect cycles the ring filled with
+abandoned slots and every subsequent frame from any participant was
+dropped at the connector with `Ring buffer full — dropped frame`.
+A new participant could publish video and the worker would log
+`tracks_seen=0` until the hub was restarted.
+
+**Fix.** The hub now releases every slot keyed by a participant when
+that participant's `PARTICIPANT_EVENT(joined=False)` arrives. The
+`notify_participant_left` path already fires on both `track_unsubscribed`
++ `participant_disconnected` (it is called from `_room_client._handle_left`),
+so no new message type is required. Reuses the established
+"release_slot without `view.data.release()`" pattern from the FRAME_SIGNAL
+branch — the connector's ring is still live at this point, so the
+memoryview does not need an explicit release.
+
+Also bumped `_DEFAULT_NUM_SLOTS` from 10 → 16 so a single ill-timed
+reconnect within the in-flight window between last frame and disconnect
+event can't still hit the ceiling. The slot is 12.4 MiB at the 4K NV12
+ceiling, so six extra slots adds ~75 MiB to the worst-case per-connector
+shm footprint — cheap insurance.
+
+**Out of scope.** Connector crash / OOM still leaks slots — `joined=False`
+is only emitted by the live `notify_participant_left` path, not by an
+unclean exit. A heartbeat or TTL scan would close that gap; deferred
+until there's evidence it matters in practice. The issue's reproduction
+is wholly covered by participant disconnect.
+
+### 2026-05-18 — `nightly XR AI test` workflow on self-hosted `gpu` runner
+
+The `gpu`-marked pytest suite (`tests/test_gpu_*.py`,
+`tests/test_integration_livekit.py`, `tests/test_local_render_mcp.py`)
+is filtered out of the default `tests` workflow because it needs real
+GPU / Docker / NVENC hardware that the `ubuntu-latest` runners don't
+provide — see the 2026-05-12 entry for why the marker was introduced.
+Until now the suite ran only via `tests/run_local_gpu_tests.sh` on
+developer boxes, which meant regressions could slip into `main` between
+ad-hoc local runs.
+
+A new `.github/workflows/nightly-xr-ai-test.yml` runs the same suite at
+04:00 UTC every day (and on-demand via `workflow_dispatch`) on a
+self-hosted runner registered with the `gpu` label. The job mirrors
+`tests.yml` — `uv sync` + `pytest -m gpu` from `tests/` — at Python
+3.12 only, since these tests are GPU-bound rather than
+Python-version-bound and doubling the matrix would just double GPU-hour
+cost without new coverage. Concurrency is set to queue (not cancel)
+overlapping runs so a long nightly finishes before the next cron fires.
+
+**Runner hygiene.** The `gpu` label points at a persistent host, so
+state leaks across runs. Two layers of cleanup keep the suite robust:
+
+1. A workflow-level pre/post step force-removes every container named
+   `xr-ai-vllm-*` (the prefix the launcher uses) and asserts ≥ 30 GiB
+   of GPU memory is free at start — a clear hard error here beats a
+   confusing downstream vLLM OOM.
+2. An autouse pytest fixture in `tests/conftest.py` does the same scrub
+   around each `@pytest.mark.gpu` test. Per-test `finally` blocks
+   already call `stop_persistent_servers`, but those don't run if
+   pytest itself is killed or a fixture errors out — and any leak
+   between LLM tests on a single 46 GiB GPU OOMs the next one.
+
+**CUDA toolkit discovery.** A discovery step picks the toolkit from a
+priority list (`/usr/local/cuda-13.0`, `…-13`, `…`, `$CUDA_HOME`, then
+`which nvcc`) and exports `CUDA_HOME` plus `CUDACXX` via `$GITHUB_ENV`
+so downstream JIT compilers (FlashInfer, torch.cpp_extension, cmake)
+stop guessing. A follow-up step asserts the chosen `nvcc` supports
+`compute_89`, failing the run early on a misconfigured host.
+
+**vLLM tests use the docker backend.** Hosting vLLM in
+`nvcr.io/nvidia/vllm:26.04-py3` instead of pip means the host's CUDA /
+FlashInfer JIT toolchain (or its absence) no longer affects the tests
+— the container ships nvcc and a working FlashInfer build. The image's
+JIT cache lives at the runner's `/ephemeral/cache/flashinfer/...`,
+which is invisible to per-test setup; switching to the container side-
+steps it entirely.
+
+**`extra_pip` seam in `xr_ai_vllm.serve`.** The launcher already pip-
+installed `hf_transfer` into the NGC container before `vllm serve` ran
+(the image hard-errors with `HF_HUB_ENABLE_HF_TRANSFER=1` otherwise).
+That seam is generalised: `serve(..., extra_pip=[...])` is threaded
+through `_docker.run` → `build_run_argv` and appended to the same
+`pip install -q ... && vllm serve ...` shell line. `nemotron_omni`
+defaults `extra_pip=["mamba-ssm", "causal-conv1d"]` so its hybrid SSM
+backbone — which the NGC image doesn't bundle — loads cleanly. The
+knob is `cfg["extra_pip"]`-overridable for version pinning. pip-mode
+silently ignores it (deps belong in `pyproject.toml` there).
+
+### 2026-05-14 — `xr-ai-models` seam adopted by migrated workers; one migration pending
+
+`vlm-mcp` (#139), `xr-render-demo` (#140), and `xr-ai-pipecat` (#137) now
+depend on `agent-sdk/xr-ai-models` and construct their LLM / VLM / STT / TTS
+clients from a per-sample `yaml/models.yaml` via `make_llm` / `make_vlm` /
+`make_stt` / `make_tts`.  Per-model quirks (`chat_template_kwargs.enable_thinking`,
+`thinking_budget`, `reasoning` vs `reasoning_content` field naming,
+served-model-name strings) live in built-in presets — no caller branches on
+backend, and swapping a model is a `kind:` + `base_url:` YAML edit.
+
+The seam is consumed by `vlm-mcp` (#139), `xr-render-demo` (#140), and
+`xr-ai-pipecat` (#137); `simple-vlm-example`'s worker still uses inline
+`httpx` callers and migrates in #138.  The AGENTS.md hard rule
+"All HTTP calls to AI services go through `agent-sdk/xr-ai-models`"
+becomes universally enforceable on review once #138 lands.
+
+Top-level docs (`README.md`, `docs/ai-services.md`,
+`docs/adding-a-sample.md`, `AGENTS.md`) surface the `models.yaml` convention
+in the new-sample checklist and the per-service call examples.
+
+See PR #135 (Unit 1, SDK) and Units 2–5 (consumer migrations) for the
+individual diffs.
+
+### 2026-05-14 — Introduce `agent-sdk/xr-ai-models` SDK; collapse hand-rolled httpx clients behind four protocols
+
+Before this change, every consumer of an AI service rolled its own `httpx`
+wrapper around `/v1/chat/completions` / `/v1/audio/transcriptions` /
+`/v1/audio/speech` — `VlmClient` existed in three places (vlm-mcp,
+simple-vlm-example/worker/services.py, xr-render-demo/worker/processors.py
+where four inline `httpx.post(.../v1/chat/completions)` sites duplicated the
+OpenAI request shape); `SttClient` / `TtsClient` lived in both
+xr-ai-pipecat and simple-vlm-example.  Per-model quirks
+(`chat_template_kwargs.enable_thinking`, `thinking_budget=1024` in the
+agentic loop, the `reasoning` vs `reasoning_content` field-name difference
+between vLLM's `nano_v3` and `nemotron_v3` reasoning parsers) leaked into
+every caller.  Swapping a model meant editing N files.
+
+The new `agent-sdk/xr-ai-models/` package introduces four service
+protocols — `LLMService`, `VLMService`, `STTService`, `TTSService` — and
+one `OpenAICompat*` implementation per protocol that covers every in-tree
+backend (vLLM-served VLM/LLMs, NeMo Parakeet STT, Piper/Magpie TTS) and
+any future OpenAI-compatible endpoint.  Worker code constructs services
+from a per-sample `yaml/models.yaml` via `make_llm` / `make_vlm` /
+`make_stt` / `make_tts`; built-in presets (`cosmos_vlm`,
+`llama_nemotron`, `nemotron3_nano`, `nemotron_omni`, `parakeet_stt`,
+`piper_tts`, `magpie_tts`) pre-fill the model-specific quirks so a sample
+entry only needs `kind: preset:<name>` + `base_url:`.
+
+`ChatResponse.reasoning` is the canonical reasoning surface; the
+`reasoning_field` knob normalizes `reasoning_content` (nemotron_v3) into
+that one name so callers do not branch.  `enable_thinking` and
+`thinking_budget` are typed kwargs on `chat()` that flatten into
+`chat_template_kwargs` on the wire — callers never construct that dict.
+
+**Wire-format note (vlm-mcp migration, #139).** Pre-migration, an
+explicit `enable_thinking=True` from a caller produced a request with no
+`chat_template_kwargs` key at all (the legacy `VlmClient` only emitted
+the key when *false*). Post-migration the SDK always emits
+`chat_template_kwargs: {"enable_thinking": <bool>}`. Functionally
+equivalent — the model still generates `<think>` tokens — but worth
+recording for anyone bisecting wire traces across the migration boundary.
+
+**Why not LiteLLM or any-llm-sdk.** Both are excellent for cross-vendor
+fan-out but solve a problem we do not have yet — every in-tree backend
+already speaks OpenAI-compatible HTTP, and both libraries pass our most
+painful quirk (the reasoning-field name) straight through; we would still
+write the normalization layer on top.  They would also pull `openai`,
+`pydantic`, `tiktoken`, and friends into every worker venv.  The
+`factory.py::make_*` `kind` dispatch is the seam where a `LiteLLMBackend`
+slots in as a new `kind` later if/when Phase B brings true cross-vendor
+needs — protocols and callers do not change.
+
+This is Unit 1 of a multi-PR refactor.  Subsequent units migrate
+vlm-mcp, simple-vlm-example, xr-render-demo, and xr-ai-pipecat to depend
+on `xr-ai-models` instead of rolling their own clients.
+
+`VLMService` also exposes `ask_video(video, question)`, mirroring
+`ask_image`.  The wire format is a `{"type": "video_url", "video_url":
+{...}}` content part — what vLLM's Qwen2.5-VL serving expects when
+`--limit-mm-per-prompt {"video": >=1}` is set.  `cosmos_vlm` declares
+`capabilities: { vision, video }` because Cosmos-Reason1-7B is a
+Qwen2.5-VL fine-tune primarily designed for video reasoning; video is
+opt-in at the server because vLLM reserves tens of GiB of activation
+memory for it at startup.  Callers that haven't enabled video on their
+spec get a `ValueError` from `ask_video` rather than a silent server
+500.
+
 ### 2026-05-14 — CodeQL Advanced Setup (committed workflow) instead of Default Setup
 
 `Analyze (python)` and `Analyze (javascript-typescript)` are required status
@@ -29,6 +229,14 @@ and all visible checks green (first hit by PR #131). We've committed
 required contexts unconditionally. Default Setup must stay disabled in
 `Settings → Code security → Code scanning` — Advanced Setup and Default Setup
 cannot coexist.
+
+### 2026-05-12 — `FrameSink::InjectVideoFrame` gains a zero-copy overload
+
+The span-only `InjectVideoFrame(std::span<const std::byte>, …)` forced backends to allocate + memcpy the entire pixel buffer on every frame before they could construct an owning `livekit::VideoFrame`. On an embedded 32-bit ARMv7-A target (720p I420 @ 30 fps) this dominated per-frame cost at ~63 ms — the camera HAL collapsed to ~6 fps. Hardware-validated A/B against a new `InjectVideoFrame(std::vector<std::uint8_t>&&, …)` overload that moves the buffer directly into the SDK: total per-frame cost drops from ~70 ms to ~5 ms (14× speedup), matching the in-house baseline publisher.
+
+**Design**: the overload is strictly additive. Default impl forwards to the span overload, so any backend that only overrides one path keeps working. Callers with read-only / shared buffers continue to use the span overload; owning callers get the fast path.
+
+The fix benefits every native C++ consumer (CloudXR, native game-engine plugins, embedded camera SDKs), not just embedded — the embedded case is just where the cost crosses from "wasteful" to "unusable". See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134) for the diagnostic methodology, on-device numbers, and the cross-platform impact estimate.
 
 ### 2026-05-12 — `gpu` pytest marker + local-only dev script for hardware-bound tests
 

@@ -50,10 +50,10 @@ from loguru import logger
 from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
                           ParticipantEvent, ProcessorEndpoint)
 from xr_ai_logging import print_task_done_banner
+from xr_ai_models import STTService, TTSService, VLMService
 
 from audio import chunks_to_wav, now_us, rms, wav_to_chunks
 from pixels import encode_image, frame_to_pil
-from services import SttClient, TtsClient, VlmClient
 from voice import VoiceState
 
 
@@ -79,9 +79,9 @@ class SimpleVlmAgent:
     def __init__(
         self,
         ep:  ProcessorEndpoint,
-        stt: SttClient,
-        vlm: VlmClient,
-        tts: TtsClient,
+        stt: STTService,
+        vlm: VLMService,
+        tts: TTSService,
         *,
         default_prompt:     str   = "Describe what you see.",
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
