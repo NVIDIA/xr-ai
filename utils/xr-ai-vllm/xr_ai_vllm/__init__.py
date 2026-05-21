@@ -177,7 +177,24 @@ def stop_persistent_servers(
         if container_name:
             print(f"  [{label}] stopping container {container_name}…", flush=True)
             if _docker.stop_container(container_name):
-                print(f"  [{label}] stopped", flush=True)
+                # Remove the container so the next launch goes through a full
+                # `docker run` and picks up YAML config changes (without removal,
+                # `docker start` reuses the old container with its baked-in
+                # argv — stale --limit-mm-per-prompt, extra_pip, etc.).
+                #
+                # Tradeoff acknowledged: `_docker.run`'s start-on-existing path
+                # skipped `pip install` (hf_transfer, plus any extra_pip like
+                # mamba-ssm / causal-conv1d for Nemotron-Omni). Forcing rm means
+                # those reinstall on every restart — a few-second extra cost on
+                # warm cache, in exchange for config edits actually applying.
+                # Acceptable: persistent-servers exists to skip MODEL reloads,
+                # not pip reinstalls.
+                if _docker.remove_container(container_name):
+                    print(f"  [{label}] stopped and removed", flush=True)
+                else:
+                    print(f"  [{label}] stopped (rm failed — "
+                          f"run `docker rm {container_name}` to apply config changes)",
+                          flush=True)
             else:
                 print(f"  [{label}] docker stop failed — check `docker ps -a`",
                       flush=True)
