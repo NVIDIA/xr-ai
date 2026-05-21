@@ -25,8 +25,15 @@ max_model_len:          8192
 gpu_memory_utilization: 0.85
 enforce_eager:          false
 
-# Max images accepted per request. Increase if multi-image queries are needed.
-max_images_per_prompt:  1
+# Max images accepted per request.
+#
+# Budget note: each Qwen2.5-VL image consumes ~1.5k tokens of context at the
+# default preprocessor settings (smart_resize, max 1280×28 patches), so 4
+# images fit comfortably inside max_model_len=8192 alongside a typical
+# system+user prompt. If you raise this above ~5, also raise max_model_len
+# or tighten the image-preprocessor patch limit, otherwise long multi-image
+# turns will be truncated by vLLM at request time.
+max_images_per_prompt:  4
 
 # Max video items accepted per request. Default 0 (disabled).
 # Qwen2.5-VL-class models reserve activation memory at startup for the maximum
