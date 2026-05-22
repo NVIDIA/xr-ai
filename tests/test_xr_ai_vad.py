@@ -167,3 +167,39 @@ async def test_reset_drops_in_progress_utterance():
     await _feed_many(vad, 10, SILENT)
 
     assert received == [], "reset() should drop the in-progress utterance"
+
+
+@pytest.mark.asyncio
+async def test_real_silero_model_loads_in_consumer_venv():
+    """Construct a `VadDetector` with NO stub injection — exercises the real
+    `load_silero_vad(onnx=True)` import path so a missing `onnxruntime` (or
+    any other runtime dep that `silero-vad` lists as optional but our ONNX
+    backend requires) fails at this test rather than at first-mic-input in a
+    consumer worker.
+
+    The state-machine tests above stub `_silero` after construction, which
+    masks dependency gaps in the real load. This is the regression guard for
+    the bug where `simple-vlm-example`'s venv didn't have `onnxruntime` and
+    crashed at runtime instead of at `uv sync`.
+    """
+    received: list[bytes] = []
+
+    async def on_utt(audio: bytes, _sr: int) -> None:
+        received.append(audio)
+
+    # No `_install_stub` — the real silero ONNX model must load + run.
+    vad = VadDetector(
+        on_utterance      = on_utt,
+        silence_duration  = 0.10,
+        min_speech        = 0.06,
+        silero_threshold  = 0.5,
+    )
+
+    # One round-trip through the real classifier to prove the inference path
+    # also works (not just the import). Silero's float32 expectations require
+    # real audio shape, so we send a non-silent chunk.
+    await vad.feed(_tone_bytes(0.5), SR)
+    # Feed silence long enough to flush whatever decision silero made; we
+    # don't assert on the outcome (the real model may classify a 1 kHz tone
+    # as not-speech), only on the lack of exceptions.
+    await _feed_many(vad, 10, SILENT)

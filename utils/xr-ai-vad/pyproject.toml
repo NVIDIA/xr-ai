@@ -10,11 +10,16 @@ name = "xr-ai-vad"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 # Shared Silero-VAD utterance detector used by agent workers that ingest
-# microphone audio.  Uses the ONNX backend (no GPU required at runtime);
-# silero-vad pulls in torch + onnxruntime transitively.
+# microphone audio. Uses the ONNX backend (no GPU required at runtime).
+#
+# `onnxruntime` is declared explicitly because `silero-vad` lists it as an
+# optional extra, not a hard dependency — we always call
+# `load_silero_vad(onnx=True)` so the ONNX runtime is mandatory at import
+# time, and any consumer venv (simple-vlm-example/worker, etc.) needs it.
 dependencies = [
     "numpy>=1.24",
     "silero-vad>=5.1",
+    "onnxruntime>=1.17",
 ]
 
 [tool.hatch.build.targets.wheel]
