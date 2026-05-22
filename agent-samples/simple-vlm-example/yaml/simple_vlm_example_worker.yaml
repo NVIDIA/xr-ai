@@ -37,4 +37,4 @@ camera_grace_s:       5.0   # keep camera on this long after a query (avoids res
 # Tune if STT triggers too early or misses speech.
 silero_threshold:  0.5    # Silero speech-probability gate (0..1); lower = more sensitive
 silence_duration:  0.8    # seconds of silence that ends an utterance
-min_speech:        0.3    # minimum seconds of speech before STT is called
+min_speech:        0.1    # minimum seconds of speech before STT is called; 0.1s captures short commands like "stop"
