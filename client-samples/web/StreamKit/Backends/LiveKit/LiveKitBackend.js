@@ -242,12 +242,17 @@ export class LiveKitBackend {
    * @returns {Promise<void>}
    */
   async stopAudio() {
-    if (!this.#audioTrack) return;
-    if (this.#room) {
-      await this.#room.localParticipant.unpublishTrack(this.#audioTrack);
-    }
-    this.#audioTrack.stop();
+    const track = this.#audioTrack;
+    if (!track) return;
     this.#audioTrack = null;
+
+    try {
+      if (this.#room && this.#room.state === 'connected') {
+        await this.#room.localParticipant.unpublishTrack(track);
+      }
+    } finally {
+      track.stop();
+    }
   }
 
   /**
@@ -304,13 +309,17 @@ export class LiveKitBackend {
    * @returns {Promise<void>}
    */
   async stopCamera() {
-    if (!this.#videoTrack) return;
-
-    if (this.#room) {
-      await this.#room.localParticipant.unpublishTrack(this.#videoTrack);
-    }
-    this.#videoTrack.stop();
+    const track = this.#videoTrack;
+    if (!track) return;
     this.#videoTrack = null;
+
+    try {
+      if (this.#room && this.#room.state === 'connected') {
+        await this.#room.localParticipant.unpublishTrack(track);
+      }
+    } finally {
+      track.stop();
+    }
   }
 
   /**
@@ -362,27 +371,32 @@ export class LiveKitBackend {
    * @returns {Promise<void>}
    */
   async #tearDown() {
-    if (this.#room) {
-      // Remove all listeners before disconnecting to prevent stale callbacks.
-      this.#room.removeAllListeners();
-      await this.#room.disconnect();
-      this.#room = null;
+    const room = this.#room;
+    this.#room = null;
+    try {
+      if (room) {
+        // Remove all listeners before disconnecting to prevent stale callbacks.
+        room.removeAllListeners();
+        await room.disconnect();
+      }
+    } catch (err) {
+      console.warn('LiveKitBackend: room.disconnect() failed', err);
+    } finally {
+      for (const el of this.#audioElements.values()) el.remove();
+      this.#audioElements.clear();
+
+      if (this.#videoTrack) {
+        this.#videoTrack.stop();
+        this.#videoTrack = null;
+      }
+
+      if (this.#audioTrack) {
+        this.#audioTrack.stop();
+        this.#audioTrack = null;
+      }
+
+      this.#sessionConfig = null;
     }
-
-    for (const el of this.#audioElements.values()) el.remove();
-    this.#audioElements.clear();
-
-    if (this.#videoTrack) {
-      this.#videoTrack.stop();
-      this.#videoTrack = null;
-    }
-
-    if (this.#audioTrack) {
-      this.#audioTrack.stop();
-      this.#audioTrack = null;
-    }
-
-    this.#sessionConfig = null;
   }
 
   /**
