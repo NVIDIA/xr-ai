@@ -7,8 +7,12 @@ SimpleVlmAgent — vision Q&A driven by voice, text, or "ping".
 Inputs
 ------
 * Audio chunks (mic):  VAD detects an utterance, STT turns it into text,
-                       which is then dispatched as a query.
+                       which is then dispatched as a query.  If ``wake_word``
+                       is configured, the transcript must start with it
+                       (case-insensitive) or the utterance is dropped; the
+                       prefix is stripped before dispatch.
 * Data messages:       text payload is dispatched as a query directly.
+                       The wake-word gate does not apply to this path.
 * "ping" data message: literal text "ping" (case-insensitive) is replaced
                        with the configured default prompt before dispatch.
 
@@ -58,6 +62,15 @@ from audio import int16_pcm_to_wav, now_us, wav_to_chunks
 from pixels import encode_image, frame_to_pil
 from voice import VoiceState
 
+# Transcripts matching this pattern are dispatched even when a wake word is
+# configured and absent — so "stop" always interrupts a response.
+_STOP_RE = re.compile(
+    r'^\s*(?:\S+\s+){0,2}'               # up to 2 optional filler words
+    r'(?:stop(?:\s+\w+){0,2}|be\s+quiet|quiet|shut\s+up)'
+    r'\s*[.!?]?\s*$',
+    re.IGNORECASE,
+)
+
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are an XR assistant speaking directly to the person wearing the headset. "
@@ -87,6 +100,7 @@ class SimpleVlmAgent:
         *,
         default_prompt:     str   = "Describe what you see.",
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
+        wake_word:          str   = "",
         silence_duration:   float = 0.8,
         min_speech:         float = 0.3,
         silero_threshold:   float = 0.5,
@@ -106,6 +120,7 @@ class SimpleVlmAgent:
 
         self._default_prompt    = default_prompt
         self._system_prompt     = system_prompt
+        self._wake_word             = wake_word.strip().lower()
         self._vad_silence_s         = silence_duration
         self._vad_min_s             = min_speech
         self._vad_silero_threshold  = silero_threshold
@@ -171,12 +186,46 @@ class SimpleVlmAgent:
             text = (await self._stt.transcribe(wav)).strip()
             if not text:
                 return
-            logger.info("audio query  pid={!r}  {!r}", pid, text[:80])
-            await self._dispatch_query(pid, text, pts_us=now_us())
+            query = self._strip_wake_word(text)
+            if query is None:
+                if _STOP_RE.match(text):
+                    query = text
+                else:
+                    logger.info("wake word missing pid={!r} text={!r}", pid, text[:80])
+                    return
+            if not query:
+                logger.info("wake word only, no query pid={!r}", pid)
+                return
+            logger.info("audio query  pid={!r}  {!r}", pid, query[:80])
+            await self._dispatch_query(pid, query, pts_us=now_us())
         except httpx.HTTPError as exc:
             logger.error("stt error pid={!r}: {}", pid, exc)
         finally:
             vs.transcribing = False
+
+    def _strip_wake_word(self, text: str) -> str | None:
+        """Gate STT output on the configured wake word.
+
+        Matches the wake word as a whole word within the first few words of
+        the transcript, so "hey agent …" and "agent …" both work when
+        wake_word="agent".  Returns the query with everything up to and
+        including the wake word stripped, or ``None`` if not found.
+        Empty wake word ⇒ filter disabled, text returned unchanged.
+        """
+        if not self._wake_word:
+            return text
+        # Allow up to 3 filler words before the wake word so STT variants
+        # like "hey agent" or "okay agent" match, without accepting the word
+        # appearing mid-sentence.
+        pattern = (
+            r'(?i)^\s*(?:\S+\s+){0,3}'
+            + re.escape(self._wake_word)
+            + r'\b[\s,.:;!?-]*'
+        )
+        m = re.match(pattern, text)
+        if m is None:
+            return None
+        return text[m.end():]
 
     # ── data path: text → query (with "ping" → default prompt) ────────────────
 
