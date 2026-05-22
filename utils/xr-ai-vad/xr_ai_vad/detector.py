@@ -29,7 +29,12 @@ from silero_vad import load_silero_vad
 
 log = logging.getLogger("xr_ai_vad")
 
-_SILERO_WINDOW   = 512    # 32 ms at 16 kHz
+# Silero v5 only accepts 16 kHz or 8 kHz. We always classify at 16 kHz —
+# input at any other rate is linearly resampled in-process before
+# buffering. The original-rate PCM still goes to `on_utterance` so STT /
+# WAV downstream get full-fidelity audio.
+_SILERO_SR       = 16_000
+_SILERO_WINDOW   = 512    # 32 ms at 16 kHz — silero v5 hard requirement
 _MAX_UTT_S       = 30.0
 _PRE_ROLL_CHUNKS = 10     # ~320 ms pre-roll (10 × 32 ms)
 
@@ -155,15 +160,31 @@ class VadDetector:
             await self._finalize(sample_rate)
 
     def _classify(self, pcm_int16: bytes, sample_rate: int) -> bool:
-        """Return True if the chunk is speech."""
+        """Return True if the chunk is speech.
+
+        Silero v5 only accepts 16 kHz or 8 kHz input and requires a fixed
+        window size (512 samples at 16 kHz). Callers commonly hand us
+        48 kHz audio straight from a WebRTC track, so we resample to
+        16 kHz here and always call silero with sample_rate=16000.
+        """
         f32 = np.frombuffer(pcm_int16, dtype=np.int16).astype(np.float32) / 32768.0
+        if sample_rate != _SILERO_SR and f32.size:
+            # Linear resample is adequate for VAD — we only need rough
+            # spectral profile, not audiophile fidelity. Avoids pulling in
+            # scipy just for this single hop.
+            n_out = max(1, int(round(f32.size * _SILERO_SR / sample_rate)))
+            f32 = np.interp(
+                np.linspace(0.0, f32.size - 1, n_out, dtype=np.float32),
+                np.arange(f32.size, dtype=np.float32),
+                f32,
+            ).astype(np.float32)
         self._silero_buf = np.concatenate([self._silero_buf, f32])
         speech_prob = 0.0
         while len(self._silero_buf) >= _SILERO_WINDOW:
             window = self._silero_buf[:_SILERO_WINDOW]
             self._silero_buf = self._silero_buf[_SILERO_WINDOW:]
             tensor = torch.from_numpy(np.ascontiguousarray(window))
-            speech_prob = max(speech_prob, float(self._silero(tensor, sample_rate)))
+            speech_prob = max(speech_prob, float(self._silero(tensor, _SILERO_SR)))
         return speech_prob > self._silero_threshold
 
     async def _safe_speech_start(self) -> None:

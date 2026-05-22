@@ -203,3 +203,46 @@ async def test_real_silero_model_loads_in_consumer_venv():
     # don't assert on the outcome (the real model may classify a 1 kHz tone
     # as not-speech), only on the lack of exceptions.
     await _feed_many(vad, 10, SILENT)
+
+
+@pytest.mark.asyncio
+async def test_real_silero_accepts_48khz_via_internal_resample():
+    """48 kHz audio from a WebRTC track must classify without raising.
+
+    Silero v5 only accepts 16 kHz / 8 kHz, so the detector resamples to
+    16 kHz internally. This test feeds chunks at 48 kHz (LiveKit's default
+    publish rate) and asserts the real silero classify path runs cleanly.
+    Regression guard for the runtime crash where the detector forwarded
+    a 48 kHz `sample_rate` straight to silero and got
+    `ValueError: Input audio chunk is too short` because the 512-sample
+    16 kHz window is ~10.6 ms at 48 kHz — silero's `_validate_input` for
+    the (resampled) 48 kHz request expects 1536+ samples.
+    """
+    SR_48K = 48_000
+    chunk_n = int(SR_48K * 0.02)  # 20 ms at 48 kHz = 960 samples
+    t = np.arange(chunk_n, dtype=np.float32) / SR_48K
+    speech_48k = ((0.5 * np.sin(2 * np.pi * 1000.0 * t)) * 32767).astype(np.int16).tobytes()
+    silent_48k = (np.zeros(chunk_n, np.int16)).tobytes()
+
+    received: list[bytes] = []
+
+    async def on_utt(audio: bytes, _sr: int) -> None:
+        received.append(audio)
+
+    # No stub — real silero must accept the resampled stream.
+    vad = VadDetector(
+        on_utterance      = on_utt,
+        silence_duration  = 0.10,
+        min_speech        = 0.06,
+        silero_threshold  = 0.5,
+    )
+
+    # Feed enough 48 kHz chunks that the resample buffer crosses
+    # silero's 512-sample window at 16 kHz several times.
+    for _ in range(10):
+        await vad.feed(speech_48k, SR_48K)
+    for _ in range(10):
+        await vad.feed(silent_48k, SR_48K)
+
+    # No assertion on `received` — silero may or may not classify a 1 kHz
+    # tone as speech. The contract under test is "no ValueError raised".
