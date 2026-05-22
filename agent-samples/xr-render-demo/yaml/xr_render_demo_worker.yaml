@@ -7,7 +7,9 @@
 # ── AI model services ─────────────────────────────────────────────────────────
 # Model endpoints (URLs, presets, timeouts) are declared in models.yaml and
 # loaded via xr-ai-models.  Edit that file to change which model runs where.
-models_yaml: yaml/models.yaml
+# Path is resolved relative to THIS file's directory (`yaml/`), so the bare
+# `models.yaml` here points at `agent-samples/xr-render-demo/yaml/models.yaml`.
+models_yaml: models.yaml
 
 # ── MCP server base URLs ──────────────────────────────────────────────────────
 render_mcp_url: http://localhost:8220

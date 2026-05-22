@@ -34,12 +34,12 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
             data = yaml.safe_load(f) or {}
 
     # Resolve models_yaml relative to the config file's directory so the path
-    # works regardless of where the worker process is launched from. Note:
-    # when ``path`` is None (no --config), the default "yaml/models.yaml" is
-    # interpreted relative to CWD — the launcher always passes an absolute
-    # --config, so this only bites bare ``uv run xr_render_demo_worker`` runs
-    # from outside the worker directory.
-    models_yaml_raw = data.get("models_yaml", "yaml/models.yaml")
+    # works regardless of where the worker process is launched from. The
+    # default `"models.yaml"` is a bare basename — it sits next to this
+    # worker's config YAML in `agent-samples/xr-render-demo/yaml/`. When the
+    # launcher passes `--config`, `path.parent` is that yaml dir; when run
+    # bare without `--config`, the relative path falls back to CWD.
+    models_yaml_raw = data.get("models_yaml", "models.yaml")
     if path and not pathlib.Path(models_yaml_raw).is_absolute():
         models_yaml = str(path.parent / models_yaml_raw)
     else:
