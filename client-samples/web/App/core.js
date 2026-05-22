@@ -263,22 +263,24 @@ export function renderBase(model) {
     selectRow.style.display = 'none';
   }
 
-  // ── Agent status ───────────────────────────────────────────────────────────
+  // ── Agent status (optional — some clients replace this with their own UI) ──
   const agentDot   = $('agent-status-dot');
   const agentLabel = $('agent-status-label');
 
-  if (!isConnected) {
-    agentDot.className     = 'state-dot disconnected';
-    agentLabel.textContent = '—';
-  } else if (model.agentStatus === 'processing') {
-    agentDot.className     = 'state-dot connecting';
-    agentLabel.textContent = 'Processing…';
-  } else if (model.agentStatus === 'idle') {
-    agentDot.className     = 'state-dot connected';
-    agentLabel.textContent = 'Idle';
-  } else {
-    agentDot.className     = 'state-dot disconnected';
-    agentLabel.textContent = 'Unknown';
+  if (agentDot && agentLabel) {
+    if (!isConnected) {
+      agentDot.className     = 'state-dot disconnected';
+      agentLabel.textContent = '—';
+    } else if (model.agentStatus === 'processing') {
+      agentDot.className     = 'state-dot connecting';
+      agentLabel.textContent = 'Processing…';
+    } else if (model.agentStatus === 'idle') {
+      agentDot.className     = 'state-dot connected';
+      agentLabel.textContent = 'Idle';
+    } else {
+      agentDot.className     = 'state-dot disconnected';
+      agentLabel.textContent = 'Unknown';
+    }
   }
 
   // ── Data channel ───────────────────────────────────────────────────────────
@@ -350,12 +352,14 @@ export async function connect(model, {
   }
 
   newSession.onConnectionStateChanged = (state) => {
+    const wasCameraActive = model.isCameraActive;
     model.connectionState = state;
     if (state === ConnectionState.CONNECTED) {
       // Enumerate cameras on connect so the selector is populated before the
       // user starts the camera for the first time.
       _ec?.();
     } else if (state === ConnectionState.DISCONNECTED) {
+      if (wasCameraActive) _sc?.();
       model.isAudioActive  = false;
       model.isCameraActive = false;
       model.agentStatus    = null;

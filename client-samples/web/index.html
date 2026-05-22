@@ -309,6 +309,88 @@
       opacity: 1;
     }
 
+    /* ── Camera preview ──────────────────────────────────────────────── */
+    .preview-card {
+      background: #000;
+      border-radius: var(--radius);
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+      margin-bottom: 32px;
+      box-shadow: 0 1px 0 var(--separator);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    #camera-preview {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+      /* Mirroring applied dynamically in app.js based on facingMode */
+    }
+
+    #camera-preview.active { display: block; }
+
+    .preview-placeholder {
+      color: rgba(255, 255, 255, 0.3);
+      font-size: 14px;
+      pointer-events: none;
+    }
+
+    .preview-live-badge {
+      display: none;
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-radius: 6px;
+      padding: 3px 8px;
+      gap: 5px;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .preview-live-badge.active { display: flex; }
+
+    .preview-live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--red);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    /* ── Agent response display ───────────────────────────────────────── */
+    .agent-response-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 1px 0 var(--separator);
+      margin-bottom: 32px;
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      padding: 16px;
+    }
+
+    #agent-response-text {
+      font-size: 17px;
+      line-height: 1.5;
+      color: var(--label);
+    }
+
+    #agent-response-text.empty {
+      color: var(--secondary);
+      font-style: italic;
+      font-size: 15px;
+    }
+
     /* ── Responsive max-width ─────────────────────────────────────────── */
     .page-content {
       max-width: 540px;
@@ -320,6 +402,24 @@
 <body>
   <div class="page-content">
     <h1 class="page-title">NVIDIA XR-AI Sample</h1>
+
+    <!-- ── Camera preview ────────────────────────────────────────────────── -->
+    <div class="preview-card">
+      <span class="preview-placeholder" id="preview-placeholder">Camera off</span>
+      <video id="camera-preview" autoplay playsinline muted></video>
+      <div class="preview-live-badge" id="preview-live-badge">
+        <span class="preview-live-dot"></span>
+        <span>LIVE</span>
+      </div>
+    </div>
+
+    <!-- ── Agent response ─────────────────────────────────────────────────── -->
+    <section class="section">
+      <h2 class="section-header">Agent</h2>
+      <div class="agent-response-card">
+        <p id="agent-response-text" class="empty" role="status" aria-live="polite" aria-atomic="true">Waiting for agent…</p>
+      </div>
+    </section>
 
     <!-- ── Connection section ─────────────────────────────────────────── -->
     <section class="section">
@@ -461,20 +561,6 @@
           <span id="camera-status" class="status-text status-idle">Not connected</span>
         </div>
 
-      </div>
-    </section>
-
-    <!-- ── Agent section ────────────────────────────────────────────────── -->
-    <section class="section">
-      <h2 class="section-header">Agent</h2>
-      <div class="card">
-        <div class="labeled-row">
-          <span class="row-label">Status</span>
-          <div class="state-badge">
-            <span id="agent-status-dot" class="state-dot disconnected"></span>
-            <span id="agent-status-label">—</span>
-          </div>
-        </div>
       </div>
     </section>
 

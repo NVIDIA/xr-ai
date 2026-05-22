@@ -33,7 +33,23 @@ import {
 // Model state  (mirrors AppModel.swift field-for-field)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const model = { ...createBaseModel() };
+const model = {
+  ...createBaseModel(),
+  /** @type {string|null} Most recent agent.response message text. */
+  agentResponse: null,
+};
+
+// Local camera preview stream (separate from the LiveKit publish stream).
+let _previewStream = null;
+
+function releasePreviewStream() {
+  if (!_previewStream) return;
+  _previewStream.getTracks().forEach(t => t.stop());
+  _previewStream = null;
+  const videoEl = $('camera-preview');
+  videoEl.srcObject = null;
+  videoEl.style.transform = '';
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Error toast
@@ -57,18 +73,99 @@ function showError(message) {
 // Render + bound actions
 // ─────────────────────────────────────────────────────────────────────────────
 
-function render()           { renderBase(model); }
+function render() {
+  renderBase(model);
+
+  // Camera preview elements.
+  const video       = $('camera-preview');
+  const placeholder = $('preview-placeholder');
+  const liveBadge   = $('preview-live-badge');
+  if (model.isCameraActive) {
+    video.classList.add('active');
+    placeholder.style.display = 'none';
+    liveBadge.classList.add('active');
+  } else {
+    video.classList.remove('active');
+    placeholder.style.display = '';
+    liveBadge.classList.remove('active');
+  }
+
+  // Agent response.
+  const responseEl = $('agent-response-text');
+  if (model.agentResponse) {
+    responseEl.textContent = model.agentResponse;
+    responseEl.classList.remove('empty');
+  } else {
+    responseEl.textContent = 'Waiting for agent…';
+    responseEl.classList.add('empty');
+  }
+}
 
 function enumerateCameras() { return _enumerateCameras(model, render); }
-function stopCamera()       { return _stopCamera(model, render, showError); }
-function startCamera()      { return _startCamera(model, { render, showError, enumerateCameras }); }
+
+async function stopCamera() {
+  try {
+    await _stopCamera(model, render, showError);
+  } finally {
+    releasePreviewStream();
+  }
+}
+
+async function startCamera() {
+  await _startCamera(model, { render, showError, enumerateCameras });
+  if (model.isCameraActive) {
+    try {
+      releasePreviewStream();
+      // No facingMode default — let the browser pick the same camera LiveKit
+      // picks (both calls use `{video: true}` when no deviceId is selected,
+      // so they converge on the system default). When the user has explicitly
+      // chosen a camera in the dropdown, both pin to that deviceId.
+      const constraints = model.selectedCameraId
+        ? { video: { deviceId: { exact: model.selectedCameraId } } }
+        : { video: true };
+      _previewStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const videoEl = $('camera-preview');
+      videoEl.srcObject = _previewStream;
+
+      // Default: do NOT mirror — XR / glasses / mobile-back-camera capture
+      // should preserve real-world orientation (left = left, right = right).
+      // Only flip when the camera is explicitly user-facing (front mobile cam,
+      // `facingMode === 'user'`). Desktop selfie webcams typically report no
+      // facingMode and stay unmirrored; users who want the FaceTime-style
+      // mirror UX on a desktop webcam can add a manual toggle later.
+      const track = _previewStream.getVideoTracks()[0];
+      const facingMode = track?.getSettings?.()?.facingMode ?? '';
+      videoEl.style.transform = facingMode === 'user' ? 'scaleX(-1)' : '';
+    } catch { /* preview failure is non-fatal */ }
+  }
+  render();
+}
+
 function startAudio()       { return _startAudio(model, render, showError); }
 function stopAudio()        { return _stopAudio(model, render, showError); }
-function disconnect()       { return _disconnect(model, render); }
+async function disconnect() {
+  releasePreviewStream();
+  try {
+    await _disconnect(model, render);
+  } finally {
+    releasePreviewStream();
+    render();
+  }
+}
 function sendPing()         { return _sendPing(model, startCamera); }
 function sendCustom(text)   { return _sendCustom(model, text, showError); }
 function connect()          {
-  return _connect(model, { render, showError, enumerateCameras, stopCamera });
+  return _connect(model, {
+    render, showError, enumerateCameras, stopCamera,
+    onDataReceived(topic, data) {
+      if (topic === 'agent.response') {
+        model.agentResponse = new TextDecoder().decode(data);
+        render();
+        return true; // suppress from the received messages list
+      }
+      return false;
+    },
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,4 +173,9 @@ function connect()          {
 // ─────────────────────────────────────────────────────────────────────────────
 
 wireBaseEvents(model, { connect, disconnect, startAudio, stopAudio, startCamera, stopCamera, sendPing, sendCustom });
+window.addEventListener('pagehide', () => {
+  releasePreviewStream();
+  const pendingDisconnect = model.session?.disconnect();
+  if (pendingDisconnect) pendingDisconnect.catch(() => {});
+});
 render();
