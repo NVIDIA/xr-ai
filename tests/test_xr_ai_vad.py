@@ -42,6 +42,9 @@ class _StubSilero:
         rms = float(np.sqrt(np.mean(arr.astype(np.float32) ** 2))) if arr.size else 0.0
         return 0.9 if rms >= self._threshold else 0.0
 
+    def reset_states(self) -> None:
+        pass
+
 
 def _install_stub(vad: VadDetector) -> None:
     """Replace the loaded silero model with a deterministic stub."""

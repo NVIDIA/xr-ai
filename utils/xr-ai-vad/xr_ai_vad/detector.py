@@ -76,7 +76,6 @@ class VadDetector:
         self._speech_s:       float       = 0.0
         self._silent_s:       float       = 0.0
         self._speaking:       bool        = False
-        self._busy:           bool        = False   # on_utterance in flight
         # One-shot per utterance: ensures on_speech_start fires at most
         # once between finalizations.
         self._speech_start_fired: bool = False
@@ -100,6 +99,7 @@ class VadDetector:
         self._speech_start_fired = False
         self._pre_roll.clear()
         self._silero_buf = np.zeros(0, np.float32)
+        self._silero.reset_states()
 
     async def feed(self, pcm_int16: bytes, sample_rate: int) -> None:
         """Process one chunk of int16 LE PCM audio.
@@ -155,7 +155,6 @@ class VadDetector:
             self._speaking
             and self._speech_s >= self._min_speech
             and self._silent_s >= self._silence_duration
-            and not self._busy
         ):
             await self._finalize(sample_rate)
 
@@ -206,12 +205,13 @@ class VadDetector:
         self._silent_s           = 0.0
         self._speech_s           = 0.0
         self._speech_start_fired = False
-        self._busy               = True
+        # Reset Silero's RNN hidden state so the next utterance's silence
+        # detection isn't biased by this utterance's speech context.
+        self._silero_buf = np.zeros(0, np.float32)
+        self._silero.reset_states()
         dur_s = (len(audio_bytes) // 2) / max(sample_rate, 1)
         log.info("VAD: utterance finalized  dur=%.2fs", dur_s)
         try:
             await self._on_utterance(audio_bytes, sample_rate)
         except Exception:
             log.exception("on_utterance callback raised")
-        finally:
-            self._busy = False
