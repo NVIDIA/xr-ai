@@ -28,19 +28,19 @@ Before anything else, identify WHICH OBJECT the user means:
     most recent reply mentioned a DIFFERENT object than [Recent moves]
     last touched, the REPLY wins.
     Examples:
-      Prev reply: "Added a magenta pyramid."        → it = the magenta pyramid
-      Prev reply: "Shifted the box 0.4 m forward."  → it = the box
-      Prev reply: "Recoloured the tiny pyramid."    → it = the tiny pyramid
+      Prev reply: "Added a magenta cone."           → it = the magenta cone
+      Prev reply: "Shifted the cylinder 0.4 m forward."  → it = the cylinder
+      Prev reply: "Recoloured the tiny cone."       → it = the tiny cone
 
     WORKED EXAMPLE — "previous reply" wins over "last moved":
-      Scene:    sphere-A (yellow), sphere-B (blue)  ← B was just added
+      Scene:    cone-A (turquoise), cone-B (teal)   ← B was just added
       [Recent moves]
-        sphere-A: (0, 1.6, …) → (0, 0.6, …)        ← A was just moved down
-      [Recent conversation] last assistant reply: "Added a blue sphere."
+        cone-A: (0, 1.6, …) → (0, 0.6, …)          ← A was just moved down
+      [Recent conversation] last assistant reply: "Added a teal cone."
       User: "Move it right by 1 m."
-        "it" → SPHERE-B (the blue one — subject of the last reply).
-        NOT sphere-A (which was the most recently moved). The reply
-        named "blue sphere"; the [Recent moves] block is for undo only.
+        "it" → CONE-B (the teal one — subject of the last reply).
+        NOT cone-A (which was the most recently moved). The reply
+        named "teal cone"; the [Recent moves] block is for undo only.
         displace_object(current_x=B.x, current_y=B.y, current_z=B.z, right=1)
 
     If your previous reply did NOT name an object (e.g. it was the very
@@ -56,10 +56,11 @@ Before anything else, identify WHICH OBJECT the user means:
         orange ≈ (1, 0.5, 0)      purple  ≈ (0.6, 0, 1)
     DO NOT fall back to "the most recently moved object" when the user
     named a specific color — the color cue dominates over recency.
-    Example: scene has sphere-0 (yellow) and sphere-2 (blue), and
-    sphere-0 was just moved. User says "Move the blue sphere left" —
-    the target is sphere-2, full stop.  sphere-0's recency does NOT
+    Example: scene has cone-0 (turquoise) and cone-2 (teal), and
+    cone-0 was just moved. User says "Move the teal cone left" —
+    the target is cone-2, full stop.  cone-0's recency does NOT
     apply when a non-matching color is named.
+
   'sphere one' / 'first sphere' → sphere-1; 'second' → sphere-2, etc.
   'them' / 'they' / 'those' / 'these' → PLURAL.  Resolves to the set of
     objects the user was just talking about — typically both objects
@@ -68,29 +69,29 @@ Before anything else, identify WHICH OBJECT the user means:
     per resolved object — N objects → N update_primitive calls (and N
     math-tool calls if the operation needs coords).
     Examples:
-      Prev: "Added an orange pyramid above the magenta box."
-      User: "Recolour them white"      → both (the pyramid AND the box)
-      Prev: "Stacked four cyan cubes."
-      User: "Make them tiny"           → all four cubes
+      Prev: "Added an orange cone above the magenta cylinder."
+      User: "Recolour them white"      → both (the cone AND the cylinder)
+      Prev: "Stacked four teal capsules."
+      User: "Make them tiny"           → all four capsules
 
     WORKED EXAMPLE — "them" after two adds in prior turns:
       [Recent conversation]
         User: "Add a small ring."        Agent: "Added a small ring."
-        User: "Put a cube next to it."   Agent: "Added a cube next to the ring."
-      Scene now contains ring-0 and box-0.
+        User: "Put a cone next to it."   Agent: "Added a cone next to the ring."
+      Scene now contains ring-0 and cone-0.
       User: "Move them up 30 cm."
-        target set = {ring-0, box-0}    ← BOTH, not just the most recent.
+        target set = {ring-0, cone-0}    ← BOTH, not just the most recent.
         PREFERRED — one batch math call + N updates:
-        iter 0: displace_objects(object_ids=["ring-0", "box-0"],
-                                 current_xs=[ring.x, box.x],
-                                 current_ys=[ring.y, box.y],
-                                 current_zs=[ring.z, box.z],
+        iter 0: displace_objects(object_ids=["ring-0", "cone-0"],
+                                 current_xs=[ring.x, cone.x],
+                                 current_ys=[ring.y, cone.y],
+                                 current_zs=[ring.z, cone.z],
                                  up=0.3)
                 returns {"items": [{"obj_id": "ring-0", "x":…, "y":…, "z":…},
-                                   {"obj_id": "box-0",  "x":…, "y":…, "z":…}]}
+                                   {"obj_id": "cone-0", "x":…, "y":…, "z":…}]}
         iter 1: update_primitive(obj_id="ring-0",
                                  x=item0.x, y=item0.y, z=item0.z)
-        iter 2: update_primitive(obj_id="box-0",
+        iter 2: update_primitive(obj_id="cone-0",
                                  x=item1.x, y=item1.y, z=item1.z)
       A single update_primitive (only the most recent object) is a BUG —
       "them" is at least two objects.
@@ -120,14 +121,14 @@ Before anything else, identify WHICH OBJECT the user means:
     'the X above' / 'top X' / 'upper X'   → GREATEST y.
     'the X below' / 'bottom X' / 'lower X' → SMALLEST y.
 
-  WORKED EXAMPLE — scene has two purple pyramids,
-      pyramid-0 at (-1.20, 1.45, -2.10)
-      pyramid-1 at ( 0.85, 1.45, -2.10)
-  User says "Recolour the rightmost pyramid green":
-    pyramid-0 has x=-1.20, pyramid-1 has x=0.85.
-    GREATEST x → pyramid-1.
-    iter 0: update_primitive(obj_id="pyramid-1", r=0, g=0.8, b=0)
-    NOT pyramid-0 — the explicit positional cue ("rightmost")
+  WORKED EXAMPLE — scene has two purple cones,
+      cone-0 at (-1.20, 1.45, -2.10)
+      cone-1 at ( 0.85, 1.45, -2.10)
+  User says "Recolour the rightmost cone magenta":
+    cone-0 has x=-1.20, cone-1 has x=0.85.
+    GREATEST x → cone-1.
+    iter 0: update_primitive(obj_id="cone-1", r=1, g=0, b=1)
+    NOT cone-0 — the explicit positional cue ("rightmost")
     overrides any recency or insertion-order heuristic.
 
 Never guess an id. If genuinely ambiguous (no positional cue, multiple
@@ -154,21 +155,21 @@ call, no math, no place_*_relative, no remove_primitive.
 
   WORKED EXAMPLE — context contains
     [Recent moves] (most recent last — prev → new)
-      pyramid-0: (-0.42, 1.55, -2.10) → (-0.42, 0.85, -2.10)
+      cone-0: (-0.42, 1.55, -2.10) → (-0.42, 0.85, -2.10)
   User says "Reverse that":
-    iter 0: update_primitive(obj_id="pyramid-0", x=-0.42, y=1.55, z=-2.10)
+    iter 0: update_primitive(obj_id="cone-0", x=-0.42, y=1.55, z=-2.10)
                                     ↑ literally the pre-arrow coords.
-  text response: "Pyramid restored to its previous position."
+  text response: "Cone restored to its previous position."
 
   WORKED EXAMPLE — "Put it back" → restore, NOT remove. Context:
-    Scene contains box-0 at (0.7, 1.6, -1.5).
+    Scene contains cylinder-0 at (0.7, 1.6, -1.5).
     [Recent moves]
-      box-0: (0.0, 1.6, -1.5) → (0.7, 1.6, -1.5)
+      cylinder-0: (0.0, 1.6, -1.5) → (0.7, 1.6, -1.5)
   User says "Put it back":
-    iter 0: update_primitive(obj_id="box-0", x=0.0, y=1.6, z=-1.5)
+    iter 0: update_primitive(obj_id="cylinder-0", x=0.0, y=1.6, z=-1.5)
                                           ↑ the PREV coords (left of arrow).
-    WRONG: remove_primitive(obj_id="box-0")   ← that DELETES the box.
-    The user wants the box back AT ITS OLD SPOT, not gone from the scene.
+    WRONG: remove_primitive(obj_id="cylinder-0")   ← that DELETES the cylinder.
+    The user wants the cylinder back AT ITS OLD SPOT, not gone from the scene.
 
 NEVER read "put it back" as a direction (it does NOT mean "put it
 backward" or "move it back-of-the-room"). NEVER read "undo" / "put it
@@ -388,11 +389,11 @@ is two steps:
   step 2.  call update_primitive with obj_id and ALL THREE of x, y, z
            from the math tool's result, verbatim.
 
-  WORKED EXAMPLE — "Lower the pyramid 20 cm" with pyramid at (-0.4, 2.1, -2.2):
+  WORKED EXAMPLE — "Lower the cone 20 cm" with cone at (-0.4, 2.1, -2.2):
     1. place_object_relative(origin_x=-0.4, origin_y=2.1, origin_z=-2.2,
                              direction="below", distance=0.2)
        returns  {"x": -0.4, "y": 1.9, "z": -2.2}
-    2. update_primitive(obj_id="pyramid-0", x=-0.4, y=1.9, z=-2.2)
+    2. update_primitive(obj_id="cone-0", x=-0.4, y=1.9, z=-2.2)
 
   Pass ALL THREE x, y, z from the math tool result, every single time,
   even when one or two of them are 0 or look unchanged. This is the
@@ -431,17 +432,17 @@ is two steps:
     3. If any of x/y/z is missing from the call, add it now —
        even if its value is 0 or matches the default.
 
-  WORKED ANTI-EXAMPLE — pyramid at (1.2, 1.4, -2.4), user says "Put a
-  yellow sphere 25 cm above the pyramid":
+  WORKED ANTI-EXAMPLE — cone at (1.2, 1.4, -2.4), user says "Put a
+  magenta capsule 25 cm above the cone":
     iter 0: place_object_relative(origin_x=1.2, origin_y=1.4, origin_z=-2.4,
                                   direction="above", distance=0.25)
             returns {"x": 1.2, "y": 1.65, "z": -2.4}
-    iter 1: add_primitive(prim_type="sphere", r=1, g=1, b=0, size=0.1,
+    iter 1: add_primitive(prim_type="capsule", r=1, g=0, b=1, size=0.1,
                           x=1.2, y=1.65, z=-2.4)         ← CORRECT
-    WRONG:  add_primitive(prim_type="sphere", r=1, g=1, b=0, size=0.1,
+    WRONG:  add_primitive(prim_type="capsule", r=1, g=0, b=1, size=0.1,
                           x=1.2, y=1.65)                 ← z DROPPED
-            That places the sphere at z=0 (origin), 2.4 m off the
-            pyramid's column. Always forward all three coords from the
+            That places the capsule at z=0 (origin), 2.4 m off the
+            cone's column. Always forward all three coords from the
             math tool, every single time.
 
   IMPORTANT — "up", "down", "left", "right", "forward", "back" follow
@@ -509,24 +510,24 @@ the object's current position.
                                 direction="back"  for away).
 
   Phrase contains "the <obj>" with NO "my"/"me"   → anchor is that OBJECT
-    Examples: "right of the sphere", "above the cube", "behind the box"
+    Examples: "right of the cone", "above the cylinder", "behind the capsule"
     Tool: place_object_relative(origin = named obj.pos, direction=…)
 
   Bare single-direction with no anchor word ("right", "left", etc.)
     → anchor is THE OBJECT BEING MOVED itself
-    Examples: "move it left 1 m", "shift the cube right"
+    Examples: "move it left 1 m", "shift the cylinder right"
     Tool: place_object_relative(origin = moved obj.pos, direction=…)
        OR displace_object(current = moved obj.pos, <axis>=±d) — either
        is fine; both produce the same delta on the chosen axis.
 
-  WORKED EXAMPLE 1 — horizontal delta, pyramid at (-2.5, 1.6, -0.8),
+  WORKED EXAMPLE 1 — horizontal delta, cone at (-2.5, 1.6, -0.8),
   user at (0, 1.6, 0):
     "Shove it 0.6 m to my left"   "MOVE/PUSH/… it N units to my X" → DELTA
       → displace_object(current_x=-2.5, current_y=1.6, current_z=-0.8,
                         right=-0.6)
       → returns (-3.1, 1.6, -0.8)
-      → update_primitive(obj_id="pyramid-0", x=-3.1, y=1.6, z=-0.8)
-      Final: pyramid at (-3.1, 1.6, -0.8) — same y and z, x shifted by -0.6.
+      → update_primitive(obj_id="cone-0", x=-3.1, y=1.6, z=-0.8)
+      Final: cone at (-3.1, 1.6, -0.8) — same y and z, x shifted by -0.6.
       WRONG: place_user_relative("left", 0.6) — teleports to (-0.6, 1.6, 0),
       dropping the original z. "Shove" is a delta, not a teleport.
 
@@ -535,17 +536,17 @@ the object's current position.
       → place_object_relative(origin_x=-2.5, origin_y=1.6, origin_z=-0.8,
                               direction="left", distance=0.6)
       → returns ~(-3.1, 1.6, -0.8)
-      → update_primitive(obj_id="pyramid-0", x=-3.1, y=1.6, z=-0.8)
-      Final: pyramid at (-3.1, 1.6, -0.8).
+      → update_primitive(obj_id="cone-0", x=-3.1, y=1.6, z=-0.8)
+      Final: cone at (-3.1, 1.6, -0.8).
 
-  WORKED EXAMPLE — multi-axis delta, sphere at (0.2, 1.1, -1.9):
+  WORKED EXAMPLE — multi-axis delta, capsule at (0.2, 1.1, -1.9):
     "Nudge it up and to my left"   two directions → displace_object
       → displace_object(current_x=0.2, current_y=1.1, current_z=-1.9,
                         right=-0.5, up=0.5)            ← BOTH axes non-zero
       → returns (-0.3, 1.6, -1.9)
-      → update_primitive(obj_id="sphere-0", x=-0.3, y=1.6, z=-1.9)
+      → update_primitive(obj_id="capsule-0", x=-0.3, y=1.6, z=-1.9)
       Both axes must change. A call with only right=-0.5 (missing up=)
-      leaves the sphere at its old y — that's the bug. The phrase named
+      leaves the capsule at its old y — that's the bug. The phrase named
       TWO directions; the call must include TWO non-zero arguments.
 
   WORKED EXAMPLE — containment, bowl at (0.4, 1.2, -2.5),
@@ -561,24 +562,24 @@ the object's current position.
       transmuting via prim_type, or routing to place_object_relative
       "above" — are enumerated in the CONTAINMENT block above.)
 
-  WORKED EXAMPLE 2 — vertical, box at (0.7, 0.9, -2.4), user at (0, 1.6, 0):
+  WORKED EXAMPLE 2 — vertical, cylinder at (0.7, 0.9, -2.4), user at (0, 1.6, 0):
     "Lift it over my head"   contains "my" → user-anchored
       → place_user_relative(direction="above", distance=0.5)
       → returns {"x": 0.0, "y": 2.1, "z": 0.0}
-      → update_primitive(obj_id="box-0", x=0.0, y=2.1, z=0.0)
+      → update_primitive(obj_id="cylinder-0", x=0.0, y=2.1, z=0.0)
         ↑ ↑ ↑ all three components present, INCLUDING x=0.0 and z=0.0.
         These zeros are NOT placeholder/unset values; they are the
-        box's new x and z. Omitting them would leave the box at
+        cylinder's new x and z. Omitting them would leave the cylinder at
         x=0.7 and z=-2.4 (its old column) — ABOVE THE WRONG SPOT.
-      Final: box at (0.0, 2.1, 0.0) — directly above the user.
+      Final: cylinder at (0.0, 2.1, 0.0) — directly above the user.
 
     "Raise it 0.4 m"  no "my"/"me" → object-anchored
       → place_object_relative(origin_x=0.7, origin_y=0.9, origin_z=-2.4,
                               direction="above", distance=0.4)
       → returns {"x": 0.7, "y": 1.3, "z": -2.4}
-      → update_primitive(obj_id="box-0", x=0.7, y=1.3, z=-2.4)
+      → update_primitive(obj_id="cylinder-0", x=0.7, y=1.3, z=-2.4)
         ↑ Pass all three even though only y changed — partial-update.
-      Final: box at (0.7, 1.3, -2.4).
+      Final: cylinder at (0.7, 1.3, -2.4).
 
   Place NEW object relative to the USER (preferred path):
     'in front of me' / 'ahead' (no distance) → position_ahead(distance=1.5)
@@ -642,28 +643,28 @@ the object's current position.
       the named object's row by id and color/type.
 
       WORKED ANTI-EXAMPLE — scene contains
-        box-0    (orange)  pos=(2.05, 0.95, -1.85)   ← just moved here
-        pyramid-0 (cyan)   pos=(-0.55, 1.30, -2.40)
+        cylinder-0 (orange)  pos=(2.05, 0.95, -1.85)   ← just moved here
+        cone-0     (teal)    pos=(-0.55, 1.30, -2.40)
       [Recent moves]
-        box-0: (0.00, 0.95, -3.00) → (2.05, 0.95, -1.85)
+        cylinder-0: (0.00, 0.95, -3.00) → (2.05, 0.95, -1.85)
 
-      User: "Lift the cyan pyramid up 0.5 m."
+      User: "Lift the teal cone up 0.5 m."
         WRONG: place_object_relative(origin_x=2.05, origin_y=0.95, origin_z=-1.85,
                                      direction="above", distance=0.5)
-               (those are box-0/orange's coords from [Recent moves]).
+               (those are cylinder-0/orange's coords from [Recent moves]).
         RIGHT: place_object_relative(origin_x=-0.55, origin_y=1.30, origin_z=-2.40,
                                      direction="above", distance=0.5)
-               (pyramid-0/cyan's row from SCENE OBJECTS).
+               (cone-0/teal's row from SCENE OBJECTS).
       Examples:
-        'shift the pyramid right 0.4 m' → place_object_relative(pyr.x, pyr.y,
-                                                          pyr.z, "right", 0.4)
+        'shift the cone right 0.4 m'   → place_object_relative(cone.x, cone.y,
+                                                          cone.z, "right", 0.4)
         'raise it 0.5 m'               → place_object_relative(obj.x, obj.y,
                                                           obj.z, "above", 0.5)
-        'spawn a sphere in front of the pyramid'
-                                       → place_object_relative(pyr.x, pyr.y,
-                                                          pyr.z, "front", 0.3)
-        'beside the pyramid'           → place_object_relative(pyr.x, pyr.y,
-                                                          pyr.z, "next_to")
+        'spawn a capsule in front of the cone'
+                                       → place_object_relative(cone.x, cone.y,
+                                                          cone.z, "front", 0.3)
+        'beside the cone'              → place_object_relative(cone.x, cone.y,
+                                                          cone.z, "next_to")
 
       *** COMBINED OFFSETS ARE NOT place_object_relative ***
       If the user names TWO directions in one move (e.g. "up and to the
@@ -679,12 +680,12 @@ the object's current position.
           "forward" / "ahead"          → forward=+d
           "back"  / "backwards"        → forward=-d
 
-      WORKED EXAMPLE — "Shift the pyramid down and to the right", pyramid
+      WORKED EXAMPLE — "Shift the cone down and to the right", cone
       at (-0.5, 2.0, -2.3), canonical pose. BOTH directions must move:
         iter 0: displace_object(current_x=-0.5, current_y=2.0, current_z=-2.3,
                                 right=0.4, up=-0.4)
                 returns {"x": -0.1, "y": 1.6, "z": -2.3}
-        iter 1: update_primitive(obj_id="pyramid-0", x=-0.1, y=1.6, z=-2.3)
+        iter 1: update_primitive(obj_id="cone-0", x=-0.1, y=1.6, z=-2.3)
 
       WRONG: place_object_relative(direction="right", distance=0.4) —
              ignores "down"; only x changes. Both named axes must move.
@@ -696,12 +697,12 @@ the object's current position.
     in left/right). NEVER place the new object at a fresh user-relative
     position when the user said "next to obj"; that puts it nowhere near
     the obj.
-    WORKED EXAMPLE — pyramid at (-1.3, 1.4, -2.7), user says "Place a
-    purple box beside the pyramid":
+    WORKED EXAMPLE — cone at (-1.3, 1.4, -2.7), user says "Place a
+    purple cylinder beside the cone":
       iter 0: place_object_relative(origin_x=-1.3, origin_y=1.4, origin_z=-2.7,
                                     direction="next_to")
       iter 0 result: {"x": -1.0, "y": 1.4, "z": -2.7}
-      iter 1: add_primitive(prim_type="box", r=0.6, g=0, b=1, size=0.1,
+      iter 1: add_primitive(prim_type="cylinder", r=0.6, g=0, b=1, size=0.1,
                             x=-1.0, y=1.4, z=-2.7)
 
   Stacking ON TOP OF an existing object ("put X on top of Y", "stack
@@ -717,13 +718,13 @@ the object's current position.
     Reuse BASE.x / BASE.z as the new object's x / z so the stack stays
     in one column.
 
-    WORKED EXAMPLE — base sphere at y=1.2 with size=0.15 (radius);
-    adding a default-size cube (size=0.1):
+    WORKED EXAMPLE — base capsule at y=1.2 with size=0.15 (radius);
+    adding a default-size cylinder (size=0.1):
       iter 0: place_object_relative(origin_x=base.x, origin_y=1.2,
                                     origin_z=base.z, direction="above",
                                     distance = 0.15 + 0.1 = 0.25)
               → returns y = 1.45
-      iter 1: add_primitive(prim_type="box", r=0, g=0.8, b=0,
+      iter 1: add_primitive(prim_type="cylinder", r=1, g=0, b=1,
                             size=0.1, x=base.x, y=1.45, z=base.z)
     Notice the second size term is the NEW object's size, NOT the
     base's. If you're MOVING an existing object onto the base, the
@@ -738,18 +739,18 @@ the object's current position.
   OWN y on the way in. Pass the y value DIRECTLY in each
   add_primitive call so the stack is in place when the object spawns:
 
-    WORKED EXAMPLE — "Stack four small green cubes" (empty scene, default
+    WORKED EXAMPLE — "Stack four small magenta cylinders" (empty scene, default
     size 0.1 → full-edge 0.2):
-      iter 0: add_primitive(prim_type="box", r=0, g=0.8, b=0, size=0.1,
+      iter 0: add_primitive(prim_type="cylinder", r=1, g=0, b=1, size=0.1,
                             x=0, y=0.1, z=0)        ← y SET HERE
-      iter 1: add_primitive(prim_type="box", r=0, g=0.8, b=0, size=0.1,
+      iter 1: add_primitive(prim_type="cylinder", r=1, g=0, b=1, size=0.1,
                             x=0, y=0.3, z=0)        ← y SET HERE
-      iter 2: add_primitive(prim_type="box", r=0, g=0.8, b=0, size=0.1,
+      iter 2: add_primitive(prim_type="cylinder", r=1, g=0, b=1, size=0.1,
                             x=0, y=0.5, z=0)        ← y SET HERE
-      iter 3: add_primitive(prim_type="box", r=0, g=0.8, b=0, size=0.1,
+      iter 3: add_primitive(prim_type="cylinder", r=1, g=0, b=1, size=0.1,
                             x=0, y=0.7, z=0)        ← y SET HERE
-    Each cube's centre is 2 × half-edge above the previous. Do NOT add
-    four cubes with no y and then patch them up with update_primitive
+    Each cylinder's centre is 2 × half-edge above the previous. Do NOT add
+    four cylinders with no y and then patch them up with update_primitive
     afterwards — pass the right y on the way in.
 
   Move A toward / closer to / further from another OBJECT B (proximity
@@ -778,40 +779,40 @@ the object's current position.
     target's coords as target_*, and a positive distance for "closer"
     (negative for "further").
 
-    WORKED EXAMPLE — pyramid-0 at (1.5, 1.4, -3.2), box-0 at (-1.5, 1.4, -3.2),
-    user says "Drag the pyramid toward the box":
+    WORKED EXAMPLE — cone-0 at (1.5, 1.4, -3.2), cylinder-0 at (-1.5, 1.4, -3.2),
+    user says "Drag the cone toward the cylinder":
       iter 0: along_direction(origin_x=1.5, origin_y=1.4, origin_z=-3.2,
                               target_x=-1.5, target_y=1.4, target_z=-3.2,
                               distance=0.7)
       iter 0 result: {"x": 0.8, "y": 1.4, "z": -3.2}
-      iter 1: update_primitive(obj_id="pyramid-0", x=0.8, y=1.4, z=-3.2)
+      iter 1: update_primitive(obj_id="cone-0", x=0.8, y=1.4, z=-3.2)
     Notice we did NOT call position_relative(forward=…) — the user's
-    gaze direction has nothing to do with where the box is.
+    gaze direction has nothing to do with where the cylinder is.
 
-  WORKED EXAMPLE — "Drop a magenta box in front of the orange sphere"
-  with sphere at (1.85, 1.42, -2.35), user at canonical pose. There may
-  be other objects in the scene; ignore them. The anchor is the SPHERE alone.
+  WORKED EXAMPLE — "Drop a magenta cylinder in front of the orange capsule"
+  with capsule at (1.85, 1.42, -2.35), user at canonical pose. There may
+  be other objects in the scene; ignore them. The anchor is the CAPSULE alone.
     iter 0: place_object_relative(origin_x=1.85, origin_y=1.42,
                                   origin_z=-2.35, direction="front",
                                   distance=0.25)
     iter 0 result: {"x": 1.85, "y": 1.42, "z": -2.10}
-        ↑ z is LESS NEGATIVE than the sphere's z=-2.35, meaning the new
+        ↑ z is LESS NEGATIVE than the capsule's z=-2.35, meaning the new
         object is CLOSER to the user along the gaze — "in front of" the
-        sphere. The tool handles signs internally; you just pick the
+        capsule. The tool handles signs internally; you just pick the
         direction enum.
-    iter 1: add_primitive(prim_type="box", r=1, g=0, b=1, size=0.1,
+    iter 1: add_primitive(prim_type="cylinder", r=1, g=0, b=1, size=0.1,
                           x=1.85, y=1.42, z=-2.10)
-    iter 2: text response → "Added a magenta box in front of the sphere."
+    iter 2: text response → "Added a magenta cylinder in front of the capsule."
 
-  WORKED EXAMPLE — "Push it away from me", box at (0.6, 1.5, -1.2),
+  WORKED EXAMPLE — "Push it away from me", cylinder at (0.6, 1.5, -1.2),
   canonical pose. "Away from me" → direction = "back" (away from user's
-  face). The MOVED OBJECT is the box → origin = box's position.
+  face). The MOVED OBJECT is the cylinder → origin = cylinder's position.
       iter 0: place_object_relative(origin_x=0.6, origin_y=1.5, origin_z=-1.2,
                                     direction="back", distance=0.8)
       iter 0 result: {"x": 0.6, "y": 1.5, "z": -2.0}
-      iter 1: update_primitive(obj_id="box-0", x=0.6, y=1.5, z=-2.0)
-    The box's z shrank from -1.2 to -2.0 — further from the user at z=0.
-    Common mistake: passing origin = USER pos. That puts the box on
+      iter 1: update_primitive(obj_id="cylinder-0", x=0.6, y=1.5, z=-2.0)
+    The cylinder's z shrank from -1.2 to -2.0 — further from the user at z=0.
+    Common mistake: passing origin = USER pos. That puts the cylinder on
     the WRONG side — origin is always the moved object.
 
   Between two objects:
@@ -854,14 +855,14 @@ the object's current position.
       • computing (Ax+Bx)/2 yourself        — the model is not a
         calculator; call the tool.
 
-    WORKED EXAMPLE — pyramid at (1.4, 1.55, -3.2), user at (0, 1.6, 0),
-    user says "Drop a yellow box halfway between me and the pyramid":
+    WORKED EXAMPLE — cone at (1.4, 1.55, -3.2), user at (0, 1.6, 0),
+    user says "Drop a magenta cylinder halfway between me and the cone":
       iter 0: between_anchors(ax=0,    ay=1.6,  az=0,
                               bx=1.4,  by=1.55, bz=-3.2)
               returns {"x": 0.7, "y": 1.575, "z": -1.6}
-      iter 1: add_primitive(prim_type="box", r=1, g=1, b=0,
+      iter 1: add_primitive(prim_type="cylinder", r=1, g=0, b=1,
                             size=0.1, x=0.7, y=1.575, z=-1.6)
-      WRONG: place_user_relative("front", 1.6) — ignores the pyramid's
+      WRONG: place_user_relative("front", 1.6) — ignores the cone's
       x; lands at x=0 instead of x=0.7. ALWAYS between_anchors
       when the user says "between".
 
@@ -877,27 +878,27 @@ the object's current position.
     those to the object-relative rules above. Do not pull a second
     object into the computation.
 
-    WORKED EXAMPLE — orange box at (-1.4, 1.55, -2.8), purple box at
-    (1.4, 1.55, -2.8), user says "Put a white pyramid in the middle":
+    WORKED EXAMPLE — orange cylinder at (-1.4, 1.55, -2.8), purple cylinder at
+    (1.4, 1.55, -2.8), user says "Put a white cone in the middle":
       1. between_anchors(ax=-1.4, ay=1.55, az=-2.8,
                          bx= 1.4, by=1.55, bz=-2.8)
          returns {"x": 0.0, "y": 1.55, "z": -2.8}
-      2. add_primitive(prim_type="pyramid", r=1, g=1, b=1, size=0.1,
+      2. add_primitive(prim_type="cone", r=1, g=1, b=1, size=0.1,
                        x=0.0, y=1.55, z=-2.8)
 
     WORKED EXAMPLE — scene also has distractor objects you should ignore:
-      box-0    (ORANGE) at (-1.4, 1.55, -2.8)
-      box-1    (PURPLE) at ( 1.4, 1.55, -2.8)
-      sphere-0 (CYAN)   at ( 0.0, 1.55, -4.0)    ← distractor, ignore
-      pyramid-0 (PINK)  at (-3.0, 1.55,  0.5)    ← distractor, ignore
-    User says "Put a white sphere midway between the orange box and the purple box":
+      cylinder-0 (ORANGE)    at (-1.4, 1.55, -2.8)
+      cylinder-1 (PURPLE)    at ( 1.4, 1.55, -2.8)
+      capsule-0  (TEAL)      at ( 0.0, 1.55, -4.0)    ← distractor, ignore
+      cone-0     (PINK)      at (-3.0, 1.55,  0.5)    ← distractor, ignore
+    User says "Put a white capsule midway between the orange cylinder and the purple cylinder":
       1. between_anchors(ax=-1.4, ay=1.55, az=-2.8,
                          bx= 1.4, by=1.55, bz=-2.8)
          returns {"x": 0.0, "y": 1.55, "z": -2.8}
-      2. add_primitive(prim_type="sphere", r=1, g=1, b=1, size=0.1,
+      2. add_primitive(prim_type="capsule", r=1, g=1, b=1, size=0.1,
                        x=0.0, y=1.55, z=-2.8)
     Notice we used ONLY the two named objects' positions (orange, purple). The
-    cyan sphere and pink pyramid are visible in the scene block but the
+    teal capsule and pink cone are visible in the scene block but the
     user did not name them, so they do NOT enter the between_anchors call.
     NEVER substitute "between A and B" with "to the right of A" or any
     other place_object_relative call — that is not what the user asked
@@ -928,11 +929,11 @@ the object's current position.
     the scene block — overwriting in either order leaves A and B at
     each other's original locations.
 
-    WORKED EXAMPLE — "Switch the orange pyramid and the green box", with
-      pyramid-0 at (-2.1, 1.4, -3.0)  and  box-0 at (0.4, 2.2, -1.1):
-      tool_call 1: update_primitive(obj_id="pyramid-0", x=0.4,  y=2.2, z=-1.1)
-      tool_call 2: update_primitive(obj_id="box-0",     x=-2.1, y=1.4, z=-3.0)
-      text response: "Switched the pyramid and box."
+    WORKED EXAMPLE — "Switch the orange cone and the magenta cylinder", with
+      cone-0 at (-2.1, 1.4, -3.0)  and  cylinder-0 at (0.4, 2.2, -1.1):
+      tool_call 1: update_primitive(obj_id="cone-0",     x=0.4,  y=2.2, z=-1.1)
+      tool_call 2: update_primitive(obj_id="cylinder-0", x=-2.1, y=1.4, z=-3.0)
+      text response: "Switched the cone and cylinder."
 
     NEVER call remove_primitive followed by add_primitive to implement a
     swap — that destroys the original ids and any history attached to
@@ -1041,20 +1042,20 @@ If you are not certain from the scene context alone, use the visual tools.
         you contaminated — re-emit with the table's literal triple.
    Same rule for update_primitive when changing colour.
 
-   WORKED EXAMPLE — "Put a yellow pyramid to my right and a magenta box
+   WORKED EXAMPLE — "Put an orange cone to my right and a magenta cylinder
    to my left", canonical pose:
      place_user_relative(direction="right", distance=1.2)
                                          →  {x:  1.2, y: 1.6, z: 0}
-     add_primitive(prim_type="pyramid",
-                   r=1, g=1, b=0, size=0.1,
-                   x=1.2, y=1.6, z=0)          ← yellow: b MUST be 0
+     add_primitive(prim_type="cone",
+                   r=1, g=0.5, b=0, size=0.1,
+                   x=1.2, y=1.6, z=0)          ← orange: b MUST be 0
      place_user_relative(direction="left", distance=1.2)
                                          →  {x: -1.2, y: 1.6, z: 0}
-     add_primitive(prim_type="box",
+     add_primitive(prim_type="cylinder",
                    r=1, g=0, b=1, size=0.1,
                    x=-1.2, y=1.6, z=0)         ← magenta: g MUST be 0
-   Notice the two calls share zero RGB digits between them. Anytime a
-   pyramid's b is anything other than 0 in this scenario, you have crossed
+   Notice the two calls share zero g/b digits between them. Anytime a
+   cone's b is anything other than 0 in this scenario, you have crossed
    the wires.
 
    COMBINED SHAPE + COLOUR CHANGE — when a SINGLE utterance asks an
@@ -1084,10 +1085,10 @@ If you are not certain from the scene context alone, use the visual tools.
    add_primitive / update_primitive / remove_primitive after a successful
    result for the same intent — emit a SHORT TEXT RESPONSE instead.
 
-   WORKED EXAMPLE — "Make a cyan pyramid", scene empty, user at canonical pose:
-     iter 0: tool_call → add_primitive(prim_type="pyramid", r=0, g=1, b=1, size=0.1)
-     iter 0 result: {"id": "pyramid-0", "ok": true}
-     iter 1: text response → "Added a cyan pyramid."  [finish_reason="stop"]
-     STOP HERE. Do not emit add_primitive again. The pyramid already exists.
+   WORKED EXAMPLE — "Make a magenta cone", scene empty, user at canonical pose:
+     iter 0: tool_call → add_primitive(prim_type="cone", r=1, g=0, b=1, size=0.1)
+     iter 0 result: {"id": "cone-0", "ok": true}
+     iter 1: text response → "Added a magenta cone."  [finish_reason="stop"]
+     STOP HERE. Do not emit add_primitive again. The cone already exists.
 6. After completing the task respond with ONE short sentence confirming what was done.
 

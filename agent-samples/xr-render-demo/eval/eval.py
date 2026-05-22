@@ -24,6 +24,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -1909,12 +1910,123 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
 _MAX_STEPS = 10
 
 
+# Reserved-prompt-vocabulary audit (check #4 in _check_prompt_eval_overlap).
+#
+# Eval-side colour/shape words used in case fixtures (user utterances,
+# scene `type` tags, history dialogue). The prompt's worked-example
+# blocks may NOT use any word from these sets — see AGENTS.md
+# "Prompt-driven samples: write eval cases / Don't train on the test
+# set". Prompt rule narration (the colour-lookup table, anchor-routing
+# rules, etc.) is free to mention these words generically; only the
+# worked-example blocks are restricted, because those are the strings
+# the model is most likely to memorise as a template.
+_EVAL_VOCAB_COLORS = frozenset({
+    "red", "green", "blue", "cyan", "brown", "yellow",
+})
+_EVAL_VOCAB_SHAPES = frozenset({
+    "sphere", "spheres", "cube", "cubes", "box", "boxes",
+    "pyramid", "pyramids",
+})
+
+# Worked-example section start markers (case-insensitive).  A section
+# runs from the marker line through the first blank line; triple-backtick
+# fences are also captured as blocks (everything between the fences).
+_EXAMPLE_START_RE = re.compile(
+    r"^\s*(?:"
+    r"WORKED\s+EXAMPLE\b|WORKED\s+ANTI-?EXAMPLE\b|"
+    r"Examples?:|"
+    r"iter\s+\d+\s*:|"
+    r"tool_call\s+\d+\s*:"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _extract_example_blocks(sp: str) -> list[tuple[int, str]]:
+    """Slice the system prompt into worked-example sections.
+
+    Returns ``[(start_line_1_indexed, block_text), …]``.  A section is
+    either everything between a pair of triple-backtick fences, or
+    everything from a marker line (``WORKED EXAMPLE``, ``Example:``,
+    ``iter N:``, ``tool_call N:``) through the first following blank
+    line.
+    """
+    blocks: list[tuple[int, str]] = []
+    lines = sp.splitlines()
+    in_fence = False
+    fence_start = 0
+    fence_buf: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.lstrip().startswith("```"):
+            if in_fence:
+                blocks.append((fence_start, "\n".join(fence_buf)))
+                in_fence = False
+                fence_buf = []
+            else:
+                in_fence = True
+                fence_start = i + 1
+            i += 1
+            continue
+        if in_fence:
+            fence_buf.append(line)
+            i += 1
+            continue
+        if _EXAMPLE_START_RE.match(line):
+            start = i + 1
+            buf = [line]
+            i += 1
+            while i < len(lines) and lines[i].strip():
+                buf.append(lines[i])
+                i += 1
+            blocks.append((start, "\n".join(buf)))
+            continue
+        i += 1
+    if in_fence and fence_buf:
+        blocks.append((fence_start, "\n".join(fence_buf)))
+    return blocks
+
+
+def _case_fixture_vocab(c: dict) -> tuple[set[str], set[str]]:
+    """Eval-vocab colour/shape words actually present in this case's
+    fixture (user utterance, history dialogue, scene type tags, ids).
+    Used to attribute reserved-vocab violations to specific cases."""
+    parts: list[str] = [c.get("user") or ""]
+    for pair in c.get("history") or []:
+        parts.extend(pair)
+    for o in c.get("scene") or []:
+        if t := o.get("type"):
+            parts.append(t)
+        if oid := o.get("id"):
+            parts.append(oid)
+    blob = " ".join(parts).lower()
+    colors = {w for w in _EVAL_VOCAB_COLORS if re.search(rf"\b{w}\b", blob)}
+    shapes = {w for w in _EVAL_VOCAB_SHAPES if re.search(rf"\b{w}\b", blob)}
+    return colors, shapes
+
+
 def _check_prompt_eval_overlap(
     system_prompt: str, cases: list[dict]
 ) -> tuple[set[str], list[str]]:
-    """Detect verbatim overlap between prompt worked-examples and eval
-    case fixtures.  An overlap turns a generalization probe into a
+    """Detect overlap between prompt worked-examples and eval case
+    fixtures.  An overlap turns a generalization probe into a
     memorization check (see AGENTS.md "Prompt-driven samples").
+
+    Four checks run, each across every case:
+      1. Verbatim user utterance (≥12 chars) appearing in the prompt.
+      2. Concrete scene coordinates rendered like ``(x.xx, y.yy, z.zz)``
+         appearing in the prompt.
+      3. ``recent_moves`` coords appearing in the prompt.
+      4. Reserved-prompt-vocabulary: worked-example sections of
+         system.txt must not use any colour/shape word from the
+         eval-case vocabulary (``_EVAL_VOCAB_COLORS`` /
+         ``_EVAL_VOCAB_SHAPES``).  Worked-example sections are
+         triple-backtick blocks and any block starting with
+         ``WORKED EXAMPLE`` / ``Example:`` / ``iter N:`` /
+         ``tool_call N:``.  Rule narration outside those blocks
+         is unrestricted — the colour table, anchor-routing rules,
+         etc. may still mention ``red sphere`` generically.
 
     Returns ``(overlapping_case_names, issue_lines)``.  The set is the
     distinct cases that overlap (caller uses the count for the score
@@ -1957,6 +2069,67 @@ def _check_prompt_eval_overlap(
                     break
         if len(issues) > before:
             overlapping.add(name)
+
+    # 4. Reserved-prompt-vocabulary.  Built second so it's reported as a
+    #    block after the verbatim checks, but the case names it
+    #    attributes still feed the same ``overlapping`` set used by the
+    #    score-line suffix.
+    case_index_colors: dict[str, list[str]] = {w: [] for w in _EVAL_VOCAB_COLORS}
+    case_index_shapes: dict[str, list[str]] = {w: [] for w in _EVAL_VOCAB_SHAPES}
+    for c in cases:
+        cname = c.get("name", "<unnamed>")
+        cc, cs = _case_fixture_vocab(c)
+        for w in cc:
+            case_index_colors[w].append(cname)
+        for w in cs:
+            case_index_shapes[w].append(cname)
+
+    color_alt = "|".join(sorted(_EVAL_VOCAB_COLORS))
+    shape_alt = "|".join(sorted(_EVAL_VOCAB_SHAPES))
+    pair_re   = re.compile(rf"\b({color_alt})\s+({shape_alt})\b", re.IGNORECASE)
+    color_re  = re.compile(rf"\b({color_alt})\b", re.IGNORECASE)
+    shape_re  = re.compile(rf"\b({shape_alt})\b", re.IGNORECASE)
+
+    for start_line, block_text in _extract_example_blocks(sp):
+        seen_words: set[str] = set()
+        # Adjacent "<color> <shape>" — the canonical violation shape.
+        for m in pair_re.finditer(block_text):
+            color = m.group(1).lower()
+            shape = m.group(2).lower()
+            offenders = sorted(set(case_index_colors.get(color, []))
+                               | set(case_index_shapes.get(shape, [])))
+            for case_name in offenders:
+                issues.append(
+                    f"  {case_name}: example block at line {start_line} "
+                    f"uses '{color} {shape}' which also appears in case fixture"
+                )
+                overlapping.add(case_name)
+            seen_words.add(color)
+            seen_words.add(shape)
+        # Lone colour or shape words not already counted in a pair.
+        for m in color_re.finditer(block_text):
+            w = m.group(1).lower()
+            if w in seen_words:
+                continue
+            seen_words.add(w)
+            for case_name in case_index_colors.get(w, []):
+                issues.append(
+                    f"  {case_name}: example block at line {start_line} "
+                    f"uses '{w}' which also appears in case fixture"
+                )
+                overlapping.add(case_name)
+        for m in shape_re.finditer(block_text):
+            w = m.group(1).lower()
+            if w in seen_words:
+                continue
+            seen_words.add(w)
+            for case_name in case_index_shapes.get(w, []):
+                issues.append(
+                    f"  {case_name}: example block at line {start_line} "
+                    f"uses '{w}' which also appears in case fixture"
+                )
+                overlapping.add(case_name)
+
     return overlapping, issues
 
 
@@ -2070,6 +2243,9 @@ async def main() -> None:
                       f"({len(overlap_names)} overlapping case(s))",
                       file=sys.stderr)
                 sys.exit(2)
+        else:
+            print("PROMPT/EVAL OVERLAP: clean (no verbatim utterances, coords, or "
+                  "reserved-vocab leaks)")
 
         results = []
         for c in cases:
