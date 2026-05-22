@@ -29,7 +29,7 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     camera_grace_s:            5.0   # keep camera on this long after a query (avoids restart on follow-ups)
     silero_threshold:           0.5   # Silero speech probability gate (0..1)
     silence_duration:           0.8   # seconds of silence that ends an utterance
-    min_speech:                 0.3   # minimum seconds of speech before STT fires
+    min_speech:                 0.1   # minimum seconds of speech before STT fires
 """
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ async def main(
         camera_on_timeout_s   =float(cfg.get("camera_on_timeout_s",  10.0)),
         camera_grace_s        =float(cfg.get("camera_grace_s",         5.0)),
         silence_duration      =float(cfg.get("silence_duration",      0.8)),
-        min_speech            =float(cfg.get("min_speech",            0.3)),
+        min_speech            =float(cfg.get("min_speech",            0.1)),
         silero_threshold      =float(cfg.get("silero_threshold",      0.5)),
     )
 
