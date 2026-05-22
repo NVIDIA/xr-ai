@@ -63,6 +63,8 @@ endpoint and no local GPU is required for the agent or hub.
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
+| Docker | 24+ | required: all vLLM-backed services (LLM, VLM) run in `nvcr.io/nvidia/vllm` containers |
+| NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU.  Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
 | npm | 18+ | only needed to rebuild the web vendor bundle |
 
 `uv` handles all Python dependencies per-sample — no global `pip install`
@@ -72,10 +74,34 @@ or virtual-environment setup needed.  If you do not have it:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
+The NVIDIA Container Toolkit install is one-time per host:
+
+```bash
+# Install
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update && sudo apt install -y nvidia-container-toolkit
+
+# Configure Docker to use the nvidia runtime + generate the CDI spec
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+sudo systemctl restart docker
+
+# Smoke-test that Docker can see the GPU
+docker run --rm --gpus all nvidia/cuda:13.0-base nvidia-smi
+```
+
 **GPU-profile prerequisites** — install before `uv sync` for these targets:
 
 - **DGX Spark** (`xr-render-demo/yaml/spark/`): `sudo apt install python3-dev`
-- **RTX PRO 6000 Blackwell** (`xr-render-demo/yaml/96G_blackwell/`): NVIDIA Container Toolkit + CUDA NVCC (`sudo apt install nvidia-cuda-toolkit`)
+
+(All GPU profiles default to `vllm_backend: docker`, so the vLLM
+container ships nvcc + FlashInfer. If you switch a profile to
+`vllm_backend: pip`, see [`docs/troubleshooting.md`](docs/troubleshooting.md)
+for the host CUDA toolchain prereq.)
 
 If `uv sync` or the VLM fails on first run, see
 [`docs/troubleshooting.md`](docs/troubleshooting.md).
