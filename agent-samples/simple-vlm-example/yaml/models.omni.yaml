@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Nemotron-Omni VLM profile for simple-vlm-example.
-# To activate: set  models_yaml: yaml/models.omni.yaml
+# To activate: set  models_yaml: models.omni.yaml
 # in simple_vlm_example_worker.yaml.
 #
 # Nemotron-Omni uses model_name "llm" (the vLLM --served-model-name default)

@@ -50,11 +50,21 @@ _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
 
-async def main(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
+async def main(
+    cfg: dict,
+    config_path: pathlib.Path | None = None,
+    ready_file: pathlib.Path | None = None,
+) -> None:
     setup_logging("worker")
 
-    # models_yaml is resolved relative to cwd (the sample root, where the launcher runs).
-    models_yaml_path = cfg.get("models_yaml", "yaml/models.yaml")
+    # Resolve `models_yaml` relative to the worker YAML's parent directory.
+    # Matches the convention used by xr-render-demo (and any future sample)
+    # so all samples behave the same regardless of CWD. The bare default
+    # `"models.yaml"` sits next to the worker yaml in `yaml/`.
+    models_yaml_raw = cfg.get("models_yaml", "models.yaml")
+    models_yaml_path = pathlib.Path(models_yaml_raw)
+    if config_path and not models_yaml_path.is_absolute():
+        models_yaml_path = config_path.parent / models_yaml_path
     models_cfg = load_models_config(models_yaml_path)
 
     stt = make_stt(models_cfg, "stt")
@@ -126,7 +136,7 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    asyncio.run(main(cfg, ready_file=ns.ready_file))
+    asyncio.run(main(cfg, config_path=ns.config, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":
