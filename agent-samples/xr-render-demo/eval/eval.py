@@ -29,6 +29,7 @@ import time
 from pathlib import Path
 
 import httpx
+import yaml
 from fastmcp import Client as McpClient
 
 _HERE       = Path(__file__).resolve().parent
@@ -41,13 +42,26 @@ sys.path.insert(0, str((_HERE / "../worker").resolve()))
 from config import load_config  # noqa: E402  — must follow sys.path tweak
 _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
 
-AGENT_LLM   = f"{_WORKER_CFG.agent_llm_server}/v1/chat/completions"  # overridable via --agent-llm
+def _agent_llm_base_url() -> str:
+    """Read agent_llm.base_url from models.yaml (post-#140 SDK config)."""
+    # WorkerConfig.models_yaml is resolved relative to the live launcher's
+    # cwd (the sample root); eval runs from eval/, so anchor it ourselves.
+    p = Path(_WORKER_CFG.models_yaml)
+    if not p.is_absolute():
+        p = (_HERE / ".." / p).resolve()
+    with open(p) as f:
+        models = yaml.safe_load(f) or {}
+    return str(models["agent_llm"]["base_url"]).rstrip("/")
+
+
+AGENT_LLM   = f"{_agent_llm_base_url()}/v1/chat/completions"  # overridable via --agent-llm
 AGENT_MODEL = "llm"                                                   # overridable via --agent-model
 AGENT_KEY   = ""                                                      # overridable via --agent-api-key / NGC_API_KEY
 RENDER_MCP  = f"{_WORKER_CFG.render_mcp}/mcp"
 OXR_MCP     = f"{_WORKER_CFG.oxr_mcp}/mcp"
 VLM_MCP     = f"{_WORKER_CFG.vlm_mcp}/mcp"
 VIDEO_MCP   = f"{_WORKER_CFG.video_mcp}/mcp"
+VEC_MCP     = f"{_WORKER_CFG.vec_mcp}/mcp"
 
 # Tools the worker manages internally; hidden from the agent LLM so
 # the eval and the live worker advertise the same tool surface.
@@ -1313,7 +1327,7 @@ def _format_pose(pose: dict) -> str:
 
 async def _discover_tools() -> list[dict]:
     tools = []
-    for url in (RENDER_MCP, OXR_MCP, VLM_MCP, VIDEO_MCP):
+    for url in (RENDER_MCP, OXR_MCP, VLM_MCP, VIDEO_MCP, VEC_MCP):
         try:
             async with McpClient(url) as c:
                 for t in await c.list_tools():
@@ -1473,6 +1487,128 @@ def _local_place_user_relative(args: dict, pose: dict) -> dict:
     }
 
 
+
+
+def _local_world_offset(args: dict, _pose: dict) -> dict:
+    """Mirror vec-mcp.world_offset — origin + (dx, dy, dz)."""
+    ox = float(args.get("origin_x", 0.0))
+    oy = float(args.get("origin_y", 0.0))
+    oz = float(args.get("origin_z", 0.0))
+    dx = float(args.get("dx", 0.0))
+    dy = float(args.get("dy", 0.0))
+    dz = float(args.get("dz", 0.0))
+    return {"x": round(ox + dx, 3), "y": round(oy + dy, 3), "z": round(oz + dz, 3)}
+
+
+def _local_along_direction(args: dict, _pose: dict) -> dict:
+    """Mirror vec-mcp.along_direction — origin moved `distance` toward target."""
+    import math
+    ox = float(args.get("origin_x", 0.0))
+    oy = float(args.get("origin_y", 0.0))
+    oz = float(args.get("origin_z", 0.0))
+    tx = float(args.get("target_x", 0.0))
+    ty = float(args.get("target_y", 0.0))
+    tz = float(args.get("target_z", 0.0))
+    d  = float(args.get("distance", 0.5))
+    vx, vy, vz = tx - ox, ty - oy, tz - oz
+    mag = math.sqrt(vx*vx + vy*vy + vz*vz)
+    if mag < 1e-6:
+        return {"x": round(ox, 3), "y": round(oy, 3), "z": round(oz, 3)}
+    return {
+        "x": round(ox + vx * d / mag, 3),
+        "y": round(oy + vy * d / mag, 3),
+        "z": round(oz + vz * d / mag, 3),
+    }
+
+
+def _local_scale_value(args: dict, _pose: dict) -> dict:
+    """Mirror vec-mcp.scale_value — current * factor."""
+    cur = float(args.get("current", 0.0))
+    fac = float(args.get("factor",  1.0))
+    return {"value": round(cur * fac, 3)}
+
+
+def _local_place_inside_by_id(args: dict, _pose: dict) -> dict:
+    """Mirror oxr-mcp.place_inside_by_id — container coords echoed back
+    alongside the movee's id so the result feeds straight into
+    update_primitive."""
+    for field in ("movee_id", "container_x", "container_y", "container_z"):
+        if args.get(field) is None:
+            return {"error": f"missing {field}"}
+    return {
+        "obj_id": args["movee_id"],
+        "x":      round(float(args["container_x"]), 3),
+        "y":      round(float(args["container_y"]), 3),
+        "z":      round(float(args["container_z"]), 3),
+    }
+
+
+def _local_between_anchors(args: dict, _pose: dict) -> dict:
+    """Mirror vec-mcp.between_anchors — component-wise midpoint of A and B."""
+    ax, ay, az = (float(args.get("ax", 0.0)),
+                  float(args.get("ay", 0.0)),
+                  float(args.get("az", 0.0)))
+    bx, by, bz = (float(args.get("bx", 0.0)),
+                  float(args.get("by", 0.0)),
+                  float(args.get("bz", 0.0)))
+    return {
+        "x": round((ax + bx) / 2.0, 3),
+        "y": round((ay + by) / 2.0, 3),
+        "z": round((az + bz) / 2.0, 3),
+    }
+
+
+def _local_displace_objects(args: dict, pose: dict) -> dict:
+    """Mirror oxr-mcp.displace_objects — same user-frame delta applied
+    to every (id, x, y, z) entry; returns {items: [...]}."""
+    for field in ("object_ids", "current_xs", "current_ys", "current_zs"):
+        if args.get(field) is None:
+            return {"error": f"missing {field}"}
+    ids = list(args["object_ids"])
+    xs  = list(args["current_xs"])
+    ys  = list(args["current_ys"])
+    zs  = list(args["current_zs"])
+    n = len(ids)
+    if not (len(xs) == n and len(ys) == n and len(zs) == n):
+        return {"error": "object_ids / current_xs / current_ys / current_zs "
+                         "must all be the same length"}
+    if n == 0:
+        return {"items": []}
+    right   = float(args.get("right",   0.0))
+    up_     = float(args.get("up",      0.0))
+    forward = float(args.get("forward", 0.0))
+    (fx, fz), (rx, rz) = _ground_basis(pose)
+    items = []
+    for i in range(n):
+        cx, cy, cz = float(xs[i]), float(ys[i]), float(zs[i])
+        items.append({
+            "obj_id": ids[i],
+            "x": round(cx + fx * forward + rx * right, 3),
+            "y": round(cy + up_,                       3),
+            "z": round(cz + fz * forward + rz * right, 3),
+        })
+    return {"items": items}
+
+
+def _local_displace_object(args: dict, pose: dict) -> dict:
+    """Mirror oxr-mcp.displace_object — current + user-frame delta."""
+    for field in ("current_x", "current_y", "current_z"):
+        if args.get(field) is None:
+            return {"error": f"missing {field}"}
+    cx = float(args["current_x"])
+    cy = float(args["current_y"])
+    cz = float(args["current_z"])
+    right   = float(args.get("right",   0.0))
+    up_     = float(args.get("up",      0.0))
+    forward = float(args.get("forward", 0.0))
+    (fx, fz), (rx, rz) = _ground_basis(pose)
+    return {
+        "x": round(cx + fx * forward + rx * right, 3),
+        "y": round(cy + up_,                       3),
+        "z": round(cz + fz * forward + rz * right, 3),
+    }
+
+
 def _local_place_object_relative(args: dict, pose: dict) -> dict:
     direction = args.get("direction", "front")
     distance = float(args.get("distance", 0.3))
@@ -1492,7 +1628,7 @@ def _local_place_object_relative(args: dict, pose: dict) -> dict:
     elif direction == "left":
         dx, dz = -rx * distance, -rz * distance
     elif direction == "next_to":
-        dx, dz = rx * 0.3, rz * 0.3
+        dx, dz = rx * distance, rz * distance
     elif direction == "above":
         dy = distance
     elif direction == "below":
@@ -1564,6 +1700,20 @@ async def _exec_tool(name: str, args_json: str, pose: dict) -> dict:
         return _local_place_user_relative(args, pose)
     if name == "place_object_relative":
         return _local_place_object_relative(args, pose)
+    if name == "place_inside_by_id":
+        return _local_place_inside_by_id(args, pose)
+    if name == "displace_object":
+        return _local_displace_object(args, pose)
+    if name == "displace_objects":
+        return _local_displace_objects(args, pose)
+    if name == "between_anchors":
+        return _local_between_anchors(args, pose)
+    if name == "world_offset":
+        return _local_world_offset(args, pose)
+    if name == "along_direction":
+        return _local_along_direction(args, pose)
+    if name == "scale_value":
+        return _local_scale_value(args, pose)
     if name == "get_head_pose":
         return pose
     if name == "add_primitive":
@@ -1755,8 +1905,7 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
     return True, f"matched {len(wanted)} mutation(s)"
 
 
-# Mirror the worker's loop cap (see processors.py _MAX_LOOP) so eval and
-# the live agent agree on "how many turns is too many".
+# max LLM iterations per turn (mirrors processors.py _MAX_LOOP).
 _MAX_STEPS = 10
 
 
@@ -1817,6 +1966,11 @@ async def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("query", nargs="?", help="ad-hoc query (skips case suite)")
     p.add_argument("--prompt", type=Path, default=SYS_PROMPT)
+    p.add_argument("--only",
+                   help="comma-separated list of case names to run; all other "
+                        "cases are skipped.  Useful for fast iteration on a "
+                        "single failing cluster.  Mutually exclusive with the "
+                        "positional `query` arg.")
     p.add_argument("--thinking", action="store_true")
     p.add_argument("--verbose",  action="store_true")
     p.add_argument("--strict-overlap", action="store_true",
@@ -1840,6 +1994,29 @@ async def main() -> None:
     AGENT_LLM   = args.agent_llm
     AGENT_MODEL = args.agent_model
     AGENT_KEY   = args.agent_api_key
+
+    if args.only and args.query:
+        p.error("--only and a positional query are mutually exclusive")
+
+    # Fast inner-loop targeting: if --only wasn't passed (and we aren't
+    # running a one-shot query), honour a sibling .only file. Lines are
+    # case names; '#' comments and blank lines are skipped; commas also
+    # split, so a single-line CSV file works. An empty/missing file is
+    # a no-op (full suite).
+    only_file = _HERE / ".only"
+    if not args.only and not args.query and only_file.exists():
+        names: list[str] = []
+        for raw in only_file.read_text(encoding="utf-8").splitlines():
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            for tok in line.split(","):
+                tok = tok.strip()
+                if tok:
+                    names.append(tok)
+        if names:
+            args.only = ",".join(names)
+            print(f"FILTER: {only_file.name} → {names}")
 
     system_prompt = args.prompt.read_text(encoding="utf-8").strip()
     print(f"PROMPT: {args.prompt}  ({len(system_prompt)} chars)")
@@ -1865,6 +2042,14 @@ async def main() -> None:
             return
 
         cases = list(CASES)
+        if args.only:
+            requested = [n.strip() for n in args.only.split(",") if n.strip()]
+            valid = {c["name"] for c in cases}
+            unknown = [n for n in requested if n not in valid]
+            if unknown:
+                p.error(f"--only: unknown case name(s) {unknown}. "
+                        f"Valid names: {sorted(valid)}")
+            cases = [c for c in cases if c["name"] in requested]
 
         # Audit: prompt worked-examples must not duplicate case fixtures.
         # Warns at startup so overlaps don't turn the score into a

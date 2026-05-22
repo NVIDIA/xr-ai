@@ -16,6 +16,10 @@ render_mcp_url: http://localhost:8220
 oxr_mcp_url:    http://localhost:8230
 vlm_mcp_url:    http://localhost:8240
 video_mcp_url:  http://localhost:8210
+# vec-mcp: pure-math spatial primitives (midpoint, world_offset,
+# along_direction, scale_value).  Lets the LLM use the math instead of
+# computing it in head.
+vec_mcp_url:    http://localhost:8250
 
 # ── Voice activity detection (Silero VAD, ONNX backend) ──────────────────────
 # silence_duration: seconds of trailing silence that ends an utterance.

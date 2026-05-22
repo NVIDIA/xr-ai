@@ -38,6 +38,7 @@ class RenderDemoAgent:
         oxr:        McpClient,
         vlm:        McpClient,
         video:      McpClient,
+        vec:        McpClient,
         prompt_path: Path,
         tools:      list[ToolDef],
         llm:        LLMService,
@@ -50,6 +51,7 @@ class RenderDemoAgent:
         self._oxr    = oxr
         self._vlm    = vlm
         self._video  = video
+        self._vec    = vec
 
         self._transport = XRMediaHubTransport()
         self._transport.endpoint.on_data(self._on_data)
@@ -57,7 +59,7 @@ class RenderDemoAgent:
         self._transport.endpoint.on_participant(self._on_participant)
 
         self._scene = RenderSceneProcessor(
-            self._transport, cfg, render, oxr, vlm, video,
+            self._transport, cfg, render, oxr, vlm, video, vec,
             prompt_path, tools=tools, llm=llm, agent_llm=agent_llm,
         )
         self._pipeline, self._pipeline_task = build_pipeline(

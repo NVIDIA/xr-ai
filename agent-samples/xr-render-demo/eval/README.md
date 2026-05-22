@@ -42,6 +42,15 @@ tool-schema discovery and fail open if absent.
 # All built-in cases against the current system.txt
 agent-samples/xr-render-demo/eval/eval.py
 
+# Subset by case name — fast iteration on a single failing cluster.
+# Comma-separated; unknown names error out (mutually exclusive with the
+# positional query arg below).
+agent-samples/xr-render-demo/eval/eval.py --only move_left_one_meter,between_two_spheres
+
+# Watcher-friendly equivalent: write case names (newline- or
+# comma-separated; '#' comments OK) to eval/.only. Gitignored.
+# Active subset is echoed at startup.
+
 # One ad-hoc query (prints the raw LLM response)
 agent-samples/xr-render-demo/eval/eval.py "Move the cube up 30 cm"
 
