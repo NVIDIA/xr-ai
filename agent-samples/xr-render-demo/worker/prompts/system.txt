@@ -527,10 +527,8 @@ the object's current position.
       → returns (-3.1, 1.6, -0.8)
       → update_primitive(obj_id="pyramid-0", x=-3.1, y=1.6, z=-0.8)
       Final: pyramid at (-3.1, 1.6, -0.8) — same y and z, x shifted by -0.6.
-      WRONG: place_user_relative("left", 0.6) returns (-0.6, 1.6, 0.0),
-      teleporting the pyramid to the user's left side and DROPPING its
-      original z=-0.8. The user said "shove" not "teleport" — keep the
-      other axes intact.
+      WRONG: place_user_relative("left", 0.6) — teleports to (-0.6, 1.6, 0),
+      dropping the original z. "Shove" is a delta, not a teleport.
 
     "Push it 0.6 m left"  no "my" → object-anchored delta (place_object_relative
                                     or displace_object both work)
@@ -558,18 +556,10 @@ the object's current position.
                            container_z=-2.5)
       → returns {"obj_id": "apple-0", "x": 0.4, "y": 1.2, "z": -2.5}
       → update_primitive(obj_id="apple-0", x=0.4, y=1.2, z=-2.5)
-      Final: apple co-located with bowl's centre.
-      WRONG: place_inside_by_id(movee_id="apple-0",
-                                container_x=1.8, container_y=1.3,
-                                container_z=-1.0) — those are the
-      APPLE's coords. The container is the BOWL; container_* must be
-      the bowl's coords. Passing the apple's own coords leaves it
-      exactly where it is.
-      WRONG: update_primitive(obj_id="apple-0", prim_type="box") —
-      that transmutes the apple into a box; the user wanted the apple
-      INSIDE the bowl, not the apple's shape changed.
-      WRONG: place_object_relative(direction="above") — that puts the
-      apple on top of the bowl, not inside it.
+      Final: apple co-located with bowl's centre. (Failure modes for
+      this rule — passing the movee's own coords as container_*,
+      transmuting via prim_type, or routing to place_object_relative
+      "above" — are enumerated in the CONTAINMENT block above.)
 
   WORKED EXAMPLE 2 — vertical, box at (0.7, 0.9, -2.4), user at (0, 1.6, 0):
     "Lift it over my head"   contains "my" → user-anchored
@@ -696,10 +686,8 @@ the object's current position.
                 returns {"x": -0.1, "y": 1.6, "z": -2.3}
         iter 1: update_primitive(obj_id="pyramid-0", x=-0.1, y=1.6, z=-2.3)
 
-      WRONG: place_object_relative(direction="right", distance=0.4)
-             — that ignores "down" entirely and the y stays at 2.0.
-             A combined-offset call that changes only x or only y is a
-             bug; both axes named must change.
+      WRONG: place_object_relative(direction="right", distance=0.4) —
+             ignores "down"; only x changes. Both named axes must move.
 
       Default unspecified distance for a combined offset: 0.5 m per axis.
 
