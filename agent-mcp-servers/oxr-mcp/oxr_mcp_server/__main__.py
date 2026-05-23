@@ -367,30 +367,10 @@ def build_mcp(source: PoseSource) -> FastMCP:
         if not pose.get("is_valid"):
             return {"error": "pose unavailable"}
         p = pose["position"]
-        f = pose["forward"]
-        r = pose["right"]
         ox = p["x"] if origin_x is None else origin_x
         oy = p["y"] if origin_y is None else origin_y
         oz = p["z"] if origin_z is None else origin_z
-
-        # Project forward onto the y=0 plane and renormalise so head
-        # pitch/roll don't bleed into horizontal moves. Recover right as
-        # forward × world_up so the basis stays orthonormal.
-        fx, fz = f["x"], f["z"]
-        mag = math.sqrt(fx*fx + fz*fz)
-        if mag < 1e-6:
-            # Looking straight up/down — fall back to right's projection.
-            rx0, rz0 = r["x"], r["z"]
-            mag2 = math.sqrt(rx0*rx0 + rz0*rz0)
-            if mag2 < 1e-6:
-                fx, fz = 0.0, -1.0
-            else:
-                rx0, rz0 = rx0 / mag2, rz0 / mag2
-                fx, fz = rz0, -rx0
-        else:
-            fx, fz = fx / mag, fz / mag
-        rx, rz = -fz, fx  # forward × (0,1,0) gives right in OpenXR Y-up.
-
+        (fx, fz), (rx, rz) = _ground_basis(pose)
         return {
             "x": round(ox + fx*forward + rx*right,        3),
             "y": round(oy + up,                            3),
@@ -399,7 +379,7 @@ def build_mcp(source: PoseSource) -> FastMCP:
 
     def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
         """Return ((fx, fz), (rx, rz)) — pose.forward / pose.right projected onto
-        the y=0 plane and renormalised. Used by place_user_relative."""
+        the y=0 plane and renormalised."""
         f, r = pose["forward"], pose["right"]
         fx, fz = f["x"], f["z"]
         mag = math.sqrt(fx * fx + fz * fz)

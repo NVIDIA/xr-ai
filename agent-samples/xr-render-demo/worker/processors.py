@@ -78,6 +78,7 @@ _WORKER_MANAGED_TOOLS = frozenset({"start_xr", "get_health"})
 _OXR_TOOLS = frozenset({
     "get_head_pose", "position_ahead", "position_relative",
     "place_user_relative", "place_object_relative",
+    "place_inside_by_id", "displace_object", "displace_objects",
 })
 
 # Tools served by vec-mcp — pure-math spatial primitives. Routed there so
@@ -102,6 +103,9 @@ _TOOL_PROGRESS: dict[str, str] = {
     "position_relative":    "Computing relative position...",
     "place_user_relative":  "Placing relative to you...",
     "place_object_relative":"Placing relative to object...",
+    "place_inside_by_id":   "Placing inside container...",
+    "displace_object":      "Shifting object...",
+    "displace_objects":     "Shifting objects...",
     "between_anchors":      "Computing midpoint...",
     "world_offset":         "Computing offset...",
     "along_direction":      "Computing position...",

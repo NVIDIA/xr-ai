@@ -44,7 +44,7 @@ from config import load_config  # noqa: E402  — must follow sys.path tweak
 _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
 
 def _agent_llm_base_url() -> str:
-    """Read agent_llm.base_url from models.yaml (post-#140 SDK config)."""
+    """Read agent_llm.base_url from models.yaml."""
     # WorkerConfig.models_yaml is resolved relative to the live launcher's
     # cwd (the sample root); eval runs from eval/, so anchor it ourselves.
     p = Path(_WORKER_CFG.models_yaml)
@@ -1253,6 +1253,67 @@ CASES = [
         ],
     },
 
+    # ── existing subject → update_primitive, never add_primitive ────────────
+    # Mirrors a live-demo bug: prior turns mentioned several objects
+    # (user added pyramid-0, then swapped box and sphere); user then
+    # says "Put it above the blue sphere" expecting the existing
+    # pyramid to be raised.  Model has historically picked add_primitive
+    # ("clone the recently-named object") instead of update_primitive on
+    # the existing pyramid.  Pass-or-fail probe — captures the bug so
+    # we can iterate; the prompt-side rule lives in the
+    # "EXISTING ID → update_primitive" section.
+    {
+        "name":  "pronoun_after_swap_uses_update_not_add",
+        "scene": [
+            {"id": "box-0",     "type": "box",
+             "pos": [0.5, 0.6, -1.5], "color": [1, 1, 0], "size": 0.1},
+            {"id": "sphere-0",  "type": "sphere",
+             "pos": [0.5, 0.7, -1.5], "color": [0, 0.4, 1], "size": 0.1},
+            {"id": "pyramid-0", "type": "pyramid",
+             "pos": [0.0, 1.6, 0.5], "color": [0, 0.8, 0], "size": 0.1},
+        ],
+        "history": [
+            ("Add a green pyramid above me and a bit behind.",
+             "Added a green pyramid."),
+            ("Switch the box and the sphere.",
+             "Swapped the box and the sphere."),
+        ],
+        "user":  "Put it above the blue sphere.",
+        # Subject of the placement ("it") is the existing pyramid-0;
+        # the rule REQUIRES update_primitive on pyramid-0, not
+        # add_primitive of any kind.  Position lands ~above sphere-0
+        # at (0.5, 0.7, -1.5); we accept any y >= 0.75 to be lenient
+        # on the "above" offset the model picks.
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "pyramid-0",
+                      "x": (0.45, 0.55),
+                      "y": (0.75, 2.5),
+                      "z": (-1.55, -1.45)}},
+        ],
+    },
+
+    # ── companion probe: named existing subject → update, never add ─────────
+    # Same rule, but the subject is named explicitly ("the cube") so
+    # pronoun resolution doesn't enter the picture.  ignore_extra=False
+    # is the teeth: an add_primitive alongside the update is also a fail.
+    {
+        "name":  "move_existing_cube_above_me_uses_update_not_add",
+        "scene": [{"id": "box-0", "type": "box",
+                   "pos": [0.0, 0.6, -1.5], "color": [0, 0.4, 1], "size": 0.1}],
+        "user":  "Move the cube above where I am.",
+        # box-0 should end up near the user's column (x≈0, z≈0) with y
+        # raised above eye level (≥1.55).  No add_primitive allowed.
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "box-0",
+                      "x": (-0.05, 0.05),
+                      "y": ( 1.55, 3.5),
+                      "z": (-0.05, 0.05)}},
+        ],
+        "ignore_extra": False,
+    },
+
     # ── three sequential moves on one object via "up and down 3 times" ───────
     # Exercises the multi-update-in-one-utterance pattern on a single object.
     # Model often emits partial-update calls (just y= …) for vertical
@@ -1488,8 +1549,6 @@ def _local_place_user_relative(args: dict, pose: dict) -> dict:
     }
 
 
-
-
 def _local_world_offset(args: dict, _pose: dict) -> dict:
     """Mirror vec-mcp.world_offset — origin + (dx, dy, dz)."""
     ox = float(args.get("origin_x", 0.0))
@@ -1513,8 +1572,8 @@ def _local_along_direction(args: dict, _pose: dict) -> dict:
     d  = float(args.get("distance", 0.5))
     vx, vy, vz = tx - ox, ty - oy, tz - oz
     mag = math.sqrt(vx*vx + vy*vy + vz*vz)
-    if mag < 1e-6:
-        return {"x": round(ox, 3), "y": round(oy, 3), "z": round(oz, 3)}
+    if mag < 1e-9:
+        return {"error": "origin and target coincide"}
     return {
         "x": round(ox + vx * d / mag, 3),
         "y": round(oy + vy * d / mag, 3),
@@ -1910,16 +1969,8 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
 _MAX_STEPS = 10
 
 
-# Reserved-prompt-vocabulary audit (check #4 in _check_prompt_eval_overlap).
-#
-# Eval-side colour/shape words used in case fixtures (user utterances,
-# scene `type` tags, history dialogue). The prompt's worked-example
-# blocks may NOT use any word from these sets — see AGENTS.md
-# "Prompt-driven samples: write eval cases / Don't train on the test
-# set". Prompt rule narration (the colour-lookup table, anchor-routing
-# rules, etc.) is free to mention these words generically; only the
-# worked-example blocks are restricted, because those are the strings
-# the model is most likely to memorise as a template.
+# Reserved-prompt-vocabulary sets used by check #4 in
+# _check_prompt_eval_overlap (see that docstring and eval/README.md).
 _EVAL_VOCAB_COLORS = frozenset({
     "red", "green", "blue", "cyan", "brown", "yellow",
 })
@@ -2171,11 +2222,8 @@ async def main() -> None:
     if args.only and args.query:
         p.error("--only and a positional query are mutually exclusive")
 
-    # Fast inner-loop targeting: if --only wasn't passed (and we aren't
-    # running a one-shot query), honour a sibling .only file. Lines are
-    # case names; '#' comments and blank lines are skipped; commas also
-    # split, so a single-line CSV file works. An empty/missing file is
-    # a no-op (full suite).
+    # Honour a sibling .only file as a shorthand for --only (see
+    # eval/README.md "Watcher" section for the file format).
     only_file = _HERE / ".only"
     if not args.only and not args.query and only_file.exists():
         names: list[str] = []

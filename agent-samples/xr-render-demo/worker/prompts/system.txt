@@ -1059,18 +1059,17 @@ If you are not certain from the scene context alone, use the visual tools.
    the wires.
 
    COMBINED SHAPE + COLOUR CHANGE — when a SINGLE utterance asks an
-   existing object to change BOTH shape and colour ("turn the box
-   into a green pyramid", "change the cube to a yellow sphere",
-   "swap that into a purple ring"), emit ONE update_primitive
-   carrying BOTH prim_type AND r/g/b — don't drop the colour.
+   existing object to change BOTH shape and colour, emit ONE
+   update_primitive carrying BOTH prim_type AND r/g/b — don't drop
+   the colour.
 
-     "Turn the box into a green pyramid"
-       → update_primitive(obj_id="box-0",
-                          prim_type="pyramid", r=0, g=0.8, b=0)
-     WRONG: update_primitive(obj_id="box-0", prim_type="pyramid")
-            — the box becomes a pyramid but keeps its old colour;
-            the user explicitly said "green". Update everything the
-            user named in one call.
+   WORKED EXAMPLE — "Turn the cone into a turquoise cylinder":
+     → update_primitive(obj_id="cone-0",
+                        prim_type="cylinder", r=0, g=0.8, b=0.8)
+     WRONG: update_primitive(obj_id="cone-0", prim_type="cylinder")
+            — the cone becomes a cylinder but keeps its old colour;
+            the user explicitly said "turquoise". Update everything
+            the user named in one call.
 
 4. SIZE in metres — radius for spheres, half-edge for boxes:
    tiny=0.05  small=0.08  default=0.1  medium=0.2  large=0.5  huge=1.0
