@@ -6,6 +6,7 @@
 #include "streamkit/Config/BackendConfiguration.h"
 
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 namespace streamkit {
@@ -15,8 +16,7 @@ namespace streamkit {
 // ─────────────────────────────────────────────────────────────────────────────
 
 std::unique_ptr<StreamingBackend> MakeBackend(const BackendConfiguration& config) {
-    return std::visit([](auto&& cfg) -> std::unique_ptr<StreamingBackend> {
-        using T = std::decay_t<decltype(cfg)>;
+    return std::visit([]<typename T>(const T& cfg) -> std::unique_ptr<StreamingBackend> {
         if constexpr (std::is_same_v<T, LiveKitConfig>) {
             return std::make_unique<LiveKitBackend>(cfg);
         }

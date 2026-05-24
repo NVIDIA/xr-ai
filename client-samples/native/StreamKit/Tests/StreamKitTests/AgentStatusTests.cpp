@@ -6,58 +6,59 @@
 #include "Backends/LiveKit/AgentStatusParser.h"
 
 #include <cstddef>
-#include <cstring>
 #include <span>
 #include <string>
+#include <string_view>
 
 namespace {
 
-std::span<const std::byte> bytes_of(const char* s) {
-    return std::span<const std::byte>(
-        reinterpret_cast<const std::byte*>(s), std::strlen(s));
+std::span<const std::byte> bytes_of(std::string_view s) {
+    return std::as_bytes(std::span<const char>(s.data(), s.size()));
 }
 
 }  // namespace
 
 int main() {
     using streamkit::internal::ExtractAgentStatus;
+    using streamkit::test::Expect;
+    using streamkit::test::ExpectEq;
 
     // Canonical payload shipped by xr-ai-pipecat's set_status:
     {
         auto r = ExtractAgentStatus(bytes_of(R"({"status": "idle"})"));
-        SK_EXPECT(r.has_value());
-        SK_EXPECT_EQ(*r, std::string("idle"));
+        Expect(r.has_value());
+        ExpectEq(*r, std::string("idle"));
     }
     {
         auto r = ExtractAgentStatus(bytes_of(R"({"status":"processing"})"));
-        SK_EXPECT(r.has_value());
-        SK_EXPECT_EQ(*r, std::string("processing"));
+        Expect(r.has_value());
+        ExpectEq(*r, std::string("processing"));
     }
 
     // Missing key → nullopt
     {
         auto r = ExtractAgentStatus(bytes_of(R"({"other": "x"})"));
-        SK_EXPECT(!r.has_value());
+        Expect(!r.has_value());
     }
 
     // Truncated payload — no closing quote.
     {
         auto r = ExtractAgentStatus(bytes_of(R"({"status": "idle)"));
-        SK_EXPECT(!r.has_value());
+        Expect(!r.has_value());
     }
 
     // Empty value is a valid match; HandleDataReceived skips empty status
     // separately so the parser itself just reports what it saw.
     {
         auto r = ExtractAgentStatus(bytes_of(R"({"status": ""})"));
-        SK_EXPECT(r.has_value());
-        SK_EXPECT_EQ(*r, std::string(""));
+        Expect(r.has_value());
+        ExpectEq(*r, std::string(""));
     }
 
     // Empty payload
     {
         auto r = ExtractAgentStatus(bytes_of(""));
-        SK_EXPECT(!r.has_value());
+        Expect(!r.has_value());
     }
 
     return 0;

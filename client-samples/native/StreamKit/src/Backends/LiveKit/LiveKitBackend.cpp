@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <format>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -68,11 +69,12 @@ ConnectionState MapState(livekit::ConnectionState lk) {
 }
 
 livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
+    using enum PixelFormat;
     switch (fmt) {
-        case PixelFormat::kI420: return livekit::VideoBufferType::I420;
-        case PixelFormat::kNV12: return livekit::VideoBufferType::NV12;
-        case PixelFormat::kRGBA: return livekit::VideoBufferType::RGBA;
-        case PixelFormat::kBGRA: return livekit::VideoBufferType::BGRA;
+        case kI420: return livekit::VideoBufferType::I420;
+        case kNV12: return livekit::VideoBufferType::NV12;
+        case kRGBA: return livekit::VideoBufferType::RGBA;
+        case kBGRA: return livekit::VideoBufferType::BGRA;
     }
     return livekit::VideoBufferType::I420;
 }
@@ -159,8 +161,11 @@ LiveKitBackend::LiveKitBackend(const LiveKitConfig& config) : config_(config) {
 #endif
 }
 
-LiveKitBackend::~LiveKitBackend() {
-    TearDown();
+LiveKitBackend::~LiveKitBackend() noexcept {
+    try {
+        TearDown();
+    } catch (...) {
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -176,14 +181,14 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
     }
 
     const std::string scheme = config_.secure ? "wss" : "ws";
-    const std::string ws_url = scheme + "://" + config_.host + ":"
-                               + std::to_string(config_.port);
+    const std::string ws_url =
+        std::format("{}://{}:{}", scheme, config_.host, config_.port);
 
     std::string token;
     if (config_.token.has_value() && !config_.token->empty()) {
         token = *config_.token;
     } else if (config_.token_url.has_value() && !config_.token_url->empty()) {
-        token = FetchToken(*config_.token_url, session_config_.identity);
+        FetchToken(*config_.token_url, session_config_.identity);
     } else {
         throw MissingTokenError{};
     }
@@ -205,7 +210,8 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
         room_.reset();
         delegate_.reset();
         FireStateChanged(ConnectionState::kDisconnected);
-        throw StreamError("LiveKit Room::Connect returned false for " + ws_url);
+        throw StreamError(std::format(
+            "LiveKit Room::Connect returned false for {}", ws_url));
     }
     is_connected_.store(true);
     // The SDK delegate may have already fired kConnected during the
@@ -334,14 +340,14 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
     // matches what a packed frame of the declared dimensions / format
     // requires. Catches the common "did the caller forget to repack
     // their padded HAL or GPU readback buffer?" mistake.
-    const auto expected = PackedFrameSize(width, height, format);
-    if (data.size() != expected) {
-        throw std::invalid_argument(
-            "InjectVideoFrame: buffer size " + std::to_string(data.size())
-            + " does not match the packed size " + std::to_string(expected)
-            + " expected for the given dimensions and format. "
-              "FrameSink requires tightly packed input — repack padded "
-              "buffers before calling.");
+    if (const auto expected = PackedFrameSize(width, height, format);
+        data.size() != expected) {
+        throw std::invalid_argument(std::format(
+            "InjectVideoFrame: buffer size {} does not match the packed size "
+            "{} expected for the given dimensions and format. FrameSink "
+            "requires tightly packed input - repack padded buffers before "
+            "calling.",
+            data.size(), expected));
     }
 
 #if STREAMKIT_HAVE_LIVEKIT
@@ -369,7 +375,8 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
     }
     source->captureFrame(outgoing, timestamp_us);
 #else
-    (void)data;
+    std::vector<std::uint8_t> ignored = std::move(data);
+    (void)ignored;
     (void)width;
     (void)height;
     (void)format;
@@ -393,14 +400,14 @@ void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
         return;
     }
 
-    const auto expected =
-        static_cast<std::size_t>(channels) *
-        static_cast<std::size_t>(samples_per_channel);
-    if (pcm.size() != expected) {
-        throw std::invalid_argument(
-            "InjectAudioFrame: sample count " + std::to_string(pcm.size())
-            + " does not match channels * samples_per_channel = "
-            + std::to_string(expected));
+    if (const auto expected =
+            static_cast<std::size_t>(channels) *
+            static_cast<std::size_t>(samples_per_channel);
+        pcm.size() != expected) {
+        throw std::invalid_argument(std::format(
+            "InjectAudioFrame: sample count {} does not match channels * "
+            "samples_per_channel = {}",
+            pcm.size(), expected));
     }
 
 #if STREAMKIT_HAVE_LIVEKIT
@@ -433,8 +440,8 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
         throw NotConnectedError{};
     }
     if (topic == kAgentStatusTopic) {
-        throw std::invalid_argument(
-            "topic '" + std::string(topic) + "' is reserved for internal SDK use");
+        throw std::invalid_argument(std::format(
+            "topic '{}' is reserved for internal SDK use", topic));
     }
 
 #if STREAMKIT_HAVE_LIVEKIT
@@ -472,7 +479,7 @@ void LiveKitBackend::FireStateChanged(ConnectionState state) {
 }
 
 void LiveKitBackend::HandleDataReceived(std::string_view topic,
-                                        std::span<const std::byte> payload) {
+                                        std::span<const std::byte> payload) const {
     if (topic == kAgentStatusTopic) {
         if (auto status = internal::ExtractAgentStatus(payload)) {
             if (!status->empty() && on_agent_status) {
@@ -520,16 +527,19 @@ void LiveKitBackend::TearDown() {
 // Token fetch
 // ─────────────────────────────────────────────────────────────────────────────
 
-std::string LiveKitBackend::FetchToken(const std::string& token_url,
-                                       const std::string& /*identity*/) {
+[[noreturn]] void LiveKitBackend::FetchToken(
+    const std::string& token_url,
+    const std::string& /*identity*/) const {
     // Token-fetch over HTTP is deliberately not implemented in this
     // backend. Embedded targets typically pass an inline token in
     // `LiveKitConfig::token` (computed server-side); desktop hosts that
     // need a token endpoint can subclass LiveKitBackend and override
     // FetchToken with their preferred HTTP client (libcurl, Poco::Net,
     // cpp-httplib). See `App/main.cpp` for the inline-token path.
-    throw TokenFetchFailedError(token_url + " — FetchToken is not implemented in this backend; "
-                                            "supply an inline token in LiveKitConfig::token");
+    throw TokenFetchFailedError(std::format(
+        "{} - FetchToken is not implemented in this backend; supply an "
+        "inline token in LiveKitConfig::token",
+        token_url));
 }
 
 } // namespace streamkit

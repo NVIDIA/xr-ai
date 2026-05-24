@@ -22,8 +22,9 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstring>
+#include <cstddef>
 #include <iostream>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -48,8 +49,8 @@ struct Args {
 static std::string GetArg(const std::vector<std::string>& argv,
                            const std::string& flag,
                            const std::string& fallback = "") {
-    auto it = std::find(argv.begin(), argv.end(), flag);
-    if (it != argv.end() && std::next(it) != argv.end()) {
+    if (auto it = std::ranges::find(argv, flag);
+        it != argv.end() && std::next(it) != argv.end()) {
         return *std::next(it);
     }
     return fallback;
@@ -76,13 +77,22 @@ static Args ParseArgs(int argc, char** argv) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 static std::string StateToString(streamkit::ConnectionState state) {
+    using enum streamkit::ConnectionState;
     switch (state) {
-        case streamkit::ConnectionState::kDisconnected:  return "disconnected";
-        case streamkit::ConnectionState::kConnecting:    return "connecting";
-        case streamkit::ConnectionState::kConnected:     return "connected";
-        case streamkit::ConnectionState::kReconnecting:  return "reconnecting";
+        case kDisconnected:  return "disconnected";
+        case kConnecting:    return "connecting";
+        case kConnected:     return "connected";
+        case kReconnecting:  return "reconnecting";
     }
     return "unknown";
+}
+
+static std::string BytesToString(std::span<const std::byte> data) {
+    std::string payload(data.size(), '\0');
+    std::ranges::transform(data, payload.begin(), [](std::byte byte) {
+        return static_cast<char>(std::to_integer<unsigned char>(byte));
+    });
+    return payload;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -108,7 +118,7 @@ int main(int argc, char** argv) {
 
     session.on_data_received = [](std::string_view topic,
                                   std::span<const std::byte> data) {
-        std::string payload(reinterpret_cast<const char*>(data.data()), data.size());
+        const std::string payload = BytesToString(data);
         std::cout << "[data] topic='" << topic << "' payload='" << payload << "'\n";
     };
 
@@ -149,10 +159,7 @@ int main(int argc, char** argv) {
     // ── Send a test message ───────────────────────────────────────────────
     try {
         const std::string msg = R"({"event":"hello","from":"native-client"})";
-        std::vector<std::byte> payload(msg.size());
-        std::transform(msg.begin(), msg.end(), payload.begin(),
-                       [](char c) { return static_cast<std::byte>(c); });
-
+        const auto payload = std::as_bytes(std::span<const char>(msg.data(), msg.size()));
         session.Send(payload, /*reliable=*/true, "xr.session.started");
         std::cout << "Sent test message.\n";
     } catch (const streamkit::StreamError& e) {
