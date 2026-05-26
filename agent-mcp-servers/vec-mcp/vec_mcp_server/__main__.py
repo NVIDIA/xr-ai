@@ -2,12 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-vec-mcp — pure-math spatial primitives for agentic XR scenes.
+vec-mcp: pure-math spatial primitives for agentic XR scenes.
 
-Pure FastMCP. No GPU, no XR session, no live state — every tool is a
-deterministic function from inputs to a 3-tuple result. The point is to
-move the arithmetic the LLM is bad at (vector scaling, midpoints, axis
-offsets) onto a server that always gets it right.
+Handles arithmetic the LLM is bad at (vector scaling, midpoints, axis offsets).
 
 Tools (FastMCP, mounted at /mcp)
 ────────────────────────────────
@@ -26,7 +23,7 @@ Tools (FastMCP, mounted at /mcp)
       origin and B's coords as target.
 
   scale_value(current, factor) → {value}
-      Scalar multiplication for sizes — "3× bigger" / "half".
+      Scalar multiplication for sizes e.g., "3× bigger", "half".
       Returned as a dict so it composes uniformly with the vec results.
 """
 from __future__ import annotations

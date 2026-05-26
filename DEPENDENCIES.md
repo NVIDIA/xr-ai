@@ -179,9 +179,8 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
     └── fastmcp >=0.4
     └── pyyaml >=6.0
     Pure FastMCP at /mcp. Deterministic spatial-math primitives
-    (between_anchors, world_offset, along_direction, scale_value) — no
-    GPU, no XR session, no live state. Offloads vector arithmetic from
-    the LLM.
+    (between_anchors, world_offset, along_direction, scale_value).
+    Offloads vector arithmetic from the LLM.
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]

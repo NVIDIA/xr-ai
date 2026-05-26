@@ -81,8 +81,8 @@ _OXR_TOOLS = frozenset({
     "place_inside_by_id", "displace_object", "displace_objects",
 })
 
-# Tools served by vec-mcp — pure-math spatial primitives. Routed there so
-# the LLM offloads vector arithmetic instead of computing it inline.
+# Spatial primitive math tools served by vec-mcp. Routed there so
+# the LLM offloads vector arithmetic.
 _VEC_TOOLS = frozenset({
     "between_anchors", "world_offset",
     "along_direction", "scale_value",
