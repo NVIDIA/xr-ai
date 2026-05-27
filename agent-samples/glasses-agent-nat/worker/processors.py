@@ -108,12 +108,26 @@ _DEMO_END_PHRASES = (
 
 _GUIDANCE_PHRASES = (
     "how do i",
+    "how to do",
     "walk me through",
     "show me how",
     "teach me how to",
+    "teach me how",
     "guide me through",
+    "guide me",
     "step by step",
+    "instruct me",
+    "help me do",
+    "help me with",
+    "do task",
+    "let's do",
 )
+
+# Sentinel emitted by the agent LLM when the freshness marker is in
+# context and the wearer's utterance is not clearly a current-view
+# question. The agentic loop intercepts this token and hands off to
+# _handle_ambiguous_guidance_request instead of speaking it.
+_DEFER_TO_WORKER_SENTINEL = "__defer_to_worker__"
 
 _GUIDANCE_ADVANCE_PHRASES = (
     "next",
@@ -141,8 +155,84 @@ _GUIDANCE_DONE_PHRASES = (
     "cancel",
 )
 
+# Explicit guidance-stop phrases that exit guidance even before the
+# generic stop branch runs, so the demo-end → explicit-guidance-stop →
+# in-guidance-bare-stop → outside-guidance-stop precedence stays in
+# this order regardless of which mode the worker is in.
+_GUIDANCE_STOP_PHRASES = (
+    "stop guidance",
+    "cancel guidance",
+    "exit guidance",
+    "stop guiding",
+    "end guidance",
+)
+
+# Generic "shut up" phrases: outside guidance, these only flush queued TTS
+# (no exit-guidance side effect). Inside guidance, the in-guidance bare
+# stop case (_is_guidance_done) handles them and exits guidance instead,
+# matching the existing UX.
+_STOP_SPEAKING_PHRASES = (
+    "stop talking",
+    "be quiet",
+    "shut up",
+    "stop speaking",
+    "quiet",
+    "shush",
+    "hush",
+    "stop",
+    "cancel",
+)
+
 _AGENT_RESPONSE_TOPIC = "agent.response"
 _AGENT_PROGRESS_TOPIC = "agent.progress"
+
+# Spoken / ordinal forms accepted when the wearer is answering a numbered
+# "did you mean…?" prompt. Only used inside the pending-disambiguation
+# branch — outside that branch a bare "one" is treated as ordinary speech.
+_NUMERIC_CHOICE_WORDS: dict[str, int] = {
+    "one": 1, "first": 1, "1st": 1,
+    "two": 2, "second": 2, "2nd": 2,
+    "three": 3, "third": 3, "3rd": 3,
+    "four": 4, "fourth": 4, "4th": 4,
+    "five": 5, "fifth": 5, "5th": 5,
+    "six": 6, "sixth": 6, "6th": 6,
+}
+
+# Cap pending-disambiguation re-asks so an uncooperative user (or a
+# stuck mic) can't trap the wearer in a loop forever.
+_PENDING_DISAMBIGUATION_MAX_ATTEMPTS = 2
+
+
+def _extract_choice_number(lower: str) -> int | None:
+    """If *lower* is a short numeric/ordinal answer, return its 1-based index.
+
+    Examples: "1" / "one" / "first" / "the first one" / "number two" -> 1, 1, 1, 1, 2.
+    A whole-utterance match is preferred so a casual mention of "first"
+    in a longer sentence doesn't get hijacked.
+    """
+    stripped = lower.strip().rstrip(string.punctuation).strip()
+    if not stripped:
+        return None
+    if stripped.isdigit():
+        n = int(stripped)
+        if 1 <= n <= 9:
+            return n
+    tokens = [t.strip(string.punctuation) for t in stripped.split()]
+    if any(t in _NUMERIC_CHOICE_WORDS or (t.isdigit() and 1 <= int(t) <= 9)
+           for t in tokens):
+        # Drop common filler around the number — but only when at least
+        # one numeric token survives, so "one two" stays a non-match.
+        filler = {"the", "a", "an", "number", "option"}
+        useful = [t for t in tokens if t and t not in filler]
+        if len(useful) == 1:
+            t = useful[0]
+            if t.isdigit():
+                n = int(t)
+                if 1 <= n <= 9:
+                    return n
+            return _NUMERIC_CHOICE_WORDS.get(t)
+    return None
+
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
@@ -184,17 +274,24 @@ class QueryProcessor:
         *,
         send_text:    SendTextCb,
         say:          Callable[[str, str], Awaitable[None]],   # (pid, text)
+        flush_audio:  Callable[[str], Awaitable[None]],        # (pid,)
     ) -> None:
         self._cfg          = cfg
         self._memory       = memory
         self._nat_runtime  = nat_runtime
         self._send_text    = send_text
         self._say          = say
+        self._flush_audio  = flush_audio
         self._http         = httpx.AsyncClient(timeout=180.0)
         self._nat_agent    = NatAgentRunner(nat_runtime)
 
         self._history:     list[tuple[str, str]] = []
         self._history_max  = 4
+
+        # Last spoken ack per pid — used to drop a duplicate ack when the
+        # LLM regenerates exactly the same phrase ("On it." / "On it.") for
+        # back-to-back utterances, which sounds like a stutter.
+        self._last_ack:    dict[str, str] = {}
 
         # Guidance mode state.
         self._guidance_demo: Demonstration | None = None
@@ -204,6 +301,22 @@ class QueryProcessor:
         self._guidance_step_obs_baseline:   int = 0
         self._guidance_monitor_idle_cycles: int = 0
         self._guidance_consecutive_yes:     int = 0  # consecutive 2-frame YES responses
+
+        # Pending guidance disambiguation per pid. When we ask "did you
+        # mean 1) X or 2) Y?", the next non-stop utterance from that pid
+        # is interpreted against the stored {query, choices, attempts}
+        # instead of going through the normal handler. Cleared on
+        # success, explicit stop, attempt cap, demo-set change, or any
+        # branch that starts a different mode (guidance, recording).
+        self._pending_guidance_by_pid: dict[str, dict] = {}
+
+    def is_guiding(self, pid: str | None = None) -> bool:
+        """Return True if guidance mode is active.
+
+        *pid* is accepted for API parity with the per-participant agent —
+        guidance state is currently global, so it is ignored.
+        """
+        return self._guidance_demo is not None
 
     async def handle(
         self,
@@ -224,6 +337,9 @@ class QueryProcessor:
                                     "delete all demos", "forget demos",
                                     "clear demos", "reset demos")):
             n = self._memory.clear_demonstrations()
+            # Demo set just changed underneath any in-flight pending
+            # prompt — the stored choices list is now stale.
+            self._pending_guidance_by_pid.clear()
             response = f"Done — {n} demonstration{'s' if n != 1 else ''} cleared."
             await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
             await self._say(pid, response)
@@ -243,6 +359,48 @@ class QueryProcessor:
                         _trace_log.info("VOICE_NOTE(pre-stop)  %s", narration[:80])
                     break
             await self._handle_demo_end(pid, ref_us)
+            return
+
+        # ── explicit guidance-stop ───────────────────────────────────────────
+        # Matches BEFORE the recording / guidance / generic-stop branches so
+        # the wearer can always exit guidance with an unambiguous phrase.
+        if self._is_guidance_stop(lower):
+            self._clear_pending_guidance(pid)
+            if self._guidance_demo is not None:
+                await self._finish_guidance(pid)
+            else:
+                await self._stop_speaking(pid)
+            return
+
+        # ── pending guidance disambiguation ──────────────────────────────────
+        # We previously asked "did you mean 1) X or 2) Y?" — interpret
+        # this utterance as the answer. Order matters: bare "stop" /
+        # "cancel" must still clear pending state and stop speaking
+        # rather than being treated as a non-match and re-asked.
+        if pid in self._pending_guidance_by_pid:
+            if self._is_stop_speaking(lower):
+                self._clear_pending_guidance(pid)
+                await self._stop_speaking(pid)
+                return
+            demo = self._resolve_pending_choice(lower, pid)
+            if demo is not None:
+                self._clear_pending_guidance(pid)
+                await self._start_guidance(demo, pid)
+                return
+            state = self._pending_guidance_by_pid[pid]
+            attempts = int(state.get("attempts", 0)) + 1
+            if attempts >= _PENDING_DISAMBIGUATION_MAX_ATTEMPTS:
+                self._clear_pending_guidance(pid)
+                response = (
+                    "I'm having trouble matching that to a recorded demo. "
+                    "Try again with the exact demo name when you're ready."
+                )
+                await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
+                await self._say(pid, response)
+                _trace_log.info("PENDING_GIVE_UP  pid=%s  utterance=%r", pid, text[:60])
+                return
+            state["attempts"] = attempts
+            await self._reask_with_choices(pid, attempts)
             return
 
         # ── voice narration during recording ─────────────────────────────────
@@ -286,10 +444,33 @@ class QueryProcessor:
                 await self._handle_guidance_question(text, pid)
             return
 
+        # ── outside-guidance stop-speaking ───────────────────────────────────
+        # We're not recording, not in guidance, and the user just said "stop"
+        # / "be quiet" / "shut up" — they almost certainly want us to stop
+        # talking, not to start a new query. flush_audio + text-only ack.
+        if self._is_stop_speaking(lower):
+            await self._stop_speaking(pid)
+            return
+
         # ── guidance request detection ────────────────────────────────────────
         guidance_match = self._match_guidance_request(lower)
         if guidance_match is not None:
             await self._handle_guidance_request(guidance_match, pid)
+            return
+
+        # ── freshness-scoped guidance fallback ───────────────────────────────
+        # Within `guidance_freshness_window_s` of a finished demo, treat
+        # ambiguous utterances (no explicit guidance phrase, not a clear
+        # current-view question) as "guide me through what I just
+        # demonstrated". Catches STT-mangled requests like "the gym"
+        # (heard from "show me how to wear pico headset") that would
+        # otherwise fall into the agentic loop and get a wrong answer.
+        if (
+            self._memory.demo_is_fresh(self._cfg.guidance_freshness_window_s)
+            and self._memory.most_recent_demo() is not None
+            and not self._looks_like_current_view_question(lower)
+        ):
+            await self._handle_ambiguous_guidance_request(text, pid)
             return
 
         # ── ordinary query ────────────────────────────────────────────────────
@@ -299,10 +480,17 @@ class QueryProcessor:
             log.exception("quick-ack failed")
             ack, needs_thinking = "", False
 
+        # ack: text-only progress message ("On it.", "Let me look.", …).
+        # We deliberately do NOT TTS the ack here, even when needs_thinking
+        # is True — TTSing both the ack and the eventual response makes the
+        # agent talk over itself on long replies and double-speak the
+        # acknowledgement on every stop. The progress text is enough.
         if ack:
-            await self._send_text(pid, ack, _AGENT_PROGRESS_TOPIC)
-            if needs_thinking:
-                await self._say(pid, ack)
+            if self._last_ack.get(pid) == ack:
+                _trace_log.info("ACK_DUP_SUPPRESS  %s", ack)
+            else:
+                self._last_ack[pid] = ack
+                await self._send_text(pid, ack, _AGENT_PROGRESS_TOPIC)
 
         try:
             response = await self._agentic_loop(
@@ -311,6 +499,15 @@ class QueryProcessor:
         except Exception:
             log.exception("agentic loop failed")
             response = "Something went wrong — please try again."
+
+        # Sentinel: the agentic LLM signalled that this utterance is really
+        # an ambiguous guidance request inside the freshness window. Hand
+        # the original transcript off to the demo→guidance fallback rather
+        # than speaking the sentinel back to the wearer.
+        if response and _DEFER_TO_WORKER_SENTINEL in response:
+            _trace_log.info("DEFER_TO_WORKER  %r", text[:60])
+            await self._handle_ambiguous_guidance_request(text, pid)
+            return
 
         if response:
             self._history.append((text, response))
@@ -358,6 +555,30 @@ class QueryProcessor:
                 return lower
         return None
 
+    _CURRENT_VIEW_PHRASES: tuple[str, ...] = (
+        "what do you see",
+        "what can you see",
+        "describe this",
+        "describe the view",
+        "describe what you see",
+        "what is in front of me",
+        "what's in front of me",
+        "what am i looking at",
+        "what do i see",
+    )
+
+    def _looks_like_current_view_question(self, lower: str) -> bool:
+        """Cheap text predicate for 'what do you see?'-style questions.
+
+        Used by the freshness-scoped guidance fallback to avoid hijacking
+        a legitimate current-view question with guidance on a recent demo.
+        """
+        s = lower.strip()
+        for phrase in self._CURRENT_VIEW_PHRASES:
+            if phrase in s:
+                return True
+        return False
+
     def _is_guidance_advance(self, lower: str) -> bool:
         for phrase in _GUIDANCE_ADVANCE_PHRASES:
             if lower.strip() == phrase or lower.strip().startswith(phrase):
@@ -375,9 +596,52 @@ class QueryProcessor:
                 return True
         return False
 
+    def _is_guidance_stop(self, lower: str) -> bool:
+        """Explicit 'stop guidance' / 'cancel guidance' / 'exit guidance'.
+
+        Matches before the generic stop branch, so the wearer can always
+        end guidance with an unambiguous phrase even if guidance state
+        somehow got out of sync.
+        """
+        s = lower.strip()
+        for phrase in _GUIDANCE_STOP_PHRASES:
+            if phrase in s:
+                return True
+        return False
+
+    def _is_stop_speaking(self, lower: str) -> bool:
+        """Generic 'be quiet / stop / cancel'.
+
+        Outside guidance only — inside guidance, ``_is_guidance_done``
+        owns these phrases and exits guidance.
+        """
+        s = lower.strip()
+        words = set(s.replace(",", " ").replace(".", " ").split())
+        for phrase in _STOP_SPEAKING_PHRASES:
+            if s == phrase:
+                return True
+            if " " in phrase and phrase in s:
+                return True
+            if " " not in phrase and phrase in words and len(words) <= 3:
+                return True
+        return False
+
+    async def _stop_speaking(self, pid: str) -> None:
+        """Flush queued TTS and send a brief text-only acknowledgement.
+
+        Deliberately does NOT TTS the ack — the wearer just asked us to
+        stop talking, speaking back would defeat the request.
+        """
+        await self._flush_audio(pid)
+        await self._send_text(pid, "Okay.", _AGENT_PROGRESS_TOPIC)
+        _trace_log.info("STOP_SPEAKING  pid=%s", pid)
+
     # ── demo actions ──────────────────────────────────────────────────────────
 
     async def _handle_demo_start(self, name: str, pid: str) -> None:
+        # Starting a new recording supersedes any pending "did you
+        # mean…?" prompt — the wearer is moving on.
+        self._clear_pending_guidance(pid)
         self._memory.start_recording(name)
         response = (
             f"Recording '{name}'. Go ahead and demonstrate — "
@@ -535,11 +799,34 @@ class QueryProcessor:
     # ── guidance actions ──────────────────────────────────────────────────────
 
     async def _handle_guidance_request(self, query: str, pid: str) -> None:
-        """Find a matching demo and enter guidance mode."""
-        # Look for a demo name mentioned in the query, or use the first available.
-        demo = self._memory.find_demonstration_fuzzy(query)
+        """Find a matching demo and enter guidance mode.
+
+        First tries strict fuzzy-matching against demo names. If no demo
+        matches strictly and there's more than one on file, sets pending
+        disambiguation state and re-asks with a numbered list — the
+        wearer's next utterance is interpreted by the pending branch in
+        ``handle()``. For ambiguous post-demo utterances inside the
+        freshness window use ``_handle_ambiguous_guidance_request``
+        instead — it explicitly prefers the most recent demo.
+        """
+        demo = self._memory.find_demonstration_fuzzy(query, min_confidence="strict")
         if demo is None:
             demos = self._memory.list_demonstrations()
+            if len(demos) > 1:
+                # Ambiguous: store choices keyed by pid so the wearer's
+                # numeric / by-name reply gets routed back into
+                # _start_guidance via the pending branch.
+                self._pending_guidance_by_pid[pid] = {
+                    "query":    query,
+                    "choices":  list(demos),
+                    "attempts": 0,
+                }
+                _trace_log.info(
+                    "PENDING_SET  pid=%s  query=%r  choices=%s",
+                    pid, query[:60], demos,
+                )
+                await self._reask_with_choices(pid, attempts=0)
+                return
             if demos:
                 demo = self._memory.get_demonstration(demos[0])
         if demo is None:
@@ -547,14 +834,104 @@ class QueryProcessor:
             await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
             await self._say(pid, response)
             return
+        await self._start_guidance(demo, pid)
 
+    def _clear_pending_guidance(self, pid: str) -> None:
+        """Drop pending disambiguation state for *pid* if present.
+
+        Safe to call unconditionally — used in every code path that
+        starts a different mode, finishes guidance, or changes the demo
+        set, so a stale "did you mean…?" prompt never lingers.
+        """
+        if self._pending_guidance_by_pid.pop(pid, None) is not None:
+            _trace_log.info("PENDING_CLEAR  pid=%s", pid)
+
+    def _resolve_pending_choice(self, lower: str, pid: str) -> Demonstration | None:
+        """Interpret a pending-disambiguation reply.
+
+        Accepts either a numeric/ordinal answer against the stored
+        choices list (1-based), or a free-form name match against any
+        demo in the choices list using lenient fuzzy matching (since the
+        wearer is explicitly answering "which demo?", a single unique
+        token is enough evidence).
+        """
+        state = self._pending_guidance_by_pid.get(pid)
+        if not state:
+            return None
+        choices: list[str] = state.get("choices", [])
+        if not choices:
+            return None
+
+        n = _extract_choice_number(lower)
+        if n is not None and 1 <= n <= len(choices):
+            return self._memory.get_demonstration(choices[n - 1])
+
+        candidate = self._memory.find_demonstration_fuzzy(lower, min_confidence="lenient")
+        if candidate is not None and candidate.name in choices:
+            return candidate
+        return None
+
+    async def _reask_with_choices(self, pid: str, attempts: int) -> None:
+        """Ask "did you mean 1) X or 2) Y?" — with a hint on re-asks."""
+        state = self._pending_guidance_by_pid.get(pid)
+        if not state:
+            return
+        choices: list[str] = state.get("choices", [])
+        if not choices:
+            return
+        numbered = ", ".join(f"{i + 1}) '{name}'" for i, name in enumerate(choices))
+        if attempts == 0:
+            response = (
+                f"I have a few demos saved — did you mean {numbered}? "
+                "Reply with the number or the name."
+            )
+        else:
+            response = (
+                f"I didn't catch that. Please say the number or the exact name: {numbered}."
+            )
+        await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
+        await self._say(pid, response)
+
+    async def _handle_ambiguous_guidance_request(
+        self, transcript: str, pid: str
+    ) -> None:
+        """Fallback for ambiguous post-demo utterances inside the freshness window.
+
+        Prefer a strict name match against any recorded demo — if the
+        utterance is STT-garbled but still contains enough distinctive
+        tokens to identify one demo unambiguously (e.g. STT heard "show
+        me how to wear pickle headset" with a 'pico headset' demo on
+        file), guide that one. Only fall back to the most recent demo
+        when no demo is a strict match. Strict mode here means we
+        require either a (unique) substring match or two-token overlap,
+        so a stray utterance with one weak token in common doesn't
+        silently override the recent demo.
+        """
+        demo = self._memory.find_demonstration_fuzzy(transcript, min_confidence="strict")
+        via = "name"
+        if demo is None:
+            demo = self._memory.most_recent_demo()
+            via = "recent"
+        if demo is None:
+            log.info("ambiguous guidance request but no demo on file  pid=%s", pid)
+            return
+        _trace_log.info(
+            "GUIDANCE_FALLBACK  via=%s  utterance=%r  demo=%s",
+            via, transcript[:60], demo.name,
+        )
+        await self._start_guidance(demo, pid)
+
+    async def _start_guidance(self, demo: Demonstration, pid: str) -> None:
+        """Enter guidance mode for *demo*. Shared by name-match and freshness paths."""
+        # We're committing to a demo — any pending "did you mean…?"
+        # prompt is now resolved.
+        self._clear_pending_guidance(pid)
         if not demo.steps:
             response = f"The demonstration '{demo.name}' has no steps recorded."
             await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
             await self._say(pid, response)
             return
 
-        # Cancel any previously-running guidance session cleanly.
         if self._guidance_monitor_task and not self._guidance_monitor_task.done():
             self._guidance_monitor_task.cancel()
             self._guidance_monitor_task = None
@@ -583,6 +960,7 @@ class QueryProcessor:
         if self._guidance_monitor_task and not self._guidance_monitor_task.done():
             self._guidance_monitor_task.cancel()
             self._guidance_monitor_task = None
+        self._clear_pending_guidance(pid)
         demo = self._guidance_demo
         self._guidance_demo = None
         self._guidance_step = 0
@@ -949,6 +1327,25 @@ class QueryProcessor:
             ctx_parts.append(
                 f"[Recording active — demo: {self._memory.recording.name!r}]"
             )
+
+        # Inject the fresh-demo marker ONLY inside the freshness window.
+        # The system_prompt's __defer_to_worker__ rule is scoped to this
+        # marker being present, so we never accidentally hand off when the
+        # worker isn't actually expecting a guidance follow-up.
+        if (
+            self._guidance_demo is None
+            and self._memory.recording is None
+            and self._memory.demo_is_fresh(self._cfg.guidance_freshness_window_s)
+        ):
+            fresh = self._memory.most_recent_demo()
+            if fresh is not None:
+                ctx_parts.append(
+                    f"[Fresh demo: {fresh.name!r}] "
+                    "The wearer just finished recording this demo. If they're "
+                    "asking to be guided through it (even ambiguously, even "
+                    "if the transcript looks garbled), output "
+                    "__defer_to_worker__ — the worker will start guidance."
+                )
 
         if self._guidance_demo is not None:
             total       = len(self._guidance_demo.steps)

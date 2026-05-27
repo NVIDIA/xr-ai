@@ -212,12 +212,18 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
                 return
             await agent.send_text(pid, text, topic)
 
+        async def _flush_audio(pid: str) -> None:
+            if agent is None:
+                return
+            await agent.flush_audio(pid)
+
         query_proc = QueryProcessor(
             cfg           = cfg,
             memory        = memory,
             nat_runtime   = nat_runtime,
             send_text     = _send_text,
             say           = _say,
+            flush_audio   = _flush_audio,
         )
 
         # ── main agent ────────────────────────────────────────────────────────

@@ -21,6 +21,40 @@ if TYPE_CHECKING:
 log = logging.getLogger("glasses_agent_nat.memory")
 
 
+# ── demo name normalization (used by find_demonstration_fuzzy) ───────────────
+
+# Baseline set from agent-samples/glasses-agent/worker/memory.py. Do NOT add
+# action words like "wear" / "put" / "on": a future demo named "put on
+# headset" would normalize to just "headset" and silently collapse with any
+# other "headset" demo on a one-token match.
+_DEMO_LOOKUP_STOPWORDS = frozenset({
+    "a", "an", "and", "do", "for", "how", "me", "show", "step", "task",
+    "teach", "the", "through", "to", "walk",
+})
+
+
+def _fold_plural(t: str) -> str:
+    """Strip trailing 's'/'es' when the result is still substantive.
+
+    Protects short words like 'bus', 'gas', 'yes'; catches the common STT
+    artefact 'headsets' -> 'headset', 'cases' -> 'case' seen in the
+    20260526_162310 trace.
+    """
+    if len(t) >= 6 and t.endswith("es") and not t.endswith("ses"):
+        return t[:-2]
+    if len(t) >= 5 and t.endswith("s") and not t.endswith("ss"):
+        return t[:-1]
+    return t
+
+
+def _normalize_demo_text(text: str) -> str:
+    clean = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
+    return " ".join(
+        _fold_plural(t) for t in clean.split()
+        if t not in _DEMO_LOOKUP_STOPWORDS and not t.isdigit()
+    )
+
+
 # ── data types ────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -84,6 +118,11 @@ class AgentMemory:
         self._scene_summary = ""
         self._demos: dict[str, Demonstration] = {}
         self._recording: Demonstration | None = None
+        # Wall-clock μs of the last finish_recording() call. Used by the
+        # demo→guidance freshness fallback: within ~120 s of a finished
+        # demo, an ambiguous follow-up almost certainly means "guide me
+        # through what I just recorded".
+        self._last_demo_finished_at_us: int = 0
 
     # ── observations ──────────────────────────────────────────────────────────
 
@@ -121,6 +160,9 @@ class AgentMemory:
 
         The returned Demonstration has recorded_frames populated but steps/
         instructions empty — those are filled by _analyze_recording afterward.
+        Also stamps ``_last_demo_finished_at_us`` so ``demo_is_fresh`` can
+        decide whether an ambiguous follow-up utterance should default to
+        guiding the wearer through what they just demonstrated.
         """
         if self._recording is None:
             log.warning("finish_recording called but no recording in progress")
@@ -128,6 +170,7 @@ class AgentMemory:
         demo = self._recording
         demo.ended_at_us = int(time.time() * 1_000_000)
         self._recording = None
+        self._last_demo_finished_at_us = demo.ended_at_us
         if demo.recorded_frames:
             # Store immediately so guidance can start once analysis populates steps.
             self._demos[demo.name] = demo
@@ -136,6 +179,25 @@ class AgentMemory:
         else:
             log.warning("demo %r had no frames — discarding", demo.name)
         return demo
+
+    def demo_is_fresh(self, window_s: float) -> bool:
+        """Return True if the most recent demo finished within *window_s* seconds.
+
+        Used by the noise gate (skip the LLM intent classifier — mangled
+        post-demo utterances are almost always guidance requests) and by
+        the worker-side demo→guidance fallback.
+        """
+        if self._last_demo_finished_at_us == 0:
+            return False
+        now_us   = int(time.time() * 1_000_000)
+        delta_us = now_us - self._last_demo_finished_at_us
+        return 0 <= delta_us <= int(window_s * 1_000_000)
+
+    def most_recent_demo(self) -> Demonstration | None:
+        """Return the demo with the highest ended_at_us, or None if no demos."""
+        if not self._demos:
+            return None
+        return max(self._demos.values(), key=lambda d: d.ended_at_us)
 
     def clear_demonstrations(self) -> int:
         """Delete all stored demonstrations. Returns count removed."""
@@ -204,16 +266,62 @@ class AgentMemory:
     def list_demonstrations(self) -> list[str]:
         return list(self._demos.keys())
 
-    def find_demonstration_fuzzy(self, query: str) -> Demonstration | None:
-        """Simple case-insensitive substring match against demo names.
+    def find_demonstration_fuzzy(
+        self,
+        query: str,
+        *,
+        min_confidence: str = "strict",
+    ) -> Demonstration | None:
+        """Find a demo by normalized name + token overlap.
 
-        Returns the first matching demo, or ``None`` if no match.
+        ``min_confidence``:
+          ``"strict"``  -- substring match either direction, or token
+                           overlap >= 2 with a unique-best demo. Used by
+                           the freshness fallback so a stray utterance
+                           with one weak token in common doesn't silently
+                           override the recent demo.
+          ``"lenient"`` -- ``"strict"``, plus a single-token overlap
+                           when it is the UNIQUE best candidate. Used by
+                           explicit pending-disambiguation where the user
+                           is expected to be answering a "which demo?"
+                           question, so weak-but-unique evidence is enough.
+
+        Returns ``None`` when no demo passes the threshold.
         """
-        q = query.lower()
+        q = _normalize_demo_text(query)
+        if not q:
+            return None
+
+        substr_hits = [
+            demo for name, demo in self._demos.items()
+            if (n := _normalize_demo_text(name)) and (q in n or n in q)
+        ]
+        if len(substr_hits) == 1:
+            return substr_hits[0]
+        if len(substr_hits) > 1:
+            return None
+
+        q_tokens = set(q.split())
+        scored: list[tuple[int, Demonstration]] = []
         for name, demo in self._demos.items():
-            if q in name.lower():
-                return demo
-        return None
+            name_tokens = set(_normalize_demo_text(name).split())
+            if not name_tokens:
+                continue
+            score = len(q_tokens & name_tokens)
+            if score:
+                scored.append((score, demo))
+        if not scored:
+            return None
+
+        max_score = max(s for s, _ in scored)
+        top = [d for s, d in scored if s == max_score]
+
+        threshold = 2 if min_confidence == "strict" else 1
+        if max_score < threshold:
+            return None
+        if len(top) != 1:
+            return None
+        return top[0]
 
     def restore_demonstration(self, demo: Demonstration) -> None:
         """Load a previously persisted demonstration into memory (startup restore)."""
