@@ -36,12 +36,13 @@ import numpy as np
 from xr_ai_agent import (
     AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint
 )
+from xr_ai_vad import VadDetector
 
 from config import WorkerConfig
+from intent import is_real_assistant_request, is_shape_noise
 from memory import AgentMemory, Observation, RecordedFrame, TranscriptClient
 from nat_runtime import NatRuntime
 from processors import QueryProcessor
-from vad import VadDetector
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -59,8 +60,8 @@ def _now_us() -> int:
 def _chunks_to_wav(int16_pcm: bytes, sample_rate: int, channels: int = 1) -> bytes:
     """Wrap raw int16 PCM bytes in a WAV container for the STT server.
 
-    VadDetector already converts float32 → int16 before calling on_utterance,
-    so no further conversion is needed here.
+    ``xr_ai_vad`` emits int16 PCM directly via on_utterance, so the bytes
+    can be wrapped as-is.
     """
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -147,9 +148,22 @@ class GlassesAgent:
         self._bg_task:        asyncio.Task | None = None
         self._condenser_task: asyncio.Task | None = None
 
-        # Flag to pause background VLM loop when a user query is in flight.
+        # In-flight query task + dispatch lock per pid. The lock serialises
+        # cancel-await-flush-launch so a rapid second utterance can't race
+        # past an in-flight cancellation and clobber generation bookkeeping.
+        self._query_tasks:    dict[str, asyncio.Task] = {}
+        self._dispatch_locks: dict[str, asyncio.Lock] = {}
+
+        # Per-pid TTS generation token. flush_audio() bumps it; say() checks
+        # it inside its chunk-send loop and stops emitting once the value
+        # has moved on. Without this, an in-progress say() keeps queuing
+        # chunks after the hub queue has been flushed, so flush + new
+        # response still bleed through.
+        self._speech_generation: dict[str, int] = {}
+
+        # Background VLM loop pauses while a user query is being dispatched
+        # so we don't compete with the user-facing path for VLM bandwidth.
         self._user_query_active = False
-        self._audio_suppressed_until_us = 0
 
         # Last observed frame timestamp and description (observation loop).
         # Instance variables so they can be reset on participant reconnect.
@@ -191,39 +205,50 @@ class GlassesAgent:
     # ── audio path: VAD → STT → QueryProcessor ───────────────────────────────
 
     async def _on_audio(self, chunk: AudioChunk) -> None:
+        """Feed inbound mic audio through xr-ai-vad.
+
+        Note: we do NOT pre-filter audio based on "assistant talking" flags.
+        Pre-filtering breaks barge-in. The two-stage gate (speech_start
+        flushes queued TTS, then post-STT noise/intent classifier decides
+        whether to cancel the in-flight task) lives in
+        ``_handle_speech_start`` and ``_handle_utterance``.
+        """
         pid = chunk.participant_id or _DEFAULT_PID
-        if self._should_suppress_audio():
-            vad = self._vad.get(pid)
-            if vad is not None:
-                vad.reset()
-            return
         vad = self._get_vad(pid)
-        await vad.feed(chunk.data, chunk.sample_rate, chunk.samples)
-
-    def _should_suppress_audio(self) -> bool:
-        return self._user_query_active or _now_us() < self._audio_suppressed_until_us
-
-    def _suppress_audio_for(self, seconds: float) -> None:
-        until = _now_us() + int(seconds * 1_000_000)
-        self._audio_suppressed_until_us = max(self._audio_suppressed_until_us, until)
+        # xr_ai_vad expects float32 → int16 conversion. Hub AudioChunks
+        # are float32, so convert here.
+        f32 = np.frombuffer(chunk.data, dtype=np.float32)
+        i16 = (np.clip(f32, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()
+        await vad.feed(i16, chunk.sample_rate)
 
     def _get_vad(self, pid: str) -> VadDetector:
         if pid not in self._vad:
             self._vad[pid] = VadDetector(
-                on_utterance    = lambda pcm, sr: self._handle_utterance(pid, pcm, sr),
-                silence_threshold = self._cfg.silence_threshold,
-                silence_duration  = self._cfg.silence_duration,
-                min_speech        = self._cfg.min_speech,
-                silero_threshold  = self._cfg.silero_threshold,
-                vad_noise_mult    = self._cfg.vad_noise_mult,
+                on_utterance     = lambda pcm, sr: self._handle_utterance(pid, pcm, sr),
+                on_speech_start  = lambda: self._handle_speech_start(pid),
+                silence_duration = self._cfg.silence_duration,
+                min_speech       = self._cfg.min_speech,
+                silero_threshold = self._cfg.silero_threshold,
             )
         return self._vad[pid]
 
+    async def _handle_speech_start(self, pid: str) -> None:
+        """Stage 1 of barge-in: flush queued TTS the moment speech is detected.
+
+        We deliberately do NOT cancel the in-flight query here — VAD fires
+        on background noise too, and cancelling on every silero spike would
+        kill legitimate responses. Cancellation happens after STT + the
+        noise gate confirm a real utterance, in ``_handle_utterance``.
+        """
+        await self.flush_audio(pid)
+
     async def _handle_utterance(self, pid: str, pcm_bytes: bytes, sample_rate: int) -> None:
-        """STT-transcribe a finalized utterance, then dispatch to QueryProcessor."""
-        if self._should_suppress_audio():
-            log.debug("ignoring utterance during assistant response")
-            return
+        """STT-transcribe a finalized utterance, then dispatch to QueryProcessor.
+
+        Voice path only — this is where the layered noise/intent gate runs.
+        Data-channel text bypasses both layers (deliberate: the client
+        explicitly sent it, so the user means it).
+        """
         ref_us = _now_us()
         wav    = _chunks_to_wav(pcm_bytes, sample_rate)
         try:
@@ -245,12 +270,37 @@ class GlassesAgent:
             return
 
         log.info("stt  pid=%r  %r", pid, text[:80])
-        self._user_query_active = True
-        try:
-            await self._qproc.handle(text, pid, ref_us)
-        finally:
-            self._user_query_active = False
-            self._suppress_audio_for(1.5)
+
+        # ── Layer 1: shape gate — cheap, synchronous. ─────────────────────
+        if is_shape_noise(text):
+            log.info("noise-gate L1 dropped  pid=%r  %r", pid, text[:80])
+            _trace_log.info("NOISE_L1_DROP  pid=%s  %r", pid, text)
+            return
+
+        # ── Layer 2: LLM intent classifier. ───────────────────────────────
+        # Skip when worker is recording or guiding (those modes have their
+        # own narration policy) and when a fresh demo is on the table
+        # (post-demo utterances are almost always guidance requests, even
+        # if mangled). Layer 2 is fail-open: classifier error → accept.
+        skip_l2 = (
+            self._memory.recording is not None
+            or self._qproc.is_guiding(pid)
+            or self._memory.demo_is_fresh(self._cfg.guidance_freshness_window_s)
+        )
+        if not skip_l2:
+            try:
+                accepted = await is_real_assistant_request(
+                    self._http, self._cfg.llm_server, text
+                )
+            except Exception:
+                log.exception("intent classifier raised — fail-open")
+                accepted = True
+            if not accepted:
+                log.info("noise-gate L2 dropped  pid=%r  %r", pid, text[:80])
+                _trace_log.info("NOISE_L2_DROP  pid=%s  %r", pid, text)
+                return
+
+        await self._dispatch_query(pid, text, ref_us=ref_us, source="voice")
 
     # ── data path: text → QueryProcessor ─────────────────────────────────────
 
@@ -264,12 +314,74 @@ class GlassesAgent:
         pid    = msg.participant_id or _DEFAULT_PID
         ref_us = msg.pts_us or _now_us()
         log.info("data query  pid=%r  %r", pid, text[:80])
+        await self._dispatch_query(pid, text, ref_us=ref_us, source="data")
+
+    # ── interruption / dispatch ──────────────────────────────────────────────
+
+    async def _dispatch_query(
+        self,
+        pid: str,
+        text: str,
+        *,
+        ref_us: int,
+        source: str,
+    ) -> None:
+        """Cancel any in-flight query for *pid*, flush queued audio, dispatch a new one.
+
+        The per-pid lock serialises cancel→await→flush→launch so a rapid
+        second utterance can't race past an in-flight cancellation and
+        clobber the bookkeeping.
+        """
+        lock = self._dispatch_locks.setdefault(pid, asyncio.Lock())
+        async with lock:
+            old = self._query_tasks.get(pid)
+            current = asyncio.current_task()
+            if old is not None and not old.done() and old is not current:
+                log.info("interrupt pid=%r — cancelling in-flight response", pid)
+                old.cancel()
+                try:
+                    await old
+                except (asyncio.CancelledError, Exception):
+                    pass
+            await self.flush_audio(pid)
+            task = asyncio.create_task(
+                self._run_query(pid, text, ref_us=ref_us, source=source),
+                name=f"glasses-nat-query-{pid}",
+            )
+            self._query_tasks[pid] = task
+
+    async def _run_query(
+        self,
+        pid: str,
+        text: str,
+        *,
+        ref_us: int,
+        source: str,
+    ) -> None:
         self._user_query_active = True
         try:
             await self._qproc.handle(text, pid, ref_us)
+        except asyncio.CancelledError:
+            log.info("query cancelled  pid=%r  source=%s", pid, source)
+            raise
+        except Exception:
+            log.exception("query failed pid=%r source=%s", pid, source)
         finally:
             self._user_query_active = False
-            self._suppress_audio_for(1.5)
+
+    async def flush_audio(self, pid: str) -> None:
+        """Drop any TTS audio still queued for *pid* and signal a generation bump.
+
+        Bumping ``_speech_generation`` makes the in-progress ``say()`` loop
+        stop emitting further chunks (it checks the generation on every
+        iteration). Without that guard, ``say()`` keeps queueing chunks
+        after the hub queue has been flushed and stale audio bleeds through.
+        """
+        self._speech_generation[pid] = self._speech_generation.get(pid, 0) + 1
+        try:
+            await self._ep.flush_return_audio(pid)
+        except Exception:
+            log.exception("flush_return_audio failed  pid=%r", pid)
 
     # ── participant tracking ──────────────────────────────────────────────────
 
@@ -653,9 +765,16 @@ class GlassesAgent:
             log.exception("send_text failed  pid=%r  topic=%s", pid, topic)
 
     async def say(self, pid: str, text: str) -> None:
-        """TTS → send audio back to participant."""
+        """TTS → send audio back to *pid*.
+
+        Snapshots the per-pid generation token before the chunk-send loop;
+        ``flush_audio()`` bumps the token, and the loop bails out the moment
+        it observes a newer value. This is what makes barge-in actually
+        feel instant — the hub queue is flushed, AND the producer stops
+        producing.
+        """
+        my_gen = self._speech_generation.get(pid, 0)
         try:
-            self._suppress_audio_for(max(2.0, min(8.0, len(text) / 18.0)))
             resp = await self._http.post(
                 self._tts_url + "/v1/audio/speech",
                 json={"input": text, "response_format": "wav"},
@@ -666,8 +785,10 @@ class GlassesAgent:
                 return
             wav = resp.content
             for chunk in _wav_to_chunks(wav, pid):
+                if self._speech_generation.get(pid, 0) != my_gen:
+                    log.debug("say pid=%r — generation bumped, stopping chunk send", pid)
+                    return
                 await self._ep.send_return_audio(chunk)
-            self._suppress_audio_for(1.5)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

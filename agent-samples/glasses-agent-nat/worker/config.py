@@ -29,12 +29,14 @@ class WorkerConfig:
     transcript_source:         str
     guidance_check_interval_s: float  # how often to check step completion during guidance
 
-    # VAD
-    silence_threshold: float
+    # Demo→guidance freshness window: while a saved demo is this recent,
+    # ambiguous post-demo utterances default to "guide me through it".
+    guidance_freshness_window_s: float
+
+    # VAD (xr-ai-vad — int16 PCM in, async on_utterance / on_speech_start out).
     silence_duration:  float
     min_speech:        float
     silero_threshold:  float
-    vad_noise_mult:    float
 
 
 def load_config(path: pathlib.Path | None) -> WorkerConfig:
@@ -59,14 +61,13 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         video_mcp           = data.get("video_mcp",           "http://localhost:8210"),
         transcript_mcp      = data.get("transcript_mcp",      "http://localhost:8200"),
         nat_workflow_config = workflow_config,
-        vlm_interval_s            = float(data.get("vlm_interval_s",            1.0)),
-        vlm_obs_max               = int(data.get("vlm_obs_max",               240)),
-        condenser_interval_s      = float(data.get("condenser_interval_s",   60.0)),
-        transcript_source         = data.get("transcript_source",    "glasses-agent-nat"),
-        guidance_check_interval_s = float(data.get("guidance_check_interval_s", 4.0)),
-        silence_threshold   = float(data.get("silence_threshold", 0.005)),
-        silence_duration    = float(data.get("silence_duration",  0.8)),
-        min_speech          = float(data.get("min_speech",        0.15)),
-        silero_threshold    = float(data.get("silero_threshold",  0.3)),
-        vad_noise_mult      = float(data.get("vad_noise_mult",    4.0)),
+        vlm_interval_s              = float(data.get("vlm_interval_s",              1.0)),
+        vlm_obs_max                 = int(data.get("vlm_obs_max",                 240)),
+        condenser_interval_s        = float(data.get("condenser_interval_s",     60.0)),
+        transcript_source           = data.get("transcript_source",      "glasses-agent-nat"),
+        guidance_check_interval_s   = float(data.get("guidance_check_interval_s",   4.0)),
+        guidance_freshness_window_s = float(data.get("guidance_freshness_window_s", 120.0)),
+        silence_duration   = float(data.get("silence_duration",  0.8)),
+        min_speech         = float(data.get("min_speech",        0.3)),
+        silero_threshold   = float(data.get("silero_threshold",  0.5)),
     )

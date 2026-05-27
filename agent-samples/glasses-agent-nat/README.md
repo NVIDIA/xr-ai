@@ -24,7 +24,9 @@ MCP servers, and the worker. The worker loads
 
 To record a demonstration, say `start recording <task name>` or
 `record demo <task name>`, then say `stop recording` when finished. The worker
-owns recording state and sends bounded analysis tasks through NAT.
+owns recording state and sends bounded analysis tasks through NAT. Guidance
+follows the baseline worker loop: scene changes advance steps, while NAT's
+`check_guidance_step_complete` task is only the idle visual fallback.
 
 ## NAT Workflow
 
