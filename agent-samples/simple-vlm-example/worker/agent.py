@@ -117,6 +117,19 @@ def _read_wav_sample_rate(wav_bytes: bytes) -> int:
         return wf.getframerate()
 
 
+def _wav_duration_s(wav_bytes: bytes) -> float:
+    """Total playback length of a WAV blob, in seconds, header-only read."""
+    import io, wave
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
+        return wf.getnframes() / float(wf.getframerate())
+
+
+# Extra time appended to estimated TTS duration before the mic is
+# re-enabled — covers LiveKit's jitter buffer + client-side playback
+# latency so the agent's own voice doesn't bleed into the next VAD turn.
+_SPEAKING_DRAIN_PAD_S = 0.4
+
+
 DEFAULT_SYSTEM_PROMPT = (
     "You are an XR assistant. You can see the user's live camera feed, "
     "but you are not required to use it. Decide per question:\n"
@@ -277,6 +290,15 @@ class SimpleVlmAgent:
         vs = self._voice.get(pid)
         if vs is None or vs.transcribing:
             return
+        # Drop mic input while the agent is still speaking — kills the
+        # feedback loop where TTS audio bled into the mic and registered
+        # as user speech, producing bogus follow-up queries.
+        if vs.speaking_until > time.monotonic():
+            logger.info(
+                "drop mic — agent speaking pid={!r}  remaining={:.2f}s",
+                pid, vs.speaking_until - time.monotonic(),
+            )
+            return
         vs.transcribing = True
         try:
             wav = int16_pcm_to_wav(audio_bytes, sample_rate)
@@ -385,6 +407,9 @@ class SimpleVlmAgent:
                     pass
 
             await self._ep.flush_return_audio(pid)
+            # Buffered TTS audio was just dropped; the speaking estimate
+            # no longer reflects reality. Let the new response rebuild it.
+            vs.speaking_until = 0.0
             vs.current_task = asyncio.create_task(self._handle_query(pid, text, pts_us))
 
     async def _handle_query(self, pid: str, text: str, pts_us: int) -> None:
@@ -467,10 +492,8 @@ class SimpleVlmAgent:
                     break
                 try:
                     wav = await task
-                    # Sniff the TTS sample rate here too so the chime
-                    # gets built even if the user speaks before _say's
-                    # greeting completes.
                     self._maybe_build_chime(wav)
+                    self._mark_speaking(pid, _wav_duration_s(wav))
                     for chunk in wav_to_chunks(wav, pid):
                         await self._ep.send_return_audio(chunk)
                 except asyncio.CancelledError:
@@ -652,12 +675,8 @@ class SimpleVlmAgent:
         await self._reply(pid, text, pts_us)
         try:
             wav = await self._tts.synthesize(text)
-            # Sniff the TTS sample rate from this WAV's header and build
-            # the chime lazily — guarantees the chime matches the rate
-            # the LiveKit return track is locked to, without firing a
-            # separate probe synthesize() (which trips a Piper bug on
-            # whitespace input).
             self._maybe_build_chime(wav)
+            self._mark_speaking(pid, _wav_duration_s(wav))
             for chunk in wav_to_chunks(wav, pid):
                 await self._ep.send_return_audio(chunk)
         except asyncio.CancelledError:
@@ -666,6 +685,18 @@ class SimpleVlmAgent:
             logger.opt(exception=True).error(
                 "tts error pid={!r}: {}", pid, exc,
             )
+
+    def _mark_speaking(self, pid: str, duration_s: float) -> None:
+        """Extend the per-pid 'agent is speaking' window by ``duration_s``
+        plus a small drain pad. The VAD-utterance handler uses this to
+        drop mic input while the agent is talking, which kills the
+        feedback loop where the agent's own voice triggered new queries."""
+        vs = self._voice.get(pid)
+        if vs is None:
+            return
+        now = time.monotonic()
+        base = max(vs.speaking_until, now)
+        vs.speaking_until = base + duration_s + _SPEAKING_DRAIN_PAD_S
 
     def _maybe_build_chime(self, wav_bytes: bytes) -> None:
         """Build the chime at the TTS sample rate the first time we see
@@ -698,6 +729,10 @@ class SimpleVlmAgent:
                         pass
                 await self._ep.flush_return_audio(pid)
                 vs.current_task = None
+            # The flush drops queued audio, so the prior estimate is no
+            # longer reachable. Reset so _say's own duration extends from
+            # `now` rather than a stale future timestamp.
+            vs.speaking_until = 0.0
         await self._say(pid, "Okay, I will stop.", now_us())
 
     async def _send_chime(self, pid: str) -> None:
@@ -707,6 +742,8 @@ class SimpleVlmAgent:
             return
         pts0 = now_us()
         try:
+            total_dur = sum(c.samples / c.sample_rate for c in self._chime_chunks)
+            self._mark_speaking(pid, total_dur)
             for i, ch in enumerate(self._chime_chunks):
                 chunk = dataclasses.replace(
                     ch, participant_id=pid, pts_us=pts0 + i * 20_000,
