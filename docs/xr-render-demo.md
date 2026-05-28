@@ -14,7 +14,7 @@ For inference-server mechanics shared with other samples see
 ## Process stack
 
 The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) starts
-twelve processes concurrently. There is no startup ordering — every process
+its processes concurrently. There is no startup ordering — every process
 must tolerate peers that are not yet ready. `run_stack` is fail-fast: any
 exit terminates the whole stack.
 
@@ -31,6 +31,7 @@ exit terminates the whole stack.
 | video-mcp | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 |
 | render-mcp | `agent-mcp-servers/render-mcp/` | `render_mcp` | 8220 |
 | oxr-mcp | `agent-mcp-servers/oxr-mcp/` | `oxr_mcp_server` | 8230 |
+| vec-mcp | `agent-mcp-servers/vec-mcp/` | `vec_mcp_server` | 8250 |
 | worker | `agent-samples/xr-render-demo/worker/` | `xr_render_demo_worker` | — |
 
 Before starting the stack, the orchestrator runs two setup steps:
@@ -53,7 +54,7 @@ The worker reads two YAML files:
   and a `base_url`.  Edit this file to change which model runs where without
   touching the worker code.
 
-## The two LLM servers
+## The LLM servers
 
 Both are vLLM `execvp` shims — a small Python wrapper that reads YAML config,
 sets `HF_HOME` / token env vars, then `os.execvp`s into `vllm serve`. The
@@ -161,10 +162,11 @@ XRMediaHubTransport.input()
 
 ## Agentic loop
 
-At worker startup, `list_tools()` is called on all four MCP clients
-(`render-mcp`, `oxr-mcp`, `vlm-mcp`, `video-mcp`). Results are converted to
-OpenAI tool format and held in memory. `start_xr` and `get_health` are
-excluded from the tool list — the worker calls those directly, not the LLM.
+At worker startup, `list_tools()` is called on all MCP clients
+(`render-mcp`, `oxr-mcp`, `vlm-mcp`, `video-mcp`, `vec-mcp`). Results are
+converted to OpenAI tool format and held in memory. `start_xr` and
+`get_health` are excluded from the tool list — the worker calls those
+directly, not the LLM.
 
 On each `TranscriptionFrame`:
 
@@ -177,9 +179,13 @@ On each `TranscriptionFrame`:
 4. **Nemotron-30B :8107** runs with `tools=[…]`, up to 10 iterations:
    - Model emits `tool_calls` → worker routes and executes → result appended
      to conversation → next iteration.
-   - Tool routing: `get_head_pose` / `position_ahead` / `position_relative`
-     → `oxr-mcp`; `ask_image` → `vlm-mcp` (with path existence guard);
-     video tools → `video-mcp`; everything else → `render-mcp`.
+   - Tool routing: oxr-mcp tools (`get_head_pose`, `position_ahead`,
+     `position_relative`, `place_user_relative`, `place_object_relative`,
+     `place_inside_by_id`, `displace_object`, `displace_objects`) →
+     `oxr-mcp`; vec-mcp tools (`between_anchors`, `world_offset`,
+     `along_direction`, `scale_value`) → `vec-mcp`; `ask_image` →
+     `vlm-mcp` (with path existence guard); video tools → `video-mcp`;
+     everything else → `render-mcp`.
    - Progress message sent on `agent.progress` topic before each tool
      executes (data channel).
    - If `think=true`: reasoning preamble injected into system prompt
@@ -202,7 +208,8 @@ On each `TranscriptionFrame`:
 | Server | Port | Tools |
 |---|---|---|
 | `render-mcp` | 8220 | `start_xr`, `get_health`, `add_primitive`, `update_primitive`, `remove_primitive`, `get_scene_state` |
-| `oxr-mcp` | 8230 | `get_head_pose`, `position_ahead`, `position_relative`, `get_health` |
+| `oxr-mcp` | 8230 | `get_head_pose`, `position_ahead`, `position_relative`, `place_user_relative`, `place_object_relative`, `place_inside_by_id`, `displace_object`, `displace_objects`, `get_health` |
+| `vec-mcp` | 8250 | `between_anchors`, `world_offset`, `along_direction`, `scale_value` |
 | `vlm-mcp` | 8240 | `ask_image` |
 | `video-mcp` | 8210 | `list_live_participants`, `list_recorded_participants`, `get_video_stats`, `query_video`, `get_latest_frame`, `get_frame_at_time` |
 
@@ -211,6 +218,65 @@ ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `oxr-mcp` opens a
 second headless OpenXR session (`XR_MND_HEADLESS`) separate from LOVR's
 rendering session — both coexist without contention; the session opens
 lazily on first tool call.
+
+### Spatial tool surface
+
+The tool surface is split across `oxr-mcp` (pose-aware named-direction
+helpers) and `vec-mcp` (pure-math primitives). The split offloads vector
+arithmetic the LLM is bad at while keeping pose-dependent math in one place:
+
+- **oxr-mcp named-direction helpers** take a `direction` enum (`front`,
+  `back`, `left`, `right`, `above`, `below`, plus `next_to` on
+  `place_object_relative`) and always-positive `distance`. The LLM never
+  applies signs to user-frame axes.
+  - `place_user_relative(direction, distance)`: user-anchored teleport
+    ("above my head", "to my left 1 m").
+  - `place_object_relative(origin_x, origin_y, origin_z, direction, distance)`:
+    object-anchored teleport. `direction="front"` means *toward the user*;
+    `"back"` means *away*. Left/right/above/below map literally.
+  - `displace_object(current_x, current_y, current_z, right, up, forward)`:
+    user-frame signed-delta on an existing object. Multi-axis ("up and
+    to the left") in one call.
+  - `displace_objects(object_ids, current_xs, current_ys, current_zs,
+    right, up, forward)`: batch user-frame delta over N objects. Returns
+    `{"items": [{obj_id, x, y, z}, …]}` so the model fans out to N
+    `update_primitive` calls with one math call total.
+  - `place_inside_by_id(movee_id, container_x, container_y, container_z)`:
+    containment for "put X in Y". Argument names (`movee_id` paired
+    with `container_*`) force the model to pick the right noun's coords;
+    the return shape feeds straight into `update_primitive`.
+- **vec-mcp pure-math primitives** are pose-independent:
+  - `between_anchors(a_x, a_y, a_z, b_x, b_y, b_z)`: component-wise midpoint.
+  - `world_offset(origin_x, origin_y, origin_z, dx, dy, dz)`:
+    axis-aligned world-Y-up shift.
+  - `along_direction(origin_x, origin_y, origin_z, target_x, target_y,
+    target_z, distance)`: origin moved `distance` toward target. Used
+    for "closer to / further from <named-obj>", which the user-frame
+    helpers can't model.
+  - `scale_value(current, factor)`: scalar multiplication for sizes.
+
+## Prompt structure
+
+The system prompt at `worker/prompts/system.txt` is worked-example heavy.
+It opens with pronoun/reference resolution, then routes placement
+utterances through sequential checks before the LLM picks a tool:
+
+1. **FIRST CHECK**: `"between"`/`"middle"`/`"halfway"` → route to
+   `between_anchors`; stop considering other placement tools.
+2. **SECOND CHECK**: anchor is the user (`"me"`/`"my"`) → route to
+   `place_user_relative`; `place_object_relative` with `origin=user_pos`
+   returns the wrong side of the user.
+3. **THIRD CHECK**: proximity to a named object (`"closer to <obj>"`,
+   `"toward <obj>"`) → route to `along_direction`. The user's facing
+   direction is unrelated to where the target object sits, so
+   `displace_object` is wrong here.
+
+Every rule that's not obviously self-explanatory has a paired WORKED
+EXAMPLE (concrete coords + tool call) and, for the highest-leakage
+failure modes, a WORKED ANTI-EXAMPLE. The two-step contract is
+hammered: every move emits one math-tool call followed by exactly one
+`add_primitive`/`update_primitive` call carrying all three of `x`,
+`y`, `z` from the math result.
 
 ## XR session lifecycle
 
@@ -242,3 +308,15 @@ for the case format and the watch-mode loop. Run with:
 ```bash
 agent-samples/xr-render-demo/eval/eval.py
 ```
+
+### Prompt/eval overlap audit
+
+Per `AGENTS.md` "Prompt-driven samples", the harness audits the system
+prompt's worked-example blocks against every case fixture at startup
+and warns if they share specifics: verbatim user utterances (≥12
+chars), scene coordinates rendered as `(x.xx, y.yy, z.zz)`,
+`recent_moves` coords, or any reserved colour/shape word that appears
+in both a case fixture and a worked-example block. Reserved vocab
+lives in `_EVAL_VOCAB_COLORS` / `_EVAL_VOCAB_SHAPES`; clearing a
+warning means changing the prompt's worked example, not the case.
+`--strict-overlap` turns the audit into a hard failure (rc=2) for CI.

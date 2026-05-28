@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import re
 import sys
@@ -1462,7 +1463,6 @@ def _build_messages(system_prompt: str, scene: list[dict], pose: dict, user: str
 def _local_position_relative(args: dict, pose: dict) -> dict:
     """Mirror oxr-mcp.position_relative — gravity-aligned (yaw is honoured;
     pitch and roll are stripped). Up is world +Y."""
-    import math
     f, r = pose["forward"], pose["right"]
     p = pose["position"]
     fwd = float(args.get("forward", 0.0))
@@ -1505,7 +1505,6 @@ def _local_position_ahead(args: dict, pose: dict) -> dict:
 
 def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
     """Mirror oxr-mcp._ground_basis."""
-    import math
     f, r = pose["forward"], pose["right"]
     fx, fz = f["x"], f["z"]
     mag = math.sqrt(fx * fx + fz * fz)
@@ -1562,7 +1561,6 @@ def _local_world_offset(args: dict, _pose: dict) -> dict:
 
 def _local_along_direction(args: dict, _pose: dict) -> dict:
     """Mirror vec-mcp.along_direction — origin moved `distance` toward target."""
-    import math
     ox = float(args.get("origin_x", 0.0))
     oy = float(args.get("origin_y", 0.0))
     oz = float(args.get("origin_z", 0.0))
@@ -1605,16 +1603,16 @@ def _local_place_inside_by_id(args: dict, _pose: dict) -> dict:
 
 def _local_between_anchors(args: dict, _pose: dict) -> dict:
     """Mirror vec-mcp.between_anchors — component-wise midpoint of A and B."""
-    ax, ay, az = (float(args.get("ax", 0.0)),
-                  float(args.get("ay", 0.0)),
-                  float(args.get("az", 0.0)))
-    bx, by, bz = (float(args.get("bx", 0.0)),
-                  float(args.get("by", 0.0)),
-                  float(args.get("bz", 0.0)))
+    a_x, a_y, a_z = (float(args.get("a_x", 0.0)),
+                     float(args.get("a_y", 0.0)),
+                     float(args.get("a_z", 0.0)))
+    b_x, b_y, b_z = (float(args.get("b_x", 0.0)),
+                     float(args.get("b_y", 0.0)),
+                     float(args.get("b_z", 0.0)))
     return {
-        "x": round((ax + bx) / 2.0, 3),
-        "y": round((ay + by) / 2.0, 3),
-        "z": round((az + bz) / 2.0, 3),
+        "x": round((a_x + b_x) / 2.0, 3),
+        "y": round((a_y + b_y) / 2.0, 3),
+        "z": round((a_z + b_z) / 2.0, 3),
     }
 
 

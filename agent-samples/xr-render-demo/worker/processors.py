@@ -391,16 +391,13 @@ class RenderSceneProcessor(FrameProcessor):
 
             send_pid = pid or self._transport.target_participant
 
-            # Record the turn in the rolling history buffer. Sanitize JSON-
-            # shaped content (a known failure mode where the model tries to
-            # encode a tool call as text) so the bad pattern doesn't poison
-            # subsequent turns by becoming an in-context example.
+            # Strip leaked tool-call JSON from the surface reply; legit text
+            # starting with "{" passes through.
             if response:
                 stored = response
-                stripped = response.lstrip().lstrip("`")
-                if stripped.startswith("{") or stripped.startswith("["):
+                if _looks_like_leaked_tool_call(response):
                     logger.warning(
-                        "response looks like JSON, sanitizing for history: {!r}",
+                        "response looks like a leaked tool call, sanitizing for history: {!r}",
                         response[:120],
                     )
                     stored = "Done."
@@ -1000,6 +997,40 @@ def _tool_payload(result) -> dict | list | None:
     if hasattr(result, "data") and result.data is not None:
         return result.data
     return getattr(result, "structured_content", None)
+
+
+_TOOL_CALL_KEY_SHAPES: tuple[frozenset[str], ...] = (
+    frozenset({"name", "arguments"}),
+    frozenset({"tool", "args"}),
+    frozenset({"function", "arguments"}),
+)
+
+
+def _looks_like_leaked_tool_call(text: str) -> bool:
+    """True if *text* is a JSON object/array whose top level matches an
+    OpenAI-style tool-call envelope (name+arguments, tool+args, or
+    function+arguments). Plain prose that happens to start with "{" returns
+    False; only parseable JSON with the right keys is sanitized.
+    """
+    obj_text = _extract_json(text)
+    if obj_text is None:
+        return False
+    try:
+        obj = json.loads(obj_text)
+    except json.JSONDecodeError:
+        return False
+    candidates: list[dict] = []
+    if isinstance(obj, dict):
+        candidates.append(obj)
+    elif isinstance(obj, list):
+        candidates.extend(c for c in obj if isinstance(c, dict))
+    else:
+        return False
+    for c in candidates:
+        keys = set(c.keys())
+        if any(shape <= keys for shape in _TOOL_CALL_KEY_SHAPES):
+            return True
+    return False
 
 
 def _extract_json(text: str) -> str | None:

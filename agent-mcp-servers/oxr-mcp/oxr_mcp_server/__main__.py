@@ -285,7 +285,7 @@ def build_mcp(source: PoseSource) -> FastMCP:
     async def get_head_pose() -> dict:
         """Return the user's head position and orientation as human-readable vectors.
 
-        Fields (all world-space, OpenXR Y-up, +x right, +y up, -z forward):
+        Fields (all world-space, +x right, +y up, -z forward):
           is_valid  — False until tracking is established; retry, don't fail hard
           position  — {x, y, z} head position in metres
           forward   — {x, y, z} unit vector in the direction the user is looking
@@ -319,6 +319,24 @@ def build_mcp(source: PoseSource) -> FastMCP:
             "y": round(p["y"] + f["y"] * distance, 3),
             "z": round(p["z"] + f["z"] * distance, 3),
         }
+
+    def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
+        """Return ((fx, fz), (rx, rz)): pose.forward / pose.right projected onto
+        the y=0 plane and renormalised."""
+        f, r = pose["forward"], pose["right"]
+        fx, fz = f["x"], f["z"]
+        mag = math.sqrt(fx * fx + fz * fz)
+        if mag < 1e-6:
+            rx0, rz0 = r["x"], r["z"]
+            mag2 = math.sqrt(rx0 * rx0 + rz0 * rz0)
+            if mag2 < 1e-6:
+                fx, fz = 0.0, -1.0
+            else:
+                rx0, rz0 = rx0 / mag2, rz0 / mag2
+                fx, fz = rz0, -rx0
+        else:
+            fx, fz = fx / mag, fz / mag
+        return (fx, fz), (-fz, fx)
 
     @mcp.tool()
     async def position_relative(
@@ -376,24 +394,6 @@ def build_mcp(source: PoseSource) -> FastMCP:
             "y": round(oy + up,                            3),
             "z": round(oz + fz*forward + rz*right,        3),
         }
-
-    def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
-        """Return ((fx, fz), (rx, rz)) — pose.forward / pose.right projected onto
-        the y=0 plane and renormalised."""
-        f, r = pose["forward"], pose["right"]
-        fx, fz = f["x"], f["z"]
-        mag = math.sqrt(fx * fx + fz * fz)
-        if mag < 1e-6:
-            rx0, rz0 = r["x"], r["z"]
-            mag2 = math.sqrt(rx0 * rx0 + rz0 * rz0)
-            if mag2 < 1e-6:
-                fx, fz = 0.0, -1.0
-            else:
-                rx0, rz0 = rx0 / mag2, rz0 / mag2
-                fx, fz = rz0, -rx0
-        else:
-            fx, fz = fx / mag, fz / mag
-        return (fx, fz), (-fz, fx)
 
     @mcp.tool()
     async def place_user_relative(

@@ -8,7 +8,7 @@ Handles arithmetic the LLM is bad at (vector scaling, midpoints, axis offsets).
 
 Tools (FastMCP, mounted at /mcp)
 ────────────────────────────────
-  between_anchors(ax, ay, az, bx, by, bz) → {x, y, z}
+  between_anchors(a_x, a_y, a_z, b_x, b_y, b_z) → {x, y, z}
       Component-wise midpoint of two world positions. Use when the
       utterance says "between A and B" / "halfway between" / "in the
       middle of".
@@ -76,8 +76,8 @@ def build_mcp() -> FastMCP:
 
     @mcp.tool()
     async def between_anchors(
-        ax: float, ay: float, az: float,
-        bx: float, by: float, bz: float,
+        a_x: float, a_y: float, a_z: float,
+        b_x: float, b_y: float, b_z: float,
     ) -> dict:
         """The point halfway between anchor A and anchor B.
 
@@ -85,13 +85,13 @@ def build_mcp() -> FastMCP:
         middle of"; the ONLY two positions that enter the math are A
         and B, even if other objects are visible in the scene.
 
-        ax/ay/az = first anchor world position.
-        bx/by/bz = second anchor world position.
+        a_x/a_y/a_z = first anchor world position.
+        b_x/b_y/b_z = second anchor world position.
 
         Returns {x, y, z} — the midpoint. Feed straight into
         add_primitive or update_primitive.
         """
-        return _round3((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2)
+        return _round3((a_x + b_x) / 2, (a_y + b_y) / 2, (a_z + b_z) / 2)
 
     @mcp.tool()
     async def world_offset(

@@ -817,13 +817,13 @@ the object's current position.
 
   Between two objects:
     'between A and B' / 'in the middle of A and B' / 'halfway between'
-        → between_anchors(ax=A.x, ay=A.y, az=A.z,
-                          bx=B.x, by=B.y, bz=B.z)
+        → between_anchors(a_x=A.x, a_y=A.y, a_z=A.z,
+                          b_x=B.x, b_y=B.y, b_z=B.z)
     'between me and obj'
-        → between_anchors(ax=user.x, ay=user.y, az=user.z,
-                          bx=obj.x,  by=obj.y,  bz=obj.z)
-        The USER'S head-pose position is the FIRST anchor (ax, ay, az);
-        the object's position is the SECOND anchor (bx, by, bz).
+        → between_anchors(a_x=user.x, a_y=user.y, a_z=user.z,
+                          b_x=obj.x,  b_y=obj.y,  b_z=obj.z)
+        The USER'S head-pose position is the FIRST anchor (a_x, a_y, a_z);
+        the object's position is the SECOND anchor (b_x, b_y, b_z).
         Read user_pos from the HEAD POSE block's "position" line —
         do NOT use the object's coords for both anchors, that just
         gives the object's own position back as the midpoint.
@@ -833,7 +833,7 @@ the object's current position.
     "midway" / "in between" in the utterance is sufficient — route
     to between_anchors before considering any other placement tool.
     Read the TWO named anchors (objects, or "me" + one object) once,
-    pass them as (ax, ay, az) and (bx, by, bz), and feed the
+    pass them as (a_x, a_y, a_z) and (b_x, b_y, b_z), and feed the
     returned {x, y, z} verbatim into add_primitive or
     update_primitive.
 
@@ -857,8 +857,8 @@ the object's current position.
 
     WORKED EXAMPLE — cone at (1.4, 1.55, -3.2), user at (0, 1.6, 0),
     user says "Drop a magenta cylinder halfway between me and the cone":
-      iter 0: between_anchors(ax=0,    ay=1.6,  az=0,
-                              bx=1.4,  by=1.55, bz=-3.2)
+      iter 0: between_anchors(a_x=0,    a_y=1.6,  a_z=0,
+                              b_x=1.4,  b_y=1.55, b_z=-3.2)
               returns {"x": 0.7, "y": 1.575, "z": -1.6}
       iter 1: add_primitive(prim_type="cylinder", r=1, g=0, b=1,
                             size=0.1, x=0.7, y=1.575, z=-1.6)
@@ -880,8 +880,8 @@ the object's current position.
 
     WORKED EXAMPLE — orange cylinder at (-1.4, 1.55, -2.8), purple cylinder at
     (1.4, 1.55, -2.8), user says "Put a white cone in the middle":
-      1. between_anchors(ax=-1.4, ay=1.55, az=-2.8,
-                         bx= 1.4, by=1.55, bz=-2.8)
+      1. between_anchors(a_x=-1.4, a_y=1.55, a_z=-2.8,
+                         b_x= 1.4, b_y=1.55, b_z=-2.8)
          returns {"x": 0.0, "y": 1.55, "z": -2.8}
       2. add_primitive(prim_type="cone", r=1, g=1, b=1, size=0.1,
                        x=0.0, y=1.55, z=-2.8)
@@ -892,8 +892,8 @@ the object's current position.
       capsule-0  (TEAL)      at ( 0.0, 1.55, -4.0)    ← distractor, ignore
       cone-0     (PINK)      at (-3.0, 1.55,  0.5)    ← distractor, ignore
     User says "Put a white capsule midway between the orange cylinder and the purple cylinder":
-      1. between_anchors(ax=-1.4, ay=1.55, az=-2.8,
-                         bx= 1.4, by=1.55, bz=-2.8)
+      1. between_anchors(a_x=-1.4, a_y=1.55, a_z=-2.8,
+                         b_x= 1.4, b_y=1.55, b_z=-2.8)
          returns {"x": 0.0, "y": 1.55, "z": -2.8}
       2. add_primitive(prim_type="capsule", r=1, g=1, b=1, size=0.1,
                        x=0.0, y=1.55, z=-2.8)
@@ -1090,4 +1090,5 @@ If you are not certain from the scene context alone, use the visual tools.
      iter 1: text response → "Added a magenta cone."  [finish_reason="stop"]
      STOP HERE. Do not emit add_primitive again. The cone already exists.
 6. After completing the task respond with ONE short sentence confirming what was done.
+
 
