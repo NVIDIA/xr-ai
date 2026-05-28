@@ -14,9 +14,12 @@ Client → agent  (LiveKit data channel, any topic):
     Any other UTF-8 text — used verbatim as the query
 
 Audio in (mic) → STT → text → query (same path as a data message).
-If ``wake_word`` is set, STT transcripts must start with it (case-insensitive)
-or they are dropped; the prefix is stripped before the query is dispatched.
-The text data channel and "ping" are not affected.
+If ``magic_phrase`` is set, STT transcripts must begin with it
+(case-insensitive, strict prefix) or the utterance is dropped; the
+prefix is stripped before the query is dispatched. This prevents
+ambient conversation from triggering the agent. The text data channel
+is not gated; a *spoken* "ping" is gated, but the data-channel "ping"
+shortcut is unaffected.
 
 Agent → client:
     Topic "vlm.response"        — assembled UTF-8 text reply
@@ -27,7 +30,7 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     models_yaml:           yaml/models.yaml   # path to models config (relative to yaml dir)
     default_prompt:        "Describe what you see."
     system_prompt:              <multiline string>   # role/style guidance for the VLM
-    wake_word:                  ""    # speech-only prefix gate; empty = disabled
+    magic_phrase:               ""    # speech-only opt-in prefix; empty = always-on
     frame_max_age_s:           2.0   # frames older than this trigger a camera-on request
     camera_on_timeout_s:      15.0   # how long to wait for a fresh frame after startCamera
     camera_grace_s:            5.0   # keep camera on this long after a query (avoids restart on follow-ups)
@@ -85,7 +88,10 @@ async def main(
         ep, stt, vlm, tts,
         default_prompt        =cfg.get("default_prompt",        "Describe what you see."),
         system_prompt         =cfg.get("system_prompt",         DEFAULT_SYSTEM_PROMPT),
-        wake_word             =cfg.get("wake_word",             ""),
+        # `or ""` so that an empty YAML value (`magic_phrase:`) — which
+        # parses as None — disables the gate cleanly instead of crashing
+        # downstream `.strip()` with AttributeError.
+        magic_phrase          =cfg.get("magic_phrase") or "",
         frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),
         camera_on_timeout_s   =float(cfg.get("camera_on_timeout_s",  10.0)),
         camera_grace_s        =float(cfg.get("camera_grace_s",         5.0)),

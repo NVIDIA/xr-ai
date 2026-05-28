@@ -7,14 +7,22 @@ SimpleVlmAgent — vision Q&A driven by voice, text, or "ping".
 Inputs
 ------
 * Audio chunks (mic):  VAD detects an utterance, STT turns it into text,
-                       which is then dispatched as a query.  If ``wake_word``
-                       is configured, the transcript must start with it
-                       (case-insensitive) or the utterance is dropped; the
-                       prefix is stripped before dispatch.
+                       which is then dispatched as a query.  If
+                       ``magic_phrase`` is configured, the transcript must
+                       begin with it (case-insensitive, strict prefix —
+                       no leading filler words) or the utterance is dropped.
+                       This is the opt-in gate that keeps ambient
+                       conversation from triggering the agent.  When the
+                       magic phrase matches, the prefix is stripped before
+                       dispatch.  ``stop`` and related interrupt phrases
+                       always pass through so the user can cancel mid-reply.
 * Data messages:       text payload is dispatched as a query directly.
-                       The wake-word gate does not apply to this path.
+                       The magic-phrase gate does not apply to this path.
 * "ping" data message: literal text "ping" (case-insensitive) is replaced
                        with the configured default prompt before dispatch.
+                       Note: a *spoken* "ping" is gated by the magic phrase
+                       like any other utterance; only the data-channel
+                       shortcut is unaffected.
 
 Each query is answered against the latest video frame for that participant
 via a streaming VLM call.  The response goes back two ways:
@@ -62,8 +70,9 @@ from audio import int16_pcm_to_wav, now_us, wav_to_chunks
 from pixels import encode_image, frame_to_pil
 from voice import VoiceState
 
-# Transcripts matching this pattern are dispatched even when a wake word is
-# configured and absent — so "stop" always interrupts a response.
+# Transcripts matching this pattern bypass the magic-phrase gate so the
+# user can interrupt a response mid-flight without having to start with
+# the configured phrase.
 _STOP_RE = re.compile(
     r'^\s*(?:\S+\s+){0,2}'               # up to 2 optional filler words
     r'(?:stop(?:\s+\w+){0,2}|be\s+quiet|quiet|shut\s+up)'
@@ -100,7 +109,7 @@ class SimpleVlmAgent:
         *,
         default_prompt:     str   = "Describe what you see.",
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
-        wake_word:          str   = "",
+        magic_phrase:       str   = "",
         silence_duration:   float = 0.8,
         min_speech:         float = 0.3,
         silero_threshold:   float = 0.5,
@@ -120,7 +129,9 @@ class SimpleVlmAgent:
 
         self._default_prompt    = default_prompt
         self._system_prompt     = system_prompt
-        self._wake_word             = wake_word.strip().lower()
+        # Defensive normalization: callers can realistically pass None
+        # (empty YAML value parses as None), so coerce before .strip().
+        self._magic_phrase      = (magic_phrase or "").strip().lower()
         self._vad_silence_s         = silence_duration
         self._vad_min_s             = min_speech
         self._vad_silero_threshold  = silero_threshold
@@ -186,15 +197,20 @@ class SimpleVlmAgent:
             text = (await self._stt.transcribe(wav)).strip()
             if not text:
                 return
-            query = self._strip_wake_word(text)
+            query = self._strip_magic_phrase(text)
             if query is None:
                 if _STOP_RE.match(text):
                     query = text
                 else:
-                    logger.info("wake word missing pid={!r} text={!r}", pid, text[:80])
+                    logger.info("magic phrase missing pid={!r} text={!r}", pid, text[:80])
+                    # _on_vad_speech_start may have warmed up the camera
+                    # speculatively; without a dispatched query, nothing
+                    # else will schedule the grace-period camera-off.
+                    self._schedule_camera_off(pid)
                     return
             if not query:
-                logger.info("wake word only, no query pid={!r}", pid)
+                logger.info("magic phrase only, no query pid={!r}", pid)
+                self._schedule_camera_off(pid)
                 return
             logger.info("audio query  pid={!r}  {!r}", pid, query[:80])
             await self._dispatch_query(pid, query, pts_us=now_us())
@@ -203,23 +219,24 @@ class SimpleVlmAgent:
         finally:
             vs.transcribing = False
 
-    def _strip_wake_word(self, text: str) -> str | None:
-        """Gate STT output on the configured wake word.
+    def _strip_magic_phrase(self, text: str) -> str | None:
+        """Gate STT output on the configured magic phrase.
 
-        Matches the wake word as a whole word within the first few words of
-        the transcript, so "hey agent …" and "agent …" both work when
-        wake_word="agent".  Returns the query with everything up to and
-        including the wake word stripped, or ``None`` if not found.
-        Empty wake word ⇒ filter disabled, text returned unchanged.
+        Strict-prefix match (case-insensitive): the transcript must begin
+        with the magic phrase as a whole word — no leading filler words
+        ("hey agent …") and no mid-sentence matches. The strict rule keeps
+        ambient conversation from triggering the agent.
+
+        Returns the remainder of the transcript with the phrase and any
+        adjacent punctuation stripped, or ``None`` if the phrase is not
+        the prefix. Empty magic phrase ⇒ gate disabled, text returned
+        unchanged.
         """
-        if not self._wake_word:
+        if not self._magic_phrase:
             return text
-        # Allow up to 3 filler words before the wake word so STT variants
-        # like "hey agent" or "okay agent" match, without accepting the word
-        # appearing mid-sentence.
         pattern = (
-            r'(?i)^\s*(?:\S+\s+){0,3}'
-            + re.escape(self._wake_word)
+            r'(?i)^\s*'
+            + re.escape(self._magic_phrase)
             + r'\b[\s,.:;!?-]*'
         )
         m = re.match(pattern, text)
@@ -529,6 +546,26 @@ class SimpleVlmAgent:
                 "tts error pid={!r}: {}", pid, exc,
             )
 
+    async def _greet(self, pid: str) -> None:
+        """Speak a one-shot connection greeting that tells the user how to
+        address the agent given the current magic-phrase setting."""
+        if self._magic_phrase:
+            text = (
+                f"Hi, I'm listening. To talk to me, start your question "
+                f"with \"{self._magic_phrase}\". For example, "
+                f"\"{self._magic_phrase}, what am I looking at?\""
+            )
+        else:
+            text = "Hi, I'm listening. Ask me anything about what you see."
+        try:
+            await self._say(pid, text, now_us())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.opt(exception=True).error(
+                "greet error pid={!r}: {}", pid, exc,
+            )
+
     # ── frame tracking ────────────────────────────────────────────────────────
 
     async def _on_frame(self, sig: FrameSignal) -> None:
@@ -557,6 +594,11 @@ class SimpleVlmAgent:
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if event.joined:
+            # Greet the user so they know the agent is listening and, if
+            # a magic phrase is configured, how to address it. The speech
+            # path is gated by default now, so without this hint a user
+            # can easily think the agent is broken when it ignores them.
+            asyncio.create_task(self._greet(event.participant_id))
             return
         pid = event.participant_id
         vs  = self._voice.pop(pid, None)

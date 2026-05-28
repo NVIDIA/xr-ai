@@ -39,7 +39,15 @@ silero_threshold:  0.5    # Silero speech-probability gate (0..1); lower = more 
 silence_duration:  0.8    # seconds of silence that ends an utterance
 min_speech:        0.1    # minimum seconds of speech before STT is called; 0.1s captures short commands like "stop"
 
-# Speech-only gate: STT transcripts must start with this phrase or are dropped.
-# Case-insensitive; the prefix is stripped before the VLM sees the query.
-# Leave empty or omit to disable. Does not affect the text data channel or "ping".
-wake_word: "agent"
+# Speech-only opt-in phrase. STT transcripts must begin with this phrase
+# (case-insensitive, strict prefix — no leading filler words allowed) or
+# they are dropped, so ambient conversation never triggers the agent.
+# The prefix is stripped before the VLM sees the query.
+#
+# Leave empty or omit to disable the gate (agent answers every utterance —
+# only use this for solo testing where no ambient speech is present).
+#
+# Scope: applies to the speech path only. The text data channel is never
+# gated. Note that a *spoken* "ping" is also gated by this phrase; the
+# "ping" data-channel shortcut is unaffected.
+magic_phrase: "agent"
