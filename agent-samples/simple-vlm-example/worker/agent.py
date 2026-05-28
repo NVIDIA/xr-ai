@@ -182,9 +182,12 @@ class SimpleVlmAgent:
             self._magic_re = re.compile(
                 rf'^\s*(?:{alts})\b[\s,.:;!?-]*', re.IGNORECASE,
             )
-        # Chime is built lazily in run() at the TTS sample rate so it
-        # matches the LiveKit AudioSource (locked to first-frame params).
-        # See _ensure_chime_built. Disabled without a configured phrase.
+        # Chime is built lazily at the TTS sample rate the first time
+        # any TTS WAV passes through (greeting or VLM reply). That
+        # guarantees the chime matches the rate the LiveKit AudioSource
+        # is locked to and avoids probing TTS with a dummy synthesize
+        # call (Piper crashes on whitespace input). See
+        # _maybe_build_chime. Disabled without a configured phrase.
         self._listening_chime_enabled = listening_chime and bool(self._magic_phrases)
         self._chime_chunks: list[AudioChunk] | None = None
         self._vad_silence_s         = silence_duration
@@ -413,6 +416,10 @@ class SimpleVlmAgent:
                     break
                 try:
                     wav = await task
+                    # Sniff the TTS sample rate here too so the chime
+                    # gets built even if the user speaks before _say's
+                    # greeting completes.
+                    self._maybe_build_chime(wav)
                     for chunk in wav_to_chunks(wav, pid):
                         await self._ep.send_return_audio(chunk)
                 except asyncio.CancelledError:
@@ -594,6 +601,12 @@ class SimpleVlmAgent:
         await self._reply(pid, text, pts_us)
         try:
             wav = await self._tts.synthesize(text)
+            # Sniff the TTS sample rate from this WAV's header and build
+            # the chime lazily — guarantees the chime matches the rate
+            # the LiveKit return track is locked to, without firing a
+            # separate probe synthesize() (which trips a Piper bug on
+            # whitespace input).
+            self._maybe_build_chime(wav)
             for chunk in wav_to_chunks(wav, pid):
                 await self._ep.send_return_audio(chunk)
         except asyncio.CancelledError:
@@ -603,22 +616,18 @@ class SimpleVlmAgent:
                 "tts error pid={!r}: {}", pid, exc,
             )
 
-    async def _ensure_chime_built(self) -> None:
-        """Build the chime at the TTS sample rate the first time it's
-        needed. LiveKit's AudioSource is locked to the first-frame
-        sample_rate, so chime and TTS must agree."""
+    def _maybe_build_chime(self, wav_bytes: bytes) -> None:
+        """Build the chime at the TTS sample rate the first time we see
+        a real TTS WAV. No-op once built or when chime is disabled."""
         if self._chime_chunks is not None or not self._listening_chime_enabled:
             return
         try:
-            # Synthesize a minimal TTS sample just to read its WAV header.
-            sample = await self._tts.synthesize(" ")
-            sr = _read_wav_sample_rate(sample)
+            sr = _read_wav_sample_rate(wav_bytes)
             self._chime_chunks = _build_chime_chunks(sr)
             logger.info("listening chime ready (sr={} Hz)", sr)
         except Exception as exc:
-            # Don't crash the worker — disable the chime and continue.
             logger.opt(exception=True).warning(
-                "listening chime disabled (could not query TTS rate): {}", exc,
+                "listening chime disabled (bad TTS wav header): {}", exc,
             )
             self._listening_chime_enabled = False
 
@@ -721,11 +730,6 @@ class SimpleVlmAgent:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def run(self) -> None:
-        # Pre-warm the chime at the TTS sample rate so the first match
-        # doesn't pay the synthesis cost. Safe to skip on failure —
-        # _ensure_chime_built handles its own exceptions and toggles the
-        # feature off if TTS isn't reachable.
-        await self._ensure_chime_built()
         try:
             await self._ep.run()
         finally:
