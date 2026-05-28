@@ -53,6 +53,7 @@ rapid follow-up queries don't cause a stop/start cycle.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import re
 import time
@@ -79,6 +80,24 @@ _STOP_RE = re.compile(
     r'\s*[.!?]?\s*$',
     re.IGNORECASE,
 )
+
+
+def _build_chime_chunks() -> list[AudioChunk]:
+    """Synthesize the listening-chime once and pre-slice into AudioChunks.
+
+    Two-tone perfect-fifth ding (880 + 1320 Hz) with exponential decay,
+    ~250 ms total. Mono int16 PCM at 24 kHz to match common TTS rates so
+    the return audio track doesn't switch sample rate mid-stream.
+    The `participant_id` is patched per-send in `_send_chime`.
+    """
+    sr   = 24_000
+    dur  = 0.25
+    t    = np.linspace(0.0, dur, int(sr * dur), endpoint=False, dtype=np.float32)
+    tone = 0.55 * np.sin(2 * np.pi * 880.0 * t) + 0.30 * np.sin(2 * np.pi * 1320.0 * t)
+    env  = np.exp(-t * 8.0).astype(np.float32)
+    pcm  = (tone * env * 0.5 * 32767.0).clip(-32768, 32767).astype(np.int16)
+    wav  = int16_pcm_to_wav(pcm.tobytes(), sr, channels=1)
+    return wav_to_chunks(wav, participant_id="")
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -110,6 +129,7 @@ class SimpleVlmAgent:
         default_prompt:     str   = "Describe what you see.",
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
         magic_phrase:       str   = "",
+        listening_chime:    bool  = False,
         silence_duration:   float = 0.8,
         min_speech:         float = 0.3,
         silero_threshold:   float = 0.5,
@@ -132,6 +152,13 @@ class SimpleVlmAgent:
         # Defensive normalization: callers can realistically pass None
         # (empty YAML value parses as None), so coerce before .strip().
         self._magic_phrase      = (magic_phrase or "").strip().lower()
+        # Pre-synthesize the "I heard you" chime once at startup so the
+        # match path doesn't pay the cost on every utterance. Only built
+        # when both the chime is enabled and a phrase is configured —
+        # without a phrase there's no match event to acknowledge.
+        self._chime_chunks: list[AudioChunk] | None = None
+        if listening_chime and self._magic_phrase:
+            self._chime_chunks = _build_chime_chunks()
         self._vad_silence_s         = silence_duration
         self._vad_min_s             = min_speech
         self._vad_silero_threshold  = silero_threshold
@@ -198,7 +225,8 @@ class SimpleVlmAgent:
             if not text:
                 return
             query = self._strip_magic_phrase(text)
-            if query is None:
+            matched_magic = query is not None
+            if not matched_magic:
                 if _STOP_RE.match(text):
                     query = text
                 else:
@@ -208,6 +236,13 @@ class SimpleVlmAgent:
                     # else will schedule the grace-period camera-off.
                     self._schedule_camera_off(pid)
                     return
+            # Acknowledge a matched magic phrase with the optional chime
+            # before dispatch (or before the empty-query early-return) so
+            # the user gets immediate feedback regardless of how the rest
+            # of the path plays out. STOP-bypass does not chime — that's
+            # a different signal.
+            if matched_magic and self._chime_chunks is not None:
+                asyncio.create_task(self._send_chime(pid))
             if not query:
                 logger.info("magic phrase only, no query pid={!r}", pid)
                 self._schedule_camera_off(pid)
@@ -544,6 +579,25 @@ class SimpleVlmAgent:
         except Exception as exc:
             logger.opt(exception=True).error(
                 "tts error pid={!r}: {}", pid, exc,
+            )
+
+    async def _send_chime(self, pid: str) -> None:
+        """Emit the pre-synthesized listening-chime on the return audio
+        track. No-op when chime is disabled (chunks not built)."""
+        if self._chime_chunks is None:
+            return
+        pts0 = now_us()
+        try:
+            for i, ch in enumerate(self._chime_chunks):
+                chunk = dataclasses.replace(
+                    ch, participant_id=pid, pts_us=pts0 + i * 20_000,
+                )
+                await self._ep.send_return_audio(chunk)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.opt(exception=True).error(
+                "chime send error pid={!r}: {}", pid, exc,
             )
 
     async def _greet(self, pid: str) -> None:

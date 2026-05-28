@@ -31,6 +31,7 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     default_prompt:        "Describe what you see."
     system_prompt:              <multiline string>   # role/style guidance for the VLM
     magic_phrase:               ""    # speech-only opt-in prefix; empty = always-on
+    listening_chime:           false  # play a short bell when magic_phrase matches
     frame_max_age_s:           2.0   # frames older than this trigger a camera-on request
     camera_on_timeout_s:      15.0   # how long to wait for a fresh frame after startCamera
     camera_grace_s:            5.0   # keep camera on this long after a query (avoids restart on follow-ups)
@@ -92,6 +93,7 @@ async def main(
         # parses as None — disables the gate cleanly instead of crashing
         # downstream `.strip()` with AttributeError.
         magic_phrase          =cfg.get("magic_phrase") or "",
+        listening_chime       =bool(cfg.get("listening_chime", False)),
         frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),
         camera_on_timeout_s   =float(cfg.get("camera_on_timeout_s",  10.0)),
         camera_grace_s        =float(cfg.get("camera_grace_s",         5.0)),
