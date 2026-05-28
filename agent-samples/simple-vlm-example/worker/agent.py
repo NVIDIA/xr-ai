@@ -7,13 +7,16 @@ SimpleVlmAgent — vision Q&A driven by voice, text, or "ping".
 Inputs
 ------
 * Audio chunks (mic):  VAD detects an utterance, STT turns it into text,
-                       which is then dispatched as a query.  If
-                       ``magic_phrase`` is configured, the transcript must
-                       begin with it (case-insensitive, strict prefix —
-                       no leading filler words) or the utterance is dropped.
+                       which is then dispatched as a query.  If any
+                       ``magic_phrases`` are configured, the transcript
+                       must begin with one of them (case-insensitive,
+                       strict prefix — no leading filler words) or the
+                       utterance is dropped.  Configure several phrases
+                       to accept multiple wordings (e.g. "agent" and
+                       "hey agent") without resorting to fuzzy matching.
                        This is the opt-in gate that keeps ambient
-                       conversation from triggering the agent.  When the
-                       magic phrase matches, the prefix is stripped before
+                       conversation from triggering the agent.  When a
+                       phrase matches, the prefix is stripped before
                        dispatch.  ``stop`` and related interrupt phrases
                        always pass through so the user can cancel mid-reply.
 * Data messages:       text payload is dispatched as a query directly.
@@ -82,22 +85,31 @@ _STOP_RE = re.compile(
 )
 
 
-def _build_chime_chunks() -> list[AudioChunk]:
-    """Synthesize the listening-chime once and pre-slice into AudioChunks.
+def _build_chime_chunks(sample_rate: int) -> list[AudioChunk]:
+    """Synthesize the listening-chime and pre-slice into AudioChunks at
+    ``sample_rate``.
 
     Two-tone perfect-fifth ding (880 + 1320 Hz) with exponential decay,
-    ~250 ms total. Mono int16 PCM at 24 kHz to match common TTS rates so
-    the return audio track doesn't switch sample rate mid-stream.
+    ~250 ms total, mono int16 PCM. The sample rate MUST match the rate
+    of the rest of the return audio track (TTS) because LiveKit's
+    AudioSource is locked to the first chunk's params and rejects later
+    frames at a different rate (InvalidState).
     The `participant_id` is patched per-send in `_send_chime`.
     """
-    sr   = 24_000
     dur  = 0.25
-    t    = np.linspace(0.0, dur, int(sr * dur), endpoint=False, dtype=np.float32)
+    t    = np.linspace(0.0, dur, int(sample_rate * dur), endpoint=False, dtype=np.float32)
     tone = 0.55 * np.sin(2 * np.pi * 880.0 * t) + 0.30 * np.sin(2 * np.pi * 1320.0 * t)
     env  = np.exp(-t * 8.0).astype(np.float32)
     pcm  = (tone * env * 0.5 * 32767.0).clip(-32768, 32767).astype(np.int16)
-    wav  = int16_pcm_to_wav(pcm.tobytes(), sr, channels=1)
+    wav  = int16_pcm_to_wav(pcm.tobytes(), sample_rate, channels=1)
     return wav_to_chunks(wav, participant_id="")
+
+
+def _read_wav_sample_rate(wav_bytes: bytes) -> int:
+    """Pull the sample rate from a WAV blob without decoding the audio."""
+    import io, wave
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
+        return wf.getframerate()
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -128,7 +140,7 @@ class SimpleVlmAgent:
         *,
         default_prompt:     str   = "Describe what you see.",
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
-        magic_phrase:       str   = "",
+        magic_phrases:      list[str] | tuple[str, ...] | str = (),
         listening_chime:    bool  = False,
         silence_duration:   float = 0.8,
         min_speech:         float = 0.3,
@@ -149,16 +161,32 @@ class SimpleVlmAgent:
 
         self._default_prompt    = default_prompt
         self._system_prompt     = system_prompt
-        # Defensive normalization: callers can realistically pass None
-        # (empty YAML value parses as None), so coerce before .strip().
-        self._magic_phrase      = (magic_phrase or "").strip().lower()
-        # Pre-synthesize the "I heard you" chime once at startup so the
-        # match path doesn't pay the cost on every utterance. Only built
-        # when both the chime is enabled and a phrase is configured —
-        # without a phrase there's no match event to acknowledge.
+        # Accept a single string OR a list of phrases. Normalize to a
+        # tuple of lowercased, non-empty phrases. Defensive: empty YAML
+        # values parse as None and would otherwise crash .strip().
+        if isinstance(magic_phrases, str):
+            _raw = [magic_phrases]
+        else:
+            _raw = list(magic_phrases) if magic_phrases else []
+        self._magic_phrases: tuple[str, ...] = tuple(
+            p.strip().lower() for p in _raw if p and p.strip()
+        )
+        # Pre-compile one regex covering every configured phrase.
+        # Longest-first ordering picks the most specific match when one
+        # phrase is a prefix of another (e.g., "agent" vs "agent buddy").
+        self._magic_re: re.Pattern | None = None
+        if self._magic_phrases:
+            alts = "|".join(
+                re.escape(p) for p in sorted(self._magic_phrases, key=len, reverse=True)
+            )
+            self._magic_re = re.compile(
+                rf'^\s*(?:{alts})\b[\s,.:;!?-]*', re.IGNORECASE,
+            )
+        # Chime is built lazily in run() at the TTS sample rate so it
+        # matches the LiveKit AudioSource (locked to first-frame params).
+        # See _ensure_chime_built. Disabled without a configured phrase.
+        self._listening_chime_enabled = listening_chime and bool(self._magic_phrases)
         self._chime_chunks: list[AudioChunk] | None = None
-        if listening_chime and self._magic_phrase:
-            self._chime_chunks = _build_chime_chunks()
         self._vad_silence_s         = silence_duration
         self._vad_min_s             = min_speech
         self._vad_silero_threshold  = silero_threshold
@@ -241,7 +269,7 @@ class SimpleVlmAgent:
             # the user gets immediate feedback regardless of how the rest
             # of the path plays out. STOP-bypass does not chime — that's
             # a different signal.
-            if matched_magic and self._chime_chunks is not None:
+            if matched_magic and self._listening_chime_enabled:
                 asyncio.create_task(self._send_chime(pid))
             if not query:
                 logger.info("magic phrase only, no query pid={!r}", pid)
@@ -255,29 +283,23 @@ class SimpleVlmAgent:
             vs.transcribing = False
 
     def _strip_magic_phrase(self, text: str) -> str | None:
-        """Gate STT output on the configured magic phrase.
+        """Gate STT output on the configured magic phrase(s).
 
         Strict-prefix match (case-insensitive): the transcript must begin
-        with the magic phrase as a whole word — no leading filler words
-        ("hey agent …") and no mid-sentence matches. The strict rule keeps
-        ambient conversation from triggering the agent.
+        with one of the configured phrases as a whole word — no leading
+        filler words and no mid-sentence matches. Configure multiple
+        phrases (e.g. "agent", "hey agent") to accept several wordings
+        without falling back to fuzzy matching.
 
-        Returns the remainder of the transcript with the phrase and any
-        adjacent punctuation stripped, or ``None`` if the phrase is not
-        the prefix. Empty magic phrase ⇒ gate disabled, text returned
-        unchanged.
+        Returns the remainder of the transcript with the matched phrase
+        and any adjacent punctuation stripped, or ``None`` if no phrase
+        is the strict prefix. With no phrases configured the gate is
+        disabled and ``text`` is returned unchanged.
         """
-        if not self._magic_phrase:
+        if self._magic_re is None:
             return text
-        pattern = (
-            r'(?i)^\s*'
-            + re.escape(self._magic_phrase)
-            + r'\b[\s,.:;!?-]*'
-        )
-        m = re.match(pattern, text)
-        if m is None:
-            return None
-        return text[m.end():]
+        m = self._magic_re.match(text)
+        return None if m is None else text[m.end():]
 
     # ── data path: text → query (with "ping" → default prompt) ────────────────
 
@@ -581,9 +603,28 @@ class SimpleVlmAgent:
                 "tts error pid={!r}: {}", pid, exc,
             )
 
+    async def _ensure_chime_built(self) -> None:
+        """Build the chime at the TTS sample rate the first time it's
+        needed. LiveKit's AudioSource is locked to the first-frame
+        sample_rate, so chime and TTS must agree."""
+        if self._chime_chunks is not None or not self._listening_chime_enabled:
+            return
+        try:
+            # Synthesize a minimal TTS sample just to read its WAV header.
+            sample = await self._tts.synthesize(" ")
+            sr = _read_wav_sample_rate(sample)
+            self._chime_chunks = _build_chime_chunks(sr)
+            logger.info("listening chime ready (sr={} Hz)", sr)
+        except Exception as exc:
+            # Don't crash the worker — disable the chime and continue.
+            logger.opt(exception=True).warning(
+                "listening chime disabled (could not query TTS rate): {}", exc,
+            )
+            self._listening_chime_enabled = False
+
     async def _send_chime(self, pid: str) -> None:
-        """Emit the pre-synthesized listening-chime on the return audio
-        track. No-op when chime is disabled (chunks not built)."""
+        """Emit the listening-chime on the return audio track. No-op
+        when chime is disabled."""
         if self._chime_chunks is None:
             return
         pts0 = now_us()
@@ -603,14 +644,24 @@ class SimpleVlmAgent:
     async def _greet(self, pid: str) -> None:
         """Speak a one-shot connection greeting that tells the user how to
         address the agent given the current magic-phrase setting."""
-        if self._magic_phrase:
+        phrases = list(self._magic_phrases)
+        if not phrases:
+            text = "Hi, I'm listening. Ask me anything about what you see."
+        else:
+            if len(phrases) == 1:
+                phrase_list = f'"{phrases[0]}"'
+            elif len(phrases) == 2:
+                phrase_list = f'"{phrases[0]}" or "{phrases[1]}"'
+            else:
+                phrase_list = (
+                    ", ".join(f'"{p}"' for p in phrases[:-1])
+                    + f', or "{phrases[-1]}"'
+                )
             text = (
                 f"Hi, I'm listening. To talk to me, start your question "
-                f"with \"{self._magic_phrase}\". For example, "
-                f"\"{self._magic_phrase}, what am I looking at?\""
+                f"with {phrase_list}. For example, "
+                f"\"{phrases[0]}, what am I looking at?\""
             )
-        else:
-            text = "Hi, I'm listening. Ask me anything about what you see."
         try:
             await self._say(pid, text, now_us())
         except asyncio.CancelledError:
@@ -670,6 +721,11 @@ class SimpleVlmAgent:
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def run(self) -> None:
+        # Pre-warm the chime at the TTS sample rate so the first match
+        # doesn't pay the synthesis cost. Safe to skip on failure —
+        # _ensure_chime_built handles its own exceptions and toggles the
+        # feature off if TTS isn't reachable.
+        await self._ensure_chime_built()
         try:
             await self._ep.run()
         finally:
