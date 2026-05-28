@@ -17,8 +17,13 @@ Inputs
                        This is the opt-in gate that keeps ambient
                        conversation from triggering the agent.  When a
                        phrase matches, the prefix is stripped before
-                       dispatch.  ``stop`` and related interrupt phrases
-                       always pass through so the user can cancel mid-reply.
+                       dispatch and a short follow-up window opens — the
+                       next utterance from that participant within
+                       ``followup_grace_s`` seconds bypasses the gate so
+                       a natural pause between the phrase and the
+                       question still works.  ``stop`` and related
+                       interrupt phrases always pass through and do not
+                       extend the follow-up window.
 * Data messages:       text payload is dispatched as a query directly.
                        The magic-phrase gate does not apply to this path.
 * "ping" data message: literal text "ping" (case-insensitive) is replaced
@@ -142,6 +147,7 @@ class SimpleVlmAgent:
         system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
         magic_phrases:      list[str] | tuple[str, ...] | str = (),
         listening_chime:    bool  = False,
+        followup_grace_s:   float = 5.0,
         silence_duration:   float = 0.8,
         min_speech:         float = 0.3,
         silero_threshold:   float = 0.5,
@@ -190,6 +196,14 @@ class SimpleVlmAgent:
         # _maybe_build_chime. Disabled without a configured phrase.
         self._listening_chime_enabled = listening_chime and bool(self._magic_phrases)
         self._chime_chunks: list[AudioChunk] | None = None
+        # Follow-up grace: after a successful magic-phrase match, the
+        # next utterance from the same pid within this window bypasses
+        # the gate. Lets users say "hey agent" → pause → "what am I
+        # looking at?" naturally instead of mashing the phrase onto the
+        # front of every question. The window resets each time an
+        # utterance is accepted so a conversation keeps flowing.
+        self._followup_grace_s      = followup_grace_s
+        self._followup_until: dict[str, float] = {}
         self._vad_silence_s         = silence_duration
         self._vad_min_s             = min_speech
         self._vad_silero_threshold  = silero_threshold
@@ -255,27 +269,43 @@ class SimpleVlmAgent:
             text = (await self._stt.transcribe(wav)).strip()
             if not text:
                 return
-            query = self._strip_magic_phrase(text)
-            matched_magic = query is not None
-            if not matched_magic:
-                if _STOP_RE.match(text):
-                    query = text
-                else:
-                    logger.info("magic phrase missing pid={!r} text={!r}", pid, text[:80])
-                    # _on_vad_speech_start may have warmed up the camera
-                    # speculatively; without a dispatched query, nothing
-                    # else will schedule the grace-period camera-off.
-                    self._schedule_camera_off(pid)
-                    return
-            # Acknowledge a matched magic phrase with the optional chime
-            # before dispatch (or before the empty-query early-return) so
-            # the user gets immediate feedback regardless of how the rest
-            # of the path plays out. STOP-bypass does not chime — that's
-            # a different signal.
+            # Three ways an utterance gets through the gate:
+            #   1. strict-prefix magic phrase match (new conversation)
+            #   2. follow-up grace window still open (continuation)
+            #   3. STOP-class interrupt (always passes, doesn't arm grace)
+            now_mono       = time.monotonic()
+            in_followup    = self._followup_until.get(pid, 0.0) > now_mono
+            stripped       = self._strip_magic_phrase(text)
+            matched_magic  = stripped is not None
+            stop_bypass    = False
+            if matched_magic:
+                query = stripped
+            elif in_followup:
+                query = text
+                logger.info("followup query pid={!r} {!r}", pid, text[:80])
+            elif _STOP_RE.match(text):
+                query = text
+                stop_bypass = True
+            else:
+                logger.info("magic phrase missing pid={!r} text={!r}", pid, text[:80])
+                # Drop the speculative camera-on; window stays closed.
+                self._followup_until.pop(pid, None)
+                self._schedule_camera_off(pid)
+                return
+            # Chime on a fresh magic-phrase match only — follow-ups are
+            # already inside the conversation and STOP is a different signal.
             if matched_magic and self._listening_chime_enabled:
                 asyncio.create_task(self._send_chime(pid))
+            # Arm/refresh the follow-up window any time we accepted an
+            # utterance via the magic path (fresh or continuation). STOP
+            # does not extend — it's an end-of-thread interrupt.
+            if not stop_bypass:
+                self._followup_until[pid] = now_mono + self._followup_grace_s
             if not query:
-                logger.info("magic phrase only, no query pid={!r}", pid)
+                logger.info(
+                    "magic phrase only pid={!r} — awaiting followup ({:.1f}s)",
+                    pid, self._followup_grace_s,
+                )
                 self._schedule_camera_off(pid)
                 return
             logger.info("audio query  pid={!r}  {!r}", pid, query[:80])
@@ -723,6 +753,7 @@ class SimpleVlmAgent:
         self._frame_events.pop(pid, None)
         self._camera_on.pop(pid, None)
         self._camera_held.discard(pid)
+        self._followup_until.pop(pid, None)
         timer = self._camera_off_timers.pop(pid, None)
         if timer and not timer.done():
             timer.cancel()

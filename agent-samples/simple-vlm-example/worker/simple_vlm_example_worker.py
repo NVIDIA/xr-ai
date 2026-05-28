@@ -18,9 +18,11 @@ If any ``magic_phrases`` are configured, STT transcripts must begin
 with one of them (case-insensitive, strict prefix) or the utterance is
 dropped; the matched phrase is stripped before the query is dispatched.
 Multiple phrases enable several wordings ("agent", "hey agent", …)
-without falling back to fuzzy matching. The text data channel is not
-gated; a *spoken* "ping" is gated, but the data-channel "ping"
-shortcut is unaffected.
+without falling back to fuzzy matching. After a match, the next
+utterance from the same participant within ``followup_grace_s`` seconds
+bypasses the gate so the conversation flows naturally. The text data
+channel is not gated; a *spoken* "ping" is gated, but the data-channel
+"ping" shortcut is unaffected.
 
 Agent → client:
     Topic "vlm.response"        — assembled UTF-8 text reply
@@ -33,6 +35,7 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     system_prompt:              <multiline string>   # role/style guidance for the VLM
     magic_phrases:              []    # list of speech-only opt-in prefixes; empty = always-on
     listening_chime:           false  # play a short bell when a magic phrase matches
+    followup_grace_s:          5.0    # after a match, next utterance within Xs bypasses gate
     frame_max_age_s:           2.0   # frames older than this trigger a camera-on request
     camera_on_timeout_s:      15.0   # how long to wait for a fresh frame after startCamera
     camera_grace_s:            5.0   # keep camera on this long after a query (avoids restart on follow-ups)
@@ -94,6 +97,7 @@ async def main(
         # phrases. `or []` handles the empty-YAML-value (None) case.
         magic_phrases         =cfg.get("magic_phrases") or [],
         listening_chime       =bool(cfg.get("listening_chime", False)),
+        followup_grace_s      =float(cfg.get("followup_grace_s",      5.0)),
         frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),
         camera_on_timeout_s   =float(cfg.get("camera_on_timeout_s",  10.0)),
         camera_grace_s        =float(cfg.get("camera_grace_s",         5.0)),
