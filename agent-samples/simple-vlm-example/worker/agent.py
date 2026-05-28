@@ -180,10 +180,15 @@ class SimpleVlmAgent:
         # Pre-compile one regex covering every configured phrase.
         # Longest-first ordering picks the most specific match when one
         # phrase is a prefix of another (e.g., "agent" vs "agent buddy").
+        # Inside each phrase, the literal space between words is treated
+        # as "whitespace OR punctuation" so STT transcripts like
+        # "Hey, agent." still match the configured "hey agent".
         self._magic_re: re.Pattern | None = None
         if self._magic_phrases:
+            sep = r'[\s,.:;!?-]+'
             alts = "|".join(
-                re.escape(p) for p in sorted(self._magic_phrases, key=len, reverse=True)
+                sep.join(re.escape(w) for w in p.split())
+                for p in sorted(self._magic_phrases, key=len, reverse=True)
             )
             self._magic_re = re.compile(
                 rf'^\s*(?:{alts})\b[\s,.:;!?-]*', re.IGNORECASE,
