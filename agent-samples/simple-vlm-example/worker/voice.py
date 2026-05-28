@@ -18,9 +18,3 @@ class VoiceState:
     # lock serialises the cancel-await-flush-restart sequence per pid.
     current_task:  asyncio.Task | None   = None
     dispatch_lock: asyncio.Lock          = field(default_factory=asyncio.Lock)
-    # Monotonic timestamp until which the agent is expected to still be
-    # speaking (sum of queued TTS audio durations). Incoming VAD
-    # utterances captured before this time are dropped — the agent
-    # hearing its own voice through the mic was triggering bogus
-    # follow-up queries.
-    speaking_until: float                = 0.0
