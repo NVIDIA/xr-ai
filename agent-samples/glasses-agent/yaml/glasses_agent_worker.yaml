@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# glasses-agent worker configuration.
+#
+# All keys default to the values in worker/config.py — leave this file empty
+# (header only) to use those defaults. Override here if your stack runs the
+# AI services or MCP servers on non-default ports.
