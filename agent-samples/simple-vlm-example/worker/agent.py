@@ -283,36 +283,33 @@ class SimpleVlmAgent:
             text = (await self._stt.transcribe(wav)).strip()
             if not text:
                 return
-            # Three ways an utterance gets through the gate:
+            # Gate priority:
+            #   0. STOP — always wins. Cancels in-flight + canned ack,
+            #      regardless of magic-phrase or followup state. Matched
+            #      on both the raw transcript ("stop") AND on the
+            #      magic-phrase-stripped tail ("hey agent, stop") so the
+            #      fast path triggers either way.
             #   1. strict-prefix magic phrase match (new conversation)
             #   2. follow-up grace window still open (continuation)
-            #   3. STOP-class interrupt (always passes, doesn't arm grace)
             now_mono       = time.monotonic()
             in_followup    = self._followup_until.get(pid, 0.0) > now_mono
             stripped       = self._strip_magic_phrase(text)
             matched_magic  = stripped is not None
-            stop_bypass    = False
+            stop_candidate = stripped if (matched_magic and stripped) else text
+            if _STOP_RE.match(stop_candidate):
+                logger.info("stop bypass pid={!r}  {!r}", pid, stop_candidate[:80])
+                self._followup_until.pop(pid, None)
+                await self._handle_stop(pid)
+                self._schedule_camera_off(pid)
+                return
             if matched_magic:
                 query = stripped
             elif in_followup:
                 query = text
                 logger.info("followup query pid={!r} {!r}", pid, text[:80])
-            elif _STOP_RE.match(text):
-                query = text
-                stop_bypass = True
             else:
                 logger.info("magic phrase missing pid={!r} text={!r}", pid, text[:80])
-                # Drop the speculative camera-on; window stays closed.
                 self._followup_until.pop(pid, None)
-                self._schedule_camera_off(pid)
-                return
-            # STOP is short-circuited: cancel any in-flight response and
-            # speak a canned ack instead of routing "stop" through the
-            # full VLM pipeline (camera fetch + VLM stream + TTS). That
-            # round-trip is what made single "stop" feel unresponsive.
-            if stop_bypass:
-                logger.info("stop bypass pid={!r}  {!r}", pid, text[:80])
-                await self._handle_stop(pid)
                 self._schedule_camera_off(pid)
                 return
             # Chime on a fresh magic-phrase match only — follow-ups are
