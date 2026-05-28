@@ -306,15 +306,22 @@ class SimpleVlmAgent:
                 self._followup_until.pop(pid, None)
                 self._schedule_camera_off(pid)
                 return
+            # STOP is short-circuited: cancel any in-flight response and
+            # speak a canned ack instead of routing "stop" through the
+            # full VLM pipeline (camera fetch + VLM stream + TTS). That
+            # round-trip is what made single "stop" feel unresponsive.
+            if stop_bypass:
+                logger.info("stop bypass pid={!r}  {!r}", pid, text[:80])
+                await self._handle_stop(pid)
+                self._schedule_camera_off(pid)
+                return
             # Chime on a fresh magic-phrase match only — follow-ups are
             # already inside the conversation and STOP is a different signal.
             if matched_magic and self._listening_chime_enabled:
                 asyncio.create_task(self._send_chime(pid))
             # Arm/refresh the follow-up window any time we accepted an
-            # utterance via the magic path (fresh or continuation). STOP
-            # does not extend — it's an end-of-thread interrupt.
-            if not stop_bypass:
-                self._followup_until[pid] = now_mono + self._followup_grace_s
+            # utterance via the magic path (fresh or continuation).
+            self._followup_until[pid] = now_mono + self._followup_grace_s
             if not query:
                 logger.info(
                     "magic phrase only pid={!r} — awaiting followup ({:.1f}s)",
@@ -674,6 +681,24 @@ class SimpleVlmAgent:
                 "listening chime disabled (bad TTS wav header): {}", exc,
             )
             self._listening_chime_enabled = False
+
+    async def _handle_stop(self, pid: str) -> None:
+        """Cancel any in-flight response for this participant and play a
+        canned ack. Bypasses the VLM/camera pipeline so a single 'stop'
+        is acted on immediately."""
+        vs = self._voice.get(pid)
+        if vs is not None:
+            async with vs.dispatch_lock:
+                old = vs.current_task
+                if old is not None and not old.done():
+                    old.cancel()
+                    try:
+                        await old
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                await self._ep.flush_return_audio(pid)
+                vs.current_task = None
+        await self._say(pid, "Okay, I will stop.", now_us())
 
     async def _send_chime(self, pid: str) -> None:
         """Emit the listening-chime on the return audio track. No-op
