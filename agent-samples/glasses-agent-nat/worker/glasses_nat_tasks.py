@@ -39,8 +39,23 @@ _STEP_NUMBER_WORDS = {
 
 
 def extract_json(text: str) -> str | None:
+    clean = text.strip()
+    if clean.startswith("```"):
+        parts = clean.split("```")
+        if len(parts) >= 2:
+            clean = parts[1].lstrip("json").strip()
+    decoder = json.JSONDecoder()
+    for idx, ch in enumerate(clean):
+        if ch != "{":
+            continue
+        try:
+            _obj, end = decoder.raw_decode(clean[idx:])
+            return clean[idx:idx + end]
+        except json.JSONDecodeError:
+            pass
+
     depth, start, in_string, escape = 0, -1, False, False
-    for i, ch in enumerate(text):
+    for i, ch in enumerate(clean):
         if in_string:
             if escape:
                 escape = False
@@ -61,7 +76,9 @@ def extract_json(text: str) -> str | None:
                 continue
             depth -= 1
             if depth == 0 and start >= 0:
-                return text[start:i + 1]
+                return clean[start:i + 1]
+    if start >= 0 and depth > 0 and not in_string and depth <= 3:
+        return clean[start:] + ("}" * depth)
     return None
 
 
@@ -559,66 +576,22 @@ async def derive_step_requirements_impl(
     return DeriveStepRequirementsOutput(requirements=reqs)
 
 
-def _evidence_token_set(text: str) -> set[str]:
-    """Cheap token-bag for fuzzy requirement coverage matching."""
-    out: set[str] = set()
-    for token in re.findall(r"[a-z0-9]+", text.lower()):
-        if len(token) <= 1:
-            continue
-        out.add(token)
-        if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
-            out.add(token[:-1])
-    return out
-
-
-_OBJECT_TOKENS = frozenset({
-    "cap", "hat", "headset", "headphone", "controller", "case", "mug",
-    "cup", "phone", "button", "strap", "lid", "switch",
-})
-
-_STATE_TOKENS = frozenset({
-    "head", "hand", "hands", "eye", "eyes", "ear", "ears", "face",
-})
-
-
-def _requirement_core_tokens(requirement: str) -> tuple[set[str], set[str]]:
-    tokens = _evidence_token_set(requirement) - _EVIDENCE_STOPWORDS
-    objects = tokens & _OBJECT_TOKENS
-    if not objects:
-        objects = tokens - _STATE_TOKENS
-    states = tokens & _STATE_TOKENS
-    return objects, states
+_TEACHER_EVIDENCE_MARKERS = ("image 1", "teacher", "reference")
+_NEGATIVE_EVIDENCE_MARKERS = (
+    "missing", "not visible", "no longer present", "not present", "absent",
+    "without", "cannot see", "can't see", "does not show", "doesn't show",
+)
 
 
 def _check_has_student_evidence(requirement: str, current_obs: str, check: dict) -> bool:
-    objects, states = _requirement_core_tokens(requirement)
-    evidence_tokens = _evidence_token_set(str(check.get("evidence", ""))) - _EVIDENCE_STOPWORDS
-    obs_tokens = _evidence_token_set(current_obs) - _EVIDENCE_STOPWORDS
-    combined = evidence_tokens | obs_tokens
-    if objects and not (objects & combined):
+    evidence_text = str(check.get("evidence", ""))
+    evidence_lower = evidence_text.lower()
+    combined_lower = f"{current_obs} {evidence_text}".lower()
+    if any(marker in evidence_lower for marker in _TEACHER_EVIDENCE_MARKERS):
         return False
-    if states and not (states & combined):
+    if any(marker in combined_lower for marker in _NEGATIVE_EVIDENCE_MARKERS):
         return False
-    return True
-
-
-def _requirement_covered(expected: str, checks: list[dict]) -> dict | None:
-    """Return the first check whose requirement text overlaps *expected*.
-
-    Coverage = token-set intersection size >= ceil(|expected_tokens| / 2).
-    Each non-stopword token in the expected atom contributes; this catches
-    obvious paraphrases ("headset on the head" vs "headset on head") but
-    rejects checks that share only filler.
-    """
-    exp_tokens = _evidence_token_set(expected) - _EVIDENCE_STOPWORDS
-    if not exp_tokens:
-        return None
-    needed = max(1, (len(exp_tokens) + 1) // 2)
-    for check in checks:
-        req_tokens = _evidence_token_set(str(check.get("requirement", ""))) - _EVIDENCE_STOPWORDS
-        if len(exp_tokens & req_tokens) >= needed:
-            return check
-    return None
+    return bool(evidence_text.strip())
 
 
 def _normalize_checks(obj: dict) -> list[dict]:
@@ -652,7 +625,7 @@ def _normalize_checks(obj: dict) -> list[dict]:
 
 
 def _parse_grounded_completion(
-    raw: str, expected_requirements: list[str]
+    raw: str, expected_requirements: list[str], *, require_expected: bool = True
 ) -> tuple[bool, str, list[dict], list[str], str]:
     """Grounded-completion parser. Accepts both the new flat shape
 
@@ -681,11 +654,14 @@ def _parse_grounded_completion(
 
     # Accept either field name; the new flat shape uses `observation`.
     current_obs = str(obj.get("observation") or obj.get("current_observation") or "").strip()
+    issue_text = str(obj.get("issue") or obj.get("correction") or "").strip()
     checks = _normalize_checks(obj)
     missing = [c["requirement"] for c in checks if not c["visible"] and c["requirement"]]
 
     if not current_obs:
         return False, "", checks, missing, "vlm omitted observation"
+    if issue_text and issue_text.lower() not in {"none", "n/a", "na", "no issue"}:
+        return False, current_obs, checks, missing, issue_text
 
     # Reject "visible without evidence" — the textbook bias-copy failure.
     for c in checks:
@@ -694,17 +670,6 @@ def _parse_grounded_completion(
         if c["visible"] and not _check_has_student_evidence(c["requirement"], current_obs, c):
             return False, current_obs, checks, missing, f"no grounded evidence for: {c['requirement']}"
 
-    if expected_requirements:
-        for exp in expected_requirements:
-            match = _requirement_covered(exp, checks)
-            if match is None or not match["visible"] or not match["evidence"]:
-                if exp not in missing:
-                    missing.append(exp)
-                return False, current_obs, checks, missing, f"missing requirement: {exp}"
-        return True, current_obs, checks, missing, ""
-
-    # Degraded path: no checklist from the caller. Require at least one
-    # check with visible=True and non-empty evidence.
     if not any(c["visible"] and c["evidence"] for c in checks):
         return False, current_obs, checks, missing, "no grounded evidence"
     return True, current_obs, checks, missing, ""
@@ -721,6 +686,56 @@ def _human_issue_from_raw(raw: str) -> str:
     if not isinstance(obj, dict):
         return ""
     return str(obj.get("issue") or obj.get("correction") or "").strip()
+
+
+def _issue_from_failure(raw: str, reject_reason: str, missing: list[str]) -> str:
+    human_issue = _human_issue_from_raw(raw)
+    if human_issue:
+        return human_issue
+    if reject_reason:
+        return reject_reason
+    if missing:
+        return (
+            f"{missing[0]} not visible"
+            if len(missing) == 1
+            else f"{missing[0]} and {missing[1]} not visible"
+        )
+    return ""
+
+
+def _output_from_parse(
+    *,
+    completed: bool,
+    current_obs: str,
+    checks: list[dict],
+    missing: list[str],
+    issue: str,
+    image_path: str,
+    timestamp_us: int,
+    raw: str,
+    teacher_image_path: str = "",
+) -> GuidanceStepOutput:
+    return GuidanceStepOutput(
+        completed=completed,
+        current_observation=current_obs,
+        checks=[StepCheck(**c) for c in checks],
+        missing_or_mismatched=missing,
+        image_path=image_path,
+        teacher_image_path=teacher_image_path,
+        timestamp_us=timestamp_us,
+        issue=issue,
+        raw_vlm=raw,
+    )
+
+
+def _parser_issue(issue: str) -> bool:
+    return issue.lower().startswith((
+        "vlm ",
+        "missing requirement",
+        "visible without",
+        "no grounded",
+        "vlm omitted",
+    ))
 
 async def check_guidance_step_complete_impl(
     *,
@@ -752,7 +767,7 @@ async def check_guidance_step_complete_impl(
     if expected:
         checklist_block = "\n".join(f"  - {r}" for r in expected)
         checklist_lines = (
-            f"REQUIREMENTS (check each against the current image):\n{checklist_block}\n\n"
+            f"REQUIREMENTS (use as visual hints, not as stricter wording than the instruction):\n{checklist_block}\n\n"
         )
     else:
         checklist_lines = (
@@ -761,18 +776,87 @@ async def check_guidance_step_complete_impl(
             "those requirement texts in the JSON.\n\n"
         )
 
+    teacher_path = (
+        teacher_image_path
+        if teacher_image_path and os.path.isfile(teacher_image_path)
+        else ""
+    )
+    teacher_failure: GuidanceStepOutput | None = None
+    if ask_frames is not None and teacher_path:
+        comparison_question = (
+            f"INSTRUCTION: {instruction}\n"
+            "Image 1 is the teacher's completed reference state for this step.\n"
+            "Image 2 is the student's current state.\n"
+            f"Teacher reference caption: {teacher_caption or 'not available'}\n"
+            f"{checklist_lines}"
+            "First decide whether Image 2 is visually equivalent to Image 1 for "
+            "the task-relevant objects and spatial relationships. Minor camera "
+            "angle, lighting, hand position, and color-name differences are OK "
+            "when the arrangement matches.\n\n"
+            "Output ONLY this JSON, no prose, no markdown:\n"
+            "{\n"
+            '  "observation": "<one sentence about Image 2>",\n'
+            '  "requirements": {\n'
+            '    "<task-relevant visual check>": {"visible": true|false, "evidence": "<student visual cue or empty>"}\n'
+            "  },\n"
+            '  "issue": "<concise correction if Image 2 differs from Image 1, else empty>"\n'
+            "}\n\n"
+            "Rules:\n"
+            "- Evidence must come from Image 2, not Image 1.\n"
+            "- Mark at least one task-relevant check visible=true with Image 2 evidence when the arrangement matches.\n"
+            "- If the arrangement matches Image 1, leave issue empty."
+        )
+        result = await ask_frames.ainvoke({
+            "question": comparison_question,
+            "image_paths": [teacher_path, image_path],
+        })
+        compare_raw = _str_payload(result)
+        if compare_raw.startswith("ask_frames:"):
+            log.warning("ask_frames guidance check failed; using instruction fallback: %s", compare_raw)
+        else:
+            cmp_completed, cmp_obs, cmp_checks, cmp_missing, cmp_reject = _parse_grounded_completion(
+                compare_raw, expected, require_expected=False,
+            )
+            cmp_issue = _issue_from_failure(compare_raw, cmp_reject, cmp_missing)
+            if cmp_completed:
+                return _output_from_parse(
+                    completed=True,
+                    current_obs=cmp_obs,
+                    checks=cmp_checks,
+                    missing=cmp_missing,
+                    issue="",
+                    image_path=image_path,
+                    teacher_image_path=teacher_path,
+                    timestamp_us=frame_ts,
+                    raw=compare_raw,
+                )
+            teacher_failure = _output_from_parse(
+                completed=False,
+                current_obs=cmp_obs,
+                checks=cmp_checks,
+                missing=cmp_missing,
+                issue=cmp_issue,
+                image_path=image_path,
+                teacher_image_path=teacher_path,
+                timestamp_us=frame_ts,
+                raw=compare_raw,
+            )
+
     live_question = (
         f"INSTRUCTION: {instruction}\n"
+        f"TEACHER CAPTION: {teacher_caption or 'not available'}\n"
         f"{checklist_lines}"
         "Look ONLY at this live student image.\n"
-        "Step 1. Describe what you actually see in the image right now in one sentence.\n"
-        "Step 2. For EACH requirement, mark visible=true ONLY if it is plainly true in this image.\n\n"
+        "Decide whether the live image satisfies the instruction. The teacher "
+        "caption and requirements are supporting hints; do not reject a correct "
+        "arrangement solely because wording differs.\n\n"
         "Output ONLY this JSON, no prose, no markdown:\n"
         "{\n"
         '  "observation": "<one sentence about what is in the live image>",\n'
         '  "requirements": {\n'
-        '    "<requirement text>": {"visible": true|false, "evidence": "<short visual cue from the live image or empty>"}\n'
-        "  }\n"
+        '    "<task-relevant visual check>": {"visible": true|false, "evidence": "<short visual cue from the live image or empty>"}\n'
+        "  },\n"
+        '  "issue": "<concise correction if the instruction is not satisfied, else empty>"\n'
         "}\n\n"
         "Rules:\n"
         "- observation MUST be a non-empty sentence about THIS live image.\n"
@@ -782,119 +866,39 @@ async def check_guidance_step_complete_impl(
     live_result = await ask_image.ainvoke({"question": live_question, "image_path": image_path})
     live_raw = _str_payload(live_result)
     completed, current_obs, checks, missing, reject_reason = _parse_grounded_completion(
-        live_raw, expected,
+        live_raw, expected, require_expected=not bool(teacher_path),
     )
-    if not completed:
-        human_issue = _human_issue_from_raw(live_raw)
-        if human_issue:
-            issue = human_issue
-        elif reject_reason:
-            issue = reject_reason
-        elif missing:
-            issue = (
-                f"{missing[0]} not visible"
-                if len(missing) == 1
-                else f"{missing[0]} and {missing[1]} not visible"
-            )
-        else:
-            issue = ""
-        return GuidanceStepOutput(
-            completed=False,
-            current_observation=current_obs,
-            checks=[StepCheck(**c) for c in checks],
-            missing_or_mismatched=missing,
+    live_issue = _issue_from_failure(live_raw, reject_reason, missing)
+    if completed:
+        return _output_from_parse(
+            completed=True,
+            current_obs=current_obs,
+            checks=checks,
+            missing=missing,
+            issue="",
             image_path=image_path,
+            teacher_image_path=teacher_path,
             timestamp_us=frame_ts,
-            issue=issue,
-            raw_vlm=live_raw,
+            raw=live_raw,
         )
 
-    raw = live_raw
-    teacher_path = (
-        teacher_image_path
-        if teacher_image_path and os.path.isfile(teacher_image_path)
-        else ""
+    final_issue = (
+        teacher_failure.issue
+        if (
+            teacher_failure is not None
+            and teacher_failure.issue
+            and not _parser_issue(teacher_failure.issue)
+        )
+        else live_issue
     )
-    if ask_frames is not None and teacher_path:
-        comparison_question = (
-            f"INSTRUCTION: {instruction}\n"
-            "Image 1 is the teacher's completed reference state for this step.\n"
-            "Image 2 is the student's current state.\n"
-            f"Teacher reference caption: {teacher_caption or 'not available'}\n"
-            f"{checklist_lines}"
-            "Compare Image 2 against Image 1. Image 1 is authoritative for "
-            "the visual target state; the instruction and caption are context. "
-            "If text conflicts with Image 1, follow Image 1.\n"
-            "For EACH requirement, mark visible=true ONLY if the student's current "
-            "image plainly satisfies that requirement in a way that matches the "
-            "teacher reference. Evidence must come from Image 2.\n\n"
-            "Output ONLY this JSON, no prose, no markdown:\n"
-            "{\n"
-            '  "observation": "<one sentence about Image 2>",\n'
-            '  "requirements": {\n'
-            '    "<requirement text>": {"visible": true|false, "evidence": "<student visual cue or empty>"}\n'
-            "  },\n"
-            '  "issue": "<concise correction if Image 2 differs from Image 1, else empty>"\n'
-            "}\n\n"
-            "Rules:\n"
-            "- Do not credit Image 1 evidence to Image 2.\n"
-            "- visible=true REQUIRES non-empty Image 2 evidence.\n"
-            "- If the student differs from the teacher reference, set issue to a short correction."
-        )
-        result = await ask_frames.ainvoke({
-            "question": comparison_question,
-            "image_paths": [teacher_path, image_path],
-        })
-        compare_raw = _str_payload(result)
-        if compare_raw.startswith("ask_frames:"):
-            log.warning("ask_frames guidance check failed; using live-only check: %s", compare_raw)
-        else:
-            cmp_completed, cmp_obs, cmp_checks, cmp_missing, cmp_reject = _parse_grounded_completion(
-                compare_raw, expected,
-            )
-            if not cmp_completed:
-                cmp_issue = _human_issue_from_raw(compare_raw) or cmp_reject
-                return GuidanceStepOutput(
-                    completed=False,
-                    current_observation=cmp_obs,
-                    checks=[StepCheck(**c) for c in cmp_checks],
-                    missing_or_mismatched=cmp_missing,
-                    image_path=image_path,
-                    teacher_image_path=teacher_path,
-                    timestamp_us=frame_ts,
-                    issue=cmp_issue,
-                    raw_vlm=compare_raw,
-                )
-            raw = compare_raw
-    completed, current_obs, checks, missing, reject_reason = _parse_grounded_completion(
-        raw, expected,
-    )
-    human_issue = _human_issue_from_raw(raw)
-
-    # `issue` favors the parser's reject_reason (so GUIDANCE_CHECK_RAW can
-    # name the failure mode) and falls back to the human-readable
-    # missing-requirements summary used by _handle_guidance_question.
-    if not completed and human_issue:
-        issue = human_issue
-    elif reject_reason:
-        issue = reject_reason
-    elif not completed and missing:
-        issue = (
-            f"{missing[0]} not visible"
-            if len(missing) == 1
-            else f"{missing[0]} and {missing[1]} not visible"
-        )
-    else:
-        issue = ""
-
-    return GuidanceStepOutput(
-        completed=completed,
-        current_observation=current_obs,
-        checks=[StepCheck(**c) for c in checks],
-        missing_or_mismatched=missing,
+    return _output_from_parse(
+        completed=False,
+        current_obs=current_obs,
+        checks=checks,
+        missing=missing,
+        issue=final_issue,
         image_path=image_path,
         teacher_image_path=teacher_path,
         timestamp_us=frame_ts,
-        issue=issue,
-        raw_vlm=raw,
+        raw=live_raw,
     )

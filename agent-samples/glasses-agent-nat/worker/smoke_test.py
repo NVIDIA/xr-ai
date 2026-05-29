@@ -136,6 +136,29 @@ def _make_qp(memory: AgentMemory, rec: Recorder, *, freshness_s: float = 120.0) 
     return qp
 
 
+def _make_ga(memory: AgentMemory, qp: QueryProcessor) -> Any:
+    """Construct a GlassesAgent with hub I/O replaced by AsyncMocks."""
+    import agent as agent_mod
+
+    fake_runtime = mock.MagicMock(name="NatRuntime")
+    fake_ep = mock.MagicMock(name="ProcessorEndpoint")
+    fake_ep.flush_return_audio = mock.AsyncMock()
+    fake_ep.send_return_audio = mock.AsyncMock()
+    fake_ep.send_return_data = mock.AsyncMock()
+
+    with mock.patch.object(agent_mod, "ProcessorEndpoint", autospec=False) as ep_cls:
+        ep_cls.return_value = fake_ep
+        return agent_mod.GlassesAgent(
+            cfg=_make_cfg(),
+            memory=memory,
+            transcript_client=mock.MagicMock(name="TranscriptClient"),
+            query_processor=qp,
+            stt_url="http://stub",
+            tts_url="http://stub",
+            nat_runtime=fake_runtime,
+        )
+
+
 # ── trace capture ────────────────────────────────────────────────────────────
 
 class _TraceList(list):
@@ -937,6 +960,52 @@ async def scenario_13b_guidance_suppresses_background_observation() -> None:
 
     expect(observe_calls == [],
            f"background observation must pause during guidance: {observe_calls}")
+
+
+async def scenario_13c_vad_speech_start_does_not_flush_tts() -> None:
+    """Raw VAD starts can be noise; they must not interrupt active TTS."""
+    mem = AgentMemory()
+    rec = Recorder()
+    qp = _make_qp(mem, rec)
+    ga = _make_ga(mem, qp)
+    ga._speech_generation[PID] = 3
+
+    try:
+        await ga._handle_speech_start(PID)
+    finally:
+        await ga._http.aclose()
+
+    expect(ga._speech_generation[PID] == 3,
+           f"speech-start must not bump generation: {ga._speech_generation}")
+    expect(ga._ep.flush_return_audio.await_count == 0,
+           "speech-start must not flush return audio")
+
+
+async def scenario_13d_accepted_dispatch_still_flushes_tts() -> None:
+    """Accepted voice transcripts still interrupt playback at dispatch time."""
+    mem = AgentMemory()
+    rec = Recorder()
+    qp = _make_qp(mem, rec)
+    ga = _make_ga(mem, qp)
+    handled: list[tuple[str, str, int]] = []
+
+    async def fake_handle(text: str, pid: str, ref_us: int) -> None:
+        handled.append((text, pid, ref_us))
+
+    qp.handle = fake_handle  # type: ignore[method-assign]
+
+    try:
+        await ga._dispatch_query(PID, "stop", ref_us=123, source="voice")
+        await asyncio.wait_for(ga._query_tasks[PID], timeout=1.0)
+    finally:
+        await ga._http.aclose()
+
+    expect(ga._ep.flush_return_audio.await_count == 1,
+           "accepted dispatch must flush return audio")
+    expect(ga._speech_generation.get(PID) == 1,
+           f"accepted dispatch must bump generation: {ga._speech_generation}")
+    expect(handled == [("stop", PID, 123)],
+           f"accepted dispatch did not run query handler: {handled}")
 
 
 async def scenario_10_pending_attempt_limit() -> None:
@@ -1883,9 +1952,8 @@ async def parser_test_c_all_visible_with_evidence_accepted() -> None:
            f"fully grounded YES must be accepted, got {out}")
 
 
-async def parser_test_d_one_requirement_missing_rejected() -> None:
-    """Parser must reject when expected=[A,B] and checks cover only A
-    (B is not present at all in checks)."""
+async def parser_test_d_vlm_judgment_not_exact_checklist_match() -> None:
+    """The VLM judgment is authoritative; parser does not exact-match every hint."""
     out = await _run_parser_case(
         expected_requirements=["headset on head", "strap behind head"],
         vlm_json_response=(
@@ -1897,12 +1965,12 @@ async def parser_test_d_one_requirement_missing_rejected() -> None:
             ']}'
         ),
     )
-    expect(out["completed"] is False,
-           f"missing one expected requirement must reject, got {out}")
+    expect(out["completed"] is True,
+           f"grounded VLM pass should not require exact checklist coverage, got {out}")
 
 
 async def parser_test_e_prompt_omits_teacher_caption() -> None:
-    """Teacher caption is used only with the two-frame comparison prompt."""
+    """Teacher caption is included in the instruction fallback prompt."""
     captured: dict = {}
     secret_caption = "ABRACADABRA_TEACHER_CAPTION_DO_NOT_LEAK"
     await _run_parser_case(
@@ -1912,8 +1980,8 @@ async def parser_test_e_prompt_omits_teacher_caption() -> None:
         prompt_capture=captured,
         instruction="Put the headset on your head",
     )
-    expect(secret_caption not in captured.get("question", ""),
-           f"single-image prompt leaked teacher caption: {captured.get('question', '')!r}")
+    expect(secret_caption in captured.get("question", ""),
+           f"single-image fallback should include teacher caption: {captured.get('question', '')!r}")
     q = captured.get("question", "")
     expect("Put the headset on your head" in q,
            f"prompt missing instruction: {q!r}")
@@ -1997,32 +2065,32 @@ async def parser_test_i_prose_only_response_rejected() -> None:
 
 
 async def parser_test_j_two_frame_comparison_preferred() -> None:
-    """Teacher comparison must not override a failed live-only check."""
+    """Teacher comparison runs first and can complete without ask_image."""
     captured: dict = {}
     teacher_path = __file__
     out = await _run_parser_case(
         expected_requirements=["headset on head"],
         vlm_json_response='{"observation": "student holds headset too low", "requirements": {}}',
         ask_frames_response=(
-            '{"observation": "student holds headset too low", '
+            '{"observation": "student wears the headset like the teacher", '
             '"requirements": {'
-            '"headset on head": {"visible": false, "evidence": ""}'
-            '}, "issue": "Raise the headset onto your head"}'
+            '"headset matches teacher": {"visible": true, "evidence": "Image 2 shows headset on head"}'
+            '}, "issue": ""}'
         ),
         teacher_image_path=teacher_path,
         teacher_caption="teacher has the headset on their head",
         prompt_capture=captured,
     )
-    expect(out["completed"] is False,
-           f"live-only failure should reject before teacher comparison: {out}")
-    expect("image_paths" not in captured,
-           f"ask_frames should not run after live-only failure: {captured}")
+    expect(out["completed"] is True,
+           f"teacher comparison should complete before live-only check: {out}")
+    expect("image_paths" in captured,
+           f"ask_frames should run first: {captured}")
+    expect("image_path" not in captured,
+           f"ask_image should not run after teacher pass: {captured}")
 
 
 async def parser_test_k_two_frame_fallback_to_single_image() -> None:
-    """If ask_frames returns an error string, the old single-image path
-    remains available.
-    """
+    """If ask_frames returns an error string, the instruction fallback runs."""
     captured: dict = {}
     out = await _run_parser_case(
         expected_requirements=["headset on head"],
@@ -2101,13 +2169,13 @@ async def parser_test_n_teacher_evidence_leak_rejected() -> None:
         prompt_capture=captured,
     )
     expect(out["completed"] is False,
-           f"live-only gate must reject teacher evidence leakage: {out}")
-    expect("image_paths" not in captured,
-           f"ask_frames should not be called after live-only failure: {captured}")
+           f"teacher evidence leakage must reject, got: {out}")
+    expect("image_paths" in captured,
+           f"teacher comparison should run first: {captured}")
 
 
-async def parser_test_o_live_only_pass_can_use_teacher_compare() -> None:
-    """A live-grounded pass may still run the teacher comparison."""
+async def parser_test_o_teacher_mismatch_instruction_fallback_can_pass() -> None:
+    """A teacher mismatch falls back to instruction/caption matching."""
     captured: dict = {}
     out = await _run_parser_case(
         expected_requirements=["cap on head"],
@@ -2118,21 +2186,84 @@ async def parser_test_o_live_only_pass_can_use_teacher_compare() -> None:
             "}}"
         ),
         ask_frames_response=(
-            '{"observation": "The person is wearing a black cap on their head.", '
+            '{"observation": "The cap is not exactly like Image 1.", '
             '"requirements": {'
-            '"cap on head": {"visible": true, "evidence": "black cap on head in Image 2"}'
-            "}}"
+            '"matches teacher": {"visible": false, "evidence": ""}'
+            '}, "issue": "The cap is offset from the teacher reference."}'
         ),
         teacher_image_path=__file__,
         prompt_capture=captured,
     )
     expect(out["completed"] is True,
-           f"live-grounded teacher comparison should pass: {out}")
-    expect("image_paths" in captured,
-           f"ask_frames should run after live-only pass: {captured}")
-    frames_question = captured.get("frames_question", "")
-    expect("Image 1 is authoritative" in frames_question and "If text conflicts with Image 1" in frames_question,
-           f"two-image prompt must make Image 1 authoritative: {frames_question!r}")
+           f"instruction fallback should pass after teacher mismatch: {out}")
+    expect("image_paths" in captured and "image_path" in captured,
+           f"teacher mismatch should run ask_image fallback: {captured}")
+
+
+async def parser_test_p_malformed_teacher_falls_back_to_instruction() -> None:
+    captured: dict = {}
+    out = await _run_parser_case(
+        expected_requirements=["headset on head"],
+        vlm_json_response=(
+            '{"observation": "headset is on the head", '
+            '"requirements": {'
+            '"headset on head": {"visible": true, "evidence": "headset covers eyes"}'
+            "}}"
+        ),
+        ask_frames_response='```json\n{"observation": "started but not closed"',
+        teacher_image_path=__file__,
+        prompt_capture=captured,
+    )
+    expect(out["completed"] is True,
+           f"malformed teacher output should fall back and pass: {out}")
+    expect("image_paths" in captured and "image_path" in captured,
+           f"malformed teacher output should trigger ask_image fallback: {captured}")
+
+
+async def parser_test_q_negative_visual_statement_rejected() -> None:
+    out = await _run_parser_case(
+        expected_requirements=["mouse visible"],
+        vlm_json_response=(
+            '{"observation": "The mouse is no longer present on the desk.", '
+            '"requirements": {"mouse visible": {"visible": true, "evidence": "mouse no longer present"}}}'
+        ),
+        instruction="Put the mouse on the desk",
+    )
+    expect(out["completed"] is False,
+           f"negative visual statement must not pass: {out}")
+
+
+async def scenario_33_guidance_noise_transcript_does_not_dispatch_or_flush() -> None:
+    mem = AgentMemory()
+    demo = _seed_demo(mem, "pico headset", finished_ago_s=5.0)
+    rec = Recorder()
+    qp = _make_qp(mem, rec)
+    _enter_guidance(qp, demo)
+    ga = _make_ga(mem, qp)
+
+    class _Resp:
+        is_error = False
+
+        def json(self) -> dict:
+            return {"text": "Catches."}
+
+    class _Http:
+        async def post(self, *_args, **_kwargs) -> _Resp:
+            return _Resp()
+
+        async def aclose(self) -> None:
+            pass
+
+    ga._http = _Http()  # type: ignore[assignment]
+    try:
+        await ga._handle_utterance(PID, b"\x01\x00" * 1600, 16_000)
+    finally:
+        await ga._http.aclose()
+
+    expect(ga._ep.flush_return_audio.await_count == 0,
+           "guidance noise transcript must not flush return audio")
+    expect(PID not in ga._query_tasks,
+           f"guidance noise transcript must not dispatch query: {ga._query_tasks}")
 
 
 async def scenario_31_guidance_correction_is_rate_limited() -> None:
@@ -2394,6 +2525,8 @@ SCENARIOS = [
     scenario_12_issue_surfaces_in_guidance_question,
     scenario_13_recording_loop_not_paused_by_query,
     scenario_13b_guidance_suppresses_background_observation,
+    scenario_13c_vad_speech_start_does_not_flush_tts,
+    scenario_13d_accepted_dispatch_still_flushes_tts,
     scenario_14_question_form_done_runs_completion_check,
     scenario_14b_bare_done_still_exits,
     scenario_14c_is_this_complete_runs_completion_check,
@@ -2424,10 +2557,11 @@ SCENARIOS = [
     scenario_31b_uncertainty_does_not_speak_correction,
     scenario_31c_guidance_interval_default_is_fast,
     scenario_32_guidance_request_restarts_active_demo,
+    scenario_33_guidance_noise_transcript_does_not_dispatch_or_flush,
     parser_test_a_completed_true_no_evidence_rejected,
     parser_test_b_copied_checklist_empty_evidence_rejected,
     parser_test_c_all_visible_with_evidence_accepted,
-    parser_test_d_one_requirement_missing_rejected,
+    parser_test_d_vlm_judgment_not_exact_checklist_match,
     parser_test_e_prompt_omits_teacher_caption,
     parser_test_f_flat_schema_observation_only_accepted,
     parser_test_g_flat_schema_empty_observation_rejected,
@@ -2438,7 +2572,9 @@ SCENARIOS = [
     parser_test_l_stale_live_frame_rejected,
     parser_test_m_fresh_live_frame_accepted,
     parser_test_n_teacher_evidence_leak_rejected,
-    parser_test_o_live_only_pass_can_use_teacher_compare,
+    parser_test_o_teacher_mismatch_instruction_fallback_can_pass,
+    parser_test_p_malformed_teacher_falls_back_to_instruction,
+    parser_test_q_negative_visual_statement_rejected,
 ]
 
 

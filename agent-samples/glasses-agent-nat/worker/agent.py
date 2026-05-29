@@ -208,10 +208,9 @@ class GlassesAgent:
         """Feed inbound mic audio through xr-ai-vad.
 
         Note: we do NOT pre-filter audio based on "assistant talking" flags.
-        Pre-filtering breaks barge-in. The two-stage gate (speech_start
-        flushes queued TTS, then post-STT noise/intent classifier decides
-        whether to cancel the in-flight task) lives in
-        ``_handle_speech_start`` and ``_handle_utterance``.
+        Pre-filtering breaks barge-in. Raw VAD speech-start is advisory only;
+        accepted transcripts interrupt playback in ``_dispatch_query`` after
+        STT and the noise/intent gates.
         """
         pid = chunk.participant_id or _DEFAULT_PID
         vad = self._get_vad(pid)
@@ -233,14 +232,13 @@ class GlassesAgent:
         return self._vad[pid]
 
     async def _handle_speech_start(self, pid: str) -> None:
-        """Stage 1 of barge-in: flush queued TTS the moment speech is detected.
+        """Handle raw VAD speech-start without interrupting playback.
 
-        We deliberately do NOT cancel the in-flight query here — VAD fires
-        on background noise too, and cancelling on every silero spike would
-        kill legitimate responses. Cancellation happens after STT + the
-        noise gate confirm a real utterance, in ``_handle_utterance``.
+        VAD fires on background noise and speaker echo, so flushing here cuts
+        off legitimate TTS. Accepted utterances still interrupt through
+        ``_dispatch_query`` after STT plus the noise/intent gates.
         """
-        await self.flush_audio(pid)
+        log.debug("speech start detected  pid=%r", pid)
 
     async def _handle_utterance(self, pid: str, pcm_bytes: bytes, sample_rate: int) -> None:
         """STT-transcribe a finalized utterance, then dispatch to QueryProcessor.
@@ -275,6 +273,11 @@ class GlassesAgent:
         if is_shape_noise(text):
             log.info("noise-gate L1 dropped  pid=%r  %r", pid, text[:80])
             _trace_log.info("NOISE_L1_DROP  pid=%s  %r", pid, text)
+            return
+
+        if self._qproc.is_guiding(pid) and not self._qproc.is_guidance_control_utterance(text):
+            log.info("guidance noise dropped  pid=%r  %r", pid, text[:80])
+            _trace_log.info("GUIDANCE_NOISE_DROP  pid=%s  %r", pid, text)
             return
 
         # ── Layer 2: LLM intent classifier. ───────────────────────────────
