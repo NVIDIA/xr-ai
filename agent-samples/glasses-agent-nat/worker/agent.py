@@ -26,7 +26,11 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json as _json
 import logging
+import os
+import re as _re
+import shutil as _shutil
 import time
 import wave
 
@@ -34,15 +38,15 @@ import httpx
 import numpy as np
 
 from xr_ai_agent import (
-    AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint
+    AudioChunk, DataMessage, ParticipantEvent, ProcessorEndpoint
 )
-from xr_ai_vad import VadDetector
 
 from config import WorkerConfig
 from intent import is_real_assistant_request, is_shape_noise
 from memory import AgentMemory, Observation, RecordedFrame, TranscriptClient
 from nat_runtime import NatRuntime
 from processors import QueryProcessor
+from vad import VadDetector
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -133,13 +137,9 @@ class GlassesAgent:
         self._ep.on_audio(self._on_audio)
         self._ep.on_data(self._on_data)
         self._ep.on_participant(self._on_participant)
-        self._ep.on_frame(self._on_frame)
 
         # Per-participant VAD detectors.
         self._vad: dict[str, VadDetector] = {}
-
-        # Latest FrameSignals per (pid, track_id).
-        self._latest: dict[tuple[str, str], FrameSignal] = {}
 
         # Track connected participants.
         self._participants: set[str] = set()
@@ -397,23 +397,12 @@ class GlassesAgent:
             log.info("participant left  pid=%r", pid)
             self._participants.discard(pid)
             self._vad.pop(pid, None)
-            for k in [k for k in self._latest if k[0] == pid]:
-                del self._latest[k]
-
-    async def _on_frame(self, sig: FrameSignal) -> None:
-        self._latest[(sig.participant_id, sig.track_id)] = sig
 
     def _active_pid(self) -> str:
         """Return the most recently active participant, or the default."""
         if self._participants:
             return next(iter(self._participants))
         return _DEFAULT_PID
-
-    def _latest_signal(self, pid: str) -> FrameSignal | None:
-        candidates = [v for k, v in self._latest.items() if k[0] == pid]
-        if not candidates:
-            return None
-        return max(candidates, key=lambda s: s.pts_us)
 
     # ── background VLM loop ───────────────────────────────────────────────────
 
@@ -436,19 +425,21 @@ class GlassesAgent:
                 # _active_pid() falls back to _DEFAULT_PID ("web-client") so the
                 # VLM call still works; get_latest_frame returns an error dict if
                 # no stream is active, which is handled gracefully.
-                if not self._user_query_active:
-                    pid = self._active_pid()
-                    is_recording = self._memory.recording is not None
+                pid          = self._active_pid()
+                is_recording = self._memory.recording is not None
 
-                    if is_recording and not was_recording:
-                        self._rec_last_ts    = 0
-                        self._rec_warmup_end = _now_us() + 2_000_000  # 2s warmup
-                    was_recording = is_recording
+                if is_recording and not was_recording:
+                    self._rec_last_ts    = 0
+                    self._rec_warmup_end = _now_us() + 2_000_000  # 2s warmup
+                was_recording = is_recording
 
-                    if is_recording and _now_us() < self._rec_warmup_end:
+                # Recording capture is not gated by _user_query_active —
+                # voice notes count as part of the demonstration and must not
+                # create gaps in the recorded-frame timeline.
+                if is_recording:
+                    if _now_us() < self._rec_warmup_end:
                         pass  # skip first 2 s — user is still positioning
-                    elif is_recording:
-                        # ── Dense recording capture ───────────────────────────
+                    else:
                         frame = await self._capture_recording_frame(
                             pid, skip_ts=self._rec_last_ts
                         )
@@ -457,33 +448,34 @@ class GlassesAgent:
                             self._memory.add_recorded_frame(frame)
                             _trace_log.info("REC_FRAME  %d  %s",
                                             frame.frame_idx + 1, frame.description[:80])
-                    else:
-                        # ── Normal change-detection for memory/context ────────
-                        obs = await self._observe_frame(pid, previous=self._obs_last_desc,
-                                                        skip_ts=self._obs_last_ts)
-                        if obs:
-                            self._obs_last_desc = obs.description
-                            self._obs_last_ts   = obs.timestamp_us
-                            skipped             = 0
-                            self._memory.add_observation(obs)
-                            _trace_log.info("OBS  %s", obs.description)
-                            log.info(
-                                "\n  ┌─ observation ──────────────────────────────\n"
-                                "  │ %s\n"
-                                "  └────────────────────────────────────────────",
+                elif not self._user_query_active and not self._qproc.is_guiding(pid):
+                    # Normal change-detection observations are bandwidth-
+                    # sensitive — yield while user-facing guidance owns VLM checks.
+                    obs = await self._observe_frame(pid, previous=self._obs_last_desc,
+                                                    skip_ts=self._obs_last_ts)
+                    if obs:
+                        self._obs_last_desc = obs.description
+                        self._obs_last_ts   = obs.timestamp_us
+                        skipped             = 0
+                        self._memory.add_observation(obs)
+                        _trace_log.info("OBS  %s", obs.description)
+                        log.info(
+                            "\n  ┌─ observation ──────────────────────────────\n"
+                            "  │ %s\n"
+                            "  └────────────────────────────────────────────",
+                            obs.description,
+                        )
+                        asyncio.create_task(
+                            self._transcript.add_entry(
+                                self._cfg.transcript_source + ":observations",
+                                obs.timestamp_us,
                                 obs.description,
                             )
-                            asyncio.create_task(
-                                self._transcript.add_entry(
-                                    self._cfg.transcript_source + ":observations",
-                                    obs.timestamp_us,
-                                    obs.description,
-                                )
-                            )
-                        else:
-                            skipped += 1
-                            if skipped % 30 == 0:
-                                log.info("[vlm] observing — no change in last %ds", skipped)
+                        )
+                    else:
+                        skipped += 1
+                        if skipped % 30 == 0:
+                            log.info("[vlm] observing — no change in last %ds", skipped)
 
                 await asyncio.sleep(self._cfg.vlm_interval_s)
             except asyncio.CancelledError:
@@ -500,7 +492,6 @@ class GlassesAgent:
     async def _observe_frame(self, pid: str, previous: str = "",
                              skip_ts: int = 0) -> Observation | None:
         """Get the latest frame and caption what is NEW compared to *previous*."""
-        import os
         frame_data = await self._call_video("get_latest_frame", {"participant_id": pid})
         if not isinstance(frame_data, dict) or "path" not in frame_data:
             return None
@@ -562,7 +553,6 @@ class GlassesAgent:
         if no new frame is available. Also appends to the per-demo JSONL log.
         No dedup, no filtering — everything is captured; analysis happens later.
         """
-        import os, json as _json, re as _re
         frame_data = await self._call_video("get_latest_frame", {"participant_id": pid})
         if not isinstance(frame_data, dict) or "path" not in frame_data:
             _trace_log.info("REC_NO_FRAME  %s", str(frame_data)[:120] if frame_data else "None")
@@ -582,10 +572,9 @@ class GlassesAgent:
 
         # Copy frame to a stable path so it persists after get_latest_frame
         # overwrites the temp file on the next cycle.
-        import shutil as _shutil
         frame_idx_now = len(recording.recorded_frames)
         run_dir_now   = os.environ.get("XR_RUN_DIR", "/tmp")
-        safe_now      = __import__("re").sub(r"[^a-zA-Z0-9_-]", "_", recording.name)[:40]
+        safe_now      = _re.sub(r"[^a-zA-Z0-9_-]", "_", recording.name)[:40]
         frames_dir    = os.path.join(run_dir_now, "recordings",
                                      f"{safe_now}_{recording.started_at_us}_frames")
         os.makedirs(frames_dir, exist_ok=True)
@@ -692,7 +681,6 @@ class GlassesAgent:
 
     async def _condense_observations(self) -> None:
         """Condense the last 20 observations through the NAT worker task group."""
-        import json as _json
         recent = list(self._memory._observations)[-20:]
         if not recent:
             return

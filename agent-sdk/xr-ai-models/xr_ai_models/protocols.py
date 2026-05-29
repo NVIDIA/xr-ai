@@ -143,6 +143,17 @@ class VLMService(Protocol):
         timeout: float | None = None,
     ) -> ChatResponse: pass
 
+    async def ask_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+    ) -> ChatResponse: pass
+
     async def ask_video(
         self,
         video: VideoInput,

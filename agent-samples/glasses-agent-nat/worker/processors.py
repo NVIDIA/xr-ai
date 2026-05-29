@@ -8,25 +8,25 @@ Flow per utterance:
   1. Demo-mode detection (start / end / guidance request / guidance advance).
   2. _quick_ack() — fast Llama-Nemotron call: spoken ack + think=True/False.
   3. _agentic_loop() — delegates to a NAT tool_calling_agent workflow:
-       - Pre-fetch latest frame concurrently while building context.
-       - Context = memory.build_context() + frame path + conversation history.
+       - Build context from memory.build_context() + conversation history.
        - Tools: configured in yaml/glasses_agent_nat_workflow.yaml.
        - Finish: LLM text response → TTS + data message to participant.
 
-Demonstration detection phrases:
-  Start:    "let me show you", "watch what i", "i'll demonstrate",
-            "start recording", "remember this", "watch me", "watch how i"
-  End:      "that's it", "done", "stop recording", "end demonstration",
-            "finished", "end recording"
-  Guidance: "how do i", "walk me through", "show me how",
-            "teach me how to", "guide me through", "step by step"
-  Advance:  "next", "continue", "got it", "okay next"
+Demonstration detection phrases are defined as module constants
+(`_DEMO_START_PHRASES`, `_DEMO_END_PHRASES`, `_GUIDANCE_PHRASES`,
+`_GUIDANCE_ADVANCE_PHRASES`, `_GUIDANCE_DONE_PHRASES`,
+`_GUIDANCE_STOP_PHRASES`, `_STOP_SPEAKING_PHRASES`). Examples:
+  Start    "start recording <name>", "let me show you …"
+  End      "stop recording", "end demonstration"
+  Guidance "how do i …", "walk me through …"
+  Advance  "next", "continue"
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import re
 import string
 import time
 from typing import Callable, Awaitable
@@ -34,7 +34,14 @@ from typing import Callable, Awaitable
 import httpx
 
 from config import WorkerConfig
-from memory import AgentMemory, Demonstration, DemoStep, Observation, VoiceNote
+from memory import (
+    AgentMemory,
+    Demonstration,
+    DemoStep,
+    Observation,
+    RecordedFrame,
+    VoiceNote,
+)
 from nat_agent import NatAgentRunner
 from nat_runtime import NatRuntime
 
@@ -64,7 +71,6 @@ _DEMO_START_PHRASES = (
     "capture a demo",
     "capture how",
     "save these steps",
-    "save this",
     # Show / demonstrate
     "let me show you",
     "watch what i",
@@ -80,21 +86,11 @@ _DEMO_START_PHRASES = (
     "can you remember",
 )
 
-_DEMO_NAME_PREFIXES = (
-    "for task where ",
-    "for the task where ",
-    "for task ",
-    "for the task ",
-    "for task ",
-    "for the task ",
-    "called ",
-    "named ",
-    "where ",
-    "the task ",
-    "task ",
-    "a ",
-    "the ",
-)
+# Filler words stripped from the leading edge of the captured demo name
+# after the start phrase. Run iteratively so "for the task X" → "X".
+_LEADING_NAME_FILLER = frozenset({
+    "for", "task", "where", "called", "named", "the", "a", "an",
+})
 
 _DEMO_END_PHRASES = (
     "that's it",
@@ -120,7 +116,6 @@ _GUIDANCE_PHRASES = (
     "help me do",
     "help me with",
     "do task",
-    "let's do",
 )
 
 # Sentinel emitted by the agent LLM when the freshness marker is in
@@ -137,6 +132,13 @@ _GUIDANCE_ADVANCE_PHRASES = (
     "ok next",
     "next step",
     "go on",
+    "what's next",
+    "whats next",
+    "what next",
+    "what's the next step",
+    "whats the next step",
+    "what is the next step",
+    "move on",
 )
 
 _GUIDANCE_DONE_PHRASES = (
@@ -234,6 +236,81 @@ def _extract_choice_number(lower: str) -> int | None:
     return None
 
 
+# ── utterance tokenization / classification helpers ──────────────────────────
+
+_TOKEN_RE = re.compile(r"[a-z0-9']+")
+
+
+def _tokenize(s: str) -> list[str]:
+    """Split *s* into lowercase alphanumeric tokens, preserving apostrophes.
+
+    Used by every "did the user say X?" matcher so utterance tokens and
+    phrase tokens agree on word boundaries — `"watch me, X"` splits to
+    `["watch", "me", "x"]`, not `["watch", "me,", "x"]`.
+    """
+    return _TOKEN_RE.findall(s)
+
+
+# Question-form prefixes that turn a completion phrase into a question
+# rather than a command. `"am I done?"` asks for a check; bare `"done"`
+# exits guidance.
+_QUESTION_PREFIXES = ("am i", "is it", "is this", "did i", "do i", "have i")
+
+# Word stems for "is the step finished?" — used by both the question-form
+# completion check and the bare-command exit branch. Covers "did I finish?"
+# (stem `finish`) and "have I completed it?" (stem `completed`) that the
+# raw `done / finished / complete` set misses.
+_COMPLETION_STEMS = frozenset({
+    "done", "complete", "completed", "finish", "finished",
+})
+
+
+def _is_question_form(lower: str) -> bool:
+    """Return True if *lower* begins with a recognized question prefix."""
+    s = lower.strip()
+    return any(s.startswith(p + " ") or s == p for p in _QUESTION_PREFIXES)
+
+
+def _has_completion_stem(lower: str) -> bool:
+    """Return True if *lower* contains any word from `_COMPLETION_STEMS`."""
+    return bool(set(_tokenize(lower)) & _COMPLETION_STEMS)
+
+
+# Filler tokens stripped from BOTH ends of an utterance before matching
+# against `_GUIDANCE_ADVANCE_PHRASES`. Interior tokens are content, not
+# filler: `"got it but I'm stuck"` keeps `but` and must NOT advance.
+_ADVANCE_FILLER = frozenset({
+    "please", "thanks", "okay", "ok", "just", "alright", "now", "then",
+})
+
+
+def _after_frame_for_step(
+    frames: list[RecordedFrame],
+    notes:  list[VoiceNote],
+    step_idx: int,
+) -> RecordedFrame | None:
+    """Pick the recorded frame that captures the completed state of *step_idx*.
+
+    Returns the latest frame strictly before the NEXT voice note (the one
+    that begins the *following* step). For the last step, returns the
+    last recorded frame. Returns ``None`` only when *frames* is empty.
+
+    Lifted out of ``_handle_demo_end`` so the picked frame's
+    ``image_path`` AND ``description`` can be threaded into ``DemoStep``
+    together — no interpolated-timestamp drift between them — and so the
+    helper is directly unit-testable.
+    """
+    if not frames:
+        return None
+    next_note_ts: int | None = None
+    if step_idx + 1 < len(notes):
+        next_note_ts = notes[step_idx + 1].timestamp_us
+    if next_note_ts is not None:
+        before = [f for f in frames if f.timestamp_us < next_note_ts]
+        return before[-1] if before else frames[-1]
+    return frames[-1]
+
+
 def _now_us() -> int:
     return time.time_ns() // 1_000
 
@@ -256,6 +333,207 @@ def _extract_json(text: str) -> str | None:
             if depth == 0 and start >= 0:
                 return text[start:i + 1]
     return None
+
+
+def _fallback_step_requirements(instruction: str) -> list[str]:
+    """Small deterministic fallback for common imperative guidance steps."""
+    lower = instruction.lower()
+    clean = re.sub(r"[^a-z0-9\s]", " ", lower)
+    clean = re.sub(r"\s+", " ", clean).strip()
+    out: list[str] = []
+
+    if "headset" in clean and (
+        "on your head" in clean
+        or "on head" in clean
+        or "wear" in clean
+        or "put" in clean
+    ):
+        out.append("headset on head")
+
+    if "controller" in clean and ("hold" in clean or "hand" in clean):
+        out.append("controller in hand")
+
+    patterns = (
+        (r"\b(?:put|place|set)\s+(?:the\s+|a\s+|an\s+)?(.+?)\s+on\s+(?:your\s+)?head\b", " on head"),
+        (r"\b(?:hold|grip|pick up)\s+(?:the\s+|a\s+|an\s+)?(.+?)\s+in\s+(?:your\s+)?hand\b", " in hand"),
+    )
+    for pattern, suffix in patterns:
+        match = re.search(pattern, clean)
+        if not match:
+            continue
+        obj = match.group(1).strip()
+        obj = re.sub(r"\b(pico|vr|the|a|an)\b", "", obj)
+        obj = re.sub(r"\s+", " ", obj).strip()
+        if obj:
+            out.append(obj + suffix)
+
+    deduped: list[str] = []
+    for req in out:
+        if req not in deduped:
+            deduped.append(req)
+    return deduped[:4]
+
+
+_FRAME_SCORE_STOPWORDS = frozenset({
+    "a", "an", "and", "is", "it", "of", "on", "in", "into", "to", "the",
+    "this", "that", "your", "you", "step", "one", "two", "three", "put",
+    "place", "set", "hold", "grab", "pick", "up", "with", "for",
+})
+
+_FRAME_STATE_TOKENS = frozenset({
+    "hand", "hands", "head", "eyes", "eye", "face", "left", "right",
+})
+
+_KNOWN_OBJECT_TOKENS = frozenset({
+    "controller", "headset", "case", "mug", "cup", "phone", "lid",
+    "switch", "button", "strap", "cap", "hat", "beret", "circle",
+    "scissors", "scissor", "foam", "comb",
+})
+
+
+def _frame_score_tokens(text: str) -> set[str]:
+    out: set[str] = set()
+    for token in _tokenize(text):
+        if len(token) <= 1 or token in _FRAME_SCORE_STOPWORDS:
+            continue
+        out.add(token)
+        if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
+            out.add(token[:-1])
+    return out
+
+
+def _primary_object_tokens(instruction: str) -> set[str]:
+    tokens = _frame_score_tokens(instruction)
+    known = tokens & _KNOWN_OBJECT_TOKENS
+    if known:
+        return known
+    return tokens - _FRAME_STATE_TOKENS
+
+
+def _target_state_tokens(instruction: str) -> set[str]:
+    tokens = _frame_score_tokens(instruction)
+    return tokens & _FRAME_STATE_TOKENS
+
+
+def _candidate_score(
+    frame: RecordedFrame,
+    instruction: str,
+    next_instruction: str = "",
+) -> tuple[int, bool]:
+    caption_tokens = _frame_score_tokens(frame.description)
+    instruction_tokens = _frame_score_tokens(instruction)
+    primary = _primary_object_tokens(instruction)
+    state = _target_state_tokens(instruction)
+    caption_objects = caption_tokens & _KNOWN_OBJECT_TOKENS
+
+    primary_hits = primary & caption_tokens
+    state_hits = state & caption_tokens
+    primary_present = bool(primary_hits) if primary else bool(instruction_tokens & caption_tokens)
+    mismatch_fallback = bool(caption_objects and state and (state & caption_tokens))
+    primary_present = primary_present or mismatch_fallback
+    state_plausible = True
+    if "head" in state and "headset" in primary:
+        state_plausible = bool({"head", "eyes", "eye", "face"} & caption_tokens)
+    elif "hand" in state or "hands" in state:
+        state_plausible = bool({"hand", "hands"} & caption_tokens)
+
+    score = 0
+    score += 3 * len(primary_hits)
+    score += 2 * len(state_hits)
+    score += len((instruction_tokens - primary - state) & caption_tokens)
+
+    if next_instruction:
+        next_primary = _primary_object_tokens(next_instruction) - primary
+        next_state = _target_state_tokens(next_instruction) - state
+        score -= 7 * len(next_primary & caption_tokens)
+        score -= 4 * len(next_state & caption_tokens)
+
+    return score, primary_present and state_plausible
+
+
+def _visually_meaningful_frame(frame: RecordedFrame, instruction: str) -> bool:
+    caption_tokens = _frame_score_tokens(frame.description)
+    state = _target_state_tokens(instruction)
+    if state and not (state & caption_tokens):
+        return False
+    return bool(caption_tokens & _KNOWN_OBJECT_TOKENS)
+
+
+def _frame_candidates_for_step(
+    frames: list[RecordedFrame],
+    notes: list[VoiceNote],
+    step_idx: int,
+    demo_start_us: int,
+    demo_end_us: int,
+    *,
+    preroll_us: int = 1_500_000,
+) -> list[RecordedFrame]:
+    if not frames:
+        return []
+    if step_idx < len(notes):
+        start_us = max(demo_start_us, notes[step_idx].timestamp_us - preroll_us)
+    else:
+        start_us = demo_start_us if step_idx == 0 else frames[0].timestamp_us
+    if step_idx + 1 < len(notes):
+        end_us = notes[step_idx + 1].timestamp_us
+    else:
+        end_us = demo_end_us or frames[-1].timestamp_us
+    return [f for f in frames if start_us <= f.timestamp_us <= end_us]
+
+
+def _select_reference_frames_for_step(
+    frames: list[RecordedFrame],
+    notes: list[VoiceNote],
+    step_idx: int,
+    instructions: list[str],
+    demo_start_us: int,
+    demo_end_us: int,
+) -> tuple[RecordedFrame | None, list[RecordedFrame], list[tuple[int, int, bool]]]:
+    candidates = _frame_candidates_for_step(
+        frames, notes, step_idx, demo_start_us, demo_end_us,
+    )
+    if not candidates:
+        return None, [], []
+
+    instruction = instructions[step_idx] if step_idx < len(instructions) else ""
+    next_instruction = (
+        instructions[step_idx + 1]
+        if step_idx + 1 < len(instructions)
+        else ""
+    )
+    scored: list[tuple[int, int, bool, RecordedFrame]] = []
+    for frame in candidates:
+        score, acceptable = _candidate_score(frame, instruction, next_instruction)
+        scored.append((score, frame.frame_idx, acceptable, frame))
+
+    acceptable = [item for item in scored if item[2] and item[0] > 0]
+    if not acceptable:
+        fallback_items = [
+            item for item in scored
+            if _visually_meaningful_frame(item[3], instruction)
+        ]
+        if not fallback_items:
+            return None, [], [(idx, score, ok) for score, idx, ok, _ in scored]
+        best_score = max(score for score, _idx, _ok, _frame in fallback_items)
+        best_band = [item for item in fallback_items if item[0] >= best_score - 1]
+        best = max(best_band, key=lambda item: item[3].timestamp_us)[3]
+        backups = [
+            item[3]
+            for item in sorted(fallback_items, key=lambda item: (item[0], item[3].timestamp_us), reverse=True)
+            if item[3] is not best
+        ][:2]
+        trace_scores = [(idx, score, ok) for score, idx, ok, _ in scored]
+        return best, backups, trace_scores
+
+    best_score = max(score for score, _idx, _ok, _frame in acceptable)
+    best_band = [item for item in acceptable if item[0] >= best_score - 1]
+    best = max(best_band, key=lambda item: item[3].timestamp_us)[3]
+    backups = [
+        item[3] for item in sorted(acceptable, key=lambda item: (item[0], item[3].timestamp_us), reverse=True)
+        if item[3] is not best
+    ][:2]
+    trace_scores = [(idx, score, ok) for score, idx, ok, _ in scored]
+    return best, backups, trace_scores
 
 
 # ── QueryProcessor ────────────────────────────────────────────────────────────
@@ -299,8 +577,16 @@ class QueryProcessor:
         self._guidance_monitor_task: asyncio.Task | None = None
         self._guidance_advancing:    bool                = False
         self._guidance_step_obs_baseline:   int = 0
+        # Per-check baseline reset every monitor cycle so delta_since_last
+        # measures "did the scene move during THIS window?" rather than
+        # "has anything changed since the step started?".
+        self._guidance_check_obs_baseline:  int = 0
         self._guidance_monitor_idle_cycles: int = 0
-        self._guidance_consecutive_yes:     int = 0  # consecutive 2-frame YES responses
+        self._guidance_consecutive_yes:     int = 0
+        self._guidance_last_result:         dict = {}
+        self._guidance_correction_state:    dict[str, object] = {}
+        self._guidance_started_at_us:       int = 0
+        self._guidance_step_spoken_at_us:   int = 0
 
         # Pending guidance disambiguation per pid. When we ask "did you
         # mean 1) X or 2) Y?", the next non-stop utterance from that pid
@@ -309,6 +595,11 @@ class QueryProcessor:
         # success, explicit stop, attempt cap, demo-set change, or any
         # branch that starts a different mode (guidance, recording).
         self._pending_guidance_by_pid: dict[str, dict] = {}
+
+        # Outstanding _finalize_demo tasks (one per recording in
+        # flight). Tracked so close() / clear-demos can cancel them and
+        # so tests can observe completion.
+        self._finalize_tasks: set[asyncio.Task] = set()
 
     def is_guiding(self, pid: str | None = None) -> bool:
         """Return True if guidance mode is active.
@@ -340,6 +631,12 @@ class QueryProcessor:
             # Demo set just changed underneath any in-flight pending
             # prompt — the stored choices list is now stale.
             self._pending_guidance_by_pid.clear()
+            # Cancel any in-flight finalize tasks. The generation bump
+            # inside clear_demonstrations() is the second line of defence;
+            # cancellation here aborts the in-flight LLM call so it stops
+            # using bandwidth, and emits DEMO_FINALIZE_CANCELLED in trace.
+            for task in list(self._finalize_tasks):
+                task.cancel()
             response = f"Done — {n} demonstration{'s' if n != 1 else ''} cleared."
             await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
             await self._say(pid, response)
@@ -438,6 +735,8 @@ class QueryProcessor:
                 await self._finish_guidance(pid)
             elif self._is_guidance_advance(lower):
                 await self._advance_guidance(pid)
+            elif self._match_guidance_request(lower) is not None:
+                await self._handle_guidance_request_during_guidance(lower, pid)
             else:
                 # Any other utterance (question, comment, noise) gets a brief
                 # contextual reply focused on the current step.
@@ -530,22 +829,30 @@ class QueryProcessor:
     def _extract_demo_name(self, lower: str) -> str | None:
         """Return the demo name if a start phrase is detected, else None.
 
-        Heuristic: the demo name is whatever comes after the start phrase.
-        If nothing follows (bare trigger), use a timestamp-based name.
+        Detection is token-boundary aware: a start phrase must appear as a
+        contiguous SEQUENCE of word tokens, so ``"watch meteor shower"``
+        does NOT trigger via ``"watch me"``. Once a start phrase matches,
+        the tail tokens are stripped of leading filler (``the``,
+        ``task``, …) so ``"theme song demo"`` is not chopped to
+        ``"me song demo"``.
         """
+        toks = _tokenize(lower)
+        if not toks:
+            return None
         for phrase in _DEMO_START_PHRASES:
-            if phrase in lower:
-                # Everything after the triggering phrase is the name.
-                after = lower.split(phrase, 1)[1].strip().rstrip(string.punctuation).strip()
-                for prefix in _DEMO_NAME_PREFIXES:
-                    if after.startswith(prefix):
-                        after = after[len(prefix):].strip().rstrip(string.punctuation).strip()
-                        break
-                if after and len(after) > 2:
-                    return after
-                # Bare trigger ("watch me") — generate a name from timestamp.
-                ts = time.strftime("%H%M%S")
-                return f"demo-{ts}"
+            phrase_toks = _tokenize(phrase)
+            if not phrase_toks:
+                continue
+            for i in range(len(toks) - len(phrase_toks) + 1):
+                if toks[i:i + len(phrase_toks)] == phrase_toks:
+                    tail = toks[i + len(phrase_toks):]
+                    while tail and tail[0] in _LEADING_NAME_FILLER:
+                        tail = tail[1:]
+                    if len(" ".join(tail)) > 2:
+                        return " ".join(tail)
+                    # Bare trigger ("watch me") — generate a timestamp name.
+                    ts = time.strftime("%H%M%S")
+                    return f"demo-{ts}"
         return None
 
     def _match_guidance_request(self, lower: str) -> str | None:
@@ -580,14 +887,56 @@ class QueryProcessor:
         return False
 
     def _is_guidance_advance(self, lower: str) -> bool:
+        """Whether *lower* is an explicit "advance to next step" command.
+
+        Strict-equality matcher: tokenize, strip leading/trailing filler
+        (``please``, ``okay``, ``now``, …), then accept only if the
+        remaining tokens equal an advance phrase exactly. This prevents
+        false positives like ``"I got it wrong"`` matching ``"got it"``
+        or ``"next time I see this"`` matching ``"next"``.
+
+        Doubled utterances (``"what's next? what's next?"``) are
+        collapsed iff the first half equals the second half exactly —
+        a common STT artifact when VAD bundles two short utterances.
+        The collapse is bounded (no substring matching, no partial
+        overlap) so ``"I got it wrong"`` is still rejected.
+        """
+        toks = _tokenize(lower)
+        # Trim filler from both ends — interior tokens are content.
+        while toks and toks[0] in _ADVANCE_FILLER:
+            toks = toks[1:]
+        while toks and toks[-1] in _ADVANCE_FILLER:
+            toks = toks[:-1]
+        if not toks:
+            return False
+        half = len(toks) // 2
+        if half > 0 and len(toks) == half * 2 and toks[:half] == toks[half:]:
+            toks = toks[:half]
         for phrase in _GUIDANCE_ADVANCE_PHRASES:
-            if lower.strip() == phrase or lower.strip().startswith(phrase):
+            if toks == _tokenize(phrase):
                 return True
         return False
 
     def _is_guidance_done(self, lower: str) -> bool:
-        # Exact match for multi-word phrases; word-boundary match for single words
-        # so "stop, stop" / "stop recording" / "okay stop" all exit guidance.
+        """Whether *lower* is an explicit "exit guidance" command.
+
+        Bare commands (``done``, ``finished``, ``stop guidance``) exit.
+        Question forms containing a completion stem (``am I done?``,
+        ``did I finish?``, ``is this complete?``) route to
+        ``_handle_guidance_question`` for a real completion check
+        instead — they are NOT exit commands.
+        """
+        # Multi-word explicit exits ("stop guidance", "exit guidance", …)
+        # always exit, even when phrased as a question.
+        multi_word_exits = [p for p in _GUIDANCE_DONE_PHRASES if " " in p]
+        for phrase in multi_word_exits:
+            if phrase in lower:
+                return True
+        # Question-form completion stems are NOT exits — let the
+        # question handler check whether the step is actually done.
+        if _is_question_form(lower) and _has_completion_stem(lower):
+            return False
+        # Bare-command branch: single-word phrases match on word boundary.
         words = set(lower.replace(",", " ").replace(".", " ").split())
         for phrase in _GUIDANCE_DONE_PHRASES:
             if lower.strip() == phrase:
@@ -652,6 +1001,15 @@ class QueryProcessor:
         _trace_log.info("DEMO_START  name=%s", name)
 
     async def _handle_demo_end(self, pid: str, ref_us: int) -> None:
+        """Synchronous part of stop-recording: announce, then kick off the
+        async analysis pipeline.
+
+        Returns as soon as the "analyzing now" message has been sent. All
+        subsequent user-facing sends (ping, analysis-failed message,
+        "Saved" announcement) live in ``_finalize_demo`` and are gated
+        by ``AgentMemory.is_current_finalization`` so a stale task whose
+        demo was cleared / re-recorded cannot speak.
+        """
         demo = self._memory.finish_recording()
         if demo is None:
             response = "No demonstration was being recorded."
@@ -676,87 +1034,194 @@ class QueryProcessor:
         )
         await self._say(pid, "Got it. Analyzing the recording now.")
 
-        # Send a follow-up after 10 s so the user knows it's still working.
-        async def _ping():
-            await asyncio.sleep(10)
-            await self._send_text(
-                pid, "Still analyzing — reviewing key frames…",
-                _AGENT_PROGRESS_TOPIC,
-            )
-        ping = asyncio.create_task(_ping())
+        task = asyncio.create_task(
+            self._finalize_demo(demo, demo.finalize_generation, pid, n_frames),
+            name=f"finalize-{demo.name}",
+        )
+        self._finalize_tasks.add(task)
+        task.add_done_callback(self._finalize_tasks.discard)
 
+    async def _finalize_demo(
+        self,
+        demo:       Demonstration,
+        generation: int,
+        pid:        str,
+        n_frames:   int,
+    ) -> None:
+        """Analyze *demo* and populate its steps, then announce.
+
+        Every send_text / say in here goes through ``_say_if_current`` so
+        a stale task (clear-demos OR re-record under the same name) is
+        silently dropped instead of confusing the user with messages
+        about a demo that no longer exists.
+
+        The 10 s "still analyzing" ping is a child task launched here so
+        it shares cancellation with this method.
+        """
+        async def _say_if_current(
+            text:   str,
+            *,
+            topic:  str | None  = None,
+            speak:  bool        = True,
+        ) -> None:
+            if not self._memory.is_current_finalization(demo, generation):
+                _trace_log.info(
+                    "DEMO_FINALIZE_SUPPRESSED_SEND  demo=%s  text=%r",
+                    demo.name, text[:60],
+                )
+                return
+            if topic is not None:
+                await self._send_text(pid, text, topic)
+            if speak:
+                await self._say(pid, text)
+
+        async def _ping() -> None:
+            await asyncio.sleep(10)
+            await _say_if_current(
+                "Still analyzing — reviewing key frames…",
+                topic=_AGENT_PROGRESS_TOPIC,
+                speak=False,
+            )
+
+        ping = asyncio.create_task(_ping())
         try:
-            overview, instructions = await self._analyze_recording(demo)
+            try:
+                overview, instructions = await self._analyze_recording(demo)
+            except asyncio.CancelledError:
+                _trace_log.info("DEMO_FINALIZE_CANCELLED  name=%s", demo.name)
+                raise
+
+            if not instructions:
+                import os as _os
+                run_dir  = _os.environ.get("XR_RUN_DIR", "/tmp")
+                safe     = re.sub(r"[^a-zA-Z0-9_-]", "_", demo.name)[:40]
+                log_path = f"{run_dir}/recordings/{safe}_{demo.started_at_us}.jsonl"
+                _trace_log.info("DEMO_ANALYSIS_FAILED  log=%s", log_path)
+                await _say_if_current(
+                    f"Recorded {n_frames} frames but analysis failed. "
+                    f"Raw observations saved to: {log_path}",
+                    topic=_AGENT_RESPONSE_TOPIC,
+                    speak=False,
+                )
+                await _say_if_current(
+                    "Recording saved but analysis failed.",
+                    speak=True,
+                )
+                return
+
+            # Identity + generation check BEFORE mutating the demo — a
+            # stale task (clear-demos or re-record under same name) must
+            # not touch the demo dict's current entry.
+            if not self._memory.is_current_finalization(demo, generation):
+                _trace_log.info("DEMO_FINALIZE_STALE  name=%s", demo.name)
+                return
+
+            demo.summary      = overview
+            demo.instructions = instructions
+
+            n      = len(instructions)
+            notes  = demo.voice_notes  # sorted by timestamp (added in order)
+            frames = demo.recorded_frames
+
+            span = max(demo.ended_at_us - demo.started_at_us, 1)
+            previous_path = ""
+            for i, instr in enumerate(instructions):
+                ts    = demo.started_at_us + int(i / max(n - 1, 1) * span)
+                frame, backups, scores = _select_reference_frames_for_step(
+                    frames, notes, i, instructions, demo.started_at_us, demo.ended_at_us,
+                )
+                reliable = frame is not None
+                text_video_mismatch = False
+                if frame is not None:
+                    _score, instruction_match = _candidate_score(
+                        frame,
+                        instr,
+                        instructions[i + 1] if i + 1 < len(instructions) else "",
+                    )
+                    primary_tokens = _primary_object_tokens(instr)
+                    caption_tokens = _frame_score_tokens(frame.description)
+                    text_video_mismatch = (
+                        not instruction_match
+                        or bool(primary_tokens and not (primary_tokens & caption_tokens))
+                    )
+                if frame is not None and backups:
+                    score_by_idx = {idx: score for idx, score, _ok in scores}
+                    best_score = score_by_idx.get(frame.frame_idx)
+                    if any(score_by_idx.get(b.frame_idx) == best_score for b in backups):
+                        vlm_frame = await self._select_reference_frame_with_vlm(
+                            instr, [frame, *backups[:3]],
+                        )
+                        if vlm_frame is not None:
+                            frame = vlm_frame
+                if frame is not None and previous_path and frame.image_path == previous_path:
+                    reliable = False
+                if frame is not None and not reliable and text_video_mismatch:
+                    reliable = True
+                path    = frame.image_path  if frame and reliable else ""
+                caption = frame.description if frame and reliable else ""
+                requirements = await self._derive_step_requirements(instr, caption)
+                demo.steps.append(DemoStep(
+                    step_number           = i + 1,
+                    timestamp_us          = ts,
+                    description           = instr,
+                    image_path            = path,
+                    teacher_caption       = caption,
+                    expected_requirements = requirements,
+                    reference_image_paths = (
+                        [f.image_path for f in [frame, *backups] if f is not None]
+                        if reliable else []
+                    ),
+                    reference_reliable    = reliable,
+                    text_video_mismatch   = text_video_mismatch and reliable,
+                ))
+                if reliable:
+                    previous_path = path
+                _trace_log.info(
+                    "STEP_FRAME_CANDIDATES  step=%d  selected=%s  reliable=%s  scores=%s",
+                    i + 1,
+                    frame.frame_idx if frame else "none",
+                    "YES" if reliable else "NO",
+                    " ".join(f"{idx}:{score}:{'Y' if ok else 'N'}" for idx, score, ok in scores),
+                )
+                if reliable and text_video_mismatch:
+                    _trace_log.info(
+                        "STEP_TEXT_VIDEO_MISMATCH  step=%d  instruction=%r  caption=%r",
+                        i + 1, instr[:80], caption[:120],
+                    )
+
+            if demo.recorded_frames:
+                _trace_log.info("STEP_FRAMES  %s",
+                                " | ".join(
+                                    f"{s.step_number}:{s.image_path[-20:]}"
+                                    for s in demo.steps if s.image_path
+                                ))
+
+            _trace_log.info("DEMO_INSTRUCTIONS  %s",
+                            " | ".join(f"{i+1}:{s[:40]}" for i, s in enumerate(instructions)))
+
+            _trace_log.info(
+                "STEP_REQUIREMENTS  %s",
+                " | ".join(
+                    f"{s.step_number}:[{', '.join(s.expected_requirements)}]"
+                    for s in demo.steps
+                ),
+            )
+
+            response = f"Saved '{demo.name}' with {n} steps."
+            if overview:
+                response += f" {overview}"
+            await _say_if_current(response, topic=_AGENT_RESPONSE_TOPIC, speak=False)
+            await _say_if_current(
+                f"Saved demonstration '{demo.name}' with {n} steps.",
+                speak=True,
+            )
+            _trace_log.info(
+                "DEMO_FINALIZED  name=%s  steps=%d  duration=%.1fs",
+                demo.name, n, (demo.ended_at_us - demo.started_at_us) / 1_000_000,
+            )
         finally:
             ping.cancel()
-
-        if not instructions:
-            import os as _os, re as _re
-            run_dir  = _os.environ.get("XR_RUN_DIR", "/tmp")
-            safe     = _re.sub(r"[^a-zA-Z0-9_-]", "_", demo.name)[:40]
-            log_path = f"{run_dir}/recordings/{safe}_{demo.started_at_us}.jsonl"
-            _trace_log.info("DEMO_ANALYSIS_FAILED  log=%s", log_path)
-            response = (
-                f"Recorded {n_frames} frames but analysis failed. "
-                f"Raw observations saved to: {log_path}"
-            )
-            await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
-            await self._say(pid, "Recording saved but analysis failed.")
-            return
-
-        demo.summary      = overview
-        demo.instructions = instructions
-
-        # Create DemoStep objects and assign an "after" reference frame to each.
-        # We want the frame that shows the COMPLETED state of each step (i.e.,
-        # just before the next voice note starts), not the before-state.
-        # Using the before-state as reference confuses the vlm-check because
-        # the comparison question asks "has the step been done?" — if Image 1
-        # shows the pre-step state, the VLM correctly says NO even when done.
-        n       = len(instructions)
-        notes   = demo.voice_notes  # sorted by timestamp (added in order)
-        frames  = demo.recorded_frames
-
-        def _after_frame(step_idx: int) -> str:
-            """Frame just before the next voice note = completed state of step."""
-            if not frames:
-                return ""
-            # Find the voice note that starts the NEXT step.
-            next_note_ts = None
-            if step_idx + 1 < len(notes):
-                next_note_ts = notes[step_idx + 1].timestamp_us
-            if next_note_ts is not None:
-                # Latest frame before the next note.
-                before = [f for f in frames if f.timestamp_us < next_note_ts]
-                return before[-1].image_path if before else frames[-1].image_path
-            # Last step: use the last recorded frame.
-            return frames[-1].image_path
-
-        span = max(demo.ended_at_us - demo.started_at_us, 1)
-        for i, instr in enumerate(instructions):
-            ts = demo.started_at_us + int(i / max(n - 1, 1) * span)
-            demo.steps.append(DemoStep(
-                step_number  = i + 1,
-                timestamp_us = ts,
-                description  = instr,
-                image_path   = _after_frame(i),
-            ))
-
-        if demo.recorded_frames:
-            _trace_log.info("STEP_FRAMES  %s",
-                            " | ".join(
-                                f"{s.step_number}:{s.image_path[-20:]}"
-                                for s in demo.steps if s.image_path
-                            ))
-
-        _trace_log.info("DEMO_INSTRUCTIONS  %s",
-                        " | ".join(f"{i+1}:{s[:40]}" for i, s in enumerate(instructions)))
-
-        response = f"Saved '{demo.name}' with {n} steps."
-        if overview:
-            response += f" {overview}"
-        await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
-        await self._say(pid, f"Saved demonstration '{demo.name}' with {n} steps.")
+            demo.is_finalizing = False
 
     async def _analyze_recording(
         self, demo: Demonstration
@@ -795,6 +1260,100 @@ class QueryProcessor:
         steps = [str(s).strip() for s in result.get("steps", []) if str(s).strip()]
         _trace_log.info("ANALYSIS_RESULT  %s", str(result)[:300])
         return overview, steps
+
+    async def _derive_step_requirements(
+        self, instruction: str, teacher_caption: str
+    ) -> list[str]:
+        """Generate an atomic visual checklist for one step.
+
+        Failure falls back to a small deterministic checklist for common
+        imperative instructions.
+        """
+        if not instruction.strip():
+            return []
+        fallback = _fallback_step_requirements(instruction)
+        try:
+            result = await self._nat_runtime.call_tool(
+                "glasses_worker_tasks",
+                "derive_step_requirements",
+                {
+                    "instruction": instruction,
+                    "teacher_caption": teacher_caption,
+                },
+            )
+        except Exception:
+            log.exception("derive_step_requirements call failed")
+            if fallback:
+                _trace_log.info("STEP_REQUIREMENTS_FALLBACK  %s", ", ".join(fallback))
+            return fallback
+        if not isinstance(result, dict):
+            return fallback
+        raw = result.get("requirements", [])
+        if not isinstance(raw, list):
+            return fallback
+        out = [str(r).strip() for r in raw if str(r).strip()]
+        if out:
+            return out[:4]
+        if fallback:
+            _trace_log.info("STEP_REQUIREMENTS_FALLBACK  %s", ", ".join(fallback))
+        return fallback
+
+    async def _select_reference_frame_with_vlm(
+        self, instruction: str, candidates: list[RecordedFrame],
+    ) -> RecordedFrame | None:
+        """Tie-break ambiguous teacher reference candidates with one VLM call."""
+        candidates = candidates[:4]
+        if len(candidates) <= 1:
+            return candidates[0] if candidates else None
+        labels = "\n".join(
+            f"Image {i + 1}: frame_idx={frame.frame_idx}; caption={frame.description}"
+            for i, frame in enumerate(candidates)
+        )
+        question = (
+            f"Instruction: {instruction}\n\n"
+            f"{labels}\n\n"
+            "Choose the ONE image that best shows the completed teacher reference "
+            "state for the instruction. Prefer end-state evidence over merely "
+            "showing the object. Output only JSON: {\"best\": <image number>}."
+        )
+        try:
+            result = await asyncio.wait_for(
+                self._nat_runtime.call_tool(
+                    "vlm_mcp",
+                    "ask_frames",
+                    {
+                        "question": question,
+                        "image_paths": [frame.image_path for frame in candidates],
+                    },
+                ),
+                timeout=12.0,
+            )
+        except Exception:
+            log.debug("reference-frame VLM tie-break failed", exc_info=True)
+            return None
+
+        if isinstance(result, dict):
+            best = result.get("best")
+        else:
+            text = str(result or "")
+            obj_text = _extract_json(text)
+            if not obj_text:
+                return None
+            try:
+                best = json.loads(obj_text).get("best")
+            except Exception:
+                return None
+        try:
+            idx = int(best) - 1
+        except (TypeError, ValueError):
+            return None
+        if 0 <= idx < len(candidates):
+            _trace_log.info(
+                "STEP_FRAME_VLM_SELECT  instruction=%r  selected=%d",
+                instruction[:50], candidates[idx].frame_idx,
+            )
+            return candidates[idx]
+        return None
 
     # ── guidance actions ──────────────────────────────────────────────────────
 
@@ -835,6 +1394,42 @@ class QueryProcessor:
             await self._say(pid, response)
             return
         await self._start_guidance(demo, pid)
+
+    async def _handle_guidance_request_during_guidance(self, query: str, pid: str) -> None:
+        """Restart/switch guidance when the wearer asks for guidance again."""
+        current = self._guidance_demo
+        demo = self._memory.find_demonstration_fuzzy(query, min_confidence="strict")
+        if demo is not None:
+            await self._start_guidance(demo, pid)
+            return
+        if current is None:
+            await self._handle_guidance_request(query, pid)
+            return
+
+        query_tokens = set(_tokenize(query))
+        other_names = [
+            name for name in self._memory.list_demonstrations()
+            if name != current.name
+        ]
+        mentions_other = any(
+            query_tokens & set(_tokenize(name))
+            for name in other_names
+        )
+        if mentions_other and other_names:
+            self._pending_guidance_by_pid[pid] = {
+                "query":    query,
+                "choices":  [current.name, *other_names],
+                "attempts": 0,
+            }
+            _trace_log.info(
+                "PENDING_SET  pid=%s  query=%r  choices=%s",
+                pid, query[:60], [current.name, *other_names],
+            )
+            await self._reask_with_choices(pid, attempts=0)
+            return
+
+        _trace_log.info("GUIDANCE_RESTART  demo=%s  query=%r", current.name, query[:60])
+        await self._start_guidance(current, pid)
 
     def _clear_pending_guidance(self, pid: str) -> None:
         """Drop pending disambiguation state for *pid* if present.
@@ -926,6 +1521,15 @@ class QueryProcessor:
         # We're committing to a demo — any pending "did you mean…?"
         # prompt is now resolved.
         self._clear_pending_guidance(pid)
+        if demo.is_finalizing:
+            response = (
+                f"I'm still analyzing '{demo.name}' — "
+                "try again in a few seconds."
+            )
+            await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
+            await self._say(pid, response)
+            _trace_log.info("GUIDANCE_BLOCKED_FINALIZING  demo=%s", demo.name)
+            return
         if not demo.steps:
             response = f"The demonstration '{demo.name}' has no steps recorded."
             await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
@@ -939,6 +1543,7 @@ class QueryProcessor:
 
         self._guidance_demo = demo
         self._guidance_step = 0
+        self._guidance_started_at_us = _now_us()
         _trace_log.info("GUIDANCE_START  demo=%s  steps=%d", demo.name, len(demo.steps))
         await self._speak_current_guidance_step(pid)
         self._start_guidance_monitor(pid)
@@ -964,6 +1569,8 @@ class QueryProcessor:
         demo = self._guidance_demo
         self._guidance_demo = None
         self._guidance_step = 0
+        self._guidance_started_at_us = 0
+        self._guidance_step_spoken_at_us = 0
         if demo:
             response = f"You've completed all steps in '{demo.name}'. Well done!"
         else:
@@ -982,17 +1589,60 @@ class QueryProcessor:
         total       = len(self._guidance_demo.steps)
 
         lower = transcript.lower()
-        if any(p in lower for p in ("doing it right", "doing step", "correct", "done", "finished")):
+        if (_has_completion_stem(lower)
+            or any(p in lower for p in ("doing it right", "doing step", "correct"))):
             result = await self._guidance_completion_result(pid)
-            raw = str(result.get("raw", "")) if isinstance(result, dict) else ""
-            completed = bool(result.get("completed")) if isinstance(result, dict) else False
+            issue       = str(result.get("issue", "")).strip() if isinstance(result, dict) else ""
+            current_obs = str(result.get("current_observation", "")).strip() if isinstance(result, dict) else ""
+            completed   = bool(result.get("completed", False)) if isinstance(result, dict) else False
+            missing = result.get("missing_or_mismatched", []) if isinstance(result, dict) else []
+            # The parser may set `issue` to a debug-y reject reason
+            # (``vlm returned non-json``, ``missing requirement: ...``,
+            # ``visible without evidence``, ``no grounded evidence``).
+            # Those are for the trace log, not the wearer. Speak `issue`
+            # only when it is human-authored (e.g. ``blue circle not
+            # white``) — i.e. it does NOT start with one of the parser
+            # prefixes.
+            _PARSER_REASONS = (
+                "vlm ", "missing requirement", "visible without", "no grounded",
+                "waiting for a fresh student frame", "text-video-mismatch",
+            )
+            if issue.lower().startswith("unreliable-reference"):
+                reply = (
+                    "I cannot reliably check this step from the demo video. "
+                    "Please re-record this step or say next to continue."
+                )
+                await self._send_text(pid, reply, _AGENT_RESPONSE_TOPIC)
+                await self._say(pid, reply)
+                _trace_log.info(
+                    "GUIDANCE_QUESTION_CHECK  step=%d  completed=NO  issue=%r  obs=%r",
+                    self._guidance_step, issue[:80], current_obs[:80],
+                )
+                return
+            if issue.lower().startswith(_PARSER_REASONS):
+                if isinstance(missing, list) and missing:
+                    spoken_issue = f"{missing[0]} not visible"
+                else:
+                    spoken_issue = ""
+            else:
+                spoken_issue = issue
             if completed:
                 reply = f"Yes, step {step_num} looks complete. {instruction}"
             else:
-                detail = f" I see: {raw}" if raw and raw.upper() != "NO" else ""
+                if spoken_issue:
+                    detail = f" {spoken_issue}"
+                elif current_obs:
+                    detail = f" I see: {current_obs}"
+                else:
+                    detail = ""
                 reply = f"Not yet. Step {step_num} is: {instruction}.{detail}"
             await self._send_text(pid, reply, _AGENT_RESPONSE_TOPIC)
             await self._say(pid, reply)
+            _trace_log.info(
+                "GUIDANCE_QUESTION_CHECK  step=%d  completed=%s  issue=%r  obs=%r",
+                self._guidance_step, "YES" if completed else "NO",
+                (spoken_issue or issue)[:80], current_obs[:80],
+            )
             return
 
         # Fetch the current live frame only.
@@ -1080,9 +1730,14 @@ class QueryProcessor:
         demo = self._guidance_demo
         if demo is None:
             return
-        self._guidance_step_obs_baseline   = len(self._memory._observations)
+        obs_now = len(self._memory._observations)
+        self._guidance_step_spoken_at_us = _now_us()
+        self._guidance_step_obs_baseline   = obs_now
+        self._guidance_check_obs_baseline  = obs_now
         self._guidance_monitor_idle_cycles = 0
         self._guidance_consecutive_yes     = 0
+        self._guidance_last_result         = {}
+        self._guidance_correction_state    = {}
         total       = len(demo.steps)
         step_num    = self._guidance_step + 1
         instruction = self._instruction_for_step(demo)
@@ -1101,16 +1756,7 @@ class QueryProcessor:
         )
 
     async def _guidance_monitor_loop(self, pid: str) -> None:
-        """Advance guidance automatically when the user completes a step.
-
-        Primary signal: the background VLM observation loop adds a new entry
-        when something visibly changes — obs_delta > 0 means the user did something.
-
-        Fallback (fine-motor actions): after 3 idle cycles (~12 s) with no
-        observation change, do a direct VLM check asking whether the step
-        looks complete. This catches button presses / switch flips that don't
-        produce large enough scene changes for the observation loop.
-        """
+        """Actively check guidance progress on a fixed cadence."""
         _trace_log.info("GUIDANCE_MONITOR  start  step=%d", self._guidance_step)
         try:
             while self._guidance_demo is not None:
@@ -1119,66 +1765,221 @@ class QueryProcessor:
                     break
 
                 current_obs = len(self._memory._observations)
-                delta = current_obs - self._guidance_step_obs_baseline
+                delta_since_last = current_obs - self._guidance_check_obs_baseline
+                self._guidance_check_obs_baseline = current_obs
+
+                step_idx = self._guidance_step
                 _trace_log.info(
-                    "GUIDANCE_MONITOR  step=%d  obs_delta=%d  idle=%d",
-                    self._guidance_step, delta, self._guidance_monitor_idle_cycles,
+                    "GUIDANCE_MONITOR  step=%d  delta=%d  check=YES  need=2",
+                    step_idx, delta_since_last,
                 )
 
-                should_check = delta > 0
-                if not should_check:
-                    self._guidance_monitor_idle_cycles += 1
-                    should_check = self._guidance_monitor_idle_cycles >= 1
-                if not should_check:
-                    continue
-
-                self._guidance_monitor_idle_cycles = 0
-                if await self._vlm_step_complete(pid):
+                completed, has_evidence = await self._vlm_step_complete(
+                    pid, require_reliable_reference=True,
+                )
+                if completed and has_evidence:
                     self._guidance_consecutive_yes += 1
+                    self._guidance_correction_state = {}
                     _trace_log.info(
-                        "GUIDANCE_MONITOR  yes-count=%d  step=%d",
-                        self._guidance_consecutive_yes, self._guidance_step,
+                        "GUIDANCE_MONITOR  yes-count=%d/2  step=%d",
+                        self._guidance_consecutive_yes, step_idx,
                     )
                     if self._guidance_consecutive_yes >= 2:
                         self._guidance_consecutive_yes = 0
-                        _trace_log.info("GUIDANCE_MONITOR  vlm-advance  step=%d",
-                                        self._guidance_step)
+                        _trace_log.info(
+                            "GUIDANCE_MONITOR  vlm-advance  step=%d  need=2",
+                            step_idx,
+                        )
                         await self._advance_guidance(pid)
                 else:
+                    if self._guidance_consecutive_yes:
+                        _trace_log.info(
+                            "GUIDANCE_MONITOR  streak-reset  step=%d  was=%d  reason=%s",
+                            step_idx, self._guidance_consecutive_yes,
+                            "no-evidence" if completed else "no",
+                        )
                     self._guidance_consecutive_yes = 0
+                    await self._maybe_send_guidance_correction(
+                        pid, step_idx, self._guidance_last_result,
+                    )
         except asyncio.CancelledError:
             return
         except Exception:
             log.exception("guidance monitor error")
         _trace_log.info("GUIDANCE_MONITOR  exit")
 
-    async def _guidance_completion_result(self, pid: str) -> dict:
+    async def _guidance_completion_result(
+        self, pid: str, *, require_reliable_reference: bool = False,
+    ) -> dict:
         if self._guidance_demo is None:
             return {}
         instruction = self._instruction_for_step(self._guidance_demo)
+        expected_requirements: list[str] = []
+        teacher_image_path = ""
+        teacher_caption = ""
+        reference_reliable = False
+        if 0 <= self._guidance_step < len(self._guidance_demo.steps):
+            step = self._guidance_demo.steps[self._guidance_step]
+            expected_requirements = list(step.expected_requirements)
+            reference_reliable = bool(step.reference_reliable and step.image_path)
+            teacher_image_path = step.image_path if reference_reliable else ""
+            teacher_caption = step.teacher_caption
+        if require_reliable_reference and not reference_reliable:
+            result = {
+                "completed": False,
+                "current_observation": "",
+                "checks": [],
+                "missing_or_mismatched": [],
+                "image_path": "",
+                "timestamp_us": 0,
+                "issue": "unreliable-reference",
+            }
+            _trace_log.info(
+                "GUIDANCE_FRAME_PAIR  step=%d  teacher=none  reliable=NO  live=none  live_ts=0  min_ts=%d  issue=%r",
+                self._guidance_step,
+                max(self._guidance_started_at_us, self._guidance_step_spoken_at_us),
+                result["issue"],
+            )
+            return result
+        min_live_timestamp_us = max(
+            self._guidance_started_at_us,
+            self._guidance_step_spoken_at_us,
+        )
         try:
             result = await asyncio.wait_for(
                 self._nat_runtime.call_tool(
                     "glasses_worker_tasks",
                     "check_guidance_step_complete",
-                    {"participant_id": pid, "instruction": instruction},
+                    {
+                        "participant_id":        pid,
+                        "instruction":           instruction,
+                        "expected_requirements": expected_requirements,
+                        "teacher_image_path":    teacher_image_path,
+                        "teacher_caption":       teacher_caption,
+                        "min_live_timestamp_us": min_live_timestamp_us,
+                    },
                     participant_id=pid,
                 ),
                 timeout=10.0,
             )
         except (asyncio.TimeoutError, Exception):
             result = {}
+        if isinstance(result, dict):
+            _trace_log.info(
+                "GUIDANCE_FRAME_PAIR  step=%d  teacher=%s  reliable=%s  live=%s  live_ts=%s  min_ts=%d  issue=%r",
+                self._guidance_step,
+                teacher_image_path or "none",
+                "YES" if reference_reliable else "NO",
+                str(result.get("image_path", "") or "none"),
+                str(result.get("timestamp_us", 0) or 0),
+                min_live_timestamp_us,
+                str(result.get("issue", ""))[:80],
+            )
         return result if isinstance(result, dict) else {}
 
-    async def _vlm_step_complete(self, pid: str) -> bool:
-        """Ask the NAT guidance task whether the current step looks done."""
-        result = await self._guidance_completion_result(pid)
-        raw = str(result.get("raw", "")) if isinstance(result, dict) else ""
-        completed = bool(result.get("completed")) if isinstance(result, dict) else False
+    async def _maybe_send_guidance_correction(
+        self, pid: str, step_idx: int, result: dict,
+    ) -> None:
+        if not isinstance(result, dict):
+            return
+        current_obs = str(result.get("current_observation", "")).strip()
+        missing = result.get("missing_or_mismatched", [])
+        missing_key = ""
+        if isinstance(missing, list) and missing:
+            missing_key = str(missing[0]).strip()
+        issue = str(result.get("issue", "")).strip()
+        if not issue and missing_key:
+            issue = f"{missing_key} not visible"
+        if not issue:
+            return
+        parser_reasons = (
+            "vlm ", "missing requirement", "visible without", "no grounded",
+            "i cannot see", "waiting for a fresh student frame",
+            "unreliable-reference", "text-video-mismatch",
+        )
+        if issue.lower().startswith(parser_reasons):
+            if missing_key and current_obs:
+                issue = f"{missing_key} not visible"
+            else:
+                if issue.lower().startswith("unreliable-reference"):
+                    issue = (
+                        "I cannot reliably check this step from the demo video. "
+                        "Please re-record this step or say next to continue."
+                    )
+                else:
+                    return
+
+        now_us = _now_us()
+        state = self._guidance_correction_state
+        key = missing_key or issue
+        same_key = state.get("step_idx") == step_idx and state.get("key") == key
+        count = int(state.get("count", 0)) + 1 if same_key else 1
+        last_spoken_us = int(state.get("last_spoken_us", 0)) if same_key else 0
+        state.update({
+            "step_idx": step_idx,
+            "key": key,
+            "issue": issue,
+            "count": count,
+            "last_spoken_us": last_spoken_us,
+        })
+
+        min_gap_us = int(max(8.0, self._cfg.guidance_check_interval_s * 4) * 1_000_000)
+        if last_spoken_us and now_us - last_spoken_us < min_gap_us:
+            return
+
+        response = issue if issue.startswith("I cannot reliably") else f"Not yet. {issue}."
+        await self._send_text(pid, response, _AGENT_RESPONSE_TOPIC)
+        await self._say(pid, response)
+        state["last_spoken_us"] = now_us
+        _trace_log.info("GUIDANCE_CORRECTION  step=%d  issue=%s", step_idx, issue[:80])
+
+    async def _vlm_step_complete(
+        self, pid: str, *, require_reliable_reference: bool = False,
+    ) -> tuple[bool, bool]:
+        """Ask the NAT guidance task whether the current step looks done.
+
+        Returns ``(completed, has_evidence)``:
+          - ``completed`` is True only when the parser accepted the
+            grounded YES (every expected requirement covered with
+            non-empty evidence).
+          - ``has_evidence`` is True iff the response carried a non-empty
+            ``current_observation`` AND at least one check has non-empty
+            ``evidence``. Malformed / missing-fields collapse to
+            ``(False, False)``.
+        """
+        result = await self._guidance_completion_result(
+            pid, require_reliable_reference=require_reliable_reference,
+        )
+        self._guidance_last_result = result if isinstance(result, dict) else {}
+        if not isinstance(result, dict):
+            return False, False
+        completed = bool(result.get("completed", False))
+        current_obs = str(result.get("current_observation", "")).strip()
+        checks = result.get("checks", [])
+        if not isinstance(checks, list):
+            checks = []
+        has_evidence = bool(current_obs) and any(
+            isinstance(c, dict)
+            and c.get("visible")
+            and str(c.get("evidence", "")).strip()
+            for c in checks
+        )
         instruction = self._instruction_for_step(self._guidance_demo) if self._guidance_demo else ""
-        _trace_log.info("GUIDANCE_MONITOR  vlm-check  %r → %s  raw=%r",
-                        instruction[:40], "YES" if completed else "NO", raw[:30])
-        return completed
+        _trace_log.info(
+            "GUIDANCE_MONITOR  vlm-check  %r → %s  evidence=%s  obs=%r",
+            instruction[:40],
+            "YES" if completed else "NO",
+            "YES" if has_evidence else "NO",
+            current_obs[:40],
+        )
+        if not (completed and has_evidence):
+            _trace_log.info(
+                "GUIDANCE_CHECK_RAW  step=%d  reason=%r  raw=%r",
+                self._guidance_step,
+                str(result.get("issue", ""))[:120],
+                str(result.get("raw_vlm", ""))[:200],
+            )
+        return completed, has_evidence
 
     # ── quick-ack ─────────────────────────────────────────────────────────────
 
@@ -1252,37 +2053,6 @@ class QueryProcessor:
         return "", False
 
     # ── agentic loop ──────────────────────────────────────────────────────────
-
-    async def _prefetch_frame_description(
-        self, pid: str, ref_us: int
-    ) -> tuple[str | None, str | None]:
-        """Get the latest frame and a fresh VLM description of it.
-
-        Returns (frame_path, description). Either may be None on failure.
-        Called concurrently with context-building so the VLM answer is
-        ready before the first LLM call.
-        """
-        path = await self._get_latest_frame_path(pid, ref_us)
-        if not path:
-            return None, None
-        try:
-            result = await asyncio.wait_for(
-                self._call_vlm(
-                    "ask_image",
-                    {"question": "Describe what you see in this image in 1-2 sentences.",
-                     "image_path": path},
-                    silent=True,
-                ),
-                timeout=8.0,
-            )
-            if isinstance(result, dict):
-                result = (result.get("result") or result.get("text")
-                          or next(iter(result.values()), ""))
-            if isinstance(result, str) and result.strip():
-                return path, result.strip()
-        except Exception:
-            pass
-        return path, None
 
     async def _get_latest_frame_path(self, pid: str, ref_us: int) -> str | None:
         """Get the latest frame path from video-mcp for *pid*.
@@ -1404,5 +2174,9 @@ class QueryProcessor:
     async def close(self) -> None:
         if self._guidance_monitor_task and not self._guidance_monitor_task.done():
             self._guidance_monitor_task.cancel()
+        for task in list(self._finalize_tasks):
+            task.cancel()
+        if self._finalize_tasks:
+            await asyncio.gather(*self._finalize_tasks, return_exceptions=True)
         await self._http.aclose()
 

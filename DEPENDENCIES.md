@@ -472,7 +472,7 @@ NAT LangChain plugin internally.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `glasses-agent-nat` | `xr-ai-launcher`, `xr-ai-logging` | - |
-| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging`, `xr-ai-vad [editable]` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7 (silero-vad pulled in via xr-ai-vad) |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17 |
 
 Starts the same services as `glasses-agent`: hub, stt (8103), piper-tts
 (8105), nemotron3-nano-llm (8107), vlm-server (8100),

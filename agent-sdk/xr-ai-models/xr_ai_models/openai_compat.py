@@ -439,6 +439,23 @@ class OpenAICompatVLM:
         )
         return msgs
 
+    def _build_multi_image_messages(
+        self, images: Sequence[ImageInput], question: str, system_prompt: str
+    ) -> list[ChatMessage]:
+        urls = [_normalize_image(image) for image in images]
+        if not urls:
+            raise ValueError("ask_images requires at least one image")
+        msgs: list[ChatMessage] = []
+        if system_prompt:
+            msgs.append(ChatMessage(role="system", content=system_prompt))
+        msgs.append(
+            ChatMessage(
+                role="user",
+                content=[*(ImagePart(url=url) for url in urls), TextPart(text=question)],
+            )
+        )
+        return msgs
+
     async def ask_image(
         self,
         image: ImageInput,
@@ -451,6 +468,21 @@ class OpenAICompatVLM:
     ) -> ChatResponse:
         return await self._llm.chat(
             self._build_messages(image, question, system_prompt),
+            max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+        )
+
+    async def ask_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+    ) -> ChatResponse:
+        return await self._llm.chat(
+            self._build_multi_image_messages(images, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
         )
 

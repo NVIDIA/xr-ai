@@ -104,6 +104,9 @@ class VLMService(Protocol):
     async def ask_image(self, image, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
                         timeout=None) -> ChatResponse: ...
+    async def ask_images(self, images, question, *, system_prompt="",
+                         max_tokens=None, temperature=None,
+                         timeout=None) -> ChatResponse: ...
     async def ask_video(self, video, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
                         timeout=None) -> ChatResponse: ...
