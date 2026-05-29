@@ -16,8 +16,18 @@ default_prompt: "Describe what you see."
 # Override here to change the assistant's persona, response length, or
 # how it handles "stop"-style commands.  Omit to use the in-code default.
 system_prompt: |
-  You are an XR assistant looking at the user's live camera feed.
-  Help them understand what they see in their environment.
+  You are an XR assistant. You can see the user's live camera feed, but
+  you are not required to use it. Decide per question:
+
+  - If the question is about what is visible — e.g. "what am I looking
+    at", "what does this say", "is the door open", "describe this",
+    "what color is the X" — answer from the image.
+  - If the question is general knowledge, a definition, a calculation,
+    a chat, or anything not tied to the scene — e.g. "what's the
+    capital of France", "tell me a joke", "explain entropy", "how do I
+    boil pasta" — answer like a normal assistant and ignore the image.
+  - When it is ambiguous, prefer the visual answer if the camera shows
+    something obviously relevant; otherwise answer generally.
 
   Style:
   - Reply in plain conversational English — never JSON, code, or markdown.
@@ -36,5 +46,39 @@ camera_grace_s:       5.0   # keep camera on this long after a query (avoids res
 # Voice Activity Detection — Silero VAD (ONNX backend).
 # Tune if STT triggers too early or misses speech.
 silero_threshold:  0.5    # Silero speech-probability gate (0..1); lower = more sensitive
-silence_duration:  0.8    # seconds of silence that ends an utterance
+silence_duration:  0.4    # seconds of silence that ends an utterance (lower = snappier, but may split utterances with natural pauses)
 min_speech:        0.1    # minimum seconds of speech before STT is called; 0.1s captures short commands like "stop"
+
+# Speech-only opt-in phrases. STT transcripts must begin with one of
+# these (case-insensitive, strict prefix — no leading filler words
+# allowed) or they are dropped, so ambient conversation never triggers
+# the agent. The matched phrase is stripped before the VLM sees the
+# query. Configure several wordings to support multiple natural
+# greetings without resorting to fuzzy matching.
+#
+# Use an empty list ([]) or omit to disable the gate (agent answers
+# every utterance — only use this for solo testing where no ambient
+# speech is present).
+#
+# Scope: applies to the speech path only. The text data channel is never
+# gated. Note that a *spoken* "ping" is also gated by these phrases; the
+# "ping" data-channel shortcut is unaffected.
+magic_phrases:
+  - "agent"
+  - "hey agent"
+
+# Audible "I heard you" feedback. When true and `magic_phrases` is
+# non-empty, the server plays a short two-tone chime on the return
+# audio track the moment a phrase is matched — before STT+VLM finish —
+# so the user knows the agent is processing. Synthesized server-side
+# (no client asset needed) at the TTS sample rate to match the locked
+# LiveKit audio track. Has no effect when `magic_phrases` is empty.
+listening_chime: false
+
+# Follow-up grace window. After a successful magic-phrase match, the
+# next utterance from the same participant within this many seconds
+# bypasses the gate — so "hey agent" → pause → "what am I looking at?"
+# works as one natural interaction instead of needing the phrase on
+# every utterance. The window refreshes each time an utterance is
+# accepted so a conversation keeps flowing. Set to 0 to disable.
+followup_grace_s: 5.0
