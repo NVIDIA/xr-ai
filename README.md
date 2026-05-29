@@ -74,23 +74,15 @@ or virtual-environment setup needed.  If you do not have it:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-The NVIDIA Container Toolkit install is one-time per host:
+The NVIDIA Container Toolkit install is one-time per host. Follow the
+official install guide and run the CDI / runtime-configure steps from
+there:
+
+> https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+
+Quick smoke-test once installed:
 
 ```bash
-# Install
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-sudo apt update && sudo apt install -y nvidia-container-toolkit
-
-# Configure Docker to use the nvidia runtime + generate the CDI spec
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
-sudo systemctl restart docker
-
-# Smoke-test that Docker can see the GPU
 docker run --rm --gpus all nvidia/cuda:13.0-base nvidia-smi
 ```
 
