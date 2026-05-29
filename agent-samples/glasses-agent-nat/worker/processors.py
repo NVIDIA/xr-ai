@@ -609,6 +609,19 @@ class QueryProcessor:
         """
         return self._guidance_demo is not None
 
+    def is_guidance_control_utterance(self, transcript: str) -> bool:
+        lower = transcript.strip().lower().rstrip(string.punctuation)
+        if not lower:
+            return False
+        return (
+            self._is_guidance_stop(lower)
+            or self._is_guidance_done(lower)
+            or self._is_guidance_advance(lower)
+            or self._match_guidance_request(lower) is not None
+            or _is_question_form(lower) and _has_completion_stem(lower)
+            or any(p in lower for p in ("doing it right", "doing step", "correct"))
+        )
+
     async def handle(
         self,
         transcript: str,

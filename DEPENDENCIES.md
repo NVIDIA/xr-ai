@@ -447,6 +447,31 @@ recording disabled), transcript-mcp (8200), worker.  The NAT workflow config
 also supports `nat validate`, `nat serve`, `nat mcp serve`, and MCP client
 inspection for the configured function groups.
 
+### glasses-agent-vsop  (agent-samples/glasses-agent-vsop/)
+
+Fixed-task VSOP variant of `glasses-agent-nat` for desk arrangement.  It keeps
+the NAT process stack and student guidance monitor, but validates bundled
+teacher data (`data/steps.txt`, `data/desk_arrangement.yaml`, `frame_*.jpeg`)
+as the single task instead of recording a teacher demo at runtime.  Student
+utterances mentioning "desk arrangement" start the monitor; `stop demo` cancels
+the monitor and returns to normal visual Q&A.  These fixed-task commands bypass
+the voice-path LLM intent classifier, and the background condenser skips work
+while guidance is active so it does not compete with monitor checks.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent-nat` | `xr-ai-launcher`, `xr-ai-logging` | - |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts the same services as `glasses-agent-nat`: hub, stt (8103), piper-tts
+(8105), nemotron3-nano-llm (8107), vlm-server (8100),
+llama-nemotron-llm (8106), vlm-mcp (8240), video-mcp (8210, recording
+disabled), transcript-mcp (8200), worker.  The runtime NAT worker task group
+exposes only `check_guidance_step_complete` and `condense_observations`; live
+recording analysis and requirement derivation are not part of the monitor path.
+Package names intentionally remain the copied NAT names until the sample is
+cleaned up as a separate package.
+
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM

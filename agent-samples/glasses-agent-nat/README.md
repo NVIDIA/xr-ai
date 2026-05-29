@@ -22,6 +22,13 @@ The orchestrator starts hub, STT, TTS, VLM, two LLM servers, VLM/video/transcrip
 MCP servers, and the worker. The worker loads
 `yaml/glasses_agent_nat_workflow.yaml` and invokes NAT in-process.
 
+Voice interruption follows the same timing as `simple-vlm-example`: raw VAD
+speech-start does not flush spoken responses because it can fire on background
+noise or speaker echo. Once an utterance is finalized, STT and the NAT noise
+gates decide whether it is a real request; accepted transcripts interrupt the
+current response and flush queued TTS. Saying `stop`, `cancel`, or `be quiet`
+still stops speech after the transcript is accepted.
+
 To record a demonstration, say `start recording <task name>` or
 `record demo <task name>`, then say `stop recording` when finished. The worker
 owns recording state and sends bounded analysis tasks through NAT. During
