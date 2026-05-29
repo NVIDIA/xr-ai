@@ -688,8 +688,17 @@ class SimpleVlmAgent:
                     old.cancel()
                     try:
                         await old
-                    except (asyncio.CancelledError, Exception):
+                    except asyncio.CancelledError:
+                        # Expected — that's the cancel we just issued.
                         pass
+                    except Exception as exc:
+                        # The old task may have failed in flight; we
+                        # wanted it gone either way, so it's not
+                        # actionable here, but log so it isn't silent.
+                        logger.opt(exception=True).warning(
+                            "in-flight task error during stop pid={!r}: {}",
+                            pid, exc,
+                        )
                 await self._ep.flush_return_audio(pid)
                 vs.current_task = None
         await self._say(pid, "Okay, I will stop.", now_us())
