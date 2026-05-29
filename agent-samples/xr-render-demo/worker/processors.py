@@ -391,25 +391,25 @@ class RenderSceneProcessor(FrameProcessor):
 
             send_pid = pid or self._transport.target_participant
 
-            # Strip leaked tool-call JSON from the surface reply; legit text
-            # starting with "{" passes through.
+            # Strip leaked tool-call JSON from both the user-visible reply and
+            # history; legit text starting with "{" passes through.
             if response:
-                stored = response
+                display = response
                 if _looks_like_leaked_tool_call(response):
                     logger.warning(
-                        "response looks like a leaked tool call, sanitizing for history: {!r}",
+                        "response looks like a leaked tool call, sanitizing: {!r}",
                         response[:120],
                     )
-                    stored = "Done."
-                self._history.append((text, stored))
+                    display = "Done."
+                self._history.append((text, display))
                 if len(self._history) > self._history_max:
                     self._history.pop(0)
 
-            if response and send_pid:
-                await self._send(send_pid, response, topic=_AGENT_RESPONSE_TOPIC)
-                await self.push_frame(
-                    TextFrame(text=response), FrameDirection.DOWNSTREAM,
-                )
+                if send_pid:
+                    await self._send(send_pid, display, topic=_AGENT_RESPONSE_TOPIC)
+                    await self.push_frame(
+                        TextFrame(text=display), FrameDirection.DOWNSTREAM,
+                    )
 
     # ── quick ack ─────────────────────────────────────────────────────────────
 

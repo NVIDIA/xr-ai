@@ -465,20 +465,30 @@ def build_mcp(source: PoseSource) -> FastMCP:
         preference to position_relative + world_offset when placing or moving
         relative to an existing scene object.
 
-        Direction semantics:
-          front  → toward the user (closer to user's head along their gaze).
-          back   → away from the user (further along their gaze).
-          right  → user's right side at the object's location.
-          left   → user's left side at the object's location.
+        Direction semantics (user-frame applied at the object's origin):
+          front  → on the side of the object facing OPPOSITE the user's
+                   gaze. Coincides with "toward the user" only when the
+                   user is looking at the object; if the user is gazing
+                   away from it, this points further along the gaze
+                   direction (away from "between user and object"). For
+                   a true toward-user vector, use vec-mcp.along_direction
+                   with the user's head position as target.
+          back   → on the side of the object further along the user's
+                   gaze direction. Same caveat as `front` when the user
+                   is not looking at the object.
+          right  → user's right at the object's location (gaze-independent
+                   in the horizontal plane).
+          left   → user's left at the object's location.
           above  → world +Y from the object.
           below  → world -Y from the object.
           next_to → `distance` metres to the user's right of the object
                     (default 0.3 m when the user just says "next to obj").
 
-        Front/back/left/right use the user's perspective so that "behind
-        the cube" means the side of the cube further from the user, etc.
-        Distance is ALWAYS a positive number; pick the direction enum to
-        flip sign.
+        right / left / above / below are robust regardless of where the
+        user is looking. front / back assume the user is looking at the
+        object — true for "behind the cube" / "in front of the cube"
+        utterances in practice. Distance is ALWAYS a positive number;
+        pick the direction enum to flip sign.
 
         Use for utterances like:
           "Add a sphere behind the cube"

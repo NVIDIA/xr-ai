@@ -1091,4 +1091,3 @@ If you are not certain from the scene context alone, use the visual tools.
      STOP HERE. Do not emit add_primitive again. The cone already exists.
 6. After completing the task respond with ONE short sentence confirming what was done.
 
-
