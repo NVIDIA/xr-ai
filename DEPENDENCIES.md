@@ -195,6 +195,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
     └── xr-ai-vad               [editable: ../utils/xr-ai-vad]
     └── xr-ai-vllm              [editable: ../utils/xr-ai-vllm]
+    └── xr-ai-voicegate         [editable: ../utils/xr-ai-voicegate]
     └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
     └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
     └── render-mcp              [editable: ../agent-mcp-servers/render-mcp]
