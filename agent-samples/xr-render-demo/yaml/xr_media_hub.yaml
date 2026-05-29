@@ -33,5 +33,4 @@ video_recording:
   enabled: false
 
 # GPU index for cloudxr + render-mcp (LOVR inherits from render-mcp).
-# Matching field lives in agent-samples/model-servers/yaml/<profile>/.
 gpu_index: 0
