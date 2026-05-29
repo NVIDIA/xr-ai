@@ -290,6 +290,12 @@ export LOVR_BIN=/path/to/your/lovr   # or set lovr_bin: in render_mcp.yaml
 uv run xr_render_demo
 ```
 
+**GPU pinning** is controlled by `gpu_index` in
+`agent-samples/xr-render-demo/yaml/xr_media_hub.yaml` (pins cloudxr,
+render-mcp, and LOVR to that physical GPU). See
+[`docs/xr-render-demo.md`](docs/xr-render-demo.md#gpu-pinning-for-the-xr-side)
+for full details.
+
 To stop the model servers when done:
 
 ```bash

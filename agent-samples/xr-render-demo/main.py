@@ -59,32 +59,125 @@ _BASE = Path(__file__).resolve().parent
 # the launcher skips spawning them; start them first with:
 #   uv run --project agent-samples/model-servers model_servers
 
-_PROCESSES: list[Process] = [
-    Process("stt",       "../../ai-services/stt-server",         "stt_server",
-            launch_mode="reuse"),
-    Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
-            launch_mode="reuse"),
-    Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
-            launch_mode="reuse"),
-    Process("llm",       "../../ai-services/llm/llama_nemotron",  "llama_nemotron_llm_server",
-            launch_mode="reuse"),
-    Process("hub",        "../../server-runtime",                "xr_media_hub",
-            config="yaml/xr_media_hub.yaml"),
-    Process("cloudxr",    "../../cloudxr-runtime",               "cloudxr_runtime",
-            config="yaml/cloudxr_runtime.yaml"),
-    Process("tts",        "../../ai-services/tts/piper",         "piper_tts_server",
-            config="yaml/piper_tts_server.yaml"),
-    Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",     "vlm_mcp_server",
-            config="yaml/vlm_mcp_server.yaml"),
-    Process("video-mcp",  "../../agent-mcp-servers/video-mcp",   "video_mcp_server",
-            config="yaml/video_mcp_server.yaml"),
-    Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),
-    Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server",
-            config="yaml/oxr_mcp_server.yaml",
-            quiet_native_output=True),
-    Process("worker",     "worker",                              "xr_render_demo_worker",
-            config="yaml/xr_render_demo_worker.yaml"),
-]
+_HUB_YAML = _BASE / "yaml" / "xr_media_hub.yaml"
+
+_GPU_INDEX_LINE = re.compile(r'^\s*gpu_index\s*:\s*(\d+)\s*(?:#.*)?$')
+
+
+def _read_gpu_index(yaml_path: Path) -> int | None:
+    """Return the integer ``gpu_index`` from *yaml_path*, or None if absent."""
+    if not yaml_path.exists():
+        return None
+    for line in yaml_path.read_text().splitlines():
+        m = _GPU_INDEX_LINE.match(line)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _xr_gpu_env(idx: int) -> dict[str, str] | None:
+    """Return env keys pinning a Vulkan/CUDA child process to CUDA GPU *idx*.
+
+    Queries ``nvidia-smi`` once for the index/PCI map, then builds the three
+    selector keys that Vulkan, CUDA, and Mesa each consult independently on a
+    multi-GPU host. Without all three, the CloudXR compositor (Vulkan) can
+    land on a different physical GPU than the CUDA interop device.
+
+    Returns ``None`` (after logging a warning) when ``nvidia-smi`` is missing
+    or fails, no GPUs are reported, or *idx* is not in the reported indices.
+    Callers should treat ``None`` as "skip pinning" and continue startup.
+    """
+    if not shutil.which("nvidia-smi"):
+        logger.warning("nvidia-smi not on PATH; skipping XR-side GPU pinning")
+        return None
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=index,pci.bus_id",
+             "--format=csv,noheader,nounits"],
+            text=True, timeout=5.0,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.warning("nvidia-smi failed ({}); skipping XR-side GPU pinning", exc)
+        return None
+
+    by_index: dict[int, str] = {}
+    for line in out.strip().splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2:
+            continue
+        try:
+            by_index[int(parts[0])] = parts[1]
+        except ValueError:
+            continue
+
+    if not by_index:
+        logger.warning("nvidia-smi reported no GPUs; skipping XR-side GPU pinning")
+        return None
+
+    bus_id = by_index.get(idx)
+    if bus_id is None:
+        logger.warning(
+            "gpu_index={} not in nvidia-smi indices {}; skipping XR-side GPU pinning",
+            idx, sorted(by_index.keys()),
+        )
+        return None
+
+    # nvidia-smi reports bus_id as "00000000:41:00.0" with an 8-hex domain.
+    # Both Vulkan and Mesa selectors want the standard 4-hex-digit form.
+    try:
+        domain8, bus, dev_func = bus_id.split(":")
+        dev, func = dev_func.split(".")
+        domain = domain8[-4:]
+    except ValueError:
+        logger.warning(
+            "could not parse PCI bus_id {!r}; skipping XR-side GPU pinning",
+            bus_id,
+        )
+        return None
+
+    return {
+        "CUDA_VISIBLE_DEVICES":    str(idx),
+        "VK_LOADER_DEVICE_SELECT": f"PCI:{bus}:{dev}:{func}",
+        "DRI_PRIME":               f"pci-{domain}_{bus}_{dev}_{func}",
+    }
+
+
+def _build_processes() -> list[Process]:
+    gpu_idx = _read_gpu_index(_HUB_YAML)
+    if gpu_idx is None:
+        logger.info("gpu_index not set in xr_media_hub.yaml; XR-side GPU pinning skipped")
+    xr_env = _xr_gpu_env(gpu_idx) if gpu_idx is not None else None
+    if xr_env is not None:
+        logger.info("xr-render-demo: pinning XR side to GPU {} ({})",
+                    gpu_idx, xr_env["VK_LOADER_DEVICE_SELECT"])
+    return [
+        Process("stt",       "../../ai-services/stt-server",         "stt_server",
+                launch_mode="reuse"),
+        Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+                launch_mode="reuse"),
+        Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
+                launch_mode="reuse"),
+        Process("llm",       "../../ai-services/llm/llama_nemotron",  "llama_nemotron_llm_server",
+                launch_mode="reuse"),
+        Process("hub",        "../../server-runtime",                "xr_media_hub",
+                config="yaml/xr_media_hub.yaml"),
+        Process("cloudxr",    "../../cloudxr-runtime",               "cloudxr_runtime",
+                config="yaml/cloudxr_runtime.yaml",
+                env=xr_env),
+        Process("tts",        "../../ai-services/tts/piper",         "piper_tts_server",
+                config="yaml/piper_tts_server.yaml"),
+        Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",     "vlm_mcp_server",
+                config="yaml/vlm_mcp_server.yaml"),
+        Process("video-mcp",  "../../agent-mcp-servers/video-mcp",   "video_mcp_server",
+                config="yaml/video_mcp_server.yaml"),
+        Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp",
+                env=xr_env),
+        Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server",
+                config="yaml/oxr_mcp_server.yaml",
+                quiet_native_output=True),
+        Process("worker",     "worker",                              "xr_render_demo_worker",
+                config="yaml/xr_render_demo_worker.yaml"),
+    ]
 
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.
@@ -214,7 +307,7 @@ def run() -> None:
     setup_logging("orchestrator", namespace="xr-render-demo")
     _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(_PROCESSES, _BASE)
+    run_stack(_build_processes(), _BASE)
 
 
 if __name__ == "__main__":

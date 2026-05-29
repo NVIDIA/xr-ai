@@ -31,3 +31,7 @@ enable_token_server: true
 # Enable and set recordings_dir in video_mcp_server.yaml to unlock historical tools.
 video_recording:
   enabled: false
+
+# GPU index for cloudxr + render-mcp (LOVR inherits from render-mcp).
+# Matching field lives in agent-samples/model-servers/yaml/<profile>/.
+gpu_index: 0
