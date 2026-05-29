@@ -220,9 +220,15 @@ class SimpleVlmAgent:
 
     # ── voice-gate handlers ───────────────────────────────────────────────────
 
-    async def _dispatch_from_voice(self, pid: str, query: str) -> None:
-        """Voice-gate ``on_query`` handler — chime + dispatch."""
-        asyncio.create_task(self._gate.play_chime(pid))
+    async def _dispatch_from_voice(self, pid: str, query: str, fresh_match: bool) -> None:
+        """Voice-gate ``on_query`` handler — chime + dispatch.
+
+        Only chimes on a *fresh* magic-phrase match. Follow-up window
+        continuations (``fresh_match=False``) skip the chime; the original
+        pre-extraction code only chimed on case 2 and case 4, never on
+        case 3, and this matches that behavior."""
+        if fresh_match:
+            asyncio.create_task(self._gate.play_chime(pid))
         await self._dispatch_query(pid, query, pts_us=now_us())
 
     async def _on_phrase_only(self, pid: str) -> None:

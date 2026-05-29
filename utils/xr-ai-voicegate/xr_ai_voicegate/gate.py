@@ -28,7 +28,7 @@ from .config import AudioSink, TTSLike, VoiceGateConfig
 logger = logging.getLogger("xr_ai_voicegate")
 
 
-QueryHandler             = Callable[[str, str], Awaitable[None]]
+QueryHandler             = Callable[[str, str, bool], Awaitable[None]]   # (pid, query, fresh_match)
 StopHandler              = Callable[[str], Awaitable[None]]
 PhraseOnlyHandler        = Callable[[str], Awaitable[None]]
 DropHandler              = Callable[[str, str], Awaitable[None]]
@@ -44,9 +44,13 @@ class VoiceGate:
     1. STOP detected on raw text OR on the magic-phrase-stripped tail
        → ``on_stop(pid)``; closes the follow-up window.
     2. Magic phrase matched AND query non-empty
-       → ``on_query(pid, query)``; closes the follow-up window.
+       → ``on_query(pid, query, fresh_match=True)``; closes the follow-up
+       window.
     3. Follow-up window still open (and not STOP)
-       → ``on_query(pid, raw_text)``; closes the follow-up window.
+       → ``on_query(pid, raw_text, fresh_match=False)``; closes the
+       follow-up window. ``fresh_match`` distinguishes this continuation
+       from case 2 so consumers can suppress one-shot side effects
+       (e.g. the listening chime) on the follow-up dispatch.
     4. Magic phrase matched AND query empty
        → ``on_phrase_only(pid)``; opens the follow-up window.
     5. Otherwise → ``on_drop(pid, raw_text)``; closes the window
@@ -131,7 +135,7 @@ class VoiceGate:
                 #    after the answer must re-introduce a phrase.
                 self._followup_until.pop(pid, None)
                 logger.info("audio query pid=%r %r", pid, query[:80])
-                await self._invoke(self._on_query_h, "on_query", pid, query)
+                await self._invoke(self._on_query_h, "on_query", pid, query, True)
                 return
             # 4. Magic phrase with no follow-up payload — open the window
             #    so the user's next utterance counts as the actual query.
@@ -150,7 +154,7 @@ class VoiceGate:
             #    fresh magic-phrase match.
             self._followup_until.pop(pid, None)
             logger.info("followup query pid=%r %r", pid, text[:80])
-            await self._invoke(self._on_query_h, "on_query", pid, text)
+            await self._invoke(self._on_query_h, "on_query", pid, text, False)
             return
 
         # 5. Default drop — log and close the window defensively.
