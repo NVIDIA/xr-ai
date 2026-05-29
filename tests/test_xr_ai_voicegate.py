@@ -251,16 +251,13 @@ def test_chime_read_wav_sample_rate_round_trip(sample_rate: int):
 
 
 @pytest.mark.asyncio
-async def test_feed_no_phrases_routes_every_utterance_to_on_drop():
-    """Case 15 (locked to actual behavior): with magic_phrases=() the gate
-    does NOT pass-through to on_query; every non-STOP utterance falls
-    through the ladder to on_drop.
-
-    NOTE: ``VoiceGateConfig`` docstring says empty phrases 'disables the
-    gate so every STT transcript is dispatched' — readers may interpret
-    that as on_query pass-through. The impl routes to on_drop instead.
-    This test pins the impl's actual behavior; if the docstring is the
-    intended contract, that's a code bug, not a test bug."""
+async def test_feed_no_phrases_passes_every_utterance_through_to_on_query():
+    """Case 15: with ``magic_phrases=()`` the gate is in always-on mode —
+    every non-STOP utterance dispatches to ``on_query`` with
+    ``fresh_match=True``. Matches the original simple-vlm-example
+    behavior the gate was extracted from, and what ``VoiceGateConfig``'s
+    docstring promises ("empty tuple disables the gate so every STT
+    transcript is dispatched")."""
     gate, _, _ = _gate(phrases=())
     events = _recording_handlers(gate)
 
@@ -268,9 +265,21 @@ async def test_feed_no_phrases_routes_every_utterance_to_on_drop():
     await gate.feed("p1", "tell me about this")
 
     assert events == [
-        ("drop", "p1", "what am I looking at"),
-        ("drop", "p1", "tell me about this"),
+        ("query", "p1", "what am I looking at", True),
+        ("query", "p1", "tell me about this", True),
     ]
+
+
+@pytest.mark.asyncio
+async def test_feed_no_phrases_stop_still_routes_to_on_stop():
+    """Case 15 (b): even in always-on mode, the STOP regex must still
+    fire ``on_stop`` so an interrupt works without a wake word."""
+    gate, _, _ = _gate(phrases=())
+    events = _recording_handlers(gate)
+
+    await gate.feed("p1", "stop")
+
+    assert events == [("stop", "p1")]
 
 
 @pytest.mark.asyncio

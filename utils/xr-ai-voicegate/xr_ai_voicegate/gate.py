@@ -56,6 +56,13 @@ class VoiceGate:
     5. Otherwise → ``on_drop(pid, raw_text)``; closes the window
        defensively.
 
+    When ``magic_phrases`` is empty the gate is in always-on mode: STOP
+    still wins (interrupts must work without a phrase) and every other
+    utterance dispatches straight to ``on_query`` with
+    ``fresh_match=True``. The follow-up / phrase-only / drop branches
+    are inert in this mode — they only make sense once a phrase exists
+    to gate against.
+
     Handler exceptions are logged and swallowed so one bad handler does
     not kill the gate.
     """
@@ -112,10 +119,23 @@ class VoiceGate:
     # ── event ladder ──────────────────────────────────────────────────────────
 
     async def feed(self, pid: str, text: str) -> None:
+        # Always-on mode: no phrases configured, so the magic-phrase /
+        # follow-up / phrase-only / drop branches don't apply. STOP still
+        # wins (interrupts must work even without a phrase), and every
+        # other utterance is a fresh query.
+        if self._magic_re is None:
+            if STOP_RE.match(text):
+                logger.info("stop bypass pid=%r %r", pid, text[:80])
+                await self._invoke(self._on_stop_h, "on_stop", pid)
+                return
+            logger.info("audio query pid=%r %r", pid, text[:80])
+            await self._invoke(self._on_query_h, "on_query", pid, text, True)
+            return
+
         now_mono       = time.monotonic()
         in_followup    = self._followup_until.get(pid, 0.0) > now_mono
         stripped       = strip_magic(self._magic_re, text)
-        matched_magic  = self._magic_re is not None and stripped is not None
+        matched_magic  = stripped is not None
         stop_candidate = stripped if (matched_magic and stripped) else text
 
         # 1. STOP — always wins. Matched on both the raw transcript
