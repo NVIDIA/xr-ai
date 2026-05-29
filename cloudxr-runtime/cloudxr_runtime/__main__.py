@@ -33,6 +33,7 @@ from isaacteleop.cloudxr.runtime import (
 )
 from isaacteleop.cloudxr.wss import run as wss_run
 from loguru import logger
+from xr_ai_launcher import pick_freest_gpu_env
 from xr_ai_logging import setup_logging
 
 
@@ -69,6 +70,16 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
 
     for key, val in cfg.get("cloudxr_env", {}).items():
         os.environ[key] = str(val)
+
+    # Pin the CloudXR runtime daemon to the NVIDIA GPU with the most free
+    # VRAM. The daemon's compositor allocates per-eye Vulkan images at
+    # client-connect time; if the GPU it picked at startup is full of
+    # vLLM/etc. weights it OOMs the LOVR client with XRT_ERROR_VULKAN.
+    # Set BEFORE the multiprocessing fork so the runtime subprocess inherits.
+    gpu_env, gpu_msg = pick_freest_gpu_env()
+    logger.info("cloudxr gpu select  {}", gpu_msg)
+    if gpu_env:
+        os.environ.update(gpu_env)
 
     env_cfg = EnvConfig.from_args(install_dir, env_file)
     check_eula(accept_eula=cfg.get("accept_eula") or None)

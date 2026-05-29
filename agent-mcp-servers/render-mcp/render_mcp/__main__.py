@@ -41,7 +41,12 @@ import zmq.asyncio
 from fastmcp import FastMCP
 from loguru import logger
 
-from xr_ai_launcher import ManagedProcess, XR_RUNTIME_VAR, load_cloudxr_env
+from xr_ai_launcher import (
+    ManagedProcess,
+    XR_RUNTIME_VAR,
+    load_cloudxr_env,
+    pick_freest_gpu_env,
+)
 from xr_ai_logging import setup_logging
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "render_mcp.yaml"
@@ -216,8 +221,19 @@ class SceneDispatcher:
             logger.info(
                 "render-mcp: starting LOVR  bin={}  app={}", cfg.lovr_bin, cfg.xr_app_dir,
             )
+
+            # Pin LOVR to the NVIDIA GPU with the most free VRAM. Avoids OOM
+            # when local LLM/STT/VLM services have eaten most of one card.
+            # Falls back to inheriting parent env when nvidia-smi is
+            # unavailable or there is only one GPU.
+            gpu_env, gpu_msg = pick_freest_gpu_env()
+            logger.info("render-mcp: lovr gpu select  {}", gpu_msg)
+            child_env: dict[str, str] | None = None
+            if gpu_env:
+                child_env = {**os.environ, **gpu_env}
+
             lovr_proc = await self._stack.enter_async_context(
-                ManagedProcess("lovr", lovr_cmd, cwd=cfg.xr_app_dir)
+                ManagedProcess("lovr", lovr_cmd, cwd=cfg.xr_app_dir, env=child_env)
             )
 
             async def _watch() -> None:

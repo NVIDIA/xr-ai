@@ -149,6 +149,7 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     re-encodes selected frames as PNG via Pillow.
 
 cloudxr-runtime  (cloudxr-runtime/)
+    └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher] (pick_freest_gpu_env)
     └── isaacteleop[cloudxr]
     └── pyyaml
 
