@@ -18,6 +18,12 @@ accept_eula: true
 cloudxr_env:
   NV_DEVICE_PROFILE: auto-webrtc
 
+# Physical GPU (nvidia-smi index) the CloudXR compositor pins to. Translated
+# to PCI bus selectors for Vulkan, CUDA, and Mesa, set on this process's
+# environment, and appended to cloudxr.env so render-mcp picks them up when
+# it sources the file (and LOVR inherits from render-mcp's spawn env).
+gpu_index: 0
+
 # ── Network ports (CloudXR owns these — do not conflict with LiveKit) ─────────
 # CloudXR native service:  localhost:49100  (internal, not exposed)
 # WSS proxy (TLS):         0.0.0.0:48322   (XR clients connect here)

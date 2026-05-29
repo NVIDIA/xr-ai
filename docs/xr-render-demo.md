@@ -44,22 +44,26 @@ Before starting the stack, the orchestrator runs two setup steps:
 
 ## GPU pinning for the XR side
 
-`gpu_index` (int) in `yaml/xr_media_hub.yaml` selects the physical GPU that
-**cloudxr** and **render-mcp** run on; LOVR inherits from render-mcp because
-render-mcp spawns it with the parent env. The hub itself ignores the field.
+`gpu_index` (int) in `yaml/cloudxr_runtime.yaml` selects the physical GPU
+that the CloudXR compositor pins to. The cloudxr-runtime wrapper translates
+the index to a PCI bus address via `nvidia-smi` and sets three selectors
+(`CUDA_VISIBLE_DEVICES`, `VK_LOADER_DEVICE_SELECT`, `DRI_PRIME`) on its own
+environment before spawning the native service. All three are required: the
+compositor runs on Vulkan and needs the matching CUDA device for interop,
+so on a multi-GPU host Vulkan and CUDA can otherwise land on different
+physical GPUs.
 
-At orchestrator startup the index is translated to a PCI bus address via
-`nvidia-smi` and applied to those processes as the Vulkan, CUDA, and Mesa
-device selectors together. All three are required because the CloudXR
-compositor runs on Vulkan and then needs the matching CUDA device for
-interop; without aligned selectors on a multi-GPU host, Vulkan and CUDA can
-land on different physical GPUs and the interop lookup fails.
+The same three selectors are appended to `cloudxr.env` (under
+`~/.cloudxr/run/`). `render-mcp` sources that file when it spawns LOVR, so
+LOVR inherits the pin; `oxr-mcp` picks it up the same way.
 
-Default is `0`. The matching GPU-pinning field for the model side lives in
-`agent-samples/model-servers/yaml/<profile>/*.yaml`; pair the two so the XR
-side and the agentic LLM do not share a GPU. If `nvidia-smi` is unavailable
-or the requested index is not reported, the orchestrator logs a warning and
-skips pinning instead of failing.
+If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
+requested index, the wrapper logs a warning and skips pinning rather than
+failing startup.
+
+The corresponding model-side fields live under
+`agent-samples/model-servers/yaml/<profile>/`. Set them to different GPUs so
+the XR compositor and the agentic LLM do not share a card.
 
 ## Worker configuration
 

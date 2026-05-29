@@ -290,9 +290,10 @@ export LOVR_BIN=/path/to/your/lovr   # or set lovr_bin: in render_mcp.yaml
 uv run xr_render_demo
 ```
 
-**GPU pinning** is controlled by `gpu_index` in
-`agent-samples/xr-render-demo/yaml/xr_media_hub.yaml` (pins cloudxr,
-render-mcp, and LOVR to that physical GPU). See
+**GPU pinning** for the XR side is controlled by `gpu_index` in
+`agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`. cloudxr-runtime
+applies the pin to its own process and writes the selectors into
+`cloudxr.env`; render-mcp (and LOVR) inherit from that file. See
 [`docs/xr-render-demo.md`](docs/xr-render-demo.md#gpu-pinning-for-the-xr-side)
 for full details.
 

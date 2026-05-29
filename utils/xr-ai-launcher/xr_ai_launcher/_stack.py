@@ -81,10 +81,6 @@ class Process:
                            (e.g. OpenXR loader output) interleaved with their own Python
                            loguru lines. Default ``False`` — every other Process keeps
                            today's unconditional ``print`` behavior verbatim.
-    env                  — optional env overlay merged on top of the inherited
-                           parent environment for this process only (e.g.
-                           Vulkan/CUDA/Mesa GPU pinning). ``None`` (default)
-                           leaves the inherited env untouched.
 
       ``"own"``     (default) — launcher spawns this process and kills it on shutdown.
       ``"persist"`` — launcher spawns this process but leaves it running on shutdown.
@@ -103,7 +99,6 @@ class Process:
     launch_mode:         str = "own"
     port:                int | None = None
     quiet_native_output: bool = False
-    env:                 dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -172,8 +167,6 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     if proc.gpu is not None:
         env["CUDA_VISIBLE_DEVICES"] = proc.gpu
-    if proc.env:
-        env.update(proc.env)
 
     # start_new_session=True puts uv + its children (e.g. xr_media_hub) in a
     # new process group.  _shutdown then kills the whole group so grandchild
