@@ -65,9 +65,9 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         vlm_obs_max                 = int(data.get("vlm_obs_max",                 240)),
         condenser_interval_s        = float(data.get("condenser_interval_s",     60.0)),
         transcript_source           = data.get("transcript_source",      "glasses-agent-nat"),
-        guidance_check_interval_s   = float(data.get("guidance_check_interval_s",   4.0)),
+        guidance_check_interval_s   = float(data.get("guidance_check_interval_s",   2.0)),
         guidance_freshness_window_s = float(data.get("guidance_freshness_window_s", 120.0)),
         silence_duration   = float(data.get("silence_duration",  0.8)),
-        min_speech         = float(data.get("min_speech",        0.3)),
-        silero_threshold   = float(data.get("silero_threshold",  0.5)),
+        min_speech         = float(data.get("min_speech",        0.15)),
+        silero_threshold   = float(data.get("silero_threshold",  0.3)),
     )

@@ -18,7 +18,11 @@ from glasses_nat_schemas import AnalyzeRecordingInput
 from glasses_nat_schemas import AnalyzeRecordingOutput
 from glasses_nat_schemas import CondenseObservationsInput
 from glasses_nat_schemas import CondenseObservationsOutput
+from glasses_nat_schemas import DeriveStepRequirementsInput
+from glasses_nat_schemas import DeriveStepRequirementsOutput
+from glasses_nat_schemas import FrameEntry
 from glasses_nat_schemas import GuidanceStepOutput
+from glasses_nat_schemas import StepCheck
 
 log = logging.getLogger("glasses_agent_nat.tasks")
 
@@ -192,45 +196,6 @@ def _str_payload(value: Any) -> str:
     if isinstance(value, dict):
         value = value.get("result") or value.get("text") or next(iter(value.values()), "")
     return str(value).strip() if value else ""
-
-
-def _coerce_completion_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "yes", "y", "1", "complete", "completed", "done"}:
-            return True
-        if normalized in {
-            "false", "no", "n", "0", "incomplete", "not complete",
-            "not completed", "wrong",
-        }:
-            return False
-    return False
-
-
-def _parse_completion_response(result: str) -> tuple[bool, str]:
-    completed = False
-    issue = ""
-    json_str = extract_json(result)
-    if json_str:
-        try:
-            obj = json.loads(json_str)
-            completed = _coerce_completion_bool(
-                obj.get("completed", obj.get("complete", obj.get("is_complete", False)))
-            )
-            issue = str(obj.get("issue", "")).strip()
-            return completed, issue
-        except Exception:
-            return False, ""
-    upper = result.upper()
-    if upper.startswith("YES"):
-        return True, ""
-    if upper.startswith("NO"):
-        issue = result[2:].lstrip(":;,. -").strip()
-    return False, issue
 
 
 def _payload(value: Any) -> dict[str, Any] | list[Any] | str | None:
@@ -510,71 +475,426 @@ async def condense_observations_impl(
     )
 
 
+async def derive_step_requirements_impl(
+    request: DeriveStepRequirementsInput,
+    *,
+    agent_llm_server: str,
+) -> DeriveStepRequirementsOutput:
+    """Turn one step instruction into a small atomic checklist.
+
+    The selected teacher frame is the visual authority. The instruction
+    names the step, and the teacher caption is a hint about what the
+    frame shows.
+    """
+    instruction = request.instruction.strip()
+    if not instruction:
+        return DeriveStepRequirementsOutput()
+
+    hint = request.teacher_caption.strip()
+    hint_block = f"\nTEACHER FRAME CAPTION (visual authority): {hint}" if hint else ""
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You produce an atomic visual checklist for one step in a "
+                "demonstration. Output 1-4 short atoms (3-7 words each). "
+                "Each atom must be VISUALLY CHECKABLE from a single image — "
+                "a human looking at one photo should be able to mark it "
+                "true or false.\n\n"
+                "Rules:\n"
+                "  - The selected teacher frame is the visual authority. "
+                "If the instruction conflicts with the teacher frame caption, "
+                "prefer the teacher frame caption for object/color/state.\n"
+                "  - Do NOT enumerate background details; include only the "
+                "task-relevant object and end-state.\n"
+                "  - Prefer concrete object + state phrases: "
+                '"headset on head", "lid closed", "switch in up position".\n'
+                "  - Avoid action verbs in the past tense; describe the END "
+                'STATE (good: "screw inserted in hole"; bad: "insert screw").\n\n'
+                "OUTPUT - a single JSON object, nothing else:\n"
+                '{"requirements": ["atom 1", "atom 2", ...]}'
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"INSTRUCTION: {instruction}{hint_block}\n\nOutput the JSON."
+            ),
+        },
+    ]
+    try:
+        raw = await _post_chat(
+            base_url=agent_llm_server,
+            messages=messages,
+            max_tokens=256,
+            temperature=0.0,
+            timeout=20.0,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+    except Exception:
+        log.exception("derive_step_requirements: LLM call failed")
+        return DeriveStepRequirementsOutput()
+    content = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+    json_str = extract_json(content or raw)
+    if not json_str:
+        log.warning("derive_step_requirements: JSON parse failed: %s", raw[:300])
+        return DeriveStepRequirementsOutput()
+    try:
+        obj = json.loads(json_str)
+    except Exception:
+        log.warning("derive_step_requirements: invalid JSON: %s", json_str[:300])
+        return DeriveStepRequirementsOutput()
+    raw_reqs = obj.get("requirements", [])
+    if not isinstance(raw_reqs, list):
+        return DeriveStepRequirementsOutput()
+    reqs: list[str] = []
+    for entry in raw_reqs:
+        text = str(entry).strip()
+        if not text:
+            continue
+        reqs.append(text)
+        if len(reqs) >= 4:
+            break
+    return DeriveStepRequirementsOutput(requirements=reqs)
+
+
+def _evidence_token_set(text: str) -> set[str]:
+    """Cheap token-bag for fuzzy requirement coverage matching."""
+    out: set[str] = set()
+    for token in re.findall(r"[a-z0-9]+", text.lower()):
+        if len(token) <= 1:
+            continue
+        out.add(token)
+        if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
+            out.add(token[:-1])
+    return out
+
+
+_OBJECT_TOKENS = frozenset({
+    "cap", "hat", "headset", "headphone", "controller", "case", "mug",
+    "cup", "phone", "button", "strap", "lid", "switch",
+})
+
+_STATE_TOKENS = frozenset({
+    "head", "hand", "hands", "eye", "eyes", "ear", "ears", "face",
+})
+
+
+def _requirement_core_tokens(requirement: str) -> tuple[set[str], set[str]]:
+    tokens = _evidence_token_set(requirement) - _EVIDENCE_STOPWORDS
+    objects = tokens & _OBJECT_TOKENS
+    if not objects:
+        objects = tokens - _STATE_TOKENS
+    states = tokens & _STATE_TOKENS
+    return objects, states
+
+
+def _check_has_student_evidence(requirement: str, current_obs: str, check: dict) -> bool:
+    objects, states = _requirement_core_tokens(requirement)
+    evidence_tokens = _evidence_token_set(str(check.get("evidence", ""))) - _EVIDENCE_STOPWORDS
+    obs_tokens = _evidence_token_set(current_obs) - _EVIDENCE_STOPWORDS
+    combined = evidence_tokens | obs_tokens
+    if objects and not (objects & combined):
+        return False
+    if states and not (states & combined):
+        return False
+    return True
+
+
+def _requirement_covered(expected: str, checks: list[dict]) -> dict | None:
+    """Return the first check whose requirement text overlaps *expected*.
+
+    Coverage = token-set intersection size >= ceil(|expected_tokens| / 2).
+    Each non-stopword token in the expected atom contributes; this catches
+    obvious paraphrases ("headset on the head" vs "headset on head") but
+    rejects checks that share only filler.
+    """
+    exp_tokens = _evidence_token_set(expected) - _EVIDENCE_STOPWORDS
+    if not exp_tokens:
+        return None
+    needed = max(1, (len(exp_tokens) + 1) // 2)
+    for check in checks:
+        req_tokens = _evidence_token_set(str(check.get("requirement", ""))) - _EVIDENCE_STOPWORDS
+        if len(exp_tokens & req_tokens) >= needed:
+            return check
+    return None
+
+
+def _normalize_checks(obj: dict) -> list[dict]:
+    """Pull checks out of either the flat `requirements` map or the
+    legacy nested `checks` list. Each output entry has
+    ``{"requirement", "visible", "evidence"}``.
+    """
+    out: list[dict] = []
+    flat = obj.get("requirements")
+    if isinstance(flat, dict):
+        for req, payload in flat.items():
+            if not isinstance(payload, dict):
+                continue
+            out.append({
+                "requirement": str(req).strip(),
+                "visible":     bool(payload.get("visible", False)),
+                "evidence":    str(payload.get("evidence", "")).strip(),
+            })
+        return out
+    nested = obj.get("checks", [])
+    if isinstance(nested, list):
+        for entry in nested:
+            if not isinstance(entry, dict):
+                continue
+            out.append({
+                "requirement": str(entry.get("requirement", "")).strip(),
+                "visible":     bool(entry.get("visible", False)),
+                "evidence":    str(entry.get("evidence", "")).strip(),
+            })
+    return out
+
+
+def _parse_grounded_completion(
+    raw: str, expected_requirements: list[str]
+) -> tuple[bool, str, list[dict], list[str], str]:
+    """Grounded-completion parser. Accepts both the new flat shape
+
+        {"observation": "...", "requirements": {"<req>": {"visible": .., "evidence": ".."}}}
+
+    and the legacy nested shape
+
+        {"current_observation": "...", "checks": [{"requirement": "..", ...}], "completed": ..}
+
+    Returns (completed, observation, checks, missing_or_mismatched, reject_reason).
+    ``completed`` is derived: every expected requirement must be covered
+    by a check with visible=True and non-empty evidence. Empty
+    observation, visible-without-evidence, malformed JSON, or any
+    missing requirement collapses to ``(False, ...)`` with a non-empty
+    ``reject_reason`` for the trace log.
+    """
+    json_str = extract_json(raw)
+    if not json_str:
+        return False, "", [], [], "vlm returned non-json"
+    try:
+        obj = json.loads(json_str)
+    except Exception:
+        return False, "", [], [], "vlm returned non-json"
+    if not isinstance(obj, dict):
+        return False, "", [], [], "vlm returned non-json"
+
+    # Accept either field name; the new flat shape uses `observation`.
+    current_obs = str(obj.get("observation") or obj.get("current_observation") or "").strip()
+    checks = _normalize_checks(obj)
+    missing = [c["requirement"] for c in checks if not c["visible"] and c["requirement"]]
+
+    if not current_obs:
+        return False, "", checks, missing, "vlm omitted observation"
+
+    # Reject "visible without evidence" — the textbook bias-copy failure.
+    for c in checks:
+        if c["visible"] and not c["evidence"]:
+            return False, current_obs, checks, missing, "visible without evidence"
+        if c["visible"] and not _check_has_student_evidence(c["requirement"], current_obs, c):
+            return False, current_obs, checks, missing, f"no grounded evidence for: {c['requirement']}"
+
+    if expected_requirements:
+        for exp in expected_requirements:
+            match = _requirement_covered(exp, checks)
+            if match is None or not match["visible"] or not match["evidence"]:
+                if exp not in missing:
+                    missing.append(exp)
+                return False, current_obs, checks, missing, f"missing requirement: {exp}"
+        return True, current_obs, checks, missing, ""
+
+    # Degraded path: no checklist from the caller. Require at least one
+    # check with visible=True and non-empty evidence.
+    if not any(c["visible"] and c["evidence"] for c in checks):
+        return False, current_obs, checks, missing, "no grounded evidence"
+    return True, current_obs, checks, missing, ""
+
+
+def _human_issue_from_raw(raw: str) -> str:
+    json_str = extract_json(raw)
+    if not json_str:
+        return ""
+    try:
+        obj = json.loads(json_str)
+    except Exception:
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    return str(obj.get("issue") or obj.get("correction") or "").strip()
+
 async def check_guidance_step_complete_impl(
     *,
     participant_id: str,
     instruction: str,
+    expected_requirements: list[str] | None = None,
     teacher_image_path: str = "",
     teacher_caption: str = "",
+    min_live_timestamp_us: int = 0,
     get_latest_frame,
     ask_image,
     ask_frames=None,
 ) -> GuidanceStepOutput:
     frame = _payload(await get_latest_frame.ainvoke({"participant_id": participant_id}))
     if not isinstance(frame, dict) or "path" not in frame:
-        return GuidanceStepOutput(issue="I cannot see a current frame.", raw="NO")
+        return GuidanceStepOutput(issue="I cannot see a current frame.")
     image_path = str(frame.get("path") or "")
     if not image_path:
-        return GuidanceStepOutput(issue="I cannot see a current frame.", raw="NO")
+        return GuidanceStepOutput(issue="I cannot see a current frame.")
+    frame_ts = int(frame.get("timestamp_us", 0) or 0)
+    if min_live_timestamp_us and frame_ts and frame_ts < min_live_timestamp_us:
+        return GuidanceStepOutput(
+            image_path=image_path,
+            timestamp_us=frame_ts,
+            issue="Waiting for a fresh student frame.",
+        )
 
-    raw = ""
-    if ask_frames is not None and teacher_image_path and os.path.isfile(teacher_image_path):
-        try:
-            result = await ask_frames.ainvoke({
-                "question": (
-                    f"Task step instruction: {instruction}\n"
-                    f"Teacher reference caption: {teacher_caption or 'not available'}\n\n"
-                    "Image 1 is the teacher's completed state for this step. "
-                    "Image 2 is the student's current live view. First identify the key "
-                    "objects and constraints from the instruction and teacher caption. "
-                    "Then compare those key objects only: identity, count, color, shape, "
-                    "hand/action state, orientation, and spatial placement. Any explicit "
-                    "requirement in the instruction or teacher caption is mandatory. "
-                    "If the required color, object, shape, state, or placement differs, "
-                    "completed must be false. "
-                    "For example, a white circle does not complete a step requiring a blue circle.\n"
-                    "Output only JSON: "
-                    '{"completed": true/false, "issue": "brief visible mismatch if false"}'
-                ),
-                "image_paths": [teacher_image_path, image_path],
-            })
-            raw = _str_payload(result)
-        except Exception as exc:
-            log.warning("ask_frames guidance check failed; falling back to ask_image: %s", exc)
+    expected = [r.strip() for r in (expected_requirements or []) if r and str(r).strip()]
+    if expected:
+        checklist_block = "\n".join(f"  - {r}" for r in expected)
+        checklist_lines = (
+            f"REQUIREMENTS (check each against the current image):\n{checklist_block}\n\n"
+        )
+    else:
+        checklist_lines = (
+            "No predefined requirements were provided. Derive 1-2 short, "
+            "visually checkable requirements from the INSTRUCTION and include "
+            "those requirement texts in the JSON.\n\n"
+        )
 
-    completed, issue = _parse_completion_response(raw)
-    if not raw or raw.startswith(("ask_frames:", "ask_image:")):
-        result = await ask_image.ainvoke({
-            "question": (
-                f"Target step: {instruction}\n"
-                f"Teacher completed-state caption: {teacher_caption or 'not available'}\n"
-                "Extract the key objects and constraints from the target step and teacher "
-                "caption, then look only at those objects in the current student image. "
-                "Answer YES only if all required objects, colors, shapes, actions, states, "
-                "orientations, and positions are clearly visible. Any explicit color, "
-                "object, shape, state, or placement mismatch makes the answer NO; "
-                "a white circle is wrong if the target says blue circle.\n"
-                "Prefer JSON: "
-                '{"completed": true/false, "issue": "brief visible mismatch if false"}'
-            ),
-            "image_path": image_path,
+    live_question = (
+        f"INSTRUCTION: {instruction}\n"
+        f"{checklist_lines}"
+        "Look ONLY at this live student image.\n"
+        "Step 1. Describe what you actually see in the image right now in one sentence.\n"
+        "Step 2. For EACH requirement, mark visible=true ONLY if it is plainly true in this image.\n\n"
+        "Output ONLY this JSON, no prose, no markdown:\n"
+        "{\n"
+        '  "observation": "<one sentence about what is in the live image>",\n'
+        '  "requirements": {\n'
+        '    "<requirement text>": {"visible": true|false, "evidence": "<short visual cue from the live image or empty>"}\n'
+        "  }\n"
+        "}\n\n"
+        "Rules:\n"
+        "- observation MUST be a non-empty sentence about THIS live image.\n"
+        "- visible=true REQUIRES non-empty evidence from THIS live image.\n"
+        "- Do not invent evidence the image does not actually show."
+    )
+    live_result = await ask_image.ainvoke({"question": live_question, "image_path": image_path})
+    live_raw = _str_payload(live_result)
+    completed, current_obs, checks, missing, reject_reason = _parse_grounded_completion(
+        live_raw, expected,
+    )
+    if not completed:
+        human_issue = _human_issue_from_raw(live_raw)
+        if human_issue:
+            issue = human_issue
+        elif reject_reason:
+            issue = reject_reason
+        elif missing:
+            issue = (
+                f"{missing[0]} not visible"
+                if len(missing) == 1
+                else f"{missing[0]} and {missing[1]} not visible"
+            )
+        else:
+            issue = ""
+        return GuidanceStepOutput(
+            completed=False,
+            current_observation=current_obs,
+            checks=[StepCheck(**c) for c in checks],
+            missing_or_mismatched=missing,
+            image_path=image_path,
+            timestamp_us=frame_ts,
+            issue=issue,
+            raw_vlm=live_raw,
+        )
+
+    raw = live_raw
+    teacher_path = (
+        teacher_image_path
+        if teacher_image_path and os.path.isfile(teacher_image_path)
+        else ""
+    )
+    if ask_frames is not None and teacher_path:
+        comparison_question = (
+            f"INSTRUCTION: {instruction}\n"
+            "Image 1 is the teacher's completed reference state for this step.\n"
+            "Image 2 is the student's current state.\n"
+            f"Teacher reference caption: {teacher_caption or 'not available'}\n"
+            f"{checklist_lines}"
+            "Compare Image 2 against Image 1. Image 1 is authoritative for "
+            "the visual target state; the instruction and caption are context. "
+            "If text conflicts with Image 1, follow Image 1.\n"
+            "For EACH requirement, mark visible=true ONLY if the student's current "
+            "image plainly satisfies that requirement in a way that matches the "
+            "teacher reference. Evidence must come from Image 2.\n\n"
+            "Output ONLY this JSON, no prose, no markdown:\n"
+            "{\n"
+            '  "observation": "<one sentence about Image 2>",\n'
+            '  "requirements": {\n'
+            '    "<requirement text>": {"visible": true|false, "evidence": "<student visual cue or empty>"}\n'
+            "  },\n"
+            '  "issue": "<concise correction if Image 2 differs from Image 1, else empty>"\n'
+            "}\n\n"
+            "Rules:\n"
+            "- Do not credit Image 1 evidence to Image 2.\n"
+            "- visible=true REQUIRES non-empty Image 2 evidence.\n"
+            "- If the student differs from the teacher reference, set issue to a short correction."
+        )
+        result = await ask_frames.ainvoke({
+            "question": comparison_question,
+            "image_paths": [teacher_path, image_path],
         })
-        raw = _str_payload(result)
-        completed, issue = _parse_completion_response(raw)
+        compare_raw = _str_payload(result)
+        if compare_raw.startswith("ask_frames:"):
+            log.warning("ask_frames guidance check failed; using live-only check: %s", compare_raw)
+        else:
+            cmp_completed, cmp_obs, cmp_checks, cmp_missing, cmp_reject = _parse_grounded_completion(
+                compare_raw, expected,
+            )
+            if not cmp_completed:
+                cmp_issue = _human_issue_from_raw(compare_raw) or cmp_reject
+                return GuidanceStepOutput(
+                    completed=False,
+                    current_observation=cmp_obs,
+                    checks=[StepCheck(**c) for c in cmp_checks],
+                    missing_or_mismatched=cmp_missing,
+                    image_path=image_path,
+                    teacher_image_path=teacher_path,
+                    timestamp_us=frame_ts,
+                    issue=cmp_issue,
+                    raw_vlm=compare_raw,
+                )
+            raw = compare_raw
+    completed, current_obs, checks, missing, reject_reason = _parse_grounded_completion(
+        raw, expected,
+    )
+    human_issue = _human_issue_from_raw(raw)
+
+    # `issue` favors the parser's reject_reason (so GUIDANCE_CHECK_RAW can
+    # name the failure mode) and falls back to the human-readable
+    # missing-requirements summary used by _handle_guidance_question.
+    if not completed and human_issue:
+        issue = human_issue
+    elif reject_reason:
+        issue = reject_reason
+    elif not completed and missing:
+        issue = (
+            f"{missing[0]} not visible"
+            if len(missing) == 1
+            else f"{missing[0]} and {missing[1]} not visible"
+        )
+    else:
+        issue = ""
 
     return GuidanceStepOutput(
         completed=completed,
-        issue=issue,
-        raw=raw,
+        current_observation=current_obs,
+        checks=[StepCheck(**c) for c in checks],
+        missing_or_mismatched=missing,
         image_path=image_path,
+        teacher_image_path=teacher_path,
+        timestamp_us=frame_ts,
+        issue=issue,
+        raw_vlm=raw,
     )

@@ -24,15 +24,20 @@ MCP servers, and the worker. The worker loads
 
 To record a demonstration, say `start recording <task name>` or
 `record demo <task name>`, then say `stop recording` when finished. The worker
-owns recording state and sends bounded analysis tasks through NAT. Guidance
-follows the baseline worker loop: scene changes advance steps, while NAT's
-`check_guidance_step_complete` task is only the idle visual fallback.
+owns recording state and sends bounded analysis tasks through NAT. During
+guidance, the worker checks the student's current frame on a fixed cadence and
+uses an instruction-matched teacher reference frame from the same step window
+via `vlm_mcp.ask_frames` when available. Live student frames must be newer than
+the current spoken step before they can advance guidance. Two grounded correct
+checks advance to the next step; repeated grounded mismatches produce a spoken
+correction.
 
 ## NAT Workflow
 
 `yaml/glasses_agent_nat_workflow.yaml` declares:
 
-- `vlm_mcp` as a NAT `mcp_client` function group exposing `ask_image`.
+- `vlm_mcp` as a NAT `mcp_client` function group exposing `ask_image` and
+  `ask_frames`.
 - `video_mcp` as a NAT `mcp_client` function group exposing
   `list_live_participants` and `get_latest_frame` to custom NAT functions.
 - `transcript_mcp` as a NAT `mcp_client` function group for internal memory
@@ -40,8 +45,10 @@ follows the baseline worker loop: scene changes advance steps, while NAT's
 - `glasses_agent_tools` as the LLM-facing custom function group exposing
   `describe_current_view`, a composite current-frame VLM tool.
 - `glasses_worker_tasks` as an internal custom function group for
-  `analyze_recording`, `condense_observations`, and
-  `check_guidance_step_complete`.
+  `analyze_recording`, `derive_step_requirements`, `condense_observations`, and
+  `check_guidance_step_complete`. The guidance task receives the current
+  `DemoStep.image_path` and uses it as Image 1 when comparing against the live
+  student frame.
 - `workflow` as `tool_calling_agent` with `handle_tool_errors: true` and
   `max_iterations: 8`.
 

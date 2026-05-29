@@ -332,6 +332,28 @@ async def test_vlm_ask_image_with_path_reads_file(tmp_path) -> None:
     assert url.startswith("data:image/png;base64,")
 
 
+async def test_vlm_ask_images_sends_images_in_order() -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(content="comparison")
+    async with OpenAICompatVLM(
+        "http://stub", "vlm", client=stub.client(),
+    ) as vlm:
+        resp = await vlm.ask_images(
+            [_PNG_HEADER, "https://example.com/student.png"],
+            "compare these",
+        )
+    assert resp.content == "comparison"
+
+    parts = stub.last_json()["messages"][0]["content"]
+    assert parts[0]["type"] == "image_url"
+    assert base64.b64decode(parts[0]["image_url"]["url"].split(",", 1)[1]) == _PNG_HEADER
+    assert parts[1] == {
+        "type": "image_url",
+        "image_url": {"url": "https://example.com/student.png"},
+    }
+    assert parts[2] == {"type": "text", "text": "compare these"}
+
+
 async def test_vlm_ask_image_with_string_passes_through_url() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(

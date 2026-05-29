@@ -12,11 +12,13 @@ from nat.data_models.function import FunctionGroupBaseConfig
 
 from glasses_nat_schemas import AnalyzeRecordingInput
 from glasses_nat_schemas import CondenseObservationsInput
+from glasses_nat_schemas import DeriveStepRequirementsInput
 from glasses_nat_schemas import GuidanceStepInput
 from glasses_nat_tasks import analyze_recording_impl
 from glasses_nat_tasks import check_guidance_step_complete_impl
 from glasses_nat_tasks import condense_observations_impl
 from glasses_nat_tasks import describe_current_view_impl
+from glasses_nat_tasks import derive_step_requirements_impl
 
 
 class GlassesAgentToolsConfig(FunctionGroupBaseConfig, name="glasses_agent_tools"):
@@ -65,6 +67,7 @@ async def glasses_agent_tools(config: GlassesAgentToolsConfig, builder: Builder)
 async def glasses_worker_tasks(config: GlassesWorkerTasksConfig, builder: Builder):
     get_latest_frame = await builder.get_function("video_mcp__get_latest_frame")
     ask_image = await builder.get_function("vlm_mcp__ask_image")
+    ask_frames = await builder.get_function("vlm_mcp__ask_frames")
     group = FunctionGroup(config=config)
 
     async def analyze_recording(request: AnalyzeRecordingInput) -> dict:
@@ -82,8 +85,20 @@ async def glasses_worker_tasks(config: GlassesWorkerTasksConfig, builder: Builde
         result = await check_guidance_step_complete_impl(
             participant_id=request.participant_id,
             instruction=request.instruction,
+            expected_requirements=list(request.expected_requirements),
+            teacher_image_path=request.teacher_image_path,
+            teacher_caption=request.teacher_caption,
+            min_live_timestamp_us=request.min_live_timestamp_us,
             get_latest_frame=get_latest_frame,
             ask_image=ask_image,
+            ask_frames=ask_frames,
+        )
+        return result.model_dump()
+
+    async def derive_step_requirements(request: DeriveStepRequirementsInput) -> dict:
+        """Derive an atomic visual checklist for one analyzed step."""
+        result = await derive_step_requirements_impl(
+            request, agent_llm_server=config.agent_llm_server,
         )
         return result.model_dump()
 
@@ -104,5 +119,11 @@ async def glasses_worker_tasks(config: GlassesWorkerTasksConfig, builder: Builde
         check_guidance_step_complete,
         input_schema=GuidanceStepInput,
         description=check_guidance_step_complete.__doc__,
+    )
+    group.add_function(
+        "derive_step_requirements",
+        derive_step_requirements,
+        input_schema=DeriveStepRequirementsInput,
+        description=derive_step_requirements.__doc__,
     )
     yield group

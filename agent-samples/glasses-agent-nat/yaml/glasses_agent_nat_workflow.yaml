@@ -12,6 +12,7 @@ function_groups:
       url: http://localhost:8240/mcp
     include:
       - ask_image
+      - ask_frames
     tool_call_timeout: 60
     tool_overrides:
       ask_image:
@@ -55,6 +56,7 @@ function_groups:
     include:
       - analyze_recording
       - check_guidance_step_complete
+      - derive_step_requirements
       - condense_observations
     agent_llm_server: http://localhost:8107
     llm_server: http://localhost:8106

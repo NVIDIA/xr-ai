@@ -7,9 +7,8 @@ VLM MCP server.
 Pure FastMCP — one tool at /mcp on port 8240. There are no REST endpoints,
 no hub IPC subscription, and no `xr-ai-agent` runtime dependency.
 
-The single tool ``ask_image(question, image_path)`` reads a local PNG path,
-encodes it as a JPEG data URL, and calls the VLM via ``xr-ai-models``
-``OpenAICompatVLM``. The model's answer is returned verbatim.
+The tools read local PNG/JPEG paths, encode them as JPEG data URLs, and call
+the VLM via ``xr-ai-models``. The model's answer is returned verbatim.
 
 Typical two-step agent flow
 ───────────────────────────
@@ -27,6 +26,10 @@ Tool (FastMCP, mounted at /mcp)
       Send the local image at *image_path* and *question* to vlm-server
       and return the answer text. Reads the file synchronously inside an
       executor; the asyncio loop is never blocked.
+
+  ask_frames(question, image_paths) → str
+      Send 1-4 local image paths in order, plus *question*, to vlm-server.
+      Use when a task needs direct visual comparison across frames.
 
 Config (vlm_mcp_server.yaml)
 ────────────────────────────
@@ -152,10 +155,14 @@ def _load_jpeg_data_url(image_path: str, quality: int = 85) -> str:
     return f"data:image/jpeg;base64,{b64}"
 
 
+def _strip_thinking(content: str) -> str:
+    return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+
+
 # ── FastMCP build ─────────────────────────────────────────────────────────────
 
 def build_mcp(vlm: VLMService) -> FastMCP:
-    """Return a FastMCP server with the single ``ask_image`` tool bound."""
+    """Return a FastMCP server with VLM image tools bound."""
     mcp = FastMCP("vlm-mcp")
 
     @mcp.tool()
@@ -250,11 +257,55 @@ def build_mcp(vlm: VLMService) -> FastMCP:
         # Belt-and-suspenders: strip any <think> that leaked through despite
         # enable_thinking=False — cosmos_vlm preset sets this to False but
         # some model revisions may still emit reasoning tokens.
-        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+        content = _strip_thinking(content)
 
         logger.debug(
             "ask_image  q={!r}  image={}  -> {} chars",
             question[:80], path.name, len(content),
+        )
+        return content
+
+    @mcp.tool()
+    async def ask_frames(question: str, image_paths: list[str]) -> str:
+        """
+        Ask the vision-language model a question about multiple local frames.
+
+        ``image_paths`` must contain 1-4 existing local image files. The order
+        is preserved, so prompts can refer to Image 1, Image 2, etc.
+        """
+        if not image_paths:
+            return "ask_frames: image_paths is empty."
+        if len(image_paths) > 4:
+            return "ask_frames: at most 4 image paths are supported."
+
+        paths = [pathlib.Path(p) for p in image_paths]
+        for p in paths:
+            if not str(p):
+                return "ask_frames: image path is empty."
+            if not p.exists():
+                return f"ask_frames: file not found at {str(p)!r}."
+
+        loop = asyncio.get_running_loop()
+        try:
+            data_urls = await asyncio.gather(*(
+                loop.run_in_executor(None, _load_jpeg_data_url, str(p))
+                for p in paths
+            ))
+        except Exception as exc:
+            logger.exception("ask_frames: failed to load image paths")
+            return f"ask_frames: failed to read image paths: {exc}"
+
+        try:
+            response = await vlm.ask_images(data_urls, question)
+            content = response.content
+        except httpx.HTTPError as exc:
+            logger.exception("ask_frames: vlm-server HTTP error")
+            return f"ask_frames: vlm-server request failed: {exc}"
+
+        content = _strip_thinking(content)
+        logger.debug(
+            "ask_frames  q={!r}  images={}  -> {} chars",
+            question[:80], [p.name for p in paths], len(content),
         )
         return content
 

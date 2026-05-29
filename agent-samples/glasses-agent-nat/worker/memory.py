@@ -66,10 +66,18 @@ class Observation:
 
 @dataclass
 class DemoStep:
-    step_number:  int
-    timestamp_us: int
-    description:  str   # VLM description of what was observed at this step
-    image_path:   str
+    step_number:     int
+    timestamp_us:    int
+    description:     str   # Analyzed instruction text for this step (from _analyze_recording)
+    image_path:      str
+    teacher_caption: str = ""  # VLM description of the after-state frame (reference context only)
+    # Atomic visually-checkable requirements derived from the instruction at
+    # finalization time. The completion parser uses these as the authoritative
+    # checklist; teacher_caption only labels the reference image.
+    expected_requirements: list[str] = field(default_factory=list)
+    reference_image_paths: list[str] = field(default_factory=list)
+    reference_reliable: bool = True
+    text_video_mismatch: bool = False
 
 
 @dataclass
@@ -101,6 +109,14 @@ class Demonstration:
     steps:            list[DemoStep]      = field(default_factory=list)
     summary:          str                 = ""
     instructions:     list[str]           = field(default_factory=list)
+    # True between finish_recording() and the end of the async analysis
+    # task — the worker uses this to tell the user "still analyzing"
+    # rather than "no steps recorded yet" when guidance is requested.
+    is_finalizing:        bool = False
+    # Generation token stamped at finish_recording() time; checked by
+    # _finalize_demo before mutating the demo or speaking, so a task that
+    # races past `clear_demonstrations()` is neutered.
+    finalize_generation:  int  = 0
 
 
 # ── AgentMemory ───────────────────────────────────────────────────────────────
@@ -123,6 +139,10 @@ class AgentMemory:
         # demo, an ambiguous follow-up almost certainly means "guide me
         # through what I just recorded".
         self._last_demo_finished_at_us: int = 0
+        # Bumped by clear_demonstrations(); _finalize_demo checks its
+        # stamped value before mutating or speaking, so a finalize task
+        # that races past a clear is silently dropped.
+        self._finalize_generation:      int = 0
 
     # ── observations ──────────────────────────────────────────────────────────
 
@@ -173,7 +193,9 @@ class AgentMemory:
         self._last_demo_finished_at_us = demo.ended_at_us
         if demo.recorded_frames:
             # Store immediately so guidance can start once analysis populates steps.
-            self._demos[demo.name] = demo
+            demo.is_finalizing       = True
+            demo.finalize_generation = self._finalize_generation
+            self._demos[demo.name]   = demo
             log.info("demo capture done  name=%r  frames=%d",
                      demo.name, len(demo.recorded_frames))
         else:
@@ -200,10 +222,35 @@ class AgentMemory:
         return max(self._demos.values(), key=lambda d: d.ended_at_us)
 
     def clear_demonstrations(self) -> int:
-        """Delete all stored demonstrations. Returns count removed."""
+        """Delete all stored demonstrations. Returns count removed.
+
+        Bumps ``_finalize_generation`` first so any in-flight
+        ``_finalize_demo`` task that survives cancellation and reaches
+        its identity-check sees a stale generation token and exits
+        silently instead of announcing ``"Saved 'X'"`` for a demo that
+        no longer exists.
+        """
+        self._finalize_generation += 1
         n = len(self._demos)
         self._demos.clear()
         return n
+
+    def is_current_finalization(
+        self, demo: Demonstration, generation: int,
+    ) -> bool:
+        """Whether a finalize task for *demo* is still authoritative.
+
+        True only when BOTH (a) the generation token stamped on the task
+        still matches the memory's current generation (no
+        ``clear_demonstrations()`` happened), AND (b) the demo dict's
+        entry for ``demo.name`` is the SAME object as *demo* (so a
+        re-record under the same name during finalization invalidates
+        the prior task).
+        """
+        return (
+            self._finalize_generation == generation
+            and self._demos.get(demo.name) is demo
+        )
 
     @property
     def recording(self) -> Demonstration | None:
@@ -323,12 +370,13 @@ class AgentMemory:
             return None
         return top[0]
 
-    def restore_demonstration(self, demo: Demonstration) -> None:
-        """Load a previously persisted demonstration into memory (startup restore)."""
-        self._demos[demo.name] = demo
-
     def restore_observation(self, obs: Observation) -> None:
-        """Load a previously persisted observation into the rolling deque (startup restore)."""
+        """Load a previously persisted observation into the rolling deque (startup restore).
+
+        Note: only observations are restored across sessions. Demonstrations
+        intentionally start clean each run — see ``_restore_memory`` in
+        ``glasses_agent_nat_worker.py`` for the rationale.
+        """
         self._observations.append(obs)
         while len(self._observations) > self._max_obs:
             self._observations.popleft()
