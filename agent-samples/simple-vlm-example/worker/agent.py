@@ -7,28 +7,17 @@ SimpleVlmAgent — vision Q&A driven by voice, text, or "ping".
 Inputs
 ------
 * Audio chunks (mic):  VAD detects an utterance, STT turns it into text,
-                       which is then dispatched as a query.  If any
-                       ``magic_phrases`` are configured, the transcript
-                       must begin with one of them (case-insensitive,
-                       strict prefix — no leading filler words) or the
-                       utterance is dropped.  Configure several phrases
-                       to accept multiple wordings (e.g. "agent" and
-                       "hey agent") without resorting to fuzzy matching.
-                       This is the opt-in gate that keeps ambient
-                       conversation from triggering the agent.  When a
-                       phrase matches, the prefix is stripped before
-                       dispatch and a short follow-up window opens — the
-                       next utterance from that participant within
-                       ``followup_grace_s`` seconds bypasses the gate so
-                       a natural pause between the phrase and the
-                       question still works.  ``stop`` and related
-                       interrupt phrases always pass through and do not
-                       extend the follow-up window.
+                       which is then handed to ``xr-ai-voicegate``. The
+                       gate owns the magic-phrase, STOP, and follow-up
+                       ladder — see ``utils/xr-ai-voicegate``. This
+                       worker only wires handlers (``on_query``,
+                       ``on_stop``, ``on_phrase_only``, ``on_drop``,
+                       ``on_participant_joined``) and feeds transcripts.
 * Data messages:       text payload is dispatched as a query directly.
-                       The magic-phrase gate does not apply to this path.
+                       The voice gate does not apply to this path.
 * "ping" data message: literal text "ping" (case-insensitive) is replaced
                        with the configured default prompt before dispatch.
-                       Note: a *spoken* "ping" is gated by the magic phrase
+                       Note: a *spoken* "ping" is gated by the voice gate
                        like any other utterance; only the data-channel
                        shortcut is unaffected.
 
@@ -61,7 +50,6 @@ rapid follow-up queries don't cause a stop/start cycle.
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import json
 import re
 import time
@@ -74,47 +62,11 @@ from xr_ai_agent import (AudioChunk, DataMessage, FrameSignal,
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import STTService, TTSService, VLMService
 from xr_ai_vad import VadDetector
+from xr_ai_voicegate import VoiceGate, VoiceGateConfig
 
 from audio import int16_pcm_to_wav, now_us, wav_to_chunks
 from pixels import encode_image, frame_to_pil
 from voice import VoiceState
-
-# Transcripts matching this pattern bypass the magic-phrase gate so the
-# user can interrupt a response mid-flight without having to start with
-# the configured phrase.
-_STOP_RE = re.compile(
-    r'^\s*(?:\S+\s+){0,2}'               # up to 2 optional filler words
-    r'(?:stop(?:\s+\w+){0,2}|be\s+quiet|quiet|shut\s+up)'
-    r'\s*[.!?]?\s*$',
-    re.IGNORECASE,
-)
-
-
-def _build_chime_chunks(sample_rate: int) -> list[AudioChunk]:
-    """Synthesize the listening-chime and pre-slice into AudioChunks at
-    ``sample_rate``.
-
-    Two-tone perfect-fifth ding (880 + 1320 Hz) with exponential decay,
-    ~250 ms total, mono int16 PCM. The sample rate MUST match the rate
-    of the rest of the return audio track (TTS) because LiveKit's
-    AudioSource is locked to the first chunk's params and rejects later
-    frames at a different rate (InvalidState).
-    The `participant_id` is patched per-send in `_send_chime`.
-    """
-    dur  = 0.25
-    t    = np.linspace(0.0, dur, int(sample_rate * dur), endpoint=False, dtype=np.float32)
-    tone = 0.55 * np.sin(2 * np.pi * 880.0 * t) + 0.30 * np.sin(2 * np.pi * 1320.0 * t)
-    env  = np.exp(-t * 8.0).astype(np.float32)
-    pcm  = (tone * env * 0.5 * 32767.0).clip(-32768, 32767).astype(np.int16)
-    wav  = int16_pcm_to_wav(pcm.tobytes(), sample_rate, channels=1)
-    return wav_to_chunks(wav, participant_id="")
-
-
-def _read_wav_sample_rate(wav_bytes: bytes) -> int:
-    """Pull the sample rate from a WAV blob without decoding the audio."""
-    import io, wave
-    with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
-        return wf.getframerate()
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -143,6 +95,19 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
+class _EpSink:
+    """Adapter implementing ``xr_ai_voicegate.AudioSink`` over the hub's
+    return-audio fan-out: explode the WAV into 20 ms AudioChunks via the
+    worker's ``wav_to_chunks`` and stream them through ``send_return_audio``."""
+
+    def __init__(self, ep: ProcessorEndpoint) -> None:
+        self._ep = ep
+
+    async def play_wav(self, pid: str, wav_bytes: bytes) -> None:
+        for chunk in wav_to_chunks(wav_bytes, pid):
+            await self._ep.send_return_audio(chunk)
+
+
 class SimpleVlmAgent:
 
     def __init__(
@@ -152,14 +117,12 @@ class SimpleVlmAgent:
         vlm: VLMService,
         tts: TTSService,
         *,
-        default_prompt:     str   = "Describe what you see.",
-        system_prompt:      str   = DEFAULT_SYSTEM_PROMPT,
-        magic_phrases:      list[str] | tuple[str, ...] | str = (),
-        listening_chime:    bool  = False,
-        followup_grace_s:   float = 5.0,
-        silence_duration:   float = 0.8,
-        min_speech:         float = 0.3,
-        silero_threshold:   float = 0.5,
+        voice_gate_cfg:      VoiceGateConfig,
+        default_prompt:      str   = "Describe what you see.",
+        system_prompt:       str   = DEFAULT_SYSTEM_PROMPT,
+        silence_duration:    float = 0.8,
+        min_speech:          float = 0.3,
+        silero_threshold:    float = 0.5,
         frame_max_age_s:     float = 2.0,
         camera_on_timeout_s: float = 15.0,
         camera_grace_s:      float = 5.0,
@@ -176,48 +139,6 @@ class SimpleVlmAgent:
 
         self._default_prompt    = default_prompt
         self._system_prompt     = system_prompt
-        # Accept a single string OR a list of phrases. Normalize to a
-        # tuple of lowercased, non-empty phrases. Defensive: empty YAML
-        # values parse as None and would otherwise crash .strip().
-        if isinstance(magic_phrases, str):
-            _raw = [magic_phrases]
-        else:
-            _raw = list(magic_phrases) if magic_phrases else []
-        self._magic_phrases: tuple[str, ...] = tuple(
-            p.strip().lower() for p in _raw if p and p.strip()
-        )
-        # Pre-compile one regex covering every configured phrase.
-        # Longest-first ordering picks the most specific match when one
-        # phrase is a prefix of another (e.g., "agent" vs "agent buddy").
-        # Inside each phrase, the literal space between words is treated
-        # as "whitespace OR punctuation" so STT transcripts like
-        # "Hey, agent." still match the configured "hey agent".
-        self._magic_re: re.Pattern | None = None
-        if self._magic_phrases:
-            sep = r'[\s,.:;!?-]+'
-            alts = "|".join(
-                sep.join(re.escape(w) for w in p.split())
-                for p in sorted(self._magic_phrases, key=len, reverse=True)
-            )
-            self._magic_re = re.compile(
-                rf'^\s*(?:{alts})\b[\s,.:;!?-]*', re.IGNORECASE,
-            )
-        # Chime is built lazily at the TTS sample rate the first time
-        # any TTS WAV passes through (greeting or VLM reply). That
-        # guarantees the chime matches the rate the LiveKit AudioSource
-        # is locked to and avoids probing TTS with a dummy synthesize
-        # call (Piper crashes on whitespace input). See
-        # _maybe_build_chime. Disabled without a configured phrase.
-        self._listening_chime_enabled = listening_chime and bool(self._magic_phrases)
-        self._chime_chunks: list[AudioChunk] | None = None
-        # Follow-up grace: after a successful magic-phrase match, the
-        # next utterance from the same pid within this window bypasses
-        # the gate. Lets users say "hey agent" → pause → "what am I
-        # looking at?" naturally instead of mashing the phrase onto the
-        # front of every question. The window resets each time an
-        # utterance is accepted so a conversation keeps flowing.
-        self._followup_grace_s      = followup_grace_s
-        self._followup_until: dict[str, float] = {}
         self._vad_silence_s         = silence_duration
         self._vad_min_s             = min_speech
         self._vad_silero_threshold  = silero_threshold
@@ -234,7 +155,15 @@ class SimpleVlmAgent:
         self._camera_off_timers: dict[str, asyncio.Task] = {}  # pid → delayed-off task
         self._frame_events: dict[str, asyncio.Event]     = {}  # pid → event set on new frame
 
-    # ── audio path: VAD → STT → query ─────────────────────────────────────────
+        # Speech gating + greeting are owned by the voice gate.
+        self._gate = VoiceGate(voice_gate_cfg, audio_sink=_EpSink(ep), tts=tts)
+        self._gate.on_query(self._dispatch_from_voice)
+        self._gate.on_stop(self._handle_stop)
+        self._gate.on_phrase_only(self._on_phrase_only)
+        self._gate.on_drop(self._on_drop)
+        self._gate.on_participant_joined(self._greet)
+
+    # ── audio path: VAD → STT → gate ──────────────────────────────────────────
 
     async def _on_audio(self, chunk: AudioChunk) -> None:
         vs = self._get_voice(chunk.participant_id)
@@ -283,79 +212,31 @@ class SimpleVlmAgent:
             text = (await self._stt.transcribe(wav)).strip()
             if not text:
                 return
-            # Gate priority:
-            #   0. STOP — always wins. Cancels in-flight + canned ack,
-            #      regardless of magic-phrase or followup state. Matched
-            #      on both the raw transcript ("stop") AND on the
-            #      magic-phrase-stripped tail ("hey agent, stop") so the
-            #      fast path triggers either way.
-            #   1. strict-prefix magic phrase match (new conversation)
-            #   2. follow-up grace window still open (continuation)
-            now_mono       = time.monotonic()
-            in_followup    = self._followup_until.get(pid, 0.0) > now_mono
-            stripped       = self._strip_magic_phrase(text)
-            matched_magic  = stripped is not None
-            stop_candidate = stripped if (matched_magic and stripped) else text
-            if _STOP_RE.match(stop_candidate):
-                logger.info("stop bypass pid={!r}  {!r}", pid, stop_candidate[:80])
-                self._followup_until.pop(pid, None)
-                await self._handle_stop(pid)
-                self._schedule_camera_off(pid)
-                return
-            if matched_magic:
-                query = stripped
-            elif in_followup:
-                query = text
-                logger.info("followup query pid={!r} {!r}", pid, text[:80])
-            else:
-                logger.info("magic phrase missing pid={!r} text={!r}", pid, text[:80])
-                self._followup_until.pop(pid, None)
-                self._schedule_camera_off(pid)
-                return
-            # Chime on a fresh magic-phrase match only — follow-ups are
-            # already inside the conversation and STOP is a different signal.
-            if matched_magic and self._listening_chime_enabled:
-                asyncio.create_task(self._send_chime(pid))
-            if not query:
-                # Magic phrase with no follow-up payload yet — open the
-                # window so the user's next utterance counts as the
-                # actual query without needing the phrase again.
-                self._followup_until[pid] = now_mono + self._followup_grace_s
-                logger.info(
-                    "magic phrase only pid={!r} — awaiting followup ({:.1f}s)",
-                    pid, self._followup_grace_s,
-                )
-                self._schedule_camera_off(pid)
-                return
-            # Real query about to be dispatched. Close the window — the
-            # next utterance must re-introduce a magic phrase. Keeps
-            # ambient speech after the answer from re-entering.
-            self._followup_until.pop(pid, None)
-            logger.info("audio query  pid={!r}  {!r}", pid, query[:80])
-            await self._dispatch_query(pid, query, pts_us=now_us())
+            await self._gate.feed(pid, text)
         except httpx.HTTPError as exc:
             logger.error("stt error pid={!r}: {}", pid, exc)
         finally:
             vs.transcribing = False
 
-    def _strip_magic_phrase(self, text: str) -> str | None:
-        """Gate STT output on the configured magic phrase(s).
+    # ── voice-gate handlers ───────────────────────────────────────────────────
 
-        Strict-prefix match (case-insensitive): the transcript must begin
-        with one of the configured phrases as a whole word — no leading
-        filler words and no mid-sentence matches. Configure multiple
-        phrases (e.g. "agent", "hey agent") to accept several wordings
-        without falling back to fuzzy matching.
+    async def _dispatch_from_voice(self, pid: str, query: str) -> None:
+        """Voice-gate ``on_query`` handler — chime + dispatch."""
+        asyncio.create_task(self._gate.play_chime(pid))
+        await self._dispatch_query(pid, query, pts_us=now_us())
 
-        Returns the remainder of the transcript with the matched phrase
-        and any adjacent punctuation stripped, or ``None`` if no phrase
-        is the strict prefix. With no phrases configured the gate is
-        disabled and ``text`` is returned unchanged.
-        """
-        if self._magic_re is None:
-            return text
-        m = self._magic_re.match(text)
-        return None if m is None else text[m.end():]
+    async def _on_phrase_only(self, pid: str) -> None:
+        """Voice-gate ``on_phrase_only`` handler — chime the
+        acknowledgement so the user knows the wake word was heard while
+        the follow-up window is open, then schedule a camera-off in case
+        the user never follows up. ``_handle_query`` (case 2/3) cancels
+        a pending off-timer when the next query lands."""
+        await self._gate.play_chime(pid)
+        self._schedule_camera_off(pid)
+
+    async def _on_drop(self, pid: str, text: str) -> None:
+        logger.info("voice gate dropped pid={!r} text={!r}", pid, text[:80])
+        self._schedule_camera_off(pid)
 
     # ── data path: text → query (with "ping" → default prompt) ────────────────
 
@@ -469,7 +350,7 @@ class SimpleVlmAgent:
                     break
                 try:
                     wav = await task
-                    self._maybe_build_chime(wav)
+                    self._gate.observe_tts_wav(wav)
                     for chunk in wav_to_chunks(wav, pid):
                         await self._ep.send_return_audio(chunk)
                 except asyncio.CancelledError:
@@ -651,7 +532,7 @@ class SimpleVlmAgent:
         await self._reply(pid, text, pts_us)
         try:
             wav = await self._tts.synthesize(text)
-            self._maybe_build_chime(wav)
+            self._gate.observe_tts_wav(wav)
             for chunk in wav_to_chunks(wav, pid):
                 await self._ep.send_return_audio(chunk)
         except asyncio.CancelledError:
@@ -660,21 +541,6 @@ class SimpleVlmAgent:
             logger.opt(exception=True).error(
                 "tts error pid={!r}: {}", pid, exc,
             )
-
-    def _maybe_build_chime(self, wav_bytes: bytes) -> None:
-        """Build the chime at the TTS sample rate the first time we see
-        a real TTS WAV. No-op once built or when chime is disabled."""
-        if self._chime_chunks is not None or not self._listening_chime_enabled:
-            return
-        try:
-            sr = _read_wav_sample_rate(wav_bytes)
-            self._chime_chunks = _build_chime_chunks(sr)
-            logger.info("listening chime ready (sr={} Hz)", sr)
-        except Exception as exc:
-            logger.opt(exception=True).warning(
-                "listening chime disabled (bad TTS wav header): {}", exc,
-            )
-            self._listening_chime_enabled = False
 
     async def _handle_stop(self, pid: str) -> None:
         """Cancel any in-flight response for this participant and play a
@@ -701,48 +567,21 @@ class SimpleVlmAgent:
                         )
                 await self._ep.flush_return_audio(pid)
                 vs.current_task = None
-        await self._say(pid, "Okay, I will stop.", now_us())
-
-    async def _send_chime(self, pid: str) -> None:
-        """Emit the listening-chime on the return audio track. No-op
-        when chime is disabled."""
-        if self._chime_chunks is None:
-            return
-        pts0 = now_us()
-        try:
-            for i, ch in enumerate(self._chime_chunks):
-                chunk = dataclasses.replace(
-                    ch, participant_id=pid, pts_us=pts0 + i * 20_000,
-                )
-                await self._ep.send_return_audio(chunk)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            logger.opt(exception=True).error(
-                "chime send error pid={!r}: {}", pid, exc,
-            )
+        # Preserve the visible reply on ``vlm.response`` (clients listen
+        # on it for the assistant's text) while letting the gate handle
+        # the canned TTS + chime sample-rate observation.
+        self._schedule_camera_off(pid)
+        await self._reply(pid, "Okay, I will stop.", now_us())
+        await self._gate.say_stop_ack(pid)
 
     async def _greet(self, pid: str) -> None:
         """Speak a one-shot connection greeting that tells the user how to
-        address the agent given the current magic-phrase setting."""
-        phrases = list(self._magic_phrases)
-        if not phrases:
+        address the agent given the current voice-gate setting."""
+        help_text = self._gate.format_phrase_help()
+        if help_text is None:
             text = "Hi, I'm listening. Ask me anything about what you see."
         else:
-            if len(phrases) == 1:
-                phrase_list = f'"{phrases[0]}"'
-            elif len(phrases) == 2:
-                phrase_list = f'"{phrases[0]}" or "{phrases[1]}"'
-            else:
-                phrase_list = (
-                    ", ".join(f'"{p}"' for p in phrases[:-1])
-                    + f', or "{phrases[-1]}"'
-                )
-            text = (
-                f"Hi, I'm listening. To talk to me, start your question "
-                f"with {phrase_list}. For example, "
-                f"\"{phrases[0]}, what am I looking at?\""
-            )
+            text = f"Hi, I'm listening. {help_text}"
         try:
             await self._say(pid, text, now_us())
         except asyncio.CancelledError:
@@ -784,7 +623,7 @@ class SimpleVlmAgent:
             # a magic phrase is configured, how to address it. The speech
             # path is gated by default now, so without this hint a user
             # can easily think the agent is broken when it ignores them.
-            asyncio.create_task(self._greet(event.participant_id))
+            asyncio.create_task(self._gate.participant_joined(event.participant_id))
             return
         pid = event.participant_id
         vs  = self._voice.pop(pid, None)
@@ -795,7 +634,7 @@ class SimpleVlmAgent:
         self._frame_events.pop(pid, None)
         self._camera_on.pop(pid, None)
         self._camera_held.discard(pid)
-        self._followup_until.pop(pid, None)
+        self._gate.forget(pid)
         timer = self._camera_off_timers.pop(pid, None)
         if timer and not timer.done():
             timer.cancel()

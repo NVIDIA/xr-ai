@@ -13,16 +13,12 @@ Client → agent  (LiveKit data channel, any topic):
     "ping"      — case-insensitive trigger for the configured default prompt
     Any other UTF-8 text — used verbatim as the query
 
-Audio in (mic) → STT → text → query (same path as a data message).
-If any ``magic_phrases`` are configured, STT transcripts must begin
-with one of them (case-insensitive, strict prefix) or the utterance is
-dropped; the matched phrase is stripped before the query is dispatched.
-Multiple phrases enable several wordings ("agent", "hey agent", …)
-without falling back to fuzzy matching. After a match, the next
-utterance from the same participant within ``followup_grace_s`` seconds
-bypasses the gate so the conversation flows naturally. The text data
-channel is not gated; a *spoken* "ping" is gated, but the data-channel
-"ping" shortcut is unaffected.
+Audio in (mic) → STT → text → ``xr-ai-voicegate`` → query.
+The voice gate owns the magic-phrase, STOP, and follow-up ladder; the
+worker only feeds STT transcripts and wires handlers. Configure phrases
+via ``voice_gate.magic_phrases`` (empty/omit disables the gate); see
+``utils/xr-ai-voicegate`` for the full event ladder. The text data
+channel is never gated.
 
 Agent → client:
     Topic "vlm.response"        — assembled UTF-8 text reply
@@ -33,15 +29,16 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     models_yaml:           yaml/models.yaml   # path to models config (relative to yaml dir)
     default_prompt:        "Describe what you see."
     system_prompt:              <multiline string>   # role/style guidance for the VLM
-    magic_phrases:              []    # list of speech-only opt-in prefixes; empty = always-on
-    listening_chime:           false  # play a short bell when a magic phrase matches
-    followup_grace_s:          5.0    # after a match, next utterance within Xs bypasses gate
-    frame_max_age_s:           2.0   # frames older than this trigger a camera-on request
-    camera_on_timeout_s:      15.0   # how long to wait for a fresh frame after startCamera
-    camera_grace_s:            5.0   # keep camera on this long after a query (avoids restart on follow-ups)
-    silero_threshold:           0.5   # Silero speech probability gate (0..1)
-    silence_duration:           0.8   # seconds of silence that ends an utterance
-    min_speech:                 0.1   # minimum seconds of speech before STT fires
+    voice_gate:                 # forwarded to ``xr-ai-voicegate.VoiceGateConfig``
+      magic_phrases:            []      # opt-in speech prefixes; empty = always-on
+      followup_grace_s:         5.0     # after a match, next utterance within Xs bypasses gate
+      listening_chime:          false   # play a short bell when a magic phrase matches
+    frame_max_age_s:           2.0      # frames older than this trigger a camera-on request
+    camera_on_timeout_s:      15.0      # how long to wait for a fresh frame after startCamera
+    camera_grace_s:            5.0      # keep camera on this long after a query (avoids restart on follow-ups)
+    silero_threshold:           0.5     # Silero speech probability gate (0..1)
+    silence_duration:           0.8     # seconds of silence that ends an utterance
+    min_speech:                 0.1     # minimum seconds of speech before STT fires
 """
 from __future__ import annotations
 
@@ -55,11 +52,31 @@ from loguru import logger
 from xr_ai_agent import ProcessorEndpoint
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
+from xr_ai_voicegate import VoiceGateConfig
 
 from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmAgent
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
+
+
+def _build_voice_gate_cfg(raw: dict | None) -> VoiceGateConfig:
+    """Parse the ``voice_gate:`` YAML block into a ``VoiceGateConfig``.
+
+    Defensive: an absent or empty (``None``) block degrades to defaults
+    (gate disabled, no chime, 5 s follow-up). An empty ``magic_phrases``
+    list also degrades cleanly — the gate dispatches every utterance.
+    """
+    raw = raw or {}
+    phrases_raw = raw.get("magic_phrases") or []
+    if isinstance(phrases_raw, str):
+        phrases_raw = [phrases_raw]
+    phrases = tuple(p for p in (s.strip() for s in phrases_raw) if p)
+    return VoiceGateConfig(
+        magic_phrases    = phrases,
+        followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
+        listening_chime  = bool(raw.get("listening_chime", False)),
+    )
 
 
 async def main(
@@ -91,13 +108,9 @@ async def main(
     ep    = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     agent = SimpleVlmAgent(
         ep, stt, vlm, tts,
+        voice_gate_cfg        =_build_voice_gate_cfg(cfg.get("voice_gate")),
         default_prompt        =cfg.get("default_prompt",        "Describe what you see."),
         system_prompt         =cfg.get("system_prompt",         DEFAULT_SYSTEM_PROMPT),
-        # Accept `magic_phrases:` as a YAML list of strict-prefix
-        # phrases. `or []` handles the empty-YAML-value (None) case.
-        magic_phrases         =cfg.get("magic_phrases") or [],
-        listening_chime       =bool(cfg.get("listening_chime", False)),
-        followup_grace_s      =float(cfg.get("followup_grace_s",      5.0)),
         frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),
         camera_on_timeout_s   =float(cfg.get("camera_on_timeout_s",  10.0)),
         camera_grace_s        =float(cfg.get("camera_grace_s",         5.0)),

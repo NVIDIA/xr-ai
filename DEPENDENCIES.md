@@ -101,6 +101,18 @@ xr-ai-vad  (utils/xr-ai-vad/)
     for speculative downstream warmup (e.g. start the camera before STT
     completes).
 
+xr-ai-voicegate  (utils/xr-ai-voicegate/)
+    └── numpy >=1.24
+    Speech-only opt-in gate shared by agent workers that consume STT
+    transcripts.  Owns the magic-phrase + follow-up + STOP ladder, the
+    lazy listening chime (numpy-synthesized at the consumer's TTS sample
+    rate), and the participant-joined greeting hook.  Workers feed
+    transcripts via ``feed`` and register ``on_query`` / ``on_stop`` /
+    ``on_phrase_only`` / ``on_drop`` / ``on_participant_joined``
+    handlers.  Audio + TTS are consumed via duck-typed ``AudioSink`` /
+    ``TTSLike`` Protocols so the package stays free of xr-ai-models /
+    xr-ai-agent / pipecat deps.
+
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]
     └── pyzmq >=26.0
@@ -358,7 +370,7 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]`, `xr-ai-vad [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]`, `xr-ai-vad [editable]`, `xr-ai-voicegate [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
