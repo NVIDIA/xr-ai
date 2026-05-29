@@ -44,12 +44,13 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from xr_ai_agent import DataMessage
+from xr_ai_agent import DataMessage, ProcessorEndpoint
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, STTService, TTSService, ToolCall, ToolDef
-from xr_ai_pipecat.audio import stream_sentences_to_audio
+from xr_ai_pipecat.audio import stream_sentences_to_audio, wav_to_chunks
 from xr_ai_pipecat.transport import XRMediaHubTransport, SAMPLE_RATE
 from xr_ai_vad import VadDetector
+from xr_ai_voicegate import VoiceGate
 
 from config import WorkerConfig
 
@@ -97,6 +98,19 @@ _TOOL_PROGRESS: dict[str, str] = {
 
 _AGENT_RESPONSE_TOPIC  = "agent.response"
 _AGENT_PROGRESS_TOPIC  = "agent.progress"
+
+
+class _EpSink:
+    """``xr_ai_voicegate.AudioSink`` adapter over the hub's return-audio
+    fan-out: explode the WAV into 20 ms float32 ``AudioChunk``s via the
+    pipecat helper and stream them through ``send_return_audio``."""
+
+    def __init__(self, ep: ProcessorEndpoint) -> None:
+        self._ep = ep
+
+    async def play_wav(self, pid: str, wav_bytes: bytes) -> None:
+        for chunk in wav_to_chunks(wav_bytes, pid):
+            await self._ep.send_return_audio(chunk)
 
 
 class _SceneNotReadyError(Exception):
@@ -189,7 +203,15 @@ class RenderSceneProcessor(FrameProcessor):
     reasoning loop — guaranteed syntactically valid tool calls every iteration.
     Uses Minitron (port 8101) for the parallel quick-ack (fast, cheap).
 
-    On each utterance:
+    Speech ingress is layered behind an ``xr-ai-voicegate.VoiceGate``: each
+    ``TranscriptionFrame`` is handed to ``gate.feed(pid, text)``, and the
+    gate decides whether it dispatches to ``on_query`` (agentic loop),
+    ``on_stop`` (cancel + canned ack), ``on_phrase_only`` (log + chime
+    on the open follow-up window), or ``on_drop`` (log). Empty
+    ``magic_phrases`` keeps the original always-on behavior — every
+    transcript is a fresh query. The text data channel is never gated.
+
+    On each utterance dispatched by the gate:
       1. Quick-ack fires immediately (parallel, max 25 tokens) → agent.progress
       2. Agentic loop: model calls tools via OpenAI tool_calls protocol until
          it returns a text response (finish_reason != "tool_calls")
@@ -209,6 +231,7 @@ class RenderSceneProcessor(FrameProcessor):
         tools:       list[ToolDef],  # ToolDef list built from MCP discovery
         llm:         LLMService,
         agent_llm:   LLMService,
+        tts:         TTSService,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -230,6 +253,7 @@ class RenderSceneProcessor(FrameProcessor):
         self._tools            = tools
         self._llm              = llm
         self._agent_llm        = agent_llm
+        self._tts              = tts
 
         self._pending:    tuple[str, str, int] | None = None  # (text, pid, ref_us)
         self._lock        = asyncio.Lock()
@@ -239,6 +263,23 @@ class RenderSceneProcessor(FrameProcessor):
         # Injected as context so the agent understands "fix that", "undo", "the one I just added".
         self._history:    list[tuple[str, str]] = []
         self._history_max = 4
+
+        # Voice gate owns magic-phrase / STOP / follow-up / chime / greeting.
+        # The processor only feeds STT transcripts and handles the events.
+        self._gate = VoiceGate(
+            cfg.voice_gate,
+            audio_sink=_EpSink(transport.endpoint),
+            tts=tts,
+        )
+        self._gate.on_query(self._on_voice_query)
+        self._gate.on_stop(self._on_voice_stop)
+        self._gate.on_phrase_only(self._on_voice_phrase_only)
+        self._gate.on_drop(self._on_voice_drop)
+        self._gate.on_participant_joined(self._on_voice_participant_joined)
+
+    @property
+    def gate(self) -> VoiceGate:
+        return self._gate
 
 
     def _read_prompt(self, path: Path, cache_attr: str) -> str:
@@ -253,21 +294,83 @@ class RenderSceneProcessor(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
-            await self._enqueue(frame)
+            text = frame.text.strip()
+            if text:
+                pid = self._transport.target_participant
+                await self._gate.feed(pid, text)
         else:
             await self.push_frame(frame, direction)
 
-    async def _enqueue(self, frame: TranscriptionFrame) -> None:
-        text = frame.text.strip()
-        if not text:
-            return
-        pid = self._transport.target_participant
-        # Capture the moment the user finished speaking so visual tool calls
-        # can be anchored to that timestamp (not to when the tool fires).
+    # ── voice-gate handlers ───────────────────────────────────────────────────
+
+    async def _on_voice_query(self, pid: str, text: str, fresh_match: bool) -> None:
+        """Voice-gate ``on_query`` handler — chime + dispatch to the agentic loop.
+
+        Only chimes on a *fresh* magic-phrase match. Follow-up-window
+        continuations (``fresh_match=False``) skip the chime to avoid a
+        double bell on the same logical interaction.
+        """
+        if fresh_match:
+            asyncio.create_task(self._gate.play_chime(pid))
+        await self._enqueue(text, pid)
+
+    async def _on_voice_stop(self, pid: str) -> None:
+        """Voice-gate ``on_stop`` handler — cancel the in-flight agentic
+        loop, drop any queued utterance, flush queued return audio, and
+        play the gate's canned stop ack so the user hears the interrupt
+        was acknowledged. Mirrors ``vlm.response`` semantics by also
+        sending the ack text on ``agent.response``."""
+        async with self._lock:
+            self._pending = None
+            if self._agentic_task and not self._agentic_task.done():
+                self._agentic_task.cancel()
+        send_pid = pid or self._transport.target_participant
+        if send_pid:
+            try:
+                await self._transport.endpoint.flush_return_audio(send_pid)
+            except Exception:
+                logger.opt(exception=True).debug(
+                    "flush_return_audio failed during stop",
+                )
+            await self._send(send_pid, "Okay, I will stop.", topic=_AGENT_RESPONSE_TOPIC)
+            await self._gate.say_stop_ack(send_pid)
+
+    async def _on_voice_phrase_only(self, pid: str) -> None:
+        """Voice-gate ``on_phrase_only`` handler — open the follow-up
+        window with an audible chime so the user knows the wake word was
+        heard. xr-render-demo has no camera-on-demand so there's nothing
+        else to do here; the gate has already opened the window."""
+        await self._gate.play_chime(pid)
+        logger.info("voice gate awaiting follow-up pid={!r}", pid)
+
+    async def _on_voice_drop(self, pid: str, text: str) -> None:
+        logger.info("voice gate dropped pid={!r} text={!r}", pid, text[:80])
+
+    async def _on_voice_participant_joined(self, pid: str) -> None:
+        """Voice-gate ``on_participant_joined`` — speak a one-shot
+        greeting that tells the user how to address the agent given the
+        configured magic phrases (or that it's listening to everything
+        when no phrases are configured)."""
+        help_text = self._gate.format_phrase_help()
+        if help_text is None:
+            greeting = "Hi, I'm listening. Tell me what you'd like to render."
+        else:
+            greeting = f"Hi, I'm listening. {help_text}"
+        await self._send(pid, greeting, topic=_AGENT_RESPONSE_TOPIC)
         try:
-            ref_us = int(frame.timestamp) if frame.timestamp else _now_us()
-        except (TypeError, ValueError):
-            ref_us = _now_us()
+            wav = await self._tts.synthesize(greeting)
+        except Exception:
+            logger.opt(exception=True).warning("greeting tts failed pid={!r}", pid)
+            return
+        self._gate.observe_tts_wav(wav)
+        try:
+            for chunk in wav_to_chunks(wav, pid):
+                await self._transport.endpoint.send_return_audio(chunk)
+        except Exception:
+            logger.opt(exception=True).warning("greeting audio send failed pid={!r}", pid)
+
+    async def _enqueue(self, text: str, pid: str) -> None:
+        ref_us = _now_us()
         async with self._lock:
             self._pending = (text, pid, ref_us)
             # Cancel any in-flight agentic loop so the new utterance is handled
@@ -844,17 +947,29 @@ class RenderSceneProcessor(FrameProcessor):
 # ── TtsProcessor ─────────────────────────────────────────────────────────────
 
 class TtsProcessor(FrameProcessor):
-    """TextFrame → sentence-batched TTS → hub return audio."""
+    """TextFrame → sentence-batched TTS → hub return audio.
+
+    Every synthesized WAV is observed by the voice gate so it can build
+    the listening chime at the matching TTS sample rate the first time
+    a WAV passes through.
+    """
 
     def __init__(
         self,
         tts: TTSService,
         transport: XRMediaHubTransport,
+        gate: VoiceGate,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self._tts       = tts
         self._transport = transport
+        self._gate      = gate
+
+    async def _synthesize(self, text: str) -> bytes:
+        wav = await self._tts.synthesize(text)
+        self._gate.observe_tts_wav(wav)
+        return wav
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -871,7 +986,7 @@ class TtsProcessor(FrameProcessor):
             return
         try:
             await stream_sentences_to_audio(
-                self._transport.endpoint, self._tts.synthesize, text, pid,
+                self._transport.endpoint, self._synthesize, text, pid,
             )
         except Exception:
             logger.exception("TTS failed  pid={!r}", pid)
@@ -887,7 +1002,7 @@ def build_pipeline(
     scene:       RenderSceneProcessor,
 ) -> tuple[Pipeline, PipelineTask]:
     stt_proc = SttProcessor(stt, transport, scene._cfg)
-    tts_proc = TtsProcessor(tts, transport)
+    tts_proc = TtsProcessor(tts, transport, scene.gate)
 
     pipeline = Pipeline([
         transport.input(),

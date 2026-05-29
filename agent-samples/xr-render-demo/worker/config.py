@@ -8,6 +8,7 @@ import pathlib
 from dataclasses import dataclass
 
 import yaml
+from xr_ai_voicegate import VoiceGateConfig
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,30 @@ class WorkerConfig:
     silence_duration:  float
     min_speech:        float
     silero_threshold:  float   # Silero speech probability gate (0..1)
+
+    # Speech-only opt-in gate. Owned by ``xr-ai-voicegate``. Empty
+    # ``magic_phrases`` keeps the original always-on behavior so the
+    # default YAML config matches the pre-gate worker.
+    voice_gate: VoiceGateConfig
+
+
+def _build_voice_gate_cfg(raw: dict | None) -> VoiceGateConfig:
+    """Parse the ``voice_gate:`` YAML block into a ``VoiceGateConfig``.
+
+    Absent / empty block degrades to defaults (no phrases, no chime,
+    5 s follow-up grace) — i.e. the gate is in always-on mode and every
+    STT transcript passes through to ``on_query``.
+    """
+    raw = raw or {}
+    phrases_raw = raw.get("magic_phrases") or []
+    if isinstance(phrases_raw, str):
+        phrases_raw = [phrases_raw]
+    phrases = tuple(p for p in (s.strip() for s in phrases_raw) if p)
+    return VoiceGateConfig(
+        magic_phrases    = phrases,
+        followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
+        listening_chime  = bool(raw.get("listening_chime", False)),
+    )
 
 
 def load_config(path: pathlib.Path | None) -> WorkerConfig:
@@ -54,4 +79,5 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),
         silero_threshold  = float(data.get("silero_threshold",  0.5)),
+        voice_gate        = _build_voice_gate_cfg(data.get("voice_gate")),
     )
