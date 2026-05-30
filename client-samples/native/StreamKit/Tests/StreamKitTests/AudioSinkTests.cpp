@@ -55,18 +55,20 @@ struct RecordingAudioSink : streamkit::AudioSink {
 }  // namespace
 
 int main() {
+    using streamkit::test::ExpectEq;
+
     // 1. Direct dispatch via the concrete subclass.
     {
         RecordingAudioSink sink;
         std::vector<std::int16_t> pcm(480, std::int16_t{1234});  // 10 ms @ 48 kHz mono
         sink.InjectAudioFrame(pcm, 48000, 1, 480, 5000);
-        SK_EXPECT_EQ(sink.calls, 1);
-        SK_EXPECT_EQ(sink.last_sample_rate, 48000);
-        SK_EXPECT_EQ(sink.last_channels, 1);
-        SK_EXPECT_EQ(sink.last_samples_per_channel, 480);
-        SK_EXPECT_EQ(sink.last_ts, int64_t{5000});
-        SK_EXPECT_EQ(sink.last_sample_count, std::size_t{480});
-        SK_EXPECT_EQ(sink.last_first_sample, std::int16_t{1234});
+        ExpectEq(sink.calls, 1);
+        ExpectEq(sink.last_sample_rate, 48000);
+        ExpectEq(sink.last_channels, 1);
+        ExpectEq(sink.last_samples_per_channel, 480);
+        ExpectEq(sink.last_ts, int64_t{5000});
+        ExpectEq(sink.last_sample_count, std::size_t{480});
+        ExpectEq(sink.last_first_sample, std::int16_t{1234});
     }
 
     // 2. Dispatch through an AudioSink& reference — the path
@@ -76,11 +78,11 @@ int main() {
         streamkit::AudioSink& base = sink;
         std::vector<std::int16_t> pcm(960, std::int16_t{-7});  // 10 ms @ 48 kHz stereo
         base.InjectAudioFrame(pcm, 48000, 2, 480, 99);
-        SK_EXPECT_EQ(sink.calls, 1);
-        SK_EXPECT_EQ(sink.last_channels, 2);
-        SK_EXPECT_EQ(sink.last_samples_per_channel, 480);
-        SK_EXPECT_EQ(sink.last_sample_count, std::size_t{960});
-        SK_EXPECT_EQ(sink.last_first_sample, std::int16_t{-7});
+        ExpectEq(sink.calls, 1);
+        ExpectEq(sink.last_channels, 2);
+        ExpectEq(sink.last_samples_per_channel, 480);
+        ExpectEq(sink.last_sample_count, std::size_t{960});
+        ExpectEq(sink.last_first_sample, std::int16_t{-7});
     }
 
     return 0;

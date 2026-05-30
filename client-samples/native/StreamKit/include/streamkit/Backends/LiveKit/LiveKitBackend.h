@@ -62,7 +62,7 @@ class LiveKitBackend : public StreamingBackend,
                        public AudioSink {
 public:
     explicit LiveKitBackend(const LiveKitConfig& config);
-    ~LiveKitBackend() override;
+    ~LiveKitBackend() noexcept override;
 
     LiveKitBackend(const LiveKitBackend&)            = delete;
     LiveKitBackend& operator=(const LiveKitBackend&) = delete;
@@ -125,9 +125,10 @@ private:
     /// Disconnects the room, stops all tracks, fires kDisconnected.
     void TearDown();
 
-    /// Fetches a LiveKit JWT from `config_.token_url`.
-    /// GET <url>?identity=<identity> → plain string or {"token":"eyJ…"}.
-    std::string FetchToken(const std::string& url, const std::string& identity);
+    /// Always throws `TokenFetchFailedError` — supply `config_.token`
+    /// instead. This backend ships no HTTP client.
+    [[noreturn]] void FetchToken(const std::string& url,
+                                 const std::string& identity) const;
 
     /// Maps livekit::ConnectionState → StreamKit's ConnectionState and fires
     /// on_connection_state_changed. Called by the Delegate's event hooks.
@@ -144,7 +145,7 @@ private:
     /// Routes incoming data packets: intercepts "_agent.status",
     /// fires on_data_received for everything else.
     void HandleDataReceived(std::string_view topic,
-                            std::span<const std::byte> payload);
+                            std::span<const std::byte> payload) const;
 
     LiveKitConfig config_;
     SessionConfig session_config_;

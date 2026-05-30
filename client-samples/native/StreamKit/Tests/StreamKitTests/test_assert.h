@@ -4,7 +4,7 @@
 #pragma once
 
 /*
- * Tiny test assertion macros. Each test executable runs its checks in main()
+ * Tiny test assertion helpers. Each test executable runs its checks in main()
  * and exits non-zero on the first failure. Keeps the test-runtime dependency
  * surface at zero (no GoogleTest, no Catch2) and the per-test wiring trivial.
  *
@@ -13,23 +13,28 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <source_location>
 
-#define SK_EXPECT(cond)                                                      \
-    do {                                                                     \
-        if (!(cond)) {                                                       \
-            std::fprintf(stderr, "%s:%d: EXPECT failed: %s\n",               \
-                         __FILE__, __LINE__, #cond);                         \
-            std::exit(1);                                                    \
-        }                                                                    \
-    } while (0)
+namespace streamkit::test {
 
-#define SK_EXPECT_EQ(a, b)                                                   \
-    do {                                                                     \
-        auto _sk_a = (a);                                                    \
-        auto _sk_b = (b);                                                    \
-        if (!(_sk_a == _sk_b)) {                                             \
-            std::fprintf(stderr, "%s:%d: EXPECT_EQ failed: %s != %s\n",      \
-                         __FILE__, __LINE__, #a, #b);                        \
-            std::exit(1);                                                    \
-        }                                                                    \
-    } while (0)
+inline void Expect(bool condition,
+                   std::source_location where = std::source_location::current()) {
+    if (!condition) {
+        std::fprintf(stderr, "%s:%u: EXPECT failed\n",
+                     where.file_name(), where.line());
+        std::exit(1);
+    }
+}
+
+template <typename A, typename B>
+void ExpectEq(const A& a,
+              const B& b,
+              std::source_location where = std::source_location::current()) {
+    if (!(a == b)) {
+        std::fprintf(stderr, "%s:%u: EXPECT_EQ failed\n",
+                     where.file_name(), where.line());
+        std::exit(1);
+    }
+}
+
+}  // namespace streamkit::test
