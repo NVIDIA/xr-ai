@@ -125,8 +125,8 @@ private:
     /// Disconnects the room, stops all tracks, fires kDisconnected.
     void TearDown();
 
-    /// Fetches a LiveKit JWT from `config_.token_url`.
-    /// GET <url>?identity=<identity> → plain string or {"token":"eyJ…"}.
+    /// Always throws `TokenFetchFailedError` — supply `config_.token`
+    /// instead. This backend ships no HTTP client.
     [[noreturn]] void FetchToken(const std::string& url,
                                  const std::string& identity) const;
 

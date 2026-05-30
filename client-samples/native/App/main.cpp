@@ -15,9 +15,8 @@
  * Without it, the backend compiles in stub mode and `Connect()` reports
  * `kConnected` immediately for header-only verification.
  *
- * This sample assumes an inline JWT; `LiveKitConfig::token_url` is not
- * wired (the default backend's `FetchToken` throws). Subclass
- * `LiveKitBackend` and override `FetchToken` to drive your own HTTP client.
+ * This sample assumes an inline JWT in `LiveKitConfig::token`;
+ * `token_url` is not wired (the backend's `FetchToken` always throws).
  */
 
 #include <algorithm>

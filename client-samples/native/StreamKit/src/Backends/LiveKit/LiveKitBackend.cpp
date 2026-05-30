@@ -530,12 +530,8 @@ void LiveKitBackend::TearDown() {
 [[noreturn]] void LiveKitBackend::FetchToken(
     const std::string& token_url,
     const std::string& /*identity*/) const {
-    // Token-fetch over HTTP is deliberately not implemented in this
-    // backend. Embedded targets typically pass an inline token in
-    // `LiveKitConfig::token` (computed server-side); desktop hosts that
-    // need a token endpoint can subclass LiveKitBackend and override
-    // FetchToken with their preferred HTTP client (libcurl, Poco::Net,
-    // cpp-httplib). See `App/main.cpp` for the inline-token path.
+    // No HTTP client shipped — callers must pass an inline JWT via
+    // `LiveKitConfig::token` (computed server-side).
     throw TokenFetchFailedError(std::format(
         "{} - FetchToken is not implemented in this backend; supply an "
         "inline token in LiveKitConfig::token",
