@@ -245,6 +245,50 @@ def test_chime_read_wav_sample_rate_round_trip(sample_rate: int):
     assert read_wav_sample_rate(wav) == sample_rate
 
 
+def test_chime_clamp_accepts_upper_bound_192khz():
+    """Case 14 (b): 192 kHz is at the documented upper bound and must
+    still build — the clamp is inclusive on both ends so legitimate
+    high-rate TTS outputs are not rejected."""
+    wav = build_chime_wav(192_000)
+    assert read_wav_sample_rate(wav) == 192_000
+
+
+def test_chime_clamp_rejects_just_above_upper_bound():
+    """Case 14 (c): one Hz past the upper bound raises ValueError. Guards
+    against a hostile or corrupted WAV header that declares a multi-GHz
+    rate from driving a multi-GB ``np.linspace`` allocation."""
+    with pytest.raises(ValueError):
+        build_chime_wav(192_001)
+
+
+@pytest.mark.asyncio
+async def test_observe_tts_wav_with_out_of_range_rate_disables_chime_without_crash():
+    """Case 14 (d): a malicious or corrupted TTS WAV declaring an
+    absurdly high sample rate (here 1 GHz, the kind of value an attacker
+    might splice into a uint32 header) must not crash the gate. The
+    chime caller swallows the ValueError, logs "sample rate out of
+    range", and disables the chime so subsequent ``play_chime`` calls
+    are no-ops.
+
+    1 GHz is comfortably above the 192 kHz clamp but stays under the
+    uint32-byterate limit Python's ``wave`` module enforces on the WAV
+    header, so the malformed blob is round-trip parseable and the
+    failure happens inside ``build_chime_wav`` exactly where the clamp
+    is meant to fire."""
+    gate, sink, _ = _gate(phrases=("agent",), listening_chime=True)
+
+    # _silence_wav uses int16 PCM so the 1-frame buffer is 2 bytes
+    # regardless of the (fictitious) sample rate stored in the header.
+    bad_wav = _silence_wav(1_000_000_000, ms=0)
+
+    gate.observe_tts_wav(bad_wav)        # must not raise
+    await gate.play_chime("p1")          # must not crash, must not emit
+
+    assert gate._chime_wav is None
+    assert gate._chime_enabled is False
+    assert sink.plays == []
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # 4. Event ladder (`gate.feed`)
 # ════════════════════════════════════════════════════════════════════════════

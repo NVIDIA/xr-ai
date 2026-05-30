@@ -18,7 +18,15 @@ def build_chime_wav(sample_rate: int) -> bytes:
     of the return audio track the consumer plays into (e.g. TTS sample
     rate) so the underlying transport doesn't reject frames at a
     different rate.
+
+    Clamped to a sane audio range. A WAV header is uint32 and a hostile
+    or corrupted blob can claim a multi-GHz rate, which would drive
+    ``np.linspace`` into a multi-GB allocation. Reject outside [8 kHz,
+    192 kHz] — the chime caller (``observe_tts_wav``) treats ValueError
+    as "disable the chime", so the worst case is no chime.
     """
+    if not 8000 <= sample_rate <= 192000:
+        raise ValueError(f"unsupported chime sample rate: {sample_rate}")
     dur  = 0.25
     t    = np.linspace(0.0, dur, int(sample_rate * dur), endpoint=False, dtype=np.float32)
     tone = 0.55 * np.sin(2 * np.pi * 880.0 * t) + 0.30 * np.sin(2 * np.pi * 1320.0 * t)
