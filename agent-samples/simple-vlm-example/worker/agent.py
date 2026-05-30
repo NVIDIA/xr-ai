@@ -241,7 +241,8 @@ class SimpleVlmAgent:
         self._schedule_camera_off(pid)
 
     async def _on_drop(self, pid: str, text: str) -> None:
-        logger.info("voice gate dropped pid={!r} text={!r}", pid, text[:80])
+        logger.info("voice gate dropped pid={!r} (text suppressed)", pid)
+        logger.debug("voice gate dropped pid={!r} text={!r}", pid, text[:80])
         self._schedule_camera_off(pid)
 
     # ── data path: text → query (with "ping" → default prompt) ────────────────
@@ -253,7 +254,8 @@ class SimpleVlmAgent:
             return
         if not text:
             return
-        logger.info("data query  pid={!r}  {!r}", msg.participant_id, text[:80])
+        logger.info("data query  pid={!r} (text suppressed)", msg.participant_id)
+        logger.debug("data query  pid={!r}  {!r}", msg.participant_id, text[:80])
         await self._dispatch_query(msg.participant_id, text, pts_us=msg.pts_us)
 
     # ── interruptable query dispatch ──────────────────────────────────────────

@@ -125,10 +125,12 @@ class VoiceGate:
         # other utterance is a fresh query.
         if self._magic_re is None:
             if STOP_RE.match(text):
-                logger.info("stop bypass pid=%r %r", pid, text[:80])
+                logger.info("stop bypass pid=%r (text suppressed)", pid)
+                logger.debug("stop bypass pid=%r %r", pid, text[:80])
                 await self._invoke(self._on_stop_h, "on_stop", pid)
                 return
-            logger.info("audio query pid=%r %r", pid, text[:80])
+            logger.info("audio query pid=%r (text suppressed)", pid)
+            logger.debug("audio query pid=%r %r", pid, text[:80])
             await self._invoke(self._on_query_h, "on_query", pid, text, True)
             return
 
@@ -142,7 +144,8 @@ class VoiceGate:
         #    ("stop") AND on the magic-phrase-stripped tail ("hey agent,
         #    stop") so the fast path triggers either way.
         if STOP_RE.match(stop_candidate):
-            logger.info("stop bypass pid=%r %r", pid, stop_candidate[:80])
+            logger.info("stop bypass pid=%r (text suppressed)", pid)
+            logger.debug("stop bypass pid=%r %r", pid, stop_candidate[:80])
             self._followup_until.pop(pid, None)
             await self._invoke(self._on_stop_h, "on_stop", pid)
             return
@@ -154,7 +157,8 @@ class VoiceGate:
                 #    immediately and close the window so ambient speech
                 #    after the answer must re-introduce a phrase.
                 self._followup_until.pop(pid, None)
-                logger.info("audio query pid=%r %r", pid, query[:80])
+                logger.info("audio query pid=%r (text suppressed)", pid)
+                logger.debug("audio query pid=%r %r", pid, query[:80])
                 await self._invoke(self._on_query_h, "on_query", pid, query, True)
                 return
             # 4. Magic phrase with no follow-up payload — open the window
@@ -173,12 +177,14 @@ class VoiceGate:
             #    consumer can decide to re-open by calling back via a
             #    fresh magic-phrase match.
             self._followup_until.pop(pid, None)
-            logger.info("followup query pid=%r %r", pid, text[:80])
+            logger.info("followup query pid=%r (text suppressed)", pid)
+            logger.debug("followup query pid=%r %r", pid, text[:80])
             await self._invoke(self._on_query_h, "on_query", pid, text, False)
             return
 
         # 5. Default drop — log and close the window defensively.
-        logger.info("drop pid=%r %r", pid, text[:80])
+        logger.info("drop pid=%r (text suppressed)", pid)
+        logger.debug("drop pid=%r %r", pid, text[:80])
         self._followup_until.pop(pid, None)
         await self._invoke(self._on_drop_h, "on_drop", pid, text)
 
