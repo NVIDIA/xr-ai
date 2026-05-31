@@ -13,19 +13,19 @@
  *
  * ## Lifecycle
  *
- *   // 1. Connect — WebRTC peer connection + data channel only.
+ *   1. Connect — WebRTC peer connection + data channel only.
  *   session.Connect(SessionConfig{.identity = "workstation-1"});
  *
- *   // 2. Start media independently — each throws its own error,
- *   //    never drops the connection.
+ *   2. Start media independently — each throws its own error,
+ *      never drops the connection.
  *   session.StartAudio();
  *   session.StartCamera();
  *
- *   // 3. Send / receive data.
+ *   3. Send / receive data.
  *   session.on_data_received = [](auto topic, auto data) { ... };
  *   session.Send(payload);
  *
- *   // 4. Stop media / disconnect.
+ *   4. Stop media / disconnect.
  *   session.StopAudio();
  *   session.StopCamera();
  *   session.Disconnect();

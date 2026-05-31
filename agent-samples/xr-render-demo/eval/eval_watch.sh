@@ -20,6 +20,7 @@ EVAL="$HERE/eval.py"
 WORKER="$HERE/../worker"
 SELF="$(readlink -f "$0")"
 DEBOUNCE_SECS=10
+TIME_FMT='+%H:%M:%S'
 
 last_hash=""
 pending=0
@@ -55,7 +56,8 @@ echo $$ > "$LOCK"
 # editors / language servers / git tools re-save the file without changing
 # bytes (focus changes, refresh-on-blur, etc.).
 file_hash() {
-    sha1sum "$PROMPT" 2>/dev/null | awk '{print $1}'
+    sha1sum "$PROMPT" 2>/dev/null | awk '{print $1}' || true
+    return 0
 }
 
 kill_running() {
@@ -66,17 +68,18 @@ kill_running() {
         kill -TERM -- "-$running_pid" 2>/dev/null || true
         sleep 0.3
         kill -KILL -- "-$running_pid" 2>/dev/null || true
-        echo "  ── aborted at $(date '+%H:%M:%S') ──" >> "$LOG"
+        echo "  ── aborted at $(date "$TIME_FMT") ──" >> "$LOG"
     fi
     wait "$running_pid" 2>/dev/null || true
     running_pid=""
+    return 0
 }
 
 trigger() {
     {
         echo
         echo "═══════════════════════════════════════════════════════════════"
-        echo "  $(date '+%H:%M:%S')  prompt=$PROMPT"
+        echo "  $(date "$TIME_FMT")  prompt=$PROMPT"
         echo "═══════════════════════════════════════════════════════════════"
     } >> "$LOG"
     # Reuse the worker's already-resolved venv so we don't go through
@@ -86,16 +89,18 @@ trigger() {
     setsid uv run --project "$WORKER" python "$EVAL" \
         --verbose --prompt "$PROMPT" >> "$LOG" 2>&1 &
     running_pid=$!
+    return 0
 }
 
 cleanup() {
     kill_running
     rm -f "$LOCK"
+    return 0
 }
 trap cleanup EXIT INT TERM HUP
 
 echo "watching $PROMPT — log $LOG  debounce ${DEBOUNCE_SECS}s  (stop: kill $$)"
-echo "started $(date '+%H:%M:%S') (PID $$)" >> "$LOG"
+echo "started $(date "$TIME_FMT") (PID $$)" >> "$LOG"
 
 # Baseline run on startup so the user sees a score immediately.
 last_hash=$(file_hash)
@@ -113,7 +118,7 @@ while true; do
     fi
     now=$(date +%s)
     if [[ "$hash" != "$last_hash" ]]; then
-        echo "  ── change detected at $(date '+%H:%M:%S') (sha ${last_hash:0:8} → ${hash:0:8}) ──" >> "$LOG"
+        echo "  ── change detected at $(date "$TIME_FMT") (sha ${last_hash:0:8} → ${hash:0:8}) ──" >> "$LOG"
         last_hash="$hash"
         pending=1
         pending_since=$now

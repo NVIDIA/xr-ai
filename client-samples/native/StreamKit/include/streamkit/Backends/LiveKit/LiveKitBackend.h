@@ -62,7 +62,7 @@ class LiveKitBackend : public StreamingBackend,
                        public AudioSink {
 public:
     explicit LiveKitBackend(const LiveKitConfig& config);
-    ~LiveKitBackend() override;
+    ~LiveKitBackend() noexcept override;
 
     LiveKitBackend(const LiveKitBackend&)            = delete;
     LiveKitBackend& operator=(const LiveKitBackend&) = delete;
@@ -154,7 +154,7 @@ private:
     /// Routes incoming data packets: intercepts "_agent.status",
     /// fires on_data_received for everything else.
     void HandleDataReceived(std::string_view topic,
-                            std::span<const std::byte> payload);
+                            std::span<const std::byte> payload) const;
 
     LiveKitConfig config_;
     SessionConfig session_config_;
