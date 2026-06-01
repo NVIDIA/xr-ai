@@ -87,6 +87,8 @@ class ConversationLoop:
         on_participant_joined: Callable[[str], Awaitable[None]] | None = None,
         on_participant_left:   Callable[[str], Awaitable[None]] | None = None,
         on_stop_extra:         Callable[[str], Awaitable[None]] | None = None,
+        on_phrase_only_extra:  Callable[[str], Awaitable[None]] | None = None,
+        on_drop_extra:         Callable[[str, str], Awaitable[None]] | None = None,
         text_topic: str = "agent.response",
         greeting:   str | Callable[[VoiceGate], str] | None = None,
     ) -> None:
@@ -102,8 +104,10 @@ class ConversationLoop:
             on_participant_joined = on_participant_joined,
             on_participant_left   = on_participant_left,
         )
-        self._on_speech_start = on_speech_start
-        self._greeting        = greeting
+        self._on_speech_start      = on_speech_start
+        self._on_phrase_only_extra = on_phrase_only_extra
+        self._on_drop_extra        = on_drop_extra
+        self._greeting             = greeting
 
         self._voice: dict[str, VoiceState] = {}
 
@@ -191,10 +195,20 @@ class ConversationLoop:
         # the follow-up window is open; without it the user has no signal
         # that the gate is ready for the next utterance.
         await self._gate.play_chime(pid)
+        if self._on_phrase_only_extra is not None:
+            try:
+                await self._on_phrase_only_extra(pid)
+            except Exception:
+                logger.exception("on_phrase_only_extra hook raised pid=%r", pid)
 
     async def _on_drop(self, pid: str, text: str) -> None:
-        # The gate already logged; nothing for the loop to do.
-        return
+        # The gate already logged; the brain may need to clean up its own
+        # state (e.g. cancel a speculative camera-on from on_speech_start).
+        if self._on_drop_extra is not None:
+            try:
+                await self._on_drop_extra(pid, text)
+            except Exception:
+                logger.exception("on_drop_extra hook raised pid=%r", pid)
 
     # ── interruptible dispatch ────────────────────────────────────────────────
 

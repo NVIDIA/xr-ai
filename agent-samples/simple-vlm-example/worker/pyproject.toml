@@ -11,9 +11,9 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
+    "xr-ai-conversation",
     "xr-ai-logging",
     "xr-ai-models",
-    "xr-ai-vad",
     "xr-ai-voicegate",
     "numpy>=1.24",
     "Pillow>=10.0",
@@ -21,11 +21,11 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-agent     = { path = "../../../agent-sdk", editable = true }
-xr-ai-logging   = { path = "../../../utils/xr-ai-logging", editable = true }
-xr-ai-models    = { path = "../../../agent-sdk/xr-ai-models", editable = true }
-xr-ai-vad       = { path = "../../../utils/xr-ai-vad", editable = true }
-xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate", editable = true }
+xr-ai-agent        = { path = "../../../agent-sdk", editable = true }
+xr-ai-conversation = { path = "../../../agent-sdk/xr-ai-conversation", editable = true }
+xr-ai-logging      = { path = "../../../utils/xr-ai-logging", editable = true }
+xr-ai-models       = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-voicegate    = { path = "../../../utils/xr-ai-voicegate", editable = true }
 
 [project.scripts]
 simple_vlm_example_worker = "simple_vlm_example_worker:run"
@@ -34,7 +34,5 @@ simple_vlm_example_worker = "simple_vlm_example_worker:run"
 only-include = [
     "simple_vlm_example_worker.py",
     "agent.py",
-    "audio.py",
     "pixels.py",
-    "voice.py",
 ]

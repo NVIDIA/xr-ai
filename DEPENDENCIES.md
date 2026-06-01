@@ -390,7 +390,7 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]`, `xr-ai-vad [editable]`, `xr-ai-voicegate [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-conversation [editable]`, `xr-ai-models [editable]`, `xr-ai-voicegate [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (silero-vad pulled in transitively via xr-ai-conversation → xr-ai-vad) |
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded

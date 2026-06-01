@@ -119,6 +119,8 @@ def _make_loop(
     on_participant_joined = None,
     on_participant_left   = None,
     on_stop_extra         = None,
+    on_phrase_only_extra  = None,
+    on_drop_extra         = None,
     text_topic: str = "agent.response",
     greeting = None,
 ) -> tuple[ConversationLoop, _FakeEp, _FakeSTT, _FakeTTS]:
@@ -136,6 +138,8 @@ def _make_loop(
         on_participant_joined = on_participant_joined,
         on_participant_left   = on_participant_left,
         on_stop_extra         = on_stop_extra,
+        on_phrase_only_extra  = on_phrase_only_extra,
+        on_drop_extra         = on_drop_extra,
         text_topic            = text_topic,
         greeting              = greeting,
     )
@@ -543,3 +547,43 @@ async def test_data_channel_dispatch_sets_fresh_match_true():
     await loop._voice["p1"].current_task
 
     assert seen == [True]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 13. on_phrase_only_extra + on_drop_extra hooks fire alongside gate events
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_phrase_only_extra_and_drop_extra_hooks_fire():
+    """Case 13: the brain-side extras fire when the gate raises a
+    phrase-only acknowledgement or drops an utterance — without them, a
+    speculative ``on_speech_start`` (e.g. camera warmup) has no
+    counterbalancing teardown when the user never follows up or the
+    phrase doesn't match."""
+    phrase_only_calls: list[str] = []
+    drop_calls:        list[tuple[str, str]] = []
+
+    async def on_query(pid: str, text: str, fresh_match: bool) -> str:
+        return ""
+
+    async def on_phrase_only_extra(pid: str) -> None:
+        phrase_only_calls.append(pid)
+
+    async def on_drop_extra(pid: str, text: str) -> None:
+        drop_calls.append((pid, text))
+
+    loop, _, _, _ = _make_loop(
+        on_query             = on_query,
+        vg_phrases           = ("agent",),
+        on_phrase_only_extra = on_phrase_only_extra,
+        on_drop_extra        = on_drop_extra,
+    )
+
+    # Phrase-only: utterance is exactly the magic phrase, opens follow-up window.
+    await loop._gate.feed("p1", "agent")
+    # Drop: non-magic-phrase utterance while gate requires phrase + no follow-up.
+    await loop._gate.feed("p2", "what time is it")
+
+    assert phrase_only_calls == ["p1"]
+    assert drop_calls and drop_calls[0][0] == "p2"
