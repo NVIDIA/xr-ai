@@ -80,7 +80,9 @@ xr-ai-conversation  (agent-sdk/xr-ai-conversation/)
     a ``str`` (one-shot reply) or an ``AsyncIterator[str]`` (streamed
     tokens). Codec helpers (int16 PCM ↔ WAV, sentence split) live in
     ``xr_ai_conversation.audio`` as the canonical home — ``xr-ai-pipecat``
-    re-exports them for backward compatibility.
+    re-exports them for backward compatibility. ``wire_voice_gate`` is the
+    one-call helper Pipecat-flavored workers use to register all five
+    ``VoiceGate`` handlers without the loop.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]

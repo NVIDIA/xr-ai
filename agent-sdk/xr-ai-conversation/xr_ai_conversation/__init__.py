@@ -11,7 +11,7 @@ from .audio import (
     split_sentences,
     wav_to_chunks,
 )
-from .gate_wiring import GateBindings, QueryHandler, QueryResult
+from .gate_wiring import GateBindings, QueryHandler, QueryResult, wire_voice_gate
 from .loop import ConversationLoop, VadConfig
 from .state import VoiceState
 from .streaming import stream_text_to_audio
@@ -26,6 +26,7 @@ __all__ = [
     "QueryResult",
     "VoiceState",
     "stream_text_to_audio",
+    "wire_voice_gate",
     # audio codec helpers
     "chunks_to_wav",
     "int16_pcm_to_wav",

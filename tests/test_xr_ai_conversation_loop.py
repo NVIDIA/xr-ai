@@ -27,7 +27,7 @@ import pytest
 
 from xr_ai_agent      import AudioChunk, DataMessage, ParticipantEvent
 from xr_ai_voicegate  import VoiceGate, VoiceGateConfig
-from xr_ai_conversation import ConversationLoop, VadConfig
+from xr_ai_conversation import ConversationLoop, VadConfig, wire_voice_gate
 
 
 # ── test doubles ────────────────────────────────────────────────────────────
@@ -119,6 +119,8 @@ def _make_loop(
     on_participant_joined = None,
     on_participant_left   = None,
     on_stop_extra         = None,
+    on_phrase_only_extra  = None,
+    on_drop_extra         = None,
     text_topic: str = "agent.response",
     greeting = None,
 ) -> tuple[ConversationLoop, _FakeEp, _FakeSTT, _FakeTTS]:
@@ -136,6 +138,8 @@ def _make_loop(
         on_participant_joined = on_participant_joined,
         on_participant_left   = on_participant_left,
         on_stop_extra         = on_stop_extra,
+        on_phrase_only_extra  = on_phrase_only_extra,
+        on_drop_extra         = on_drop_extra,
         text_topic            = text_topic,
         greeting              = greeting,
     )
@@ -543,3 +547,142 @@ async def test_data_channel_dispatch_sets_fresh_match_true():
     await loop._voice["p1"].current_task
 
     assert seen == [True]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 13. on_phrase_only_extra + on_drop_extra hooks fire alongside gate events
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_phrase_only_extra_and_drop_extra_hooks_fire():
+    """Case 13: the brain-side extras fire when the gate raises a
+    phrase-only acknowledgement or drops an utterance — without them, a
+    speculative ``on_speech_start`` (e.g. camera warmup) has no
+    counterbalancing teardown when the user never follows up or the
+    phrase doesn't match."""
+    phrase_only_calls: list[str] = []
+    drop_calls:        list[tuple[str, str]] = []
+
+    async def on_query(pid: str, text: str, fresh_match: bool) -> str:
+        return ""
+
+    async def on_phrase_only_extra(pid: str) -> None:
+        phrase_only_calls.append(pid)
+
+    async def on_drop_extra(pid: str, text: str) -> None:
+        drop_calls.append((pid, text))
+
+    loop, _, _, _ = _make_loop(
+        on_query             = on_query,
+        vg_phrases           = ("agent",),
+        on_phrase_only_extra = on_phrase_only_extra,
+        on_drop_extra        = on_drop_extra,
+    )
+
+    # Phrase-only: utterance is exactly the magic phrase, opens follow-up window.
+    await loop._gate.feed("p1", "agent")
+    # Drop: non-magic-phrase utterance while gate requires phrase + no follow-up.
+    await loop._gate.feed("p2", "what time is it")
+
+    assert phrase_only_calls == ["p1"]
+    assert drop_calls and drop_calls[0][0] == "p2"
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 14. wire_voice_gate registers the five handlers in one call
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_wire_voice_gate_registers_handlers_and_defaults_on_drop():
+    """Case 14: ``wire_voice_gate`` is the pipecat-side escape hatch that
+    collapses the five ``gate.on_*`` registration lines into one call.
+
+    Asserts: (a) the four explicitly-passed handlers fire when their
+    corresponding gate event runs, and (b) ``on_drop`` defaults to a
+    DEBUG logger when the caller doesn't supply one — i.e. the gate's
+    ``_on_drop_h`` slot is populated, not left ``None``."""
+    gate = VoiceGate(
+        VoiceGateConfig(magic_phrases=("agent",)),
+        audio_sink=None,
+        tts=None,
+    )
+
+    seen_query:          list[tuple[str, str, bool]] = []
+    seen_stop:           list[str]                   = []
+    seen_phrase_only:    list[str]                   = []
+    seen_join:           list[str]                   = []
+
+    async def on_query(pid: str, text: str, fresh_match: bool) -> None:
+        seen_query.append((pid, text, fresh_match))
+
+    async def on_stop(pid: str) -> None:
+        seen_stop.append(pid)
+
+    async def on_phrase_only(pid: str) -> None:
+        seen_phrase_only.append(pid)
+
+    async def on_participant_joined(pid: str) -> None:
+        seen_join.append(pid)
+
+    wire_voice_gate(
+        gate,
+        on_query              = on_query,
+        on_stop               = on_stop,
+        on_phrase_only        = on_phrase_only,
+        on_participant_joined = on_participant_joined,
+    )
+
+    # Handlers slot in.
+    assert gate._on_query_h               is on_query
+    assert gate._on_stop_h                is on_stop
+    assert gate._on_phrase_only_h         is on_phrase_only
+    assert gate._on_participant_joined_h  is on_participant_joined
+
+    # Default on_drop is installed (not None), and it's awaitable.
+    assert gate._on_drop_h is not None
+    await gate._on_drop_h("p1", "anything dropped")  # should not raise
+
+    # End-to-end: feed "agent, hello" — case 2 (phrase + payload) →
+    # on_query fires with fresh_match=True. "agent stop" → on_stop. A
+    # bare "agent" opens the window → on_phrase_only.
+    await gate.feed("p1", "agent hello")
+    await gate.feed("p2", "agent")
+    await gate.feed("p3", "agent stop")
+
+    assert seen_query        == [("p1", "hello", True)]
+    assert seen_phrase_only  == ["p2"]
+    assert seen_stop         == ["p3"]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 15. wire_voice_gate custom on_drop overrides the default
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_wire_voice_gate_custom_on_drop_overrides_default():
+    """Case 15: passing ``on_drop`` explicitly overrides the default
+    DEBUG-logger handler. Verified by checking the slot identity, since
+    the gate's drop-path is exercised by xr-ai-voicegate's own tests."""
+    gate = VoiceGate(
+        VoiceGateConfig(magic_phrases=("agent",)),
+        audio_sink=None,
+        tts=None,
+    )
+
+    async def custom_drop(pid: str, text: str) -> None:
+        pass
+
+    async def on_query(pid: str, text: str, fresh_match: bool) -> None: ...
+    async def on_stop(pid: str) -> None: ...
+
+    wire_voice_gate(
+        gate,
+        on_query = on_query,
+        on_stop  = on_stop,
+        on_drop  = custom_drop,
+    )
+
+    assert gate._on_drop_h is custom_drop
