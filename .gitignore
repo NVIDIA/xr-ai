@@ -232,6 +232,12 @@ cython_debug/
 #  must not be committed. General agent guidelines live in AGENTS.md / CLAUDE.md.
 .claude/
 
+# xr-render-demo eval inner-loop filter
+#  `.only` is a sibling of eval.py; when present and non-empty, the harness
+#  restricts the suite to the listed case names. Per-developer iteration aid,
+#  never committed.
+agent-samples/xr-render-demo/eval/.only
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

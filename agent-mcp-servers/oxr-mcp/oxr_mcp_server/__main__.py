@@ -18,9 +18,37 @@ Tools (FastMCP, mounted at /mcp)
   position_ahead(distance) → dict {x,y,z}
       World position 'distance' metres along the user's gaze direction.
 
-  position_relative(forward, right, up) → dict {x,y,z}
-      Convert head-relative offsets (metres) to world-space position.
-      forward>0 = ahead, right>0 = right, up>0 = above eye level.
+  position_relative(forward, right, up, origin_x=, origin_y=, origin_z=) → dict {x,y,z}
+      Convert user-frame offsets (metres) to world-space position. Origin
+      defaults to the user's head; pass origin_* to move an existing
+      object user-relatively without doing the vector math yourself.
+
+  place_user_relative(direction, distance) → dict {x,y,z}
+      High-level: world position 'distance' metres in a named direction
+      (front/back/left/right/above/below) from the user. No signs, no origin.
+
+  place_object_relative(origin_x, origin_y, origin_z, direction, distance) → dict {x,y,z}
+      High-level: world position 'distance' metres from an existing object
+      in a named direction (front/back/left/right/above/below/next_to).
+      No signs, no math.
+
+  place_inside_by_id(movee_id, container_x, container_y, container_z) → dict
+      Containment for "put X in Y". Returns {obj_id: movee_id, x, y, z}
+      so the model can feed the result straight into update_primitive
+      without picking which noun's coords to use.
+
+  displace_object(current_x, current_y, current_z,
+                  right=0.0, up=0.0, forward=0.0) → dict {x,y,z}
+      User-frame displacement of an existing object. Add user-frame
+      (right/up/forward) metres to the object's current world position.
+      Handles multi-axis moves in one call ("up and to the left").
+
+  displace_objects(object_ids, current_xs, current_ys, current_zs,
+                   right=0.0, up=0.0, forward=0.0) → dict
+      Batch displacement: same user-frame delta applied to N objects in
+      one call. Returns {items: [{obj_id, x, y, z}, ...]} so the model
+      can fan out to N update_primitive calls without re-deriving each
+      new position.
 
   get_health() → dict
       {status, session_open, open_attempts, last_open_error}.
@@ -37,6 +65,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import uvicorn
 import yaml
@@ -256,7 +285,7 @@ def build_mcp(source: PoseSource) -> FastMCP:
     async def get_head_pose() -> dict:
         """Return the user's head position and orientation as human-readable vectors.
 
-        Fields (all world-space, OpenXR Y-up, +x right, +y up, -z forward):
+        Fields (all world-space, +x right, +y up, -z forward):
           is_valid  — False until tracking is established; retry, don't fail hard
           position  — {x, y, z} head position in metres
           forward   — {x, y, z} unit vector in the direction the user is looking
@@ -291,42 +320,333 @@ def build_mcp(source: PoseSource) -> FastMCP:
             "z": round(p["z"] + f["z"] * distance, 3),
         }
 
+    def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
+        """Return ((fx, fz), (rx, rz)): pose.forward / pose.right projected onto
+        the y=0 plane and renormalised."""
+        f, r = pose["forward"], pose["right"]
+        fx, fz = f["x"], f["z"]
+        mag = math.sqrt(fx * fx + fz * fz)
+        if mag < 1e-6:
+            rx0, rz0 = r["x"], r["z"]
+            mag2 = math.sqrt(rx0 * rx0 + rz0 * rz0)
+            if mag2 < 1e-6:
+                fx, fz = 0.0, -1.0
+            else:
+                rx0, rz0 = rx0 / mag2, rz0 / mag2
+                fx, fz = rz0, -rx0
+        else:
+            fx, fz = fx / mag, fz / mag
+        return (fx, fz), (-fz, fx)
+
     @mcp.tool()
     async def position_relative(
         forward: float = 0.0,
         right:   float = 0.0,
         up:      float = 0.0,
+        origin_x: float | None = None,
+        origin_y: float | None = None,
+        origin_z: float | None = None,
     ) -> dict:
-        """Compute a world position from head-relative offsets (metres).
+        """Compute a world position from user-frame offsets (metres).
 
-        forward > 0 = in front of user   (use for "ahead", "in front of me")
-        forward < 0 = behind user
-        right   > 0 = to the user's right
-        right   < 0 = to the user's left
-        up      > 0 = above eye level
-        up      < 0 = below eye level
+        Direction conventions:
+          forward → user's facing direction projected onto the GROUND
+                    PLANE (yaw is honoured; pitch/roll are ignored, so a
+                    head tilt does NOT make the result diagonal).
+          right   → 90° clockwise from forward in the ground plane.
+          up      → world +Y (gravity).
+
+        Yawing the head DOES change "right" / "left" / "forward" — the
+        result follows the direction the user's body is facing. Tilting
+        the head (pitch / roll) does NOT — vertical moves stay vertical.
+
+        For "in front of me along where I'm looking" (gaze-aware, includes
+        pitch), use position_ahead instead.
+
+        Origin defaults to the user's head position when omitted — use this
+        to place a NEW object relative to the user. Pass origin_x/y/z to
+        MOVE an existing object in a user-frame direction without doing the
+        vector arithmetic yourself: pass the object's current position as
+        origin and the desired offset.
 
         Examples:
-          "1m to my right"   → right=1.0
-          "2m ahead and left"→ forward=2.0, right=-0.5
-          "at arm's length"  → forward=0.7
+          "1m to my right"
+              → position_relative(right=1.0)
+          "0.5m to my left and 0.3m above me"
+              → position_relative(right=-0.5, up=0.3)
+          Move object at (0, 1.7, -1.5) one metre to user's left:
+              → position_relative(origin_x=0, origin_y=1.7, origin_z=-1.5,
+                                  right=-1.0)
 
-        Returns {x, y, z} world-space position, or {error: "pose unavailable"} if
-        tracking is not yet established — do not use any position values in
-        that case; retry after a short delay.
+        Returns {x, y, z} world-space position, or {error: "pose unavailable"}
+        if tracking is not yet established.
         """
         pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
         if not pose.get("is_valid"):
             return {"error": "pose unavailable"}
         p = pose["position"]
-        f = pose["forward"]
-        r = pose["right"]
-        u = pose["up"]
+        ox = p["x"] if origin_x is None else origin_x
+        oy = p["y"] if origin_y is None else origin_y
+        oz = p["z"] if origin_z is None else origin_z
+        (fx, fz), (rx, rz) = _ground_basis(pose)
         return {
-            "x": round(p["x"] + f["x"]*forward + r["x"]*right + u["x"]*up, 3),
-            "y": round(p["y"] + f["y"]*forward + r["y"]*right + u["y"]*up, 3),
-            "z": round(p["z"] + f["z"]*forward + r["z"]*right + u["z"]*up, 3),
+            "x": round(ox + fx*forward + rx*right,        3),
+            "y": round(oy + up,                            3),
+            "z": round(oz + fz*forward + rz*right,        3),
         }
+
+    @mcp.tool()
+    async def place_user_relative(
+        direction: Literal["front", "back", "left", "right", "above", "below"],
+        distance: float = 1.5,
+    ) -> dict:
+        """Compute a world position *distance* metres in a named user-frame
+        direction. Use this in preference to position_relative when the user
+        names a single cardinal direction relative to themselves.
+
+        The tool handles signs and origin internally — distance is ALWAYS a
+        positive number, and the origin is always the user's head. You only
+        pick the named direction.
+
+        Direction semantics (all gravity-aligned — head pitch/roll do not
+        bleed in; only yaw rotates the horizontal axes):
+          front  → user's facing direction projected onto the ground plane
+          back   → opposite of front
+          right  → 90° clockwise from front (the user's actual right)
+          left   → opposite of right
+          above  → world +Y
+          below  → world -Y
+
+        Use for utterances like:
+          "in front of me"  → place_user_relative("front", 1.5)
+          "behind me"       → place_user_relative("back",  1.5)
+          "to my left"      → place_user_relative("left",  1.0)
+          "above me"        → place_user_relative("above", 1.0)
+
+        Returns {x, y, z} world-space position, or {error: "pose unavailable"}
+        if tracking is not yet established.
+        """
+        if distance < 0:
+            return {"error": "distance must be non-negative; flip the direction instead"}
+        pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
+        if not pose.get("is_valid"):
+            return {"error": "pose unavailable"}
+        p = pose["position"]
+        (fx, fz), (rx, rz) = _ground_basis(pose)
+        dx = dy = dz = 0.0
+        if direction == "front":
+            dx, dz = fx * distance, fz * distance
+        elif direction == "back":
+            dx, dz = -fx * distance, -fz * distance
+        elif direction == "right":
+            dx, dz = rx * distance, rz * distance
+        elif direction == "left":
+            dx, dz = -rx * distance, -rz * distance
+        elif direction == "above":
+            dy = distance
+        elif direction == "below":
+            dy = -distance
+        return {
+            "x": round(p["x"] + dx, 3),
+            "y": round(p["y"] + dy, 3),
+            "z": round(p["z"] + dz, 3),
+        }
+
+    @mcp.tool()
+    async def place_object_relative(
+        origin_x: float,
+        origin_y: float,
+        origin_z: float,
+        direction: Literal["front", "back", "left", "right", "above", "below", "next_to"],
+        distance: float = 0.3,
+    ) -> dict:
+        """Compute a world position *distance* metres in a named direction
+        from an object at (origin_x, origin_y, origin_z). Use this in
+        preference to position_relative + world_offset when placing or moving
+        relative to an existing scene object.
+
+        Direction semantics (user-frame applied at the object's origin):
+          front  → on the side of the object facing OPPOSITE the user's
+                   gaze. Coincides with "toward the user" only when the
+                   user is looking at the object; if the user is gazing
+                   away from it, this points further along the gaze
+                   direction (away from "between user and object"). For
+                   a true toward-user vector, use vec-mcp.along_direction
+                   with the user's head position as target.
+          back   → on the side of the object further along the user's
+                   gaze direction. Same caveat as `front` when the user
+                   is not looking at the object.
+          right  → user's right at the object's location (gaze-independent
+                   in the horizontal plane).
+          left   → user's left at the object's location.
+          above  → world +Y from the object.
+          below  → world -Y from the object.
+          next_to → `distance` metres to the user's right of the object
+                    (default 0.3 m when the user just says "next to obj").
+
+        right / left / above / below are robust regardless of where the
+        user is looking. front / back assume the user is looking at the
+        object — true for "behind the cube" / "in front of the cube"
+        utterances in practice. Distance is ALWAYS a positive number;
+        pick the direction enum to flip sign.
+
+        Use for utterances like:
+          "Add a sphere behind the cube"
+              → place_object_relative(cube.x, cube.y, cube.z, "back", 0.3)
+          "Put a sphere on top of the cube"
+              → place_object_relative(cube.x, cube.y, cube.z, "above", cube.size)
+          "Put a sphere next to the cube"
+              → place_object_relative(cube.x, cube.y, cube.z, "next_to")
+
+        Returns {x, y, z} world-space position, or {error: "pose unavailable"}
+        if tracking is not yet established (front/back/left/right need pose;
+        above/below do not).
+        """
+        if distance < 0:
+            return {"error": "distance must be non-negative; flip the direction instead"}
+        if direction in ("front", "back", "left", "right", "next_to"):
+            pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
+            if not pose.get("is_valid"):
+                return {"error": "pose unavailable"}
+            (fx, fz), (rx, rz) = _ground_basis(pose)
+        else:
+            fx = fz = rx = rz = 0.0
+        dx = dy = dz = 0.0
+        if direction == "front":
+            dx, dz = -fx * distance, -fz * distance
+        elif direction == "back":
+            dx, dz = fx * distance, fz * distance
+        elif direction == "right":
+            dx, dz = rx * distance, rz * distance
+        elif direction == "left":
+            dx, dz = -rx * distance, -rz * distance
+        elif direction == "next_to":
+            dx, dz = rx * distance, rz * distance
+        elif direction == "above":
+            dy = distance
+        elif direction == "below":
+            dy = -distance
+        return {
+            "x": round(origin_x + dx, 3),
+            "y": round(origin_y + dy, 3),
+            "z": round(origin_z + dz, 3),
+        }
+
+    @mcp.tool()
+    async def displace_object(
+        current_x: float,
+        current_y: float,
+        current_z: float,
+        right:   float = 0.0,
+        up:      float = 0.0,
+        forward: float = 0.0,
+    ) -> dict:
+        """Shift an object by a user-frame delta — preferred tool for
+        "move it N metres to my right / up / forward".
+
+        Inputs:
+          current_x/y/z  — the object's CURRENT world position (read from
+                           the SCENE block; never (0,0,0) unless the object
+                           really is at the world origin).
+          right          — metres along the user's right axis (negative = left)
+          up             — metres along world +Y (negative = down)
+          forward        — metres along the user's facing direction projected
+                           onto the ground plane (negative = backward)
+
+        The user's frame is gravity-aligned: head pitch/roll do NOT bleed
+        into horizontal moves (yaw is honoured). "Up" is always world +Y.
+
+        Use this for ANY "move it <distance> <user-direction>" utterance,
+        including multi-axis ones — pass non-zero values to multiple of
+        right/up/forward in a single call:
+          "move it 1 m to my right"          → right=1.0
+          "shift it 30 cm down"              → up=-0.3
+          "push it 0.5 m forward"            → forward=0.5
+          "up and to my left"                → right=-0.5, up=0.5
+          "down and back"                    → up=-0.5, forward=-0.5
+
+        Returns {x, y, z} world-space position, or {error: "pose unavailable"}
+        if tracking is not yet established.
+        """
+        pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
+        if not pose.get("is_valid"):
+            return {"error": "pose unavailable"}
+        (fx, fz), (rx, rz) = _ground_basis(pose)
+        return {
+            "x": round(current_x + fx * forward + rx * right, 3),
+            "y": round(current_y + up,                        3),
+            "z": round(current_z + fz * forward + rz * right, 3),
+        }
+
+    @mcp.tool()
+    async def place_inside_by_id(
+        movee_id: str,
+        container_x: float,
+        container_y: float,
+        container_z: float,
+    ) -> dict:
+        """Containment for "put X in Y" / "drop X inside Y" / "stick X into Y".
+
+        Argument names are `movee_id` + `container_*` (not `origin_*`) so
+        that "put X in Y" parses unambiguously: X is the movee, Y is the
+        container.
+
+        Returns {obj_id: movee_id, x, y, z} where (x, y, z) is the
+        container's position. Feed the entire dict into update_primitive
+        verbatim:
+            update_primitive(obj_id=ret.obj_id, x=ret.x, y=ret.y, z=ret.z)
+        """
+        return {
+            "obj_id": movee_id,
+            "x":      round(container_x, 3),
+            "y":      round(container_y, 3),
+            "z":      round(container_z, 3),
+        }
+
+    @mcp.tool()
+    async def displace_objects(
+        object_ids:  list[str],
+        current_xs:  list[float],
+        current_ys:  list[float],
+        current_zs:  list[float],
+        right:   float = 0.0,
+        up:      float = 0.0,
+        forward: float = 0.0,
+    ) -> dict:
+        """Batch user-frame displacement: same delta applied to every
+        object in parallel.
+
+        Use for utterances referencing multiple objects ("them",
+        "all of them", "everything", "the spheres"). Returns one item
+        per input object in the same order.
+
+        Parallel lists: object_ids[i] / current_xs[i] / current_ys[i] /
+        current_zs[i] describe the i-th object. All four lists must be
+        the same length. right/up/forward are signed metres in the
+        user's frame (same semantics as displace_object).
+
+        Returns {"items": [{"obj_id", "x", "y", "z"}, ...]}.
+        """
+        n = len(object_ids)
+        if not (len(current_xs) == n and len(current_ys) == n and len(current_zs) == n):
+            return {"error": "object_ids / current_xs / current_ys / current_zs "
+                             "must all be the same length"}
+        if n == 0:
+            return {"items": []}
+        pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
+        if not pose.get("is_valid"):
+            return {"error": "pose unavailable"}
+        (fx, fz), (rx, rz) = _ground_basis(pose)
+        items = []
+        for i in range(n):
+            cx, cy, cz = current_xs[i], current_ys[i], current_zs[i]
+            items.append({
+                "obj_id": object_ids[i],
+                "x": round(cx + fx * forward + rx * right, 3),
+                "y": round(cy + up,                         3),
+                "z": round(cz + fz * forward + rz * right, 3),
+            })
+        return {"items": items}
 
     @mcp.tool()
     async def get_health() -> dict:

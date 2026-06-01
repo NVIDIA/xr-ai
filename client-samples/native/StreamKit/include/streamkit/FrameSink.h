@@ -14,10 +14,10 @@
  *
  * ## Workflow
  *
- *   // 1. Connect to the session.
+ *   1. Connect to the session.
  *   session.Connect();
  *
- *   // 2. In your frame callback, inject each buffer:
+ *   2. In your frame callback, inject each buffer:
  *   if (auto* sink = dynamic_cast<FrameSink*>(session.GetBackend())) {
  *       sink->InjectVideoFrame(pixels, width, height, format, timestamp_us);
  *   }
@@ -115,8 +115,9 @@ public:
                                   int height,
                                   PixelFormat format,
                                   int64_t timestamp_us) {
+        auto owned = std::move(data);
         std::span<const std::byte> as_span(
-            reinterpret_cast<const std::byte*>(data.data()), data.size());
+            reinterpret_cast<const std::byte*>(owned.data()), owned.size());
         InjectVideoFrame(as_span, width, height, format, timestamp_us);
     }
 };

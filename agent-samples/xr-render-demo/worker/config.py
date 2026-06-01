@@ -12,7 +12,7 @@ import yaml
 
 @dataclass(frozen=True)
 class WorkerConfig:
-    # Path to the models.yaml file (resolved relative to the worker YAML).
+    # Path to the models.yaml file (resolved relative to cwd).
     models_yaml: str
 
     # MCP server base URLs — not in scope for xr-ai-models.
@@ -20,6 +20,7 @@ class WorkerConfig:
     oxr_mcp:    str   # base URL, e.g. http://localhost:8230
     vlm_mcp:    str   # base URL, e.g. http://localhost:8240
     video_mcp:  str   # base URL, e.g. http://localhost:8210
+    vec_mcp:    str   # base URL, e.g. http://localhost:8250
 
     # VAD (Silero, ONNX).
     silence_duration:  float
@@ -51,6 +52,7 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         oxr_mcp     = data.get("oxr_mcp_url",     "http://localhost:8230"),
         vlm_mcp     = data.get("vlm_mcp_url",     "http://localhost:8240"),
         video_mcp   = data.get("video_mcp_url",   "http://localhost:8210"),
+        vec_mcp     = data.get("vec_mcp_url",     "http://localhost:8250"),
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),
         silero_threshold  = float(data.get("silero_threshold",  0.5)),

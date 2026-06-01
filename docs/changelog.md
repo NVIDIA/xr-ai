@@ -9,6 +9,69 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-05-28 — xr-render-demo: vec-mcp + redesigned spatial tools + prompt redesign + eval vocab audit
+
+The eval score on the agentic-loop suite climbed from 40/66 to 58/66 by
+splitting "vector arithmetic the model is bad at" out of the prompt and
+into a deterministic tool surface, then redesigning the prompt around
+the new tools.
+
+**New `vec-mcp` server (port 8250, pure FastMCP).** Lives at
+`agent-mcp-servers/vec-mcp/` and exposes four pose-independent math
+primitives: `between_anchors`, `world_offset`, `along_direction`,
+`scale_value`. Greenfield rather than an extension of `oxr-mcp` because
+none of these need head pose and forcing them through oxr-mcp would
+silently couple their availability to the headless OpenXR session
+opening. The split also lets `vec-mcp` stay a `uvicorn + fastmcp +
+pyyaml`-only dep so it can be reused by future samples that have no XR
+component at all.
+
+**`oxr-mcp` gains named-direction helpers.** Adds `place_user_relative`,
+`place_object_relative`, `place_inside_by_id`, `displace_object`,
+`displace_objects`. Each takes a `direction` enum (`front`/`back`/
+`left`/`right`/`above`/`below`, plus `next_to` on
+`place_object_relative`) and an always-positive `distance`. The LLM
+never applies signs to user-frame axes, which was the dominant
+failure mode on the previous `position_relative`-only surface.
+`displace_objects` is the batch variant ("move them all 1 m forward")
+that collapses N math calls into one. `place_inside_by_id` uses
+deliberately split argument names (`movee_id` paired with
+`container_*` rather than the more natural `origin_*`) so "put X in Y"
+parses unambiguously. The previous `position_relative(origin=…)`
+overload made the model pick the wrong noun's coords ~30 % of the time.
+
+**`place_object_relative` `direction="front"` means *toward the user*,
+not "away from the user".** Counter-intuitive but matches user English
+("in front of <obj>" = the side of <obj> closer to the user). The
+inverted convention is the most common bug for the model to learn;
+documented in the docstring and reinforced with a worked example
+covering the "Push it away from me" case (which is `direction="back"`).
+
+**Prompt redesign: worked-example heavy, three-check ladder, reserved
+vocab.** The new `system.txt` opens with explicit pronoun-resolution
+rules then routes placement utterances through three sequential checks
+(FIRST: `between`/`middle`/`halfway` → `between_anchors`; SECOND:
+anchor is the user → `place_user_relative`; THIRD: proximity to a
+named object → `along_direction`) before the LLM picks a tool. Every
+non-obvious rule has a paired WORKED EXAMPLE with concrete coords; the
+highest-leakage failure modes get WORKED ANTI-EXAMPLEs.
+
+Worked-example fixtures use a *reserved vocabulary* (cones, cylinders,
+capsules, magenta/teal/turquoise) that is disjoint from the eval cases'
+vocabulary (spheres, boxes, pyramids, red/green/blue/cyan/yellow/brown).
+This keeps the eval honest; see the audit below.
+
+**Eval-harness vocab-leakage audit.** `eval.py` gained
+`_check_prompt_eval_overlap`, which audits the system prompt's
+worked-example blocks against every case fixture at startup. Four
+checks: verbatim user utterances (≥12 chars), scene coordinates,
+`recent_moves` coords, and reserved-vocab collisions (any colour/shape
+word appearing both in a case fixture *and* in a worked-example block
+of `system.txt`). Per `AGENTS.md` "Prompt-driven samples", the
+warnings surface at every run; `--strict-overlap` turns them into a
+CI-grade rc=2 failure. Clearing a warning means changing the prompt's
+worked example, not the case fixture.
+
 ### 2026-05-21 — `xr-ai-vad` is Silero-only; `xr-render-demo` migrated
 
 Dropped the adaptive-energy fallback path that shipped in the initial
