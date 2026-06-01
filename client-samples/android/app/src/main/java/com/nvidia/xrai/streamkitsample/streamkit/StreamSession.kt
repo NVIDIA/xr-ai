@@ -9,6 +9,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import java.nio.ByteBuffer
 
 /**
  * Transport-agnostic streaming session — the single public entry-point of StreamKit.
@@ -129,6 +130,30 @@ class StreamSession(private val backend: StreamingBackend) {
      */
     suspend fun stopCamera() {
         backend.stopCamera()
+    }
+
+    /**
+     * Pushes a single externally-sourced I420 video frame to the published
+     * video track. The track is created lazily on the first call and reused
+     * for subsequent frames; [stopCamera] tears it down.
+     *
+     * Used by clients that inject frames from their own pipeline (external
+     * camera adapters, screen capture, synthetic frame sources). Mirror of
+     * iOS `StreamSession.injectVideoFrame(_: CMSampleBuffer)`.
+     *
+     * @param i420         Read-only buffer containing Y, U, V planes back-to-back.
+     * @param width        Y-plane pixel width (must be even).
+     * @param height       Y-plane pixel height (must be even).
+     * @param timestampUs  Source-side presentation timestamp, microseconds.
+     * @throws [StreamError.NotConnected]
+     */
+    suspend fun injectVideoFrame(
+        i420: ByteBuffer,
+        width: Int,
+        height: Int,
+        timestampUs: Long,
+    ) {
+        backend.injectVideoFrame(i420, width, height, timestampUs)
     }
 
     // ── Data channel ──────────────────────────────────────────────────────────
