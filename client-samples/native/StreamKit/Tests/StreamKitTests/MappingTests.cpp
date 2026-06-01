@@ -7,11 +7,13 @@
 
 int main() {
     using streamkit::ConnectionState;
+    using streamkit::test::Expect;
+    using streamkit::test::ExpectEq;
 
-    SK_EXPECT_EQ(ConnectionState::kConnected, ConnectionState::kConnected);
-    SK_EXPECT(ConnectionState::kDisconnected != ConnectionState::kConnected);
-    SK_EXPECT(ConnectionState::kConnecting   != ConnectionState::kConnected);
-    SK_EXPECT(ConnectionState::kReconnecting != ConnectionState::kConnected);
+    ExpectEq(ConnectionState::kConnected, ConnectionState::kConnected);
+    Expect(ConnectionState::kDisconnected != ConnectionState::kConnected);
+    Expect(ConnectionState::kConnecting   != ConnectionState::kConnected);
+    Expect(ConnectionState::kReconnecting != ConnectionState::kConnected);
 
     return 0;
 }

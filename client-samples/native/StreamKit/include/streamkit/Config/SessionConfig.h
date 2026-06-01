@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
-#include <random>
+#include <format>
 #include <string>
 
 namespace streamkit {
@@ -20,11 +22,14 @@ struct SessionConfig {
     /// A unique label for this participant in the session.
     std::string identity;
 
-    /// Returns a config with a random participant ID.
+    /// Returns a config with a process-local unique participant ID.
     static SessionConfig Default() {
-        static std::mt19937 rng{std::random_device{}()};
-        static std::uniform_int_distribution<uint32_t> dist{100000, 999999};
-        return SessionConfig{"participant-" + std::to_string(dist(rng))};
+        static std::atomic_uint64_t sequence{0};
+        const auto timestamp =
+            std::chrono::steady_clock::now().time_since_epoch().count();
+        return SessionConfig{std::format(
+            "participant-{}-{}", timestamp,
+            sequence.fetch_add(1, std::memory_order_relaxed))};
     }
 };
 
