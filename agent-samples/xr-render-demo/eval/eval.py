@@ -23,12 +23,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
+import re
 import sys
 import time
 from pathlib import Path
 
 import httpx
+import yaml
 from fastmcp import Client as McpClient
 
 _HERE       = Path(__file__).resolve().parent
@@ -41,13 +44,26 @@ sys.path.insert(0, str((_HERE / "../worker").resolve()))
 from config import load_config  # noqa: E402  — must follow sys.path tweak
 _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
 
-AGENT_LLM   = f"{_WORKER_CFG.agent_llm_server}/v1/chat/completions"  # overridable via --agent-llm
+def _agent_llm_base_url() -> str:
+    """Read agent_llm.base_url from models.yaml."""
+    # WorkerConfig.models_yaml is resolved relative to the live launcher's
+    # cwd (the sample root); eval runs from eval/, so anchor it ourselves.
+    p = Path(_WORKER_CFG.models_yaml)
+    if not p.is_absolute():
+        p = (_HERE / ".." / p).resolve()
+    with open(p) as f:
+        models = yaml.safe_load(f) or {}
+    return str(models["agent_llm"]["base_url"]).rstrip("/")
+
+
+AGENT_LLM   = f"{_agent_llm_base_url()}/v1/chat/completions"  # overridable via --agent-llm
 AGENT_MODEL = "llm"                                                   # overridable via --agent-model
 AGENT_KEY   = ""                                                      # overridable via --agent-api-key / NGC_API_KEY
 RENDER_MCP  = f"{_WORKER_CFG.render_mcp}/mcp"
 OXR_MCP     = f"{_WORKER_CFG.oxr_mcp}/mcp"
 VLM_MCP     = f"{_WORKER_CFG.vlm_mcp}/mcp"
 VIDEO_MCP   = f"{_WORKER_CFG.video_mcp}/mcp"
+VEC_MCP     = f"{_WORKER_CFG.vec_mcp}/mcp"
 
 # Tools the worker manages internally; hidden from the agent LLM so
 # the eval and the live worker advertise the same tool surface.
@@ -1238,6 +1254,67 @@ CASES = [
         ],
     },
 
+    # ── existing subject → update_primitive, never add_primitive ────────────
+    # Mirrors a live-demo bug: prior turns mentioned several objects
+    # (user added pyramid-0, then swapped box and sphere); user then
+    # says "Put it above the blue sphere" expecting the existing
+    # pyramid to be raised.  Model has historically picked add_primitive
+    # ("clone the recently-named object") instead of update_primitive on
+    # the existing pyramid.  Pass-or-fail probe — captures the bug so
+    # we can iterate; the prompt-side rule lives in the
+    # "EXISTING ID → update_primitive" section.
+    {
+        "name":  "pronoun_after_swap_uses_update_not_add",
+        "scene": [
+            {"id": "box-0",     "type": "box",
+             "pos": [0.5, 0.6, -1.5], "color": [1, 1, 0], "size": 0.1},
+            {"id": "sphere-0",  "type": "sphere",
+             "pos": [0.5, 0.7, -1.5], "color": [0, 0.4, 1], "size": 0.1},
+            {"id": "pyramid-0", "type": "pyramid",
+             "pos": [0.0, 1.6, 0.5], "color": [0, 0.8, 0], "size": 0.1},
+        ],
+        "history": [
+            ("Add a green pyramid above me and a bit behind.",
+             "Added a green pyramid."),
+            ("Switch the box and the sphere.",
+             "Swapped the box and the sphere."),
+        ],
+        "user":  "Put it above the blue sphere.",
+        # Subject of the placement ("it") is the existing pyramid-0;
+        # the rule REQUIRES update_primitive on pyramid-0, not
+        # add_primitive of any kind.  Position lands ~above sphere-0
+        # at (0.5, 0.7, -1.5); we accept any y >= 0.75 to be lenient
+        # on the "above" offset the model picks.
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "pyramid-0",
+                      "x": (0.45, 0.55),
+                      "y": (0.75, 2.5),
+                      "z": (-1.55, -1.45)}},
+        ],
+    },
+
+    # ── companion probe: named existing subject → update, never add ─────────
+    # Same rule, but the subject is named explicitly ("the cube") so
+    # pronoun resolution doesn't enter the picture.  ignore_extra=False
+    # is the teeth: an add_primitive alongside the update is also a fail.
+    {
+        "name":  "move_existing_cube_above_me_uses_update_not_add",
+        "scene": [{"id": "box-0", "type": "box",
+                   "pos": [0.0, 0.6, -1.5], "color": [0, 0.4, 1], "size": 0.1}],
+        "user":  "Move the cube above where I am.",
+        # box-0 should end up near the user's column (x≈0, z≈0) with y
+        # raised above eye level (≥1.55).  No add_primitive allowed.
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "box-0",
+                      "x": (-0.05, 0.05),
+                      "y": ( 1.55, 3.5),
+                      "z": (-0.05, 0.05)}},
+        ],
+        "ignore_extra": False,
+    },
+
     # ── three sequential moves on one object via "up and down 3 times" ───────
     # Exercises the multi-update-in-one-utterance pattern on a single object.
     # Model often emits partial-update calls (just y= …) for vertical
@@ -1313,7 +1390,7 @@ def _format_pose(pose: dict) -> str:
 
 async def _discover_tools() -> list[dict]:
     tools = []
-    for url in (RENDER_MCP, OXR_MCP, VLM_MCP, VIDEO_MCP):
+    for url in (RENDER_MCP, OXR_MCP, VLM_MCP, VIDEO_MCP, VEC_MCP):
         try:
             async with McpClient(url) as c:
                 for t in await c.list_tools():
@@ -1386,7 +1463,6 @@ def _build_messages(system_prompt: str, scene: list[dict], pose: dict, user: str
 def _local_position_relative(args: dict, pose: dict) -> dict:
     """Mirror oxr-mcp.position_relative — gravity-aligned (yaw is honoured;
     pitch and roll are stripped). Up is world +Y."""
-    import math
     f, r = pose["forward"], pose["right"]
     p = pose["position"]
     fwd = float(args.get("forward", 0.0))
@@ -1429,7 +1505,6 @@ def _local_position_ahead(args: dict, pose: dict) -> dict:
 
 def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
     """Mirror oxr-mcp._ground_basis."""
-    import math
     f, r = pose["forward"], pose["right"]
     fx, fz = f["x"], f["z"]
     mag = math.sqrt(fx * fx + fz * fz)
@@ -1473,6 +1548,125 @@ def _local_place_user_relative(args: dict, pose: dict) -> dict:
     }
 
 
+def _local_world_offset(args: dict, _pose: dict) -> dict:
+    """Mirror vec-mcp.world_offset — origin + (dx, dy, dz)."""
+    ox = float(args.get("origin_x", 0.0))
+    oy = float(args.get("origin_y", 0.0))
+    oz = float(args.get("origin_z", 0.0))
+    dx = float(args.get("dx", 0.0))
+    dy = float(args.get("dy", 0.0))
+    dz = float(args.get("dz", 0.0))
+    return {"x": round(ox + dx, 3), "y": round(oy + dy, 3), "z": round(oz + dz, 3)}
+
+
+def _local_along_direction(args: dict, _pose: dict) -> dict:
+    """Mirror vec-mcp.along_direction — origin moved `distance` toward target."""
+    ox = float(args.get("origin_x", 0.0))
+    oy = float(args.get("origin_y", 0.0))
+    oz = float(args.get("origin_z", 0.0))
+    tx = float(args.get("target_x", 0.0))
+    ty = float(args.get("target_y", 0.0))
+    tz = float(args.get("target_z", 0.0))
+    d  = float(args.get("distance", 0.5))
+    vx, vy, vz = tx - ox, ty - oy, tz - oz
+    mag = math.sqrt(vx*vx + vy*vy + vz*vz)
+    if mag < 1e-9:
+        return {"error": "origin and target coincide"}
+    return {
+        "x": round(ox + vx * d / mag, 3),
+        "y": round(oy + vy * d / mag, 3),
+        "z": round(oz + vz * d / mag, 3),
+    }
+
+
+def _local_scale_value(args: dict, _pose: dict) -> dict:
+    """Mirror vec-mcp.scale_value — current * factor."""
+    cur = float(args.get("current", 0.0))
+    fac = float(args.get("factor",  1.0))
+    return {"value": round(cur * fac, 3)}
+
+
+def _local_place_inside_by_id(args: dict, _pose: dict) -> dict:
+    """Mirror oxr-mcp.place_inside_by_id — container coords echoed back
+    alongside the movee's id so the result feeds straight into
+    update_primitive."""
+    for field in ("movee_id", "container_x", "container_y", "container_z"):
+        if args.get(field) is None:
+            return {"error": f"missing {field}"}
+    return {
+        "obj_id": args["movee_id"],
+        "x":      round(float(args["container_x"]), 3),
+        "y":      round(float(args["container_y"]), 3),
+        "z":      round(float(args["container_z"]), 3),
+    }
+
+
+def _local_between_anchors(args: dict, _pose: dict) -> dict:
+    """Mirror vec-mcp.between_anchors — component-wise midpoint of A and B."""
+    a_x, a_y, a_z = (float(args.get("a_x", 0.0)),
+                     float(args.get("a_y", 0.0)),
+                     float(args.get("a_z", 0.0)))
+    b_x, b_y, b_z = (float(args.get("b_x", 0.0)),
+                     float(args.get("b_y", 0.0)),
+                     float(args.get("b_z", 0.0)))
+    return {
+        "x": round((a_x + b_x) / 2.0, 3),
+        "y": round((a_y + b_y) / 2.0, 3),
+        "z": round((a_z + b_z) / 2.0, 3),
+    }
+
+
+def _local_displace_objects(args: dict, pose: dict) -> dict:
+    """Mirror oxr-mcp.displace_objects — same user-frame delta applied
+    to every (id, x, y, z) entry; returns {items: [...]}."""
+    for field in ("object_ids", "current_xs", "current_ys", "current_zs"):
+        if args.get(field) is None:
+            return {"error": f"missing {field}"}
+    ids = list(args["object_ids"])
+    xs  = list(args["current_xs"])
+    ys  = list(args["current_ys"])
+    zs  = list(args["current_zs"])
+    n = len(ids)
+    if not (len(xs) == n and len(ys) == n and len(zs) == n):
+        return {"error": "object_ids / current_xs / current_ys / current_zs "
+                         "must all be the same length"}
+    if n == 0:
+        return {"items": []}
+    right   = float(args.get("right",   0.0))
+    up_     = float(args.get("up",      0.0))
+    forward = float(args.get("forward", 0.0))
+    (fx, fz), (rx, rz) = _ground_basis(pose)
+    items = []
+    for i in range(n):
+        cx, cy, cz = float(xs[i]), float(ys[i]), float(zs[i])
+        items.append({
+            "obj_id": ids[i],
+            "x": round(cx + fx * forward + rx * right, 3),
+            "y": round(cy + up_,                       3),
+            "z": round(cz + fz * forward + rz * right, 3),
+        })
+    return {"items": items}
+
+
+def _local_displace_object(args: dict, pose: dict) -> dict:
+    """Mirror oxr-mcp.displace_object — current + user-frame delta."""
+    for field in ("current_x", "current_y", "current_z"):
+        if args.get(field) is None:
+            return {"error": f"missing {field}"}
+    cx = float(args["current_x"])
+    cy = float(args["current_y"])
+    cz = float(args["current_z"])
+    right   = float(args.get("right",   0.0))
+    up_     = float(args.get("up",      0.0))
+    forward = float(args.get("forward", 0.0))
+    (fx, fz), (rx, rz) = _ground_basis(pose)
+    return {
+        "x": round(cx + fx * forward + rx * right, 3),
+        "y": round(cy + up_,                       3),
+        "z": round(cz + fz * forward + rz * right, 3),
+    }
+
+
 def _local_place_object_relative(args: dict, pose: dict) -> dict:
     direction = args.get("direction", "front")
     distance = float(args.get("distance", 0.3))
@@ -1492,7 +1686,7 @@ def _local_place_object_relative(args: dict, pose: dict) -> dict:
     elif direction == "left":
         dx, dz = -rx * distance, -rz * distance
     elif direction == "next_to":
-        dx, dz = rx * 0.3, rz * 0.3
+        dx, dz = rx * distance, rz * distance
     elif direction == "above":
         dy = distance
     elif direction == "below":
@@ -1564,6 +1758,20 @@ async def _exec_tool(name: str, args_json: str, pose: dict) -> dict:
         return _local_place_user_relative(args, pose)
     if name == "place_object_relative":
         return _local_place_object_relative(args, pose)
+    if name == "place_inside_by_id":
+        return _local_place_inside_by_id(args, pose)
+    if name == "displace_object":
+        return _local_displace_object(args, pose)
+    if name == "displace_objects":
+        return _local_displace_objects(args, pose)
+    if name == "between_anchors":
+        return _local_between_anchors(args, pose)
+    if name == "world_offset":
+        return _local_world_offset(args, pose)
+    if name == "along_direction":
+        return _local_along_direction(args, pose)
+    if name == "scale_value":
+        return _local_scale_value(args, pose)
     if name == "get_head_pose":
         return pose
     if name == "add_primitive":
@@ -1755,17 +1963,119 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
     return True, f"matched {len(wanted)} mutation(s)"
 
 
-# Mirror the worker's loop cap (see processors.py _MAX_LOOP) so eval and
-# the live agent agree on "how many turns is too many".
+# max LLM iterations per turn (mirrors processors.py _MAX_LOOP).
 _MAX_STEPS = 10
+
+
+# Reserved-prompt-vocabulary sets used by check #4 in
+# _check_prompt_eval_overlap (see that docstring and eval/README.md).
+_EVAL_VOCAB_COLORS = frozenset({
+    "red", "green", "blue", "cyan", "brown", "yellow",
+})
+_EVAL_VOCAB_SHAPES = frozenset({
+    "sphere", "spheres", "cube", "cubes", "box", "boxes",
+    "pyramid", "pyramids",
+})
+
+# Worked-example section start markers (case-insensitive).  A section
+# runs from the marker line through the first blank line; triple-backtick
+# fences are also captured as blocks (everything between the fences).
+_EXAMPLE_START_RE = re.compile(
+    r"^\s*(?:"
+    r"WORKED\s+EXAMPLE\b|WORKED\s+ANTI-?EXAMPLE\b|"
+    r"Examples?:|"
+    r"iter\s+\d+\s*:|"
+    r"tool_call\s+\d+\s*:"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _extract_example_blocks(sp: str) -> list[tuple[int, str]]:
+    """Slice the system prompt into worked-example sections.
+
+    Returns ``[(start_line_1_indexed, block_text), …]``.  A section is
+    either everything between a pair of triple-backtick fences, or
+    everything from a marker line (``WORKED EXAMPLE``, ``Example:``,
+    ``iter N:``, ``tool_call N:``) through the first following blank
+    line.
+    """
+    blocks: list[tuple[int, str]] = []
+    lines = sp.splitlines()
+    in_fence = False
+    fence_start = 0
+    fence_buf: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.lstrip().startswith("```"):
+            if in_fence:
+                blocks.append((fence_start, "\n".join(fence_buf)))
+                in_fence = False
+                fence_buf = []
+            else:
+                in_fence = True
+                fence_start = i + 1
+            i += 1
+            continue
+        if in_fence:
+            fence_buf.append(line)
+            i += 1
+            continue
+        if _EXAMPLE_START_RE.match(line):
+            start = i + 1
+            buf = [line]
+            i += 1
+            while i < len(lines) and lines[i].strip():
+                buf.append(lines[i])
+                i += 1
+            blocks.append((start, "\n".join(buf)))
+            continue
+        i += 1
+    if in_fence and fence_buf:
+        blocks.append((fence_start, "\n".join(fence_buf)))
+    return blocks
+
+
+def _case_fixture_vocab(c: dict) -> tuple[set[str], set[str]]:
+    """Eval-vocab colour/shape words actually present in this case's
+    fixture (user utterance, history dialogue, scene type tags, ids).
+    Used to attribute reserved-vocab violations to specific cases."""
+    parts: list[str] = [c.get("user") or ""]
+    for pair in c.get("history") or []:
+        parts.extend(pair)
+    for o in c.get("scene") or []:
+        if t := o.get("type"):
+            parts.append(t)
+        if oid := o.get("id"):
+            parts.append(oid)
+    blob = " ".join(parts).lower()
+    colors = {w for w in _EVAL_VOCAB_COLORS if re.search(rf"\b{w}\b", blob)}
+    shapes = {w for w in _EVAL_VOCAB_SHAPES if re.search(rf"\b{w}\b", blob)}
+    return colors, shapes
 
 
 def _check_prompt_eval_overlap(
     system_prompt: str, cases: list[dict]
 ) -> tuple[set[str], list[str]]:
-    """Detect verbatim overlap between prompt worked-examples and eval
-    case fixtures.  An overlap turns a generalization probe into a
+    """Detect overlap between prompt worked-examples and eval case
+    fixtures.  An overlap turns a generalization probe into a
     memorization check (see AGENTS.md "Prompt-driven samples").
+
+    Four checks run, each across every case:
+      1. Verbatim user utterance (≥12 chars) appearing in the prompt.
+      2. Concrete scene coordinates rendered like ``(x.xx, y.yy, z.zz)``
+         appearing in the prompt.
+      3. ``recent_moves`` coords appearing in the prompt.
+      4. Reserved-prompt-vocabulary: worked-example sections of
+         system.txt must not use any colour/shape word from the
+         eval-case vocabulary (``_EVAL_VOCAB_COLORS`` /
+         ``_EVAL_VOCAB_SHAPES``).  Worked-example sections are
+         triple-backtick blocks and any block starting with
+         ``WORKED EXAMPLE`` / ``Example:`` / ``iter N:`` /
+         ``tool_call N:``.  Rule narration outside those blocks
+         is unrestricted — the colour table, anchor-routing rules,
+         etc. may still mention ``red sphere`` generically.
 
     Returns ``(overlapping_case_names, issue_lines)``.  The set is the
     distinct cases that overlap (caller uses the count for the score
@@ -1808,6 +2118,67 @@ def _check_prompt_eval_overlap(
                     break
         if len(issues) > before:
             overlapping.add(name)
+
+    # 4. Reserved-prompt-vocabulary.  Built second so it's reported as a
+    #    block after the verbatim checks, but the case names it
+    #    attributes still feed the same ``overlapping`` set used by the
+    #    score-line suffix.
+    case_index_colors: dict[str, list[str]] = {w: [] for w in _EVAL_VOCAB_COLORS}
+    case_index_shapes: dict[str, list[str]] = {w: [] for w in _EVAL_VOCAB_SHAPES}
+    for c in cases:
+        cname = c.get("name", "<unnamed>")
+        cc, cs = _case_fixture_vocab(c)
+        for w in cc:
+            case_index_colors[w].append(cname)
+        for w in cs:
+            case_index_shapes[w].append(cname)
+
+    color_alt = "|".join(sorted(_EVAL_VOCAB_COLORS))
+    shape_alt = "|".join(sorted(_EVAL_VOCAB_SHAPES))
+    pair_re   = re.compile(rf"\b({color_alt})\s+({shape_alt})\b", re.IGNORECASE)
+    color_re  = re.compile(rf"\b({color_alt})\b", re.IGNORECASE)
+    shape_re  = re.compile(rf"\b({shape_alt})\b", re.IGNORECASE)
+
+    for start_line, block_text in _extract_example_blocks(sp):
+        seen_words: set[str] = set()
+        # Adjacent "<color> <shape>" — the canonical violation shape.
+        for m in pair_re.finditer(block_text):
+            color = m.group(1).lower()
+            shape = m.group(2).lower()
+            offenders = sorted(set(case_index_colors.get(color, []))
+                               | set(case_index_shapes.get(shape, [])))
+            for case_name in offenders:
+                issues.append(
+                    f"  {case_name}: example block at line {start_line} "
+                    f"uses '{color} {shape}' which also appears in case fixture"
+                )
+                overlapping.add(case_name)
+            seen_words.add(color)
+            seen_words.add(shape)
+        # Lone colour or shape words not already counted in a pair.
+        for m in color_re.finditer(block_text):
+            w = m.group(1).lower()
+            if w in seen_words:
+                continue
+            seen_words.add(w)
+            for case_name in case_index_colors.get(w, []):
+                issues.append(
+                    f"  {case_name}: example block at line {start_line} "
+                    f"uses '{w}' which also appears in case fixture"
+                )
+                overlapping.add(case_name)
+        for m in shape_re.finditer(block_text):
+            w = m.group(1).lower()
+            if w in seen_words:
+                continue
+            seen_words.add(w)
+            for case_name in case_index_shapes.get(w, []):
+                issues.append(
+                    f"  {case_name}: example block at line {start_line} "
+                    f"uses '{w}' which also appears in case fixture"
+                )
+                overlapping.add(case_name)
+
     return overlapping, issues
 
 
@@ -1817,6 +2188,11 @@ async def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("query", nargs="?", help="ad-hoc query (skips case suite)")
     p.add_argument("--prompt", type=Path, default=SYS_PROMPT)
+    p.add_argument("--only",
+                   help="comma-separated list of case names to run; all other "
+                        "cases are skipped.  Useful for fast iteration on a "
+                        "single failing cluster.  Mutually exclusive with the "
+                        "positional `query` arg.")
     p.add_argument("--thinking", action="store_true")
     p.add_argument("--verbose",  action="store_true")
     p.add_argument("--strict-overlap", action="store_true",
@@ -1840,6 +2216,26 @@ async def main() -> None:
     AGENT_LLM   = args.agent_llm
     AGENT_MODEL = args.agent_model
     AGENT_KEY   = args.agent_api_key
+
+    if args.only and args.query:
+        p.error("--only and a positional query are mutually exclusive")
+
+    # Honour a sibling .only file as a shorthand for --only (see
+    # eval/README.md "Watcher" section for the file format).
+    only_file = _HERE / ".only"
+    if not args.only and not args.query and only_file.exists():
+        names: list[str] = []
+        for raw in only_file.read_text(encoding="utf-8").splitlines():
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            for tok in line.split(","):
+                tok = tok.strip()
+                if tok:
+                    names.append(tok)
+        if names:
+            args.only = ",".join(names)
+            print(f"FILTER: {only_file.name} → {names}")
 
     system_prompt = args.prompt.read_text(encoding="utf-8").strip()
     print(f"PROMPT: {args.prompt}  ({len(system_prompt)} chars)")
@@ -1865,6 +2261,14 @@ async def main() -> None:
             return
 
         cases = list(CASES)
+        if args.only:
+            requested = [n.strip() for n in args.only.split(",") if n.strip()]
+            valid = {c["name"] for c in cases}
+            unknown = [n for n in requested if n not in valid]
+            if unknown:
+                p.error(f"--only: unknown case name(s) {unknown}. "
+                        f"Valid names: {sorted(valid)}")
+            cases = [c for c in cases if c["name"] in requested]
 
         # Audit: prompt worked-examples must not duplicate case fixtures.
         # Warns at startup so overlaps don't turn the score into a
@@ -1885,6 +2289,9 @@ async def main() -> None:
                       f"({len(overlap_names)} overlapping case(s))",
                       file=sys.stderr)
                 sys.exit(2)
+        else:
+            print("PROMPT/EVAL OVERLAP: clean (no verbatim utterances, coords, or "
+                  "reserved-vocab leaks)")
 
         results = []
         for c in cases:

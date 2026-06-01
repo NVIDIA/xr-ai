@@ -36,10 +36,14 @@ _WORKER_MANAGED_TOOLS = frozenset({"start_xr", "get_health"})
 
 
 def _build_tools(render_tools: list, oxr_tools: list,
-                 vlm_tools: list = (), video_tools: list = ()) -> list[ToolDef]:
+                 vlm_tools: list = (), video_tools: list = (),
+                 vec_tools: list = ()) -> list[ToolDef]:
     """Convert MCP tool definitions to ToolDef objects for the SDK."""
     tools: list[ToolDef] = []
-    all_tools = list(oxr_tools) + list(render_tools) + list(vlm_tools) + list(video_tools)
+    # vec-mcp's pure-math primitives sit next to oxr-mcp's pose-driven helpers
+    # in the tool list so the model sees them as a single spatial toolbox.
+    all_tools = (list(oxr_tools) + list(vec_tools) + list(render_tools)
+                 + list(vlm_tools) + list(video_tools))
     for t in all_tools:
         if t.name in _WORKER_MANAGED_TOOLS:
             continue
@@ -92,6 +96,7 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         "oxr-mcp":   mcp_probe(cfg.oxr_mcp.rstrip("/")   + "/mcp"),
         "vlm-mcp":   mcp_probe(cfg.vlm_mcp.rstrip("/")   + "/mcp"),
         "video-mcp": mcp_probe(cfg.video_mcp.rstrip("/") + "/mcp"),
+        "vec-mcp":   mcp_probe(cfg.vec_mcp.rstrip("/")   + "/mcp"),
     }
     await wait_for_services(probes)
     await vlm_service.close()
@@ -104,13 +109,15 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         McpClient(cfg.oxr_mcp.rstrip("/")    + "/mcp") as oxr,
         McpClient(cfg.vlm_mcp.rstrip("/")    + "/mcp") as vlm_mcp,
         McpClient(cfg.video_mcp.rstrip("/")  + "/mcp") as video,
+        McpClient(cfg.vec_mcp.rstrip("/")    + "/mcp") as vec,
     ):
-        render_tools, oxr_tools, vlm_tools, video_tools = [], [], [], []
+        render_tools, oxr_tools, vlm_tools, video_tools, vec_tools = [], [], [], [], []
         for name, client, store in [
             ("render-mcp", render,  lambda t: render_tools.extend(t)),
             ("oxr-mcp",    oxr,     lambda t: oxr_tools.extend(t)),
             ("vlm-mcp",    vlm_mcp, lambda t: vlm_tools.extend(t)),
             ("video-mcp",  video,   lambda t: video_tools.extend(t)),
+            ("vec-mcp",    vec,     lambda t: vec_tools.extend(t)),
         ]:
             try:
                 discovered = await client.list_tools()
@@ -119,11 +126,11 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
             except Exception as exc:
                 logger.warning("{} tool discovery failed: {}", name, exc)
 
-        tools = _build_tools(render_tools, oxr_tools, vlm_tools, video_tools)
+        tools = _build_tools(render_tools, oxr_tools, vlm_tools, video_tools, vec_tools)
         logger.info("tool-calling tools: {}", [t.name for t in tools])
 
         agent = RenderDemoAgent(
-            cfg, render, oxr, vlm_mcp, video,
+            cfg, render, oxr, vlm_mcp, video, vec,
             _PROMPT_FILE, tools, llm, agent_llm, stt, tts,
         )
 

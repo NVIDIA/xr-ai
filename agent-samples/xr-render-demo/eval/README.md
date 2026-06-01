@@ -42,6 +42,15 @@ tool-schema discovery and fail open if absent.
 # All built-in cases against the current system.txt
 agent-samples/xr-render-demo/eval/eval.py
 
+# Subset by case name — fast iteration on a single failing cluster.
+# Comma-separated; unknown names error out (mutually exclusive with the
+# positional query arg below).
+agent-samples/xr-render-demo/eval/eval.py --only move_left_one_meter,between_two_spheres
+
+# Watcher-friendly equivalent: write case names (newline- or
+# comma-separated; '#' comments OK) to eval/.only. Gitignored.
+# Active subset is echoed at startup.
+
 # One ad-hoc query (prints the raw LLM response)
 agent-samples/xr-render-demo/eval/eval.py "Move the cube up 30 cm"
 
@@ -106,9 +115,29 @@ what the harness consumes directly; there's no case schema layer.
 ## Don't train on the test set
 
 Prompt worked-examples and case fixtures share the same model. The
-harness audits at startup for verbatim overlap (utterances, scene
-coords, recent-moves coords) and prints a warning. Fix overlaps by
-changing the prompt example, not the case.
+harness audits at startup for four kinds of overlap and prints a
+warning for any it finds:
+
+1. Verbatim user utterance from a case appearing in `system.txt`.
+2. Concrete scene coordinates (formatted like `(0.50, 1.60, -1.50)`)
+   from a case appearing in `system.txt`.
+3. `recent_moves` coordinates from a case appearing in `system.txt`.
+4. **Reserved prompt vocabulary** — any colour or shape word from the
+   eval-case vocabulary (`_EVAL_VOCAB_COLORS` / `_EVAL_VOCAB_SHAPES`
+   in `eval.py`) appearing inside a worked-example section of
+   `system.txt`. Worked-example sections are triple-backtick blocks
+   and any block starting with `WORKED EXAMPLE`, `Example:`,
+   `iter N:`, or `tool_call N:`; the first blank line after the
+   marker ends the block. Rule narration outside those blocks may
+   still mention the eval vocabulary generically (e.g. the colour
+   table, anchor-routing rules) — the restriction is only on the
+   worked examples, which are the strings the model is most likely
+   to memorise as a template.
+
+Fix overlaps by changing the prompt example, not the case. For
+check #4, use colours and shapes outside the eval vocabulary
+(turquoise / teal / lavender / magenta / cone / cylinder / capsule)
+when reaching for a fixture word in a worked example.
 
 ## What the harness does not cover
 

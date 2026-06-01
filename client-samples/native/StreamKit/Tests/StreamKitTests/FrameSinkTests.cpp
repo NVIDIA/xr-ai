@@ -25,6 +25,8 @@
 namespace {
 
 struct SpanOnlySink : streamkit::FrameSink {
+    using streamkit::FrameSink::InjectVideoFrame;
+
     int span_calls = 0;
     std::size_t last_span_size = 0;
     int last_width = 0;
@@ -62,7 +64,8 @@ struct BothOverloadsSink : streamkit::FrameSink {
                           streamkit::PixelFormat /*format*/,
                           int64_t /*timestamp_us*/) override {
         ++move_calls;
-        last_move_capacity = data.capacity();
+        auto owned = std::move(data);
+        last_move_capacity = owned.capacity();
     }
 };
 
@@ -70,6 +73,8 @@ struct BothOverloadsSink : streamkit::FrameSink {
 
 int main() {
     using streamkit::PixelFormat;
+    using streamkit::test::Expect;
+    using streamkit::test::ExpectEq;
 
     // 1. Span-only subclass — the move overload should fall through the
     //    default impl to the span overload. The call goes through a
@@ -82,12 +87,12 @@ int main() {
         std::vector<std::uint8_t> buffer(1024, std::uint8_t{0xAB});
         base.InjectVideoFrame(std::move(buffer), 32, 16,
                               PixelFormat::kI420, 12345);
-        SK_EXPECT_EQ(sink.span_calls, 1);
-        SK_EXPECT_EQ(sink.last_span_size, std::size_t{1024});
-        SK_EXPECT_EQ(sink.last_width, 32);
-        SK_EXPECT_EQ(sink.last_height, 16);
-        SK_EXPECT(sink.last_format == PixelFormat::kI420);
-        SK_EXPECT_EQ(sink.last_ts, int64_t{12345});
+        ExpectEq(sink.span_calls, 1);
+        ExpectEq(sink.last_span_size, std::size_t{1024});
+        ExpectEq(sink.last_width, 32);
+        ExpectEq(sink.last_height, 16);
+        Expect(sink.last_format == PixelFormat::kI420);
+        ExpectEq(sink.last_ts, int64_t{12345});
     }
 
     // 2. Backend that overrides both — the move overload is called directly,
@@ -97,9 +102,9 @@ int main() {
         std::vector<std::uint8_t> buffer(2048);
         sink.InjectVideoFrame(std::move(buffer), 64, 32,
                               PixelFormat::kNV12, 999);
-        SK_EXPECT_EQ(sink.move_calls, 1);
-        SK_EXPECT_EQ(sink.span_calls, 0);
-        SK_EXPECT(sink.last_move_capacity >= std::size_t{2048});
+        ExpectEq(sink.move_calls, 1);
+        ExpectEq(sink.span_calls, 0);
+        Expect(sink.last_move_capacity >= std::size_t{2048});
     }
 
     // 3. Span overload on a both-overloads backend still routes through span
@@ -110,8 +115,8 @@ int main() {
         std::span<const std::byte> view(
             reinterpret_cast<const std::byte*>(buffer.data()), buffer.size());
         sink.InjectVideoFrame(view, 16, 8, PixelFormat::kRGBA, 1);
-        SK_EXPECT_EQ(sink.span_calls, 1);
-        SK_EXPECT_EQ(sink.move_calls, 0);
+        ExpectEq(sink.span_calls, 1);
+        ExpectEq(sink.move_calls, 0);
     }
 
     return 0;

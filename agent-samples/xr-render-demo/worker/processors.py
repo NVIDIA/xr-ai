@@ -16,7 +16,8 @@ RenderSceneProcessor
   Agentic loop (max _MAX_LOOP iterations):
     - LLM outputs {"think": "...", "tool": "<name>", "args": {...}}  → execute tool, continue
     - LLM outputs {"done": true, "response": "..."}                  → finish
-  Tools route to render-mcp (scene ops) or oxr-mcp (spatial helpers).
+  Tools route to render-mcp (scene ops), oxr-mcp (spatial helpers), or
+  vec-mcp (pure-math primitives).
   Each tool call sends a brief progress message so the user isn't left waiting.
 
 TtsProcessor
@@ -74,7 +75,18 @@ _FILLER_PHRASES = frozenset({
 _WORKER_MANAGED_TOOLS = frozenset({"start_xr", "get_health"})
 
 # Tools served by oxr-mcp (routed there, not to render-mcp).
-_OXR_TOOLS = frozenset({"get_head_pose", "position_ahead", "position_relative"})
+_OXR_TOOLS = frozenset({
+    "get_head_pose", "position_ahead", "position_relative",
+    "place_user_relative", "place_object_relative",
+    "place_inside_by_id", "displace_object", "displace_objects",
+})
+
+# Spatial primitive math tools served by vec-mcp. Routed there so
+# the LLM offloads vector arithmetic.
+_VEC_TOOLS = frozenset({
+    "between_anchors", "world_offset",
+    "along_direction", "scale_value",
+})
 
 # Tools served by vlm-mcp and video-mcp.
 _VLM_TOOLS   = frozenset({"ask_image"})
@@ -86,13 +98,22 @@ _VIDEO_TOOLS = frozenset({
 
 # Brief human-readable progress message shown while a tool runs.
 _TOOL_PROGRESS: dict[str, str] = {
-    "get_head_pose":    "Checking your position...",
-    "position_ahead":   "Computing gaze position...",
-    "position_relative":"Computing relative position...",
-    "get_scene_state":  "Scanning the scene...",
-    "add_primitive":    "Creating object...",
-    "update_primitive": "Updating object...",
-    "remove_primitive": "Removing object...",
+    "get_head_pose":        "Checking your position...",
+    "position_ahead":       "Computing gaze position...",
+    "position_relative":    "Computing relative position...",
+    "place_user_relative":  "Placing relative to you...",
+    "place_object_relative":"Placing relative to object...",
+    "place_inside_by_id":   "Placing inside container...",
+    "displace_object":      "Shifting object...",
+    "displace_objects":     "Shifting objects...",
+    "between_anchors":      "Computing midpoint...",
+    "world_offset":         "Computing offset...",
+    "along_direction":      "Computing position...",
+    "scale_value":          "Computing size...",
+    "get_scene_state":      "Scanning the scene...",
+    "add_primitive":        "Creating object...",
+    "update_primitive":     "Updating object...",
+    "remove_primitive":     "Removing object...",
 }
 
 _AGENT_RESPONSE_TOPIC  = "agent.response"
@@ -183,7 +204,7 @@ def _is_filler(lower: str) -> bool:
 
 class RenderSceneProcessor(FrameProcessor):
     """
-    Multi-step agentic loop over render-mcp and oxr-mcp tools.
+    Multi-step agentic loop over render-mcp, oxr-mcp, and vec-mcp tools.
 
     Uses Llama-Nemotron (port 8106) with OpenAI tool calling + LMFE for the
     reasoning loop — guaranteed syntactically valid tool calls every iteration.
@@ -205,6 +226,7 @@ class RenderSceneProcessor(FrameProcessor):
         oxr:         McpClient,
         vlm:         McpClient,
         video:       McpClient,
+        vec:         McpClient,
         prompt_path: Path,
         tools:       list[ToolDef],  # ToolDef list built from MCP discovery
         llm:         LLMService,
@@ -218,6 +240,7 @@ class RenderSceneProcessor(FrameProcessor):
         self._oxr            = oxr
         self._vlm            = vlm
         self._video          = video
+        self._vec            = vec
         self._prompt_path      = prompt_path
         self._prompt_cache     = prompt_path.read_text(encoding="utf-8").strip()
         _prompts               = prompt_path.parent
@@ -239,6 +262,13 @@ class RenderSceneProcessor(FrameProcessor):
         # Injected as context so the agent understands "fix that", "undo", "the one I just added".
         self._history:    list[tuple[str, str]] = []
         self._history_max = 4
+
+        # Move log for "put it back" — (obj_id, prev, new), capped at N.
+        self._recent_moves: list[tuple[str, tuple[float, float, float],
+                                              tuple[float, float, float]]] = []
+        self._recent_moves_max = 5
+        # Per-turn snapshot used to compute prev→new pairs on update_primitive.
+        self._pre_move_positions: dict[str, tuple[float, float, float]] = {}
 
 
     def _read_prompt(self, path: Path, cache_attr: str) -> str:
@@ -361,17 +391,25 @@ class RenderSceneProcessor(FrameProcessor):
 
             send_pid = pid or self._transport.target_participant
 
-            # Record the turn in the rolling history buffer.
+            # Strip leaked tool-call JSON from both the user-visible reply and
+            # history; legit text starting with "{" passes through.
             if response:
-                self._history.append((text, response))
+                display = response
+                if _looks_like_leaked_tool_call(response):
+                    logger.warning(
+                        "response looks like a leaked tool call, sanitizing: {!r}",
+                        response[:120],
+                    )
+                    display = "Done."
+                self._history.append((text, display))
                 if len(self._history) > self._history_max:
                     self._history.pop(0)
 
-            if response and send_pid:
-                await self._send(send_pid, response, topic=_AGENT_RESPONSE_TOPIC)
-                await self.push_frame(
-                    TextFrame(text=response), FrameDirection.DOWNSTREAM,
-                )
+                if send_pid:
+                    await self._send(send_pid, display, topic=_AGENT_RESPONSE_TOPIC)
+                    await self.push_frame(
+                        TextFrame(text=display), FrameDirection.DOWNSTREAM,
+                    )
 
     # ── quick ack ─────────────────────────────────────────────────────────────
 
@@ -537,12 +575,20 @@ class RenderSceneProcessor(FrameProcessor):
         ctx_parts: list[str] = []
 
         # ── Scene ──────────────────────────────────────────────────────────────
+        # Snapshot pre-move positions so update_primitive calls during this
+        # turn can be recorded as (prev → new) entries in _recent_moves.
+        self._pre_move_positions = {}
         if isinstance(scene, dict) and scene.get("objects"):
             objs = scene["objects"]
             lines = ["SCENE OBJECTS:"]
             for o in objs:
                 pos = o.get("position", {})
                 col = o.get("color", {})
+                self._pre_move_positions[o["id"]] = (
+                    float(pos.get("x", 0)),
+                    float(pos.get("y", 0)),
+                    float(pos.get("z", 0)),
+                )
                 lines.append(
                     f"  {o['id']} ({o['type']})  "
                     f"pos=({pos.get('x',0):.2f}, {pos.get('y',0):.2f}, {pos.get('z',0):.2f})  "
@@ -594,6 +640,19 @@ class RenderSceneProcessor(FrameProcessor):
             ctx_parts.append(f"Participant: {pid}")
         if ref_us:
             ctx_parts.append(f"Reference time (when user spoke): {ref_us} µs")
+
+        # Structured move log — machine-readable prior coords for "put it
+        # back" / "undo" / "revert" so the model doesn't have to parse free
+        # text out of the conversation history.
+        if self._recent_moves:
+            move_lines = []
+            for obj_id, prev, new in self._recent_moves:
+                move_lines.append(
+                    f"  {obj_id}: ({prev[0]:.2f}, {prev[1]:.2f}, {prev[2]:.2f}) → "
+                    f"({new[0]:.2f}, {new[1]:.2f}, {new[2]:.2f})"
+                )
+            ctx_parts.append("[Recent moves] (most recent last — prev → new)\n"
+                             + "\n".join(move_lines))
 
         # Recent conversation history — lets the agent understand "fix that",
         # "undo", "the sphere I just added", etc.
@@ -779,13 +838,16 @@ class RenderSceneProcessor(FrameProcessor):
     # ── tool routing ──────────────────────────────────────────────────────────
 
     async def _execute_tool(self, tool: str, args: dict) -> dict | str | None:
-        """Route a tool call to render-mcp or oxr-mcp."""
+        """Route a tool call to render-mcp, oxr-mcp, vec-mcp, vlm-mcp, or video-mcp."""
         # Normalize nested dicts that the LLM sometimes generates instead of
         # flat scalar args — e.g. {"position": {x,y,z}} → x=, y=, z=.
         args = _normalize_tool_args(args)
 
         if tool in _OXR_TOOLS:
             return await self._call_mcp(self._oxr, tool, args)
+
+        if tool in _VEC_TOOLS:
+            return await self._call_mcp(self._vec, tool, args)
 
         # Intercept not_started before it reaches the model — it means LOVR
         # hasn't spawned yet and no render op will succeed.  Return a clear
@@ -809,6 +871,27 @@ class RenderSceneProcessor(FrameProcessor):
         result = await self._call_mcp(self._render, tool, args)
         if isinstance(result, dict) and result.get("reason") == "not_started":
             raise _SceneNotReadyError()
+
+        # Record (prev → new) for any update_primitive that touched x/y/z so
+        # later turns can answer "put it back" by reading the move log.
+        if (tool == "update_primitive" and isinstance(result, dict)
+                and result.get("ok")):
+            obj_id = args.get("obj_id")
+            prev = self._pre_move_positions.get(obj_id) if obj_id else None
+            if prev and ("x" in args or "y" in args or "z" in args):
+                new = (
+                    float(args.get("x", prev[0])),
+                    float(args.get("y", prev[1])),
+                    float(args.get("z", prev[2])),
+                )
+                if new != prev:
+                    self._recent_moves.append((obj_id, prev, new))
+                    if len(self._recent_moves) > self._recent_moves_max:
+                        self._recent_moves.pop(0)
+                    # Update the snapshot so a second update in the same turn
+                    # records (latest → newer), not (original → newer).
+                    self._pre_move_positions[obj_id] = new
+
         return result
 
     async def _call_mcp(
@@ -916,6 +999,40 @@ def _tool_payload(result) -> dict | list | None:
     return getattr(result, "structured_content", None)
 
 
+_TOOL_CALL_KEY_SHAPES: tuple[frozenset[str], ...] = (
+    frozenset({"name", "arguments"}),
+    frozenset({"tool", "args"}),
+    frozenset({"function", "arguments"}),
+)
+
+
+def _looks_like_leaked_tool_call(text: str) -> bool:
+    """True if *text* is a JSON object/array whose top level matches an
+    OpenAI-style tool-call envelope (name+arguments, tool+args, or
+    function+arguments). Plain prose that happens to start with "{" returns
+    False; only parseable JSON with the right keys is sanitized.
+    """
+    obj_text = _extract_json(text)
+    if obj_text is None:
+        return False
+    try:
+        obj = json.loads(obj_text)
+    except json.JSONDecodeError:
+        return False
+    candidates: list[dict] = []
+    if isinstance(obj, dict):
+        candidates.append(obj)
+    elif isinstance(obj, list):
+        candidates.extend(c for c in obj if isinstance(c, dict))
+    else:
+        return False
+    for c in candidates:
+        keys = set(c.keys())
+        if any(shape <= keys for shape in _TOOL_CALL_KEY_SHAPES):
+            return True
+    return False
+
+
 def _extract_json(text: str) -> str | None:
     depth, start, in_string, escape = 0, -1, False, False
     for i, ch in enumerate(text):
@@ -997,12 +1114,3 @@ def _normalize_tool_args(args: dict) -> dict:
     # Strip None and empty-string values — the model sometimes emits r=''
     # when thinking is enabled and the value wasn't filled in.
     return {k: v for k, v in args.items() if v is not None and v != ""}
-
-
-def _tool_param_sig(input_schema: dict) -> str:
-    props = (input_schema or {}).get("properties", {})
-    if not props:
-        return ""
-    return ", ".join(
-        f"{k}: {v.get('type', 'any')}" for k, v in props.items()
-    )
