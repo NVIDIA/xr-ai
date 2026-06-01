@@ -8,6 +8,7 @@ import pathlib
 from dataclasses import dataclass
 
 import yaml
+from xr_ai_voicegate import VoiceGateConfig, load_voice_gate_config
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,11 @@ class WorkerConfig:
     silence_duration:  float
     min_speech:        float
     silero_threshold:  float   # Silero speech probability gate (0..1)
+
+    # Speech-only opt-in gate. Owned by ``xr-ai-voicegate``. Empty
+    # ``magic_phrases`` keeps the original always-on behavior so the
+    # default YAML config matches the pre-gate worker.
+    voice_gate: VoiceGateConfig
 
 
 def load_config(path: pathlib.Path | None) -> WorkerConfig:
@@ -46,6 +52,13 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
     else:
         models_yaml = models_yaml_raw
 
+    # Resolve voice_gate_yaml the same way; a missing file degrades to the
+    # always-on gate defaults via load_voice_gate_config.
+    voice_gate_yaml_raw = data.get("voice_gate_yaml", "voice_gate.yaml")
+    voice_gate_path = pathlib.Path(voice_gate_yaml_raw)
+    if path and not voice_gate_path.is_absolute():
+        voice_gate_path = path.parent / voice_gate_path
+
     return WorkerConfig(
         models_yaml = models_yaml,
         render_mcp  = data.get("render_mcp_url",  "http://localhost:8220"),
@@ -56,4 +69,5 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),
         silero_threshold  = float(data.get("silero_threshold",  0.5)),
+        voice_gate        = load_voice_gate_config(voice_gate_path),
     )

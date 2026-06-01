@@ -30,3 +30,10 @@ vec_mcp_url:    http://localhost:8250
 silence_duration:  0.8
 min_speech:        0.15
 silero_threshold:  0.3
+
+# ── Speech-only opt-in gate (xr-ai-voicegate) ────────────────────────────────
+# Loaded by ``xr-ai-voicegate.load_voice_gate_config``. The gate sits
+# between STT and the agentic loop; only the speech path is affected —
+# the text data channel is never gated. Path is resolved relative to
+# THIS file's directory.
+voice_gate_yaml: voice_gate.yaml

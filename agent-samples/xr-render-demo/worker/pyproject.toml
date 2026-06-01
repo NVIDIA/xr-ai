@@ -11,10 +11,12 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
+    "xr-ai-conversation",
     "xr-ai-models",
     "xr-ai-pipecat",
     "xr-ai-logging",
     "xr-ai-vad",
+    "xr-ai-voicegate",
     "numpy>=1.24",
     "scipy>=1.11",
     "pyyaml>=6.0",
@@ -24,11 +26,13 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-agent   = { path = "../../../agent-sdk",                    editable = true }
-xr-ai-models  = { path = "../../../agent-sdk/xr-ai-models",       editable = true }
-xr-ai-pipecat = { path = "../../../agent-sdk/xr-ai-pipecat",      editable = true }
-xr-ai-logging = { path = "../../../utils/xr-ai-logging",          editable = true }
-xr-ai-vad     = { path = "../../../utils/xr-ai-vad",              editable = true }
+xr-ai-agent        = { path = "../../../agent-sdk",                    editable = true }
+xr-ai-conversation = { path = "../../../agent-sdk/xr-ai-conversation", editable = true }
+xr-ai-models       = { path = "../../../agent-sdk/xr-ai-models",       editable = true }
+xr-ai-pipecat      = { path = "../../../agent-sdk/xr-ai-pipecat",      editable = true }
+xr-ai-logging      = { path = "../../../utils/xr-ai-logging",          editable = true }
+xr-ai-vad          = { path = "../../../utils/xr-ai-vad",              editable = true }
+xr-ai-voicegate    = { path = "../../../utils/xr-ai-voicegate",        editable = true }
 
 [project.scripts]
 xr_render_demo_worker = "xr_render_demo_worker:run"

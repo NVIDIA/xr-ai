@@ -60,7 +60,7 @@ class RenderDemoAgent:
 
         self._scene = RenderSceneProcessor(
             self._transport, cfg, render, oxr, vlm, video, vec,
-            prompt_path, tools=tools, llm=llm, agent_llm=agent_llm,
+            prompt_path, tools=tools, llm=llm, agent_llm=agent_llm, tts=tts,
         )
         self._pipeline, self._pipeline_task = build_pipeline(
             self._transport, stt, tts, self._scene,
@@ -131,8 +131,15 @@ class RenderDemoAgent:
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if event.joined:
             self._transport.set_target_participant(event.participant_id)
+            # Greet the user and (when phrases are configured) tell them
+            # how to address the agent. Without this hint, the gated speech
+            # path can look like the agent is broken when it ignores them.
+            asyncio.create_task(
+                self._scene.gate.participant_joined(event.participant_id)
+            )
         else:
             self._transport.cleanup_participant(event.participant_id)
+            self._scene.gate.forget(event.participant_id)
 
     # ── render-mcp helper ─────────────────────────────────────────────────────
 
