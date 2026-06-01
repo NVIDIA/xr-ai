@@ -1,81 +1,53 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""
-Audio helpers: PCM ↔ WAV conversion, sentence-batched TTS, VAD bookkeeping.
+"""Pipecat audio helpers — codec is re-exported from xr-ai-conversation.
+
+The canonical home for the PCM ↔ WAV codec helpers is
+``xr_ai_conversation.audio``; this module re-exports them for
+backwards compatibility with existing pipecat consumers. The
+pipecat-flavored ``stream_sentences_to_audio`` stays here because it
+pushes pipecat-style audio frames and depends on
+``xr_ai_agent.ProcessorEndpoint``.
 """
 from __future__ import annotations
 
 import asyncio
-import io
-import re
-import time
-import wave
 
 import numpy as np
 from loguru import logger
 
-from xr_ai_agent import AudioChunk, ProcessorEndpoint
+from xr_ai_agent import ProcessorEndpoint
 
-SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+# Re-exported codec + sentence helpers — canonical location is
+# ``xr_ai_conversation.audio``. Importing from here continues to work
+# for backwards compatibility with workers that pre-date PR-C.
+from xr_ai_conversation.audio import (
+    chunks_to_wav,
+    int16_pcm_to_wav,
+    now_us,
+    split_sentences,
+    wav_to_chunks,
+)
 
-_CHUNK_MS = 20
-_CHUNK_US = _CHUNK_MS * 1_000
 
-
-def now_us() -> int:
-    return time.time_ns() // 1_000
+__all__ = [
+    # re-exports
+    "chunks_to_wav",
+    "int16_pcm_to_wav",
+    "now_us",
+    "split_sentences",
+    "wav_to_chunks",
+    # pipecat-only
+    "rms_float32",
+    "stream_sentences_to_audio",
+]
 
 
 def rms_float32(data: bytes) -> float:
+    """RMS amplitude of float32 PCM bytes — pipecat-only utility."""
     arr = np.frombuffer(data, dtype=np.float32)
     return float(np.sqrt(np.mean(arr ** 2))) if len(arr) else 0.0
-
-
-def chunks_to_wav(chunks: list[AudioChunk]) -> bytes:
-    """Concatenate float32 IPC chunks into a single 16-bit PCM WAV blob."""
-    raw = b"".join(c.data for c in chunks)
-    arr = np.frombuffer(raw, dtype=np.float32)
-    pcm = (np.clip(arr, -1.0, 1.0) * 32767).astype(np.int16)
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(chunks[0].channels)
-        wf.setsampwidth(2)
-        wf.setframerate(chunks[0].sample_rate)
-        wf.writeframes(pcm.tobytes())
-    return buf.getvalue()
-
-
-def wav_to_chunks(wav_bytes: bytes, participant_id: str) -> list[AudioChunk]:
-    """Decode a WAV blob into 20 ms float32 AudioChunks at native sample rate."""
-    buf = io.BytesIO(wav_bytes)
-    with wave.open(buf, "rb") as wf:
-        sr  = wf.getframerate()
-        ch  = wf.getnchannels()
-        raw = wf.readframes(wf.getnframes())
-    arr = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-    chunk_frames = max(1, sr // (1000 // _CHUNK_MS))
-    pts = now_us()
-    out: list[AudioChunk] = []
-    for i in range(0, len(arr), chunk_frames * ch):
-        seg = arr[i : i + chunk_frames * ch]
-        if not len(seg):
-            break
-        out.append(AudioChunk(
-            pts_us=pts,
-            sample_rate=sr,
-            channels=ch,
-            samples=len(seg) // ch,
-            data=seg.tobytes(),
-            participant_id=participant_id,
-        ))
-        pts += _CHUNK_US
-    return out
-
-
-def split_sentences(text: str) -> list[str]:
-    parts = SENTENCE_RE.split(text.strip())
-    return [s.strip() for s in parts if s.strip()]
 
 
 async def stream_sentences_to_audio(

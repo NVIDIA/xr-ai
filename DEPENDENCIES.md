@@ -44,9 +44,10 @@ xr-ai-agent  (agent-sdk/)
     └── msgpack >=1.0
 
 xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
-    └── xr-ai-agent   [editable: ..]
-    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-models  [editable: ../xr-ai-models]
+    └── xr-ai-agent        [editable: ..]
+    └── xr-ai-conversation [editable: ../xr-ai-conversation]
+    └── xr-ai-logging      [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models       [editable: ../xr-ai-models]
     └── pipecat-ai >=0.0.46
     └── numpy >=1.24
     └── scipy >=1.11
@@ -58,6 +59,11 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     SttClient / TtsClient are thin wrappers around xr-ai-models'
     OpenAICompatSTT / OpenAICompatTTS — PCM→WAV conversion is handled by
     the SDK. httpx is retained for http_probe() readiness checks.
+    The codec helpers in ``xr_ai_pipecat.audio`` (``wav_to_chunks``,
+    ``chunks_to_wav``, ``int16_pcm_to_wav``, ``split_sentences``,
+    ``now_us``) are re-exports of the canonical implementations in
+    ``xr_ai_conversation.audio``; ``stream_sentences_to_audio`` and
+    ``rms_float32`` stay here (pipecat-flavored).
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
 
 xr-ai-conversation  (agent-sdk/xr-ai-conversation/)
@@ -72,8 +78,11 @@ xr-ai-conversation  (agent-sdk/xr-ai-conversation/)
     streaming. Workers supply the ``ProcessorEndpoint``, STT/TTS services,
     a ``VoiceGateConfig``, and one ``on_query`` callback returning either
     a ``str`` (one-shot reply) or an ``AsyncIterator[str]`` (streamed
-    tokens). Codec helpers (int16 PCM ↔ WAV, sentence split) are exported
-    for consumers that want pieces without the full loop.
+    tokens). Codec helpers (int16 PCM ↔ WAV, sentence split) live in
+    ``xr_ai_conversation.audio`` as the canonical home — ``xr-ai-pipecat``
+    re-exports them for backward compatibility. ``wire_voice_gate`` is the
+    one-call helper Pipecat-flavored workers use to register all five
+    ``VoiceGate`` handlers without the loop.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
@@ -423,7 +432,7 @@ forwarding.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | — |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-logging` [editable], `xr-ai-vad` [editable], `xr-ai-voicegate` [editable] | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-conversation` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-logging` [editable], `xr-ai-vad` [editable], `xr-ai-voicegate` [editable] | numpy >=1.24, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /

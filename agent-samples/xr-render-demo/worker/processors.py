@@ -45,9 +45,11 @@ from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from xr_ai_agent import DataMessage, ProcessorEndpoint
+from xr_ai_conversation import wire_voice_gate
+from xr_ai_conversation.audio import wav_to_chunks
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, STTService, TTSService, ToolCall, ToolDef
-from xr_ai_pipecat.audio import stream_sentences_to_audio, wav_to_chunks
+from xr_ai_pipecat.audio import stream_sentences_to_audio
 from xr_ai_pipecat.transport import XRMediaHubTransport, SAMPLE_RATE
 from xr_ai_vad import VadDetector
 from xr_ai_voicegate import VoiceGate
@@ -266,16 +268,21 @@ class RenderSceneProcessor(FrameProcessor):
 
         # Voice gate owns magic-phrase / STOP / follow-up / chime / greeting.
         # The processor only feeds STT transcripts and handles the events.
+        # ``wire_voice_gate`` collapses the five ``gate.on_*`` registrations
+        # into one call and provides a sensible default ``on_drop`` (DEBUG
+        # log), so the worker doesn't have to repeat that boilerplate.
         self._gate = VoiceGate(
             cfg.voice_gate,
             audio_sink=_EpSink(transport.endpoint),
             tts=tts,
         )
-        self._gate.on_query(self._on_voice_query)
-        self._gate.on_stop(self._on_voice_stop)
-        self._gate.on_phrase_only(self._on_voice_phrase_only)
-        self._gate.on_drop(self._on_voice_drop)
-        self._gate.on_participant_joined(self._on_voice_participant_joined)
+        wire_voice_gate(
+            self._gate,
+            on_query              = self._on_voice_query,
+            on_stop               = self._on_voice_stop,
+            on_phrase_only        = self._on_voice_phrase_only,
+            on_participant_joined = self._on_voice_participant_joined,
+        )
 
     @property
     def gate(self) -> VoiceGate:
@@ -342,9 +349,6 @@ class RenderSceneProcessor(FrameProcessor):
         else to do here; the gate has already opened the window."""
         await self._gate.play_chime(pid)
         logger.info("voice gate awaiting follow-up pid={!r}", pid)
-
-    async def _on_voice_drop(self, pid: str, text: str) -> None:
-        logger.info("voice gate dropped pid={!r} text={!r}", pid, text[:80])
 
     async def _on_voice_participant_joined(self, pid: str) -> None:
         """Voice-gate ``on_participant_joined`` — speak a one-shot
