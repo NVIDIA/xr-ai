@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-conversation"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+# Shared voice-conversation loop for agent workers: wires VAD → STT →
+# voice gate → user query handler → TTS → return audio, with per-pid
+# in-flight cancel/flush and sentence-batched streaming.  Workers supply
+# the ProcessorEndpoint, STT/TTS services, a voice-gate config, and one
+# ``on_query`` callback; everything else (codec helpers, audio sink
+# adapter, gate handler wiring) lives in this package.
+dependencies = [
+    "xr-ai-agent",
+    "xr-ai-vad",
+    "xr-ai-voicegate",
+    "xr-ai-models",
+    "numpy>=1.24",
+]
+
+[tool.uv.sources]
+xr-ai-agent     = { path = "..", editable = true }
+xr-ai-vad       = { path = "../../utils/xr-ai-vad", editable = true }
+xr-ai-voicegate = { path = "../../utils/xr-ai-voicegate", editable = true }
+xr-ai-models    = { path = "../xr-ai-models", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_conversation"]

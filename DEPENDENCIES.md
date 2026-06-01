@@ -60,6 +60,21 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     the SDK. httpx is retained for http_probe() readiness checks.
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
 
+xr-ai-conversation  (agent-sdk/xr-ai-conversation/)
+    └── xr-ai-agent     [editable: ..]
+    └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
+    └── xr-ai-voicegate [editable: ../../utils/xr-ai-voicegate]
+    └── xr-ai-models    [editable: ../xr-ai-models]
+    └── numpy >=1.24
+    Shared voice-conversation loop for agent workers: wires VAD → STT →
+    voice gate → user ``on_query`` → TTS → return-audio fan-out, with
+    per-pid in-flight cancel + ``flush_return_audio`` and sentence-batched
+    streaming. Workers supply the ``ProcessorEndpoint``, STT/TTS services,
+    a ``VoiceGateConfig``, and one ``on_query`` callback returning either
+    a ``str`` (one-shot reply) or an ``AsyncIterator[str]`` (streamed
+    tokens). Codec helpers (int16 PCM ↔ WAV, sentence split) are exported
+    for consumers that want pieces without the full loop.
+
 xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── httpx >=0.27
@@ -191,6 +206,7 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
+    └── xr-ai-conversation      [editable: ../agent-sdk/xr-ai-conversation]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)

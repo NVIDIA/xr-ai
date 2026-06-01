@@ -13,6 +13,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-agent",
+    "xr-ai-conversation",
     "xr-ai-models",
     "xr-ai-pipecat",
     "xr-media-hub",
@@ -38,6 +39,7 @@ dependencies = [
 
 [tool.uv.sources]
 xr-ai-agent           = { path = "../agent-sdk",                        editable = true }
+xr-ai-conversation    = { path = "../agent-sdk/xr-ai-conversation",     editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
 xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable = true }
 xr-media-hub          = { path = "../server-runtime",                   editable = true }
