@@ -144,7 +144,7 @@ struct ContentView: View {
             @Bindable var m = model
 
             // Audio mode picker — mirrors the web client's dropdown.
-            // Disabled while the mic is actively streaming (same as web).
+            // Disabled while the mic is live (same as web).
             Picker("Audio Mode", selection: $m.audioMode) {
                 Text("Voice Processing").tag(AudioConfig.MicrophoneMode.voiceProcessing)
                 Text("Software (AEC on)").tag(AudioConfig.MicrophoneMode.softwareProcessing)
@@ -154,7 +154,7 @@ struct ContentView: View {
 
             LabeledContent("Microphone") {
                 HStack {
-                    Text(model.isAudioActive ? "Streaming" : "Idle")
+                    Text(model.isAudioActive ? "Live" : "Idle")
                         .foregroundStyle(model.isAudioActive ? .green : .secondary)
                     if model.isAudioActive {
                         Button("Stop", role: .destructive) {
