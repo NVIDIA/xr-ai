@@ -13,7 +13,6 @@ the chime uses. No GPU, no network, no model loads.
 """
 from __future__ import annotations
 
-import asyncio
 import io
 import pathlib
 import wave

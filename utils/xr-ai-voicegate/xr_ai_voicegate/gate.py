@@ -15,7 +15,6 @@ race through ``feed`` at the same time.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from typing import Awaitable, Callable
