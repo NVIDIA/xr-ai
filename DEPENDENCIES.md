@@ -101,6 +101,21 @@ xr-ai-vad  (utils/xr-ai-vad/)
     for speculative downstream warmup (e.g. start the camera before STT
     completes).
 
+xr-ai-voicegate  (utils/xr-ai-voicegate/)
+    └── numpy >=1.24
+    └── pyyaml >=6.0
+    Speech-only opt-in gate shared by agent workers that consume STT
+    transcripts.  Owns the magic-phrase + follow-up + STOP ladder, the
+    lazy listening chime (numpy-synthesized at the consumer's TTS sample
+    rate), and the participant-joined greeting hook.  Workers feed
+    transcripts via ``feed`` and register ``on_query`` / ``on_stop`` /
+    ``on_phrase_only`` / ``on_drop`` / ``on_participant_joined``
+    handlers.  Audio + TTS are consumed via duck-typed ``AudioSink`` /
+    ``TTSLike`` Protocols so the package stays free of xr-ai-models /
+    xr-ai-agent / pipecat deps.  pyyaml is used by
+    ``load_voice_gate_config`` to parse the standalone ``voice_gate.yaml``
+    file each sample's worker YAML references.
+
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]
     └── pyzmq >=26.0
@@ -191,6 +206,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
     └── xr-ai-vad               [editable: ../utils/xr-ai-vad]
     └── xr-ai-vllm              [editable: ../utils/xr-ai-vllm]
+    └── xr-ai-voicegate         [editable: ../utils/xr-ai-voicegate]
     └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
     └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
     └── render-mcp              [editable: ../agent-mcp-servers/render-mcp]
