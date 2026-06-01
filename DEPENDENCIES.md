@@ -44,9 +44,10 @@ xr-ai-agent  (agent-sdk/)
     └── msgpack >=1.0
 
 xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
-    └── xr-ai-agent   [editable: ..]
-    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-models  [editable: ../xr-ai-models]
+    └── xr-ai-agent        [editable: ..]
+    └── xr-ai-conversation [editable: ../xr-ai-conversation]
+    └── xr-ai-logging      [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models       [editable: ../xr-ai-models]
     └── pipecat-ai >=0.0.46
     └── numpy >=1.24
     └── scipy >=1.11
@@ -58,6 +59,11 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     SttClient / TtsClient are thin wrappers around xr-ai-models'
     OpenAICompatSTT / OpenAICompatTTS — PCM→WAV conversion is handled by
     the SDK. httpx is retained for http_probe() readiness checks.
+    The codec helpers in ``xr_ai_pipecat.audio`` (``wav_to_chunks``,
+    ``chunks_to_wav``, ``int16_pcm_to_wav``, ``split_sentences``,
+    ``now_us``) are re-exports of the canonical implementations in
+    ``xr_ai_conversation.audio``; ``stream_sentences_to_audio`` and
+    ``rms_float32`` stay here (pipecat-flavored).
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
 
 xr-ai-conversation  (agent-sdk/xr-ai-conversation/)
@@ -72,8 +78,9 @@ xr-ai-conversation  (agent-sdk/xr-ai-conversation/)
     streaming. Workers supply the ``ProcessorEndpoint``, STT/TTS services,
     a ``VoiceGateConfig``, and one ``on_query`` callback returning either
     a ``str`` (one-shot reply) or an ``AsyncIterator[str]`` (streamed
-    tokens). Codec helpers (int16 PCM ↔ WAV, sentence split) are exported
-    for consumers that want pieces without the full loop.
+    tokens). Codec helpers (int16 PCM ↔ WAV, sentence split) live in
+    ``xr_ai_conversation.audio`` as the canonical home — ``xr-ai-pipecat``
+    re-exports them for backward compatibility.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
