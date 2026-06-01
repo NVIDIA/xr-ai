@@ -1,11 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Configuration dataclass and consumer-facing Protocols for the voice gate."""
+"""Configuration dataclass, YAML loader, and consumer-facing Protocols
+for the voice gate."""
 from __future__ import annotations
 
+import pathlib
 from dataclasses import dataclass
 from typing import Protocol
+
+import yaml
 
 
 @dataclass(frozen=True)
@@ -25,6 +29,33 @@ class VoiceGateConfig:
     magic_phrases:    tuple[str, ...] = ()
     followup_grace_s: float           = 5.0
     listening_chime:  bool            = False
+
+
+def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
+    """Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
+
+    Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
+    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
+    Missing file or empty file → returns the dataclass defaults (gate
+    disabled / always-on). ``magic_phrases: null`` and trailing whitespace
+    in phrases are normalized the same way the inline-block parser did.
+    """
+    if not path.exists():
+        return VoiceGateConfig()
+    raw = yaml.safe_load(path.read_text()) or {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path}: top-level must be a mapping")
+
+    phrases_raw = raw.get("magic_phrases") or []
+    if isinstance(phrases_raw, str):
+        phrases_raw = [phrases_raw]
+    phrases = tuple(p for p in (s.strip() for s in phrases_raw) if p)
+
+    return VoiceGateConfig(
+        magic_phrases    = phrases,
+        followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
+        listening_chime  = bool(raw.get("listening_chime", False)),
+    )
 
 
 class AudioSink(Protocol):

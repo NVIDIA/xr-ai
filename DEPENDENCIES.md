@@ -103,6 +103,7 @@ xr-ai-vad  (utils/xr-ai-vad/)
 
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24
+    └── pyyaml >=6.0
     Speech-only opt-in gate shared by agent workers that consume STT
     transcripts.  Owns the magic-phrase + follow-up + STOP ladder, the
     lazy listening chime (numpy-synthesized at the consumer's TTS sample
@@ -111,7 +112,9 @@ xr-ai-voicegate  (utils/xr-ai-voicegate/)
     ``on_phrase_only`` / ``on_drop`` / ``on_participant_joined``
     handlers.  Audio + TTS are consumed via duck-typed ``AudioSink`` /
     ``TTSLike`` Protocols so the package stays free of xr-ai-models /
-    xr-ai-agent / pipecat deps.
+    xr-ai-agent / pipecat deps.  pyyaml is used by
+    ``load_voice_gate_config`` to parse the standalone ``voice_gate.yaml``
+    file each sample's worker YAML references.
 
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]

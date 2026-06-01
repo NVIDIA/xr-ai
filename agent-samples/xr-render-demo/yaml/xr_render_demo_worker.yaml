@@ -28,30 +28,8 @@ min_speech:        0.15
 silero_threshold:  0.3
 
 # ── Speech-only opt-in gate (xr-ai-voicegate) ────────────────────────────────
-# Forwarded to ``xr-ai-voicegate.VoiceGateConfig``. The gate sits between
-# STT and the agentic loop; only the speech path is affected — the text
-# data channel is never gated.
-#
-# Default is always-on (empty ``magic_phrases``): every STT transcript
-# becomes a query, matching the pre-gate worker behavior. Populate the
-# list to require a wake word before the agent responds.
-voice_gate:
-  # Strict-prefix phrases (case-insensitive, no leading filler words).
-  # The matched phrase is stripped before the query reaches the agentic
-  # loop. Configure several wordings to support multiple natural
-  # greetings, e.g.:
-  #   magic_phrases:
-  #     - "agent"
-  #     - "hey agent"
-  magic_phrases:    []
-
-  # Follow-up grace window. After a magic-phrase match, the next
-  # utterance from the same participant within this many seconds
-  # bypasses the gate.
-  followup_grace_s: 5.0
-
-  # Audible "I heard you" feedback. When true AND ``magic_phrases`` is
-  # non-empty, a short two-tone chime plays on the return audio track
-  # the moment a phrase is matched. No effect when ``magic_phrases`` is
-  # empty (always-on mode has no fresh-match event to ride).
-  listening_chime:  false
+# Loaded by ``xr-ai-voicegate.load_voice_gate_config``. The gate sits
+# between STT and the agentic loop; only the speech path is affected —
+# the text data channel is never gated. Path is resolved relative to
+# THIS file's directory.
+voice_gate_yaml: voice_gate.yaml

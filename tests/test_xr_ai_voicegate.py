@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import asyncio
 import io
+import pathlib
 import wave
 
 import numpy as np
 import pytest
 
-from xr_ai_voicegate import VoiceGate, VoiceGateConfig
+from xr_ai_voicegate import VoiceGate, VoiceGateConfig, load_voice_gate_config
 from xr_ai_voicegate._chime import build_chime_wav, read_wav_sample_rate
 from xr_ai_voicegate._phrases import STOP_RE, build_magic_pattern, strip_magic
 
@@ -660,3 +661,120 @@ async def test_handler_exceptions_are_swallowed_and_gate_keeps_working():
     await gate.feed("p1", "agent, second time")
 
     assert calls == ["boom", "second time"]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 8. YAML loader (`load_voice_gate_config`)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def test_load_voice_gate_config_full_file(tmp_path: pathlib.Path):
+    """Case 34: a populated file parses into a VoiceGateConfig with every
+    field set as written."""
+    p = tmp_path / "voice_gate.yaml"
+    p.write_text(
+        "magic_phrases:\n"
+        '  - "agent"\n'
+        '  - "hey agent"\n'
+        "listening_chime:  true\n"
+        "followup_grace_s: 7.5\n"
+    )
+    cfg = load_voice_gate_config(p)
+    assert cfg == VoiceGateConfig(
+        magic_phrases    = ("agent", "hey agent"),
+        followup_grace_s = 7.5,
+        listening_chime  = True,
+    )
+
+
+def test_load_voice_gate_config_missing_file_returns_defaults(tmp_path: pathlib.Path):
+    """Case 35: a path that does not exist degrades to the dataclass
+    defaults (always-on, no chime, 5 s follow-up grace) — same behavior
+    the inline-block parser had for an absent block."""
+    assert load_voice_gate_config(tmp_path / "nope.yaml") == VoiceGateConfig()
+
+
+def test_load_voice_gate_config_empty_file_returns_defaults(tmp_path: pathlib.Path):
+    """Case 36: an empty file (``yaml.safe_load`` → None) degrades to
+    defaults, matching the ``raw or {}`` normalization."""
+    p = tmp_path / "empty.yaml"
+    p.write_text("")
+    assert load_voice_gate_config(p) == VoiceGateConfig()
+
+
+def test_load_voice_gate_config_bare_string_phrase_normalizes(tmp_path: pathlib.Path):
+    """Case 37: ``magic_phrases: agent`` (bare string, not a list) is
+    normalized to a single-element tuple, matching the inline parser."""
+    p = tmp_path / "voice_gate.yaml"
+    p.write_text("magic_phrases: agent\n")
+    cfg = load_voice_gate_config(p)
+    assert cfg.magic_phrases == ("agent",)
+
+
+def test_load_voice_gate_config_null_phrases_normalizes_to_empty(tmp_path: pathlib.Path):
+    """Case 38: ``magic_phrases: null`` (or omitted) is normalized to an
+    empty tuple — the gate's always-on mode."""
+    p = tmp_path / "voice_gate.yaml"
+    p.write_text("magic_phrases: null\nfollowup_grace_s: 3.0\n")
+    cfg = load_voice_gate_config(p)
+    assert cfg.magic_phrases == ()
+    assert cfg.followup_grace_s == 3.0
+
+
+def test_load_voice_gate_config_strips_whitespace_and_drops_empty(tmp_path: pathlib.Path):
+    """Case 39: phrase entries are stripped, and empty entries (after
+    strip) are dropped — same normalization the inline parser ran."""
+    p = tmp_path / "voice_gate.yaml"
+    p.write_text(
+        "magic_phrases:\n"
+        '  - "  agent  "\n'
+        '  - ""\n'
+        '  - "hey agent"\n'
+    )
+    cfg = load_voice_gate_config(p)
+    assert cfg.magic_phrases == ("agent", "hey agent")
+
+
+def test_load_voice_gate_config_rejects_non_mapping_top_level(tmp_path: pathlib.Path):
+    """Case 40: a top-level list (or any non-mapping) raises ValueError —
+    catches typo'd files that would otherwise silently degrade."""
+    p = tmp_path / "voice_gate.yaml"
+    p.write_text("- agent\n- hey agent\n")
+    with pytest.raises(ValueError):
+        load_voice_gate_config(p)
+
+
+# ── Round-trip checks against the in-tree sample voice_gate.yaml files ──────
+#
+# Skipped when the tests are run from an environment where the agent-samples
+# tree isn't reachable on disk (e.g. a published wheel install). When reachable,
+# these guard against accidental drift between the loader's accepted schema
+# and the YAML the samples actually ship.
+
+
+def _repo_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[1]
+
+
+def test_load_voice_gate_config_simple_vlm_sample_round_trip():
+    """Case 41: the simple-vlm-example sample ships with the wake-word
+    config — confirm the file parses and exposes the documented phrases."""
+    p = _repo_root() / "agent-samples" / "simple-vlm-example" / "yaml" / "voice_gate.yaml"
+    if not p.exists():
+        pytest.skip(f"sample voice_gate.yaml not reachable at {p}")
+    cfg = load_voice_gate_config(p)
+    assert cfg.magic_phrases    == ("agent", "hey agent")
+    assert cfg.listening_chime  is False
+    assert cfg.followup_grace_s == 5.0
+
+
+def test_load_voice_gate_config_xr_render_demo_sample_round_trip():
+    """Case 42: the xr-render-demo sample ships with the empty-list
+    default (always-on) — confirm the file parses to defaults."""
+    p = _repo_root() / "agent-samples" / "xr-render-demo" / "yaml" / "voice_gate.yaml"
+    if not p.exists():
+        pytest.skip(f"sample voice_gate.yaml not reachable at {p}")
+    cfg = load_voice_gate_config(p)
+    assert cfg.magic_phrases    == ()
+    assert cfg.listening_chime  is False
+    assert cfg.followup_grace_s == 5.0

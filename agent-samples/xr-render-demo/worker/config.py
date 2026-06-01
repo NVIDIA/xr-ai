@@ -8,7 +8,7 @@ import pathlib
 from dataclasses import dataclass
 
 import yaml
-from xr_ai_voicegate import VoiceGateConfig
+from xr_ai_voicegate import VoiceGateConfig, load_voice_gate_config
 
 
 @dataclass(frozen=True)
@@ -33,25 +33,6 @@ class WorkerConfig:
     voice_gate: VoiceGateConfig
 
 
-def _build_voice_gate_cfg(raw: dict | None) -> VoiceGateConfig:
-    """Parse the ``voice_gate:`` YAML block into a ``VoiceGateConfig``.
-
-    Absent / empty block degrades to defaults (no phrases, no chime,
-    5 s follow-up grace) — i.e. the gate is in always-on mode and every
-    STT transcript passes through to ``on_query``.
-    """
-    raw = raw or {}
-    phrases_raw = raw.get("magic_phrases") or []
-    if isinstance(phrases_raw, str):
-        phrases_raw = [phrases_raw]
-    phrases = tuple(p for p in (s.strip() for s in phrases_raw) if p)
-    return VoiceGateConfig(
-        magic_phrases    = phrases,
-        followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
-        listening_chime  = bool(raw.get("listening_chime", False)),
-    )
-
-
 def load_config(path: pathlib.Path | None) -> WorkerConfig:
     data: dict = {}
     if path and path.exists():
@@ -70,6 +51,13 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
     else:
         models_yaml = models_yaml_raw
 
+    # Resolve voice_gate_yaml the same way; a missing file degrades to the
+    # always-on gate defaults via load_voice_gate_config.
+    voice_gate_yaml_raw = data.get("voice_gate_yaml", "voice_gate.yaml")
+    voice_gate_path = pathlib.Path(voice_gate_yaml_raw)
+    if path and not voice_gate_path.is_absolute():
+        voice_gate_path = path.parent / voice_gate_path
+
     return WorkerConfig(
         models_yaml = models_yaml,
         render_mcp  = data.get("render_mcp_url",  "http://localhost:8220"),
@@ -79,5 +67,5 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),
         silero_threshold  = float(data.get("silero_threshold",  0.5)),
-        voice_gate        = _build_voice_gate_cfg(data.get("voice_gate")),
+        voice_gate        = load_voice_gate_config(voice_gate_path),
     )

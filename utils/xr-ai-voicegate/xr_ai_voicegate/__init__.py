@@ -4,7 +4,7 @@
 """Public surface of the xr-ai-voicegate package."""
 from __future__ import annotations
 
-from .config import AudioSink, TTSLike, VoiceGateConfig
+from .config import AudioSink, TTSLike, VoiceGateConfig, load_voice_gate_config
 from .gate import VoiceGate
 
 __all__ = [
@@ -12,4 +12,5 @@ __all__ = [
     "TTSLike",
     "VoiceGate",
     "VoiceGateConfig",
+    "load_voice_gate_config",
 ]

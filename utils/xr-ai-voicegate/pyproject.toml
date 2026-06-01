@@ -13,9 +13,11 @@ requires-python = ">=3.11,<3.13"
 # audio.  Owns the magic-phrase + follow-up + STOP ladder, the lazy
 # listening chime, and the participant-joined greeting hook so each
 # worker only wires handlers and feeds STT transcripts.  numpy is used
-# for the chime tone synthesis; everything else is stdlib.
+# for the chime tone synthesis; pyyaml parses the standalone
+# voice_gate.yaml file referenced from each worker YAML.
 dependencies = [
     "numpy>=1.24",
+    "pyyaml>=6.0",
 ]
 
 [tool.hatch.build.targets.wheel]

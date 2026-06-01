@@ -16,7 +16,8 @@ Client → agent  (LiveKit data channel, any topic):
 Audio in (mic) → STT → text → ``xr-ai-voicegate`` → query.
 The voice gate owns the magic-phrase, STOP, and follow-up ladder; the
 worker only feeds STT transcripts and wires handlers. Configure phrases
-via ``voice_gate.magic_phrases`` (empty/omit disables the gate); see
+via ``yaml/voice_gate.yaml`` (referenced by ``voice_gate_yaml`` in the
+worker YAML; an empty ``magic_phrases`` list disables the gate). See
 ``utils/xr-ai-voicegate`` for the full event ladder. The text data
 channel is never gated.
 
@@ -29,10 +30,7 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     models_yaml:           yaml/models.yaml   # path to models config (relative to yaml dir)
     default_prompt:        "Describe what you see."
     system_prompt:              <multiline string>   # role/style guidance for the VLM
-    voice_gate:                 # forwarded to ``xr-ai-voicegate.VoiceGateConfig``
-      magic_phrases:            []      # opt-in speech prefixes; empty = always-on
-      followup_grace_s:         5.0     # after a match, next utterance within Xs bypasses gate
-      listening_chime:          false   # play a short bell when a magic phrase matches
+    voice_gate_yaml:       voice_gate.yaml   # path to standalone voice_gate config (relative to yaml dir)
     frame_max_age_s:           2.0      # frames older than this trigger a camera-on request
     camera_on_timeout_s:      15.0      # how long to wait for a fresh frame after startCamera
     camera_grace_s:            5.0      # keep camera on this long after a query (avoids restart on follow-ups)
@@ -52,31 +50,12 @@ from loguru import logger
 from xr_ai_agent import ProcessorEndpoint
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_voicegate import VoiceGateConfig
+from xr_ai_voicegate import load_voice_gate_config
 
 from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmAgent
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
-
-
-def _build_voice_gate_cfg(raw: dict | None) -> VoiceGateConfig:
-    """Parse the ``voice_gate:`` YAML block into a ``VoiceGateConfig``.
-
-    Defensive: an absent or empty (``None``) block degrades to defaults
-    (gate disabled, no chime, 5 s follow-up). An empty ``magic_phrases``
-    list also degrades cleanly — the gate dispatches every utterance.
-    """
-    raw = raw or {}
-    phrases_raw = raw.get("magic_phrases") or []
-    if isinstance(phrases_raw, str):
-        phrases_raw = [phrases_raw]
-    phrases = tuple(p for p in (s.strip() for s in phrases_raw) if p)
-    return VoiceGateConfig(
-        magic_phrases    = phrases,
-        followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
-        listening_chime  = bool(raw.get("listening_chime", False)),
-    )
 
 
 async def main(
@@ -96,6 +75,14 @@ async def main(
         models_yaml_path = config_path.parent / models_yaml_path
     models_cfg = load_models_config(models_yaml_path)
 
+    # Resolve `voice_gate_yaml` the same way as `models_yaml`. A missing
+    # file degrades to gate defaults (always-on); see load_voice_gate_config.
+    voice_gate_yaml_raw  = cfg.get("voice_gate_yaml", "voice_gate.yaml")
+    voice_gate_yaml_path = pathlib.Path(voice_gate_yaml_raw)
+    if config_path and not voice_gate_yaml_path.is_absolute():
+        voice_gate_yaml_path = config_path.parent / voice_gate_yaml_path
+    voice_gate_cfg = load_voice_gate_config(voice_gate_yaml_path)
+
     stt = make_stt(models_cfg, "stt")
     vlm = make_vlm(models_cfg, "vlm")
     tts = make_tts(models_cfg, "tts")
@@ -108,7 +95,7 @@ async def main(
     ep    = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
     agent = SimpleVlmAgent(
         ep, stt, vlm, tts,
-        voice_gate_cfg        =_build_voice_gate_cfg(cfg.get("voice_gate")),
+        voice_gate_cfg        =voice_gate_cfg,
         default_prompt        =cfg.get("default_prompt",        "Describe what you see."),
         system_prompt         =cfg.get("system_prompt",         DEFAULT_SYSTEM_PROMPT),
         frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),

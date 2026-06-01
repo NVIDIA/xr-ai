@@ -51,28 +51,6 @@ min_speech:        0.1    # minimum seconds of speech before STT is called; 0.1s
 
 # Speech-only opt-in gate. Owned by the `xr-ai-voicegate` package; the
 # worker forwards STT transcripts and lets the gate decide whether they
-# become queries, are dropped, or open a follow-up window.
-voice_gate:
-  # Strict-prefix phrases (case-insensitive, no leading filler words).
-  # The matched phrase is stripped before the query is dispatched.
-  # Configure several wordings to support multiple natural greetings.
-  # Empty list ([]) or omit to disable the gate so every STT transcript
-  # is dispatched — only use this for solo testing.
-  # Scope: speech path only. The text data channel is never gated; a
-  # spoken "ping" is gated, but the data-channel "ping" shortcut is not.
-  magic_phrases:
-    - "agent"
-    - "hey agent"
-
-  # Follow-up grace window. After a successful magic-phrase match, the
-  # next utterance from the same participant within this many seconds
-  # bypasses the gate — so "hey agent" → pause → "what am I looking
-  # at?" works as one natural interaction. Set to 0 to disable.
-  followup_grace_s: 5.0
-
-  # Audible "I heard you" feedback. When true and `magic_phrases` is
-  # non-empty, the worker plays a short two-tone chime on the return
-  # audio track the moment a phrase is matched. Synthesized server-side
-  # at the TTS sample rate to match the locked LiveKit audio track.
-  # Has no effect when `magic_phrases` is empty.
-  listening_chime: false
+# become queries, are dropped, or open a follow-up window. Path is
+# resolved relative to THIS file's directory.
+voice_gate_yaml: voice_gate.yaml
