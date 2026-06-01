@@ -43,6 +43,29 @@ Before starting the stack, the orchestrator runs two setup steps:
   not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
   `lovr_bin:` in `render_mcp.yaml` → cached AppImage → fresh download.
 
+## GPU pinning for the XR side
+
+`gpu_index` (int) in `yaml/cloudxr_runtime.yaml` selects the physical GPU
+that the CloudXR compositor pins to. The cloudxr-runtime wrapper translates
+the index to a PCI bus address via `nvidia-smi` and sets three selectors
+(`CUDA_VISIBLE_DEVICES`, `VK_LOADER_DEVICE_SELECT`, `DRI_PRIME`) on its own
+environment before spawning the native service. All three are required: the
+compositor runs on Vulkan and needs the matching CUDA device for interop,
+so on a multi-GPU host Vulkan and CUDA can otherwise land on different
+physical GPUs.
+
+The same three selectors are appended to `cloudxr.env` (under
+`~/.cloudxr/run/`). `render-mcp` sources that file when it spawns LOVR, so
+LOVR inherits the pin; `oxr-mcp` picks it up the same way.
+
+If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
+requested index, the wrapper logs a warning and skips pinning rather than
+failing startup.
+
+The corresponding model-side fields live under
+`agent-samples/model-servers/yaml/<profile>/`. Set them to different GPUs so
+the XR compositor and the agentic LLM do not share a card.
+
 ## Worker configuration
 
 The worker reads two YAML files:

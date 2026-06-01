@@ -16,7 +16,10 @@ import argparse
 import asyncio
 import multiprocessing
 import os
+import shlex
+import shutil
 import signal
+import subprocess
 import sys
 from pathlib import Path
 
@@ -63,6 +66,82 @@ def _load_config(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
+def _xr_gpu_env(idx: int) -> dict[str, str] | None:
+    """Return the env vars that pin Vulkan, CUDA, and Mesa to CUDA GPU *idx*.
+
+    All three selectors are required: the CloudXR compositor runs on Vulkan
+    and needs the matching CUDA device for interop, so on a multi-GPU host
+    Vulkan and CUDA can otherwise land on different physical GPUs.
+
+    Returns ``None`` (after logging a warning) when ``nvidia-smi`` is
+    missing or fails, reports no GPUs, *idx* is not in the reported
+    indices, or the PCI bus_id does not parse. Callers should treat
+    ``None`` as "skip pinning" and continue startup.
+    """
+    if not shutil.which("nvidia-smi"):
+        logger.warning("nvidia-smi not on PATH; skipping XR-side GPU pinning")
+        return None
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=index,pci.bus_id",
+             "--format=csv,noheader,nounits"],
+            text=True, timeout=5.0,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.warning("nvidia-smi failed ({}); skipping XR-side GPU pinning", exc)
+        return None
+
+    by_index: dict[int, str] = {}
+    for line in out.strip().splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2:
+            continue
+        try:
+            by_index[int(parts[0])] = parts[1]
+        except ValueError:
+            continue
+
+    if not by_index:
+        logger.warning("nvidia-smi reported no GPUs; skipping XR-side GPU pinning")
+        return None
+
+    bus_id = by_index.get(idx)
+    if bus_id is None:
+        logger.warning(
+            "gpu_index={} not in nvidia-smi indices {}; skipping XR-side GPU pinning",
+            idx, sorted(by_index.keys()),
+        )
+        return None
+
+    # nvidia-smi reports bus_id as "00000000:XX:00.0" with an 8-hex domain.
+    # Vulkan and Mesa selectors want the standard 4-hex-digit form.
+    try:
+        domain8, bus, dev_func = bus_id.split(":")
+        dev, func = dev_func.split(".")
+        domain = domain8[-4:]
+    except ValueError:
+        logger.warning(
+            "could not parse PCI bus_id {!r}; skipping XR-side GPU pinning",
+            bus_id,
+        )
+        return None
+
+    return {
+        "CUDA_VISIBLE_DEVICES":    str(idx),
+        "VK_LOADER_DEVICE_SELECT": f"PCI:{bus}:{dev}:{func}",
+        "DRI_PRIME":               f"pci-{domain}_{bus}_{dev}_{func}",
+    }
+
+
+def _append_env_to_file(path: Path, env: dict[str, str]) -> None:
+    """Append ``export KEY=value`` lines to *path* so consumers that source
+    the cloudxr env file (e.g. render-mcp via ``load_cloudxr_env``) inherit
+    *env*."""
+    lines = [f"export {k}={shlex.quote(v)}\n" for k, v in env.items()]
+    with open(path, "a", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
 async def _run(cfg: dict, ready_file: Path | None = None) -> None:
     install_dir = str(Path(cfg.get("cloudxr_install_dir", "~/.cloudxr")).expanduser())
     env_file    = cfg.get("cloudxr_env_config")
@@ -70,7 +149,30 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
     for key, val in cfg.get("cloudxr_env", {}).items():
         os.environ[key] = str(val)
 
+    # XR-side GPU pinning. Set on os.environ before EnvConfig.from_args so the
+    # multiprocessing.Process that hosts the native CloudXR service inherits
+    # the three selectors via fork.
+    pinning: dict[str, str] | None = None
+    gpu_idx = cfg.get("gpu_index")
+    if gpu_idx is None:
+        logger.info("cloudxr: gpu_index unset; not pinning")
+    else:
+        pinning = _xr_gpu_env(int(gpu_idx))
+        if pinning is not None:
+            os.environ.update(pinning)
+            logger.info(
+                "cloudxr: pinning to GPU {} ({})",
+                gpu_idx, pinning["VK_LOADER_DEVICE_SELECT"],
+            )
+
     env_cfg = EnvConfig.from_args(install_dir, env_file)
+
+    # Propagate pinning into cloudxr.env so peers that source it (render-mcp,
+    # oxr-mcp) inherit the same GPU selectors when they spawn their own
+    # children (e.g. LOVR).
+    if pinning is not None:
+        _append_env_to_file(Path(env_cfg.env_filepath()), pinning)
+
     check_eula(accept_eula=cfg.get("accept_eula") or None)
     logs_dir = env_cfg.ensure_logs_dir()
 
