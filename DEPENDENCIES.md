@@ -333,7 +333,7 @@ Jetpack Compose sample app mirroring the web and iOS/visionOS clients feature-fo
 
 | Layer | Language | External deps |
 |---|---|---|
-| StreamKit library | Kotlin | `io.livekit:livekit-android` 2.7.0 |
+| StreamKit library | Kotlin | `io.livekit:livekit-android` 2.7.0 (provides `TextureViewRenderer` used by the in-SDK `CameraPreviewView` composable; no extra `livekit-android-compose-components` dep) |
 | App UI | Kotlin + Jetpack Compose | Compose BOM 2024.11.00, `lifecycle-viewmodel-compose` 2.8.7, `activity-compose` 1.9.3 |
 
 The `gradle-wrapper.jar` is not checked in (binary artifact); Android Studio generates it on first sync.

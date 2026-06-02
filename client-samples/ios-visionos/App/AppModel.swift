@@ -61,6 +61,12 @@ final class AppModel {
         didSet { AppModel.defaults.set(cameraOnDemand, forKey: Keys.cameraOnDemand) }
     }
 
+    // MARK: - Topic routing
+
+    /// Topics carrying the agent's final text reply (mirrors web client).
+    /// Routed to `agentResponse`; never appended to `receivedMessages`.
+    static let agentReplyTopics: Set<String> = ["agent.response", "vlm.response"]
+
     // MARK: - Persistence helpers
 
     private static let defaults = UserDefaults.standard
@@ -106,6 +112,9 @@ final class AppModel {
     var session: StreamSession?
     var connectionState: ConnectionState = .disconnected
     var agentStatus: String?
+    /// Latest final-reply text received on `agent.response` or `vlm.response`.
+    /// Mirrors the web client's Agent panel; nil shows the "Waiting for agent..." placeholder.
+    var agentResponse: String?
     var isAudioActive = false
     var isCameraActive = false
     private var isCameraStarting = false
@@ -148,6 +157,7 @@ final class AppModel {
                 self.isAudioActive = false
                 self.isCameraActive = false
                 self.agentStatus = nil
+                self.agentResponse = nil
             }
         }
         newSession.onAgentStatus = { [weak self, weak newSession] status in
@@ -156,6 +166,13 @@ final class AppModel {
         }
         newSession.onDataReceived = { [weak self, weak newSession] topic, data in
             guard let self, self.session === newSession else { return }
+
+            // Final agent reply text: route to the Agent panel and never list.
+            // Topic set mirrors web/App/app.js AGENT_REPLY_TOPICS.
+            if AppModel.agentReplyTopics.contains(topic) {
+                self.agentResponse = String(data: data, encoding: .utf8) ?? ""
+                return
+            }
 
             // Camera on demand: intercept clientControl signals from the agent.
             // In always-on mode (cameraOnDemand = false) they are silently ignored.
@@ -196,6 +213,7 @@ final class AppModel {
         session = nil
         connectionState = .disconnected
         agentStatus = nil
+        agentResponse = nil
         isAudioActive = false
         isCameraActive = false
     }

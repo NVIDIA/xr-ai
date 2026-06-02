@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -51,17 +52,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import kotlinx.coroutines.launch
 import androidx.compose.material3.TopAppBarDefaults
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,6 +83,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
+import com.nvidia.xrai.streamkitsample.streamkit.ui.CameraPreviewView
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -125,21 +125,8 @@ private fun StreamKitTheme(content: @Composable () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    // Show errors as snackbars (mirrors the web toast / iOS alert).
-    LaunchedEffect(vm.lastError) {
-        val err = vm.lastError ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(
-            message = err,
-            duration = SnackbarDuration.Long,
-        )
-        vm.clearError()
-    }
-
     Scaffold(
         containerColor = ColorPageBg,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("NVIDIA XR-AI Sample", style = MaterialTheme.typography.titleLarge) },
@@ -149,24 +136,71 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
             )
         },
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+                .padding(paddingValues),
         ) {
-            Spacer(Modifier.height(4.dp))
-            ConnectionSection(vm)
-            MediaSection(vm)
-            AgentSection(vm)
-            DataChannelSection(vm)
-            if (vm.receivedMessages.isNotEmpty()) {
-                ReceivedSection(vm)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                Spacer(Modifier.height(4.dp))
+                CameraPreviewCard(vm)
+                AgentSection(vm)
+                ConnectionSection(vm)
+                MediaSection(vm)
+                DataChannelSection(vm)
+                if (vm.receivedMessages.isNotEmpty()) {
+                    ReceivedSection(vm)
+                }
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(24.dp))
+
+            ErrorToast(
+                message = vm.lastError,
+                onDismiss = { vm.clearError() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp),
+            )
         }
+    }
+}
+
+/**
+ * Bottom-anchored auto-dismiss toast (mirrors the web client's `#error-toast`
+ * and the iOS `ErrorToast`).  Visible whenever [message] is non-null; clears
+ * via [onDismiss] after 4 seconds or when tapped.
+ */
+@Composable
+private fun ErrorToast(
+    message: String?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (message == null) return
+
+    LaunchedEffect(message) {
+        delay(4_000)
+        onDismiss()
+    }
+
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = ColorRed.copy(alpha = 0.92f),
+        shadowElevation = 6.dp,
+        modifier = modifier,
+    ) {
+        Text(
+            text = message,
+            color = Color.White,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+        )
     }
 }
 
@@ -659,58 +693,111 @@ private fun CameraSelectorRow(
     }
 }
 
-// ── Agent section ─────────────────────────────────────────────────────────────
+// ── Camera preview card ───────────────────────────────────────────────────────
+
+/**
+ * 16:9 preview card mirroring the web client's `.preview-card`.
+ * Renders the local LiveKit camera track when active (wired in a follow-up
+ * step), a "Camera off" placeholder otherwise, and a pulsing LIVE badge while
+ * capturing.
+ */
+@Composable
+private fun CameraPreviewCard(vm: AppViewModel) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Black),
+        elevation = CardDefaults.cardElevation(0.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f),
+        ) {
+            if (vm.isCameraActive) {
+                CameraPreviewView(
+                    session = vm.session,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                LiveBadge(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp),
+                )
+            } else {
+                Text(
+                    text = "Camera off",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
+        }
+    }
+}
 
 @Composable
-private fun AgentSection(vm: AppViewModel) {
-    val isConnected = vm.connectionState == ConnectionState.CONNECTED
+private fun LiveBadge(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "live-pulse")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "live-dot-alpha",
+    )
+    Row(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.55f), shape = RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .alpha(alpha)
+                .background(ColorRed, shape = CircleShape),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = "LIVE",
+            style = MaterialTheme.typography.labelSmall.copy(
+                color = Color.White,
+                letterSpacing = 0.06.sp,
+            ),
+        )
+    }
+}
 
+// ── Agent section ─────────────────────────────────────────────────────────────
+
+/**
+ * Final-reply text panel. Mirrors the web client's `#agent-response` block:
+ * shows `agentResponse` verbatim, or an italic "Waiting for agent…"
+ * placeholder while null/empty.
+ */
+@Composable
+private fun AgentSection(vm: AppViewModel) {
     SectionCard(title = "Agent") {
         CardRow(showDivider = false) {
-            Text("Status", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.weight(1f))
-
-            val dotColor = when {
-                !isConnected                   -> ColorSecondary
-                vm.agentStatus == "processing" -> ColorOrange
-                vm.agentStatus == "idle"       -> ColorGreen
-                else                           -> ColorSecondary
-            }
-            val isPulsing = isConnected && vm.agentStatus == "processing"
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isPulsing) {
-                    val infiniteTransition = rememberInfiniteTransition(label = "agent-pulse")
-                    val alpha by infiniteTransition.animateFloat(
-                        initialValue = 1f,
-                        targetValue = 0.3f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(700, easing = LinearEasing),
-                            repeatMode = RepeatMode.Reverse,
-                        ),
-                        label = "agent-dot-alpha",
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .alpha(alpha)
-                            .background(color = dotColor, shape = CircleShape),
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(color = dotColor, shape = CircleShape),
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-                val agentLabel = when {
-                    !isConnected                   -> "—"
-                    vm.agentStatus == "idle"       -> "Idle"
-                    vm.agentStatus == "processing" -> "Processing…"
-                    else                           -> "Unknown"
-                }
-                Text(agentLabel, style = MaterialTheme.typography.bodySmall, color = ColorSecondary)
+            val response = vm.agentResponse
+            if (response.isNullOrEmpty()) {
+                Text(
+                    text = "Waiting for agent…",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = ColorSecondary,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Text(
+                    text = response,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
