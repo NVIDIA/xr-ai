@@ -176,12 +176,9 @@ async def main(
         )
 
         loop = asyncio.get_running_loop()
-        def _on_signal() -> None:
-            # PipelineTask.cancel is a coroutine — schedule it so the
-            # signal handler returns immediately.
-            asyncio.ensure_future(task.cancel())
         for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, _on_signal)
+            # PipelineTask.cancel is a coroutine; add_signal_handler needs a sync callable.
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(task.cancel()))
 
         logger.info("xr_render_demo starting")
         try:
