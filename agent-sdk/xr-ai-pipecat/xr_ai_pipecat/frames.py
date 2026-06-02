@@ -52,3 +52,24 @@ class GatedQueryFrame(DataFrame):
     text: str
     fresh_match: bool
     pts_us: int
+
+
+@dataclass
+class BrainResponseEndFrame(DataFrame):
+    """A single brain turn finished emitting ``TextFrame``s.
+
+    Emitted by :class:`BrainProcessor` in :meth:`_run_query`'s finally
+    block. Carries ``text`` — the full assembled response — so the
+    downstream :class:`StreamingTtsProcessor` can echo the per-turn
+    response on the data channel exactly once, matching the
+    pre-migration "send full response at end" behavior. ``pid`` is the
+    participant whose turn ended; the data echo addresses the same pid.
+
+    A turn that was cancelled (new query, interruption) still produces
+    one of these on the way out so the consumer never sees an open turn
+    without a corresponding end marker.
+    """
+
+    pid: str
+    text: str
+    pts_us: int

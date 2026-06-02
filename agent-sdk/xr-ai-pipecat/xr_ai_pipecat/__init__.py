@@ -9,7 +9,12 @@ everything else (VAD/STT, voice gate, streaming TTS) is provided.
 """
 from __future__ import annotations
 
-from .frames import GatedQueryFrame, ParticipantJoinedFrame, ParticipantLeftFrame
+from .frames import (
+    BrainResponseEndFrame,
+    GatedQueryFrame,
+    ParticipantJoinedFrame,
+    ParticipantLeftFrame,
+)
 from .pipeline import make_voice_pipeline
 from .processors import (
     BrainProcessor,
@@ -21,6 +26,7 @@ from .processors import (
 
 __all__ = [
     "BrainProcessor",
+    "BrainResponseEndFrame",
     "GatedQueryFrame",
     "ParticipantJoinedFrame",
     "ParticipantLeftFrame",

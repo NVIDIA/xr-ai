@@ -14,12 +14,20 @@ agent to stop.
 
 Every synthesized WAV is offered to ``VoiceGate.observe_tts_wav`` so
 the gate's listening chime can lazily build at the right sample rate.
+
+When constructed with a non-empty ``text_topic`` and a ``transport``,
+the processor also echoes each brain turn's full assembled response on
+the data channel under that topic — the moment it sees a
+:class:`BrainResponseEndFrame`. Samples whose brain already pushes its
+own per-turn data echo (e.g. xr-render-demo) pass ``text_topic=""`` to
+opt out of this and avoid duplicate sends.
 """
 from __future__ import annotations
 
 import asyncio
 import re
 import time
+from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
@@ -31,10 +39,15 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
+from xr_ai_agent import DataMessage
 from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate
 
 from ..audio import wav_to_chunks
+from ..frames import BrainResponseEndFrame
+
+if TYPE_CHECKING:
+    from ..transport import XRMediaHubTransport
 
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -46,12 +59,29 @@ class StreamingTtsProcessor(FrameProcessor):
     Lifts the parallel-synth-with-ordered-send pattern from
     :func:`xr_ai_pipecat.audio.stream_sentences_to_audio` and exposes it
     as a frame processor.
+
+    ``transport`` and ``text_topic`` are optional; when both are
+    supplied (and the topic is non-empty), the processor emits one
+    ``send_return_data`` per :class:`BrainResponseEndFrame` so the
+    client receives the full assembled reply on the data channel.
+    Leaving them out (or passing an empty topic) disables the echo —
+    used by samples whose brain already sends its own per-turn data
+    response.
     """
 
-    def __init__(self, *, tts: TTSService, voice_gate: VoiceGate) -> None:
+    def __init__(
+        self,
+        *,
+        tts: TTSService,
+        voice_gate: VoiceGate,
+        transport: "XRMediaHubTransport | None" = None,
+        text_topic: str = "",
+    ) -> None:
         super().__init__()
         self._tts        = tts
         self._voice_gate = voice_gate
+        self._transport  = transport
+        self._text_topic = text_topic
         # Pending text we haven't yet split into a sentence — accumulates
         # across consecutive TextFrames so e.g. token streams from an
         # LLM coalesce into whole sentences before TTS is invoked.
@@ -66,6 +96,14 @@ class StreamingTtsProcessor(FrameProcessor):
 
         if isinstance(frame, InterruptionFrame):
             await self._drain_on_interrupt()
+            await self.push_frame(frame, direction)
+            return
+
+        if isinstance(frame, BrainResponseEndFrame):
+            await self._handle_response_end(frame)
+            # Forward the marker so any tail processor / sink that
+            # tracks turn boundaries (tests, future debug taps) still
+            # sees it.
             await self.push_frame(frame, direction)
             return
 
@@ -95,6 +133,37 @@ class StreamingTtsProcessor(FrameProcessor):
         # sent verbatim.
         self._pending += frame.text
         await self._flush_complete_sentences(pid=frame.transport_destination or "")
+
+    async def _handle_response_end(self, frame: BrainResponseEndFrame) -> None:
+        """Flush trailing pending text, then send the data echo.
+
+        The brain may finish a turn with text that has no
+        sentence-final punctuation (e.g. an aborted partial answer);
+        the boundary regex would leave that fragment in the buffer
+        forever. End-of-response is the right place to flush it so the
+        user hears the tail of the reply.
+        """
+        if self._pending.strip():
+            sentence = self._pending.strip()
+            self._pending = ""
+            await self._dispatch_sentence(sentence, pid=frame.pid)
+
+        if not self._text_topic or self._transport is None:
+            return
+        if not frame.text:
+            return
+        try:
+            await self._transport.send_return_data(DataMessage(
+                participant_id = frame.pid,
+                topic          = self._text_topic,
+                pts_us         = frame.pts_us,
+                data           = frame.text.encode(),
+            ))
+        except Exception:
+            logger.exception(
+                "send_return_data failed pid={!r} topic={!r}",
+                frame.pid, self._text_topic,
+            )
 
     async def _flush_complete_sentences(self, *, pid: str) -> None:
         """Drain every complete sentence in the pending buffer, leaving

@@ -35,7 +35,7 @@ def make_voice_pipeline(
     brain: BrainProcessor,
     vad_cfg: VadConfig,
     voice_gate_cfg: VoiceGateConfig,
-    text_topic: str = "agent.response",  # noqa: ARG001 — held for PR-2/3 sample wiring
+    text_topic: str = "agent.response",
 ) -> tuple[Pipeline, PipelineTask]:
     """Assemble the unified voice pipeline.
 
@@ -44,9 +44,19 @@ def make_voice_pipeline(
     :class:`StreamingTtsProcessor` — the TTS processor calls
     ``gate.observe_tts_wav`` so the listening chime gets built at the
     right sample rate.
+
+    ``text_topic`` controls the per-turn data-channel echo emitted by
+    :class:`StreamingTtsProcessor`. Set to ``""`` to opt out — samples
+    whose brain pushes its own response data message (e.g.
+    xr-render-demo) want this off to avoid duplicate sends.
     """
     voice_gate_proc = VoiceGateProcessor(cfg=voice_gate_cfg, tts=tts)
-    streaming_tts   = StreamingTtsProcessor(tts=tts, voice_gate=voice_gate_proc.gate)
+    streaming_tts   = StreamingTtsProcessor(
+        tts        = tts,
+        voice_gate = voice_gate_proc.gate,
+        transport  = transport,
+        text_topic = text_topic,
+    )
     vad_stt         = VadSttProcessor(stt=stt, vad_cfg=vad_cfg)
 
     pipeline = Pipeline([

@@ -40,6 +40,7 @@ from pipecat.workers.runner import WorkerRunner
 
 from xr_ai_pipecat import (
     BrainProcessor,
+    BrainResponseEndFrame,
     GatedQueryFrame,
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
@@ -880,3 +881,432 @@ async def test_make_voice_pipeline_audio_in_to_audio_out(monkeypatch):
     audio_out = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
     assert audio_out, "expected at least one OutputAudioRawFrame at the tail"
     assert tts.calls == ["echo hi pipeline."]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Regression: brain tags TextFrames with pid (Bug #2)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_brain_tags_text_frame_with_pid_for_string_return():
+    """The brain MUST set ``transport_destination`` on every TextFrame.
+
+    Downstream ``StreamingTtsProcessor`` reads
+    ``frame.transport_destination or ""`` and copies it onto the
+    resulting ``OutputAudioRawFrame``. Without the pid tag the empty
+    string flows through and the hub drops every audio chunk on the
+    floor — the "agent thinks but says nothing" failure mode.
+    """
+    brain = _StringBrain()
+    sink = await _run_chain(
+        brain,
+        sends=[GatedQueryFrame(participant_id="web-client", text="hi", fresh_match=True, pts_us=0)],
+    )
+
+    texts = [f for f in sink.frames if isinstance(f, TextFrame)]
+    assert texts, "brain produced no TextFrame"
+    assert all(t.transport_destination == "web-client" for t in texts)
+
+
+@pytest.mark.asyncio
+async def test_brain_tags_text_frame_with_pid_for_async_iter_return():
+    brain = _IterBrain(chunks=["alpha ", "beta."])
+    sink = await _run_chain(
+        brain,
+        sends=[GatedQueryFrame(participant_id="web-client", text="hi", fresh_match=True, pts_us=0)],
+        settle_s=0.15,
+    )
+    texts = [f for f in sink.frames if isinstance(f, TextFrame)]
+    assert len(texts) == 2
+    assert all(t.transport_destination == "web-client" for t in texts)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Regression: brain emits BrainResponseEndFrame at end of turn (Bug #4)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_brain_emits_response_end_after_string_turn():
+    """One ``BrainResponseEndFrame`` per completed turn carries the full
+    assembled text and pid — the downstream data-channel echo keys off
+    this marker."""
+    brain = _StringBrain()
+    sink = await _run_chain(
+        brain,
+        sends=[GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=42)],
+    )
+    ends = [f for f in sink.frames if isinstance(f, BrainResponseEndFrame)]
+    assert len(ends) == 1
+    assert ends[0].pid    == "pid-1"
+    assert ends[0].text   == "answer: hi"
+    assert ends[0].pts_us == 42
+
+
+@pytest.mark.asyncio
+async def test_brain_emits_response_end_after_streamed_turn():
+    brain = _IterBrain(chunks=["one ", "two ", "three."])
+    sink = await _run_chain(
+        brain,
+        sends=[GatedQueryFrame(participant_id="pid-1", text="q", fresh_match=True, pts_us=7)],
+        settle_s=0.2,
+    )
+    ends = [f for f in sink.frames if isinstance(f, BrainResponseEndFrame)]
+    assert len(ends) == 1
+    assert ends[0].text == "one two three."
+    assert ends[0].pid  == "pid-1"
+
+
+@pytest.mark.asyncio
+async def test_brain_does_not_emit_response_end_on_cancel():
+    """Cancellation (new query or InterruptionFrame) supersedes the
+    in-flight turn — the data-channel echo would surface a partial
+    answer that contradicts the new turn, so the brain skips the end
+    marker. The second turn still emits its own end marker normally."""
+    brain = _IterBrain(chunks=[f"chunk{i} " for i in range(200)])
+    sink = await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.4,
+        per_send_delay_s=0.05,
+    )
+    ends = [f for f in sink.frames if isinstance(f, BrainResponseEndFrame)]
+    # Only the second turn's end marker survives — the first was cancelled.
+    assert len(ends) == 1
+    assert ends[0].pts_us == 1
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Regression: handle_query async-def-returning-async-iterator shape works (Bug #3)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class _StreamMethodBrain(BrainProcessor):
+    """Locks in the simple-vlm / xr-render-demo handle_query shape:
+
+        async def handle_query(...) -> AsyncIterator[str]:
+            return self._stream(...)
+
+    where ``_stream`` is itself an async-generator function. ``await``-
+    ing handle_query resolves to the async-generator object the base
+    brain then iterates with ``async for`` — the shape is valid Python
+    and must remain supported, since both samples use it.
+    """
+
+    def __init__(self, chunks: list[str]) -> None:
+        super().__init__()
+        self._chunks = chunks
+
+    async def handle_query(self, pid, text, fresh_match) -> AsyncIterator[str]:
+        return self._stream(pid, text)
+
+    async def _stream(self, pid: str, text: str) -> AsyncIterator[str]:
+        for c in self._chunks:
+            yield c
+            await asyncio.sleep(0.001)
+
+
+@pytest.mark.asyncio
+async def test_brain_supports_handle_query_returning_async_generator_method():
+    brain = _StreamMethodBrain(chunks=["foo ", "bar."])
+    sink = await _run_chain(
+        brain,
+        sends=[GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=0)],
+        settle_s=0.15,
+    )
+    texts = [f.text for f in sink.frames if isinstance(f, TextFrame)]
+    assert texts == ["foo ", "bar."]
+    ends = [f for f in sink.frames if isinstance(f, BrainResponseEndFrame)]
+    assert len(ends) == 1
+    assert ends[0].text == "foo bar."
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Regression: StreamingTts data-channel echo (Bug #4)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class _RecordingTransport:
+    """Transport double — captures every ``send_return_data`` call."""
+
+    def __init__(self) -> None:
+        self.sends: list = []
+
+    async def send_return_data(self, msg) -> None:
+        self.sends.append(msg)
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_echoes_data_when_topic_set():
+    tts  = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    transport = _RecordingTransport()
+    proc = StreamingTtsProcessor(
+        tts=tts, voice_gate=gate,
+        transport=transport, text_topic="vlm.response",
+    )
+
+    await _run_chain(
+        proc,
+        sends=[
+            BrainResponseEndFrame(pid="web-client", text="hello there", pts_us=99),
+        ],
+    )
+
+    assert len(transport.sends) == 1
+    msg = transport.sends[0]
+    assert msg.participant_id == "web-client"
+    assert msg.topic          == "vlm.response"
+    assert msg.data           == b"hello there"
+    assert msg.pts_us         == 99
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_skips_echo_when_topic_empty():
+    """Samples whose brain pushes its own per-turn data echo (e.g.
+    xr-render-demo) pass ``text_topic=""`` to opt out of the
+    pipeline-level send and avoid duplicates."""
+    tts  = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    transport = _RecordingTransport()
+    proc = StreamingTtsProcessor(
+        tts=tts, voice_gate=gate,
+        transport=transport, text_topic="",
+    )
+    await _run_chain(
+        proc,
+        sends=[BrainResponseEndFrame(pid="pid-1", text="hi", pts_us=0)],
+    )
+    assert transport.sends == []
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_flushes_trailing_text_on_response_end():
+    """The brain may finish a turn with text that has no sentence-final
+    punctuation (e.g. partial answer). End-of-response is the last
+    chance to flush the buffer; otherwise the tail of the reply is
+    silently dropped."""
+    tts  = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            TextFrame(text="trailing fragment with no period"),
+            BrainResponseEndFrame(pid="pid-1", text="trailing fragment with no period", pts_us=0),
+        ],
+        settle_s=0.15,
+    )
+    assert tts.calls == ["trailing fragment with no period"]
+    audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
+    assert audio, "expected audio for the flushed trailing fragment"
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Regression: output transport rewrites destination to default sender (Bug #1)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_output_transport_handle_frame_routes_pid_to_default_sender(monkeypatch):
+    """Pipecat's ``BaseOutputTransport._handle_frame`` drops frames whose
+    ``transport_destination`` is not a registered key in
+    ``_media_senders``. By default only ``None`` is registered, so a
+    frame tagged with a pid (the way the brain / TTS / chime tag every
+    outbound frame) would be silently dropped — the audio bug. The
+    override rewrites the destination to ``None`` before delegating to
+    the base class so the default sender picks it up; the hub layer
+    routes by ``_target_participant``.
+    """
+    from xr_ai_pipecat.transport import XRMediaHubOutputTransport
+    from pipecat.transports.base_output import BaseOutputTransport
+    from pipecat.transports.base_transport import TransportParams
+
+    class _StubEndpoint:
+        async def send_return_audio(self, *_a, **_kw) -> None:
+            return
+
+    transport = XRMediaHubOutputTransport(_StubEndpoint(), TransportParams())
+
+    # Capture what the super-class sees so the assertion focuses on the
+    # destination rewrite without needing the full media-sender lifecycle.
+    seen: list = []
+
+    async def fake_super_handle(self, frame):
+        seen.append((frame, frame.transport_destination))
+
+    monkeypatch.setattr(BaseOutputTransport, "_handle_frame", fake_super_handle)
+
+    frame = OutputAudioRawFrame(audio=b"\x00\x00", sample_rate=16000, num_channels=1)
+    frame.transport_destination = "web-client"
+    await transport._handle_frame(frame)
+
+    assert seen, "super._handle_frame was not invoked"
+    delegated_frame, dest_at_super_entry = seen[0]
+    assert delegated_frame is frame
+    assert dest_at_super_entry is None
+    assert frame.transport_destination is None, (
+        "destination must be rewritten to None so the default media sender accepts the frame"
+    )
+
+
+@pytest.mark.asyncio
+async def test_output_transport_writes_audio_to_target_participant():
+    """End-to-end inside the output transport: ``write_audio_frame``
+    (the pipecat hook the media sender invokes per chunked output frame)
+    must produce one ``send_return_audio`` whose ``participant_id``
+    matches the configured target.
+
+    The previous implementation overrode the non-existent
+    ``write_raw_audio_frames`` instead — pipecat never invoked it, so
+    every TTS chunk was dropped before reaching the hub. This is the
+    regression that locks the right hook in."""
+    from xr_ai_agent import AudioChunk
+    from xr_ai_pipecat.transport import (
+        TTS_NATIVE_SAMPLE_RATE,
+        XRMediaHubOutputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    captured: list[AudioChunk] = []
+
+    class _StubEndpoint:
+        async def send_return_audio(self, chunk: AudioChunk) -> None:
+            captured.append(chunk)
+
+    params = TransportParams(
+        audio_out_enabled=True,
+        audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
+        audio_out_channels=1,
+    )
+    transport = XRMediaHubOutputTransport(_StubEndpoint(), params)
+    transport.set_target_participant("web-client")
+
+    pcm = b"\x00\x00" * 320  # 320 int16 samples = 20 ms @ 16 kHz
+    frame = OutputAudioRawFrame(audio=pcm, sample_rate=TTS_NATIVE_SAMPLE_RATE, num_channels=1)
+    ok = await transport.write_audio_frame(frame)
+
+    assert ok is True
+    assert len(captured) == 1
+    assert captured[0].participant_id == "web-client"
+    assert captured[0].track_id       == "tts"
+    assert captured[0].sample_rate    == TTS_NATIVE_SAMPLE_RATE
+
+
+@pytest.mark.asyncio
+async def test_output_transport_write_audio_frame_returns_false_without_target():
+    """No target participant configured — drop the frame at the hub
+    boundary instead of emitting an unaddressable AudioChunk. Returning
+    False also tells pipecat to skip the downstream push so a tail tap
+    doesn't see a half-routed frame."""
+    from xr_ai_pipecat.transport import XRMediaHubOutputTransport
+    from pipecat.transports.base_transport import TransportParams
+
+    captured: list = []
+
+    class _StubEndpoint:
+        async def send_return_audio(self, chunk) -> None:
+            captured.append(chunk)
+
+    transport = XRMediaHubOutputTransport(_StubEndpoint(), TransportParams())
+    frame = OutputAudioRawFrame(audio=b"\x00\x00", sample_rate=22050, num_channels=1)
+    ok = await transport.write_audio_frame(frame)
+    assert ok is False
+    assert captured == []
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# E2E smoke: GatedQueryFrame → full pipeline → OutputAudioRawFrame reaches transport
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_gated_query_drives_audio_through_full_pipeline_to_transport():
+    """The end-to-end "agent says something" path:
+
+    GatedQueryFrame → brain (TextFrame tagged with pid) → StreamingTts
+    (OutputAudioRawFrame tagged with pid) → output transport
+    (write_raw_audio_frames invoked → send_return_audio).
+
+    This is the path that was previously silently dropping every audio
+    frame at the output transport's media-sender router. The assertion
+    is on ``send_return_audio`` reaching the hub, not just on audio
+    frames appearing at the tail — that's the bug we shipped the fix
+    for.
+    """
+    from xr_ai_agent import AudioChunk
+    from xr_ai_pipecat.transport import (
+        TTS_NATIVE_SAMPLE_RATE,
+        XRMediaHubOutputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    captured: list[AudioChunk] = []
+
+    class _StubEndpoint:
+        async def send_return_audio(self, chunk: AudioChunk) -> None:
+            captured.append(chunk)
+
+    params = TransportParams(
+        audio_out_enabled=True,
+        audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
+        audio_out_channels=1,
+    )
+    output = XRMediaHubOutputTransport(_StubEndpoint(), params)
+    output.set_target_participant("web-client")
+
+    tts  = _FakeTts(sample_rate=TTS_NATIVE_SAMPLE_RATE)
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    brain = _StringBrain()
+    streaming_tts = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    await _run_chain(
+        brain, streaming_tts, output,
+        sends=[GatedQueryFrame(
+            participant_id="web-client", text="echo this", fresh_match=True, pts_us=0,
+        )],
+        settle_s=0.4,
+    )
+
+    assert captured, "no audio reached the hub via send_return_audio"
+    assert all(c.participant_id == "web-client" for c in captured)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Regression: factory wires text_topic through to StreamingTts (Bug #4)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_make_voice_pipeline_wires_text_topic_through_streaming_tts(monkeypatch):
+    """The factory's ``text_topic`` argument must reach the streaming
+    TTS processor's data-echo path. Previously the parameter was
+    explicitly unused (``# noqa: ARG001``) and the echo silently never
+    fired."""
+    from xr_ai_pipecat import make_voice_pipeline
+    from xr_ai_pipecat.transport import XRMediaHubTransport
+
+    transport = XRMediaHubTransport()
+    try:
+        pipeline, _task = make_voice_pipeline(
+            transport      = transport,
+            stt            = _FakeStt(),
+            tts            = _FakeTts(),
+            brain          = _StringBrain(),
+            vad_cfg        = VadConfig(),
+            voice_gate_cfg = VoiceGateConfig(),
+            text_topic     = "vlm.response",
+        )
+        # The streaming-tts processor lives at index 5 in the wrapped
+        # pipeline (source, input, vad_stt, voice_gate, brain, tts, output, sink).
+        streaming_tts = pipeline.processors[5]
+        assert isinstance(streaming_tts, StreamingTtsProcessor)
+        assert streaming_tts._text_topic == "vlm.response"
+        assert streaming_tts._transport is transport
+    finally:
+        transport.shutdown()

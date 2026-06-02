@@ -38,7 +38,12 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from ..frames import GatedQueryFrame, ParticipantJoinedFrame, ParticipantLeftFrame
+from ..frames import (
+    BrainResponseEndFrame,
+    GatedQueryFrame,
+    ParticipantJoinedFrame,
+    ParticipantLeftFrame,
+)
 
 if TYPE_CHECKING:
     from ..transport import XRMediaHubTransport
@@ -175,27 +180,64 @@ class BrainProcessor(FrameProcessor):
         )
 
     async def _run_query(self, frame: GatedQueryFrame) -> None:
+        pid = frame.participant_id
+        # Accumulate every token/string we yield so the trailing
+        # ``BrainResponseEndFrame`` carries the full assembled response.
+        # Downstream ``StreamingTtsProcessor`` uses this to send a single
+        # data-channel echo per turn, matching pre-migration behavior.
+        accumulated: list[str] = []
+        cancelled = False
         try:
-            result = await self.handle_query(
-                frame.participant_id, frame.text, frame.fresh_match,
-            )
+            result = await self.handle_query(pid, frame.text, frame.fresh_match)
             if isinstance(result, str):
                 if result:
-                    await self.push_frame(TextFrame(text=result))
+                    accumulated.append(result)
+                    await self._push_text(result, pid=pid)
                 return
             async for chunk in result:
                 if not chunk:
                     continue
-                await self.push_frame(TextFrame(text=chunk))
+                accumulated.append(chunk)
+                await self._push_text(chunk, pid=pid)
         except asyncio.CancelledError:
+            cancelled = True
             raise
         except Exception:
-            logger.exception("brain handle_query raised pid={!r}", frame.participant_id)
+            logger.exception("brain handle_query raised pid={!r}", pid)
         finally:
+            # Emit the end marker only when the turn completed
+            # (success OR caught exception). On asyncio cancellation we
+            # leave the marker out — a cancel means the user superseded
+            # the response, and a half-assembled data echo would
+            # contradict the new turn that's about to render.
+            if not cancelled:
+                try:
+                    await self.push_frame(BrainResponseEndFrame(
+                        pid    = pid,
+                        text   = "".join(accumulated),
+                        pts_us = frame.pts_us,
+                    ))
+                except Exception:
+                    logger.exception("emit BrainResponseEndFrame failed pid={!r}", pid)
+
             # Don't pop if a newer task has taken our slot.
-            current = self._inflight.get(frame.participant_id)
+            current = self._inflight.get(pid)
             if current is asyncio.current_task():
-                self._inflight.pop(frame.participant_id, None)
+                self._inflight.pop(pid, None)
+
+    async def _push_text(self, text: str, *, pid: str) -> None:
+        """Push a ``TextFrame`` tagged with the participant id.
+
+        ``transport_destination`` flows through the pipeline to the
+        ``StreamingTtsProcessor``, which copies it onto the
+        ``OutputAudioRawFrame``s it emits so the output transport knows
+        which participant to address. Without this tag, the empty
+        string ends up on every downstream send and the hub drops the
+        audio.
+        """
+        f = TextFrame(text=text)
+        f.transport_destination = pid
+        await self.push_frame(f)
 
     def _cancel_pid(self, pid: str) -> None:
         task = self._inflight.pop(pid, None)
