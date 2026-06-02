@@ -27,7 +27,7 @@ per-pid setup/teardown.
 from __future__ import annotations
 
 import asyncio
-from typing import AsyncIterator, Union
+from typing import TYPE_CHECKING, AsyncIterator, Union
 
 from loguru import logger
 from pipecat.frames.frames import (
@@ -39,6 +39,9 @@ from pipecat.frames.frames import (
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from ..frames import GatedQueryFrame, ParticipantJoinedFrame, ParticipantLeftFrame
+
+if TYPE_CHECKING:
+    from ..transport import XRMediaHubTransport
 
 
 QueryResult = Union[AsyncIterator[str], str]
@@ -52,13 +55,19 @@ class BrainProcessor(FrameProcessor):
     pipecat-internal traffic.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, transport: "XRMediaHubTransport | None" = None) -> None:
         super().__init__()
         self._inflight: dict[str, asyncio.Task] = {}
         # Joined pids so the user-speech hook can fire on the cold path
         # (no in-flight task yet) — useful for camera warmup. Cleared on
         # ``ParticipantLeftFrame``.
         self._joined: set[str] = set()
+        # Optional — when supplied, the output transport is steered at
+        # the first ``ParticipantJoinedFrame`` so the single-participant
+        # return-audio / return-data path "just works" without per-sample
+        # wiring. Samples that handle multi-participant routing manually
+        # leave this unset.
+        self._transport = transport
 
     # ── overrides ─────────────────────────────────────────────────────────────
 
@@ -119,12 +128,20 @@ class BrainProcessor(FrameProcessor):
 
         if isinstance(frame, ParticipantJoinedFrame):
             self._joined.add(frame.participant_id)
+            # Single-participant default: steer the output transport at
+            # the first join so return-audio / return-data routing works
+            # without per-sample wiring. Samples that need multi-pid
+            # routing construct the brain without a transport.
+            if self._transport is not None:
+                self._transport.set_target_participant(frame.participant_id)
             await self.on_participant_joined(frame.participant_id)
             await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, ParticipantLeftFrame):
             self._joined.discard(frame.participant_id)
+            if self._transport is not None:
+                self._transport.cleanup_participant(frame.participant_id)
             await self.on_participant_left(frame.participant_id)
             self._cancel_pid(frame.participant_id)
             await self.push_frame(frame, direction)

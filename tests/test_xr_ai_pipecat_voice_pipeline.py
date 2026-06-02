@@ -506,6 +506,55 @@ async def test_brain_cancels_inflight_on_interruption_frame():
 
 
 @pytest.mark.asyncio
+async def test_brain_steers_transport_target_on_participant_joined():
+    """Single-participant routing default: when a brain is constructed
+    with a transport, the first ``ParticipantJoinedFrame`` steers the
+    output transport at that pid so return-audio/return-data go to the
+    right participant without per-sample wiring. The output transport
+    silently drops audio when ``_target_participant`` is empty — this
+    is what previously made the bug "agent thinks but says nothing".
+    """
+    class _FakeTransport:
+        def __init__(self) -> None:
+            self.target_calls:  list[str] = []
+            self.cleanup_calls: list[str] = []
+
+        def set_target_participant(self, pid: str) -> None:
+            self.target_calls.append(pid)
+
+        def cleanup_participant(self, pid: str) -> None:
+            self.cleanup_calls.append(pid)
+
+    transport = _FakeTransport()
+    brain = _StringBrain()
+    brain._transport = transport  # type: ignore[assignment]
+
+    await _run_chain(
+        brain,
+        sends=[
+            ParticipantJoinedFrame(participant_id="web-client"),
+            ParticipantLeftFrame(participant_id="web-client"),
+        ],
+    )
+
+    assert transport.target_calls  == ["web-client"]
+    assert transport.cleanup_calls == ["web-client"]
+
+
+@pytest.mark.asyncio
+async def test_brain_no_transport_steering_when_not_configured():
+    """Multi-pid samples may construct the brain without a transport;
+    join/leave must then be a no-op on the transport side."""
+    brain = _StringBrain()  # default: transport=None
+    await _run_chain(
+        brain,
+        sends=[ParticipantJoinedFrame(participant_id="pid-1")],
+    )
+    # If we got here without an AttributeError, the None-transport path
+    # is exercised. No assertion needed beyond that.
+
+
+@pytest.mark.asyncio
 async def test_brain_participant_lifecycle_hooks_fire():
     brain = _LifecycleBrain()
     sink = await _run_chain(
