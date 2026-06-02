@@ -172,7 +172,11 @@ async def main(
                 silero_threshold=cfg.silero_threshold,
             ),
             voice_gate_cfg=voice_gate_cfg,
-            text_topic="agent.response",
+            # Brain pushes its own per-turn ``agent.response`` data
+            # message with the sanitized "display" string (see
+            # ``RenderDemoBrain._run_turn``); opting out of the
+            # pipeline-level echo here avoids a duplicate send.
+            text_topic="",
         )
 
         loop = asyncio.get_running_loop()
