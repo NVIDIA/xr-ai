@@ -174,6 +174,14 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     OpenXR session; runs alongside LOVR's rendering session.
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
+vec-mcp-server  (agent-mcp-servers/vec-mcp/)
+    └── uvicorn[standard] >=0.29
+    └── fastmcp >=0.4
+    └── pyyaml >=6.0
+    Pure FastMCP at /mcp. Deterministic spatial-math primitives
+    (between_anchors, world_offset, along_direction, scale_value).
+    Offloads vector arithmetic from the LLM.
+
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
@@ -309,6 +317,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
 | `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
+| `agent-mcp-servers/vec-mcp/` | `vec-mcp-server` | `vec_mcp_server` | 8250 | — | Pure FastMCP; deterministic spatial-math primitives (no model) |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -401,8 +410,8 @@ a transitive dep of `xr-ai-pipecat` and `fastmcp`.
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
 is explicit in the process list.
-Starts: hub, cloudxr-runtime, piper-tts (8105), vlm-mcp (8220),
-video-mcp (8210), render-mcp (8220), oxr-mcp (8230), worker.
+Starts: hub, cloudxr-runtime, piper-tts (8105), vlm-mcp (8240),
+video-mcp (8210), render-mcp (8220), oxr-mcp (8230), vec-mcp (8250), worker.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
 

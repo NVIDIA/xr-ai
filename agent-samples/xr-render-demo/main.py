@@ -82,6 +82,7 @@ _PROCESSES: list[Process] = [
     Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server",
             config="yaml/oxr_mcp_server.yaml",
             quiet_native_output=True),
+    Process("vec-mcp",    "../../agent-mcp-servers/vec-mcp",     "vec_mcp_server"),
     Process("worker",     "worker",                              "xr_render_demo_worker",
             config="yaml/xr_render_demo_worker.yaml"),
 ]
