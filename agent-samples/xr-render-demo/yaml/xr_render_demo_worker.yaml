@@ -11,6 +11,12 @@
 # `models.yaml` here points at `agent-samples/xr-render-demo/yaml/models.yaml`.
 models_yaml: models.yaml
 
+# ── Voice gate ────────────────────────────────────────────────────────────────
+# Magic-phrase opt-in gate; see voice_gate.yaml for the schema.  Ships with
+# `magic_phrases: []` (always-on) to preserve the pre-migration behavior;
+# operators populate the list to enable wake-word gating.
+voice_gate_yaml: voice_gate.yaml
+
 # ── MCP server base URLs ──────────────────────────────────────────────────────
 render_mcp_url: http://localhost:8220
 oxr_mcp_url:    http://localhost:8230

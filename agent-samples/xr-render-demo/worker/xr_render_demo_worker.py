@@ -4,8 +4,9 @@
 """
 xr-render-demo agent worker — voice-driven XR scene control via Pipecat.
 
-Pipeline (per participant):
-  XRMediaHubInput → SttProcessor(Silero VAD) → RenderSceneProcessor → TtsProcessor → XRMediaHubOutput
+Voice pipeline (assembled by ``xr_ai_pipecat.make_voice_pipeline``):
+  transport.input → VadStt → VoiceGate → RenderSceneProcessor (brain)
+                  → StreamingTts → transport.output
 
 Launched as a subprocess by ``uv run xr_render_demo``.
 """
@@ -19,12 +20,17 @@ from pathlib import Path
 
 from fastmcp import Client as McpClient
 from loguru import logger
+from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import ToolDef, load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_pipecat import VadConfig, make_voice_pipeline
 from xr_ai_pipecat.services import mcp_probe, wait_for_services
+from xr_ai_pipecat.transport import XRMediaHubTransport
+from xr_ai_voicegate import load_voice_gate_config
 
 from agent import RenderDemoAgent
 from config import WorkerConfig, load_config
+from processors import RenderSceneProcessor
 
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
 
@@ -59,7 +65,11 @@ def _build_tools(render_tools: list, oxr_tools: list,
 _PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
 
 
-async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> None:
+async def main(
+    cfg: WorkerConfig,
+    config_path: pathlib.Path | None = None,
+    ready_file: pathlib.Path | None = None,
+) -> None:
     setup_logging("worker")
 
     # Curated session transcript — only records bound with extra={"trace": True}
@@ -101,6 +111,8 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
     await wait_for_services(probes)
     await vlm_service.close()
 
+    voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
+
     if ready_file:
         ready_file.touch()
 
@@ -129,20 +141,54 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         tools = _build_tools(render_tools, oxr_tools, vlm_tools, video_tools, vec_tools)
         logger.info("tool-calling tools: {}", [t.name for t in tools])
 
-        agent = RenderDemoAgent(
-            cfg, render, oxr, vlm_mcp, video, vec,
-            _PROMPT_FILE, tools, llm, agent_llm, stt, tts,
+        transport = XRMediaHubTransport()
+        brain = RenderSceneProcessor(
+            transport=transport,
+            cfg=cfg,
+            render=render,
+            oxr=oxr,
+            vlm=vlm_mcp,
+            video=video,
+            vec=vec,
+            prompt_path=_PROMPT_FILE,
+            tools=tools,
+            llm=llm,
+            agent_llm=agent_llm,
+        )
+        # Wire xr.session.started → start_xr lifecycle and the typed-text
+        # input path. The agent registers callbacks on the transport's
+        # endpoint; those bound methods keep it alive for the worker's
+        # lifetime.
+        _agent = RenderDemoAgent(transport=transport, brain=brain, render=render)  # noqa: F841
+
+        _, task = make_voice_pipeline(
+            transport=transport,
+            stt=stt,
+            tts=tts,
+            brain=brain,
+            vad_cfg=VadConfig(
+                silence_duration=cfg.silence_duration,
+                min_speech=cfg.min_speech,
+                silero_threshold=cfg.silero_threshold,
+            ),
+            voice_gate_cfg=voice_gate_cfg,
+            text_topic="agent.response",
         )
 
         loop = asyncio.get_running_loop()
+        def _on_signal() -> None:
+            # PipelineTask.cancel is a coroutine — schedule it so the
+            # signal handler returns immediately.
+            asyncio.ensure_future(task.cancel())
         for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, agent.shutdown)
+            loop.add_signal_handler(sig, _on_signal)
 
         logger.info("xr_render_demo starting")
         try:
-            await agent.run()
+            await PipelineRunner().run(task)
         finally:
-            agent.shutdown()
+            transport.shutdown()
+            await brain.close()
     logger.info("xr_render_demo stopped")
 
 
@@ -152,7 +198,7 @@ def run() -> None:
     p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
     cfg = load_config(ns.config)
-    asyncio.run(main(cfg, ready_file=ns.ready_file))
+    asyncio.run(main(cfg, config_path=ns.config, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":
