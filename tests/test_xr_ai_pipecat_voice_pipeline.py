@@ -201,6 +201,7 @@ async def test_vad_stt_emits_transcription_on_utterance(monkeypatch):
     monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StubVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig())
     frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
 
     sink = await _run_chain(proc, sends=[frame])
 
@@ -209,6 +210,11 @@ async def test_vad_stt_emits_transcription_on_utterance(monkeypatch):
     assert "UserStoppedSpeakingFrame" in kinds
     transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
     assert [t.text for t in transcripts] == ["hello agent"]
+    # The pid from transport_source must propagate to TranscriptionFrame
+    # so VoiceGate (which keys off user_id) and any future
+    # transport_source consumer see the real participant.
+    assert transcripts[0].user_id         == "web-client"
+    assert transcripts[0].transport_source == "web-client"
     assert stt.calls and stt.calls[0][1] == 16000
 
 
@@ -225,11 +231,42 @@ async def test_vad_stt_swallows_empty_transcript(monkeypatch):
 
     monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StubVad)
     proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig())
-    sink = await _run_chain(
-        proc,
-        sends=[InputAudioRawFrame(audio=b"\x00\x00", sample_rate=16000, num_channels=1)],
-    )
+    frame = InputAudioRawFrame(audio=b"\x00\x00", sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    sink = await _run_chain(proc, sends=[frame])
     assert not any(isinstance(f, TranscriptionFrame) for f in sink.frames)
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_drops_frame_with_missing_transport_source(monkeypatch):
+    """Regression guard: a transport adapter that fails to populate
+    ``transport_source`` used to silently degrade to ``pid=''``, which
+    the hub then dropped on the floor. The processor now drops the
+    frame and logs loudly instead of dispatching with an empty pid."""
+    stt = _FakeStt(text="hello agent")
+
+    fed: list[tuple[bytes, int]] = []
+
+    class _StubVad:
+        def __init__(self, on_utterance, on_speech_start, **_):
+            self._on_utt   = on_utterance
+            self._on_start = on_speech_start
+
+        async def feed(self, pcm_int16: bytes, sample_rate: int) -> None:
+            fed.append((pcm_int16, sample_rate))
+            await self._on_start()
+            await self._on_utt(pcm_int16, sample_rate)
+
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StubVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig())
+
+    # transport_source intentionally left at its default (None).
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    sink = await _run_chain(proc, sends=[frame])
+
+    assert fed == [], "VAD must not be fed when transport_source is missing"
+    assert not any(isinstance(f, TranscriptionFrame) for f in sink.frames)
+    assert stt.calls == []
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -596,6 +633,71 @@ async def test_streaming_tts_observes_each_wav_through_gate():
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# XRMediaHubInputTransport
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_input_transport_populates_transport_source_from_chunk_pid():
+    """The hub-side ``AudioChunk.participant_id`` must flow onto
+    ``InputAudioRawFrame.transport_source`` — without it every
+    downstream return-data / return-audio send routes to ``pid=''`` and
+    the hub drops the message on the floor (production bug fixed in
+    this commit)."""
+    from xr_ai_agent import AudioChunk
+    from xr_ai_pipecat.transport import (
+        SAMPLE_RATE,
+        XRMediaHubInputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.audio_cb = None
+
+        def on_audio(self, cb) -> None:
+            self.audio_cb = cb
+
+        def stop(self) -> None:
+            return
+
+    ep = _StubEndpoint()
+    params = TransportParams(
+        audio_in_enabled=True,
+        audio_in_sample_rate=SAMPLE_RATE,
+        audio_in_channels=1,
+    )
+    transport = XRMediaHubInputTransport(ep, params)
+    # Mark started without spinning up the ZMQ run loop; the audio
+    # callback gates on this flag.
+    transport._started = True
+
+    pushed: list[Frame] = []
+
+    async def capture(frame, direction=FrameDirection.DOWNSTREAM):
+        pushed.append(frame)
+
+    transport.push_frame = capture  # type: ignore[method-assign]
+
+    pcm_f32 = np.zeros(320, dtype=np.float32).tobytes()
+    chunk = AudioChunk(
+        pts_us         = 0,
+        sample_rate    = SAMPLE_RATE,
+        channels       = 1,
+        samples        = 320,
+        data           = pcm_f32,
+        participant_id = "web-client",
+        track_id       = "mic",
+    )
+    await ep.audio_cb(chunk)
+
+    assert len(pushed) == 1
+    frame = pushed[0]
+    assert isinstance(frame, InputAudioRawFrame)
+    assert frame.transport_source == "web-client"
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # make_voice_pipeline end-to-end smoke
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -669,9 +771,11 @@ async def test_make_voice_pipeline_audio_in_to_audio_out(monkeypatch):
     vad_stt         = VadSttProcessor(stt=stt, vad_cfg=VadConfig())
     brain           = _EchoBrain()
 
+    in_frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    in_frame.transport_source = "web-client"
     sink = await _run_chain(
         vad_stt, voice_gate_proc, brain, streaming_tts,
-        sends=[InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)],
+        sends=[in_frame],
         settle_s=0.6,
     )
 

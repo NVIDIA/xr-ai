@@ -96,11 +96,20 @@ class XRMediaHubInputTransport(BaseInputTransport):
                 audio_array, SAMPLE_RATE, chunk.sample_rate,
             ).astype(np.int16)
             pcm_int16 = audio_array.tobytes()
-        await self.push_frame(InputAudioRawFrame(
+        frame = InputAudioRawFrame(
             audio=pcm_int16,
             sample_rate=SAMPLE_RATE,
             num_channels=chunk.channels,
-        ))
+        )
+        # pipecat's ``transport_source`` is the standard "which input
+        # track did this come from" hook — set it to the hub-side
+        # participant id so downstream processors (VadStt, brain, the
+        # output transport's return_data / return_audio routing) can
+        # address the right participant. Without this, every downstream
+        # send falls back to the empty string and the hub drops the
+        # message.
+        frame.transport_source = chunk.participant_id
+        await self.push_frame(frame)
 
 
 # ── Output ────────────────────────────────────────────────────────────────────

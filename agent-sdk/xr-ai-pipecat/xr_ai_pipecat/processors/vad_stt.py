@@ -50,10 +50,11 @@ class VadSttProcessor(FrameProcessor):
 
     A single shared ``VadDetector`` is held per-participant. The pid is
     read from ``frame.transport_source`` (pipecat's standard hook for
-    "which input track did this come from"); an unset transport_source
-    is treated as the single anonymous participant ``""`` — adequate for
-    samples that only ever expect one speaker at a time and matches the
-    transport's current single-target behavior.
+    "which input track did this come from"). An unset transport_source
+    means the transport adapter regressed — there is no usable pid to
+    route brain output / return-data / return-audio back to, so the
+    frame is logged and dropped rather than silently dispatched with
+    ``pid=''`` (which the hub drops on the floor anyway).
     """
 
     def __init__(self, *, stt: STTService, vad_cfg: VadConfig) -> None:
@@ -99,11 +100,16 @@ class VadSttProcessor(FrameProcessor):
                 return
             if not text:
                 return
-            await self.push_frame(TranscriptionFrame(
+            tf = TranscriptionFrame(
                 text      = text,
                 user_id   = pid,
                 timestamp = _now_iso(),
-            ))
+            )
+            # Propagate the pid on transport_source too — downstream
+            # processors that key on the pipecat-standard field (rather
+            # than user_id) need the same value.
+            tf.transport_source = pid
+            await self.push_frame(tf)
 
         det = VadDetector(
             on_utterance      = on_utterance,
@@ -116,7 +122,18 @@ class VadSttProcessor(FrameProcessor):
         return det
 
     async def _handle_audio(self, frame: InputAudioRawFrame) -> None:
-        pid = frame.transport_source or ""
+        pid = frame.transport_source
+        if not pid:
+            # The transport adapter is responsible for populating
+            # transport_source with the participant id. If it is missing
+            # there is no usable routing target for any downstream
+            # response — log loudly and drop rather than dispatch with
+            # pid='' (which the hub would drop silently anyway).
+            logger.error(
+                "VadSttProcessor dropped InputAudioRawFrame with no "
+                "transport_source — transport adapter regression?",
+            )
+            return
         det = self._detector_for(pid)
         await det.feed(frame.audio, frame.sample_rate)
 
