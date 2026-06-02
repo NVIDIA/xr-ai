@@ -447,16 +447,42 @@ async def test_brain_async_iter_return_pushes_text_frame_per_chunk():
 
 
 @pytest.mark.asyncio
-async def test_brain_cancels_inflight_on_user_started_speaking():
-    """``UserStartedSpeakingFrame`` is the interrupt point: any
-    in-flight query for that pid must be cancelled before a new turn
-    starts."""
-    brain = _IterBrain(chunks=[f"chunk{i} " for i in range(200)])
-    await _run_chain(
+async def test_brain_does_not_cancel_on_user_started_speaking():
+    """Regression guard: ``UserStartedSpeakingFrame`` is a hook, not a
+    cancel signal. Cancelling on speech onset breaks two things:
+
+    * any AEC leak of the agent's own TTS becomes self-cancel,
+    * a quick follow-up utterance aborts the prior response BEFORE the
+      voice gate even decides whether the new utterance was a query.
+
+    The brain must keep streaming TextFrames; cancellation happens on
+    the next GatedQueryFrame or on an explicit InterruptionFrame."""
+    brain = _IterBrain(chunks=[f"chunk{i} " for i in range(5)])
+    sink = await _run_chain(
         brain,
         sends=[
             GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=0),
             UserStartedSpeakingFrame(),
+        ],
+        settle_s=0.3,
+        per_send_delay_s=0.05,
+    )
+    assert brain.cancelled is False
+    texts = [f.text for f in sink.frames if isinstance(f, TextFrame)]
+    assert texts == [f"chunk{i} " for i in range(5)]
+
+
+@pytest.mark.asyncio
+async def test_brain_cancels_inflight_on_new_query_for_same_pid():
+    """A fresh GatedQueryFrame supersedes any in-flight reasoning for
+    the same pid — this is the contract that makes rapid follow-ups
+    work without the user having to wait for the previous answer."""
+    brain = _IterBrain(chunks=[f"chunk{i} " for i in range(200)])
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="hi",   fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="hi 2", fresh_match=True, pts_us=1),
         ],
         settle_s=0.2,
         per_send_delay_s=0.05,
@@ -498,30 +524,53 @@ async def test_brain_participant_lifecycle_hooks_fire():
 
 
 @pytest.mark.asyncio
-async def test_brain_user_started_speaking_hook_fires():
-    """on_user_started_speaking fires for every pid currently in flight,
-    giving samples a hook to start speculative work (e.g. camera warmup)
-    on the leading edge of the next turn."""
-    # IterBrain has an in-flight task we can probe; intercept its
-    # on_user_started_speaking hook to record what pid was reported.
-    long_brain = _IterBrain(chunks=[f"chunk{i} " for i in range(200)])
+async def test_brain_user_started_speaking_hook_fires_for_joined_pids():
+    """on_user_started_speaking fires for every joined pid (NOT just the
+    in-flight ones), so the cold path — first utterance, nothing in
+    flight yet — still gets the speculative-warmup hook. Tracking
+    in-flight tasks here would mean the very first turn never sees
+    camera warmup, which is precisely the case it was designed for."""
+    brain = _IterBrain(chunks=[])
     started_for: list[str] = []
 
     async def speech_hook(pid: str) -> None:
         started_for.append(pid)
 
-    long_brain.on_user_started_speaking = speech_hook  # type: ignore[method-assign]
+    brain.on_user_started_speaking = speech_hook  # type: ignore[method-assign]
 
     await _run_chain(
-        long_brain,
+        brain,
         sends=[
-            GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=0),
+            ParticipantJoinedFrame(participant_id="pid-1"),
             UserStartedSpeakingFrame(),
         ],
-        settle_s=0.2,
+        settle_s=0.1,
         per_send_delay_s=0.05,
     )
     assert started_for == ["pid-1"]
+
+
+@pytest.mark.asyncio
+async def test_brain_user_started_speaking_hook_skipped_after_leave():
+    brain = _IterBrain(chunks=[])
+    started_for: list[str] = []
+
+    async def speech_hook(pid: str) -> None:
+        started_for.append(pid)
+
+    brain.on_user_started_speaking = speech_hook  # type: ignore[method-assign]
+
+    await _run_chain(
+        brain,
+        sends=[
+            ParticipantJoinedFrame(participant_id="pid-1"),
+            ParticipantLeftFrame(participant_id="pid-1"),
+            UserStartedSpeakingFrame(),
+        ],
+        settle_s=0.1,
+        per_send_delay_s=0.05,
+    )
+    assert started_for == []
 
 
 # ════════════════════════════════════════════════════════════════════════════

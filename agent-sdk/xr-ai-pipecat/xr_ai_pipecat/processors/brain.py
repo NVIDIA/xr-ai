@@ -7,10 +7,19 @@ Sample brains subclass this and implement :meth:`handle_query`. The
 base class owns:
 
 - the per-pid in-flight task,
-- cancellation on ``UserStartedSpeakingFrame`` and ``InterruptionFrame``
-  (the user is talking again — abandon the old response),
+- cancellation on a new ``GatedQueryFrame`` (a fresh user query
+  supersedes any prior in-flight response) and on ``InterruptionFrame``
+  (explicit stop, e.g. from the voice gate),
 - pushing each yielded token/chunk as a downstream ``TextFrame``,
-- the optional participant join/leave lifecycle hooks.
+- the optional participant join/leave / user-started-speaking lifecycle
+  hooks.
+
+``UserStartedSpeakingFrame`` is a hook only — it does NOT cancel
+in-flight work. Cancelling on every speech onset interrupts the agent
+mid-sentence the moment the user starts a follow-up; worse, any AEC
+leak of the agent's own TTS makes the agent cancel itself. The voice
+gate emits ``InterruptionFrame`` explicitly when the user actually
+says "stop"; that is the right cancel signal.
 
 Sample brains are tiny: write the reasoning loop and (optionally) any
 per-pid setup/teardown.
@@ -46,6 +55,10 @@ class BrainProcessor(FrameProcessor):
     def __init__(self) -> None:
         super().__init__()
         self._inflight: dict[str, asyncio.Task] = {}
+        # Joined pids so the user-speech hook can fire on the cold path
+        # (no in-flight task yet) — useful for camera warmup. Cleared on
+        # ``ParticipantLeftFrame``.
+        self._joined: set[str] = set()
 
     # ── overrides ─────────────────────────────────────────────────────────────
 
@@ -62,9 +75,11 @@ class BrainProcessor(FrameProcessor):
     async def on_user_started_speaking(self, pid: str) -> None:
         """Override for sample-specific behavior on speech start.
 
-        Fires before the in-flight query (if any) is cancelled — useful
-        for speculative warmup (e.g. camera, image fetch) so the next
-        query starts with a hot cache. Default: no-op.
+        Useful for speculative warmup (e.g. camera, image fetch) so the
+        next query starts with a hot cache. Does NOT cancel the
+        in-flight query — cancellation happens on the next
+        ``GatedQueryFrame`` or explicit ``InterruptionFrame``. Default:
+        no-op.
         """
         return
 
@@ -85,7 +100,11 @@ class BrainProcessor(FrameProcessor):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, UserStartedSpeakingFrame):
-            await self._on_user_started_speaking_locally()
+            # Hook only — speech onset is NOT a cancel signal. Samples
+            # may override on_user_started_speaking for speculative work
+            # (e.g. camera warmup); cancellation happens on the next
+            # GatedQueryFrame or on an explicit InterruptionFrame.
+            await self._fan_out_user_started_speaking()
             await self.push_frame(frame, direction)
             return
 
@@ -99,11 +118,13 @@ class BrainProcessor(FrameProcessor):
             return
 
         if isinstance(frame, ParticipantJoinedFrame):
+            self._joined.add(frame.participant_id)
             await self.on_participant_joined(frame.participant_id)
             await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, ParticipantLeftFrame):
+            self._joined.discard(frame.participant_id)
             await self.on_participant_left(frame.participant_id)
             self._cancel_pid(frame.participant_id)
             await self.push_frame(frame, direction)
@@ -113,14 +134,14 @@ class BrainProcessor(FrameProcessor):
 
     # ── private ───────────────────────────────────────────────────────────────
 
-    async def _on_user_started_speaking_locally(self) -> None:
-        # The frame itself doesn't carry pid; cancel everything and fan
-        # the hook out across the pids we currently know about. Most
-        # samples are single-speaker today so this collapses to a
-        # single cancel.
-        pids = list(self._inflight)
-        self._cancel_all_inflight()
-        for pid in pids:
+    async def _fan_out_user_started_speaking(self) -> None:
+        # The pipecat ``UserStartedSpeakingFrame`` carries no pid, so we
+        # fan the hook out across every pid the brain currently knows
+        # about. Use the joined set, not the in-flight tasks: the cold
+        # path (first utterance, nothing in flight yet) is exactly where
+        # speculative warmup matters most. Single-speaker samples
+        # collapse to one call.
+        for pid in list(self._joined):
             try:
                 await self.on_user_started_speaking(pid)
             except Exception:
