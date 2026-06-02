@@ -397,10 +397,21 @@ export async function connect(model, {
             // Prefer the caller's wrapper so client-specific side effects
             // (e.g. acquiring the local <video> preview stream in app.js)
             // run on agent-triggered start.
-            if (_startCamera) _startCamera();
-            else startCamera(model, { render, showError, enumerateCameras: _ec });
+            const startOp = _startCamera
+              ? _startCamera()
+              : startCamera(model, { render, showError, enumerateCameras: _ec });
+            startOp?.catch((err) => {
+              showError(err instanceof StreamError ? err.message : String(err));
+              render();
+            });
           }
-          if (action === 'stopCamera'  &&  model.isCameraActive) _sc?.();
+          if (action === 'stopCamera'  &&  model.isCameraActive) {
+            const stopOp = _sc?.();
+            stopOp?.catch((err) => {
+              showError(err instanceof StreamError ? err.message : String(err));
+              render();
+            });
+          }
         } catch { /* malformed — ignore */ }
       }
       return;
