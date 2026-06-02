@@ -20,6 +20,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -72,6 +74,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
@@ -84,6 +87,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.ui.CameraPreviewView
+import com.nvidia.xrai.streamkitsample.streamkit.ui.rememberCameraPreviewAspectRatio
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -696,45 +700,70 @@ private fun CameraSelectorRow(
 // ── Camera preview card ───────────────────────────────────────────────────────
 
 /**
- * 16:9 preview card mirroring the web client's `.preview-card`.
- * Renders the local LiveKit camera track when active (wired in a follow-up
- * step), a "Camera off" placeholder otherwise, and a pulsing LIVE badge while
- * capturing.
+ * Camera preview card mirroring the web client's `.preview-card`.
+ *
+ * Aspect ratio follows the live LiveKit track dimensions once frames are
+ * flowing (so portrait phone capture renders as 9:16, landscape cameras
+ * as 16:9). Before the first frame arrives — including the entire
+ * "Camera off" placeholder state — the card uses the matching phone-
+ * camera orientation (9:16 in portrait, 16:9 in landscape) so the
+ * placeholder has the same footprint the live preview will once frames
+ * flow. Width is capped at [PreviewMaxWidth] so a tall portrait video
+ * still leaves room for the Agent panel below without scrolling.
  */
 @Composable
 private fun CameraPreviewCard(vm: AppViewModel) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Black),
-        elevation = CardDefaults.cardElevation(0.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Box(
+    // Until the first frame arrives, fall back to the typical phone-camera
+    // frame orientation (9:16 in portrait, 16:9 in landscape) so the
+    // "Camera off" card has the same footprint as the live preview will
+    // once frames flow.
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+    val fallbackAspect = if (isLandscape) 16f / 9f else 9f / 16f
+    val liveAspect = rememberCameraPreviewAspectRatio(vm.session) ?: fallbackAspect
+
+    // Cap card width at 80% of the available width, never exceeding 540dp
+    // (the web client's `.page-content` cap). This keeps a tall portrait
+    // 9:16 frame from pushing the Agent panel below the fold on a phone.
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val cardWidth = (maxWidth * 0.8f).coerceAtMost(PreviewMaxWidth)
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Black),
+            elevation = CardDefaults.cardElevation(0.dp),
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f),
+                .align(Alignment.Center)
+                .widthIn(max = cardWidth),
         ) {
-            if (vm.isCameraActive) {
-                CameraPreviewView(
-                    session = vm.session,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                LiveBadge(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(10.dp),
-                )
-            } else {
-                Text(
-                    text = "Camera off",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.align(Alignment.Center),
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(liveAspect),
+            ) {
+                if (vm.isCameraActive) {
+                    CameraPreviewView(
+                        session = vm.session,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    LiveBadge(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(10.dp),
+                    )
+                } else {
+                    Text(
+                        text = "Camera off",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
             }
         }
     }
 }
+
+private val PreviewMaxWidth = 540.dp
 
 @Composable
 private fun LiveBadge(modifier: Modifier = Modifier) {

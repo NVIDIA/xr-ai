@@ -162,11 +162,14 @@ GIF-based camera feed regardless.
 
 The camera preview card at the top of `ContentView` mirrors the web client's
 `<video>` element. It is wired through StreamKit's `CameraPreviewView`, which
-wraps the LiveKit Swift `SwiftUIVideoView`. On visionOS device builds the
-ARKit main-camera passthrough track is forwarded straight to LiveKit's WebRTC
-pipeline and is not surfaced through a 2D video sink; the preview card stays
-on its "Camera off" placeholder while the `LIVE` badge signals active
-capture.
+wraps the LiveKit Swift `SwiftUIVideoView`. The card's aspect ratio follows
+the live capture dimensions (so a portrait phone camera renders as 9:16 and
+a landscape sensor as 16:9), with a 16:9 fallback before the first frame
+arrives; its width is capped so the Agent panel below stays visible without
+scrolling. On visionOS device builds the ARKit main-camera passthrough track
+is forwarded straight to LiveKit's WebRTC pipeline and is not surfaced
+through a 2D video sink; the preview card stays on its "Camera off"
+placeholder while the `LIVE` badge signals active capture.
 
 #### Simulator camera feed
 

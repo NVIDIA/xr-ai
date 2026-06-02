@@ -60,6 +60,7 @@ struct ContentView: View {
     private var cameraPreviewSection: some View {
         Section {
             CameraPreviewCard(isActive: model.isCameraActive)
+                .frame(maxWidth: .infinity)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
         }
@@ -319,13 +320,40 @@ struct ContentView: View {
 
 // MARK: - CameraPreviewCard
 
-/// 16:9 preview card mirroring the web client's `.preview-card`.
-/// Shows the local LiveKit camera track when active, a "Camera off"
-/// placeholder otherwise, and a pulsing "LIVE" badge while capturing.
+/// Camera preview card mirroring the web client's `.preview-card`.
+///
+/// Aspect ratio follows the live LiveKit track dimensions once frames are
+/// flowing (so portrait phone capture renders as 9:16, landscape cameras
+/// as 16:9). Before the first frame arrives — including the entire
+/// "Camera off" placeholder state — the card uses the matching phone-
+/// camera orientation (9:16 in portrait, 16:9 in landscape) on iOS so the
+/// placeholder has the same footprint the live preview will once frames
+/// flow. visionOS has no meaningful "phone display" to mirror, so it
+/// falls back to 16:9. Width is capped so the Agent panel below stays
+/// visible without scrolling.
 private struct CameraPreviewCard: View {
     let isActive: Bool
 
     @Environment(AppModel.self) private var model
+    #if os(iOS)
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
+    @StateObject private var aspect = CameraPreviewAspect()
+
+    private static let previewMaxWidth: CGFloat = 540
+
+    /// Fallback aspect used until the first camera frame arrives.
+    /// On iOS/iPadOS, matches the typical phone-camera frame orientation:
+    /// 9:16 in portrait (compact width / regular height) and 16:9 in
+    /// landscape (compact height). Recomputes on rotation because the
+    /// size class environment value is observed.
+    private var fallbackAspectRatio: CGFloat {
+        #if os(iOS)
+        verticalSizeClass == .compact ? 16.0 / 9.0 : 9.0 / 16.0
+        #else
+        16.0 / 9.0
+        #endif
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -345,8 +373,20 @@ private struct CameraPreviewCard: View {
                     .padding(10)
             }
         }
-        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+        .aspectRatio(aspect.value(default: fallbackAspectRatio), contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        // Cap width at 80% of the containing list row, never exceeding
+        // 540pt (the web client's `.page-content` cap).
+        .containerRelativeFrame(.horizontal, alignment: .center) { width, _ in
+            min(width * 0.8, Self.previewMaxWidth)
+        }
+        .onAppear { aspect.attach(to: model.session) }
+        .onChange(of: model.isCameraActive) { _, _ in
+            aspect.attach(to: model.session)
+        }
+        .onChange(of: model.cameraPosition) { _, _ in
+            aspect.attach(to: model.session)
+        }
     }
 }
 

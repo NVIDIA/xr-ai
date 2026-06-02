@@ -393,14 +393,22 @@ export async function connect(model, {
       if (model.cameraOnDemand) {
         try {
           const { action } = JSON.parse(new TextDecoder().decode(data));
+          const reportAsyncError = (err) =>
+            showError(err instanceof StreamError ? err.message : String(err));
           if (action === 'startCamera' && !model.isCameraActive) {
             // Prefer the caller's wrapper so client-specific side effects
             // (e.g. acquiring the local <video> preview stream in app.js)
-            // run on agent-triggered start.
-            if (_startCamera) _startCamera();
-            else startCamera(model, { render, showError, enumerateCameras: _ec });
+            // run on agent-triggered start. Wrappers are async — surface
+            // rejections via showError so agent-triggered failures aren't
+            // swallowed as unhandled promise rejections.
+            (_startCamera
+              ? _startCamera()
+              : startCamera(model, { render, showError, enumerateCameras: _ec })
+            )?.catch?.(reportAsyncError);
           }
-          if (action === 'stopCamera'  &&  model.isCameraActive) _sc?.();
+          if (action === 'stopCamera'  &&  model.isCameraActive) {
+            _sc?.()?.catch?.(reportAsyncError);
+          }
         } catch { /* malformed — ignore */ }
       }
       return;
