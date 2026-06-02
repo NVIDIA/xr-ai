@@ -116,7 +116,8 @@ async def main(
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, task.cancel)
+        # PipelineTask.cancel is a coroutine; add_signal_handler needs a sync callable.
+        loop.add_signal_handler(sig, lambda: asyncio.create_task(task.cancel()))
 
     logger.info("simple-vlm-example starting pipecat pipeline")
     try:
