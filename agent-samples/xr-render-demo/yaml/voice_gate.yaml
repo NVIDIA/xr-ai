@@ -12,5 +12,5 @@
 # followup_grace_s — seconds after a phrase match during which the next
 #                    utterance from the same participant bypasses the gate.
 magic_phrases: []
-listening_chime: false
+listening_chime: true
 followup_grace_s: 5.0
