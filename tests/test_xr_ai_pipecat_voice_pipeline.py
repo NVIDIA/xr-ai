@@ -1373,6 +1373,34 @@ async def test_streaming_tts_flushes_trailing_text_on_response_end():
     assert audio, "expected audio for the flushed trailing fragment"
 
 
+@pytest.mark.asyncio
+async def test_streaming_tts_flushes_sentence_ending_with_closing_quote():
+    """Sentence-final punctuation followed by a closing quote/bracket
+    must still flush the trailing fragment.
+
+    Regression: the voice-gate greeting ends with ``... what am I
+    looking at?"`` — the ``?`` is the sentence end but the buffer's
+    last char is ``"``. A plain ``endswith((".", "!", "?"))`` check
+    misses this; the tail stays in pending and concatenates onto the
+    next turn's response, so the user hears half the greeting up front
+    and the other half glued to their first query reply.
+    """
+    tts  = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    await _run_chain(
+        proc,
+        sends=[TextFrame(text='How are you? "I am fine."')],
+        settle_s=0.15,
+    )
+
+    # Both sentences must be dispatched in one turn — no residual
+    # waiting to be glued onto the next reply.
+    assert tts.calls == ['How are you?', '"I am fine."']
+    assert proc._pending == ""  # noqa: SLF001
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # Regression: output transport rewrites destination to default sender (Bug #1)
 # ════════════════════════════════════════════════════════════════════════════

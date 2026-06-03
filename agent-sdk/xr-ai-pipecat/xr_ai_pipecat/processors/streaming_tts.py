@@ -51,6 +51,13 @@ if TYPE_CHECKING:
 
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+# Matches a sentence-final char optionally followed by closing punctuation
+# (quote, single quote, paren, bracket) and trailing whitespace. The
+# brain may emit `'... what am I looking at?"'` — the `?` is the
+# sentence end but the buffer's last char is `"`, so an `endswith(.!?)`
+# check would leave the tail in pending and the next turn's text would
+# be concatenated onto it.
+_TRAILING_SENTENCE_END = re.compile(r"""[.!?]["')\]]*\s*$""")
 
 
 class StreamingTtsProcessor(FrameProcessor):
@@ -182,8 +189,12 @@ class StreamingTtsProcessor(FrameProcessor):
             await self._dispatch_sentence(sentence, pid=pid)
         # Pending buffer ends in sentence-final punctuation? Flush it
         # too — the brain is done writing and there's no follow-up
-        # whitespace to fire the boundary regex.
-        if self._pending and self._pending.rstrip().endswith((".", "!", "?")):
+        # whitespace to fire the boundary regex. ``_TRAILING_SENTENCE_END``
+        # tolerates trailing closing quotes/brackets after the sentence
+        # char (e.g. ``... what am I looking at?"``) which a plain
+        # ``endswith((".", "!", "?"))`` would miss, leaving the tail in
+        # pending until it concatenated onto the next turn's reply.
+        if self._pending and _TRAILING_SENTENCE_END.search(self._pending):
             sentence  = self._pending.strip()
             self._pending = ""
             if sentence:
