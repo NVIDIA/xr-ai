@@ -128,6 +128,14 @@ DEFAULT_SYSTEM_PROMPT = (
     "and say nothing else."
 )
 
+# A frame whose latest signal is older than this is treated as "camera
+# unavailable" rather than answered against. With always-on streaming live
+# frames arrive continuously (tens of ms apart), so this only trips when the
+# user has manually stopped the camera and the last signal lingers in
+# ``_latest`` — without it, ``request_frame`` returns an 8x8 placeholder for
+# the dead track and the VLM would answer about a blank image.
+_FRAME_MAX_AGE_US = 5_000_000  # 5s
+
 
 class SimpleVlmAgent:
 
@@ -351,7 +359,9 @@ class SimpleVlmAgent:
         status = "done"
         try:
             sig = self._latest_signal(pid)
-            if sig is None:
+            if sig is None or not self._is_fresh(sig):
+                # No signal, or only a stale one left behind by a manually
+                # stopped track — answering would send an 8x8 placeholder.
                 await self._say(pid, "Camera unavailable, please try again.", pts_us)
                 return
 
@@ -601,6 +611,9 @@ class SimpleVlmAgent:
         # seq restarts from 1 on each camera restart, so the old track's
         # stale entry wins max(seq) for hundreds of frames on the new track.
         return max(candidates, key=lambda s: s.pts_us)
+
+    def _is_fresh(self, sig: FrameSignal) -> bool:
+        return now_us() - sig.pts_us < _FRAME_MAX_AGE_US
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
         if event.joined:
