@@ -52,6 +52,13 @@ export function isQuestBrowser() {
 // Camera enumeration
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Chromium appends the USB vendor:product id to camera labels, e.g.
+// "MacBook Pro Camera (0000:0001)". It's a disambiguator, not part of the
+// name — strip the trailing hex identifier so the picker reads cleanly.
+function stripCameraId(label) {
+  return (label || '').replace(/\s*\([0-9a-fA-F]{4}:[0-9a-fA-F]{4}\)\s*$/, '').trim();
+}
+
 /**
  * Queries available video input devices and updates `model.cameras`.
  *
@@ -82,7 +89,7 @@ export async function enumerateCameras(model, render) {
 
     const list = cameras.map((d, i) => ({
       deviceId: d.deviceId,
-      label:    d.label || `Camera ${i + 1}`,
+      label:    stripCameraId(d.label) || `Camera ${i + 1}`,
     }));
 
     model.cameras = list;
@@ -317,13 +324,21 @@ export function resolvedTokenURL(model) {
  *   render: () => void,
  *   showError: (msg: string) => void,
  *   enumerateCameras: () => Promise<void>,
+ *   startCamera?: () => Promise<void>,
  *   stopCamera: () => Promise<void>,
  *   onStateChange?: (state: string) => void,
  *   onDataReceived?: (topic: string, data: Uint8Array) => boolean,
  * }} opts
+ *   `startCamera` / `stopCamera` are caller-supplied wrappers used by the
+ *   on-demand `clientControl` handler so client-specific side effects (e.g.
+ *   the local `<video>` preview in `web/App/app.js`) run on agent-triggered
+ *   start / stop. When omitted, the on-demand start falls back to the bare
+ *   transport-level `startCamera` (sufficient for clients without a local
+ *   preview, such as `web-xr`).
  */
 export async function connect(model, {
-  render, showError, enumerateCameras: _ec, stopCamera: _sc,
+  render, showError, enumerateCameras: _ec,
+  startCamera: _startCamera, stopCamera: _sc,
   onStateChange, onDataReceived,
 }) {
   model.lastError        = null;

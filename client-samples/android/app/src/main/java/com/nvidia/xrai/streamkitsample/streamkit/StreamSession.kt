@@ -5,10 +5,13 @@ package com.nvidia.xrai.streamkitsample.streamkit
 
 import android.content.Context
 import com.nvidia.xrai.streamkitsample.streamkit.backends.StreamingBackend
+import com.nvidia.xrai.streamkitsample.streamkit.backends.livekit.LiveKitBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import io.livekit.android.renderer.TextureViewRenderer
+import io.livekit.android.room.track.LocalVideoTrack
 
 /**
  * Transport-agnostic streaming session — the single public entry-point of StreamKit.
@@ -129,6 +132,26 @@ class StreamSession(private val backend: StreamingBackend) {
      */
     suspend fun stopCamera() {
         backend.stopCamera()
+    }
+
+    // ── Local preview ─────────────────────────────────────────────────────────
+
+    /**
+     * The currently published local camera track, if any.
+     * Used by `CameraPreviewView`; app code typically does not access this
+     * directly.  Returns null when the camera is stopped or the active
+     * backend is not LiveKit-based.
+     */
+    val localCameraTrack: LocalVideoTrack?
+        get() = (backend as? LiveKitBackend)?.localCameraTrack
+
+    /**
+     * Initialises a [TextureViewRenderer] with the active room's EGL context.
+     * Required once per renderer instance before frames can be drawn.
+     * No-op when the active backend is not LiveKit-based.
+     */
+    fun initVideoRenderer(view: TextureViewRenderer) {
+        (backend as? LiveKitBackend)?.initVideoRenderer(view)
     }
 
     // ── Data channel ──────────────────────────────────────────────────────────

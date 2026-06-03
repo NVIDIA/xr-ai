@@ -74,6 +74,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var agentStatus by mutableStateOf<String?>(null)
         private set
+    /** Latest final-reply text from the agent. Drives the Agent panel;
+     *  null shows the "Waiting for agent…" placeholder. Mirrors web. */
+    var agentResponse by mutableStateOf<String?>(null)
+        private set
     var isAudioActive by mutableStateOf(false)
         private set
     var isCameraActive by mutableStateOf(false)
@@ -86,7 +90,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Private ────────────────────────────────────────────────────────────────
 
-    private var session: StreamSession? = null
+    /** Topics carrying the agent's final text reply. Routed to [agentResponse];
+     *  never appended to [receivedMessages]. Mirrors the web client. */
+    private val agentReplyTopics = setOf("agent.response", "vlm.response")
+
+    /**
+     * Active session, exposed for `CameraPreviewView` to render the local
+     * camera track.  `null` between connects.  Mutated only from
+     * [viewModelScope] coroutines.
+     */
+    var session by mutableStateOf<StreamSession?>(null)
+        private set
 
     // ── Connect / disconnect ──────────────────────────────────────────────────
 
@@ -123,24 +137,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         isAudioActive = false
                         isCameraActive = false
                         agentStatus = null
+                        agentResponse = null
                     }
                 }
                 newSession.onAgentStatus = { status ->
                     agentStatus = status
                 }
                 newSession.onDataReceived = { topic, data ->
-                    if (topic == "clientControl") {
-                        // Always-on streaming: clientControl signals from the
-                        // agent are silently dropped and never surfaced in the
-                        // received messages list.
-                    } else {
-                        val body = try {
-                            String(data, Charsets.UTF_8)
-                        } catch (_: Exception) {
-                            "[${data.size} bytes binary]"
+                    when {
+                        topic in agentReplyTopics -> {
+                            // Final agent reply text: drive the Agent panel and
+                            // never surface in Received. Matches web's
+                            // AGENT_REPLY_TOPICS interceptor.
+                            agentResponse = try {
+                                String(data, Charsets.UTF_8)
+                            } catch (_: Exception) {
+                                ""
+                            }
                         }
-                        val text = if (topic.isEmpty()) body else "[$topic] $body"
-                        receivedMessages.add(0, ReceivedMessage(text = text))
+                        topic == "clientControl" -> {
+                            // Always-on streaming: clientControl signals from the
+                            // agent are silently dropped and never surfaced in the
+                            // received messages list.
+                        }
+                        else -> {
+                            val body = try {
+                                String(data, Charsets.UTF_8)
+                            } catch (_: Exception) {
+                                "[${data.size} bytes binary]"
+                            }
+                            val text = if (topic.isEmpty()) body else "[$topic] $body"
+                            receivedMessages.add(0, ReceivedMessage(text = text))
+                        }
                     }
                 }
 
@@ -164,6 +192,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             session = null
             connectionState = ConnectionState.DISCONNECTED
             agentStatus = null
+            agentResponse = null
             isAudioActive = false
             isCameraActive = false
         }
