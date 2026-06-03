@@ -32,6 +32,7 @@ from pipecat.frames.frames import (
     TextFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker
@@ -268,6 +269,270 @@ async def test_vad_stt_drops_frame_with_missing_transport_source(monkeypatch):
     assert fed == [], "VAD must not be fed when transport_source is missing"
     assert not any(isinstance(f, TranscriptionFrame) for f in sink.frames)
     assert stt.calls == []
+
+
+# ── early STOP probe ────────────────────────────────────────────────────────
+
+
+class _StagedStt:
+    """STTService double that returns canned text from a queue.
+
+    Each call pops from ``texts`` (FIFO); when empty, falls back to
+    ``default``. Lets a single test feed different transcripts to the
+    probe call and the eventual VAD-finalize call.
+    """
+
+    def __init__(self, texts: list[str], default: str = "") -> None:
+        self.texts        = list(texts)
+        self.default      = default
+        self.calls:       list[tuple[bytes, int]] = []
+        self.raise_on_call = False
+
+    async def transcribe(self, audio: bytes, *, sample_rate: int | None = None, channels: int = 1, timeout: float | None = None) -> str:
+        self.calls.append((audio, sample_rate or 16000))
+        if self.raise_on_call:
+            raise RuntimeError("stt down")
+        if self.texts:
+            return self.texts.pop(0)
+        return self.default
+
+    async def health(self) -> bool:
+        return True
+
+    async def close(self) -> None:
+        pass
+
+
+class _StagedVad:
+    """VadDetector double whose ``feed`` only triggers ``on_speech_start``
+    on the first call; the test fires ``on_utterance`` explicitly via
+    ``trigger_utterance`` so the probe / finalize race can be exercised
+    deterministically.
+    """
+
+    instances: list = []
+
+    def __init__(self, on_utterance, on_speech_start, **_):
+        self._on_utt    = on_utterance
+        self._on_start  = on_speech_start
+        self._started   = False
+        self.last_audio: bytes = b""
+        self.last_sr:    int   = 0
+        _StagedVad.instances.append(self)
+
+    async def feed(self, pcm_int16: bytes, sample_rate: int) -> None:
+        # Accumulate the audio the way the real detector buffers an
+        # utterance — keeps a single concatenated snapshot so the test
+        # can assert against the bytes seen by the probe.
+        self.last_audio = self.last_audio + pcm_int16
+        self.last_sr    = sample_rate
+        if not self._started:
+            self._started = True
+            await self._on_start()
+
+    async def trigger_utterance(self) -> None:
+        await self._on_utt(self.last_audio, self.last_sr)
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_schedules_on_speech_start(monkeypatch):
+    """On the first ``on_speech_start`` after silence, the processor
+    schedules a one-shot probe task. Waiting longer than
+    ``stop_probe_after_s`` lets the probe run; the stub STT records the
+    call so the probe firing is observable."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["something"])  # not STOP — probe is silent
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    await _run_chain(proc, sends=[frame], settle_s=0.2)
+
+    # Exactly one STT call — the probe's — because on_utterance never fired.
+    assert len(stt.calls) == 1
+    assert stt.calls[0][1] == 16000
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_emits_interruption_on_stop_match(monkeypatch):
+    """When the probe's partial transcript matches ``STOP_RE`` the
+    processor pushes ``InterruptionFrame`` + the matched
+    ``TranscriptionFrame`` + ``UserStoppedSpeakingFrame`` downstream
+    immediately — without waiting for VAD's silence-window finalize."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["stop"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    sink = await _run_chain(proc, sends=[frame], settle_s=0.2)
+
+    kinds = [type(f).__name__ for f in sink.frames]
+    assert "InterruptionFrame"        in kinds
+    assert "UserStoppedSpeakingFrame" in kinds
+    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
+    assert [t.text for t in transcripts] == ["stop"]
+    # InterruptionFrame must arrive before the TranscriptionFrame so any
+    # in-flight reasoning is cancelled before the gate sees STOP.
+    int_idx = next(i for i, f in enumerate(sink.frames) if isinstance(f, InterruptionFrame))
+    tf_idx  = next(i for i, f in enumerate(sink.frames) if isinstance(f, TranscriptionFrame))
+    assert int_idx < tf_idx
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_silent_on_non_stop_match(monkeypatch):
+    """A non-STOP partial transcript discards the probe result and lets
+    VAD-finalize handle the utterance via the usual path. No
+    ``InterruptionFrame`` is pushed."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["hello agent what time is it"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    sink = await _run_chain(proc, sends=[frame], settle_s=0.2)
+
+    assert not any(isinstance(f, InterruptionFrame) for f in sink.frames)
+    assert not any(isinstance(f, TranscriptionFrame) for f in sink.frames)
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_cancelled_when_vad_finalizes_first(monkeypatch):
+    """If VAD finalizes the utterance before the probe timer fires, the
+    pending probe task is cancelled — STT is called exactly once (by
+    the on_utterance path) and no probe-side STT call lands."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["hello agent"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=1.0))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    # Drive the first frame so on_speech_start fires and the probe task
+    # is scheduled; then trigger on_utterance manually well before the
+    # 1-second probe timer expires.
+    sink = _CaptureSink()
+    pipeline = Pipeline([proc, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        await asyncio.sleep(0.05)
+        assert _StagedVad.instances, "VAD stub was not instantiated"
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    # Only the on_utterance STT call — no probe call.
+    assert len(stt.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_suppresses_duplicate_vad_finalize(monkeypatch):
+    """After the probe fires STOP, the eventual VAD-finalize for the
+    same utterance must NOT re-emit ``UserStoppedSpeakingFrame`` + a
+    second ``TranscriptionFrame`` — otherwise the gate would re-fire
+    its canned "Okay, I will stop." ack TTS."""
+    _StagedVad.instances.clear()
+    # Probe call returns "stop"; the eventual on_utterance call (if
+    # the suppression failed) would return "stop now" — we must not see
+    # that downstream.
+    stt = _StagedStt(texts=["stop", "stop now"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    sink = _CaptureSink()
+    pipeline = Pipeline([proc, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        # Wait for the probe to fire (>= stop_probe_after_s).
+        await asyncio.sleep(0.2)
+        # VAD now finalizes after silence — would normally push a fresh
+        # UserStoppedSpeakingFrame + TranscriptionFrame.
+        assert _StagedVad.instances
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
+    assert [t.text for t in transcripts] == ["stop"], (
+        "duplicate transcription from VAD-finalize must be suppressed "
+        "after the probe already fired STOP"
+    )
+    # The probe's stop-emit ends with UserStoppedSpeakingFrame; VAD's
+    # finalize would re-push one. With suppression we should see exactly
+    # one of each.
+    stops = [f for f in sink.frames if isinstance(f, UserStoppedSpeakingFrame)]
+    assert len(stops) == 1
+    # Only the probe-side STT call should have happened — the on_utterance
+    # path bailed before its own STT call.
+    assert len(stt.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_disabled_when_setting_zero(monkeypatch):
+    """``stop_probe_after_s = 0`` opts out of the probe entirely — no
+    background task is scheduled and the only STT call comes from
+    on_utterance, matching the pre-probe behavior."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["stop"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.0))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    sink = _CaptureSink()
+    pipeline = Pipeline([proc, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        # Give the world long enough for any (incorrectly-scheduled) probe
+        # to fire; with the probe disabled, nothing happens here.
+        await asyncio.sleep(0.2)
+        assert _StagedVad.instances
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    # Exactly one STT call — the on_utterance one. No probe ran.
+    assert len(stt.calls) == 1
+    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
+    assert [t.text for t in transcripts] == ["stop"]
+    # The discriminating signal: with the probe disabled, the
+    # InterruptionFrame the probe normally pushes on STOP-match must NOT
+    # appear. (Without this assertion, the call-count check above would
+    # pass even if the probe ran — its STT call and the on_utterance one
+    # would either way total exactly one because the suppression flag
+    # would gate out the duplicate.)
+    assert not any(isinstance(f, InterruptionFrame) for f in sink.frames), (
+        "probe must not push InterruptionFrame when stop_probe_after_s=0"
+    )
 
 
 # ════════════════════════════════════════════════════════════════════════════

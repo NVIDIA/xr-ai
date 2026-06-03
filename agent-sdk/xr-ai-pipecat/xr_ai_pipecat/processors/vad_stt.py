@@ -11,9 +11,18 @@ injected ``STTService`` and pushes a ``TranscriptionFrame`` downstream.
 VAD start/stop edges are forwarded as pipecat's built-in
 ``UserStartedSpeakingFrame`` / ``UserStoppedSpeakingFrame`` so the brain
 can cancel in-flight work on the moment speech starts.
+
+Also runs an early STT *probe* shortly after speech-start so brief
+STOP utterances ("stop", "be quiet") interrupt the agent without
+waiting for VAD's full silence-window finalize. The probe transcribes
+the partial audio buffer; on a STOP-pattern match it pushes an
+``InterruptionFrame`` immediately and lets the gate handle the canned
+ack. Anything else is discarded and normal VAD-finalize handles the
+query.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass
 
@@ -21,6 +30,7 @@ from loguru import logger
 from pipecat.frames.frames import (
     Frame,
     InputAudioRawFrame,
+    InterruptionFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
@@ -29,6 +39,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from xr_ai_models import STTService
 from xr_ai_vad import VadDetector
+from xr_ai_voicegate._phrases import STOP_RE
 
 
 @dataclass(frozen=True)
@@ -37,10 +48,18 @@ class VadConfig:
 
     Mirrors the constructor of :class:`xr_ai_vad.VadDetector`. Default
     values match the in-tree samples' current behavior.
+
+    ``stop_probe_after_s`` — seconds after ``on_speech_start`` to run an
+    extra STT pass on the partial audio buffer and check for STOP. This
+    gives the user a fast-path interrupt on brief commands ("stop",
+    "be quiet") that VAD would otherwise hold open for the full
+    ``silence_duration`` window. Set to ``0`` or negative to disable
+    the probe and rely solely on VAD finalize.
     """
-    silence_duration: float = 0.8
-    min_speech:       float = 0.15
-    silero_threshold: float = 0.5
+    silence_duration:   float = 0.8
+    min_speech:         float = 0.15
+    silero_threshold:   float = 0.5
+    stop_probe_after_s: float = 0.4
 
 
 class VadSttProcessor(FrameProcessor):
@@ -66,6 +85,20 @@ class VadSttProcessor(FrameProcessor):
         # can push the matching ``UserStoppedSpeakingFrame`` even though
         # the VAD callback itself is pid-agnostic.
         self._current_pid: str | None = None
+        # Per-pid mutable audio buffer for the early STOP probe — present
+        # only while an utterance is in flight. ``on_speech_start`` opens
+        # the entry; ``on_utterance`` (and the probe itself, after firing)
+        # close it.
+        self._probe_buffer:   dict[str, bytearray] = {}
+        self._probe_sr:       dict[str, int]       = {}
+        # One probe task per pid, so a fresh speech_start can cancel a
+        # lingering task before scheduling the next.
+        self._probe_task:     dict[str, asyncio.Task] = {}
+        # Pids whose probe has already pushed a STOP for the current
+        # utterance — suppresses the duplicate that would fire when VAD
+        # eventually finalizes the same speech run. Cleared on the next
+        # ``on_speech_start`` for the pid.
+        self._stop_fired_for_current_utterance: set[str] = set()
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────
 
@@ -87,9 +120,44 @@ class VadSttProcessor(FrameProcessor):
 
         async def on_speech_start() -> None:
             self._current_pid = pid
+            # Reset probe state for the new utterance. Any leftover task
+            # from a previous utterance (should be done by now, but
+            # belt-and-suspenders) is cancelled before scheduling a new one.
+            self._stop_fired_for_current_utterance.discard(pid)
+            self._cancel_probe_task(pid)
+            self._probe_buffer[pid] = bytearray()
+            # The first feed after start_fired carries the real sample
+            # rate; default to 0 so a missing entry later means "no audio".
+            self._probe_sr[pid] = 0
+            if self._vad_cfg.stop_probe_after_s > 0:
+                self._probe_task[pid] = asyncio.create_task(
+                    self._run_stop_probe(pid),
+                    name=f"vad-stop-probe-{pid}",
+                )
             await self.push_frame(UserStartedSpeakingFrame())
 
         async def on_utterance(audio_bytes: bytes, sample_rate: int) -> None:
+            # Probe ran-or-not, the utterance has finalized. Close the
+            # probe buffer entry and cancel any pending probe (e.g.
+            # silence_duration < stop_probe_after_s).
+            self._cancel_probe_task(pid)
+            self._probe_buffer.pop(pid, None)
+            self._probe_sr.pop(pid, None)
+
+            # If the probe already pushed STOP for this utterance, the
+            # frames downstream (InterruptionFrame + TranscriptionFrame
+            # to the gate + UserStoppedSpeakingFrame) have already done
+            # their job. Re-firing UserStoppedSpeakingFrame + a fresh
+            # TranscriptionFrame (gate sees STOP again → re-fires the ack
+            # TTS) would double the stop-ack. Suppress.
+            if pid in self._stop_fired_for_current_utterance:
+                self._stop_fired_for_current_utterance.discard(pid)
+                logger.debug(
+                    "VadSttProcessor suppressing duplicate VAD-finalize "
+                    "STOP pid={!r} (probe already fired)", pid,
+                )
+                return
+
             # Order matters: pipecat consumers expect "user stopped speaking"
             # before the transcript so they can finalize turn state.
             await self.push_frame(UserStoppedSpeakingFrame())
@@ -135,7 +203,108 @@ class VadSttProcessor(FrameProcessor):
             )
             return
         det = self._detector_for(pid)
+
         await det.feed(frame.audio, frame.sample_rate)
+
+        # Accumulate audio for the probe only while speech is active —
+        # the dict entry is opened in on_speech_start and closed in
+        # on_utterance (or by the probe itself after firing STOP). Append
+        # AFTER ``feed`` so the chunk that synchronously triggered
+        # on_speech_start lands in the buffer. (In production
+        # on_speech_start runs as a task and may not have created the
+        # entry yet — at most we lose ~20-30ms of audio, which is fine
+        # for STOP detection on the remainder.)
+        buf = self._probe_buffer.get(pid)
+        if buf is not None:
+            buf.extend(frame.audio)
+            self._probe_sr[pid] = frame.sample_rate
+
+    async def _run_stop_probe(self, pid: str) -> None:
+        """Wait ``stop_probe_after_s``, then transcribe whatever's in the
+        per-pid buffer and check it against ``STOP_RE``.
+
+        On match: push ``InterruptionFrame`` immediately, then
+        ``TranscriptionFrame`` (so the gate emits its canned ack), then
+        ``UserStoppedSpeakingFrame``. The duplicate-STOP suppression
+        flag is set so the eventual VAD-finalize for this same utterance
+        doesn't re-fire the ack.
+
+        On a non-STOP transcript, or on STT failure / timeout, the probe
+        is silent — VAD finalize will dispatch normally.
+        """
+        try:
+            await asyncio.sleep(self._vad_cfg.stop_probe_after_s)
+        except asyncio.CancelledError:
+            return
+
+        # Snapshot under the same control flow that owns the buffer dict —
+        # no other coroutine writes to these entries between here and the
+        # cancellation path, so a plain read is safe in the asyncio model.
+        buf = self._probe_buffer.get(pid)
+        sr  = self._probe_sr.get(pid, 0)
+        if not buf or sr <= 0:
+            # Utterance already finalized (and entry cleared) or no audio
+            # ever accumulated — skip silently.
+            return
+        audio_snapshot = bytes(buf)
+
+        try:
+            text = await self._stt.transcribe(audio_snapshot, sample_rate=sr)
+        except asyncio.CancelledError:
+            # Cancelled mid-transcribe — the on_utterance path is taking
+            # over. Don't push anything.
+            return
+        except Exception:
+            logger.exception("stop-probe stt transcribe failed pid={!r}", pid)
+            return
+
+        if not text or not STOP_RE.match(text):
+            return
+
+        # Race guard: if on_utterance already closed the buffer between
+        # the STT await returning and this check, the cancellation simply
+        # hasn't propagated yet. Bow out — the finalize path will handle
+        # the rest.
+        if pid not in self._probe_buffer:
+            return
+
+        logger.info(
+            "VadSttProcessor early-probe STOP match pid={!r} after={:.2f}s",
+            pid, self._vad_cfg.stop_probe_after_s,
+        )
+
+        # Mark before pushing so the suppression flag is set if the VAD
+        # racing-finalize lands while frames are still queueing downstream.
+        self._stop_fired_for_current_utterance.add(pid)
+
+        # Close the probe buffer now — on_utterance will see the empty
+        # entry and skip its own buffering work, but the suppression flag
+        # is what actually gates the duplicate frame emission.
+        self._probe_buffer.pop(pid, None)
+        self._probe_sr.pop(pid, None)
+
+        # Frame order intentionally differs from ``on_utterance``'s
+        # USSF-first convention: the probe is a fast-path interruption,
+        # not a clean end-of-turn. InterruptionFrame goes first so the
+        # brain cancels any in-flight reasoning before the gate sees the
+        # STOP transcript and re-issues its own InterruptionFrame +
+        # canned ack. UserStoppedSpeakingFrame tails as a hint to
+        # downstream turn-state consumers that the partial-audio turn
+        # has ended.
+        await self.push_frame(InterruptionFrame())
+        tf = TranscriptionFrame(
+            text      = text,
+            user_id   = pid,
+            timestamp = _now_iso(),
+        )
+        tf.transport_source = pid
+        await self.push_frame(tf)
+        await self.push_frame(UserStoppedSpeakingFrame())
+
+    def _cancel_probe_task(self, pid: str) -> None:
+        task = self._probe_task.pop(pid, None)
+        if task is not None and not task.done():
+            task.cancel()
 
 
 def _now_iso() -> str:
