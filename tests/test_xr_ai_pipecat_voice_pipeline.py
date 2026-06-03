@@ -772,7 +772,7 @@ async def test_brain_cancels_inflight_on_interruption_frame():
 
 
 @pytest.mark.asyncio
-async def test_brain_on_query_superseded_fires_when_new_query_supersedes_inflight():
+async def test_brain_on_query_superseded_fires_on_second_query_while_inflight():
     """When a fresh ``GatedQueryFrame`` arrives while a prior query's
     task is still in-flight, ``on_query_superseded`` must fire so an
     agent can decide what to do with the previous response's queued
@@ -799,6 +799,119 @@ async def test_brain_on_query_superseded_fires_when_new_query_supersedes_infligh
     )
     assert brain.supersede_calls == ["pid-1"]
     assert brain.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_fires_when_prior_task_already_done():
+    """Regression: the supersede hook must fire on every non-first
+    query for a pid, even when the prior brain task has already
+    completed. Real-world case: a short VLM response streams in
+    quickly so the brain task is done, but its TTS audio is still
+    playing out when the user fires a follow-up query. Gating the
+    hook on ``_inflight[pid].done()`` (the old bug) caused the new
+    query to queue behind the prior audio instead of interrupting it.
+
+    Uses ``_StringBrain`` (one-shot string response) plus a generous
+    ``per_send_delay_s`` so the first task finishes before the
+    second query arrives. Asserts that at supersede time the prior
+    task was indeed already done, so the assertion exercises the
+    bug case rather than the in-flight case."""
+    class _SupersedeRecorder(_StringBrain):
+        def __init__(self) -> None:
+            super().__init__()
+            self.supersede_calls: list[str] = []
+            self.prior_task_done_at_supersede: list[bool] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+            existing = self._inflight.get(pid)
+            self.prior_task_done_at_supersede.append(
+                existing is None or existing.done(),
+            )
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        # Long enough that the one-shot ``_StringBrain`` response for
+        # the first query has fully run and emitted its end frame
+        # before the second query is queued.
+        settle_s=0.3,
+        per_send_delay_s=0.2,
+    )
+    assert brain.supersede_calls == ["pid-1"]
+    assert brain.prior_task_done_at_supersede == [True], (
+        "test must exercise the bug case: prior brain task already done "
+        "when supersede fires"
+    )
+    # Both queries ran end-to-end.
+    handled = [t for _pid, t, _fm in brain.handle_calls]
+    assert "first"  in handled
+    assert "second" in handled
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_fires_on_every_subsequent_query():
+    """The hook fires once per non-first query — three queries fire
+    it twice, four fire it three times, etc. Uses ``_StringBrain``
+    so each prior task completes before the next query arrives,
+    confirming the gate is per-pid query count, not brain-task state."""
+    class _SupersedeRecorder(_StringBrain):
+        def __init__(self) -> None:
+            super().__init__()
+            self.supersede_calls: list[str] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+            GatedQueryFrame(participant_id="pid-1", text="third",  fresh_match=True, pts_us=2),
+            GatedQueryFrame(participant_id="pid-1", text="fourth", fresh_match=True, pts_us=3),
+        ],
+        settle_s=0.3,
+        per_send_delay_s=0.1,
+    )
+    # First query: no supersede. Each subsequent query: one supersede.
+    assert brain.supersede_calls == ["pid-1", "pid-1", "pid-1"]
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_seen_state_cleared_on_participant_left():
+    """``_seen_query`` is per-pid and must be cleared on
+    ``ParticipantLeftFrame`` so a rejoin's first query is treated
+    as cold (no supersede) rather than as a follow-up. Without
+    this, an override that pushes ``InterruptionFrame`` on
+    supersede would flush unrelated audio on every fresh session."""
+    class _SupersedeRecorder(_StringBrain):
+        def __init__(self) -> None:
+            super().__init__()
+            self.supersede_calls: list[str] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1",  text="first",  fresh_match=True, pts_us=0),
+            ParticipantLeftFrame(participant_id="pid-1"),
+            # Same pid rejoins (or different session): the first
+            # query after the left frame must NOT fire the hook.
+            GatedQueryFrame(participant_id="pid-1",  text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.3,
+        per_send_delay_s=0.1,
+    )
+    assert brain.supersede_calls == []
 
 
 @pytest.mark.asyncio
