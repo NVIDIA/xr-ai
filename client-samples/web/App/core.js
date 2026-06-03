@@ -322,13 +322,21 @@ export function resolvedTokenURL(model) {
  *   render: () => void,
  *   showError: (msg: string) => void,
  *   enumerateCameras: () => Promise<void>,
+ *   startCamera?: () => Promise<void>,
  *   stopCamera: () => Promise<void>,
  *   onStateChange?: (state: string) => void,
  *   onDataReceived?: (topic: string, data: Uint8Array) => boolean,
  * }} opts
+ *   `startCamera` / `stopCamera` are caller-supplied wrappers used by the
+ *   on-demand `clientControl` handler so client-specific side effects (e.g.
+ *   the local `<video>` preview in `web/App/app.js`) run on agent-triggered
+ *   start / stop. When omitted, the on-demand start falls back to the bare
+ *   transport-level `startCamera` (sufficient for clients without a local
+ *   preview, such as `web-xr`).
  */
 export async function connect(model, {
-  render, showError, enumerateCameras: _ec, stopCamera: _sc,
+  render, showError, enumerateCameras: _ec,
+  startCamera: _startCamera, stopCamera: _sc,
   onStateChange, onDataReceived,
 }) {
   model.lastError        = null;
@@ -385,8 +393,22 @@ export async function connect(model, {
       if (model.cameraOnDemand) {
         try {
           const { action } = JSON.parse(new TextDecoder().decode(data));
-          if (action === 'startCamera' && !model.isCameraActive) _ec && startCamera(model, { render, showError, enumerateCameras: _ec });
-          if (action === 'stopCamera'  &&  model.isCameraActive) _sc?.();
+          const reportAsyncError = (err) =>
+            showError(err instanceof StreamError ? err.message : String(err));
+          if (action === 'startCamera' && !model.isCameraActive) {
+            // Prefer the caller's wrapper so client-specific side effects
+            // (e.g. acquiring the local <video> preview stream in app.js)
+            // run on agent-triggered start. Wrappers are async — surface
+            // rejections via showError so agent-triggered failures aren't
+            // swallowed as unhandled promise rejections.
+            (_startCamera
+              ? _startCamera()
+              : startCamera(model, { render, showError, enumerateCameras: _ec })
+            )?.catch?.(reportAsyncError);
+          }
+          if (action === 'stopCamera'  &&  model.isCameraActive) {
+            _sc?.()?.catch?.(reportAsyncError);
+          }
         } catch { /* malformed — ignore */ }
       }
       return;

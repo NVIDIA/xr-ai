@@ -10,6 +10,7 @@
 
 import CoreMedia
 import Foundation
+import LiveKit
 
 // MARK: - StreamSession
 
@@ -121,6 +122,16 @@ public final class StreamSession: ObservableObject {
     /// Stops camera capture.
     public func stopCamera() async throws {
         try await backend.stopCamera()
+    }
+
+    /// The currently active local camera track, if any. Used by
+    /// ``CameraPreviewView`` to render the outgoing video locally; app code
+    /// typically does not access this directly.
+    ///
+    /// Returns `nil` when the active backend is not LiveKit-backed or while
+    /// the camera is stopped.
+    public var localCameraTrack: LocalVideoTrack? {
+        (backend as? LiveKitBackend)?.localCameraTrack
     }
 
     // MARK: - Frame injection

@@ -20,16 +20,19 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -51,17 +54,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import kotlinx.coroutines.launch
 import androidx.compose.material3.TopAppBarDefaults
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,6 +74,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
@@ -84,6 +86,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
+import com.nvidia.xrai.streamkitsample.streamkit.ui.CameraPreviewView
+import com.nvidia.xrai.streamkitsample.streamkit.ui.rememberCameraPreviewAspectRatio
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -125,21 +129,8 @@ private fun StreamKitTheme(content: @Composable () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    // Show errors as snackbars (mirrors the web toast / iOS alert).
-    LaunchedEffect(vm.lastError) {
-        val err = vm.lastError ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(
-            message = err,
-            duration = SnackbarDuration.Long,
-        )
-        vm.clearError()
-    }
-
     Scaffold(
         containerColor = ColorPageBg,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("NVIDIA XR-AI Sample", style = MaterialTheme.typography.titleLarge) },
@@ -149,24 +140,71 @@ private fun StreamKitSampleApp(vm: AppViewModel = viewModel()) {
             )
         },
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+                .padding(paddingValues),
         ) {
-            Spacer(Modifier.height(4.dp))
-            ConnectionSection(vm)
-            MediaSection(vm)
-            AgentSection(vm)
-            DataChannelSection(vm)
-            if (vm.receivedMessages.isNotEmpty()) {
-                ReceivedSection(vm)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                Spacer(Modifier.height(4.dp))
+                CameraPreviewCard(vm)
+                AgentSection(vm)
+                ConnectionSection(vm)
+                MediaSection(vm)
+                DataChannelSection(vm)
+                if (vm.receivedMessages.isNotEmpty()) {
+                    ReceivedSection(vm)
+                }
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(24.dp))
+
+            ErrorToast(
+                message = vm.lastError,
+                onDismiss = { vm.clearError() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp),
+            )
         }
+    }
+}
+
+/**
+ * Bottom-anchored auto-dismiss toast (mirrors the web client's `#error-toast`
+ * and the iOS `ErrorToast`).  Visible whenever [message] is non-null; clears
+ * via [onDismiss] after 4 seconds or when tapped.
+ */
+@Composable
+private fun ErrorToast(
+    message: String?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (message == null) return
+
+    LaunchedEffect(message) {
+        delay(4_000)
+        onDismiss()
+    }
+
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = ColorRed.copy(alpha = 0.92f),
+        shadowElevation = 6.dp,
+        modifier = modifier,
+    ) {
+        Text(
+            text = message,
+            color = Color.White,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+        )
     }
 }
 
@@ -659,58 +697,136 @@ private fun CameraSelectorRow(
     }
 }
 
-// ── Agent section ─────────────────────────────────────────────────────────────
+// ── Camera preview card ───────────────────────────────────────────────────────
 
+/**
+ * Camera preview card mirroring the web client's `.preview-card`.
+ *
+ * Aspect ratio follows the live LiveKit track dimensions once frames are
+ * flowing (so portrait phone capture renders as 9:16, landscape cameras
+ * as 16:9). Before the first frame arrives — including the entire
+ * "Camera off" placeholder state — the card uses the matching phone-
+ * camera orientation (9:16 in portrait, 16:9 in landscape) so the
+ * placeholder has the same footprint the live preview will once frames
+ * flow. Width is capped at [PreviewMaxWidth] so a tall portrait video
+ * still leaves room for the Agent panel below without scrolling.
+ */
 @Composable
-private fun AgentSection(vm: AppViewModel) {
-    val isConnected = vm.connectionState == ConnectionState.CONNECTED
+private fun CameraPreviewCard(vm: AppViewModel) {
+    // Until the first frame arrives, fall back to the typical phone-camera
+    // frame orientation (9:16 in portrait, 16:9 in landscape) so the
+    // "Camera off" card has the same footprint as the live preview will
+    // once frames flow.
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+    val fallbackAspect = if (isLandscape) 16f / 9f else 9f / 16f
+    val liveAspect = rememberCameraPreviewAspectRatio(vm.session) ?: fallbackAspect
 
-    SectionCard(title = "Agent") {
-        CardRow(showDivider = false) {
-            Text("Status", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.weight(1f))
-
-            val dotColor = when {
-                !isConnected                   -> ColorSecondary
-                vm.agentStatus == "processing" -> ColorOrange
-                vm.agentStatus == "idle"       -> ColorGreen
-                else                           -> ColorSecondary
-            }
-            val isPulsing = isConnected && vm.agentStatus == "processing"
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isPulsing) {
-                    val infiniteTransition = rememberInfiniteTransition(label = "agent-pulse")
-                    val alpha by infiniteTransition.animateFloat(
-                        initialValue = 1f,
-                        targetValue = 0.3f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(700, easing = LinearEasing),
-                            repeatMode = RepeatMode.Reverse,
-                        ),
-                        label = "agent-dot-alpha",
+    // Cap card width at 80% of the available width, never exceeding 540dp
+    // (the web client's `.page-content` cap). This keeps a tall portrait
+    // 9:16 frame from pushing the Agent panel below the fold on a phone.
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val cardWidth = (maxWidth * 0.8f).coerceAtMost(PreviewMaxWidth)
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Black),
+            elevation = CardDefaults.cardElevation(0.dp),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .widthIn(max = cardWidth),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(liveAspect),
+            ) {
+                if (vm.isCameraActive) {
+                    CameraPreviewView(
+                        session = vm.session,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                    Box(
+                    LiveBadge(
                         modifier = Modifier
-                            .size(8.dp)
-                            .alpha(alpha)
-                            .background(color = dotColor, shape = CircleShape),
+                            .align(Alignment.TopStart)
+                            .padding(10.dp),
                     )
                 } else {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(color = dotColor, shape = CircleShape),
+                    Text(
+                        text = "Camera off",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.align(Alignment.Center),
                     )
                 }
-                Spacer(Modifier.width(6.dp))
-                val agentLabel = when {
-                    !isConnected                   -> "—"
-                    vm.agentStatus == "idle"       -> "Idle"
-                    vm.agentStatus == "processing" -> "Processing…"
-                    else                           -> "Unknown"
-                }
-                Text(agentLabel, style = MaterialTheme.typography.bodySmall, color = ColorSecondary)
+            }
+        }
+    }
+}
+
+private val PreviewMaxWidth = 540.dp
+
+@Composable
+private fun LiveBadge(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "live-pulse")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "live-dot-alpha",
+    )
+    Row(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.55f), shape = RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .alpha(alpha)
+                .background(ColorRed, shape = CircleShape),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = "LIVE",
+            style = MaterialTheme.typography.labelSmall.copy(
+                color = Color.White,
+                letterSpacing = 0.06.sp,
+            ),
+        )
+    }
+}
+
+// ── Agent section ─────────────────────────────────────────────────────────────
+
+/**
+ * Final-reply text panel. Mirrors the web client's `#agent-response` block:
+ * shows `agentResponse` verbatim, or an italic "Waiting for agent…"
+ * placeholder while null/empty.
+ */
+@Composable
+private fun AgentSection(vm: AppViewModel) {
+    SectionCard(title = "Agent") {
+        CardRow(showDivider = false) {
+            val response = vm.agentResponse
+            if (response.isNullOrEmpty()) {
+                Text(
+                    text = "Waiting for agent…",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = ColorSecondary,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Text(
+                    text = response,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

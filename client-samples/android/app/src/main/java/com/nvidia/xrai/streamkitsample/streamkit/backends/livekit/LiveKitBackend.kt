@@ -15,10 +15,13 @@ import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
+import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
+import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.LocalVideoTrackOptions
+import io.livekit.android.room.track.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -57,6 +60,24 @@ internal class LiveKitBackend(
     override var onConnectionStateChanged: ((ConnectionState) -> Unit)? = null
     override var onDataReceived: ((topic: String, data: ByteArray) -> Unit)? = null
     override var onAgentStatus: ((status: String) -> Unit)? = null
+
+    // ── Public local preview accessor ─────────────────────────────────────────
+
+    /**
+     * Currently published local camera track, or null when stopped.  Used by
+     * `CameraPreviewView` to render the outgoing stream locally; app code
+     * goes through that composable rather than touching this directly.
+     */
+    val localCameraTrack: LocalVideoTrack?
+        get() = room?.localParticipant
+            ?.getTrackPublication(Track.Source.CAMERA)?.track as? LocalVideoTrack
+
+    /** Initialises a [TextureViewRenderer] with the connected room's EGL
+     *  context so it can sink frames from the local camera track. No-op when
+     *  the room is not connected. */
+    fun initVideoRenderer(view: TextureViewRenderer) {
+        room?.initVideoRenderer(view)
+    }
 
     // ── Private state ──────────────────────────────────────────────────────────
 
