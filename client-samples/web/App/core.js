@@ -131,7 +131,6 @@ export function createBaseModel() {
     selectedCameraId:  null,
     /** @type {string|null} */
     agentStatus:       null,
-    cameraOnDemand:    false,
     /** @type {Array<{id: string, text: string, timestamp: Date}>} */
     receivedMessages:  [],
     /** @type {string|null} */
@@ -239,10 +238,6 @@ export function renderBase(model) {
     cameraStatus.textContent = isConnected ? 'Idle' : 'Not connected';
     cameraStatus.className   = 'status-text status-idle';
   }
-
-  // ── Camera on demand toggle ────────────────────────────────────────────────
-  const codCheckbox = $('camera-on-demand');
-  if (codCheckbox) codCheckbox.checked = model.cameraOnDemand;
 
   // ── Camera selector ────────────────────────────────────────────────────────
   const selectRow = $('camera-select-row');
@@ -381,14 +376,9 @@ export async function connect(model, {
     // Let the caller intercept topics first (returns true to suppress list append).
     if (onDataReceived?.(topic, data)) return;
 
+    // Always-on streaming: clientControl signals from the agent are
+    // silently dropped and never surfaced in the message list.
     if (topic === 'clientControl') {
-      if (model.cameraOnDemand) {
-        try {
-          const { action } = JSON.parse(new TextDecoder().decode(data));
-          if (action === 'startCamera' && !model.isCameraActive) _ec && startCamera(model, { render, showError, enumerateCameras: _ec });
-          if (action === 'stopCamera'  &&  model.isCameraActive) _sc?.();
-        } catch { /* malformed — ignore */ }
-      }
       return;
     }
 
@@ -505,7 +495,6 @@ export async function stopCamera(model, render, showError) {
  * @param {() => Promise<void>} _startCamera  bound startCamera for the caller
  */
 export async function sendPing(model, _startCamera) {
-  if (model.cameraOnDemand && !model.isCameraActive) _startCamera();
   try {
     await model.session?.send('ping');
   } catch { /* ignore */ }
@@ -575,10 +564,6 @@ export function wireBaseEvents(model, actions) {
 
   $('camera-select').addEventListener('change', (e) => {
     model.selectedCameraId = e.target.value || null;
-  });
-
-  $('camera-on-demand')?.addEventListener('change', (e) => {
-    model.cameraOnDemand = e.target.checked;
   });
 
   $('camera-btn').addEventListener('click', () => {
