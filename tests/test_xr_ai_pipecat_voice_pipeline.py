@@ -753,9 +753,13 @@ async def test_input_transport_populates_transport_source_from_chunk_pid():
     class _StubEndpoint:
         def __init__(self) -> None:
             self.audio_cb = None
+            self.participant_cb = None
 
         def on_audio(self, cb) -> None:
             self.audio_cb = cb
+
+        def on_participant(self, cb) -> None:
+            self.participant_cb = cb
 
         def stop(self) -> None:
             return
@@ -794,6 +798,165 @@ async def test_input_transport_populates_transport_source_from_chunk_pid():
     frame = pushed[0]
     assert isinstance(frame, InputAudioRawFrame)
     assert frame.transport_source == "web-client"
+
+
+@pytest.mark.asyncio
+async def test_input_transport_emits_participant_joined_frame():
+    """``ParticipantEvent(joined=True)`` from the hub must surface as a
+    ``ParticipantJoinedFrame`` on the pipecat pipeline — otherwise the
+    voice gate never greets and the brain never steers the output
+    transport at a participant, so every TTS chunk gets dropped by
+    ``XRMediaHubOutputTransport.write_audio_frame``."""
+    from xr_ai_agent import ParticipantEvent
+    from xr_ai_pipecat.transport import (
+        SAMPLE_RATE,
+        XRMediaHubInputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.audio_cb = None
+            self.participant_cb = None
+
+        def on_audio(self, cb) -> None:
+            self.audio_cb = cb
+
+        def on_participant(self, cb) -> None:
+            self.participant_cb = cb
+
+        def stop(self) -> None:
+            return
+
+    ep = _StubEndpoint()
+    params = TransportParams(
+        audio_in_enabled=True,
+        audio_in_sample_rate=SAMPLE_RATE,
+        audio_in_channels=1,
+    )
+    transport = XRMediaHubInputTransport(ep, params)
+    transport._started = True
+
+    pushed: list[Frame] = []
+
+    async def capture(frame, direction=FrameDirection.DOWNSTREAM):
+        pushed.append(frame)
+
+    transport.push_frame = capture  # type: ignore[method-assign]
+
+    assert ep.participant_cb is not None, (
+        "input transport must bind on_participant in __init__"
+    )
+
+    await ep.participant_cb(
+        ParticipantEvent(participant_id="web-client", joined=True, pts_us=0),
+    )
+
+    assert len(pushed) == 1
+    frame = pushed[0]
+    assert isinstance(frame, ParticipantJoinedFrame)
+    assert frame.participant_id == "web-client"
+
+
+@pytest.mark.asyncio
+async def test_input_transport_emits_participant_left_frame():
+    """``ParticipantEvent(joined=False)`` from the hub must surface as a
+    ``ParticipantLeftFrame`` so ``BrainProcessor`` can run per-pid
+    teardown (cancel in-flight, clear target participant)."""
+    from xr_ai_agent import ParticipantEvent
+    from xr_ai_pipecat.transport import (
+        SAMPLE_RATE,
+        XRMediaHubInputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.audio_cb = None
+            self.participant_cb = None
+
+        def on_audio(self, cb) -> None:
+            self.audio_cb = cb
+
+        def on_participant(self, cb) -> None:
+            self.participant_cb = cb
+
+        def stop(self) -> None:
+            return
+
+    ep = _StubEndpoint()
+    params = TransportParams(
+        audio_in_enabled=True,
+        audio_in_sample_rate=SAMPLE_RATE,
+        audio_in_channels=1,
+    )
+    transport = XRMediaHubInputTransport(ep, params)
+    transport._started = True
+
+    pushed: list[Frame] = []
+
+    async def capture(frame, direction=FrameDirection.DOWNSTREAM):
+        pushed.append(frame)
+
+    transport.push_frame = capture  # type: ignore[method-assign]
+
+    await ep.participant_cb(
+        ParticipantEvent(participant_id="web-client", joined=False, pts_us=0),
+    )
+
+    assert len(pushed) == 1
+    frame = pushed[0]
+    assert isinstance(frame, ParticipantLeftFrame)
+    assert frame.participant_id == "web-client"
+
+
+@pytest.mark.asyncio
+async def test_input_transport_drops_participant_event_before_start():
+    """Same ``_started`` guard as ``_on_hub_audio`` — a late event
+    arriving after teardown (or before ``StartFrame``) must be a no-op
+    so the bridge doesn't race the pipeline shutdown."""
+    from xr_ai_agent import ParticipantEvent
+    from xr_ai_pipecat.transport import (
+        SAMPLE_RATE,
+        XRMediaHubInputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.audio_cb = None
+            self.participant_cb = None
+
+        def on_audio(self, cb) -> None:
+            self.audio_cb = cb
+
+        def on_participant(self, cb) -> None:
+            self.participant_cb = cb
+
+        def stop(self) -> None:
+            return
+
+    ep = _StubEndpoint()
+    params = TransportParams(
+        audio_in_enabled=True,
+        audio_in_sample_rate=SAMPLE_RATE,
+        audio_in_channels=1,
+    )
+    transport = XRMediaHubInputTransport(ep, params)
+    # Intentionally leave transport._started == False.
+
+    pushed: list[Frame] = []
+
+    async def capture(frame, direction=FrameDirection.DOWNSTREAM):
+        pushed.append(frame)
+
+    transport.push_frame = capture  # type: ignore[method-assign]
+
+    await ep.participant_cb(
+        ParticipantEvent(participant_id="web-client", joined=True, pts_us=0),
+    )
+
+    assert pushed == []
 
 
 # ════════════════════════════════════════════════════════════════════════════

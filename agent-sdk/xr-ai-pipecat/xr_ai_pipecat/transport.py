@@ -30,7 +30,15 @@ from pipecat.transports.base_input import BaseInputTransport
 from pipecat.transports.base_output import BaseOutputTransport
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 
-from xr_ai_agent import AudioChunk, DataMessage, ProcessorEndpoint, Subscribe
+from xr_ai_agent import (
+    AudioChunk,
+    DataMessage,
+    ParticipantEvent,
+    ProcessorEndpoint,
+    Subscribe,
+)
+
+from .frames import ParticipantJoinedFrame, ParticipantLeftFrame
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -61,6 +69,7 @@ class XRMediaHubInputTransport(BaseInputTransport):
         self._ep_task: asyncio.Task | None = None
         self._started = False
         self._ep.on_audio(self._on_hub_audio)
+        self._ep.on_participant(self._on_hub_participant)
 
     async def start(self, frame: StartFrame):
         await super().start(frame)
@@ -112,6 +121,31 @@ class XRMediaHubInputTransport(BaseInputTransport):
         # message.
         frame.transport_source = chunk.participant_id
         await self.push_frame(frame)
+
+    async def _on_hub_participant(self, event: ParticipantEvent) -> None:
+        """Translate hub ``ParticipantEvent`` into pipecat lifecycle frames.
+
+        The hub publishes one event per LiveKit join/leave; downstream
+        processors (``VoiceGateProcessor`` greeting hook,
+        ``BrainProcessor.set_target_participant``) consume the resulting
+        ``ParticipantJoinedFrame`` / ``ParticipantLeftFrame``. Without
+        this bridge the gate never greets and the brain never steers the
+        output transport at a participant, so every TTS chunk is dropped
+        by ``XRMediaHubOutputTransport.write_audio_frame``.
+
+        Same ``_started`` guard as ``_on_hub_audio``: a late event after
+        teardown is a no-op rather than racing the pipeline shutdown.
+        """
+        if not self._started:
+            return
+        if event.joined:
+            await self.push_frame(
+                ParticipantJoinedFrame(participant_id=event.participant_id),
+            )
+        else:
+            await self.push_frame(
+                ParticipantLeftFrame(participant_id=event.participant_id),
+            )
 
 
 # ── Output ────────────────────────────────────────────────────────────────────
