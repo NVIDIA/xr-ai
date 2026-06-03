@@ -765,8 +765,10 @@ def test_load_voice_gate_config_full_file(tmp_path: pathlib.Path):
 
 def test_load_voice_gate_config_missing_file_returns_defaults(tmp_path: pathlib.Path):
     """Case 35: a path that does not exist degrades to the dataclass
-    defaults (always-on, no chime, 5 s follow-up grace) — same behavior
-    the inline-block parser had for an absent block."""
+    defaults (always-on, chime opt-out only, 5 s follow-up grace) —
+    same behavior the inline-block parser had for an absent block.
+    The dataclass default for ``listening_chime`` is True, but always-on
+    mode (empty ``magic_phrases``) inhibits the chime regardless."""
     assert load_voice_gate_config(tmp_path / "nope.yaml") == VoiceGateConfig()
 
 
