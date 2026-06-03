@@ -22,8 +22,7 @@ to ``yaml/voice_gate.yaml`` so every pipecat sample shares the schema.
 
 Text data channel + frame tracking + camera-on-demand are owned by
 ``SimpleVlmBrain`` and continue to use the ``ProcessorEndpoint`` API
-directly — the transport does not yet surface those hub events as
-pipecat frames.
+directly.
 
 Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
 ---------------------------------------------------------------------
