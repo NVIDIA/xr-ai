@@ -1473,3 +1473,31 @@ async def test_make_voice_pipeline_wires_text_topic_through_streaming_tts(monkey
         assert streaming_tts._transport is transport
     finally:
         transport.shutdown()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Regression: transport subscribes to VIDEO so brain receives FrameSignals
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def test_xr_media_hub_transport_subscribes_to_video_frames():
+    """The ProcessorEndpoint must subscribe to the video category so
+    that camera FrameSignals reach brain consumers (e.g. VLM workers
+    that bind ``ep.on_frame``). A previous version of the transport
+    filtered out video at the ZMQ subscription layer, causing
+    ``_wait_for_camera_frame`` to time out and the VLM call to block
+    indefinitely after a query."""
+    from xr_ai_agent._processor import Subscribe
+    from xr_ai_pipecat.transport import XRMediaHubTransport
+
+    transport = XRMediaHubTransport()
+    try:
+        assert transport._ep._default_filter & Subscribe.VIDEO, (
+            "transport must subscribe to VIDEO frames so brains receive "
+            "camera FrameSignals"
+        )
+        # Audio and data are also required for the voice pipeline.
+        assert transport._ep._default_filter & Subscribe.AUDIO
+        assert transport._ep._default_filter & Subscribe.DATA
+    finally:
+        transport.shutdown()

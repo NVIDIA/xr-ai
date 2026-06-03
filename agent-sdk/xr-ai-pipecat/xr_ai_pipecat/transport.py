@@ -252,7 +252,7 @@ class XRMediaHubTransport(BaseTransport):
         self._ep = ProcessorEndpoint(
             sub_addr=_HUB_PUB,
             push_addr=_HUB_PUSH,
-            filter=Subscribe.AUDIO | Subscribe.DATA,
+            filter=Subscribe.AUDIO | Subscribe.DATA | Subscribe.VIDEO,
         )
 
         params = TransportParams(
