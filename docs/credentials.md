@@ -35,6 +35,13 @@ Supported tokens: `HF_TOKEN`, `NGC_API_KEY`. The user is shown a prompt
 consequence of skipping it, alongside a link to generate one. Pressing
 Enter without typing skips the token (left unset, not saved).
 
+`NGC_API_KEY` authenticates both `nvcr.io` image pulls and **hosted NVIDIA
+NIM** inference endpoints — a `models.yaml` entry with
+`api_key_env: NGC_API_KEY` sends it as the `Authorization: Bearer` token (see
+[`docs/ai-services.md`](ai-services.md#hosting-models-on-nvidia-nim)). Because
+`run_stack` injects saved credentials into every subprocess, no per-sample
+wiring is needed once the key is saved.
+
 ## Automatic injection
 
 `run_stack` always calls `load_credentials()` internally before spawning child

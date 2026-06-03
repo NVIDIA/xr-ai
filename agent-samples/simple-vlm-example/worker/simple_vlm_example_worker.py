@@ -30,7 +30,8 @@ Agent → client:
 
 Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
 ----------------------------------------------------------------------
-    models_yaml:           yaml/models.yaml   # path to models config (relative to yaml dir)
+    model_backend:         local   # "local" (default) or "nim" (hosted VLM; uses models.nim.yaml)
+    models_yaml:           yaml/models.yaml   # local-backend models config (relative to yaml dir)
     default_prompt:        "Describe what you see."
     system_prompt:              <multiline string>   # role/style guidance for the VLM
     magic_phrases:              []    # list of speech-only opt-in prefixes; empty = always-on
@@ -73,7 +74,16 @@ async def main(
     # Matches the convention used by xr-render-demo (and any future sample)
     # so all samples behave the same regardless of CWD. The bare default
     # `"models.yaml"` sits next to the worker yaml in `yaml/`.
-    models_yaml_raw = cfg.get("models_yaml", "models.yaml")
+    #
+    # `model_backend: nim` selects the NIM overlay (hosted VLM); the
+    # orchestrator reads the same key to skip the local vlm-server. Otherwise
+    # `models_yaml` picks the local config (default models.yaml; e.g.
+    # models.omni.yaml).
+    backend = str(cfg.get("model_backend", "local")).lower()
+    models_yaml_raw = (
+        "models.nim.yaml" if backend == "nim"
+        else cfg.get("models_yaml", "models.yaml")
+    )
     models_yaml_path = pathlib.Path(models_yaml_raw)
     if config_path and not models_yaml_path.is_absolute():
         models_yaml_path = config_path.parent / models_yaml_path

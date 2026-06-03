@@ -40,7 +40,14 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
     # worker's config YAML in `agent-samples/xr-render-demo/yaml/`. When the
     # launcher passes `--config`, `path.parent` is that yaml dir; when run
     # bare without `--config`, the relative path falls back to CWD.
-    models_yaml_raw = data.get("models_yaml", "models.yaml")
+    #
+    # `model_backend: nim` selects the NIM overlay (hosted LLM/VLM); the
+    # orchestrator reads the same key to point vlm-mcp at its NIM config.
+    backend = str(data.get("model_backend", "local")).lower()
+    models_yaml_raw = (
+        "models.nim.yaml" if backend == "nim"
+        else data.get("models_yaml", "models.yaml")
+    )
     if path and not pathlib.Path(models_yaml_raw).is_absolute():
         models_yaml = str(path.parent / models_yaml_raw)
     else:

@@ -295,6 +295,30 @@ async def test_llm_health_false_on_503() -> None:
         assert (await llm.health()) is False
 
 
+async def test_llm_health_true_when_health_check_disabled() -> None:
+    # Remote endpoints (hosted NIM) have no /health route — health_check=False
+    # makes readiness assumed without probing, even if the route would 503.
+    stub = StubOpenAI()
+    stub.set_health_status(503)
+    async with OpenAICompatLLM(
+        "http://stub", "llm", health_check=False, client=stub.client(),
+    ) as llm:
+        assert (await llm.health()) is True
+
+
+async def test_vlm_and_stt_health_true_when_health_check_disabled() -> None:
+    stub = StubOpenAI()
+    stub.set_health_status(503)
+    async with OpenAICompatVLM(
+        "http://stub", "vlm", health_check=False, client=stub.client(),
+    ) as vlm:
+        assert (await vlm.health()) is True
+    async with OpenAICompatSTT(
+        "http://stub", health_check=False, client=stub.client(),
+    ) as stt:
+        assert (await stt.health()) is True
+
+
 # ── VLM ───────────────────────────────────────────────────────────────────
 
 

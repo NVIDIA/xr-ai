@@ -25,6 +25,7 @@ def make_llm(config: ModelsConfig, name: str) -> LLMService:
             default_extras=spec.default_extras,
             api_key_env=spec.api_key_env,
             timeout=spec.timeout,
+            health_check=spec.health_check,
         )
     raise ValueError(f"unsupported LLM kind: {spec.kind!r}")
 
@@ -39,6 +40,7 @@ def make_vlm(config: ModelsConfig, name: str) -> VLMService:
             default_extras=spec.default_extras,
             api_key_env=spec.api_key_env,
             timeout=spec.timeout,
+            health_check=spec.health_check,
         )
     raise ValueError(f"unsupported VLM kind: {spec.kind!r}")
 
@@ -50,6 +52,7 @@ def make_stt(config: ModelsConfig, name: str) -> STTService:
             base_url=spec.base_url,
             api_key_env=spec.api_key_env,
             timeout=spec.timeout,
+            health_check=spec.health_check,
         )
     raise ValueError(f"unsupported STT kind: {spec.kind!r}")
 
@@ -61,5 +64,6 @@ def make_tts(config: ModelsConfig, name: str) -> TTSService:
             base_url=spec.base_url,
             api_key_env=spec.api_key_env,
             timeout=spec.timeout,
+            health_check=spec.health_check,
         )
     raise ValueError(f"unsupported TTS kind: {spec.kind!r}")

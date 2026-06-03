@@ -9,6 +9,40 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-03 — NVIDIA NIM as a model backend option (LLM + VLM)
+
+Agent samples can now run their LLM and VLM on hosted [NVIDIA
+NIM](https://build.nvidia.com) instead of local vLLM, selectable per sample
+by config. NIM is OpenAI-compatible, so this rides the existing
+`xr-ai-models` client layer — no new `kind`, no worker code changes.
+
+**One code change: `health_check` on every spec (default `true`).** Workers
+gate readiness on `service.health()`, which probes `base_url/health`. Hosted
+NIM has no such route, so a NIM spec sets `health_check: false` and
+`health()` returns `True` without probing. Threaded config → factory →
+all four `OpenAICompat*` clients. Chosen over auto-detecting "remote" from
+the URL because explicit is safer and self-hosted NIM containers *do* expose
+`/v1/health` (operator sets the flag to match their deployment).
+
+**Selection is one config key — `model_backend: local|nim` (no env/CLI
+switch, no main.py edits).** Each sample ships a `yaml/models.nim.yaml`
+overlay (LLM/VLM → `integrate.api.nvidia.com` with `api_key_env: NGC_API_KEY`;
+STT/TTS stay local). Setting `model_backend: nim` in the worker YAML does
+everything: the worker loads `models.nim.yaml`, and the orchestrator — which
+reads the same key — skips the local model server(s) NIM replaces. The
+orchestrator stays stdlib-only by reading the scalar with a regex (the same
+technique already used for `lovr_bin`), since orchestrators may not depend on
+pyyaml. For xr-render-demo the worker reaches the VLM through `vlm-mcp`, so a
+matching `yaml/vlm_mcp_server.nim.yaml` is shipped and the orchestrator points
+the `vlm-mcp` process at it automatically in NIM mode. `NGC_API_KEY` is a
+managed credential (auto-injected by `run_stack`); the orchestrator prompts
+for it once in NIM mode if unset.
+
+**Scope: LLM + VLM only.** Hosted NIM speech (Riva) is not OpenAI
+`/v1/audio`-compatible, so STT/TTS remain local. The agentic loop in
+xr-render-demo is tuned for the local Nemotron stack; hosted model ids in the
+overlay are examples to confirm at build.nvidia.com.
+
 ### 2026-05-28 — xr-render-demo: vec-mcp + redesigned spatial tools + prompt redesign + eval vocab audit
 
 The eval score on the agentic-loop suite climbed from 40/66 to 58/66 by
