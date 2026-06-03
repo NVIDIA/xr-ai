@@ -243,7 +243,16 @@ class StreamingTtsProcessor(FrameProcessor):
             await self.push_frame(out)
 
     async def _drain_on_interrupt(self) -> None:
-        """Cancel everything in flight + flush the pending buffer."""
+        """Cancel everything in flight + flush the pending buffer.
+
+        Cancelling the synth + sender tasks stops *new* audio from being
+        produced, but anything already queued downstream — the hub's
+        pacing pipe and the LiveKit jitter buffer — keeps playing. The
+        user hears the agent finish its current sentence(s) before
+        silence, and STOP feels broken. Flushing the hub's return-audio
+        buffer on the way out drops that pending audio at the source so
+        the stop is immediate.
+        """
         self._pending = ""
         if self._sender_task is not None and not self._sender_task.done():
             self._sender_task.cancel()
@@ -265,3 +274,20 @@ class StreamingTtsProcessor(FrameProcessor):
                 task.cancel()
         self._sender_queue = None
         self._sender_task  = None
+
+        # Flush the hub's return-audio buffer so already-paced audio
+        # stops immediately instead of finishing whatever sentence was
+        # mid-playback. Single-participant samples set
+        # ``target_participant`` on ``ParticipantJoinedFrame``; if the
+        # transport isn't wired or no participant is bound yet, there's
+        # nothing to flush.
+        if self._transport is not None:
+            pid = self._transport.target_participant
+            if pid:
+                try:
+                    await self._transport.endpoint.flush_return_audio(pid)
+                except Exception:
+                    logger.opt(exception=True).debug(
+                        "flush_return_audio failed on interrupt pid={!r}",
+                        pid,
+                    )

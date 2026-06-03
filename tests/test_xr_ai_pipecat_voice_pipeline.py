@@ -713,6 +713,109 @@ async def test_streaming_tts_interruption_cancels_and_clears_pending():
 
 
 @pytest.mark.asyncio
+async def test_streaming_tts_flushes_hub_return_audio_on_interrupt():
+    """STOP must drop audio that's already paced into the hub.
+
+    Cancelling synth + sender tasks only stops *new* audio. The hub's
+    pacing pipe (and LiveKit jitter buffer behind it) keep playing
+    whatever is already queued, so without an explicit flush the user
+    hears the agent finish its current sentence before silence — STOP
+    feels broken. On ``InterruptionFrame`` the processor must call
+    ``transport.endpoint.flush_return_audio(target_participant)`` so the
+    hub drops its pending audio at the source.
+    """
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.flush_calls: list[str] = []
+
+        async def flush_return_audio(self, pid: str) -> None:
+            self.flush_calls.append(pid)
+
+    class _StubTransport:
+        def __init__(self, pid: str) -> None:
+            self.endpoint           = _StubEndpoint()
+            self.target_participant = pid
+
+    tts  = _FakeTts()
+    tts.delay_s = 0.2
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    transport = _StubTransport("web-client")
+    proc = StreamingTtsProcessor(
+        tts=tts, voice_gate=gate, transport=transport,
+    )
+
+    await _run_chain(
+        proc,
+        sends=[
+            TextFrame(text="abandoned sentence one. "),
+            InterruptionFrame(),
+        ],
+        settle_s=0.4,
+        per_send_delay_s=0.05,
+    )
+
+    assert transport.endpoint.flush_calls == ["web-client"]
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_no_flush_when_transport_unset():
+    """Tests / standalone usage that construct the processor without a
+    transport must still survive ``InterruptionFrame`` — no transport
+    means no flush, not an AttributeError."""
+    tts  = _FakeTts()
+    tts.delay_s = 0.2
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)  # transport=None
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            TextFrame(text="abandoned sentence one. "),
+            InterruptionFrame(),
+        ],
+        settle_s=0.3,
+        per_send_delay_s=0.05,
+    )
+    # If we got here without an AttributeError, the None-transport path
+    # is exercised. Pending buffer should still be cleared.
+    assert proc._pending == ""  # noqa: SLF001
+    audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
+    assert audio == []
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_no_flush_when_no_target_participant():
+    """A transport with no target participant bound yet has no pid to
+    flush. The processor must skip the flush rather than calling
+    ``flush_return_audio("")`` which the hub drops on the floor."""
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.flush_calls: list[str] = []
+
+        async def flush_return_audio(self, pid: str) -> None:
+            self.flush_calls.append(pid)
+
+    class _StubTransport:
+        def __init__(self) -> None:
+            self.endpoint           = _StubEndpoint()
+            self.target_participant = ""
+
+    tts  = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    transport = _StubTransport()
+    proc = StreamingTtsProcessor(
+        tts=tts, voice_gate=gate, transport=transport,
+    )
+
+    await _run_chain(
+        proc,
+        sends=[InterruptionFrame()],
+        settle_s=0.1,
+    )
+    assert transport.endpoint.flush_calls == []
+
+
+@pytest.mark.asyncio
 async def test_streaming_tts_observes_each_wav_through_gate():
     """observe_tts_wav must be invoked once per synthesized WAV so the
     gate's lazy chime can build at the TTS sample rate."""
