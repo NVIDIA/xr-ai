@@ -772,6 +772,122 @@ async def test_brain_cancels_inflight_on_interruption_frame():
 
 
 @pytest.mark.asyncio
+async def test_brain_on_query_superseded_fires_when_new_query_supersedes_inflight():
+    """When a fresh ``GatedQueryFrame`` arrives while a prior query's
+    task is still in-flight, ``on_query_superseded`` must fire so an
+    agent can decide what to do with the previous response's queued
+    downstream state (e.g. push an InterruptionFrame to drain queued
+    TTS audio). The library default is a no-op; this test only checks
+    the hook is invoked."""
+    class _SupersedeRecorder(_IterBrain):
+        def __init__(self) -> None:
+            super().__init__(chunks=[f"chunk{i} " for i in range(200)])
+            self.supersede_calls: list[str] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.2,
+        per_send_delay_s=0.05,
+    )
+    assert brain.supersede_calls == ["pid-1"]
+    assert brain.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_not_called_on_cold_path_first_query():
+    """The cold path — first query, no in-flight task — must NOT call
+    ``on_query_superseded``. There is nothing to supersede, and agents
+    that override to push an InterruptionFrame would otherwise flush
+    unrelated in-flight audio (e.g. a voice-gate chime)."""
+    class _SupersedeRecorder(_StringBrain):
+        def __init__(self) -> None:
+            super().__init__()
+            self.supersede_calls: list[str] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=0)],
+    )
+    assert brain.supersede_calls == []
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_can_push_frames_downstream():
+    """The hook is allowed to push frames — this is the whole point of
+    the design (sample-side override pushes ``InterruptionFrame`` to
+    drain queued TTS audio for the previous response). Verify a frame
+    pushed from the hook reaches the downstream sink."""
+    class _InterruptingBrain(_IterBrain):
+        def __init__(self) -> None:
+            super().__init__(chunks=[f"chunk{i} " for i in range(200)])
+
+        async def on_query_superseded(self, pid: str) -> None:
+            await self.push_frame(InterruptionFrame())
+
+    brain = _InterruptingBrain()
+    sink = await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.2,
+        per_send_delay_s=0.05,
+    )
+    assert any(isinstance(f, InterruptionFrame) for f in sink.frames), (
+        "hook must be able to push frames to downstream sink"
+    )
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_exception_is_swallowed_and_spawn_proceeds():
+    """A misbehaving override must not break the supersede contract:
+    the previous task is still cancelled and the new query still
+    spawns. The exception is logged at the library boundary."""
+    class _RaisingBrain(_IterBrain):
+        def __init__(self) -> None:
+            super().__init__(chunks=[f"chunk{i} " for i in range(200)])
+            self.handle_calls: list[str] = []
+            self.supersede_calls: list[str] = []
+
+        async def handle_query(self, pid, text, fresh_match):
+            self.handle_calls.append(text)
+            return await super().handle_query(pid, text, fresh_match)
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+            raise RuntimeError("boom")
+
+    brain = _RaisingBrain()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.2,
+        per_send_delay_s=0.05,
+    )
+    assert brain.supersede_calls == ["pid-1"]
+    # Previous task still cancelled; new query still ran.
+    assert brain.cancelled is True
+    assert "first"  in brain.handle_calls
+    assert "second" in brain.handle_calls
+
+
+@pytest.mark.asyncio
 async def test_brain_steers_transport_target_on_participant_joined():
     """Single-participant routing default: when a brain is constructed
     with a transport, the first ``ParticipantJoinedFrame`` steers the

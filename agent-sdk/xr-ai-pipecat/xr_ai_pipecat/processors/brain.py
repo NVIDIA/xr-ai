@@ -97,6 +97,31 @@ class BrainProcessor(FrameProcessor):
         """
         return
 
+    async def on_query_superseded(self, pid: str) -> None:
+        """Override to react when a new query supersedes an in-flight one.
+
+        Fires when a new ``GatedQueryFrame`` arrives for ``pid`` while
+        the previous query's task is still in-flight (i.e. the new query
+        supersedes the old). The library still cancels the previous
+        brain task immediately after this hook returns — that is not
+        configurable (you cannot have two queries in flight for the
+        same pid).
+
+        What IS configurable is what else should happen at supersede
+        time. The most common use is to drain queued downstream audio
+        for the previous response: cancelling the brain task only stops
+        *new* ``TextFrame``s from this processor, while the streaming
+        TTS sender queue, the hub's pacing pipe, and any jitter buffer
+        downstream continue to deliver whatever was already enqueued.
+        Override and push an ``InterruptionFrame`` to flush those
+        layers at the source. Default: no-op — audio continues, the
+        new response queues behind it.
+
+        Exceptions from this hook are logged and swallowed; the
+        supersede + spawn of the new query proceeds either way.
+        """
+        return
+
     async def on_participant_joined(self, pid: str) -> None:
         """Override for per-pid setup. Default: no-op."""
         return
@@ -173,8 +198,17 @@ class BrainProcessor(FrameProcessor):
         pid = frame.participant_id
         # A fresh query supersedes any previous in-flight reasoning for
         # the same pid — happens when the user squeezes in a follow-up
-        # before the last response completes.
-        self._cancel_pid(pid)
+        # before the last response completes. Fire the supersede hook
+        # *before* cancelling so the override (e.g. push InterruptionFrame
+        # to drain queued TTS audio for the previous response) lands
+        # while the prior task's downstream state is still coherent.
+        existing = self._inflight.get(pid)
+        if existing is not None and not existing.done():
+            try:
+                await self.on_query_superseded(pid)
+            except Exception:
+                logger.exception("on_query_superseded raised pid={!r}", pid)
+            self._cancel_pid(pid)
         self._inflight[pid] = asyncio.create_task(
             self._run_query(frame), name=f"brain-query-{pid}",
         )
