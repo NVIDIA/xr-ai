@@ -33,6 +33,7 @@ from typing import AsyncIterator
 
 import httpx
 from loguru import logger
+from pipecat.frames.frames import InterruptionFrame
 from xr_ai_agent import DataMessage, FrameSignal, ParticipantEvent
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import VLMService
@@ -132,6 +133,23 @@ class SimpleVlmBrain(BrainProcessor):
         TTS. ``fresh_match`` is informational — both speech and data
         paths drive the same VLM call."""
         return self._stream_query(pid, text)
+
+    async def on_query_superseded(self, pid: str) -> None:
+        """Interrupt the previous response's audio when a new query lands.
+
+        Cancelling the prior brain task only stops *new* TextFrames from
+        this processor. Without an explicit drain signal, the streaming
+        TTS sender queue, the hub return-audio pacing pipe, and the
+        jitter buffer keep delivering the previous answer — the user
+        hears the old response finish before the new one starts. Push
+        an ``InterruptionFrame`` so those layers flush at the source.
+
+        The library default for this hook is a no-op (queue behind);
+        this sample opts in to interrupt-on-supersede because vision
+        Q&A turns are short and the user expects the new answer to
+        cut in immediately.
+        """
+        await self.push_frame(InterruptionFrame())
 
     async def on_user_started_speaking(self, pid: str) -> None:
         """Speculative camera warmup at the leading edge of speech.
