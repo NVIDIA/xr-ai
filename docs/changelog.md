@@ -9,6 +9,25 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-03 — Removed on-demand camera mode; clients always stream
+
+Dropped the "camera on demand" feature across the stack. Clients now
+stream the camera in always-on mode only, and the agent no longer sends
+`startCamera`/`stopCamera` control signals on the `clientControl` topic.
+
+**Agent (`agent-samples/simple-vlm-example`).** `SimpleVlmAgent` no
+longer requests, holds, or releases the camera. The `frame_max_age_s`,
+`camera_on_timeout_s`, and `camera_grace_s` config knobs and the
+`clientControl` signalling (plus speculative VAD warmup, freshness
+gating, and grace-period stop timers) are gone. `_handle_query` now just
+grabs the latest frame for the participant; if none exists yet it replies
+"Camera unavailable, please try again."
+
+**Clients (Android, iOS/visionOS, web, web-xr).** Removed the
+`cameraOnDemand` setting, its persisted key (iOS), and the "On demand"
+toggle UI. The `clientControl` topic is now silently dropped. The manual
+`startCamera`/`stopCamera` user controls (camera button) are unchanged.
+
 ### 2026-05-28 — xr-render-demo: vec-mcp + redesigned spatial tools + prompt redesign + eval vocab audit
 
 The eval score on the agentic-loop suite climbed from 40/66 to 58/66 by
