@@ -148,6 +148,9 @@ class StreamSession(private val backend: StreamingBackend) {
      * @param width        Y-plane pixel width (must be even).
      * @param height       Y-plane pixel height (must be even).
      * @param timestampUs  Source-side presentation timestamp, microseconds.
+     *                     Note: not honored downstream — the WebRTC frame
+     *                     timestamp is overridden internally with the local
+     *                     monotonic clock to keep the encoder's PTS stable.
      * @throws [StreamError.NotConnected]
      */
     suspend fun injectVideoFrame(

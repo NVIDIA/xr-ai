@@ -204,10 +204,15 @@ internal class LiveKitBackend(
     ) {
         if (!isConnected) throw StreamError.NotConnected
 
-        // Fast path — track already exists, no lock needed.
-        injectedCapturer?.let {
-            it.pushI420Frame(i420, width, height, timestampUs)
-            return
+        // Fast path — track already exists. Take the same mutex that
+        // stopCamera()/tearDown() use when they clear and dispose the
+        // capturer, so a concurrent teardown cannot dispose the native
+        // capturer between the null-check and pushI420Frame (use-after-dispose).
+        injectedVideoMutex.withLock {
+            injectedCapturer?.let {
+                it.pushI420Frame(i420, width, height, timestampUs)
+                return
+            }
         }
         // Slow path — first frame: create + publish track under the mutex.
         val capturer = injectedVideoMutex.withLock {
