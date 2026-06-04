@@ -360,7 +360,16 @@ export class LiveKitBackend {
     if (topic === LiveKitBackend.#STATUS_TOPIC) {
       throw new Error(`topic '${topic}' is reserved for internal SDK use`);
     }
-    await this.#room.localParticipant.publishData(bytes, { reliable, topic });
+
+    // Address outbound data to the hub participant only. Clients only ever
+    // talk to the hub/agent, so targeting it keeps a message from being
+    // broadcast to — and surfaced by — other participants sharing the room.
+    // When `hubIdentity` is null the data broadcasts to the whole room.
+    const opts = { reliable, topic };
+    if (this.#config.hubIdentity) {
+      opts.destinationIdentities = [this.#config.hubIdentity];
+    }
+    await this.#room.localParticipant.publishData(bytes, opts);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

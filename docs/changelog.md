@@ -71,7 +71,6 @@ of `system.txt`). Per `AGENTS.md` "Prompt-driven samples", the
 warnings surface at every run; `--strict-overlap` turns them into a
 CI-grade rc=2 failure. Clearing a warning means changing the prompt's
 worked example, not the case fixture.
-
 ### 2026-05-21 — `xr-ai-vad` is Silero-only; `xr-render-demo` migrated
 
 Dropped the adaptive-energy fallback path that shipped in the initial
