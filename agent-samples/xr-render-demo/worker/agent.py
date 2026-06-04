@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fastmcp import Client as McpClient
 from loguru import logger
+from pipecat.frames.frames import TranscriptionFrame
 from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent
 from xr_ai_models import LLMService, STTService, TTSService, ToolDef
@@ -72,6 +73,7 @@ class RenderDemoAgent:
 
     async def _on_data(self, msg: DataMessage) -> None:
         if msg.topic != _XR_SESSION_STARTED_TOPIC:
+            await self._handle_text_input(msg)
             return
 
         self._transport.set_target_participant(msg.participant_id)
@@ -104,6 +106,26 @@ class RenderDemoAgent:
             participant_id=msg.participant_id,
             topic=_RENDER_READY_TOPIC,
             pts_us=_now_us(), data=b"",
+        ))
+
+    async def _handle_text_input(self, msg: DataMessage) -> None:
+        """Feed a typed text message into the same path STT uses.
+
+        The web client's "Send" button publishes typed text on the data
+        channel with no topic, mirroring simple-vlm-example. We synthesize
+        a TranscriptionFrame so the agentic loop fires identically to a
+        spoken utterance, bypassing VAD/STT entirely.
+        """
+        text = (msg.data or b"").decode("utf-8", errors="replace").strip()
+        if not text:
+            return
+        if not self._transport.target_participant:
+            self._transport.set_target_participant(msg.participant_id)
+        logger.info("text input  pid={!r}  {!r}", msg.participant_id, text[:80])
+        await self._scene._enqueue(TranscriptionFrame(
+            text=text,
+            user_id=msg.participant_id,
+            timestamp=str(msg.pts_us or _now_us()),
         ))
 
     async def _wait_lovr(self, timeout_s: float = 120.0) -> bool:
