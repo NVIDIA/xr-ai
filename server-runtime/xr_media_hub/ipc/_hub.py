@@ -142,7 +142,10 @@ class HubEndpoint:
                 chunk.participant_id,
             )
             return
-        topic = f"return_audio.{chunk.participant_id}".encode()
+        # Trailing "." terminates the pid segment so a connector subscribed for
+        # `alice` does not also receive `alice2`'s return audio (ZMQ SUBSCRIBE is
+        # a byte-prefix match). The connector subscribes with the same delimiter.
+        topic = f"return_audio.{chunk.participant_id}.".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_AUDIO, chunk)])
 
     async def send_return_data(self, msg: DataMessage) -> None:
@@ -173,7 +176,8 @@ class HubEndpoint:
                 flush.participant_id,
             )
             return
-        topic = f"return_audio_flush.{flush.participant_id}".encode()
+        # Trailing "." — same pid-segment guard as send_return_audio.
+        topic = f"return_audio_flush.{flush.participant_id}.".encode()
         await self._pub.send_multipart([topic, encode(MsgType.RETURN_AUDIO_FLUSH, flush)])
 
     def _is_connected(self, participant_id: str) -> bool:
