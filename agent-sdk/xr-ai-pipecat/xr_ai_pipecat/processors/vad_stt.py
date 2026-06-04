@@ -143,6 +143,11 @@ class VadSttProcessor(FrameProcessor):
                     self._run_stop_probe(pid),
                     name=f"vad-stop-probe-{pid}",
                 )
+                logger.info(
+                    "early STOP probe scheduled pid={!r} after={:.2f}s",
+                    pid, self._vad_cfg.stop_probe_after_s,
+                )
+            logger.info("speech start pid={!r}", pid)
             await self.push_frame(UserStartedSpeakingFrame())
 
         async def on_utterance(audio_bytes: bytes, sample_rate: int) -> None:
@@ -155,6 +160,9 @@ class VadSttProcessor(FrameProcessor):
             self._probe_buffer.pop(pid, None)
             self._probe_sr.pop(pid, None)
 
+            dur_s = (len(audio_bytes) // 2) / max(sample_rate, 1)
+            logger.info("utterance finalize pid={!r} dur={:.2f}s", pid, dur_s)
+
             # If the probe already pushed STOP for this utterance, the
             # frames downstream (InterruptionFrame + TranscriptionFrame
             # to the gate + UserStoppedSpeakingFrame) have already done
@@ -163,6 +171,9 @@ class VadSttProcessor(FrameProcessor):
             # TTS) would double the stop-ack. Suppress.
             if pid in self._stop_fired_for_current_utterance:
                 self._stop_fired_for_current_utterance.discard(pid)
+                logger.info(
+                    "suppressed duplicate utterance after probe STOP pid={!r}", pid,
+                )
                 logger.debug(
                     "VadSttProcessor suppressing duplicate VAD-finalize "
                     "STOP pid={!r} (probe already fired)", pid,
@@ -269,7 +280,12 @@ class VadSttProcessor(FrameProcessor):
             logger.exception("stop-probe stt transcribe failed pid={!r}", pid)
             return
 
-        if not text or not STOP_RE.match(text):
+        matched = bool(text and STOP_RE.match(text))
+        logger.info(
+            "early STOP probe fired pid={!r} elapsed={:.2f}s matched={}",
+            pid, self._vad_cfg.stop_probe_after_s, matched,
+        )
+        if not matched:
             return
 
         # Race guard: if on_utterance already closed the buffer between
@@ -279,7 +295,7 @@ class VadSttProcessor(FrameProcessor):
         if pid not in self._probe_buffer:
             return
 
-        logger.info(
+        logger.debug(
             "VadSttProcessor early-probe STOP match pid={!r} after={:.2f}s",
             pid, self._vad_cfg.stop_probe_after_s,
         )

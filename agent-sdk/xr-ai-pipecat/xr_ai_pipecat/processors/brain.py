@@ -161,6 +161,9 @@ class BrainProcessor(FrameProcessor):
             return
 
         if isinstance(frame, InterruptionFrame):
+            if self._inflight:
+                for pid in list(self._inflight):
+                    logger.info("brain cancel pid={!r} reason=interruption", pid)
             self._cancel_all_inflight()
             await self.push_frame(frame, direction)
             return
@@ -171,6 +174,7 @@ class BrainProcessor(FrameProcessor):
 
         if isinstance(frame, ParticipantJoinedFrame):
             self._joined.add(frame.participant_id)
+            logger.info("brain participant joined pid={!r}", frame.participant_id)
             # Single-participant default: steer the output transport at
             # the first join so return-audio / return-data routing works
             # without per-sample wiring. Samples that need multi-pid
@@ -184,6 +188,7 @@ class BrainProcessor(FrameProcessor):
         if isinstance(frame, ParticipantLeftFrame):
             self._joined.discard(frame.participant_id)
             self._seen_query.discard(frame.participant_id)
+            logger.info("brain participant left pid={!r}", frame.participant_id)
             if self._transport is not None:
                 self._transport.cleanup_participant(frame.participant_id)
             await self.on_participant_left(frame.participant_id)
@@ -210,6 +215,9 @@ class BrainProcessor(FrameProcessor):
 
     async def _spawn_query(self, frame: GatedQueryFrame) -> None:
         pid = frame.participant_id
+        logger.info(
+            "brain dispatch pid={!r} fresh_match={}", pid, frame.fresh_match,
+        )
         # A fresh query supersedes the previous one for the same pid.
         # Fire the supersede hook on every non-first query for the pid,
         # regardless of whether the prior brain task is still running.
@@ -221,6 +229,7 @@ class BrainProcessor(FrameProcessor):
         # the override lands while the prior task's downstream state is
         # still coherent.
         if pid in self._seen_query:
+            logger.info("brain superseded pid={!r}", pid)
             try:
                 await self.on_query_superseded(pid)
             except Exception:
@@ -264,6 +273,7 @@ class BrainProcessor(FrameProcessor):
             # the response, and a half-assembled data echo would
             # contradict the new turn that's about to render.
             if not cancelled:
+                logger.info("brain query complete pid={!r}", pid)
                 try:
                     await self.push_frame(BrainResponseEndFrame(
                         pid    = pid,

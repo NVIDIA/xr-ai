@@ -139,6 +139,7 @@ class VoiceGateProcessor(FrameProcessor):
         if fresh_match:
             # Fire-and-forget: chime is a UX nicety; failure to play
             # must not delay the query dispatch downstream.
+            logger.info("chime fire pid={!r}", pid)
             try:
                 await self._gate.play_chime(pid)
             except Exception:
@@ -151,6 +152,7 @@ class VoiceGateProcessor(FrameProcessor):
         ))
 
     async def _on_gate_stop(self, pid: str) -> None:
+        logger.info("stop ack emit pid={!r}", pid)
         await self.push_frame(InterruptionFrame())
         ack = TextFrame(text=_STOP_ACK_TEXT)
         ack.transport_destination = pid
@@ -169,6 +171,7 @@ class VoiceGateProcessor(FrameProcessor):
             # listening" would be intrusive on samples that never opted
             # into a wake word, so stay silent.
             return
+        logger.info("greeting emit pid={!r}", pid)
         frame = TextFrame(text=greeting)
         frame.transport_destination = pid
         await self.push_frame(frame)

@@ -159,6 +159,10 @@ class StreamingTtsProcessor(FrameProcessor):
             return
         if not frame.text:
             return
+        logger.info(
+            "data text echo pid={!r} topic={!r} len={}",
+            frame.pid, self._text_topic, len(frame.text),
+        )
         try:
             await self._transport.send_return_data(DataMessage(
                 participant_id = frame.pid,
@@ -201,6 +205,7 @@ class StreamingTtsProcessor(FrameProcessor):
                 await self._dispatch_sentence(sentence, pid=pid)
 
     async def _dispatch_sentence(self, sentence: str, *, pid: str) -> None:
+        logger.info("tts sentence dispatch pid={!r} len={}", pid, len(sentence))
         queue = self._ensure_sender()
         task  = asyncio.create_task(
             self._tts.synthesize(sentence),
@@ -265,6 +270,14 @@ class StreamingTtsProcessor(FrameProcessor):
         the stop is immediate.
         """
         self._pending = ""
+        # Snapshot the target pid + queue length before tearing down so
+        # the user-facing log carries useful breadcrumbs (which
+        # participant was being addressed, how much queued audio is
+        # about to be dropped) without exposing transcript content.
+        target_pid = ""
+        if self._transport is not None:
+            target_pid = self._transport.target_participant
+        queue_len = self._sender_queue.qsize() if self._sender_queue is not None else 0
         if self._sender_task is not None and not self._sender_task.done():
             self._sender_task.cancel()
             try:
@@ -283,6 +296,9 @@ class StreamingTtsProcessor(FrameProcessor):
                     continue
                 task, _ = item
                 task.cancel()
+        logger.info(
+            "tts sender drained pid={!r} queue_len={}", target_pid, queue_len,
+        )
         self._sender_queue = None
         self._sender_task  = None
 
@@ -295,6 +311,7 @@ class StreamingTtsProcessor(FrameProcessor):
         if self._transport is not None:
             pid = self._transport.target_participant
             if pid:
+                logger.info("hub return-audio flushed pid={!r}", pid)
                 try:
                     await self._transport.endpoint.flush_return_audio(pid)
                 except Exception:

@@ -147,10 +147,20 @@ class VoiceGate:
         # other utterance is a fresh query.
         if self._magic_re is None:
             if STOP_RE.match(text):
+                logger.info(
+                    "gate decision pid=%r kind=STOP fresh_match=False "
+                    "followup_window_open=False",
+                    pid,
+                )
                 logger.info("stop bypass pid=%r (text suppressed)", pid)
                 logger.debug("stop bypass pid=%r %r", pid, text[:80])
                 await self._invoke(self._on_stop_h, "on_stop", pid)
                 return
+            logger.info(
+                "gate decision pid=%r kind=DISPATCH fresh_match=True "
+                "followup_window_open=False",
+                pid,
+            )
             logger.info("audio query pid=%r (text suppressed)", pid)
             logger.debug("audio query pid=%r %r", pid, text[:80])
             await self._invoke(self._on_query_h, "on_query", pid, text, True)
@@ -166,6 +176,11 @@ class VoiceGate:
         #    ("stop") AND on the magic-phrase-stripped tail ("hey agent,
         #    stop") so the fast path triggers either way.
         if STOP_RE.match(stop_candidate):
+            logger.info(
+                "gate decision pid=%r kind=STOP fresh_match=%s "
+                "followup_window_open=%s",
+                pid, matched_magic, in_followup,
+            )
             logger.info("stop bypass pid=%r (text suppressed)", pid)
             logger.debug("stop bypass pid=%r %r", pid, stop_candidate[:80])
             self._followup_until.pop(pid, None)
@@ -178,6 +193,11 @@ class VoiceGate:
                 # 2. Fresh magic-phrase match with a payload — dispatch
                 #    immediately and close the window so ambient speech
                 #    after the answer must re-introduce a phrase.
+                logger.info(
+                    "gate decision pid=%r kind=DISPATCH fresh_match=True "
+                    "followup_window_open=%s",
+                    pid, in_followup,
+                )
                 self._followup_until.pop(pid, None)
                 logger.info("audio query pid=%r (text suppressed)", pid)
                 logger.debug("audio query pid=%r %r", pid, query[:80])
@@ -185,6 +205,11 @@ class VoiceGate:
                 return
             # 4. Magic phrase with no follow-up payload — open the window
             #    so the user's next utterance counts as the actual query.
+            logger.info(
+                "gate decision pid=%r kind=PHRASE_ONLY fresh_match=True "
+                "followup_window_open=%s",
+                pid, in_followup,
+            )
             self._followup_until[pid] = now_mono + self._cfg.followup_grace_s
             logger.info(
                 "magic phrase only pid=%r — awaiting followup (%.1fs)",
@@ -198,6 +223,11 @@ class VoiceGate:
             #    window. Refreshing it on accept happens implicitly: the
             #    consumer can decide to re-open by calling back via a
             #    fresh magic-phrase match.
+            logger.info(
+                "gate decision pid=%r kind=DISPATCH fresh_match=False "
+                "followup_window_open=True",
+                pid,
+            )
             self._followup_until.pop(pid, None)
             logger.info("followup query pid=%r (text suppressed)", pid)
             logger.debug("followup query pid=%r %r", pid, text[:80])
@@ -205,6 +235,11 @@ class VoiceGate:
             return
 
         # 5. Default drop — log and close the window defensively.
+        logger.info(
+            "gate decision pid=%r kind=DROP fresh_match=False "
+            "followup_window_open=%s",
+            pid, in_followup,
+        )
         logger.info("drop pid=%r (text suppressed)", pid)
         logger.debug("drop pid=%r %r", pid, text[:80])
         self._followup_until.pop(pid, None)
