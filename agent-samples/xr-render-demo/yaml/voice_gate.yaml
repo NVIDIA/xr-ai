@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# xr-render-demo voice gate configuration.
+#
+# magic_phrases — strict-prefix opt-in words; empty list disables the gate so
+#                 every STT transcript is dispatched (the pre-migration
+#                 always-on behavior).  Add phrases (e.g. ["agent", "hey agent"])
+#                 to require a wake word.
+# listening_chime — when true AND magic_phrases is non-empty, a short two-tone
+#                   chime plays on fresh magic-phrase matches.
+# followup_grace_s — seconds after a phrase match during which the next
+#                    utterance from the same participant bypasses the gate.
+magic_phrases: []
+listening_chime: true
+followup_grace_s: 5.0
