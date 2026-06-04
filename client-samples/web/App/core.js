@@ -52,6 +52,13 @@ export function isQuestBrowser() {
 // Camera enumeration
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Chromium appends the USB vendor:product id to camera labels, e.g.
+// "MacBook Pro Camera (0000:0001)". It's a disambiguator, not part of the
+// name — strip the trailing hex identifier so the picker reads cleanly.
+function stripCameraId(label) {
+  return (label || '').replace(/\s*\([0-9a-fA-F]{4}:[0-9a-fA-F]{4}\)\s*$/, '').trim();
+}
+
 /**
  * Queries available video input devices and updates `model.cameras`.
  *
@@ -82,7 +89,7 @@ export async function enumerateCameras(model, render) {
 
     const list = cameras.map((d, i) => ({
       deviceId: d.deviceId,
-      label:    d.label || `Camera ${i + 1}`,
+      label:    stripCameraId(d.label) || `Camera ${i + 1}`,
     }));
 
     model.cameras = list;
@@ -131,7 +138,6 @@ export function createBaseModel() {
     selectedCameraId:  null,
     /** @type {string|null} */
     agentStatus:       null,
-    cameraOnDemand:    false,
     /** @type {Array<{id: string, text: string, timestamp: Date}>} */
     receivedMessages:  [],
     /** @type {string|null} */
@@ -240,10 +246,6 @@ export function renderBase(model) {
     cameraStatus.className   = 'status-text status-idle';
   }
 
-  // ── Camera on demand toggle ────────────────────────────────────────────────
-  const codCheckbox = $('camera-on-demand');
-  if (codCheckbox) codCheckbox.checked = model.cameraOnDemand;
-
   // ── Camera selector ────────────────────────────────────────────────────────
   const selectRow = $('camera-select-row');
   const camSelect = $('camera-select');
@@ -322,13 +324,21 @@ export function resolvedTokenURL(model) {
  *   render: () => void,
  *   showError: (msg: string) => void,
  *   enumerateCameras: () => Promise<void>,
+ *   startCamera?: () => Promise<void>,
  *   stopCamera: () => Promise<void>,
  *   onStateChange?: (state: string) => void,
  *   onDataReceived?: (topic: string, data: Uint8Array) => boolean,
  * }} opts
+ *   `startCamera` / `stopCamera` are caller-supplied wrappers used by the
+ *   on-demand `clientControl` handler so client-specific side effects (e.g.
+ *   the local `<video>` preview in `web/App/app.js`) run on agent-triggered
+ *   start / stop. When omitted, the on-demand start falls back to the bare
+ *   transport-level `startCamera` (sufficient for clients without a local
+ *   preview, such as `web-xr`).
  */
 export async function connect(model, {
-  render, showError, enumerateCameras: _ec, stopCamera: _sc,
+  render, showError, enumerateCameras: _ec,
+  startCamera: _startCamera, stopCamera: _sc,
   onStateChange, onDataReceived,
 }) {
   model.lastError        = null;
@@ -381,14 +391,9 @@ export async function connect(model, {
     // Let the caller intercept topics first (returns true to suppress list append).
     if (onDataReceived?.(topic, data)) return;
 
+    // Always-on streaming: clientControl signals from the agent are
+    // silently dropped and never surfaced in the message list.
     if (topic === 'clientControl') {
-      if (model.cameraOnDemand) {
-        try {
-          const { action } = JSON.parse(new TextDecoder().decode(data));
-          if (action === 'startCamera' && !model.isCameraActive) _ec && startCamera(model, { render, showError, enumerateCameras: _ec });
-          if (action === 'stopCamera'  &&  model.isCameraActive) _sc?.();
-        } catch { /* malformed — ignore */ }
-      }
       return;
     }
 
@@ -505,7 +510,6 @@ export async function stopCamera(model, render, showError) {
  * @param {() => Promise<void>} _startCamera  bound startCamera for the caller
  */
 export async function sendPing(model, _startCamera) {
-  if (model.cameraOnDemand && !model.isCameraActive) _startCamera();
   try {
     await model.session?.send('ping');
   } catch { /* ignore */ }
@@ -575,10 +579,6 @@ export function wireBaseEvents(model, actions) {
 
   $('camera-select').addEventListener('change', (e) => {
     model.selectedCameraId = e.target.value || null;
-  });
-
-  $('camera-on-demand')?.addEventListener('change', (e) => {
-    model.cameraOnDemand = e.target.checked;
   });
 
   $('camera-btn').addEventListener('click', () => {
