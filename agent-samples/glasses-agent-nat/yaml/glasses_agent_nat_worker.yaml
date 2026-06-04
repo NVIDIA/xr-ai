@@ -19,6 +19,20 @@ condenser_interval_s: 60.0
 transcript_source: glasses-agent-nat
 guidance_check_interval_s: 2.0
 
+# Seconds skipped at the start of a recording while the wearer is still
+# positioning, before key-frame capture begins.
+recording_warmup_s: 2.0
+
+# Consecutive grounded "complete" verdicts required before guidance
+# auto-advances to the next step. Higher = more cautious (fewer premature
+# advances), lower = snappier.
+guidance_advance_confirmations: 2
+
+# When true, the auto-advance monitor skips the grounded VLM completion check
+# on cycles where the live camera frame has not advanced since the last check
+# (same frame ⇒ same verdict). Saves VLM bandwidth during guidance.
+guidance_skip_static_frames: true
+
 # Seconds after a demo finishes during which ambiguous follow-ups
 # (including STT-mangled ones like "the gym") default to guiding the
 # wearer through that just-recorded demo.

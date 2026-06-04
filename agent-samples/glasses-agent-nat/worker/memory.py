@@ -65,6 +65,41 @@ class Observation:
 
 
 @dataclass
+class StepKeyInfo:
+    """Structured distillation of a step's long text description.
+
+    Turns the free-text instruction + teacher caption into the few facts that
+    actually define the step, so the student-monitoring VLM checks ONLY these
+    and is not thrown off by irrelevant differences (background, lighting,
+    camera angle, clothing, room). ``ignore`` names details that explicitly
+    must not affect the verdict.
+    """
+    objects:      list[str] = field(default_factory=list)  # key objects, e.g. ["VR headset", "strap"]
+    action:       str = ""   # the action performed, e.g. "place on head"
+    position:     str = ""   # spatial relationship / placement to verify
+    target_state: str = ""   # the end state that defines "done", e.g. "headset worn, strap snug"
+    ignore:       list[str] = field(default_factory=list)  # irrelevant details to disregard
+
+    def is_empty(self) -> bool:
+        return not (self.objects or self.action or self.position or self.target_state)
+
+    def as_prompt_block(self) -> str:
+        """Render the key info as a compact block for VLM/LLM prompts."""
+        lines: list[str] = []
+        if self.objects:
+            lines.append(f"  Key objects: {', '.join(self.objects)}")
+        if self.action:
+            lines.append(f"  Action: {self.action}")
+        if self.position:
+            lines.append(f"  Position/placement: {self.position}")
+        if self.target_state:
+            lines.append(f"  Target end-state: {self.target_state}")
+        ignore = list(self.ignore) or ["background", "lighting", "camera angle"]
+        lines.append(f"  IGNORE (must not affect the verdict): {', '.join(ignore)}")
+        return "\n".join(lines)
+
+
+@dataclass
 class DemoStep:
     step_number:     int
     timestamp_us:    int
@@ -75,6 +110,10 @@ class DemoStep:
     # finalization time. The completion parser uses these as the authoritative
     # checklist; teacher_caption only labels the reference image.
     expected_requirements: list[str] = field(default_factory=list)
+    # Structured key info distilled from the description at finalize time.
+    # When present, student monitoring checks ONLY these facts (objects /
+    # action / position / target_state) and ignores irrelevant differences.
+    key_info: StepKeyInfo | None = None
     reference_image_paths: list[str] = field(default_factory=list)
     reference_reliable: bool = True
     text_video_mismatch: bool = False

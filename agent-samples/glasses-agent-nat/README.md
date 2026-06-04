@@ -32,12 +32,18 @@ still stops speech after the transcript is accepted.
 To record a demonstration, say `start recording <task name>` or
 `record demo <task name>`, then say `stop recording` when finished. The worker
 owns recording state and sends bounded analysis tasks through NAT. During
-guidance, the worker checks the student's current frame on a fixed cadence and
-uses an instruction-matched teacher reference frame from the same step window
-via `vlm_mcp.ask_frames` when available. Live student frames must be newer than
-the current spoken step before they can advance guidance. Two grounded correct
-checks advance to the next step; repeated grounded mismatches produce a spoken
-correction.
+guidance, the worker checks the student's current frame on a fixed cadence,
+guided by each step's structured **key info** (objects/action/position/
+target_state). The check is two-tier: it first compares the live frame to the
+teacher reference frame via `vlm_mcp.ask_frames` (judging only the key info,
+ignoring background/lighting/camera angle); if that fails it checks whether the
+live frame satisfies the key info as text via `vlm_mcp.ask_image`; if both
+fail it speaks a key-info-grounded correction (e.g. "headset should be on your
+head"). Live student frames must be newer than the current spoken step before
+they can advance guidance, and the monitor skips redundant checks when the
+frame has not changed (`guidance_skip_static_frames`). A configurable number of
+grounded correct checks (`guidance_advance_confirmations`, default 2) advances
+to the next step.
 
 ## NAT Workflow
 
@@ -52,10 +58,14 @@ correction.
 - `glasses_agent_tools` as the LLM-facing custom function group exposing
   `describe_current_view`, a composite current-frame VLM tool.
 - `glasses_worker_tasks` as an internal custom function group for
-  `analyze_recording`, `derive_step_requirements`, `condense_observations`, and
-  `check_guidance_step_complete`. The guidance task receives the current
-  `DemoStep.image_path` and uses it as Image 1 when comparing against the live
-  student frame.
+  `analyze_recording`, `derive_step_requirements`, `derive_step_key_info`,
+  `condense_observations`, and `check_guidance_step_complete`. At finalize
+  time each step is distilled into structured **key info**
+  (`objects`/`action`/`position`/`target_state` + an `ignore` list) stored on
+  `DemoStep.key_info`. The guidance task receives the current
+  `DemoStep.image_path` (Image 1) and the step's key info, and judges ONLY the
+  key objects/action/placement — differences in the `ignore` list
+  (background, lighting, camera angle, clothing) must not change the verdict.
 - `workflow` as `tool_calling_agent` with `handle_tool_errors: true` and
   `max_iterations: 8`.
 

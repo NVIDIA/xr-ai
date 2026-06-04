@@ -29,6 +29,18 @@ class WorkerConfig:
     transcript_source:         str
     guidance_check_interval_s: float  # how often to check step completion during guidance
 
+    # Recording: seconds skipped at the start of a demo while the wearer is
+    # still positioning before key-frame capture begins.
+    recording_warmup_s: float
+    # Monitoring: number of consecutive grounded "complete" verdicts required
+    # before guidance auto-advances to the next step. Higher = more cautious.
+    guidance_advance_confirmations: int
+    # Monitoring: when True, the auto-advance monitor skips the (expensive)
+    # grounded VLM completion check on cycles where the live camera frame has
+    # not advanced since the last check — the verdict on an identical frame is
+    # identical, so this saves VLM bandwidth without changing behavior.
+    guidance_skip_static_frames: bool
+
     # Demo→guidance freshness window: while a saved demo is this recent,
     # ambiguous post-demo utterances default to "guide me through it".
     guidance_freshness_window_s: float
@@ -66,6 +78,9 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         condenser_interval_s        = float(data.get("condenser_interval_s",     60.0)),
         transcript_source           = data.get("transcript_source",      "glasses-agent-nat"),
         guidance_check_interval_s   = float(data.get("guidance_check_interval_s",   2.0)),
+        recording_warmup_s          = float(data.get("recording_warmup_s",           2.0)),
+        guidance_advance_confirmations = max(1, int(data.get("guidance_advance_confirmations", 2))),
+        guidance_skip_static_frames = bool(data.get("guidance_skip_static_frames",   True)),
         guidance_freshness_window_s = float(data.get("guidance_freshness_window_s", 120.0)),
         silence_duration   = float(data.get("silence_duration",  0.8)),
         min_speech         = float(data.get("min_speech",        0.15)),

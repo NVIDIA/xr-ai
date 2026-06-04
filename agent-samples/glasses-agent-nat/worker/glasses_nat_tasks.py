@@ -18,6 +18,8 @@ from glasses_nat_schemas import AnalyzeRecordingInput
 from glasses_nat_schemas import AnalyzeRecordingOutput
 from glasses_nat_schemas import CondenseObservationsInput
 from glasses_nat_schemas import CondenseObservationsOutput
+from glasses_nat_schemas import DeriveStepKeyInfoInput
+from glasses_nat_schemas import DeriveStepKeyInfoOutput
 from glasses_nat_schemas import DeriveStepRequirementsInput
 from glasses_nat_schemas import DeriveStepRequirementsOutput
 from glasses_nat_schemas import FrameEntry
@@ -576,6 +578,125 @@ async def derive_step_requirements_impl(
     return DeriveStepRequirementsOutput(requirements=reqs)
 
 
+async def derive_step_key_info_impl(
+    request: DeriveStepKeyInfoInput,
+    *,
+    agent_llm_server: str,
+) -> DeriveStepKeyInfoOutput:
+    """Distill one step's instruction + teacher caption into structured key info.
+
+    Output fields name only what defines the step — the objects, the action,
+    the spatial placement, and the end-state to verify — plus an ``ignore``
+    list of details that must NOT affect the student-monitoring verdict
+    (background, lighting, camera angle, …). This is what makes monitoring
+    tolerant of irrelevant differences.
+    """
+    instruction = request.instruction.strip()
+    if not instruction:
+        return DeriveStepKeyInfoOutput()
+    hint = request.teacher_caption.strip()
+    reqs = [r.strip() for r in request.requirements if r and r.strip()]
+    hint_block = f"\nTEACHER FRAME CAPTION (visual authority): {hint}" if hint else ""
+    req_block = ("\nDERIVED CHECKS: " + "; ".join(reqs)) if reqs else ""
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You distill ONE demonstration step into the few facts that "
+                "define it, so a vision model can later check a student "
+                "without being distracted by irrelevant differences.\n\n"
+                "Output ONLY this JSON object, nothing else:\n"
+                "{\n"
+                '  "objects": ["the task-relevant object(s), by name + color/shape if helpful"],\n'
+                '  "action": "the single action performed, imperative (e.g. \\"place on head\\")",\n'
+                '  "position": "the spatial relationship/placement that matters (e.g. \\"strap around back of head\\")",\n'
+                '  "target_state": "the visible end-state that means this step is done",\n'
+                '  "ignore": ["irrelevant details a checker must disregard"]\n'
+                "}\n\n"
+                "Rules:\n"
+                "  - Prefer the teacher frame caption for object/color/state when it conflicts with the instruction.\n"
+                "  - objects: 1-3 items, only task-relevant ones.\n"
+                "  - target_state describes what is VISIBLE when done, not the action verb.\n"
+                "  - ALWAYS include at least: background, lighting, camera angle, "
+                "and the wearer's clothing in ignore.\n"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"INSTRUCTION: {instruction}{hint_block}{req_block}\n\nOutput the JSON.",
+        },
+    ]
+    try:
+        raw = await _post_chat(
+            base_url=agent_llm_server,
+            messages=messages,
+            max_tokens=256,
+            temperature=0.0,
+            timeout=20.0,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+    except Exception:
+        log.exception("derive_step_key_info: LLM call failed")
+        return DeriveStepKeyInfoOutput()
+    content = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+    json_str = extract_json(content or raw)
+    if not json_str:
+        log.warning("derive_step_key_info: JSON parse failed: %s", raw[:300])
+        return DeriveStepKeyInfoOutput()
+    try:
+        obj = json.loads(json_str)
+    except Exception:
+        log.warning("derive_step_key_info: invalid JSON: %s", json_str[:300])
+        return DeriveStepKeyInfoOutput()
+    if not isinstance(obj, dict):
+        return DeriveStepKeyInfoOutput()
+
+    def _strlist(value: Any, limit: int) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        out = [str(v).strip() for v in value if str(v).strip()]
+        return out[:limit]
+
+    ignore = _strlist(obj.get("ignore"), 8)
+    for default in ("background", "lighting", "camera angle"):
+        if default not in [i.lower() for i in ignore]:
+            ignore.append(default)
+    return DeriveStepKeyInfoOutput(
+        objects=_strlist(obj.get("objects"), 3),
+        action=str(obj.get("action", "")).strip(),
+        position=str(obj.get("position", "")).strip(),
+        target_state=str(obj.get("target_state", "")).strip(),
+        ignore=ignore,
+    )
+
+
+def _key_info_block(
+    *,
+    objects: list[str],
+    action: str,
+    position: str,
+    target_state: str,
+    ignore: list[str],
+) -> str:
+    """Render flat key-info args into a compact prompt block, or '' if empty."""
+    lines: list[str] = []
+    objs = [o for o in objects if o and o.strip()]
+    if objs:
+        lines.append(f"  Key objects: {', '.join(objs)}")
+    if action.strip():
+        lines.append(f"  Action: {action.strip()}")
+    if position.strip():
+        lines.append(f"  Position/placement: {position.strip()}")
+    if target_state.strip():
+        lines.append(f"  Target end-state: {target_state.strip()}")
+    if not lines:
+        return ""
+    ig = [i for i in ignore if i and i.strip()] or ["background", "lighting", "camera angle"]
+    lines.append(f"  IGNORE (must NOT affect the verdict): {', '.join(ig)}")
+    return "KEY INFO (judge ONLY these; ignore everything else):\n" + "\n".join(lines)
+
+
 _TEACHER_EVIDENCE_MARKERS = ("image 1", "teacher", "reference")
 _NEGATIVE_EVIDENCE_MARKERS = (
     "missing", "not visible", "no longer present", "not present", "absent",
@@ -703,6 +824,26 @@ def _issue_from_failure(raw: str, reject_reason: str, missing: list[str]) -> str
     return ""
 
 
+def _key_info_correction(
+    objects: list[str], action: str, position: str, target_state: str,
+) -> str:
+    """Build a spoken-friendly 'what's wrong' line from key info.
+
+    Used when both the image-to-image and image-to-text checks fail and the
+    VLM did not return a human-readable issue — the student still hears a
+    concrete correction grounded in the step's key facts.
+    """
+    obj = (objects[0] if objects else "").strip()
+    if target_state.strip():
+        ts = target_state.strip()
+        return f"{obj} should be {ts}" if obj else f"I don't see {ts} yet"
+    if position.strip():
+        return f"{obj or 'it'} should be {position.strip()}"
+    if action.strip():
+        return f"{action.strip()} isn't done yet"
+    return ""
+
+
 def _output_from_parse(
     *,
     completed: bool,
@@ -745,6 +886,11 @@ async def check_guidance_step_complete_impl(
     teacher_image_path: str = "",
     teacher_caption: str = "",
     min_live_timestamp_us: int = 0,
+    key_objects: list[str] | None = None,
+    key_action: str = "",
+    key_position: str = "",
+    key_target_state: str = "",
+    key_ignore: list[str] | None = None,
     get_latest_frame,
     ask_image,
     ask_frames=None,
@@ -762,6 +908,15 @@ async def check_guidance_step_complete_impl(
             timestamp_us=frame_ts,
             issue="Waiting for a fresh student frame.",
         )
+
+    key_block = _key_info_block(
+        objects=key_objects or [],
+        action=key_action,
+        position=key_position,
+        target_state=key_target_state,
+        ignore=key_ignore or [],
+    )
+    key_lines = f"{key_block}\n\n" if key_block else ""
 
     expected = [r.strip() for r in (expected_requirements or []) if r and str(r).strip()]
     if expected:
@@ -788,11 +943,13 @@ async def check_guidance_step_complete_impl(
             "Image 1 is the teacher's completed reference state for this step.\n"
             "Image 2 is the student's current state.\n"
             f"Teacher reference caption: {teacher_caption or 'not available'}\n"
+            f"{key_lines}"
             f"{checklist_lines}"
-            "First decide whether Image 2 is visually equivalent to Image 1 for "
-            "the task-relevant objects and spatial relationships. Minor camera "
-            "angle, lighting, hand position, and color-name differences are OK "
-            "when the arrangement matches.\n\n"
+            "Decide whether Image 2 matches Image 1 for the KEY INFO only — the "
+            "key objects, the action, and the spatial placement. Differences in "
+            "anything listed under IGNORE (background, lighting, camera angle, "
+            "distance, clothing, hand pose, color-name) MUST NOT change your "
+            "verdict: judge the step, not the scene.\n\n"
             "Output ONLY this JSON, no prose, no markdown:\n"
             "{\n"
             '  "observation": "<one sentence about Image 2>",\n'
@@ -845,11 +1002,14 @@ async def check_guidance_step_complete_impl(
     live_question = (
         f"INSTRUCTION: {instruction}\n"
         f"TEACHER CAPTION: {teacher_caption or 'not available'}\n"
+        f"{key_lines}"
         f"{checklist_lines}"
         "Look ONLY at this live student image.\n"
-        "Decide whether the live image satisfies the instruction. The teacher "
-        "caption and requirements are supporting hints; do not reject a correct "
-        "arrangement solely because wording differs.\n\n"
+        "Decide whether the live image satisfies the KEY INFO — the key "
+        "objects in the target end-state/placement, performing the action. The "
+        "teacher caption and requirements are supporting hints; do not reject a "
+        "correct arrangement because of wording, or because of anything listed "
+        "under IGNORE (background, lighting, camera angle, clothing).\n\n"
         "Output ONLY this JSON, no prose, no markdown:\n"
         "{\n"
         '  "observation": "<one sentence about what is in the live image>",\n'
@@ -891,6 +1051,15 @@ async def check_guidance_step_complete_impl(
         )
         else live_issue
     )
+    # Both image-to-image and image-to-text failed without a usable human
+    # correction — fall back to a key-info-grounded "what's wrong" line so the
+    # student hears something concrete instead of a parser reason.
+    if not final_issue or _parser_issue(final_issue):
+        ki_issue = _key_info_correction(
+            key_objects or [], key_action, key_position, key_target_state,
+        )
+        if ki_issue:
+            final_issue = ki_issue
     return _output_from_parse(
         completed=False,
         current_obs=current_obs,

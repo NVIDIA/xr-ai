@@ -40,6 +40,7 @@ from memory import (
     DemoStep,
     Observation,
     RecordedFrame,
+    StepKeyInfo,
     VoiceNote,
 )
 from nat_agent import NatAgentRunner
@@ -587,6 +588,11 @@ class QueryProcessor:
         self._guidance_correction_state:    dict[str, object] = {}
         self._guidance_started_at_us:       int = 0
         self._guidance_step_spoken_at_us:   int = 0
+        # Timestamp of the live frame the auto-advance monitor last ran a
+        # grounded completion check against. Used to skip redundant VLM
+        # checks when the hub hasn't delivered a newer frame (the verdict on
+        # an identical frame is identical). Reset to 0 on each new step.
+        self._guidance_last_checked_live_ts: int = 0
 
         # Pending guidance disambiguation per pid. When we ask "did you
         # mean 1) X or 2) Y?", the next non-stop utterance from that pid
@@ -1173,6 +1179,7 @@ class QueryProcessor:
                 path    = frame.image_path  if frame and reliable else ""
                 caption = frame.description if frame and reliable else ""
                 requirements = await self._derive_step_requirements(instr, caption)
+                key_info = await self._extract_step_key_info(instr, caption, requirements)
                 demo.steps.append(DemoStep(
                     step_number           = i + 1,
                     timestamp_us          = ts,
@@ -1180,6 +1187,7 @@ class QueryProcessor:
                     image_path            = path,
                     teacher_caption       = caption,
                     expected_requirements = requirements,
+                    key_info              = key_info,
                     reference_image_paths = (
                         [f.image_path for f in [frame, *backups] if f is not None]
                         if reliable else []
@@ -1218,6 +1226,15 @@ class QueryProcessor:
                     f"{s.step_number}:[{', '.join(s.expected_requirements)}]"
                     for s in demo.steps
                 ),
+            )
+
+            _trace_log.info(
+                "STEP_KEY_INFO  %s",
+                " | ".join(
+                    f"{s.step_number}:obj={s.key_info.objects} act={s.key_info.action!r} "
+                    f"pos={s.key_info.position!r} state={s.key_info.target_state!r}"
+                    for s in demo.steps if s.key_info is not None
+                ) or "none",
             )
 
             response = f"Saved '{demo.name}' with {n} steps."
@@ -1310,6 +1327,40 @@ class QueryProcessor:
         if fallback:
             _trace_log.info("STEP_REQUIREMENTS_FALLBACK  %s", ", ".join(fallback))
         return fallback
+
+    async def _extract_step_key_info(
+        self, instruction: str, teacher_caption: str, requirements: list[str],
+    ) -> StepKeyInfo | None:
+        """Distill a step into structured key info via the NAT worker task.
+
+        Returns None on failure — guidance then falls back to the existing
+        instruction + requirements checklist (no regression).
+        """
+        if not instruction.strip():
+            return None
+        try:
+            result = await self._nat_runtime.call_tool(
+                "glasses_worker_tasks",
+                "derive_step_key_info",
+                {
+                    "instruction":     instruction,
+                    "teacher_caption": teacher_caption,
+                    "requirements":    list(requirements or []),
+                },
+            )
+        except Exception:
+            log.exception("derive_step_key_info call failed")
+            return None
+        if not isinstance(result, dict):
+            return None
+        info = StepKeyInfo(
+            objects=[str(o).strip() for o in result.get("objects", []) if str(o).strip()][:3],
+            action=str(result.get("action", "")).strip(),
+            position=str(result.get("position", "")).strip(),
+            target_state=str(result.get("target_state", "")).strip(),
+            ignore=[str(i).strip() for i in result.get("ignore", []) if str(i).strip()],
+        )
+        return None if info.is_empty() else info
 
     async def _select_reference_frame_with_vlm(
         self, instruction: str, candidates: list[RecordedFrame],
@@ -1751,6 +1802,7 @@ class QueryProcessor:
         self._guidance_consecutive_yes     = 0
         self._guidance_last_result         = {}
         self._guidance_correction_state    = {}
+        self._guidance_last_checked_live_ts = 0
         total       = len(demo.steps)
         step_num    = self._guidance_step + 1
         instruction = self._instruction_for_step(demo)
@@ -1777,31 +1829,51 @@ class QueryProcessor:
                 if self._guidance_demo is None:
                     break
 
+                step_idx = self._guidance_step
+                need = self._cfg.guidance_advance_confirmations
+
+                # Static-frame skip: if the hub hasn't delivered a newer live
+                # frame since the last grounded check, the verdict would be
+                # identical — skip the expensive VLM compare. Cheap metadata
+                # fetch only; leaves the yes-streak and correction state
+                # untouched, so it is strictly behavior-preserving.
+                if (self._cfg.guidance_skip_static_frames
+                        and self._guidance_last_checked_live_ts):
+                    live_ts = await self._latest_live_frame_ts(pid)
+                    if live_ts and live_ts == self._guidance_last_checked_live_ts:
+                        _trace_log.info(
+                            "GUIDANCE_MONITOR  step=%d  skip=static-frame  ts=%d",
+                            step_idx, live_ts,
+                        )
+                        continue
+
                 current_obs = len(self._memory._observations)
                 delta_since_last = current_obs - self._guidance_check_obs_baseline
                 self._guidance_check_obs_baseline = current_obs
 
-                step_idx = self._guidance_step
                 _trace_log.info(
-                    "GUIDANCE_MONITOR  step=%d  delta=%d  check=YES  need=2",
-                    step_idx, delta_since_last,
+                    "GUIDANCE_MONITOR  step=%d  delta=%d  check=YES  need=%d",
+                    step_idx, delta_since_last, need,
                 )
 
                 completed, has_evidence = await self._vlm_step_complete(
                     pid, require_reliable_reference=True,
                 )
+                checked_ts = int(self._guidance_last_result.get("timestamp_us", 0) or 0)
+                if checked_ts:
+                    self._guidance_last_checked_live_ts = checked_ts
                 if completed and has_evidence:
                     self._guidance_consecutive_yes += 1
                     self._guidance_correction_state = {}
                     _trace_log.info(
-                        "GUIDANCE_MONITOR  yes-count=%d/2  step=%d",
-                        self._guidance_consecutive_yes, step_idx,
+                        "GUIDANCE_MONITOR  yes-count=%d/%d  step=%d",
+                        self._guidance_consecutive_yes, need, step_idx,
                     )
-                    if self._guidance_consecutive_yes >= 2:
+                    if self._guidance_consecutive_yes >= need:
                         self._guidance_consecutive_yes = 0
                         _trace_log.info(
-                            "GUIDANCE_MONITOR  vlm-advance  step=%d  need=2",
-                            step_idx,
+                            "GUIDANCE_MONITOR  vlm-advance  step=%d  need=%d",
+                            step_idx, need,
                         )
                         await self._advance_guidance(pid)
                 else:
@@ -1821,6 +1893,23 @@ class QueryProcessor:
             log.exception("guidance monitor error")
         _trace_log.info("GUIDANCE_MONITOR  exit")
 
+    async def _latest_live_frame_ts(self, pid: str) -> int:
+        """Cheap metadata-only fetch of the latest live frame timestamp.
+
+        Used by the auto-advance monitor to detect whether a newer frame has
+        arrived since the last grounded check. Returns 0 when no frame is
+        available; never raises.
+        """
+        data = await self._call_video(
+            "get_latest_frame", {"participant_id": pid}, silent=True,
+        )
+        if isinstance(data, dict):
+            try:
+                return int(data.get("timestamp_us", 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+        return 0
+
     async def _guidance_completion_result(
         self, pid: str, *, require_reliable_reference: bool = False,
     ) -> dict:
@@ -1831,12 +1920,23 @@ class QueryProcessor:
         teacher_image_path = ""
         teacher_caption = ""
         reference_reliable = False
+        key_objects: list[str] = []
+        key_action = ""
+        key_position = ""
+        key_target_state = ""
+        key_ignore: list[str] = []
         if 0 <= self._guidance_step < len(self._guidance_demo.steps):
             step = self._guidance_demo.steps[self._guidance_step]
             expected_requirements = list(step.expected_requirements)
             reference_reliable = bool(step.reference_reliable and step.image_path)
             teacher_image_path = step.image_path if reference_reliable else ""
             teacher_caption = step.teacher_caption
+            if step.key_info is not None:
+                key_objects      = list(step.key_info.objects)
+                key_action       = step.key_info.action
+                key_position     = step.key_info.position
+                key_target_state = step.key_info.target_state
+                key_ignore       = list(step.key_info.ignore)
         if require_reliable_reference and not reference_reliable:
             result = {
                 "completed": False,
@@ -1870,6 +1970,11 @@ class QueryProcessor:
                         "teacher_image_path":    teacher_image_path,
                         "teacher_caption":       teacher_caption,
                         "min_live_timestamp_us": min_live_timestamp_us,
+                        "key_objects":           key_objects,
+                        "key_action":            key_action,
+                        "key_position":          key_position,
+                        "key_target_state":      key_target_state,
+                        "key_ignore":            key_ignore,
                     },
                     participant_id=pid,
                 ),

@@ -433,7 +433,11 @@ class GlassesAgent:
 
                 if is_recording and not was_recording:
                     self._rec_last_ts    = 0
-                    self._rec_warmup_end = _now_us() + 2_000_000  # 2s warmup
+                    # Skip the configured warmup window while the wearer is
+                    # still positioning before they start the first step.
+                    self._rec_warmup_end = _now_us() + int(
+                        self._cfg.recording_warmup_s * 1_000_000
+                    )
                 was_recording = is_recording
 
                 # Recording capture is not gated by _user_query_active —

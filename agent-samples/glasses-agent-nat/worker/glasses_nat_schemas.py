@@ -55,6 +55,20 @@ class DeriveStepRequirementsOutput(BaseModel):
     requirements: list[str] = Field(default_factory=list)
 
 
+class DeriveStepKeyInfoInput(BaseModel):
+    instruction: str
+    teacher_caption: str = ""
+    requirements: list[str] = Field(default_factory=list)
+
+
+class DeriveStepKeyInfoOutput(BaseModel):
+    objects: list[str] = Field(default_factory=list)
+    action: str = ""
+    position: str = ""
+    target_state: str = ""
+    ignore: list[str] = Field(default_factory=list)
+
+
 class GuidanceStepInput(BaseModel):
     participant_id: str
     instruction: str
@@ -62,6 +76,13 @@ class GuidanceStepInput(BaseModel):
     teacher_image_path: str = ""
     teacher_caption: str = ""
     min_live_timestamp_us: int = 0
+    # Structured key info (see memory.StepKeyInfo). When present, the check
+    # is guided by these facts and ignores irrelevant visual differences.
+    key_objects: list[str] = Field(default_factory=list)
+    key_action: str = ""
+    key_position: str = ""
+    key_target_state: str = ""
+    key_ignore: list[str] = Field(default_factory=list)
 
 
 class StepCheck(BaseModel):
