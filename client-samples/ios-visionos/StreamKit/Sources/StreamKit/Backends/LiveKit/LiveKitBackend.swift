@@ -102,11 +102,28 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         room.delegates.add(delegate: self)
 
         let roomOptions = RoomOptions(stopLocalTrackOnUnpublish: true)
+        // Audio isolation: when hubIdentity is set, disable auto-subscribe and
+        // subscribe only to the hub participant's tracks (post-connect below +
+        // the didPublishTrack delegate), so a client never receives another
+        // participant's microphone.
         let connectOptions = ConnectOptions(
+            autoSubscribe: config.hubIdentity == nil,
             socketConnectTimeoutInterval: 5,   // fail fast if the host is unreachable
             primaryTransportConnectTimeout: 5  // fail fast if ICE/DTLS stalls
         )
         try await room.connect(url: url, token: token, connectOptions: connectOptions, roomOptions: roomOptions)
+
+        // Subscribe to any hub tracks already published before we connected.
+        if let hub = config.hubIdentity {
+            let hubID = Participant.Identity(from: hub)
+            for participant in room.remoteParticipants.values where participant.identity == hubID {
+                for publication in participant.trackPublications.values {
+                    if let remotePub = publication as? RemoteTrackPublication {
+                        try? await remotePub.set(subscribed: true)
+                    }
+                }
+            }
+        }
     }
 
     public func disconnect() async {
@@ -516,7 +533,7 @@ extension LiveKitBackend: RoomDelegate {
 
     public func room(
         _ room: Room,
-        participant _: RemoteParticipant?,
+        participant: RemoteParticipant?,
         didReceiveData data: Data,
         forTopic topic: String,
         encryptionType _: EncryptionType
@@ -529,7 +546,23 @@ extension LiveKitBackend: RoomDelegate {
             }
             return
         }
+        // Isolation: only surface data from the hub/agent, never from peer
+        // participants. nil hubIdentity keeps the legacy accept-from-anyone behaviour.
+        if let hub = config.hubIdentity, participant?.identity != Participant.Identity(from: hub) {
+            return
+        }
         onDataReceived?(topic, data)
+    }
+
+    public func room(
+        _ room: Room,
+        participant: RemoteParticipant,
+        didPublishTrack publication: RemoteTrackPublication
+    ) {
+        // Audio isolation: subscribe only to the hub participant's tracks.
+        guard let hub = config.hubIdentity,
+              participant.identity == Participant.Identity(from: hub) else { return }
+        Task { try? await publication.set(subscribed: true) }
     }
 }
 

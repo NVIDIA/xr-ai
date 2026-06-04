@@ -12,6 +12,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import io.livekit.android.ConnectOptions
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
@@ -19,6 +20,7 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
+import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.LocalVideoTrackOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,7 +103,26 @@ internal class LiveKitBackend(
         onConnectionStateChanged?.invoke(ConnectionState.CONNECTING)
 
         // room.connect() suspends until the room is fully connected or throws.
-        newRoom.connect(wsUrl, token)
+        // Audio isolation: when hubIdentity is set, disable auto-subscribe and
+        // subscribe only to the hub participant's tracks (below + in
+        // handleTrackPublished), so a client never receives another
+        // participant's microphone.
+        newRoom.connect(
+            wsUrl,
+            token,
+            ConnectOptions(autoSubscribe = config.hubIdentity == null),
+        )
+
+        // Subscribe to any hub tracks already published before we connected.
+        config.hubIdentity?.let { hub ->
+            newRoom.remoteParticipants.values
+                .filter { it.identity?.value == hub }
+                .forEach { p ->
+                    p.trackPublications.values.forEach { pub ->
+                        (pub as? RemoteTrackPublication)?.setSubscribed(true)
+                    }
+                }
+        }
 
         // Successfully connected.
         isConnected = true
@@ -181,6 +202,14 @@ internal class LiveKitBackend(
                 onConnectionStateChanged?.invoke(ConnectionState.DISCONNECTED)
             }
             is RoomEvent.DataReceived -> handleData(event)
+            is RoomEvent.TrackPublished -> {
+                // Audio isolation: subscribe only to the hub participant's tracks.
+                if (config.hubIdentity != null &&
+                    event.participant.identity?.value == config.hubIdentity
+                ) {
+                    (event.publication as? RemoteTrackPublication)?.setSubscribed(true)
+                }
+            }
             else -> {}
         }
     }
@@ -198,6 +227,12 @@ internal class LiveKitBackend(
             } catch (_: Exception) {
                 // Malformed payload — ignore.
             }
+            return
+        }
+
+        // Isolation: only surface data from the hub/agent, never from peer
+        // participants. null hubIdentity keeps the legacy accept-from-anyone behaviour.
+        if (config.hubIdentity != null && event.participant?.identity?.value != config.hubIdentity) {
             return
         }
 
