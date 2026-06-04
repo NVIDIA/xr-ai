@@ -246,7 +246,11 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
-        let options = DataPublishOptions(reliable: reliable)
+        // Address outbound data to the hub participant only so it is not
+        // broadcast to — and surfaced by — other participants sharing the room.
+        // Clients only ever talk to the hub. nil hubIdentity → whole-room broadcast.
+        let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
+        let options = DataPublishOptions(destinationIdentities: destinations, reliable: reliable)
         try await room.localParticipant.publish(data: data, options: options)
     }
 

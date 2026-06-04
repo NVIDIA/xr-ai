@@ -70,15 +70,25 @@ public struct LiveKitConfig: Sendable {
     /// The endpoint must return either a plain JWT string or `{ "token": "eyJ…" }`.
     public var tokenURL: URL?
 
+    /// Identity of the server-side hub participant the agent publishes through
+    /// (the LiveKit connector — `xr-hub-connector` by default, see
+    /// `server-runtime/.../transport/livekit/config.py`). Outbound data is
+    /// addressed only to this identity so it is never delivered to peer
+    /// participants in the same room. Set to `nil` to broadcast to the whole
+    /// room (the pre-isolation behaviour).
+    public var hubIdentity: String?
+
     public init(
         host: String,
         port: Int = 8080,
         token: String? = nil,
-        tokenURL: URL? = nil
+        tokenURL: URL? = nil,
+        hubIdentity: String? = "xr-hub-connector"
     ) {
         self.host = host
         self.port = port
         self.token = token
         self.tokenURL = tokenURL
+        self.hubIdentity = hubIdentity
     }
 }

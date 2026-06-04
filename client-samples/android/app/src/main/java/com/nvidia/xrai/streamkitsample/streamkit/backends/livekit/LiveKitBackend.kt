@@ -16,6 +16,7 @@ import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
+import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
 import io.livekit.android.room.track.LocalVideoTrackOptions
@@ -153,11 +154,14 @@ internal class LiveKitBackend(
 
     override suspend fun send(data: ByteArray, reliable: Boolean) {
         if (!isConnected) throw StreamError.NotConnected
-        // DataPublishOptions carries reliability and optional topic.
-        // The hub reads the data channel payload directly — no topic encoding needed.
+        // Address outbound data to the hub participant only so it is not
+        // broadcast to — and surfaced by — other participants sharing the room.
+        // Clients only ever talk to the hub. null hubIdentity → whole-room broadcast.
+        val identities = config.hubIdentity?.let { listOf(Participant.Identity(it)) }
         room?.localParticipant?.publishData(
             data,
             if (reliable) DataPublishReliability.RELIABLE else DataPublishReliability.LOSSY,
+            identities = identities,
         )
     }
 
