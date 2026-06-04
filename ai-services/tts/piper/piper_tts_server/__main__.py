@@ -41,6 +41,12 @@ from xr_ai_logging import setup_logging
 _DEFAULT_PORT   = 8105
 _HF_REPO        = "rhasspy/piper-voices"
 
+# Exit code for "the voice could not be obtained for environmental reasons"
+# (offline with an empty cache, or a transient HuggingFace download failure),
+# as distinct from a genuine misconfiguration (unknown voice name → exit 1).
+# Callers/tests can treat this as retry-or-skip rather than a hard failure.
+_EXIT_VOICE_UNAVAILABLE = 3
+
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
     raw = cfg.get("model_cache", "../models")
@@ -72,9 +78,15 @@ def _hf_path_for_voice(voice: str) -> tuple[str, str]:
 def _ensure_voice(voice: str, cache_dir: Path) -> tuple[Path, Path]:
     """Return (onnx_path, json_path), downloading from HF if necessary.
 
-    Failures are surfaced as a clear single-line error and SystemExit(1) at
+    Failures are surfaced as a clear single-line error and SystemExit at
     startup — without this, a typo in the voice name only manifests as a
     cryptic huggingface_hub stack trace on the first /v1/audio/speech call.
+
+    Exit codes:
+      1  unknown voice name / repo (a misconfiguration — fix the config).
+      3  voice unavailable for environmental reasons: offline with an empty
+         cache, or a transient HF download failure (network / rate-limit).
+         Retryable, not a code bug — see ``_EXIT_VOICE_UNAVAILABLE``.
     """
     from huggingface_hub import hf_hub_download
     from huggingface_hub.errors import (
@@ -105,7 +117,19 @@ def _ensure_voice(voice: str, cache_dir: Path) -> tuple[Path, Path]:
             "or remove the offline restriction.",
             voice, hf_cache,
         )
-        sys.exit(1)
+        sys.exit(_EXIT_VOICE_UNAVAILABLE)
+    except Exception as exc:
+        # Any other huggingface_hub error (HfHubHTTPError, connection reset,
+        # read timeout, 429 rate-limit, …) is a transient download problem,
+        # not a misconfiguration. Surface a clear single line and exit with the
+        # retryable code instead of dumping a raw traceback as exit 1.
+        logger.error(
+            "Could not download voice {!r} from {} ({}: {}). This is usually a "
+            "transient network or HuggingFace availability problem — retry, or "
+            "pre-fetch the voice on a connected host.",
+            voice, _HF_REPO, exc.__class__.__name__, exc,
+        )
+        sys.exit(_EXIT_VOICE_UNAVAILABLE)
     logger.info("Voice files ready")
     return onnx_path, json_path
 
