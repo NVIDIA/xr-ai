@@ -283,6 +283,9 @@ class StreamingTtsProcessor(FrameProcessor):
             try:
                 await self._sender_task
             except asyncio.CancelledError:
+                # Expected: we cancelled this task ourselves; awaiting it
+                # raises CancelledError, which we intentionally swallow so
+                # interrupt drain completes cleanly.
                 pass
         # Drop any tasks still parked in the queue so they don't keep
         # running and emit audio after the interrupt.
