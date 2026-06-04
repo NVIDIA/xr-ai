@@ -17,8 +17,10 @@ what a deployed pipeline will see.
 from __future__ import annotations
 
 import asyncio
+import gc
 import io
 import wave
+import warnings
 from typing import AsyncIterator, Sequence
 
 import numpy as np
@@ -532,6 +534,68 @@ async def test_vad_stt_stop_probe_disabled_when_setting_zero(monkeypatch):
     # would gate out the duplicate.)
     assert not any(isinstance(f, InterruptionFrame) for f in sink.frames), (
         "probe must not push InterruptionFrame when stop_probe_after_s=0"
+    )
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_no_unawaited_coroutine_under_finalize_race(monkeypatch):
+    """Regression guard: the probe-STOP-then-VAD-finalize sequence must
+    not produce any "coroutine was never awaited" RuntimeWarnings.
+
+    Production saw an intermittent
+    ``coroutine 'FrameProcessor.__process_frame_task_handler' was never
+    awaited`` right after a probe-STOP match. The fix awaits the
+    cancelled probe task to completion before scheduling the next one
+    (and before ``on_utterance`` clears its bookkeeping) so a cancelled
+    probe never overlaps a fresh one. Capture all RuntimeWarnings
+    raised during the sequence, then force GC so the unawaited-coroutine
+    finalizer fires before the assertion runs.
+    """
+    _StagedVad.instances.clear()
+    # Probe sees STOP; finalize would see "stop now" if suppression failed.
+    stt = _StagedStt(texts=["stop", "stop now"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    sink = _CaptureSink()
+    pipeline = Pipeline([proc, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        # Let the probe fire its STOP.
+        await asyncio.sleep(0.15)
+        # VAD finalize races 0.1s after the probe — matches the
+        # production timing reported in the original incident.
+        assert _StagedVad.instances
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        await asyncio.gather(runner.run(), drive())
+        # Coroutine-never-awaited surfaces from the GC finalizer, not from
+        # a raise — force a collection cycle so the warning lands inside
+        # the catch_warnings block.
+        for _ in range(3):
+            gc.collect()
+            await asyncio.sleep(0)
+
+    unawaited = [
+        w for w in caught
+        if issubclass(w.category, RuntimeWarning)
+        and "never awaited" in str(w.message)
+    ]
+    assert not unawaited, (
+        "probe → finalize sequence leaked unawaited coroutines: "
+        + ", ".join(str(w.message) for w in unawaited)
     )
 
 

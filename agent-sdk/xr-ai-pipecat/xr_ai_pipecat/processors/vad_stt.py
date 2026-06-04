@@ -121,10 +121,19 @@ class VadSttProcessor(FrameProcessor):
         async def on_speech_start() -> None:
             self._current_pid = pid
             # Reset probe state for the new utterance. Any leftover task
-            # from a previous utterance (should be done by now, but
-            # belt-and-suspenders) is cancelled before scheduling a new one.
+            # from a previous utterance is cancelled AND awaited to
+            # completion before scheduling the next probe — otherwise the
+            # cancelled task may still be mid ``await self.push_frame(...)``
+            # when the new probe task starts, leaving its
+            # ``__process_frame_task_handler`` coroutine in pipecat's
+            # downstream processor in a state where its cancellation
+            # propagates after a fresh one has already been scheduled.
+            # That overlap was the source of intermittent
+            # "coroutine '...__process_frame_task_handler' was never
+            # awaited" RuntimeWarnings observed in production right after
+            # a probe-STOP match.
             self._stop_fired_for_current_utterance.discard(pid)
-            self._cancel_probe_task(pid)
+            await self._cancel_probe_task(pid)
             self._probe_buffer[pid] = bytearray()
             # The first feed after start_fired carries the real sample
             # rate; default to 0 so a missing entry later means "no audio".
@@ -139,8 +148,10 @@ class VadSttProcessor(FrameProcessor):
         async def on_utterance(audio_bytes: bytes, sample_rate: int) -> None:
             # Probe ran-or-not, the utterance has finalized. Close the
             # probe buffer entry and cancel any pending probe (e.g.
-            # silence_duration < stop_probe_after_s).
-            self._cancel_probe_task(pid)
+            # silence_duration < stop_probe_after_s). Await the
+            # cancellation so the probe task is fully torn down — see
+            # the comment in ``on_speech_start`` for why this matters.
+            await self._cancel_probe_task(pid)
             self._probe_buffer.pop(pid, None)
             self._probe_sr.pop(pid, None)
 
@@ -301,10 +312,35 @@ class VadSttProcessor(FrameProcessor):
         await self.push_frame(tf)
         await self.push_frame(UserStoppedSpeakingFrame())
 
-    def _cancel_probe_task(self, pid: str) -> None:
+    async def _cancel_probe_task(self, pid: str) -> None:
+        """Cancel a pending probe task and await its teardown.
+
+        Awaiting is what closes the race that produces intermittent
+        ``coroutine '...__process_frame_task_handler' was never awaited``
+        warnings: a cancelled probe may still be mid
+        ``await self.push_frame(...)`` (frame already queued at the
+        downstream processor's ``__input_queue``) when the next
+        ``on_speech_start`` fires. If we don't wait for that
+        cancellation to land, two probe tasks briefly overlap and
+        downstream cancel-and-recreate-process-task cycles can race
+        against the in-flight push, leaving the freshly-created
+        downstream process-task coroutine un-scheduled.
+
+        Swallow ``CancelledError`` from the task — the cancellation is
+        ours; surfacing it would propagate back into ``on_speech_start``
+        / ``on_utterance`` and abort the rest of those callbacks for no
+        reason.
+        """
         task = self._probe_task.pop(pid, None)
-        if task is not None and not task.done():
-            task.cancel()
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("stop-probe cancel raised pid={!r}", pid)
 
 
 def _now_iso() -> str:
