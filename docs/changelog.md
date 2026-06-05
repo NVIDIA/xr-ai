@@ -9,6 +9,33 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Android: synthetic "Virtual Camera" provider over injectVideoFrame
+
+Adds a selectable "Virtual Camera (synthetic)" entry to the Android sample's
+camera dropdown that demonstrates the public `StreamSession.injectVideoFrame`
+API end-to-end: no physical camera, no CAMERA permission. When selected,
+`AppViewModel` runs a coroutine (`SyntheticCameraSource`) generating animated
+I420 frames (scrolling colour bars + a bouncing box) into a reused direct
+`ByteBuffer` and feeds them at ~30 fps through `session.injectVideoFrame`.
+
+Lifecycle is the subtle part: the synthetic loop is `cancelAndJoin`-ed
+*before* `stopCamera()` (otherwise a trailing frame would lazily republish the
+injected track after teardown), is gated on a CONNECTED session, and is
+cancelled on disconnect so it never calls `injectVideoFrame` on a torn-down
+session. The first frame is injected and awaited *before* `isCameraActive`
+flips true, so the preview card composes only once the injected track is
+published: `CameraPreviewView` reads the non-observable
+`session.localCameraTrack` getter a single time, so a track that appeared
+*after* composition would never render (this is what left the preview blank).
+The injected track is published with `source = CAMERA` so the
+in-app preview (`CameraPreviewView`, which reads the CAMERA-source publication)
+shows the synthetic frames and the hub treats it as the participant's camera —
+this also benefits any other `injectVideoFrame` caller (e.g. external camera
+adapters). Always available even on a camera-less device/emulator.
+
+Builds on PR #172 (the `injectVideoFrame` API); not buildable in CI here —
+on-device verification is the gate.
+
 ### 2026-06-04 — piper TTS smoke test: de-flake + dedicated voice-unavailable exit code
 
 `test_piper_tts_smoke` was failing intermittently in CI with an opaque
@@ -29,6 +56,27 @@ Two fixes:
   retryable — restores the documented "skip cleanly when the voice can't be
   obtained" contract); any other code → `pytest.fail` with the captured
   output so real regressions are diagnosable in the CI log.
+
+### 2026-06-03 — Removed on-demand camera mode; clients always stream
+
+Dropped the "camera on demand" feature across the stack. Clients now
+stream the camera in always-on mode only, and the agent no longer sends
+`startCamera`/`stopCamera` control signals on the `clientControl` topic.
+
+**Agent (`agent-samples/simple-vlm-example`).** `SimpleVlmAgent` no
+longer requests, holds, or releases the camera. The `frame_max_age_s`,
+`camera_on_timeout_s`, and `camera_grace_s` config knobs and the
+`clientControl` signalling (plus speculative VAD warmup, freshness
+gating, and grace-period stop timers) are gone. `_handle_query` now just
+grabs the latest frame for the participant; if none exists yet it replies
+"Camera unavailable, please try again."
+
+**Clients (Android, iOS/visionOS, web, web-xr).** Removed the
+`cameraOnDemand` setting, its persisted key (iOS), and the "On demand"
+toggle UI. The `clientControl` topic is now silently dropped. The manual
+`startCamera`/`stopCamera` user controls (camera button) are unchanged.
+
+### 2026-05-28 — xr-render-demo: vec-mcp + redesigned spatial tools + prompt redesign + eval vocab audit
 
 The eval score on the agentic-loop suite climbed from 40/66 to 58/66 by
 splitting "vector arithmetic the model is bad at" out of the prompt and
