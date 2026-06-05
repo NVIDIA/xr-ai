@@ -20,8 +20,21 @@ exit-1 (bad-voice-name) branch and the exit-3 branch was dead code. A transient
 HF **429** with no cached copy surfaces as `LocalEntryNotFoundError`, so the
 flake #184 was meant to de-flake still hard-failed `test_piper_tts_smoke` on
 `main` (run 26995999535). Fix: order the subclass handler first, so the
-empty-cache / transient-download case exits 3 (skip) and only a genuine bad
-voice name (`EntryNotFoundError` from the repo) exits 1 (fail).
+empty-cache / transient-download case exits 3 and only a genuine bad voice
+name (`EntryNotFoundError` from the repo) exits 1 (fail).
+
+**Root-cause fix, not just graceful degradation — and no silent skips in CI.**
+The exit-3 path only made the flake *skip*; the real problem is that the smoke
+test downloads the voice from HuggingFace on every CI run (voice not vendored,
+HF cache not persisted, anonymous → 429 on shared runner IPs). The `tests`
+workflow now **pre-fetches the voice into the same cache the server reads**
+(`ai-services/tts/models/piper`) in a dedicated, retried step and **caches it
+across runs** (`actions/cache`, keyed on the reference YAML that names the
+voice). So the test runs for real instead of racing HF. A genuine HF outage now
+fails that named prefetch step **loudly** instead of silently skipping the test.
+Belt-and-suspenders: `test_piper_tts_smoke` now **fails rather than skips** on
+exit 3 when `CI` is set (the prefetch should have supplied the voice) — the
+clean skip remains only for local dev without the voice.
 
 ### 2026-06-05 — Android: synthetic "Virtual Camera" provider over injectVideoFrame
 

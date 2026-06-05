@@ -190,14 +190,22 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
             await _wait_for_port(port, proc=proc, timeout=300.0)
         except _ServerExited as exc:
             tail = exc.output.strip()[-2000:]
-            # A transient HF download failure on a cold cache is environmental,
-            # not a regression — skip rather than fail the suite (matches the
-            # "skipped cleanly if the voice can't be obtained" contract above).
+            # A voice-unavailable exit is environmental (offline cache / transient
+            # HF download failure). For a local dev run that's a clean skip. But
+            # CI pre-fetches and caches the voice in a dedicated workflow step, so
+            # a voice-unavailable exit *in CI* means that prefetch/cache is broken
+            # — fail loudly rather than silently skip (which would read as a pass).
             if exc.returncode == _EXIT_VOICE_UNAVAILABLE:
-                pytest.skip(
+                msg = (
                     "piper voice could not be obtained (offline cache or "
                     f"transient HuggingFace download failure):\n{tail}"
                 )
+                if os.environ.get("CI"):
+                    pytest.fail(
+                        "voice unavailable in CI — the prefetch/cache step "
+                        f"should have provided it:\n{msg}"
+                    )
+                pytest.skip(msg)
             # Any other early exit is a real failure — surface the captured
             # server output so it's diagnosable from the CI log.
             pytest.fail(
