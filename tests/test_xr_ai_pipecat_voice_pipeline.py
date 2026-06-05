@@ -17,8 +17,10 @@ what a deployed pipeline will see.
 from __future__ import annotations
 
 import asyncio
+import gc
 import io
 import wave
+import warnings
 from typing import AsyncIterator, Sequence
 
 import numpy as np
@@ -32,6 +34,7 @@ from pipecat.frames.frames import (
     TextFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker
@@ -270,6 +273,332 @@ async def test_vad_stt_drops_frame_with_missing_transport_source(monkeypatch):
     assert stt.calls == []
 
 
+# ── early STOP probe ────────────────────────────────────────────────────────
+
+
+class _StagedStt:
+    """STTService double that returns canned text from a queue.
+
+    Each call pops from ``texts`` (FIFO); when empty, falls back to
+    ``default``. Lets a single test feed different transcripts to the
+    probe call and the eventual VAD-finalize call.
+    """
+
+    def __init__(self, texts: list[str], default: str = "") -> None:
+        self.texts        = list(texts)
+        self.default      = default
+        self.calls:       list[tuple[bytes, int]] = []
+        self.raise_on_call = False
+
+    async def transcribe(self, audio: bytes, *, sample_rate: int | None = None, channels: int = 1, timeout: float | None = None) -> str:
+        self.calls.append((audio, sample_rate or 16000))
+        if self.raise_on_call:
+            raise RuntimeError("stt down")
+        if self.texts:
+            return self.texts.pop(0)
+        return self.default
+
+    async def health(self) -> bool:
+        return True
+
+    async def close(self) -> None:
+        pass
+
+
+class _StagedVad:
+    """VadDetector double whose ``feed`` only triggers ``on_speech_start``
+    on the first call; the test fires ``on_utterance`` explicitly via
+    ``trigger_utterance`` so the probe / finalize race can be exercised
+    deterministically.
+    """
+
+    instances: list = []
+
+    def __init__(self, on_utterance, on_speech_start, **_):
+        self._on_utt    = on_utterance
+        self._on_start  = on_speech_start
+        self._started   = False
+        self.last_audio: bytes = b""
+        self.last_sr:    int   = 0
+        _StagedVad.instances.append(self)
+
+    async def feed(self, pcm_int16: bytes, sample_rate: int) -> None:
+        # Accumulate the audio the way the real detector buffers an
+        # utterance — keeps a single concatenated snapshot so the test
+        # can assert against the bytes seen by the probe.
+        self.last_audio = self.last_audio + pcm_int16
+        self.last_sr    = sample_rate
+        if not self._started:
+            self._started = True
+            await self._on_start()
+
+    async def trigger_utterance(self) -> None:
+        await self._on_utt(self.last_audio, self.last_sr)
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_schedules_on_speech_start(monkeypatch):
+    """On the first ``on_speech_start`` after silence, the processor
+    schedules a one-shot probe task. Waiting longer than
+    ``stop_probe_after_s`` lets the probe run; the stub STT records the
+    call so the probe firing is observable."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["something"])  # not STOP — probe is silent
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    await _run_chain(proc, sends=[frame], settle_s=0.2)
+
+    # Exactly one STT call — the probe's — because on_utterance never fired.
+    assert len(stt.calls) == 1
+    assert stt.calls[0][1] == 16000
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_emits_interruption_on_stop_match(monkeypatch):
+    """When the probe's partial transcript matches ``STOP_RE`` the
+    processor pushes ``InterruptionFrame`` + the matched
+    ``TranscriptionFrame`` + ``UserStoppedSpeakingFrame`` downstream
+    immediately — without waiting for VAD's silence-window finalize."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["stop"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    sink = await _run_chain(proc, sends=[frame], settle_s=0.2)
+
+    kinds = [type(f).__name__ for f in sink.frames]
+    assert "InterruptionFrame"        in kinds
+    assert "UserStoppedSpeakingFrame" in kinds
+    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
+    assert [t.text for t in transcripts] == ["stop"]
+    # InterruptionFrame must arrive before the TranscriptionFrame so any
+    # in-flight reasoning is cancelled before the gate sees STOP.
+    int_idx = next(i for i, f in enumerate(sink.frames) if isinstance(f, InterruptionFrame))
+    tf_idx  = next(i for i, f in enumerate(sink.frames) if isinstance(f, TranscriptionFrame))
+    assert int_idx < tf_idx
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_silent_on_non_stop_match(monkeypatch):
+    """A non-STOP partial transcript discards the probe result and lets
+    VAD-finalize handle the utterance via the usual path. No
+    ``InterruptionFrame`` is pushed."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["hello agent what time is it"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    sink = await _run_chain(proc, sends=[frame], settle_s=0.2)
+
+    assert not any(isinstance(f, InterruptionFrame) for f in sink.frames)
+    assert not any(isinstance(f, TranscriptionFrame) for f in sink.frames)
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_cancelled_when_vad_finalizes_first(monkeypatch):
+    """If VAD finalizes the utterance before the probe timer fires, the
+    pending probe task is cancelled — STT is called exactly once (by
+    the on_utterance path) and no probe-side STT call lands."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["hello agent"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=1.0))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    # Drive the first frame so on_speech_start fires and the probe task
+    # is scheduled; then trigger on_utterance manually well before the
+    # 1-second probe timer expires.
+    sink = _CaptureSink()
+    pipeline = Pipeline([proc, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        await asyncio.sleep(0.05)
+        assert _StagedVad.instances, "VAD stub was not instantiated"
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    # Only the on_utterance STT call — no probe call.
+    assert len(stt.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_suppresses_duplicate_vad_finalize(monkeypatch):
+    """After the probe fires STOP, the eventual VAD-finalize for the
+    same utterance must NOT re-emit ``UserStoppedSpeakingFrame`` + a
+    second ``TranscriptionFrame`` — otherwise the gate would re-fire
+    its canned "Okay, I will stop." ack TTS."""
+    _StagedVad.instances.clear()
+    # Probe call returns "stop"; the eventual on_utterance call (if
+    # the suppression failed) would return "stop now" — we must not see
+    # that downstream.
+    stt = _StagedStt(texts=["stop", "stop now"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    sink = _CaptureSink()
+    pipeline = Pipeline([proc, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        # Wait for the probe to fire (>= stop_probe_after_s).
+        await asyncio.sleep(0.2)
+        # VAD now finalizes after silence — would normally push a fresh
+        # UserStoppedSpeakingFrame + TranscriptionFrame.
+        assert _StagedVad.instances
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
+    assert [t.text for t in transcripts] == ["stop"], (
+        "duplicate transcription from VAD-finalize must be suppressed "
+        "after the probe already fired STOP"
+    )
+    # The probe's stop-emit ends with UserStoppedSpeakingFrame; VAD's
+    # finalize would re-push one. With suppression we should see exactly
+    # one of each.
+    stops = [f for f in sink.frames if isinstance(f, UserStoppedSpeakingFrame)]
+    assert len(stops) == 1
+    # Only the probe-side STT call should have happened — the on_utterance
+    # path bailed before its own STT call.
+    assert len(stt.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_disabled_when_setting_zero(monkeypatch):
+    """``stop_probe_after_s = 0`` opts out of the probe entirely — no
+    background task is scheduled and the only STT call comes from
+    on_utterance, matching the pre-probe behavior."""
+    _StagedVad.instances.clear()
+    stt = _StagedStt(texts=["stop"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.0))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    sink = _CaptureSink()
+    pipeline = Pipeline([proc, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        # Give the world long enough for any (incorrectly-scheduled) probe
+        # to fire; with the probe disabled, nothing happens here.
+        await asyncio.sleep(0.2)
+        assert _StagedVad.instances
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    # Exactly one STT call — the on_utterance one. No probe ran.
+    assert len(stt.calls) == 1
+    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
+    assert [t.text for t in transcripts] == ["stop"]
+    # The discriminating signal: with the probe disabled, the
+    # InterruptionFrame the probe normally pushes on STOP-match must NOT
+    # appear. (Without this assertion, the call-count check above would
+    # pass even if the probe ran — its STT call and the on_utterance one
+    # would either way total exactly one because the suppression flag
+    # would gate out the duplicate.)
+    assert not any(isinstance(f, InterruptionFrame) for f in sink.frames), (
+        "probe must not push InterruptionFrame when stop_probe_after_s=0"
+    )
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_stop_probe_no_unawaited_coroutine_under_finalize_race(monkeypatch):
+    """Regression guard: the probe-STOP-then-VAD-finalize sequence must
+    not produce any "coroutine was never awaited" RuntimeWarnings.
+
+    Production saw an intermittent
+    ``coroutine 'FrameProcessor.__process_frame_task_handler' was never
+    awaited`` right after a probe-STOP match. The fix awaits the
+    cancelled probe task to completion before scheduling the next one
+    (and before ``on_utterance`` clears its bookkeeping) so a cancelled
+    probe never overlaps a fresh one. Capture all RuntimeWarnings
+    raised during the sequence, then force GC so the unawaited-coroutine
+    finalizer fires before the assertion runs.
+    """
+    _StagedVad.instances.clear()
+    # Probe sees STOP; finalize would see "stop now" if suppression failed.
+    stt = _StagedStt(texts=["stop", "stop now"])
+    monkeypatch.setattr("xr_ai_pipecat.processors.vad_stt.VadDetector", _StagedVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=0.05))
+
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    sink = _CaptureSink()
+    pipeline = Pipeline([proc, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(frame)
+        # Let the probe fire its STOP.
+        await asyncio.sleep(0.15)
+        # VAD finalize races 0.1s after the probe — matches the
+        # production timing reported in the original incident.
+        assert _StagedVad.instances
+        await _StagedVad.instances[-1].trigger_utterance()
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        await asyncio.gather(runner.run(), drive())
+        # Coroutine-never-awaited surfaces from the GC finalizer, not from
+        # a raise — force a collection cycle so the warning lands inside
+        # the catch_warnings block.
+        for _ in range(3):
+            gc.collect()
+            await asyncio.sleep(0)
+
+    unawaited = [
+        w for w in caught
+        if issubclass(w.category, RuntimeWarning)
+        and "never awaited" in str(w.message)
+    ]
+    assert not unawaited, (
+        "probe → finalize sequence leaked unawaited coroutines: "
+        + ", ".join(str(w.message) for w in unawaited)
+    )
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # VoiceGateProcessor
 # ════════════════════════════════════════════════════════════════════════════
@@ -504,6 +833,235 @@ async def test_brain_cancels_inflight_on_interruption_frame():
         per_send_delay_s=0.05,
     )
     assert brain.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_fires_on_second_query_while_inflight():
+    """When a fresh ``GatedQueryFrame`` arrives while a prior query's
+    task is still in-flight, ``on_query_superseded`` must fire so an
+    agent can decide what to do with the previous response's queued
+    downstream state (e.g. push an InterruptionFrame to drain queued
+    TTS audio). The library default is a no-op; this test only checks
+    the hook is invoked."""
+    class _SupersedeRecorder(_IterBrain):
+        def __init__(self) -> None:
+            super().__init__(chunks=[f"chunk{i} " for i in range(200)])
+            self.supersede_calls: list[str] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.2,
+        per_send_delay_s=0.05,
+    )
+    assert brain.supersede_calls == ["pid-1"]
+    assert brain.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_fires_when_prior_task_already_done():
+    """Regression: the supersede hook must fire on every non-first
+    query for a pid, even when the prior brain task has already
+    completed. Real-world case: a short VLM response streams in
+    quickly so the brain task is done, but its TTS audio is still
+    playing out when the user fires a follow-up query. Gating the
+    hook on ``_inflight[pid].done()`` (the old bug) caused the new
+    query to queue behind the prior audio instead of interrupting it.
+
+    Uses ``_StringBrain`` (one-shot string response) plus a generous
+    ``per_send_delay_s`` so the first task finishes before the
+    second query arrives. Asserts that at supersede time the prior
+    task was indeed already done, so the assertion exercises the
+    bug case rather than the in-flight case."""
+    class _SupersedeRecorder(_StringBrain):
+        def __init__(self) -> None:
+            super().__init__()
+            self.supersede_calls: list[str] = []
+            self.prior_task_done_at_supersede: list[bool] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+            existing = self._inflight.get(pid)
+            self.prior_task_done_at_supersede.append(
+                existing is None or existing.done(),
+            )
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        # Long enough that the one-shot ``_StringBrain`` response for
+        # the first query has fully run and emitted its end frame
+        # before the second query is queued.
+        settle_s=0.3,
+        per_send_delay_s=0.2,
+    )
+    assert brain.supersede_calls == ["pid-1"]
+    assert brain.prior_task_done_at_supersede == [True], (
+        "test must exercise the bug case: prior brain task already done "
+        "when supersede fires"
+    )
+    # Both queries ran end-to-end.
+    handled = [t for _pid, t, _fm in brain.handle_calls]
+    assert "first"  in handled
+    assert "second" in handled
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_fires_on_every_subsequent_query():
+    """The hook fires once per non-first query — three queries fire
+    it twice, four fire it three times, etc. Uses ``_StringBrain``
+    so each prior task completes before the next query arrives,
+    confirming the gate is per-pid query count, not brain-task state."""
+    class _SupersedeRecorder(_StringBrain):
+        def __init__(self) -> None:
+            super().__init__()
+            self.supersede_calls: list[str] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+            GatedQueryFrame(participant_id="pid-1", text="third",  fresh_match=True, pts_us=2),
+            GatedQueryFrame(participant_id="pid-1", text="fourth", fresh_match=True, pts_us=3),
+        ],
+        settle_s=0.3,
+        per_send_delay_s=0.1,
+    )
+    # First query: no supersede. Each subsequent query: one supersede.
+    assert brain.supersede_calls == ["pid-1", "pid-1", "pid-1"]
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_seen_state_cleared_on_participant_left():
+    """``_seen_query`` is per-pid and must be cleared on
+    ``ParticipantLeftFrame`` so a rejoin's first query is treated
+    as cold (no supersede) rather than as a follow-up. Without
+    this, an override that pushes ``InterruptionFrame`` on
+    supersede would flush unrelated audio on every fresh session."""
+    class _SupersedeRecorder(_StringBrain):
+        def __init__(self) -> None:
+            super().__init__()
+            self.supersede_calls: list[str] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1",  text="first",  fresh_match=True, pts_us=0),
+            ParticipantLeftFrame(participant_id="pid-1"),
+            # Same pid rejoins (or different session): the first
+            # query after the left frame must NOT fire the hook.
+            GatedQueryFrame(participant_id="pid-1",  text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.3,
+        per_send_delay_s=0.1,
+    )
+    assert brain.supersede_calls == []
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_not_called_on_cold_path_first_query():
+    """The cold path — first query, no in-flight task — must NOT call
+    ``on_query_superseded``. There is nothing to supersede, and agents
+    that override to push an InterruptionFrame would otherwise flush
+    unrelated in-flight audio (e.g. a voice-gate chime)."""
+    class _SupersedeRecorder(_StringBrain):
+        def __init__(self) -> None:
+            super().__init__()
+            self.supersede_calls: list[str] = []
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+
+    brain = _SupersedeRecorder()
+    await _run_chain(
+        brain,
+        sends=[GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=0)],
+    )
+    assert brain.supersede_calls == []
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_can_push_frames_downstream():
+    """The hook is allowed to push frames — this is the whole point of
+    the design (sample-side override pushes ``InterruptionFrame`` to
+    drain queued TTS audio for the previous response). Verify a frame
+    pushed from the hook reaches the downstream sink."""
+    class _InterruptingBrain(_IterBrain):
+        def __init__(self) -> None:
+            super().__init__(chunks=[f"chunk{i} " for i in range(200)])
+
+        async def on_query_superseded(self, pid: str) -> None:
+            await self.push_frame(InterruptionFrame())
+
+    brain = _InterruptingBrain()
+    sink = await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.2,
+        per_send_delay_s=0.05,
+    )
+    assert any(isinstance(f, InterruptionFrame) for f in sink.frames), (
+        "hook must be able to push frames to downstream sink"
+    )
+
+
+@pytest.mark.asyncio
+async def test_brain_on_query_superseded_exception_is_swallowed_and_spawn_proceeds():
+    """A misbehaving override must not break the supersede contract:
+    the previous task is still cancelled and the new query still
+    spawns. The exception is logged at the library boundary."""
+    class _RaisingBrain(_IterBrain):
+        def __init__(self) -> None:
+            super().__init__(chunks=[f"chunk{i} " for i in range(200)])
+            self.handle_calls: list[str] = []
+            self.supersede_calls: list[str] = []
+
+        async def handle_query(self, pid, text, fresh_match):
+            self.handle_calls.append(text)
+            return await super().handle_query(pid, text, fresh_match)
+
+        async def on_query_superseded(self, pid: str) -> None:
+            self.supersede_calls.append(pid)
+            raise RuntimeError("boom")
+
+    brain = _RaisingBrain()
+    await _run_chain(
+        brain,
+        sends=[
+            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
+            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
+        ],
+        settle_s=0.2,
+        per_send_delay_s=0.05,
+    )
+    assert brain.supersede_calls == ["pid-1"]
+    # Previous task still cancelled; new query still ran.
+    assert brain.cancelled is True
+    assert "first"  in brain.handle_calls
+    assert "second" in brain.handle_calls
 
 
 @pytest.mark.asyncio

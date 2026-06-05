@@ -24,11 +24,14 @@ class VoiceGateConfig:
     ``listening_chime``  — when true AND ``magic_phrases`` is non-empty,
                            a short two-tone chime plays on the consumer's
                            audio sink whenever the worker invokes
-                           ``VoiceGate.play_chime``.
+                           ``VoiceGate.play_chime``. Defaults to ``True``
+                           because the chime is an audible "I heard you"
+                           cue that most consumers want by default;
+                           opt out explicitly with ``listening_chime: false``.
     """
     magic_phrases:    tuple[str, ...] = ()
     followup_grace_s: float           = 5.0
-    listening_chime:  bool            = False
+    listening_chime:  bool            = True
 
 
 def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
@@ -54,7 +57,7 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     return VoiceGateConfig(
         magic_phrases    = phrases,
         followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
-        listening_chime  = bool(raw.get("listening_chime", False)),
+        listening_chime  = bool(raw.get("listening_chime", True)),
     )
 
 

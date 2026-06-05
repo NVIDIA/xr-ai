@@ -157,9 +157,15 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         super().__init__(params, **kwargs)
         self._ep = ep
         self._target_participant: str = ""
+        # Throttle the "no target participant" warning so a burst of
+        # dropped audio frames produces one log line per burst rather
+        # than one per frame. Reset when a target is set.
+        self._missing_target_warned: bool = False
 
     def set_target_participant(self, pid: str) -> None:
+        logger.info("target participant set pid={!r}", pid)
         self._target_participant = pid
+        self._missing_target_warned = False
 
     async def start(self, frame: StartFrame):
         await super().start(frame)
@@ -221,6 +227,11 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         dropped before reaching the hub.
         """
         if not self._target_participant:
+            if not self._missing_target_warned:
+                logger.warning(
+                    "no target participant — dropping audio frame",
+                )
+                self._missing_target_warned = True
             return False
         pcm_float32 = _int16_to_float32(frame.audio)
         num_samples = len(frame.audio) // (2 * frame.num_channels)

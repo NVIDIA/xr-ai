@@ -63,6 +63,14 @@ class BrainProcessor(FrameProcessor):
     def __init__(self, *, transport: "XRMediaHubTransport | None" = None) -> None:
         super().__init__()
         self._inflight: dict[str, asyncio.Task] = {}
+        # Pids that have had at least one query — gates the supersede
+        # hook on every non-first query for the pid, regardless of
+        # whether the prior brain task is still running. The brain-task
+        # status is the wrong gate: by the time a follow-up query lands,
+        # the prior brain task may already be done while the downstream
+        # TTS audio is still streaming out. Cleared on
+        # ``ParticipantLeftFrame``.
+        self._seen_query: set[str] = set()
         # Joined pids so the user-speech hook can fire on the cold path
         # (no in-flight task yet) — useful for camera warmup. Cleared on
         # ``ParticipantLeftFrame``.
@@ -97,6 +105,36 @@ class BrainProcessor(FrameProcessor):
         """
         return
 
+    async def on_query_superseded(self, pid: str) -> None:
+        """Override to react when a new query supersedes the prior one.
+
+        Fires on every ``GatedQueryFrame`` after the first for ``pid``,
+        regardless of whether the prior brain task is still in-flight.
+        Audio from the prior response may still be playing even if that
+        task already completed — sample brains push ``InterruptionFrame``
+        to drain the TTS sender + flush the hub buffer.
+
+        The brain-task status is the wrong gate. Cancelling the brain
+        task only stops *new* ``TextFrame``s from this processor; the
+        streaming TTS sender queue, the hub's pacing pipe, and any
+        jitter buffer downstream continue to deliver whatever was
+        already enqueued. If the prior task finished quickly (e.g. a
+        short VLM response that streamed in under a second) the TTS
+        audio for that response can still be mid-flight when the
+        follow-up query arrives. Firing on every non-first query lets
+        the sample decide what to do about prior state (audio drain,
+        accumulated UI, etc.).
+
+        The library still cancels any prior in-flight task immediately
+        after this hook returns — that is not configurable (you cannot
+        have two queries in flight for the same pid). Default: no-op —
+        audio continues, the new response queues behind it.
+
+        Exceptions from this hook are logged and swallowed; the
+        supersede + spawn of the new query proceeds either way.
+        """
+        return
+
     async def on_participant_joined(self, pid: str) -> None:
         """Override for per-pid setup. Default: no-op."""
         return
@@ -123,6 +161,9 @@ class BrainProcessor(FrameProcessor):
             return
 
         if isinstance(frame, InterruptionFrame):
+            if self._inflight:
+                for pid in list(self._inflight):
+                    logger.info("brain cancel pid={!r} reason=interruption", pid)
             self._cancel_all_inflight()
             await self.push_frame(frame, direction)
             return
@@ -133,6 +174,7 @@ class BrainProcessor(FrameProcessor):
 
         if isinstance(frame, ParticipantJoinedFrame):
             self._joined.add(frame.participant_id)
+            logger.info("brain participant joined pid={!r}", frame.participant_id)
             # Single-participant default: steer the output transport at
             # the first join so return-audio / return-data routing works
             # without per-sample wiring. Samples that need multi-pid
@@ -145,6 +187,8 @@ class BrainProcessor(FrameProcessor):
 
         if isinstance(frame, ParticipantLeftFrame):
             self._joined.discard(frame.participant_id)
+            self._seen_query.discard(frame.participant_id)
+            logger.info("brain participant left pid={!r}", frame.participant_id)
             if self._transport is not None:
                 self._transport.cleanup_participant(frame.participant_id)
             await self.on_participant_left(frame.participant_id)
@@ -171,9 +215,27 @@ class BrainProcessor(FrameProcessor):
 
     async def _spawn_query(self, frame: GatedQueryFrame) -> None:
         pid = frame.participant_id
-        # A fresh query supersedes any previous in-flight reasoning for
-        # the same pid — happens when the user squeezes in a follow-up
-        # before the last response completes.
+        logger.info(
+            "brain dispatch pid={!r} fresh_match={}", pid, frame.fresh_match,
+        )
+        # A fresh query supersedes the previous one for the same pid.
+        # Fire the supersede hook on every non-first query for the pid,
+        # regardless of whether the prior brain task is still running.
+        # The brain-task status is the wrong gate: a short prior
+        # response may have finished assembly while its TTS audio is
+        # still streaming out, and the sample needs to decide what to
+        # do about that (e.g. push InterruptionFrame to drain the TTS
+        # sender + flush the hub buffer). Fire *before* cancelling so
+        # the override lands while the prior task's downstream state is
+        # still coherent.
+        if pid in self._seen_query:
+            logger.info("brain superseded pid={!r}", pid)
+            try:
+                await self.on_query_superseded(pid)
+            except Exception:
+                logger.exception("on_query_superseded raised pid={!r}", pid)
+        self._seen_query.add(pid)
+        # Library still owns cancelling any task that IS still running.
         self._cancel_pid(pid)
         self._inflight[pid] = asyncio.create_task(
             self._run_query(frame), name=f"brain-query-{pid}",
@@ -211,6 +273,7 @@ class BrainProcessor(FrameProcessor):
             # the response, and a half-assembled data echo would
             # contradict the new turn that's about to render.
             if not cancelled:
+                logger.info("brain query complete pid={!r}", pid)
                 try:
                     await self.push_frame(BrainResponseEndFrame(
                         pid    = pid,
