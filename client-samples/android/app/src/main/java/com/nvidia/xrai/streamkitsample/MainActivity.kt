@@ -55,8 +55,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -526,11 +524,11 @@ private fun MediaSection(vm: AppViewModel) {
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
         }
 
-        // Camera selector — auto-populated from CameraManager. Hidden while
-        // camera is active and when the device exposes no cameras.
-        if (!vm.isCameraActive && vm.availableCameras.isNotEmpty()) {
+        // Camera selector — physical Camera2 devices plus the synthetic
+        // "Virtual Camera" provider. Hidden only while a camera is active.
+        if (!vm.isCameraActive && vm.selectableCameras.isNotEmpty()) {
             CameraSelectorRow(
-                cameras = vm.availableCameras,
+                cameras = vm.selectableCameras,
                 selectedId = vm.selectedCameraId,
                 onSelect = { vm.selectedCameraId = it },
                 enabled = isConnected,
@@ -545,6 +543,9 @@ private fun MediaSection(vm: AppViewModel) {
                 onClick = {
                     if (vm.isCameraActive) {
                         vm.stopCamera()
+                    } else if (vm.selectedCameraId == VIRTUAL_CAMERA_ID) {
+                        // Synthetic frames — no physical camera, no CAMERA permission.
+                        vm.startCamera()
                     } else {
                         val hasPerm = ContextCompat.checkSelfPermission(
                             context, Manifest.permission.CAMERA
@@ -563,7 +564,7 @@ private fun MediaSection(vm: AppViewModel) {
         }
 
         // Camera status
-        CardRow {
+        CardRow(showDivider = false) {
             Text("Camera", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.weight(1f))
             val (statusText, statusColor) = when {
@@ -572,21 +573,6 @@ private fun MediaSection(vm: AppViewModel) {
                 else              -> "Not connected" to ColorSecondary
             }
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
-        }
-
-        // Camera on demand toggle — always visible so the user can set the
-        // preference before connecting.
-        CardRow(showDivider = false) {
-            Text("On demand", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.weight(1f))
-            Switch(
-                checked = vm.cameraOnDemand,
-                onCheckedChange = { vm.cameraOnDemand = it },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = ColorGreen,
-                ),
-            )
         }
     }
 }

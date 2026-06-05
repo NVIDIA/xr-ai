@@ -7,6 +7,7 @@ import com.nvidia.xrai.streamkitsample.streamkit.ConnectionState
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import java.nio.ByteBuffer
 
 /**
  * The contract that every networking backend must satisfy.
@@ -95,6 +96,20 @@ interface StreamingBackend {
 
     /** Stops camera capture and unpublishes the video track. */
     suspend fun stopCamera()
+
+    /**
+     * Pushes a single externally-sourced I420 video frame to the published
+     * video track. Lazily creates and publishes the track on the first call
+     * and reuses it for subsequent frames.
+     *
+     * Used by clients that inject frames from their own pipeline (external
+     * camera adapters, screen capture, synthetic frame sources) instead of
+     * Camera2/CameraX. Mirror of iOS
+     * `StreamSession.injectVideoFrame(_: CMSampleBuffer)`.
+     *
+     * @throws [com.nvidia.xrai.streamkitsample.streamkit.StreamError.NotConnected]
+     */
+    suspend fun injectVideoFrame(i420: ByteBuffer, width: Int, height: Int, timestampUs: Long)
 
     // ── Data channel ──────────────────────────────────────────────────────────
 
