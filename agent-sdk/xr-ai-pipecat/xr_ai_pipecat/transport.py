@@ -206,8 +206,14 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         transport layer without forcing every sample to register a
         per-pid pipecat ``MediaSender`` lifecycle.
         """
+        # Route through the default (None) sender, but preserve the pid so
+        # any downstream tap/sink still sees which participant the frame was
+        # addressed to. Leaving it nulled would strip the pid for everyone
+        # observing the frame after us.
+        pid = frame.transport_destination
         frame.transport_destination = None
         await super()._handle_frame(frame)
+        frame.transport_destination = pid
 
     async def write_audio_frame(self, frame: OutputAudioRawFrame) -> bool:
         """Pipecat's audio-out hook — invoked once per chunked output

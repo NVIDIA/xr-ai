@@ -255,7 +255,7 @@ class BrainProcessor(FrameProcessor):
                 if result:
                     accumulated.append(result)
                     await self._push_text(result, pid=pid)
-                return
+                return  # finally still fires — emits BrainResponseEndFrame
             async for chunk in result:
                 if not chunk:
                     continue
