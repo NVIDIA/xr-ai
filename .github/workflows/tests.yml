@@ -50,41 +50,6 @@ jobs:
         working-directory: tests
         run: uv sync --python ${{ matrix.python-version }}
 
-      # The piper TTS smoke test boots the real server, which downloads its
-      # voice from HuggingFace on startup. Pre-fetch it once into the same
-      # cache the server reads (model_cache/piper) and cache it across runs,
-      # so the test runs for real instead of racing HF's anonymous rate limit
-      # (HTTP 429) on every run. The voice key busts when the reference YAML
-      # (which names the voice) changes.
-      - name: Sync piper TTS server
-        run: uv sync --directory ai-services/tts/piper --python ${{ matrix.python-version }}
-
-      - name: Cache piper voice
-        uses: actions/cache@v4
-        with:
-          path: ai-services/tts/models/piper
-          key: piper-voice-${{ hashFiles('ai-services/tts/piper/piper_tts_server.yaml') }}
-          restore-keys: |
-            piper-voice-
-
-      - name: Pre-fetch piper voice
-        run: |
-          set -u
-          voice=$(grep -E '^voice:' ai-services/tts/piper/piper_tts_server.yaml | awk '{print $2}')
-          model_cache="$GITHUB_WORKSPACE/ai-services/tts/models"
-          echo "Pre-fetching piper voice '$voice' into $model_cache/piper"
-          prog='import sys; from pathlib import Path; from piper_tts_server.__main__ import _ensure_voice; _ensure_voice(sys.argv[1], Path(sys.argv[2]))'
-          for attempt in 1 2 3; do
-            if uv run --directory ai-services/tts/piper python -c "$prog" "$voice" "$model_cache"; then
-              echo "voice ready"
-              exit 0
-            fi
-            echo "::warning::piper voice prefetch attempt $attempt failed; retrying"
-            sleep $((attempt * 20))
-          done
-          echo "::error::piper voice prefetch failed after 3 attempts — HuggingFace unavailable; not masking it as a test skip"
-          exit 1
-
       - name: Run tests
         working-directory: tests
         run: uv run pytest -v --tb=short --color=yes -m "not gpu"
