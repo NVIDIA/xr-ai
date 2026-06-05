@@ -24,7 +24,7 @@ vlm:
   # Example model id — confirm the exact slug for your account at
   # https://build.nvidia.com (any hosted vision model works, e.g.
   # meta/llama-3.2-11b-vision-instruct).
-  model_name:  nvidia/cosmos-reason1-7b
+  model_name:  nvidia/nemotron-nano-12b-v2-vl
   api_key_env: NGC_API_KEY
   # Hosted NIM has no local /health route — skip the worker readiness probe.
   health_check: false
