@@ -59,6 +59,8 @@ namespace streamkit {
 /// class MyBackend : public streamkit::StreamingBackend {
 /// public:
 ///     void Connect(const SessionConfig& config) override {
+///         on_connection_state_changed(ConnectionState::kConnecting);
+///         // … begin async transport setup …
 ///         on_connection_state_changed(ConnectionState::kConnected);
 ///     }
 ///     void Disconnect() override {}
@@ -71,6 +73,25 @@ namespace streamkit {
 ///
 /// auto session = StreamSession(std::make_unique<MyBackend>());
 /// ```
+///
+/// ## Conventions for backend implementations
+///
+/// **Synthesise `kConnecting` if the underlying SDK skips it.** The
+/// `ConnectionState` enum exposes `kDisconnected / kConnecting / kConnected /
+/// kReconnecting / kFailed`. Some SDKs only report two or three of these —
+/// `livekit::ConnectionState` for example has only `Disconnected / Connected
+/// / Reconnecting`. Backends wrapping such an SDK MUST fire
+/// `on_connection_state_changed(kConnecting)` themselves before initiating
+/// the network operation, and deduplicate the eventual `kConnected` if the
+/// SDK fires it after their own explicit fire. Consumers depend on seeing
+/// the connecting → connected edge to drive UI affordances.
+///
+/// **Own your SDK's process-global init lifecycle.** Some SDKs require a
+/// one-shot global initializer before any other API call (LiveKit's
+/// `livekit::initialize()` is the canonical example). Backends should invoke
+/// that lazily on first instance construction — not from a static initialiser,
+/// which produces order-of-init hazards across translation units. A simple
+/// `static std::once_flag` guarded call inside the ctor is sufficient.
 class StreamingBackend {
 public:
     virtual ~StreamingBackend() = default;

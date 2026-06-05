@@ -7,11 +7,30 @@ namespace streamkit {
 
 /// Configures microphone capture passed to StreamSession::StartAudio().
 ///
+/// ## Platform contract for `MicrophoneMode`
+///
+/// `MicrophoneMode` is platform-managed. The iOS, Android, and Web backends
+/// honour it: `kVoiceProcessing` engages platform hardware AEC/AGC/NS;
+/// `kSoftwareProcessing` engages WebRTC's software DSP. The built-in C++
+/// `LiveKitBackend` **ignores `MicrophoneMode`** — its `livekit::AudioSource`
+/// constructor takes only `(sample_rate, channels, queue_size_ms)` with no
+/// DSP knobs, and the SDK's software DSP lives in `AudioProcessingModule`
+/// with a separate lifecycle that isn't wired up. Embedded hosts that need
+/// AEC/AGC/NS should rely on the platform/HAL DSP upstream of
+/// `AudioSink::InjectAudioFrame`.
+///
+/// If a desktop consumer needs in-process software DSP, integrating
+/// `AudioProcessingModule` into the C++ `LiveKitBackend` is a separate piece
+/// of work.
+///
 /// Mirror of Swift `AudioConfig` and Kotlin `AudioConfig`.
 struct AudioConfig {
 
     /// Controls which audio processing pipeline is applied before the PCM
     /// audio is handed to WebRTC.
+    ///
+    /// See the struct-level "Platform contract" note: ignored by the
+    /// built-in C++ `LiveKitBackend`.
     enum class MicrophoneMode {
         /// Platform hardware voice processing (e.g. platform AEC, AGC, NR).
         /// Disable WebRTC's own DSP to avoid double-processing.

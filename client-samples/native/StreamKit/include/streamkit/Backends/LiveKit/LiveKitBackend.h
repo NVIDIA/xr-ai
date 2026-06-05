@@ -117,6 +117,20 @@ public:
                           int samples_per_channel,
                           int64_t timestamp_us) override;
 
+protected:
+    /// Fetches a LiveKit JWT from `config_.token_url`.
+    ///
+    /// The default implementation throws `TokenFetchFailedError` — the C++
+    /// SDK doesn't ship a portable HTTP client and the embedded path
+    /// supplies an inline `LiveKitConfig::token` instead. Subclass and
+    /// override with whichever HTTP client your target already links
+    /// against (libcurl, cpp-httplib, Poco::Net) when a token endpoint is
+    /// actually required. Expected response format: plain JWT string or
+    /// `{"token":"eyJ…"}`; the SDK appends `?identity=<identity>` to the
+    /// configured URL.
+    virtual std::string FetchToken(const std::string& url,
+                                   const std::string& identity);
+
 private:
     // Forward-declared in the .cpp; subclasses livekit::RoomDelegate and
     // bridges its event callbacks into this backend's on_* event hooks.
@@ -124,11 +138,6 @@ private:
 
     /// Disconnects the room, stops all tracks, fires kDisconnected.
     void TearDown();
-
-    /// Always throws `TokenFetchFailedError` — supply `config_.token`
-    /// instead. This backend ships no HTTP client.
-    [[noreturn]] void FetchToken(const std::string& url,
-                                 const std::string& identity) const;
 
     /// Maps livekit::ConnectionState → StreamKit's ConnectionState and fires
     /// on_connection_state_changed. Called by the Delegate's event hooks.

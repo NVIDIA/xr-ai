@@ -35,9 +35,15 @@ import {
 
 const model = {
   ...createBaseModel(),
-  /** @type {string|null} Most recent agent.response message text. */
+  /** @type {string|null} Most recent final agent reply text. */
   agentResponse: null,
 };
+
+// Topics carrying the agent's final text reply. Different samples publish on
+// different topics (e.g. simple-vlm-example uses `vlm.response`, glasses-agent-nat
+// uses `agent.response`); both route into the Agent panel and are suppressed
+// from the "Received" list.
+const AGENT_REPLY_TOPICS = new Set(['agent.response', 'vlm.response']);
 
 // Local camera preview stream (separate from the LiveKit publish stream).
 let _previewStream = null;
@@ -156,9 +162,9 @@ function sendPing()         { return _sendPing(model, startCamera); }
 function sendCustom(text)   { return _sendCustom(model, text, showError); }
 function connect()          {
   return _connect(model, {
-    render, showError, enumerateCameras, stopCamera,
+    render, showError, enumerateCameras, startCamera, stopCamera,
     onDataReceived(topic, data) {
-      if (topic === 'agent.response') {
+      if (AGENT_REPLY_TOPICS.has(topic)) {
         model.agentResponse = new TextDecoder().decode(data);
         render();
         return true; // suppress from the received messages list

@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import time
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -95,6 +94,10 @@ class StreamingTtsProcessor(FrameProcessor):
         self._pending: str       = ""
         self._sender_task: asyncio.Task | None = None
         self._sender_queue: asyncio.Queue | None = None
+        # Monotonic per-instance counter for unique synth task names — a
+        # wall-clock millisecond stamp collides when two sentences dispatch
+        # within the same millisecond.
+        self._synth_seq: int = 0
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────
 
@@ -207,9 +210,10 @@ class StreamingTtsProcessor(FrameProcessor):
     async def _dispatch_sentence(self, sentence: str, *, pid: str) -> None:
         logger.info("tts sentence dispatch pid={!r} len={}", pid, len(sentence))
         queue = self._ensure_sender()
+        self._synth_seq += 1
         task  = asyncio.create_task(
             self._tts.synthesize(sentence),
-            name=f"tts-synth-{int(time.time()*1000)}",
+            name=f"tts-synth-{pid}-{self._synth_seq}",
         )
         await queue.put((task, pid))
 
@@ -283,6 +287,9 @@ class StreamingTtsProcessor(FrameProcessor):
             try:
                 await self._sender_task
             except asyncio.CancelledError:
+                # Expected: we cancelled this task ourselves; awaiting it
+                # raises CancelledError, which we intentionally swallow so
+                # interrupt drain completes cleanly.
                 pass
         # Drop any tasks still parked in the queue so they don't keep
         # running and emit audio after the interrupt.
