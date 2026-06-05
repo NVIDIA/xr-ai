@@ -7,15 +7,15 @@ One call composes:
 
     input → VadStt → VoiceGate → brain → StreamingTts → output
 
-and returns the assembled :class:`Pipeline` plus a :class:`PipelineTask`
-ready for :meth:`PipelineRunner.run`. Sample workers do not compose the
+and returns the assembled :class:`Pipeline` plus a :class:`PipelineWorker`
+ready for :meth:`WorkerRunner.run`. Sample workers do not compose the
 pipeline themselves — they subclass :class:`BrainProcessor` and hand it
 to this factory.
 """
 from __future__ import annotations
 
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.worker import PipelineWorker
 
 from xr_ai_models import STTService, TTSService
 from xr_ai_voicegate import VoiceGateConfig
@@ -36,7 +36,7 @@ def make_voice_pipeline(
     vad_cfg: VadConfig,
     voice_gate_cfg: VoiceGateConfig,
     text_topic: str = "agent.response",
-) -> tuple[Pipeline, PipelineTask]:
+) -> tuple[Pipeline, PipelineWorker]:
     """Assemble the unified voice pipeline.
 
     The factory builds the :class:`VoiceGateProcessor` first because its
@@ -67,5 +67,5 @@ def make_voice_pipeline(
         streaming_tts,
         transport.output(),
     ])
-    task = PipelineTask(pipeline)
-    return pipeline, task
+    worker = PipelineWorker(pipeline)
+    return pipeline, worker
