@@ -5,10 +5,14 @@ package com.nvidia.xrai.streamkitsample.streamkit
 
 import android.content.Context
 import com.nvidia.xrai.streamkitsample.streamkit.backends.StreamingBackend
+import com.nvidia.xrai.streamkitsample.streamkit.backends.livekit.LiveKitBackend
 import com.nvidia.xrai.streamkitsample.streamkit.config.AudioConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import io.livekit.android.renderer.TextureViewRenderer
+import io.livekit.android.room.track.LocalVideoTrack
+import java.nio.ByteBuffer
 
 /**
  * Transport-agnostic streaming session — the single public entry-point of StreamKit.
@@ -129,6 +133,53 @@ class StreamSession(private val backend: StreamingBackend) {
      */
     suspend fun stopCamera() {
         backend.stopCamera()
+    }
+
+    /**
+     * Pushes a single externally-sourced I420 video frame to the published
+     * video track. The track is created lazily on the first call and reused
+     * for subsequent frames; [stopCamera] tears it down.
+     *
+     * Used by clients that inject frames from their own pipeline (external
+     * camera adapters, screen capture, synthetic frame sources). Mirror of
+     * iOS `StreamSession.injectVideoFrame(_: CMSampleBuffer)`.
+     *
+     * @param i420         Read-only buffer containing Y, U, V planes back-to-back.
+     * @param width        Y-plane pixel width (must be even).
+     * @param height       Y-plane pixel height (must be even).
+     * @param timestampUs  Source-side presentation timestamp, microseconds.
+     *                     Note: not honored downstream — the WebRTC frame
+     *                     timestamp is overridden internally with the local
+     *                     monotonic clock to keep the encoder's PTS stable.
+     * @throws [StreamError.NotConnected]
+     */
+    suspend fun injectVideoFrame(
+        i420: ByteBuffer,
+        width: Int,
+        height: Int,
+        timestampUs: Long,
+    ) {
+        backend.injectVideoFrame(i420, width, height, timestampUs)
+    }
+
+    // ── Local preview ─────────────────────────────────────────────────────────
+
+    /**
+     * The currently published local camera track, if any.
+     * Used by `CameraPreviewView`; app code typically does not access this
+     * directly.  Returns null when the camera is stopped or the active
+     * backend is not LiveKit-based.
+     */
+    val localCameraTrack: LocalVideoTrack?
+        get() = (backend as? LiveKitBackend)?.localCameraTrack
+
+    /**
+     * Initialises a [TextureViewRenderer] with the active room's EGL context.
+     * Required once per renderer instance before frames can be drawn.
+     * No-op when the active backend is not LiveKit-based.
+     */
+    fun initVideoRenderer(view: TextureViewRenderer) {
+        (backend as? LiveKitBackend)?.initVideoRenderer(view)
     }
 
     // ── Data channel ──────────────────────────────────────────────────────────

@@ -86,17 +86,18 @@ livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
 std::size_t PackedFrameSize(int width, int height, PixelFormat format) {
     const auto pixels =
         static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    using enum PixelFormat;
     switch (format) {
-        case PixelFormat::kI420:
-        case PixelFormat::kNV12: {
+        case kI420:
+        case kNV12: {
             const auto chroma_w =
                 (static_cast<std::size_t>(width)  + 1) / 2;
             const auto chroma_h =
                 (static_cast<std::size_t>(height) + 1) / 2;
             return pixels + 2 * chroma_w * chroma_h;
         }
-        case PixelFormat::kRGBA:
-        case PixelFormat::kBGRA:
+        case kRGBA:
+        case kBGRA:
             return pixels * 4;
     }
     return 0;  // unreachable
@@ -165,6 +166,8 @@ LiveKitBackend::~LiveKitBackend() noexcept {
     try {
         TearDown();
     } catch (...) {
+        // Swallowed: a destructor must not propagate, and a failed teardown
+        // here has no recoverable action.
     }
 }
 
@@ -188,7 +191,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
     if (config_.token.has_value() && !config_.token->empty()) {
         token = *config_.token;
     } else if (config_.token_url.has_value() && !config_.token_url->empty()) {
-        FetchToken(*config_.token_url, session_config_.identity);
+        token = FetchToken(*config_.token_url, session_config_.identity);
     } else {
         throw MissingTokenError{};
     }
@@ -527,9 +530,9 @@ void LiveKitBackend::TearDown() {
 // Token fetch
 // ─────────────────────────────────────────────────────────────────────────────
 
-[[noreturn]] void LiveKitBackend::FetchToken(
+std::string LiveKitBackend::FetchToken(
     const std::string& token_url,
-    const std::string& /*identity*/) const {
+    const std::string& /*identity*/) {
     // No HTTP client shipped — callers must pass an inline JWT via
     // `LiveKitConfig::token` (computed server-side).
     throw TokenFetchFailedError(std::format(

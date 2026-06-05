@@ -12,7 +12,7 @@ from typing import Sequence
 # user can interrupt a response mid-flight without having to start with
 # the configured phrase.
 STOP_RE: re.Pattern = re.compile(
-    r'^\s*(?:\S+\s+){0,2}'               # up to 2 optional filler words
+    r'^\s*(?:\S+\s+){0,2}'               # 0–2 filler words before stop ("uh, stop"); 3+ = ordinary speech
     r'(?:stop(?:\s+\w+){0,2}|be\s+quiet|quiet|shut\s+up)'
     r'\s*[.!?]?\s*$',
     re.IGNORECASE,

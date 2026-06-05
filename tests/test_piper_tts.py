@@ -10,8 +10,12 @@ a tiny synthesis request through the OpenAI-compatible
 ``POST /v1/audio/speech`` endpoint.
 
 CPU-only: Piper runs ONNX on CPU at ~100 ms/sentence. No ``gpu`` marker,
-so CI picks this up. Skipped cleanly if the piper venv hasn't been
-``uv sync``'d or if the configured voice weights are not in the HF cache.
+so CI picks this up. Skipped cleanly when the environment can't support it:
+``uv`` is missing, the piper venv hasn't been ``uv sync``'d, or the
+configured voice can't be obtained (offline with an empty cache, or a
+transient HuggingFace download failure — the server signals this with a
+dedicated exit code). Any other early exit fails the test with the server's
+captured output so the cause is visible in CI.
 """
 from __future__ import annotations
 
@@ -36,6 +40,26 @@ _PIPER_PROJECT = _REPO_ROOT / "ai-services" / "tts" / "piper"
 _PIPER_BIN     = _PIPER_PROJECT / ".venv" / "bin" / "piper_tts_server"
 _PIPER_YAML    = _PIPER_PROJECT / "piper_tts_server.yaml"
 _DEFAULT_PORT  = 8105
+
+# Must match _EXIT_VOICE_UNAVAILABLE in piper_tts_server/__main__.py: the
+# server uses this exit code when the voice can't be obtained for
+# environmental reasons (offline empty cache / transient HF download failure),
+# which the smoke test treats as skip rather than fail.
+_EXIT_VOICE_UNAVAILABLE = 3
+
+
+class _ServerExited(Exception):
+    """Raised when piper_tts_server exits before binding its port.
+
+    Carries the process return code and the captured stdout+stderr so callers
+    can decide whether to skip (environmental) or fail (real error) — and so
+    the real cause is visible instead of a bare "exited with code N".
+    """
+
+    def __init__(self, returncode: int, output: str) -> None:
+        self.returncode = returncode
+        self.output = output
+        super().__init__(f"piper_tts_server exited early with code {returncode}")
 
 
 def _pick_port(preferred: int) -> int:
@@ -84,13 +108,18 @@ def _voice_cached(voice: str, hf_cache: Path) -> bool:
 
 
 async def _wait_for_port(port: int, *, proc: subprocess.Popen, timeout: float) -> None:
-    """Poll the bind port until it accepts a TCP connection or proc dies."""
+    """Poll the bind port until it accepts a TCP connection.
+
+    Raises ``_ServerExited`` (with the captured output) if the process dies
+    before binding, or ``TimeoutError`` if the port never opens.
+    """
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
         if proc.poll() is not None:
-            raise RuntimeError(
-                f"piper_tts_server exited early with code {proc.returncode}"
-            )
+            # The process is dead, so its pipe won't block — read the captured
+            # stdout+stderr and surface it instead of just the exit code.
+            output = proc.stdout.read().decode("utf-8", "replace") if proc.stdout else ""
+            raise _ServerExited(proc.returncode, output)
         if _port_open(port):
             return
         await asyncio.sleep(0.2)
@@ -157,7 +186,23 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
     try:
         # First-run voice download (~50–200 MB) plus ONNX init can take a
         # couple of minutes on a cold cache; reuse is sub-second.
-        await _wait_for_port(port, proc=proc, timeout=300.0)
+        try:
+            await _wait_for_port(port, proc=proc, timeout=300.0)
+        except _ServerExited as exc:
+            tail = exc.output.strip()[-2000:]
+            # A transient HF download failure on a cold cache is environmental,
+            # not a regression — skip rather than fail the suite (matches the
+            # "skipped cleanly if the voice can't be obtained" contract above).
+            if exc.returncode == _EXIT_VOICE_UNAVAILABLE:
+                pytest.skip(
+                    "piper voice could not be obtained (offline cache or "
+                    f"transient HuggingFace download failure):\n{tail}"
+                )
+            # Any other early exit is a real failure — surface the captured
+            # server output so it's diagnosable from the CI log.
+            pytest.fail(
+                f"piper_tts_server exited with code {exc.returncode}:\n{tail}"
+            )
         body = await asyncio.get_running_loop().run_in_executor(
             None, _post_speech, port, voice, "Hello, world.",
         )

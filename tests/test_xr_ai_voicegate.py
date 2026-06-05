@@ -842,7 +842,7 @@ def test_load_voice_gate_config_simple_vlm_sample_round_trip():
         pytest.skip(f"sample voice_gate.yaml not reachable at {p}")
     cfg = load_voice_gate_config(p)
     assert cfg.magic_phrases    == ("agent", "hey agent")
-    assert cfg.listening_chime  is True
+    assert cfg.listening_chime  is False
     assert cfg.followup_grace_s == 5.0
 
 

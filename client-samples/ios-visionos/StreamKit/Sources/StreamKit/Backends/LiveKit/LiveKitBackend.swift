@@ -51,6 +51,11 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     /// Publication for the buffer-capturer track. Published after the first injected frame.
     private var bufferPublication: LocalTrackPublication?
 
+    /// Currently active local camera track (device camera, ARKit, or simulator
+    /// buffer capturer). Used by ``CameraPreviewView`` to render the outgoing
+    /// stream locally. Nil while the camera is stopped.
+    public internal(set) var localCameraTrack: LocalVideoTrack?
+
     #if targetEnvironment(simulator)
     /// Background task that feeds synthetic test frames into the buffer track.
     /// Runs while the simulated camera is "active".
@@ -163,6 +168,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             capturer.capture(seed)
         }
         bufferPublication = try await room.localParticipant.publish(videoTrack: simTrack)
+        localCameraTrack = simTrack
         simulatorFrameTask = Task { [weak self] in
             await self?.runSimulatorFrameLoop(startingAt: 1)
         }
@@ -172,11 +178,13 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // the com.apple.developer.arkit.main-camera-access.allow enterprise entitlement.
         let track = makeVisionOSTrack()
         cameraPublication = try await room.localParticipant.publish(videoTrack: track)
+        localCameraTrack = track
 
         #else
         // Physical iOS/iPadOS camera.
         let track = makeIOSTrack(config: config)
         cameraPublication = try await room.localParticipant.publish(videoTrack: track)
+        localCameraTrack = track
         #endif
     }
 
@@ -199,6 +207,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             bufferPublication = nil
         }
         bufferTrack = nil
+        localCameraTrack = nil
     }
 
     // MARK: - FrameInjectable
@@ -225,7 +234,9 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // Create the buffer track lazily — allows calling injectVideoFrame without
         // calling startCamera first (useful for the Meta wearables use case on device).
         if bufferTrack == nil {
-            bufferTrack = LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
+            let t = LocalVideoTrack.createBufferTrack(name: "meta-camera", source: .camera)
+            bufferTrack = t
+            localCameraTrack = t
         }
 
         guard let track = bufferTrack,
@@ -266,6 +277,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         cameraPublication = nil
         bufferPublication = nil
         bufferTrack = nil
+        localCameraTrack = nil
     }
 
     // MARK: - Track factories

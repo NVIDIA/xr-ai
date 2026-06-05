@@ -41,6 +41,8 @@ from xr_ai_models import STTService
 from xr_ai_vad import VadDetector
 from xr_ai_voicegate._phrases import STOP_RE
 
+from ..frames import ParticipantLeftFrame
+
 
 @dataclass(frozen=True)
 class VadConfig:
@@ -107,6 +109,15 @@ class VadSttProcessor(FrameProcessor):
 
         if isinstance(frame, InputAudioRawFrame):
             await self._handle_audio(frame)
+            return
+
+        if isinstance(frame, ParticipantLeftFrame):
+            # Evict all per-pid state for the departing participant so the
+            # detector / buffer / flag dicts don't grow without bound over a
+            # long-lived session of joins and leaves. The frame is still
+            # forwarded downstream so the gate / brain / transport can react.
+            await self._evict_participant(frame.participant_id)
+            await self.push_frame(frame, direction)
             return
 
         await self.push_frame(frame, direction)
@@ -328,6 +339,24 @@ class VadSttProcessor(FrameProcessor):
         await self.push_frame(tf)
         await self.push_frame(UserStoppedSpeakingFrame())
 
+    async def _evict_participant(self, pid: str) -> None:
+        """Drop all per-pid state when a participant leaves.
+
+        ``_detectors`` and the probe-related dicts/sets are keyed by pid and
+        are otherwise only ever added to (on first audio / speech-start), so
+        without an eviction path they grow unbounded across a session's
+        join/leave churn. Cancel any live probe task first so it can't fire
+        against torn-down state, then pop every per-pid entry.
+        """
+        await self._cancel_probe_task(pid)
+        self._detectors.pop(pid, None)
+        self._probe_buffer.pop(pid, None)
+        self._probe_sr.pop(pid, None)
+        self._stop_fired_for_current_utterance.discard(pid)
+        if self._current_pid == pid:
+            self._current_pid = None
+        logger.info("evicted per-participant VAD state pid={!r}", pid)
+
     async def _cancel_probe_task(self, pid: str) -> None:
         """Cancel a pending probe task and await its teardown.
 
@@ -354,6 +383,9 @@ class VadSttProcessor(FrameProcessor):
         try:
             await task
         except asyncio.CancelledError:
+            # Expected: we cancelled this probe ourselves; awaiting it
+            # raises CancelledError, which we intentionally swallow so a
+            # fresh probe can't overlap the one being torn down.
             pass
         except Exception:
             logger.exception("stop-probe cancel raised pid={!r}", pid)
