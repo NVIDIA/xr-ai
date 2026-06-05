@@ -9,6 +9,28 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Android: synthetic "Virtual Camera" provider over injectVideoFrame
+
+Adds a selectable "Virtual Camera (synthetic)" entry to the Android sample's
+camera dropdown that demonstrates the public `StreamSession.injectVideoFrame`
+API end-to-end: no physical camera, no CAMERA permission. When selected,
+`AppViewModel` runs a coroutine (`SyntheticCameraSource`) generating animated
+I420 frames (scrolling colour bars + a bouncing box) into a reused direct
+`ByteBuffer` and feeds them at ~30 fps through `session.injectVideoFrame`.
+
+Lifecycle is the subtle part: the synthetic loop is `cancelAndJoin`-ed
+*before* `stopCamera()` (otherwise a trailing frame would lazily republish the
+injected track after teardown), is gated on a CONNECTED session, and is
+cancelled on disconnect so it never calls `injectVideoFrame` on a torn-down
+session. The injected track is now published with `source = CAMERA` so the
+in-app preview (`CameraPreviewView`, which reads the CAMERA-source publication)
+shows the synthetic frames and the hub treats it as the participant's camera —
+this also benefits any other `injectVideoFrame` caller (e.g. external camera
+adapters). Always available even on a camera-less device/emulator.
+
+Builds on PR #172 (the `injectVideoFrame` API); not buildable in CI here —
+on-device verification is the gate.
+
 ### 2026-06-03 — Removed on-demand camera mode; clients always stream
 
 Dropped the "camera on demand" feature across the stack. Clients now
