@@ -383,13 +383,22 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]`, `xr-ai-vad [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
+
+Worker runs on the unified pipecat voice pipeline assembled by
+`xr_ai_pipecat.make_voice_pipeline`. `SimpleVlmBrain` (a
+`BrainProcessor`) owns the camera-on-demand state machine, frame
+tracking, the VLM streaming call, and the data-channel side path
+("ping" + ad-hoc text); voice gate (magic phrases, follow-up grace,
+listening chime, stop ack) lives in `xr_ai_voicegate` inside the
+`VoiceGateProcessor`. VAD/STT and sentence-batched TTS are also
+provided by the pipeline so the worker only configures the knobs.
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
 in-process.  Model endpoints are configured via `yaml/models.yaml`
 (default: Cosmos profile) or `yaml/models.omni.yaml` (Nemotron-Omni
-on port 8108).
+on port 8108). Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
 ### model-servers  (agent-samples/model-servers/)
 

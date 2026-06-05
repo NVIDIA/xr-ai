@@ -7,38 +7,35 @@ simple-vlm-example worker — entry point.
 Launched as a subprocess by ``uv run simple_vlm_example`` (the orchestrator).
 Do not run this directly.
 
-Protocol
+Pipeline
 --------
-Client → agent  (LiveKit data channel, any topic):
-    "ping"      — case-insensitive trigger for the configured default prompt
-    Any other UTF-8 text — used verbatim as the query
+Audio + voice path runs through the unified pipecat pipeline assembled by
+``xr_ai_pipecat.make_voice_pipeline``:
 
-Audio in (mic) → STT → text → query (same path as a data message).
-If any ``magic_phrases`` are configured, STT transcripts must begin
-with one of them (case-insensitive, strict prefix) or the utterance is
-dropped; the matched phrase is stripped before the query is dispatched.
-Multiple phrases enable several wordings ("agent", "hey agent", …)
-without falling back to fuzzy matching. After a match, the next
-utterance from the same participant within ``followup_grace_s`` seconds
-bypasses the gate so the conversation flows naturally. The text data
-channel is not gated; a *spoken* "ping" is gated, but the data-channel
-"ping" shortcut is unaffected.
+    XRMediaHubInputTransport → VadSttProcessor → VoiceGateProcessor →
+    SimpleVlmBrain → StreamingTtsProcessor → XRMediaHubOutputTransport
 
-Agent → client:
-    Topic "vlm.response"        — assembled UTF-8 text reply
-    `xr-hub-return-{pid}` track — sentence-by-sentence Piper TTS audio
+The voice gate (magic phrases, follow-up grace, listening chime, stop
+ack) is owned by :class:`xr_ai_voicegate.VoiceGate` inside the
+``VoiceGateProcessor``. Wake-word config moves from this worker's YAML
+to ``yaml/voice_gate.yaml`` so every pipecat sample shares the schema.
+
+Text data channel + frame tracking + camera-on-demand are owned by
+``SimpleVlmBrain`` and continue to use the ``ProcessorEndpoint`` API
+directly.
 
 Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
-----------------------------------------------------------------------
-    models_yaml:           yaml/models.yaml   # path to models config (relative to yaml dir)
+---------------------------------------------------------------------
+    models_yaml:           yaml/models.yaml      # path to models config
+    voice_gate_yaml:       yaml/voice_gate.yaml  # path to voice-gate config
     default_prompt:        "Describe what you see."
-    system_prompt:              <multiline string>   # role/style guidance for the VLM
-    magic_phrases:              []    # list of speech-only opt-in prefixes; empty = always-on
-    listening_chime:           false  # play a short bell when a magic phrase matches
-    followup_grace_s:          5.0    # after a match, next utterance within Xs bypasses gate
+    system_prompt:               <multiline string>   # role/style guidance
+    frame_max_age_s:            2.0   # frames older than this trigger startCamera
+    camera_on_timeout_s:       15.0   # wait for a fresh frame after startCamera
+    camera_grace_s:             5.0   # keep camera on after a query
     silero_threshold:           0.5   # Silero speech probability gate (0..1)
-    silence_duration:           0.8   # seconds of silence that ends an utterance
-    min_speech:                 0.1   # minimum seconds of speech before STT fires
+    silence_duration:           0.4   # seconds of silence ending an utterance
+    min_speech:                 0.1   # min seconds of speech before STT fires
 """
 from __future__ import annotations
 
@@ -49,14 +46,23 @@ import signal
 
 import yaml
 from loguru import logger
-from xr_ai_agent import ProcessorEndpoint
+from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
+from xr_ai_pipecat import VadConfig, make_voice_pipeline
+from xr_ai_pipecat.transport import XRMediaHubTransport
+from xr_ai_voicegate import load_voice_gate_config
 
-from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmAgent
+from agent import DEFAULT_SYSTEM_PROMPT, SimpleVlmBrain
 
-_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
-_HUB_PUSH = "ipc:///tmp/xr_hub_in"
+
+def _resolve(cfg_path: pathlib.Path | None, raw: str) -> pathlib.Path:
+    """Resolve a YAML-referenced path relative to the worker YAML's
+    parent directory so sample CWD doesn't change which files load."""
+    p = pathlib.Path(raw)
+    if cfg_path and not p.is_absolute():
+        p = cfg_path.parent / p
+    return p
 
 
 async def main(
@@ -66,16 +72,9 @@ async def main(
 ) -> None:
     setup_logging("worker")
 
-    # Resolve `models_yaml` relative to the worker YAML's parent directory.
-    # Matches the convention used by xr-render-demo (and any future sample)
-    # so all samples behave the same regardless of CWD. The bare default
-    # `"models.yaml"` sits next to the worker yaml in `yaml/`.
-    models_yaml_raw = cfg.get("models_yaml", "models.yaml")
-    models_yaml_path = pathlib.Path(models_yaml_raw)
-    if config_path and not models_yaml_path.is_absolute():
-        models_yaml_path = config_path.parent / models_yaml_path
-    models_cfg = load_models_config(models_yaml_path)
-
+    models_cfg = load_models_config(
+        _resolve(config_path, cfg.get("models_yaml", "models.yaml")),
+    )
     stt = make_stt(models_cfg, "stt")
     vlm = make_vlm(models_cfg, "vlm")
     tts = make_tts(models_cfg, "tts")
@@ -85,32 +84,63 @@ async def main(
     if ready_file:
         ready_file.touch()
 
-    ep    = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
-    agent = SimpleVlmAgent(
-        ep, stt, vlm, tts,
-        default_prompt        =cfg.get("default_prompt",        "Describe what you see."),
-        system_prompt         =cfg.get("system_prompt",         DEFAULT_SYSTEM_PROMPT),
-        # Accept `magic_phrases:` as a YAML list of strict-prefix
-        # phrases. `or []` handles the empty-YAML-value (None) case.
-        magic_phrases         =cfg.get("magic_phrases") or [],
-        listening_chime       =bool(cfg.get("listening_chime", False)),
-        followup_grace_s      =float(cfg.get("followup_grace_s",      5.0)),
-        silence_duration      =float(cfg.get("silence_duration",      0.8)),
-        min_speech            =float(cfg.get("min_speech",            0.1)),
-        silero_threshold      =float(cfg.get("silero_threshold",      0.5)),
+    voice_gate_cfg = load_voice_gate_config(
+        _resolve(config_path, cfg.get("voice_gate_yaml", "voice_gate.yaml")),
+    )
+
+    transport = XRMediaHubTransport()
+    brain = SimpleVlmBrain(
+        transport           = transport,
+        vlm                 = vlm,
+        default_prompt      = cfg.get("default_prompt", "Describe what you see."),
+        system_prompt       = cfg.get("system_prompt",  DEFAULT_SYSTEM_PROMPT),
+        frame_max_age_s     = float(cfg.get("frame_max_age_s",      2.0)),
+        camera_on_timeout_s = float(cfg.get("camera_on_timeout_s", 15.0)),
+        camera_grace_s      = float(cfg.get("camera_grace_s",       5.0)),
+    )
+
+    # make_voice_pipeline returns (pipeline, task); only the task is run.
+    _, task = make_voice_pipeline(
+        transport      = transport,
+        stt            = stt,
+        tts            = tts,
+        brain          = brain,
+        vad_cfg        = VadConfig(
+            silence_duration = float(cfg.get("silence_duration", 0.4)),
+            min_speech       = float(cfg.get("min_speech",       0.1)),
+            silero_threshold = float(cfg.get("silero_threshold", 0.5)),
+        ),
+        voice_gate_cfg = voice_gate_cfg,
+        text_topic     = "vlm.response",
     )
 
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, agent.shutdown)
+    cancel_requested = False
 
-    logger.info("simple-vlm-example connecting  sub={}  push={}", _HUB_PUB, _HUB_PUSH)
+    def _request_cancel() -> None:
+        # PipelineTask.cancel is a coroutine; add_signal_handler needs a
+        # sync callable. Guard against a second signal (e.g. double
+        # ctrl-c) spawning a redundant cancel task while the first is
+        # still draining the pipeline.
+        nonlocal cancel_requested
+        if cancel_requested:
+            return
+        cancel_requested = True
+        asyncio.create_task(task.cancel())
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, _request_cancel)
+
+    logger.info("simple-vlm-example starting pipecat pipeline")
     try:
-        await agent.run()
+        await PipelineRunner().run(task)
     finally:
-        agent.shutdown()
+        transport.shutdown()
         for svc in (stt, vlm, tts):
-            await svc.close()  # type: ignore[attr-defined]
+            try:
+                await svc.close()  # type: ignore[attr-defined]
+            except Exception:
+                logger.opt(exception=True).warning("service close failed")
     logger.info("simple-vlm-example stopped")
 
 
@@ -119,7 +149,7 @@ async def _wait_for_health(**services: object) -> None:
     pending: dict[str, object] = dict(services)
     while pending:
         results = await asyncio.gather(
-            *(svc.health() for svc in pending.values()),
+            *(svc.health() for svc in pending.values()),  # type: ignore[attr-defined]
             return_exceptions=True,
         )
         still_waiting = {
