@@ -326,6 +326,8 @@ class SimpleVlmBrain(BrainProcessor):
                     self._camera_on[pid] = False
                     await self._client_control(pid, "stopCamera")
             except asyncio.CancelledError:
+                # Expected: a newer query cancels this grace-period timer
+                # before it fires (see the old.cancel() above). Nothing to do.
                 pass
 
         self._camera_off_timers[pid] = asyncio.create_task(_off())
