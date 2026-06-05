@@ -230,15 +230,16 @@ class RenderSceneProcessor(BrainProcessor):
         """Drive one full turn of the agentic loop for *text* from *pid*.
 
         Yields strings that should reach TTS:
-          - the quick-ack (only when needs_thinking — non-thinking turns
-            resolve in under a second and a spoken ack would land after
-            the real response)
+          - the quick-ack, on EVERY turn — spoken first so the user always
+            gets immediate audio feedback, especially before a tool-using
+            turn that would otherwise be silent until the final reply
           - the final user-visible response.
 
-        Progress messages (quick-ack on non-thinking turns, per-tool
-        progress, still-working ticks) are sent to the data channel via
-        ``self._transport.send_return_data`` only. Speaking them would
-        stack in the TTS queue and play after the real reply.
+        Per-tool progress and still-working ticks are sent to the data
+        channel (``send_return_data``) only, NOT spoken: a long agentic loop
+        can emit many of them and speaking each would stack the TTS queue and
+        play after the real reply. The single spoken ack covers "I'm on it";
+        the panel carries the detailed progress.
         """
         # Canned agent notice (XR-lifecycle failure) — speak it verbatim and
         # skip the LLM loop. Exact-text match guards against a real query
@@ -281,14 +282,18 @@ class RenderSceneProcessor(BrainProcessor):
             ack, needs_thinking = "", False
 
         if ack and send_pid:
+            # ACK-SPEAK POLICY (deliberate): speak the quick-ack on EVERY turn,
+            # not just needs_thinking ones. It's yielded before the agentic
+            # loop runs, so TTS plays it first — giving the user immediate
+            # audio feedback at the start of every turn. This matters most for
+            # tool-using turns (which may not be flagged needs_thinking yet
+            # still take seconds): without a spoken ack the user hears nothing
+            # until the final reply. Per-tool progress + still-working ticks
+            # remain text-only (below) so they don't stack the TTS queue; the
+            # single spoken ack is enough to signal "I'm on it". Also mirror
+            # the ack to the panel.
             await self._send(send_pid, ack, topic=_AGENT_PROGRESS_TOPIC)
-            if needs_thinking:
-                # ACK-SPEAK POLICY (deliberate): speak a brief ack only on
-                # needs_thinking turns. Fast turns answer quickly enough that
-                # a spoken ack would land after the real response and just add
-                # noise; the panel still shows the ack (the _send above) on
-                # every turn. Matches pre-migration behavior.
-                yield ack
+            yield ack
 
         # Start a "still working" timer — fires if reasoning takes >5s.
         # Cancelled as soon as the loop returns.

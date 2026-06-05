@@ -3,14 +3,19 @@
 
 # xr-render-demo voice gate configuration.
 #
-# magic_phrases — strict-prefix opt-in words; empty list disables the gate so
-#                 every STT transcript is dispatched (the pre-migration
-#                 always-on behavior).  Add phrases (e.g. ["agent", "hey agent"])
-#                 to require a wake word.
+# magic_phrases — wake-word gate. Empty list (the current default) DISABLES
+#                 the gate: every STT transcript is dispatched to the agent
+#                 (always-on, no wake word). To require a "hey agent" / "agent"
+#                 wake word instead, set:
+#                     magic_phrases:
+#                       - "agent"
+#                       - "hey agent"
+#                 (matches the simple-vlm-example default). Strict-prefix match.
 # listening_chime — when true AND magic_phrases is non-empty, a short two-tone
-#                   chime plays on fresh magic-phrase matches.
+#                   chime plays on fresh magic-phrase matches. Inert while
+#                   magic_phrases is empty (no match can occur).
 # followup_grace_s — seconds after a phrase match during which the next
 #                    utterance from the same participant bypasses the gate.
-magic_phrases: []
+magic_phrases: []  # always-on; see note above to enable a wake word
 listening_chime: true
 followup_grace_s: 5.0

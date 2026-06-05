@@ -501,3 +501,34 @@ async def test_pending_notice_not_consumed_by_real_query() -> None:
     # The matching text drains it.
     await brain.handle_query("pid-1", _LAUNCH_FAIL_MSG, False)
     assert "pid-1" not in brain._pending_notices
+
+
+async def test_quick_ack_spoken_on_non_thinking_turn() -> None:
+    """ACK-SPEAK POLICY: the quick-ack is yielded (→ TTS) on EVERY turn,
+    including a non-thinking one, so a tool-using turn is never silent until
+    the final reply. Pre-change the ack was spoken only when needs_thinking.
+
+    _quick_ack and _agentic_loop are stubbed so no LLM/MCP client is touched.
+    """
+    transport = _CaptureTransport()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    async def _fake_quick_ack(_text):
+        return ("On it.", False)  # ack present, needs_thinking = False
+
+    async def _fake_loop(*_a, **_k):
+        return "All set."
+
+    brain._quick_ack = _fake_quick_ack      # noqa: SLF001
+    brain._agentic_loop = _fake_loop        # noqa: SLF001
+
+    gen = await brain.handle_query("pid-1", "place a cube", False)
+    spoken = [s async for s in gen]
+
+    # Ack is spoken first (so the turn isn't silent), then the final reply.
+    assert spoken and spoken[0] == "On it."
+    assert "All set." in spoken
+    # Ack is also mirrored to the panel on agent.progress.
+    progress = [m for m in transport.sent if m.topic == "agent.progress"]
+    assert any(m.data.decode() == "On it." for m in progress)
