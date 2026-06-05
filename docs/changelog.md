@@ -22,7 +22,12 @@ Lifecycle is the subtle part: the synthetic loop is `cancelAndJoin`-ed
 *before* `stopCamera()` (otherwise a trailing frame would lazily republish the
 injected track after teardown), is gated on a CONNECTED session, and is
 cancelled on disconnect so it never calls `injectVideoFrame` on a torn-down
-session. The injected track is now published with `source = CAMERA` so the
+session. The first frame is injected and awaited *before* `isCameraActive`
+flips true, so the preview card composes only once the injected track is
+published: `CameraPreviewView` reads the non-observable
+`session.localCameraTrack` getter a single time, so a track that appeared
+*after* composition would never render (this is what left the preview blank).
+The injected track is published with `source = CAMERA` so the
 in-app preview (`CameraPreviewView`, which reads the CAMERA-source publication)
 shows the synthetic frames and the hub treats it as the participant's camera —
 this also benefits any other `injectVideoFrame` caller (e.g. external camera

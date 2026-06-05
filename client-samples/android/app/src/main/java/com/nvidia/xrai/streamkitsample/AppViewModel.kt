@@ -287,14 +287,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (syntheticJob?.isActive == true) return
-        isCameraActive = true
         syntheticJob = viewModelScope.launch(Dispatchers.Default) {
             val source = SyntheticCameraSource()
             var frame = 0
             try {
+                // Inject the first frame and await it: this lazily publishes the
+                // injected camera track. Only AFTER it exists do we flip
+                // isCameraActive, so the preview card composes when
+                // session.localCameraTrack is already non-null. The getter is
+                // not Compose-observable, so a track that appears after the
+                // card composes would never be picked up — mirrors the real
+                // camera, where startCamera() publishes before we mark active.
+                session?.injectVideoFrame(
+                    source.renderFrame(frame++), source.width, source.height,
+                    System.nanoTime() / 1_000,
+                )
+                withContext(Dispatchers.Main) { isCameraActive = true }
                 while (isActive) {
-                    val buf = source.renderFrame(frame++)
-                    session?.injectVideoFrame(buf, source.width, source.height, System.nanoTime() / 1_000)
+                    session?.injectVideoFrame(
+                        source.renderFrame(frame++), source.width, source.height,
+                        System.nanoTime() / 1_000,
+                    )
                     delay(VIRTUAL_CAMERA_FRAME_MS)
                 }
             } catch (e: CancellationException) {
