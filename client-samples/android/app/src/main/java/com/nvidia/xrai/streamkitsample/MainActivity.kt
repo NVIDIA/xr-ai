@@ -524,11 +524,11 @@ private fun MediaSection(vm: AppViewModel) {
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
         }
 
-        // Camera selector — auto-populated from CameraManager. Hidden while
-        // camera is active and when the device exposes no cameras.
-        if (!vm.isCameraActive && vm.availableCameras.isNotEmpty()) {
+        // Camera selector — physical Camera2 devices plus the synthetic
+        // "Virtual Camera" provider. Hidden only while a camera is active.
+        if (!vm.isCameraActive && vm.selectableCameras.isNotEmpty()) {
             CameraSelectorRow(
-                cameras = vm.availableCameras,
+                cameras = vm.selectableCameras,
                 selectedId = vm.selectedCameraId,
                 onSelect = { vm.selectedCameraId = it },
                 enabled = isConnected,
@@ -543,6 +543,9 @@ private fun MediaSection(vm: AppViewModel) {
                 onClick = {
                     if (vm.isCameraActive) {
                         vm.stopCamera()
+                    } else if (vm.selectedCameraId == VIRTUAL_CAMERA_ID) {
+                        // Synthetic frames — no physical camera, no CAMERA permission.
+                        vm.startCamera()
                     } else {
                         val hasPerm = ContextCompat.checkSelfPermission(
                             context, Manifest.permission.CAMERA
