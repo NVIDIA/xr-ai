@@ -207,8 +207,6 @@ struct ContentView: View {
         @Bindable var m = model
         let isConnected = model.connectionState == .connected
 
-        Toggle("Camera on demand", isOn: $m.cameraOnDemand)
-
         Picker("Camera", selection: $m.cameraPosition) {
             ForEach(CameraConfig.Position.allCases, id: \.self) { position in
                 Text(position.displayName).tag(position)

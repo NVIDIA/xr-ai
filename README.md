@@ -7,16 +7,15 @@
 
 # xr-ai
 
-Agentic AI for XR — a sample blueprint for multi-modal, real-time conversational AI
-within the CloudXR ecosystem.
+Agentic AI for XR — an open-source foundation for multi-modal, real-time
+conversational AI within the CloudXR ecosystem.
 
-## Early Access Notice
+## Public Beta Notice
 
-This project is currently in early access and is under active development.
-Features, APIs, documentation, and behavior may change without notice.
-Expect bugs, incomplete functionality, and breaking changes as the project
-evolves. Use at your own discretion, and please report issues or feedback
-to help improve the project.
+This project is publicly available in beta and is under active development.
+Features, APIs, documentation, and behavior may change as the project evolves.
+Expect bugs, incomplete functionality, and breaking changes. Use at your own
+discretion, and please report issues or feedback to help improve the project.
 
 ## What is XR-AI?
 
@@ -24,7 +23,7 @@ XR-AI is a developer stack for building powerful XR and AI systems across device
 
 With XR-AI, developers can build agents that see and hear what the user experiences, reason over live physical context, call external tools through MCP, and respond with audio or data in the same XR session. The stack provides an end-to-end foundation for multimodal spatial computing applications: real-time media routing, participant-aware response handling, agent interfaces, AI service integration, remote rendering, and sample applications that show the pieces working together.
 
-The value is speed without lock-in. XR-AI is designed to work quickly with NVIDIA open models for vision, language, speech, and speech synthesis, while still giving developers the flexibility to bring their own models, services, tools, and application logic. Because it is built around NVIDIA GPU infrastructure, the same architecture can be deployed where the workload needs to run: cloud, data center, workstation, or edge.
+The value is speed without lock-in. XR-AI is designed to work quickly with NVIDIA open models for vision, language, and speech, plus swappable speech synthesis services, while still giving developers the flexibility to bring their own models, services, tools, and application logic. Because it is built around NVIDIA GPU infrastructure, the same architecture can be deployed where the workload needs to run: cloud, data center, workstation, or edge.
 
 XR-AI also gives developers a practical path across product categories. Teams can start with AI glasses-style experiences that use live camera, audio, and agent responses, then extend the same framework to richer AR glasses or XR headset experiences that use CloudXR remote rendering. This lets developers build for today's lightweight AI devices while keeping a clear path to immersive, GPU-rendered spatial applications.
 
@@ -107,7 +106,7 @@ frames are dropped if it is closed.
 
 | Layer | Directory | Description |
 |---|---|---|
-| Clients | `client-samples/` | Android, iOS/visionOS, Web clients |
+| Clients | `client-samples/` | Android, iOS/visionOS, Web, and native StreamKit clients |
 | Server runtime | `server-runtime/` | XR-Media-Hub + LiveKit internal transport |
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |

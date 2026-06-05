@@ -37,9 +37,6 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     magic_phrases:              []    # list of speech-only opt-in prefixes; empty = always-on
     listening_chime:           false  # play a short bell when a magic phrase matches
     followup_grace_s:          5.0    # after a match, next utterance within Xs bypasses gate
-    frame_max_age_s:           2.0   # frames older than this trigger a camera-on request
-    camera_on_timeout_s:      15.0   # how long to wait for a fresh frame after startCamera
-    camera_grace_s:            5.0   # keep camera on this long after a query (avoids restart on follow-ups)
     silero_threshold:           0.5   # Silero speech probability gate (0..1)
     silence_duration:           0.8   # seconds of silence that ends an utterance
     min_speech:                 0.1   # minimum seconds of speech before STT fires
@@ -108,9 +105,6 @@ async def main(
         magic_phrases         =cfg.get("magic_phrases") or [],
         listening_chime       =bool(cfg.get("listening_chime", False)),
         followup_grace_s      =float(cfg.get("followup_grace_s",      5.0)),
-        frame_max_age_s       =float(cfg.get("frame_max_age_s",       2.0)),
-        camera_on_timeout_s   =float(cfg.get("camera_on_timeout_s",  10.0)),
-        camera_grace_s        =float(cfg.get("camera_grace_s",         5.0)),
         silence_duration      =float(cfg.get("silence_duration",      0.8)),
         min_speech            =float(cfg.get("min_speech",            0.1)),
         silero_threshold      =float(cfg.get("silero_threshold",      0.5)),

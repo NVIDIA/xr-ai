@@ -55,8 +55,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -563,7 +561,7 @@ private fun MediaSection(vm: AppViewModel) {
         }
 
         // Camera status
-        CardRow {
+        CardRow(showDivider = false) {
             Text("Camera", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.weight(1f))
             val (statusText, statusColor) = when {
@@ -572,21 +570,6 @@ private fun MediaSection(vm: AppViewModel) {
                 else              -> "Not connected" to ColorSecondary
             }
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
-        }
-
-        // Camera on demand toggle — always visible so the user can set the
-        // preference before connecting.
-        CardRow(showDivider = false) {
-            Text("On demand", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.weight(1f))
-            Switch(
-                checked = vm.cameraOnDemand,
-                onCheckedChange = { vm.cameraOnDemand = it },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = ColorGreen,
-                ),
-            )
         }
     }
 }

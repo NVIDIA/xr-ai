@@ -32,6 +32,22 @@ class StreamingBackend;
 /// Exactly one of `token` or `token_url` must be set before calling
 /// StreamSession::Connect().
 ///
+/// ## Platform contract for `token_url`
+///
+/// The iOS, Android, and Web backends fetch the JWT from `token_url` via
+/// the platform's native HTTP client. The built-in C++ `LiveKitBackend`
+/// **does not implement HTTP token fetch** — `LiveKitBackend::FetchToken`
+/// throws `TokenFetchFailedError` by default. The C++ SDK doesn't ship a
+/// portable HTTP client, and forcing one (libcurl, cpp-httplib, Poco::Net)
+/// on every consumer is heavy for embedded targets, where TLS root stores
+/// and DNS resolvers may not even be present.
+///
+/// Two ways forward in C++:
+///   - Pass a pre-signed JWT in `token` (computed server-side and shipped
+///     to the device by your own mechanism — the embedded path).
+///   - Subclass `LiveKitBackend` and override `FetchToken` with whichever
+///     HTTP client your target already links against.
+///
 /// Mirror of Swift `LiveKitConfig` and Kotlin `LiveKitConfig`.
 struct LiveKitConfig {
     /// IP address or hostname of the LiveKit server (e.g. "192.168.1.100").
@@ -51,6 +67,10 @@ struct LiveKitConfig {
     /// URL of a token-generation endpoint.
     /// The SDK appends `?identity=<identity>` as a query parameter.
     /// The endpoint must return either a plain JWT string or {"token":"eyJ…"}.
+    ///
+    /// See the struct-level "Platform contract" note: the built-in C++
+    /// `LiveKitBackend` does not fetch this URL — pass an inline `token`
+    /// or subclass `LiveKitBackend` to override `FetchToken`.
     std::optional<std::string> token_url;
 };
 

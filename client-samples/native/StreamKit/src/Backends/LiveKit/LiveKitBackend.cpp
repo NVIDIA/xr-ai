@@ -188,7 +188,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
     if (config_.token.has_value() && !config_.token->empty()) {
         token = *config_.token;
     } else if (config_.token_url.has_value() && !config_.token_url->empty()) {
-        FetchToken(*config_.token_url, session_config_.identity);
+        token = FetchToken(*config_.token_url, session_config_.identity);
     } else {
         throw MissingTokenError{};
     }
@@ -527,9 +527,9 @@ void LiveKitBackend::TearDown() {
 // Token fetch
 // ─────────────────────────────────────────────────────────────────────────────
 
-[[noreturn]] void LiveKitBackend::FetchToken(
+std::string LiveKitBackend::FetchToken(
     const std::string& token_url,
-    const std::string& /*identity*/) const {
+    const std::string& /*identity*/) {
     // No HTTP client shipped — callers must pass an inline JWT via
     // `LiveKitConfig::token` (computed server-side).
     throw TokenFetchFailedError(std::format(
