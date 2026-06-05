@@ -172,6 +172,12 @@ class RenderSceneProcessor(BrainProcessor):
         # Per-turn snapshot used to compute prev→new pairs on update_primitive.
         self._pre_move_positions: dict[str, tuple[float, float, float]] = {}
 
+        # Canned spoken notices the agent (XR lifecycle, outside handle_query)
+        # asks us to deliver. Keyed by pid → list of exact strings. Drained in
+        # handle_query, which short-circuits the LLM loop for a matching entry.
+        # See enqueue_notice / _emit_notice.
+        self._pending_notices: dict[str, list[str]] = {}
+
     # ── public: text-channel entry ────────────────────────────────────────────
 
     async def enqueue_text_query(self, pid: str, text: str) -> None:
@@ -184,6 +190,31 @@ class RenderSceneProcessor(BrainProcessor):
         through a synthesized ``GatedQueryFrame``.
         """
         from xr_ai_pipecat import GatedQueryFrame
+        await self._spawn_query(GatedQueryFrame(
+            participant_id = pid,
+            text           = text,
+            fresh_match    = False,
+            pts_us         = _now_us(),
+        ))
+
+    async def enqueue_notice(self, pid: str, text: str) -> None:
+        """Speak a canned, agent-authored notice through the normal turn path.
+
+        XR-lifecycle failures (start_xr error, LOVR never ready) happen in
+        ``RenderDemoAgent``, outside ``handle_query``'s yield→TTS path. To
+        surface them with voice *and* a panel line — the same delivery shape
+        as a normal final answer (``_send(agent.response)`` + ``yield``) —
+        the agent hands us the message here. We register it as pending for
+        *pid* and inject a ``GatedQueryFrame`` through the same
+        ``_spawn_query`` machinery a typed/spoken query uses, so the base
+        class owns the per-pid in-flight task and its cancellation. The text
+        is matched (and consumed) by ``handle_query`` below, which yields it
+        verbatim instead of running the agentic loop. Matching on the exact
+        string — not just pid — means a real query that interleaves before
+        the notice task runs is never mistaken for the notice.
+        """
+        from xr_ai_pipecat import GatedQueryFrame
+        self._pending_notices.setdefault(pid, []).append(text)
         await self._spawn_query(GatedQueryFrame(
             participant_id = pid,
             text           = text,
@@ -209,7 +240,24 @@ class RenderSceneProcessor(BrainProcessor):
         ``self._transport.send_return_data`` only. Speaking them would
         stack in the TTS queue and play after the real reply.
         """
+        # Canned agent notice (XR-lifecycle failure) — speak it verbatim and
+        # skip the LLM loop. Exact-text match guards against a real query
+        # interleaving before the notice task runs. See enqueue_notice.
+        pending = self._pending_notices.get(pid)
+        if pending and text in pending:
+            pending.remove(text)
+            if not pending:
+                self._pending_notices.pop(pid, None)
+            return self._emit_notice(pid, text)
         return self._run_turn(pid, text)
+
+    async def _emit_notice(self, pid: str, text: str) -> AsyncIterator[str]:
+        """Deliver a canned notice with the same shape as a final answer:
+        a panel line on ``agent.response`` plus a spoken (yielded) line."""
+        send_pid = pid or self._transport.target_participant
+        if send_pid:
+            await self._send(send_pid, text, topic=_AGENT_RESPONSE_TOPIC)
+        yield text
 
     async def _run_turn(self, pid: str, text: str) -> AsyncIterator[str]:
         text = text.strip()
@@ -235,9 +283,11 @@ class RenderSceneProcessor(BrainProcessor):
         if ack and send_pid:
             await self._send(send_pid, ack, topic=_AGENT_PROGRESS_TOPIC)
             if needs_thinking:
-                # Speak the ack only when the agentic loop will take long
-                # enough that the user benefits from hearing it — matches
-                # pre-migration behavior.
+                # ACK-SPEAK POLICY (deliberate): speak a brief ack only on
+                # needs_thinking turns. Fast turns answer quickly enough that
+                # a spoken ack would land after the real response and just add
+                # noise; the panel still shows the ack (the _send above) on
+                # every turn. Matches pre-migration behavior.
                 yield ack
 
         # Start a "still working" timer — fires if reasoning takes >5s.
@@ -288,6 +338,14 @@ class RenderSceneProcessor(BrainProcessor):
 
         # Strip leaked tool-call JSON from both the user-visible reply and
         # history; legit text starting with "{" passes through.
+        #
+        # Defensive guard only: _agentic_loop always returns a non-empty
+        # string ("Done." fallbacks on lines ~697/741, the not-ready string,
+        # or the error string set above), and the cancellation branch
+        # re-raises before reaching here. So this never fires for a real
+        # turn — we intentionally do NOT yield a spoken "Done." here, because
+        # there is no audible-close gap to fill. Every reachable turn already
+        # ends with a yielded final response below.
         if not response:
             return
 
@@ -418,8 +476,12 @@ class RenderSceneProcessor(BrainProcessor):
         while True:
             msg = await self._still_working_msg(transcript, sent, thinking_ctx)
             if msg and pid:
-                # Data channel only — spoken updates stack up in the TTS queue
-                # and play after the real response, confusing the user.
+                # PROGRESS POLICY (deliberate divergence from simple-vlm):
+                # progress is panel-only, never spoken. render-demo's long
+                # multi-tool loops emit many of these; speaking them would
+                # stack in the TTS queue and play after the real response.
+                # Only acks (on thinking turns), the final answer, and
+                # failure notices are spoken — see ACK-SPEAK POLICY above.
                 await self._send(pid, msg, topic=_AGENT_PROGRESS_TOPIC)
                 sent.append(msg)
             await asyncio.sleep(repeat_every)
@@ -713,7 +775,10 @@ class RenderSceneProcessor(BrainProcessor):
 
                 progress = _TOOL_PROGRESS.get(name)
                 if progress and pid:
-                    # Data channel only — TTS is too spammy for per-tool updates.
+                    # PROGRESS POLICY (deliberate divergence from simple-vlm):
+                    # per-tool progress is panel-only. A turn can fire several
+                    # tools; speaking each would stack in the TTS queue behind
+                    # the real answer. Only acks/final/failures are spoken.
                     await self._send(pid, progress, topic=_AGENT_PROGRESS_TOPIC)
 
                 logger.debug("tool call  iter={}  tool={}  args={}", iteration, name, args)

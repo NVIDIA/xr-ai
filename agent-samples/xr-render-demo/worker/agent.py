@@ -84,13 +84,16 @@ class RenderDemoAgent:
         start_res = await self._call_render("start_xr", {})
         if start_res is None:
             logger.warning("start_xr failed")
+            await self._notify_launch_failed(msg.participant_id)
             return
         if start_res.get("status") == "error":
             logger.error("start_xr error: {}", start_res.get("error"))
+            await self._notify_launch_failed(msg.participant_id)
             return
 
         logger.info("start_xr status={} — polling lovr_started…", start_res.get("status"))
         if not await self._wait_lovr():
+            await self._notify_launch_failed(msg.participant_id)
             return
         self._xr_started = True
 
@@ -100,6 +103,23 @@ class RenderDemoAgent:
             topic=_RENDER_READY_TOPIC,
             pts_us=_now_us(), data=b"",
         ))
+
+    async def _notify_launch_failed(self, pid: str) -> None:
+        """Surface an XR-launch failure to the user, spoken + on the panel.
+
+        ``start_xr`` and the LOVR-spawn poll run here, outside the brain's
+        ``handle_query``/yield→TTS path, so a bare ``logger.warning`` would
+        leave the user staring at a "Launch XR" button that silently did
+        nothing. Route a short, actionable message through the brain's
+        ``enqueue_notice`` so it reaches TTS *and* the ``agent.response``
+        panel exactly like a normal answer — the same delivery the in-loop
+        "scene not ready" case already gets. One generic message covers
+        both the start_xr-error and never-ready/spawn-error cases; the log
+        lines above retain the specific cause for operators.
+        """
+        await self._brain.enqueue_notice(
+            pid, "I couldn't start the XR session — try Launch XR again."
+        )
 
     async def _handle_text_input(self, msg: DataMessage) -> None:
         """Feed a typed text message into the same path STT uses.
