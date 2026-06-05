@@ -19,10 +19,13 @@ handled downstream (``StreamingTtsProcessor``). This class owns ONLY:
 * The data-channel side path: ``"ping"`` shortcut + ad-hoc text queries
   (the voice gate does not see these).
 
-Hub events (``DataMessage`` / ``FrameSignal`` / ``ParticipantEvent``) are
-not currently surfaced as pipecat frames, so the brain registers
-callbacks on the transport's ``ProcessorEndpoint`` directly. The unified
-audio path goes through pipecat; this side path stays on the IPC API.
+Hub ``DataMessage`` / ``FrameSignal`` events are not surfaced as
+pipecat frames, so the brain registers callbacks on the transport's
+``ProcessorEndpoint`` directly. Participant leave IS surfaced as a
+``ParticipantLeftFrame`` (the transport bridges it), so teardown rides
+the base ``BrainProcessor`` frame path rather than an endpoint
+callback. The unified audio path goes through pipecat; this side path
+stays on the IPC API.
 """
 from __future__ import annotations
 
@@ -34,7 +37,7 @@ from typing import AsyncIterator
 import httpx
 from loguru import logger
 from pipecat.frames.frames import InterruptionFrame
-from xr_ai_agent import DataMessage, FrameSignal, ParticipantEvent
+from xr_ai_agent import DataMessage, FrameSignal
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import VLMService
 from xr_ai_pipecat import BrainProcessor, GatedQueryFrame
@@ -117,12 +120,17 @@ class SimpleVlmBrain(BrainProcessor):
         self._frame_events:     dict[str, asyncio.Event]   = {}
 
         # Side-path: register hub callbacks directly. Voice goes through
-        # the pipecat pipeline; data/frame/participant events do not yet
-        # have frame equivalents.
+        # the pipecat pipeline; data + frame events do not yet have frame
+        # equivalents.
+        # Participant leave teardown is NOT registered here: the
+        # transport bridges the hub ``ParticipantEvent(joined=False)`` to
+        # a pipecat ``ParticipantLeftFrame``, and the base
+        # ``BrainProcessor`` runs ``on_participant_left`` + ``_cancel_pid``
+        # off that frame. Registering an endpoint callback too would tear
+        # the same pid down twice on a single leave.
         ep = transport.endpoint
         ep.on_data(self._on_data)
         ep.on_frame(self._on_frame)
-        ep.on_participant(self._on_participant)
 
     # ── BrainProcessor overrides ──────────────────────────────────────────────
 
@@ -131,7 +139,17 @@ class SimpleVlmBrain(BrainProcessor):
     ) -> AsyncIterator[str]:
         """Drive one query end-to-end. Yields VLM tokens for downstream
         TTS. ``fresh_match`` is informational — both speech and data
-        paths drive the same VLM call."""
+        paths drive the same VLM call.
+
+        Returns (not ``yield``s) the async iterator: the base
+        ``BrainProcessor._run_query`` does ``result = await
+        handle_query(...)`` then iterates ``result``, so this must be a
+        coroutine that *returns* an ``AsyncIterator`` — not an async
+        generator. Rewriting the body as ``async for ... yield`` would
+        make this an async-gen function, and ``await``-ing an async-gen
+        object raises; keep the ``return`` to honor the await-then-iterate
+        contract.
+        """
         return self._stream_query(pid, text)
 
     async def on_query_superseded(self, pid: str) -> None:
@@ -170,8 +188,7 @@ class SimpleVlmBrain(BrainProcessor):
     async def on_participant_left(self, pid: str) -> None:
         """Tear down per-pid state. Base class cancels in-flight tasks
         — we only own the camera + frame state."""
-        for k in [k for k in self._latest if k[0] == pid]:
-            del self._latest[k]
+        self._latest = {k: v for k, v in self._latest.items() if k[0] != pid}
         self._frame_events.pop(pid, None)
         self._camera_on.pop(pid, None)
         self._camera_held.discard(pid)
@@ -403,14 +420,3 @@ class SimpleVlmBrain(BrainProcessor):
                 detail=f"pid={pid!r}  query={query[:60]!r}",
                 duration_s=time.monotonic() - t0,
             )
-
-    # ── participant lifecycle (hub side) ──────────────────────────────────────
-
-    async def _on_participant(self, event: ParticipantEvent) -> None:
-        """Hub-side participant cleanup. The voice gate's greeting is
-        wired through the pipecat frame layer; this hook only needs to
-        clear brain-owned per-pid state on leave."""
-        if event.joined:
-            return
-        await self.on_participant_left(event.participant_id)
-        self._cancel_pid(event.participant_id)
