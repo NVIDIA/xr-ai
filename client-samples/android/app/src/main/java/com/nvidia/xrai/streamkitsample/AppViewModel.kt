@@ -313,6 +313,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 throw e // normal stop — let the coroutine cancel
             } catch (e: Exception) {
+                // A mid-loop failure may have already published the injected
+                // track (first frame succeeded, a later one threw). Unpublish
+                // it so we don't leave a live track lingering until the next
+                // stopCamera()/disconnect().
+                runCatching { session?.stopCamera() }
                 withContext(Dispatchers.Main) {
                     lastError = e.message
                     isCameraActive = false
