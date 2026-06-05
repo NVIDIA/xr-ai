@@ -1,6 +1,38 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""xr-ai-pipecat — shared Pipecat transport + audio utilities for xr-ai agents."""
+"""xr-ai-pipecat — unified Pipecat voice pipeline for xr-ai agents.
 
-__all__: list[str] = []
+Top-level entry point is :func:`make_voice_pipeline`. Sample workers
+subclass :class:`BrainProcessor` and hand the instance to the factory;
+everything else (VAD/STT, voice gate, streaming TTS) is provided.
+"""
+from __future__ import annotations
+
+from .frames import (
+    BrainResponseEndFrame,
+    GatedQueryFrame,
+    ParticipantJoinedFrame,
+    ParticipantLeftFrame,
+)
+from .pipeline import make_voice_pipeline
+from .processors import (
+    BrainProcessor,
+    StreamingTtsProcessor,
+    VadConfig,
+    VadSttProcessor,
+    VoiceGateProcessor,
+)
+
+__all__ = [
+    "BrainProcessor",
+    "BrainResponseEndFrame",
+    "GatedQueryFrame",
+    "ParticipantJoinedFrame",
+    "ParticipantLeftFrame",
+    "StreamingTtsProcessor",
+    "VadConfig",
+    "VadSttProcessor",
+    "VoiceGateProcessor",
+    "make_voice_pipeline",
+]

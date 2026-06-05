@@ -9,6 +9,10 @@
 # instead of Cosmos on port 8100.
 models_yaml: models.yaml
 
+# Path to the voice-gate config (resolved relative to this file's
+# directory). Owns the magic-phrase / follow-up / listening-chime knobs.
+voice_gate_yaml: voice_gate.yaml
+
 # Sent to the VLM whenever the client posts the literal text "ping".
 default_prompt: "Describe what you see."
 
@@ -38,42 +42,13 @@ system_prompt: |
     talking, just acknowledge briefly with something like "Okay, I will
     stop." and say nothing else.
 
+# Camera on demand — tune timing for your network/device combination.
+frame_max_age_s:      5.0   # frame older than this is considered stale; agent requests camera
+camera_on_timeout_s: 30.0   # give up waiting for a fresh frame after this many seconds
+camera_grace_s:       5.0   # keep camera on this long after a query (avoids restart on follow-ups)
+
 # Voice Activity Detection — Silero VAD (ONNX backend).
 # Tune if STT triggers too early or misses speech.
 silero_threshold:  0.5    # Silero speech-probability gate (0..1); lower = more sensitive
-silence_duration:  0.4    # seconds of silence that ends an utterance (lower = snappier, but may split utterances with natural pauses)
-min_speech:        0.1    # minimum seconds of speech before STT is called; 0.1s captures short commands like "stop"
-
-# Speech-only opt-in phrases. STT transcripts must begin with one of
-# these (case-insensitive, strict prefix — no leading filler words
-# allowed) or they are dropped, so ambient conversation never triggers
-# the agent. The matched phrase is stripped before the VLM sees the
-# query. Configure several wordings to support multiple natural
-# greetings without resorting to fuzzy matching.
-#
-# Use an empty list ([]) or omit to disable the gate (agent answers
-# every utterance — only use this for solo testing where no ambient
-# speech is present).
-#
-# Scope: applies to the speech path only. The text data channel is never
-# gated. Note that a *spoken* "ping" is also gated by these phrases; the
-# "ping" data-channel shortcut is unaffected.
-magic_phrases:
-  - "agent"
-  - "hey agent"
-
-# Audible "I heard you" feedback. When true and `magic_phrases` is
-# non-empty, the server plays a short two-tone chime on the return
-# audio track the moment a phrase is matched — before STT+VLM finish —
-# so the user knows the agent is processing. Synthesized server-side
-# (no client asset needed) at the TTS sample rate to match the locked
-# LiveKit audio track. Has no effect when `magic_phrases` is empty.
-listening_chime: false
-
-# Follow-up grace window. After a successful magic-phrase match, the
-# next utterance from the same participant within this many seconds
-# bypasses the gate — so "hey agent" → pause → "what am I looking at?"
-# works as one natural interaction instead of needing the phrase on
-# every utterance. The window refreshes each time an utterance is
-# accepted so a conversation keeps flowing. Set to 0 to disable.
-followup_grace_s: 5.0
+silence_duration:  0.4    # seconds of silence that ends an utterance
+min_speech:        0.1    # minimum seconds of speech before STT is called

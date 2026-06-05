@@ -13,7 +13,7 @@ dependencies = [
     "xr-ai-agent",
     "xr-ai-logging",
     "xr-ai-models",
-    "xr-ai-vad",
+    "xr-ai-pipecat",
     "numpy>=1.24",
     "Pillow>=10.0",
     "pyyaml>=6.0",
@@ -23,7 +23,7 @@ dependencies = [
 xr-ai-agent   = { path = "../../../agent-sdk", editable = true }
 xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
 xr-ai-models  = { path = "../../../agent-sdk/xr-ai-models", editable = true }
-xr-ai-vad     = { path = "../../../utils/xr-ai-vad", editable = true }
+xr-ai-pipecat = { path = "../../../agent-sdk/xr-ai-pipecat", editable = true }
 
 [project.scripts]
 simple_vlm_example_worker = "simple_vlm_example_worker:run"
@@ -32,7 +32,5 @@ simple_vlm_example_worker = "simple_vlm_example_worker:run"
 only-include = [
     "simple_vlm_example_worker.py",
     "agent.py",
-    "audio.py",
     "pixels.py",
-    "voice.py",
 ]

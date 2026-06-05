@@ -44,21 +44,36 @@ xr-ai-agent  (agent-sdk/)
     └── msgpack >=1.0
 
 xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
-    └── xr-ai-agent   [editable: ..]
-    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-models  [editable: ../xr-ai-models]
+    └── xr-ai-agent     [editable: ..]
+    └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models    [editable: ../xr-ai-models]
+    └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
+    └── xr-ai-voicegate [editable: ../../utils/xr-ai-voicegate]
     └── pipecat-ai >=0.0.46
     └── numpy >=1.24
     └── scipy >=1.11
     └── httpx >=0.27
     └── fastmcp >=0.4
-    Optional Pipecat transport bridge: connects ProcessorEndpoint (ZMQ IPC)
-    to a Pipecat frame pipeline. Resamples hub float32 audio → 16 kHz int16
-    for STT; converts TTS int16 PCM back to float32 AudioChunks for return.
-    SttClient / TtsClient are thin wrappers around xr-ai-models'
+    Unified Pipecat voice pipeline. Owns the transport bridge to
+    ProcessorEndpoint (ZMQ IPC) plus the four library FrameProcessors —
+    VadSttProcessor, VoiceGateProcessor, BrainProcessor, StreamingTtsProcessor —
+    composed by ``make_voice_pipeline``. Resamples hub float32 audio →
+    16 kHz int16 for STT, converts TTS int16 PCM back to float32 AudioChunks
+    for return. SttClient / TtsClient are thin wrappers around xr-ai-models'
     OpenAICompatSTT / OpenAICompatTTS — PCM→WAV conversion is handled by
     the SDK. httpx is retained for http_probe() readiness checks.
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
+
+xr-ai-voicegate  (utils/xr-ai-voicegate/)
+    └── numpy >=1.24
+    └── pyyaml >=6.0
+    Pipecat-free speech-input opt-in gate. Owns the magic-phrase + follow-up
+    + STOP ladder, the lazy listening chime synthesized at the TTS sample
+    rate, and the participant-joined greeting hook. Workers feed STT
+    transcripts via ``feed`` and register handlers — either one-at-a-time via
+    ``on_*`` setters or together via ``bind(...)``. Consumed inside
+    xr-ai-pipecat by ``VoiceGateProcessor`` so sample workers don't import it
+    directly when they use the unified pipeline.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
@@ -190,6 +205,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
     └── xr-ai-vad               [editable: ../utils/xr-ai-vad]
+    └── xr-ai-voicegate         [editable: ../utils/xr-ai-voicegate]
     └── xr-ai-vllm              [editable: ../utils/xr-ai-vllm]
     └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
     └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
@@ -367,13 +383,22 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-models [editable]`, `xr-ai-vad [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (silero-vad pulled in via xr-ai-vad) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
+
+Worker runs on the unified pipecat voice pipeline assembled by
+`xr_ai_pipecat.make_voice_pipeline`. `SimpleVlmBrain` (a
+`BrainProcessor`) owns the camera-on-demand state machine, frame
+tracking, the VLM streaming call, and the data-channel side path
+("ping" + ad-hoc text); voice gate (magic phrases, follow-up grace,
+listening chime, stop ack) lives in `xr_ai_voicegate` inside the
+`VoiceGateProcessor`. VAD/STT and sentence-batched TTS are also
+provided by the pipeline so the worker only configures the knobs.
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
 in-process.  Model endpoints are configured via `yaml/models.yaml`
 (default: Cosmos profile) or `yaml/models.omni.yaml` (Nemotron-Omni
-on port 8108).
+on port 8108). Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
 ### model-servers  (agent-samples/model-servers/)
 
