@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Native StreamKit: Android NDK C++20 portability
+
+Native StreamKit no longer depends on C++20 `<format>`. Some Android NDK
+libc++ versions used by embedded clients do not ship that header even though
+the project otherwise builds as C++20. The affected identity and error-message
+strings now use `std::to_string` plus string concatenation, preserving behavior
+while keeping the C++ backend portable to those toolchains. The backend also
+uses fully qualified enum labels instead of `using enum`, which older NDK r23
+compilers reject.
+
 ### 2026-06-05 — Native StreamKit: LiveKit room access for receiver-side audio
 
 `LiveKitBackend` now exposes `GetRoom()` for advanced native integrations that
