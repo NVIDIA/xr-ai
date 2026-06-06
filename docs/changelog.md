@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Native StreamKit: LiveKit room access for receiver-side audio
+
+`LiveKitBackend` now exposes `GetRoom()` for advanced native integrations that
+need receiver-side LiveKit APIs, such as rendering remote participant audio
+locally or feeding an acoustic echo canceller with the agent's playback audio.
+This remains intentionally transport-specific: the generic `StreamingBackend`
+surface is unchanged, and callers must opt in by depending on `LiveKitBackend`.
+The accessor returns `nullptr` before connect, after disconnect, and in stub
+mode.
+
 ### 2026-06-05 — Native StreamKit: vector-backed LiveKit AudioFrame construction
 
 `LiveKitBackend::InjectAudioFrame` now constructs `livekit::AudioFrame` through
