@@ -414,6 +414,9 @@ void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
     }
 
 #if STREAMKIT_HAVE_LIVEKIT
+    // AudioSink timestamps are media timestamps; AudioSource::captureFrame's
+    // second parameter is a bounded-wait timeout in milliseconds.
+    (void)timestamp_us;
     livekit::AudioFrame frame(sample_rate, channels, samples_per_channel,
                               pcm.data());
     std::shared_ptr<livekit::AudioSource> source;
@@ -422,7 +425,7 @@ void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
         source = audio_source_;
     }
     if (source) {
-        source->captureFrame(frame, timestamp_us);
+        source->captureFrame(frame);
     }
 #else
     (void)sample_rate;

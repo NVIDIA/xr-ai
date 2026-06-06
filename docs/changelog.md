@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Native StreamKit: AudioSink timestamps stay media timestamps
+
+`AudioSink::InjectAudioFrame` carries a capture timestamp in microseconds so
+hosts can pass audio and video frames through the same monotonic-clock model.
+The LiveKit C++ SDK's `AudioSource::captureFrame` API uses its optional second
+argument for a bounded-wait timeout in milliseconds, not for media time. Passing
+StreamKit's `timestamp_us` through that parameter can turn an increasing media
+timestamp into a long capture wait and add audio latency. The C++ LiveKit backend
+now preserves the StreamKit timestamp as API metadata and calls
+`AudioSource::captureFrame(frame)` so the SDK uses its realtime default timeout.
+
 ### 2026-06-05 — Android: synthetic "Virtual Camera" provider over injectVideoFrame
 
 Adds a selectable "Virtual Camera (synthetic)" entry to the Android sample's
