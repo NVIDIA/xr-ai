@@ -432,8 +432,9 @@ void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
     // AudioSink timestamps are media timestamps; AudioSource::captureFrame's
     // second parameter is a bounded-wait timeout in milliseconds.
     (void)timestamp_us;
-    livekit::AudioFrame frame(sample_rate, channels, samples_per_channel,
-                              pcm.data());
+    std::vector<std::int16_t> data(pcm.begin(), pcm.end());
+    livekit::AudioFrame frame(std::move(data), sample_rate, channels,
+                              samples_per_channel);
     std::shared_ptr<livekit::AudioSource> source;
     {
         std::lock_guard<std::mutex> lock(tracks_mutex_);

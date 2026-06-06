@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Native StreamKit: vector-backed LiveKit AudioFrame construction
+
+`LiveKitBackend::InjectAudioFrame` now constructs `livekit::AudioFrame` through
+the vector-data constructor. Some LiveKit C++ SDK builds expose only
+`AudioFrame(std::vector<int16_t>, sample_rate, channels, samples_per_channel)`
+and not the pointer-data constructor. StreamKit still accepts
+`std::span<const int16_t>` at the public `AudioSink` boundary; the conversion is
+contained inside the LiveKit backend so callers and custom backends are
+unaffected.
+
 ### 2026-06-05 — Native StreamKit: publish options for externally captured video
 
 The C++ `LiveKitBackend` publishes camera tracks lazily on the first
