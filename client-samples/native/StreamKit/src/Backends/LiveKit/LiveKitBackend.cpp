@@ -292,8 +292,8 @@ void LiveKitBackend::StartCamera(const CameraConfig& config) {
     // VideoSource ctor requires explicit width/height, so the track cannot
     // be created here. Arm the backend; the first FrameSink::InjectVideoFrame
     // call creates the source and publishes lazily.
-    (void)config;
     StopCamera();
+    camera_config_ = config;
     camera_armed_.store(true);
 }
 
@@ -371,8 +371,23 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
         std::lock_guard<std::mutex> lock(tracks_mutex_);
         if (!video_source_) {
             video_source_ = std::make_shared<livekit::VideoSource>(width, height);
-            video_track_ = room_->localParticipant()->publishVideoTrack(
-                "camera", video_source_, livekit::TrackSource::SOURCE_CAMERA);
+            video_track_ = livekit::LocalVideoTrack::createLocalVideoTrack(
+                "camera", video_source_);
+            livekit::TrackPublishOptions options;
+            options.source = livekit::TrackSource::SOURCE_CAMERA;
+            if (camera_config_.encoding.has_value()) {
+                const auto& encoding = *camera_config_.encoding;
+                if (encoding.max_bitrate_bps > 0 || encoding.max_framerate > 0.0) {
+                    livekit::VideoEncodingOptions video_encoding;
+                    video_encoding.max_bitrate = encoding.max_bitrate_bps;
+                    video_encoding.max_framerate = encoding.max_framerate;
+                    options.video_encoding = video_encoding;
+                }
+                if (encoding.simulcast.has_value()) {
+                    options.simulcast = encoding.simulcast;
+                }
+            }
+            room_->localParticipant()->publishTrack(video_track_, options);
         }
         source = video_source_;
     }

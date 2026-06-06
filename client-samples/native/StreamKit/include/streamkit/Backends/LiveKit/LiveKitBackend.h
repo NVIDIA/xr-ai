@@ -158,6 +158,7 @@ private:
 
     LiveKitConfig config_;
     SessionConfig session_config_;
+    CameraConfig camera_config_;
 
     // shared_ptr (not unique_ptr) because the type-erased deleter is
     // captured at construction. That keeps the class destructor valid when

@@ -39,6 +39,7 @@ struct MockBackend : streamkit::StreamingBackend {
     int stop_audio_calls = 0;
     int start_camera_calls = 0;
     int stop_camera_calls = 0;
+    streamkit::CameraConfig last_camera_config;
     std::vector<std::string> sent_topics;
     std::vector<std::string> sent_payloads;
 
@@ -57,7 +58,10 @@ struct MockBackend : streamkit::StreamingBackend {
     }
     void StartAudio(const streamkit::AudioConfig&) override { ++start_audio_calls; }
     void StopAudio() override { ++stop_audio_calls; }
-    void StartCamera(const streamkit::CameraConfig&) override { ++start_camera_calls; }
+    void StartCamera(const streamkit::CameraConfig& config) override {
+        ++start_camera_calls;
+        last_camera_config = config;
+    }
     void StopCamera() override { ++stop_camera_calls; }
     void Send(std::span<const std::byte> data, bool, std::string_view topic) override {
         sent_topics.emplace_back(topic);
@@ -127,6 +131,21 @@ int main() {
     session.StartCamera();
     ExpectEq(raw->start_audio_calls, 1);
     ExpectEq(raw->start_camera_calls, 1);
+
+    streamkit::CameraConfig encoded_camera;
+    encoded_camera.encoding = streamkit::CameraEncodingConfig{
+        .max_bitrate_bps = 2'500'000,
+        .max_framerate = 21.0,
+        .simulcast = false,
+    };
+    session.StartCamera(encoded_camera);
+    ExpectEq(raw->start_camera_calls, 2);
+    Expect(raw->last_camera_config.encoding.has_value());
+    ExpectEq(raw->last_camera_config.encoding->max_bitrate_bps,
+             std::uint64_t{2'500'000});
+    ExpectEq(raw->last_camera_config.encoding->max_framerate, 21.0);
+    Expect(raw->last_camera_config.encoding->simulcast.has_value());
+    Expect(!*raw->last_camera_config.encoding->simulcast);
 
     // ── Send + data delivery ───────────────────────────────────────────────
     const std::string msg = "hello";

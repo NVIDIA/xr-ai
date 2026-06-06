@@ -9,6 +9,20 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Native StreamKit: publish options for externally captured video
+
+The C++ `LiveKitBackend` publishes camera tracks lazily on the first
+`FrameSink::InjectVideoFrame` call because externally captured frames provide
+the stream dimensions. That made callers unable to set LiveKit publish-side
+encoding options before track creation. `CameraConfig` now includes an optional
+`CameraEncodingConfig` with max bitrate, max framerate, and simulcast controls.
+The built-in C++ backend stores the config at `StartCamera()` time and applies
+it when the first frame creates the `LocalVideoTrack`.
+
+Backends that open and manage their own platform camera may ignore
+`CameraConfig::encoding`; it is primarily for C++ hosts that own capture outside
+StreamKit and use `FrameSink` for injection.
+
 ### 2026-06-05 — Native StreamKit: AudioSink timestamps stay media timestamps
 
 `AudioSink::InjectAudioFrame` carries a capture timestamp in microseconds so

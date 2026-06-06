@@ -59,7 +59,7 @@ Each test is a standalone executable that asserts and exits non-zero on failure 
 |---|---|
 | Connect / Disconnect + state mapping | ✅ implemented |
 | Data channel `Send` + `_agent.status` interception | ✅ implemented |
-| Video publish via `FrameSink::InjectVideoFrame` | ✅ implemented — first frame creates the track. Real-time callers should use the `std::vector<uint8_t>&&` overload to avoid a 1.4 MB per-frame copy. See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134). |
+| Video publish via `FrameSink::InjectVideoFrame` | ✅ implemented — first frame creates the track. Real-time callers should use the `std::vector<uint8_t>&&` overload to avoid a 1.4 MB per-frame copy. `CameraConfig::encoding` can set publish-side bitrate, frame-rate, and simulcast options before that first frame. See finding #12 in [issue #134](https://github.com/NVIDIA/xr-ai/issues/134). |
 | Audio publish via `AudioSink::InjectAudioFrame` | ✅ implemented — `StartAudio()` creates the track; host pushes PCM frames |
 | Platform mic open | ⚠️ no built-in path; host opens its mic and pushes PCM frames via AudioSink |
 | Platform camera open | ⚠️ no built-in path; host opens its camera and pushes frames via FrameSink. `CameraConfig::facing` / `device_id` are inert here — the host chooses the camera |
