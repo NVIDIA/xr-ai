@@ -2,25 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-RenderDemoAgent — assembles the Pipecat pipeline and handles the XR session
-lifecycle (start_xr, polling, render.ready ack).
+RenderDemoAgent — XR session lifecycle owner.
+
+Wraps the ``RenderSceneProcessor`` brain with xr-render-demo-specific
+behavior (``xr.session.started`` → ``start_xr`` → poll LOVR → ack;
+typed-text input fed through the same path as STT).
+
+The voice pipeline itself is assembled by ``xr_ai_pipecat.make_voice_pipeline``;
+this class only owns the agent-to-hub bookkeeping that lives outside the
+generic pipeline.
 """
 from __future__ import annotations
 
 import asyncio
 import time
 
-from pathlib import Path
-
 from fastmcp import Client as McpClient
 from loguru import logger
-from pipecat.frames.frames import TranscriptionFrame
-from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent
-from xr_ai_models import LLMService, STTService, TTSService, ToolDef
 
-from config import WorkerConfig
-from processors import RenderSceneProcessor, _tool_payload, build_pipeline
+from processors import RenderSceneProcessor, _tool_payload
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 _XR_SESSION_STARTED_TOPIC = "xr.session.started"
@@ -32,42 +33,34 @@ def _now_us() -> int:
 
 
 class RenderDemoAgent:
+    """Owns the XR session lifecycle on top of the unified voice pipeline.
+
+    The voice pipeline (``transport.input() → VadStt → VoiceGate → brain
+    → StreamingTts → transport.output()``) is built by
+    :func:`xr_ai_pipecat.make_voice_pipeline`; this class subscribes the
+    hub callbacks that the foundation does not handle (XR session start,
+    typed-text input, target-participant tracking).
+    """
+
     def __init__(
         self,
-        cfg:        WorkerConfig,
-        render:     McpClient,
-        oxr:        McpClient,
-        vlm:        McpClient,
-        video:      McpClient,
-        vec:        McpClient,
-        prompt_path: Path,
-        tools:      list[ToolDef],
-        llm:        LLMService,
-        agent_llm:  LLMService,
-        stt:        STTService,
-        tts:        TTSService,
+        *,
+        transport: XRMediaHubTransport,
+        brain:     RenderSceneProcessor,
+        render:    McpClient,
     ) -> None:
-        self._cfg    = cfg
-        self._render = render
-        self._oxr    = oxr
-        self._vlm    = vlm
-        self._video  = video
-        self._vec    = vec
+        self._transport = transport
+        self._brain     = brain
+        self._render    = render
 
-        self._transport = XRMediaHubTransport()
+        self._xr_started = False
+
+        # Subscribe to hub events the pipecat pipeline doesn't surface to us:
+        # data messages (text input + xr.session.started), audio (lazy
+        # target-pid set), and participant events.
         self._transport.endpoint.on_data(self._on_data)
         self._transport.endpoint.on_audio(self._on_audio)
         self._transport.endpoint.on_participant(self._on_participant)
-
-        self._scene = RenderSceneProcessor(
-            self._transport, cfg, render, oxr, vlm, video, vec,
-            prompt_path, tools=tools, llm=llm, agent_llm=agent_llm,
-        )
-        self._pipeline, self._pipeline_task = build_pipeline(
-            self._transport, stt, tts, self._scene,
-        )
-        self._runner_task: asyncio.Task | None = None
-        self._xr_started = False
 
     # ── XR session lifecycle ──────────────────────────────────────────────────
 
@@ -77,7 +70,7 @@ class RenderDemoAgent:
             return
 
         self._transport.set_target_participant(msg.participant_id)
-        self._scene._history.clear()
+        self._brain._history.clear()
 
         if self._xr_started:
             await self._transport.send_return_data(DataMessage(
@@ -91,13 +84,16 @@ class RenderDemoAgent:
         start_res = await self._call_render("start_xr", {})
         if start_res is None:
             logger.warning("start_xr failed")
+            await self._notify_launch_failed(msg.participant_id)
             return
         if start_res.get("status") == "error":
             logger.error("start_xr error: {}", start_res.get("error"))
+            await self._notify_launch_failed(msg.participant_id)
             return
 
         logger.info("start_xr status={} — polling lovr_started…", start_res.get("status"))
         if not await self._wait_lovr():
+            await self._notify_launch_failed(msg.participant_id)
             return
         self._xr_started = True
 
@@ -108,13 +104,31 @@ class RenderDemoAgent:
             pts_us=_now_us(), data=b"",
         ))
 
+    async def _notify_launch_failed(self, pid: str) -> None:
+        """Surface an XR-launch failure to the user, spoken + on the panel.
+
+        ``start_xr`` and the LOVR-spawn poll run here, outside the brain's
+        ``handle_query``/yield→TTS path, so a bare ``logger.warning`` would
+        leave the user staring at a "Launch XR" button that silently did
+        nothing. Route a short, actionable message through the brain's
+        ``enqueue_notice`` so it reaches TTS *and* the ``agent.response``
+        panel exactly like a normal answer — the same delivery the in-loop
+        "scene not ready" case already gets. One generic message covers
+        both the start_xr-error and never-ready/spawn-error cases; the log
+        lines above retain the specific cause for operators.
+        """
+        await self._brain.enqueue_notice(
+            pid, "I couldn't start the XR session — try Launch XR again."
+        )
+
     async def _handle_text_input(self, msg: DataMessage) -> None:
         """Feed a typed text message into the same path STT uses.
 
         The web client's "Send" button publishes typed text on the data
-        channel with no topic, mirroring simple-vlm-example. We synthesize
-        a TranscriptionFrame so the agentic loop fires identically to a
-        spoken utterance, bypassing VAD/STT entirely.
+        channel with no topic, mirroring simple-vlm-example.  We hand the
+        text to the brain via a synthesized ``GatedQueryFrame`` so the
+        agentic loop fires identically to a spoken utterance, bypassing
+        VAD/STT and the voice gate entirely.
         """
         text = (msg.data or b"").decode("utf-8", errors="replace").strip()
         if not text:
@@ -122,11 +136,7 @@ class RenderDemoAgent:
         if not self._transport.target_participant:
             self._transport.set_target_participant(msg.participant_id)
         logger.info("text input  pid={!r}  {!r}", msg.participant_id, text[:80])
-        await self._scene._enqueue(TranscriptionFrame(
-            text=text,
-            user_id=msg.participant_id,
-            timestamp=str(msg.pts_us or _now_us()),
-        ))
+        await self._brain.enqueue_text_query(msg.participant_id, text)
 
     async def _wait_lovr(self, timeout_s: float = 120.0) -> bool:
         deadline = asyncio.get_running_loop().time() + timeout_s
@@ -171,21 +181,3 @@ class RenderDemoAgent:
             if not silent:
                 logger.error("render-mcp {}: {}", tool, exc)
             return None
-
-    # ── lifecycle ─────────────────────────────────────────────────────────────
-
-    async def run(self) -> None:
-        runner = PipelineRunner()
-        self._runner_task = asyncio.ensure_future(runner.run(self._pipeline_task))
-        await self._runner_task
-
-    def shutdown(self) -> None:
-        if self._runner_task and not self._runner_task.done():
-            self._runner_task.cancel()
-        self._transport.shutdown()
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._scene.close())
-        except RuntimeError:
-            # No running event loop during synchronous shutdown — skip async close.
-            pass

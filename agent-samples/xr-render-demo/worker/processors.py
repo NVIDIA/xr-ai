@@ -2,55 +2,43 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Pipecat FrameProcessors for xr-render-demo.
+Brain processor for xr-render-demo.
 
-Pipeline:
-  InputTransport → SttProcessor → RenderSceneProcessor → TtsProcessor → OutputTransport
+The voice pipeline (input → VadStt → VoiceGate → brain → StreamingTts → output)
+is assembled by ``xr_ai_pipecat.make_voice_pipeline``. This module supplies
+the sample-specific brain — a multi-step agentic loop over render-mcp,
+oxr-mcp, vec-mcp, vlm-mcp, and video-mcp tools.
 
-SttProcessor
-  xr-ai-vad Silero detector → per-utterance STT → TranscriptionFrame.
+Agentic loop (max ``_MAX_LOOP`` iterations):
+  - Llama-Nemotron emits an OpenAI ``tool_calls`` payload → execute tool,
+    append result, continue.
+  - When the model returns text instead of a tool call, that text is the
+    final user-visible response.
 
-RenderSceneProcessor
-  TranscriptionFrame → parallel quick-ack + multi-step agentic loop.
-
-  Agentic loop (max _MAX_LOOP iterations):
-    - LLM outputs {"think": "...", "tool": "<name>", "args": {...}}  → execute tool, continue
-    - LLM outputs {"done": true, "response": "..."}                  → finish
-  Tools route to render-mcp (scene ops), oxr-mcp (spatial helpers), or
-  vec-mcp (pure-math primitives).
-  Each tool call sends a brief progress message so the user isn't left waiting.
-
-TtsProcessor
-  TextFrame → sentence-batched synthesis → hub return audio.
+A parallel "quick-ack" call to Minitron fires at the start of each turn
+to (a) speak an immediate acknowledgment and (b) classify whether the
+agentic loop needs thinking enabled. A periodic "still-working" loop
+streams contextual progress messages to the data channel while the agent
+reasons.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-import string
 import time
 import uuid
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastmcp import Client as McpClient
 from loguru import logger
-from pipecat.frames.frames import (
-    Frame,
-    InputAudioRawFrame,
-    TextFrame,
-    TranscriptionFrame,
-)
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from xr_ai_agent import DataMessage
 from xr_ai_logging import print_task_done_banner
-from xr_ai_models import ChatMessage, LLMService, STTService, TTSService, ToolCall, ToolDef
-from xr_ai_pipecat.audio import stream_sentences_to_audio
-from xr_ai_pipecat.transport import XRMediaHubTransport, SAMPLE_RATE
-from xr_ai_vad import VadDetector
+from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
+from xr_ai_pipecat import BrainProcessor
+from xr_ai_pipecat.transport import XRMediaHubTransport
 
 from config import WorkerConfig
 
@@ -61,18 +49,8 @@ from config import WorkerConfig
 # ``xr_render_demo_worker.main()``; everything else is unaffected.
 _trace_log = logger.bind(trace=True)
 
-_MAX_LOOP       = 10     # visual queries need up to 5 steps; give headroom
-_FILLER_PHRASES = frozenset({
-    "mm-hmm", "mm hmm", "uh huh", "uh-huh", "uh", "um", "ah", "oh", "eh",
-    "huh", "hmm", "yeah", "yep", "yup", "okay", "ok", "right",
-    "sure", "thanks", "thank you",
-})
+_MAX_LOOP = 10  # visual queries need up to 5 steps; give headroom
 
-
-# Tools managed by the worker directly (control-plane); excluded from the
-# LLM tool list. get_scene_state is intentionally NOT here — the model must
-# call it to discover object ids before any manipulation.
-_WORKER_MANAGED_TOOLS = frozenset({"start_xr", "get_health"})
 
 # Tools served by oxr-mcp (routed there, not to render-mcp).
 _OXR_TOOLS = frozenset({
@@ -128,81 +106,9 @@ def _now_us() -> int:
     return time.time_ns() // 1_000
 
 
-# ── SttProcessor ──────────────────────────────────────────────────────────────
-
-class SttProcessor(FrameProcessor):
-    """xr-ai-vad Silero detector + utterance-level STT.
-
-    Audio frames are fed through the shared ``VadDetector``; when an
-    utterance completes, the detector's ``on_utterance`` callback runs STT
-    and pushes a ``TranscriptionFrame`` downstream.
-    """
-
-    def __init__(
-        self,
-        stt: STTService,
-        transport: XRMediaHubTransport,
-        cfg: WorkerConfig,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self._stt       = stt
-        self._transport = transport
-        self._cfg       = cfg
-
-        self._vad = VadDetector(
-            on_utterance     = self._on_utterance,
-            silence_duration = cfg.silence_duration,
-            min_speech       = cfg.min_speech,
-            silero_threshold = cfg.silero_threshold,
-        )
-
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-        if isinstance(frame, InputAudioRawFrame):
-            # Pipecat delivers int16 PCM at SAMPLE_RATE — pass through directly.
-            await self._vad.feed(frame.audio, SAMPLE_RATE)
-        else:
-            await self.push_frame(frame, direction)
-
-    async def _on_utterance(self, audio_bytes: bytes, sample_rate: int) -> None:
-        dur_s = (len(audio_bytes) // 2) / max(sample_rate, 1)
-        logger.info("transcribing {:.1f}s", dur_s)
-        try:
-            text = await self._stt.transcribe(audio_bytes, sample_rate=sample_rate)
-        except Exception:
-            logger.exception("STT failed")
-            return
-        if not text:
-            logger.debug("STT returned empty ({:.1f}s audio) — VAD may have caught noise", dur_s)
-            return
-        logger.info("transcript: {!r}", text)
-        _trace_log.info("USER  {}", text)
-        lower = text.lower().strip().rstrip(string.punctuation).strip()
-        if _is_filler(lower):
-            logger.debug("filler — skipping")
-            return
-        await self.push_frame(
-            TranscriptionFrame(text=text, user_id="", timestamp=str(_now_us())),
-            FrameDirection.DOWNSTREAM,
-        )
-
-
-def _is_filler(lower: str) -> bool:
-    if not lower:
-        return True
-    tokens = lower.split()
-    # Single-word utterance: only skip if it's a known filler, not a command.
-    if len(tokens) == 1:
-        return lower.rstrip(string.punctuation) in _FILLER_PHRASES
-    if lower in _FILLER_PHRASES:
-        return True
-    return all(t.rstrip(string.punctuation) in _FILLER_PHRASES for t in tokens)
-
-
 # ── RenderSceneProcessor ──────────────────────────────────────────────────────
 
-class RenderSceneProcessor(FrameProcessor):
+class RenderSceneProcessor(BrainProcessor):
     """
     Multi-step agentic loop over render-mcp, oxr-mcp, and vec-mcp tools.
 
@@ -215,11 +121,12 @@ class RenderSceneProcessor(FrameProcessor):
       2. Agentic loop: model calls tools via OpenAI tool_calls protocol until
          it returns a text response (finish_reason != "tool_calls")
       3. Progress messages sent before each tool execution → agent.progress
-      4. Final response → agent.response + TextFrame downstream for TTS
+      4. Final response → agent.response + yielded to TTS
     """
 
     def __init__(
         self,
+        *,
         transport:   XRMediaHubTransport,
         cfg:         WorkerConfig,
         render:      McpClient,
@@ -228,12 +135,11 @@ class RenderSceneProcessor(FrameProcessor):
         video:       McpClient,
         vec:         McpClient,
         prompt_path: Path,
-        tools:       list[ToolDef],  # ToolDef list built from MCP discovery
+        tools:       list[ToolDef],
         llm:         LLMService,
         agent_llm:   LLMService,
-        **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__()
         self._transport      = transport
         self._cfg            = cfg
         self._render         = render
@@ -254,10 +160,6 @@ class RenderSceneProcessor(FrameProcessor):
         self._llm              = llm
         self._agent_llm        = agent_llm
 
-        self._pending:    tuple[str, str, int] | None = None  # (text, pid, ref_us)
-        self._lock        = asyncio.Lock()
-        self._drain_task:   asyncio.Task | None = None
-        self._agentic_task: asyncio.Task | None = None
         # Rolling conversation buffer — last N turns of (user_text, agent_response).
         # Injected as context so the agent understands "fix that", "undo", "the one I just added".
         self._history:    list[tuple[str, str]] = []
@@ -270,6 +172,203 @@ class RenderSceneProcessor(FrameProcessor):
         # Per-turn snapshot used to compute prev→new pairs on update_primitive.
         self._pre_move_positions: dict[str, tuple[float, float, float]] = {}
 
+        # Canned spoken notices the agent (XR lifecycle, outside handle_query)
+        # asks us to deliver. Keyed by pid → list of exact strings. Drained in
+        # handle_query, which short-circuits the LLM loop for a matching entry.
+        # See enqueue_notice / _emit_notice.
+        self._pending_notices: dict[str, list[str]] = {}
+
+    # ── public: text-channel entry ────────────────────────────────────────────
+
+    async def enqueue_text_query(self, pid: str, text: str) -> None:
+        """Run a typed text query through the same path as a spoken utterance.
+
+        The web client's "Send" button posts on the data channel; the brain
+        needs to fire ``handle_query`` for it identically to a transcript
+        that passed the voice gate. The base class' ``_spawn_query`` owns
+        the per-pid in-flight task and cancellation semantics, so we route
+        through a synthesized ``GatedQueryFrame``.
+        """
+        from xr_ai_pipecat import GatedQueryFrame
+        await self._spawn_query(GatedQueryFrame(
+            participant_id = pid,
+            text           = text,
+            fresh_match    = False,
+            pts_us         = _now_us(),
+        ))
+
+    async def enqueue_notice(self, pid: str, text: str) -> None:
+        """Speak a canned, agent-authored notice through the normal turn path.
+
+        XR-lifecycle failures (start_xr error, LOVR never ready) happen in
+        ``RenderDemoAgent``, outside ``handle_query``'s yield→TTS path. To
+        surface them with voice *and* a panel line — the same delivery shape
+        as a normal final answer (``_send(agent.response)`` + ``yield``) —
+        the agent hands us the message here. We register it as pending for
+        *pid* and inject a ``GatedQueryFrame`` through the same
+        ``_spawn_query`` machinery a typed/spoken query uses, so the base
+        class owns the per-pid in-flight task and its cancellation. The text
+        is matched (and consumed) by ``handle_query`` below, which yields it
+        verbatim instead of running the agentic loop. Matching on the exact
+        string — not just pid — means a real query that interleaves before
+        the notice task runs is never mistaken for the notice.
+        """
+        from xr_ai_pipecat import GatedQueryFrame
+        self._pending_notices.setdefault(pid, []).append(text)
+        await self._spawn_query(GatedQueryFrame(
+            participant_id = pid,
+            text           = text,
+            fresh_match    = False,
+            pts_us         = _now_us(),
+        ))
+
+    # ── BrainProcessor overrides ──────────────────────────────────────────────
+
+    async def handle_query(
+        self, pid: str, text: str, fresh_match: bool,
+    ) -> AsyncIterator[str]:
+        """Drive one full turn of the agentic loop for *text* from *pid*.
+
+        Yields strings that should reach TTS:
+          - the quick-ack, on EVERY turn — spoken first so the user always
+            gets immediate audio feedback, especially before a tool-using
+            turn that would otherwise be silent until the final reply
+          - the final user-visible response.
+
+        Per-tool progress and still-working ticks are sent to the data
+        channel (``send_return_data``) only, NOT spoken: a long agentic loop
+        can emit many of them and speaking each would stack the TTS queue and
+        play after the real reply. The single spoken ack covers "I'm on it";
+        the panel carries the detailed progress.
+        """
+        # Canned agent notice (XR-lifecycle failure) — speak it verbatim and
+        # skip the LLM loop. Exact-text match guards against a real query
+        # interleaving before the notice task runs. See enqueue_notice.
+        pending = self._pending_notices.get(pid)
+        if pending and text in pending:
+            pending.remove(text)
+            if not pending:
+                self._pending_notices.pop(pid, None)
+            return self._emit_notice(pid, text)
+        return self._run_turn(pid, text)
+
+    async def _emit_notice(self, pid: str, text: str) -> AsyncIterator[str]:
+        """Deliver a canned notice with the same shape as a final answer:
+        a panel line on ``agent.response`` plus a spoken (yielded) line."""
+        send_pid = pid or self._transport.target_participant
+        if send_pid:
+            await self._send(send_pid, text, topic=_AGENT_RESPONSE_TOPIC)
+        yield text
+
+    async def _run_turn(self, pid: str, text: str) -> AsyncIterator[str]:
+        text = text.strip()
+        if not text:
+            return
+
+        send_pid = pid or self._transport.target_participant
+        # Capture the moment the user finished speaking so visual tool calls
+        # can be anchored to that timestamp (not to when the tool fires).
+        ref_us = _now_us()
+        t0     = time.monotonic()
+
+        # Quick-ack: fast Minitron call that (a) speaks an immediate
+        # acknowledgment and (b) classifies whether Nemotron needs
+        # reasoning enabled.  Await it first so the think flag is ready
+        # before the main loop starts — it takes ~1s so the delay is small.
+        try:
+            ack, needs_thinking = await self._quick_ack(text)
+        except Exception:
+            logger.exception("quick ack failed")
+            ack, needs_thinking = "", False
+
+        if ack and send_pid:
+            # ACK-SPEAK POLICY (deliberate): speak the quick-ack on EVERY turn,
+            # not just needs_thinking ones. It's yielded before the agentic
+            # loop runs, so TTS plays it first — giving the user immediate
+            # audio feedback at the start of every turn. This matters most for
+            # tool-using turns (which may not be flagged needs_thinking yet
+            # still take seconds): without a spoken ack the user hears nothing
+            # until the final reply. Per-tool progress + still-working ticks
+            # remain text-only (below) so they don't stack the TTS queue; the
+            # single spoken ack is enough to signal "I'm on it". Also mirror
+            # the ack to the panel.
+            await self._send(send_pid, ack, topic=_AGENT_PROGRESS_TOPIC)
+            yield ack
+
+        # Start a "still working" timer — fires if reasoning takes >5s.
+        # Cancelled as soon as the loop returns.
+        # thinking_ctx is a one-element list shared with the agentic loop so
+        # the still-working messages can reflect what the 30B is reasoning about.
+        thinking_ctx: list[str] = [""]
+        still_task = asyncio.create_task(
+            self._still_working_loop(text, send_pid, thinking_ctx,
+                                     enabled=needs_thinking),
+            name="still-working",
+        )
+
+        response: str | None = None
+        outcome = "done"
+        try:
+            response = await self._agentic_loop(
+                text, pid, ref_us=ref_us, needs_thinking=needs_thinking,
+                thinking_ctx=thinking_ctx,
+            )
+        except asyncio.CancelledError:
+            outcome = "interrupted"
+            logger.info("agentic loop interrupted by new utterance")
+            if send_pid:
+                try:
+                    await self._transport.endpoint.flush_return_audio(send_pid)
+                except Exception:
+                    logger.opt(exception=True).debug(
+                        "flush_return_audio failed during cancellation",
+                    )
+            raise
+        except Exception:
+            outcome = "error"
+            logger.exception("agentic loop failed")
+            response = "Something went wrong — please try again."
+        finally:
+            still_task.cancel()
+            try:
+                await still_task
+            except asyncio.CancelledError:
+                pass  # expected — we just cancelled it above
+            print_task_done_banner(
+                "xr-render-demo",
+                status=outcome,
+                detail=f"pid={pid!r}  utterance={text[:60]!r}",
+                duration_s=time.monotonic() - t0,
+            )
+
+        # Strip leaked tool-call JSON from both the user-visible reply and
+        # history; legit text starting with "{" passes through.
+        #
+        # Defensive guard only: _agentic_loop always returns a non-empty
+        # string ("Done." fallbacks on lines ~697/741, the not-ready string,
+        # or the error string set above), and the cancellation branch
+        # re-raises before reaching here. So this never fires for a real
+        # turn — we intentionally do NOT yield a spoken "Done." here, because
+        # there is no audible-close gap to fill. Every reachable turn already
+        # ends with a yielded final response below.
+        if not response:
+            return
+
+        display = response
+        if _looks_like_leaked_tool_call(response):
+            logger.warning(
+                "response looks like a leaked tool call, sanitizing: {!r}",
+                response[:120],
+            )
+            display = "Done."
+
+        self._history.append((text, display))
+        if len(self._history) > self._history_max:
+            self._history.pop(0)
+
+        if send_pid:
+            await self._send(send_pid, display, topic=_AGENT_RESPONSE_TOPIC)
+        yield display
 
     def _read_prompt(self, path: Path, cache_attr: str) -> str:
         try:
@@ -279,137 +378,6 @@ class RenderSceneProcessor(FrameProcessor):
         except OSError:
             logger.warning("prompt file unreadable: {} — using cache", path.name)
             return getattr(self, cache_attr)
-
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-        if isinstance(frame, TranscriptionFrame):
-            await self._enqueue(frame)
-        else:
-            await self.push_frame(frame, direction)
-
-    async def _enqueue(self, frame: TranscriptionFrame) -> None:
-        text = frame.text.strip()
-        if not text:
-            return
-        pid = self._transport.target_participant
-        # Capture the moment the user finished speaking so visual tool calls
-        # can be anchored to that timestamp (not to when the tool fires).
-        try:
-            ref_us = int(frame.timestamp) if frame.timestamp else _now_us()
-        except (TypeError, ValueError):
-            ref_us = _now_us()
-        async with self._lock:
-            self._pending = (text, pid, ref_us)
-            # Cancel any in-flight agentic loop so the new utterance is handled
-            # immediately rather than waiting for the old one to finish.
-            if self._agentic_task and not self._agentic_task.done():
-                self._agentic_task.cancel()
-            if self._drain_task is None or self._drain_task.done():
-                self._drain_task = asyncio.create_task(
-                    self._drain(), name="render-scene-drain",
-                )
-
-    async def _drain(self) -> None:
-        while True:
-            async with self._lock:
-                if self._pending is None:
-                    return
-                text, pid, ref_us = self._pending
-                self._pending = None
-
-            t0 = time.monotonic()
-
-            # Quick-ack: fast Minitron call that (a) speaks an immediate
-            # acknowledgment and (b) classifies whether Nemotron needs
-            # reasoning enabled.  Await it first so the think flag is ready
-            # before the main loop starts — it takes ~1s so the delay is small.
-            try:
-                ack, needs_thinking = await self._quick_ack(text)
-            except Exception:
-                logger.exception("quick ack failed")
-                ack, needs_thinking = "", False
-
-            ack_pid = pid or self._transport.target_participant
-            if ack and ack_pid:
-                await self._send(ack_pid, ack, topic=_AGENT_PROGRESS_TOPIC)
-                if needs_thinking:
-                    await self.push_frame(TextFrame(text=ack), FrameDirection.DOWNSTREAM)
-
-            # Start a "still working" timer — fires if reasoning takes >5s.
-            # Cancelled as soon as the loop returns.
-            # thinking_ctx is a one-element list shared with the agentic loop so
-            # the still-working messages can reflect what the 30B is reasoning about.
-            thinking_ctx: list[str] = [""]
-            still_pid = pid or self._transport.target_participant
-            still_task = asyncio.create_task(
-                self._still_working_loop(text, still_pid, thinking_ctx,
-                                         enabled=needs_thinking),
-                name="still-working",
-            )
-
-            # Run the agentic loop as a tracked task so a new utterance can
-            # cancel it mid-flight without tearing down the drain loop.
-            self._agentic_task = asyncio.create_task(
-                self._agentic_loop(
-                    text, pid, ref_us=ref_us, needs_thinking=needs_thinking,
-                    thinking_ctx=thinking_ctx,
-                ),
-                name="agentic-loop",
-            )
-            response = None
-            outcome = "done"
-            try:
-                response = await self._agentic_task
-            except asyncio.CancelledError:
-                outcome = "interrupted"
-                logger.info("agentic loop interrupted by new utterance")
-                send_pid = pid or self._transport.target_participant
-                if send_pid:
-                    try:
-                        await self._transport.endpoint.flush_return_audio(send_pid)
-                    except Exception:
-                        logger.opt(exception=True).debug(
-                            "flush_return_audio failed during cancellation",
-                        )
-            except Exception:
-                outcome = "error"
-                logger.exception("agentic loop failed")
-                response = "Something went wrong — please try again."
-            finally:
-                self._agentic_task = None
-                still_task.cancel()
-                try:
-                    await still_task
-                except asyncio.CancelledError:
-                    pass  # expected — we just cancelled it above
-                print_task_done_banner(
-                    "xr-render-demo",
-                    status=outcome,
-                    detail=f"pid={pid!r}  utterance={text[:60]!r}",
-                    duration_s=time.monotonic() - t0,
-                )
-
-            send_pid = pid or self._transport.target_participant
-
-            # Strip leaked tool-call JSON from both the user-visible reply and
-            # history; legit text starting with "{" passes through.
-            if response:
-                display = response
-                if _looks_like_leaked_tool_call(response):
-                    logger.warning(
-                        "response looks like a leaked tool call, sanitizing: {!r}",
-                        response[:120],
-                    )
-                    display = "Done."
-                self._history.append((text, display))
-                if len(self._history) > self._history_max:
-                    self._history.pop(0)
-
-                if send_pid:
-                    await self._send(send_pid, display, topic=_AGENT_RESPONSE_TOPIC)
-                    await self.push_frame(
-                        TextFrame(text=display), FrameDirection.DOWNSTREAM,
-                    )
 
     # ── quick ack ─────────────────────────────────────────────────────────────
 
@@ -513,8 +481,12 @@ class RenderSceneProcessor(FrameProcessor):
         while True:
             msg = await self._still_working_msg(transcript, sent, thinking_ctx)
             if msg and pid:
-                # Data channel only — spoken updates stack up in the TTS queue
-                # and play after the real response, confusing the user.
+                # PROGRESS POLICY (deliberate divergence from simple-vlm):
+                # progress is panel-only, never spoken. render-demo's long
+                # multi-tool loops emit many of these; speaking them would
+                # stack in the TTS queue and play after the real response.
+                # Only acks (on thinking turns), the final answer, and
+                # failure notices are spoken — see ACK-SPEAK POLICY above.
                 await self._send(pid, msg, topic=_AGENT_PROGRESS_TOPIC)
                 sent.append(msg)
             await asyncio.sleep(repeat_every)
@@ -808,7 +780,10 @@ class RenderSceneProcessor(FrameProcessor):
 
                 progress = _TOOL_PROGRESS.get(name)
                 if progress and pid:
-                    # Data channel only — TTS is too spammy for per-tool updates.
+                    # PROGRESS POLICY (deliberate divergence from simple-vlm):
+                    # per-tool progress is panel-only. A turn can fire several
+                    # tools; speaking each would stack in the TTS queue behind
+                    # the real answer. Only acks/final/failures are spoken.
                     await self._send(pid, progress, topic=_AGENT_PROGRESS_TOPIC)
 
                 logger.debug("tool call  iter={}  tool={}  args={}", iteration, name, args)
@@ -924,72 +899,6 @@ class RenderSceneProcessor(FrameProcessor):
         await self._agent_llm.close()
 
 
-# ── TtsProcessor ─────────────────────────────────────────────────────────────
-
-class TtsProcessor(FrameProcessor):
-    """TextFrame → sentence-batched TTS → hub return audio."""
-
-    def __init__(
-        self,
-        tts: TTSService,
-        transport: XRMediaHubTransport,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self._tts       = tts
-        self._transport = transport
-
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-        if not isinstance(frame, TextFrame):
-            await self.push_frame(frame, direction)
-            return
-        text = frame.text.strip()
-        if not text:
-            await self.push_frame(frame, direction)
-            return
-        pid = self._transport.target_participant
-        if not pid:
-            await self.push_frame(frame, direction)
-            return
-        try:
-            await stream_sentences_to_audio(
-                self._transport.endpoint, self._tts.synthesize, text, pid,
-            )
-        except Exception:
-            logger.exception("TTS failed  pid={!r}", pid)
-        await self.push_frame(frame, direction)
-
-
-# ── pipeline factory ──────────────────────────────────────────────────────────
-
-def build_pipeline(
-    transport:   XRMediaHubTransport,
-    stt:         STTService,
-    tts:         TTSService,
-    scene:       RenderSceneProcessor,
-) -> tuple[Pipeline, PipelineTask]:
-    stt_proc = SttProcessor(stt, transport, scene._cfg)
-    tts_proc = TtsProcessor(tts, transport)
-
-    pipeline = Pipeline([
-        transport.input(),
-        stt_proc,
-        scene,
-        tts_proc,
-        transport.output(),
-    ])
-    task = PipelineTask(
-        pipeline,
-        params=PipelineParams(
-            allow_interruptions=True,
-            enable_metrics=True,
-        ),
-        idle_timeout_secs=None,
-    )
-    return pipeline, task
-
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -1051,43 +960,6 @@ def _extract_json(text: str) -> str | None:
             if depth == 0 and start >= 0:
                 return text[start:i + 1]
     return None
-
-
-def _parse_agent_turn(text: str) -> dict:
-    """Parse one LLM output turn.
-
-    Expected shapes:
-      {"tool": "<name>", "args": {...}}
-      {"done": true, "response": "..."}
-
-    If no JSON is found but the text looks like a prose response, returns
-    {"done": true, "response": <first sentence>} as a graceful fallback so
-    the agent doesn't silently give up.
-    """
-    obj_text = _extract_json(text)
-    if obj_text:
-        try:
-            obj = json.loads(obj_text)
-        except json.JSONDecodeError:
-            obj = None
-        if isinstance(obj, dict):
-            # Coerce numeric argument values to float.
-            args = obj.get("args") or obj.get("arguments") or {}
-            if isinstance(args, dict):
-                obj["args"] = {
-                    k: float(v) if isinstance(v, (int, float)) else v
-                    for k, v in args.items()
-                }
-            return obj
-
-    # No JSON — model went off-script.  If it looks like a completion
-    # statement, extract the first sentence as a response.
-    stripped = text.strip()
-    if stripped:
-        first_sentence = stripped.split(".")[0].strip()
-        if first_sentence:
-            return {"done": True, "response": first_sentence + "."}
-    return {}
 
 
 def _normalize_tool_args(args: dict) -> dict:

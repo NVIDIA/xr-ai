@@ -170,9 +170,14 @@ class ConnectorEndpoint:
         The hub uses the embedded connector_id to maintain its participant →
         connector mapping.
         """
-        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio.{participant_id}".encode())
-        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio_flush.{participant_id}".encode())
-        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_data.{participant_id}".encode())
+        # Trailing "." terminates the pid segment so a subscription for `alice`
+        # does not byte-prefix-match a topic addressed to `alice2`. The hub
+        # publishes return topics with the same trailing delimiter (see
+        # `_hub.py`); the processor subscription path guards the inbound topics
+        # identically (`_prefixes` in `xr_ai_agent._processor`).
+        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio.{participant_id}.".encode())
+        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio_flush.{participant_id}.".encode())
+        self._sub.setsockopt(zmq.SUBSCRIBE, f"return_data.{participant_id}.".encode())
         event = ParticipantEvent(
             participant_id=participant_id, joined=True,
             pts_us=pts_us, connector_id=self._connector_id,
@@ -186,9 +191,9 @@ class ConnectorEndpoint:
         Unsubscribes from return traffic, cleans up sequence counters, and
         notifies the hub.
         """
-        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio.{participant_id}".encode())
-        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio_flush.{participant_id}".encode())
-        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_data.{participant_id}".encode())
+        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio.{participant_id}.".encode())
+        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_audio_flush.{participant_id}.".encode())
+        self._sub.setsockopt(zmq.UNSUBSCRIBE, f"return_data.{participant_id}.".encode())
         stale = [k for k in self._seq if k[0] == participant_id]
         for k in stale:
             del self._seq[k]

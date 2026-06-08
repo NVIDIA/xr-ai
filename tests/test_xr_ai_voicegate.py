@@ -848,11 +848,16 @@ def test_load_voice_gate_config_simple_vlm_sample_round_trip():
 
 def test_load_voice_gate_config_xr_render_demo_sample_round_trip():
     """Case 42: the xr-render-demo sample ships with the empty-list
-    default (always-on) — confirm the file parses to defaults."""
+    default (always-on) — confirm the file parses to defaults.
+
+    ``listening_chime`` is declared True in the YAML to match the
+    voicegate default; in always-on mode (empty ``magic_phrases``) the
+    gate inhibits the chime regardless, so this is a config-only
+    declaration with no behavior change."""
     p = _repo_root() / "agent-samples" / "xr-render-demo" / "yaml" / "voice_gate.yaml"
     if not p.exists():
         pytest.skip(f"sample voice_gate.yaml not reachable at {p}")
     cfg = load_voice_gate_config(p)
     assert cfg.magic_phrases    == ()
-    assert cfg.listening_chime  is False
+    assert cfg.listening_chime  is True
     assert cfg.followup_grace_s == 5.0

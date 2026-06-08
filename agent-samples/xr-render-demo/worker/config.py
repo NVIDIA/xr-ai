@@ -15,6 +15,10 @@ class WorkerConfig:
     # Path to the models.yaml file (resolved relative to cwd).
     models_yaml: str
 
+    # Path to the voice gate YAML.  Resolved the same way as models_yaml —
+    # bare basenames sit next to this worker's config YAML.
+    voice_gate_yaml: str
+
     # MCP server base URLs — not in scope for xr-ai-models.
     render_mcp: str   # base URL, e.g. http://localhost:8220
     oxr_mcp:    str   # base URL, e.g. http://localhost:8230
@@ -48,13 +52,14 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         "models.nim.yaml" if backend == "nim"
         else data.get("models_yaml", "models.yaml")
     )
-    if path and not pathlib.Path(models_yaml_raw).is_absolute():
-        models_yaml = str(path.parent / models_yaml_raw)
-    else:
-        models_yaml = models_yaml_raw
+    models_yaml = _resolve_relative(models_yaml_raw, path)
+    voice_gate_yaml = _resolve_relative(
+        data.get("voice_gate_yaml", "voice_gate.yaml"), path,
+    )
 
     return WorkerConfig(
         models_yaml = models_yaml,
+        voice_gate_yaml = voice_gate_yaml,
         render_mcp  = data.get("render_mcp_url",  "http://localhost:8220"),
         oxr_mcp     = data.get("oxr_mcp_url",     "http://localhost:8230"),
         vlm_mcp     = data.get("vlm_mcp_url",     "http://localhost:8240"),
@@ -64,3 +69,10 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         min_speech        = float(data.get("min_speech",        0.15)),
         silero_threshold  = float(data.get("silero_threshold",  0.5)),
     )
+
+
+def _resolve_relative(raw: str, config_path: pathlib.Path | None) -> str:
+    p = pathlib.Path(raw)
+    if config_path and not p.is_absolute():
+        return str(config_path.parent / p)
+    return raw

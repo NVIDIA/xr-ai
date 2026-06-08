@@ -58,6 +58,35 @@ adapters). Always available even on a camera-less device/emulator.
 Builds on PR #172 (the `injectVideoFrame` API); not buildable in CI here —
 on-device verification is the gate.
 
+### 2026-06-04 — Terminate the pid segment on return-traffic topics
+
+The connector subscribed to return traffic on `return_audio.{pid}`,
+`return_audio_flush.{pid}`, and `return_data.{pid}` with no delimiter after
+the pid (`ipc/_connector.py`). ZMQ `SUBSCRIBE` is a byte-prefix match, so a
+connector owning `alice` also matched topics addressed to `alice2` — the same
+hazard the processor inbound path already guards against by appending a
+trailing `.` (`xr_ai_agent._processor._prefixes`).
+
+**Inert in production, latent elsewhere.** Production runs one connector per
+room (`transport/livekit/connector.py`), and that connector subscribes for
+every participant in the room anyway, with `RoomClient` routing each return
+message to the correct LiveKit participant by payload pid
+(`destination_identities` / per-pid `xr-hub-return-{pid}` track). The
+over-match delivered nothing the connector wasn't already entitled to. The
+leak only manifests in a connector-per-participant topology (what the test
+suite constructs), so this is correctness-by-construction hardening, not a
+fix for an observed production cross-talk.
+
+**Fix.** Both ends now terminate the pid segment with a trailing `.`. The hub
+publishes `return_audio.{pid}.` / `return_audio_flush.{pid}.` (the data topic
+was already delimited by its trailing `.{topic}`) and the connector subscribes
+with the matching trailing `.`. This assumes participant identities do not
+contain the `.` delimiter — the same assumption the processor path already
+carries. Added `tests/test_participant_isolation_prefix.py`, which fails on the
+pre-fix code (`alice` over-receives `alice2`'s return data/audio/flush) and
+passes after. The LiveKit-transport enforcement layer
+(`destination_identities`, per-pid return tracks, subscribe permissions)
+remains without automated coverage — tracked separately.
 ### 2026-06-04 — piper TTS smoke test: de-flake + dedicated voice-unavailable exit code
 
 `test_piper_tts_smoke` was failing intermittently in CI with an opaque
