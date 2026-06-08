@@ -306,7 +306,7 @@ async def test_llm_health_true_when_health_check_disabled() -> None:
         assert (await llm.health()) is True
 
 
-async def test_vlm_and_stt_health_true_when_health_check_disabled() -> None:
+async def test_vlm_stt_tts_health_true_when_health_check_disabled() -> None:
     stub = StubOpenAI()
     stub.set_health_status(503)
     async with OpenAICompatVLM(
@@ -317,6 +317,10 @@ async def test_vlm_and_stt_health_true_when_health_check_disabled() -> None:
         "http://stub", health_check=False, client=stub.client(),
     ) as stt:
         assert (await stt.health()) is True
+    async with OpenAICompatTTS(
+        "http://stub", health_check=False, client=stub.client(),
+    ) as tts:
+        assert (await tts.health()) is True
 
 
 # ── VLM ───────────────────────────────────────────────────────────────────

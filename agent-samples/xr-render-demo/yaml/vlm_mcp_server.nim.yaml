@@ -21,7 +21,10 @@ models:
     # Confirm the exact slug for your account at https://build.nvidia.com.
     model_name:  nvidia/cosmos-reason1-7b
     api_key_env: NGC_API_KEY
-    # Hosted NIM has no local /health route.
+    # Set for parity with the worker's models.nim.yaml. vlm-mcp itself has no
+    # startup readiness gate that calls vlm.health(), so this flag is inert
+    # here — it's the worker's VLM health gate that the models.nim.yaml flag
+    # actually satisfies. Harmless to keep; documents the remote endpoint.
     health_check: false
     capabilities:
       vision:    true

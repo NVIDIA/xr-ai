@@ -55,7 +55,7 @@ _WORKER_CONFIG = "yaml/xr_render_demo_worker.yaml"
 
 # Read the model_backend scalar from the worker YAML without pyyaml — the
 # orchestrator is stdlib-only (mirrors the lovr_bin regex read below).
-_BACKEND_RE = re.compile(r"^\s*model_backend\s*:\s*[\"']?(\w+)", re.MULTILINE)
+_BACKEND_RE = re.compile(r"^\s*model_backend\s*:\s*[\"']?(\w+)[\"']?", re.MULTILINE)
 
 
 def _model_backend() -> str:

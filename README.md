@@ -258,9 +258,12 @@ model_backend: nim     # default is "local"
 
 The worker then loads the ready-made `yaml/models.nim.yaml` overlay and the
 orchestrator skips the local vlm-server automatically — no `main.py` edits.
-Pick the hosted model id in `models.nim.yaml` and provide an `NGC_API_KEY`
-(see [`docs/credentials.md`](docs/credentials.md)). Full details (and
-self-hosted NIM containers):
+Pick the hosted model id in `models.nim.yaml` and provide an `NGC_API_KEY` as
+an **environment variable** (or save it once via the launcher credential
+prompt) — it is not stored in YAML; the overlay only names the env var via
+`api_key_env: NGC_API_KEY`. See
+[`docs/credentials.md`](docs/credentials.md). Full details (and self-hosted
+NIM containers):
 [`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
 
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
@@ -346,8 +349,9 @@ model_backend: nim     # default is "local"
 
 The worker loads `yaml/models.nim.yaml` and the orchestrator points `vlm-mcp`
 at `yaml/vlm_mcp_server.nim.yaml` automatically — no `main.py` edits. Provide
-an `NGC_API_KEY` and just don't start the local `llm` / `agent-llm` / `vlm`
-model-servers. See
+an `NGC_API_KEY` as an **environment variable** (or via the launcher
+credential prompt — not in YAML) and just don't start the local `llm` /
+`agent-llm` / `vlm` model-servers. See
 [`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
 
 ---
