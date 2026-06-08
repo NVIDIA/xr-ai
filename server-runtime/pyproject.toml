@@ -15,7 +15,7 @@ dependencies = [
     # Shared loguru setup (setup_logging + stdlib InterceptHandler)
     "xr-ai-logging",
     # IPC layer — server side uses ZMQ directly (connector + hub)
-    "pyzmq>=26.0",
+    "pyzmq>=27.0",
     # LiveKit transport
     "livekit>=0.17",
     "livekit-api>=0.7",

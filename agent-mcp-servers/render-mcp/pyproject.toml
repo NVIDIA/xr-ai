@@ -20,7 +20,7 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "fastmcp>=0.4",
     # render-mcp → LOVR uses ZMQ PUSH/PULL with msgpack-encoded {op, ...} frames.
-    "pyzmq>=26",
+    "pyzmq>=27.0",
     "msgpack>=1.0",
 ]
 
