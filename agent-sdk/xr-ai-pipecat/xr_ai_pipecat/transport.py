@@ -26,6 +26,7 @@ from pipecat.frames.frames import (
     OutputAudioRawFrame,
     StartFrame,
 )
+from pipecat.processors.frame_processor import FrameDirection
 from pipecat.transports.base_input import BaseInputTransport
 from pipecat.transports.base_output import BaseOutputTransport
 from pipecat.transports.base_transport import BaseTransport, TransportParams
@@ -161,9 +162,17 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         # dropped audio frames produces one log line per burst rather
         # than one per frame. Reset when a target is set.
         self._missing_target_warned: bool = False
+        # StartFrame stashed at start() so per-participant MediaSenders can
+        # be created on demand (they need it to .start()).
+        self._start_frame: StartFrame | None = None
 
     def set_target_participant(self, pid: str) -> None:
-        logger.info("target participant set pid={!r}", pid)
+        # Retained as a fallback for frames that reach the output with no
+        # ``transport_destination`` (routed through the default ``None``
+        # sender). Per-participant routing now keys on the frame's own pid
+        # (see ``write_audio_frame``), so this no longer has to be a single
+        # room-wide target.
+        logger.info("fallback target participant set pid={!r}", pid)
         self._target_participant = pid
         self._missing_target_warned = False
 
@@ -177,7 +186,43 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         # ``_media_senders`` empty so even a destination=None frame is
         # dropped at the router; combined with the upstream pid tagging
         # this was the silent audio-output drop.
+        self._start_frame = frame
         await self.set_transport_ready(frame)
+
+    async def _ensure_destination(self, pid: str) -> bool:
+        """Lazily create a per-participant ``MediaSender`` keyed on ``pid``.
+
+        Each participant gets its own sender so two participants' TTS streams
+        never share one buffer (which would interleave their audio), and so
+        ``write_audio_frame`` can read the sender-stamped
+        ``transport_destination`` to address the return audio at the right
+        participant. Returns ``True`` once a sender for ``pid`` exists.
+        """
+        if not pid:
+            return False
+        if pid in self._media_senders:
+            return True
+        if self._start_frame is None:
+            return False
+        sender = BaseOutputTransport.MediaSender(
+            self,
+            destination=pid,
+            sample_rate=self.sample_rate,
+            audio_chunk_size=self.audio_chunk_size,
+            params=self._params,
+        )
+        await sender.start(self._start_frame)
+        self._media_senders[pid] = sender
+        return True
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        # Register a per-participant sender on join so audio addressed to that
+        # pid has somewhere to route. Senders are not torn down on leave — one
+        # idle sender per pid for the session is cheap, and tearing one down
+        # mid-pipeline needs an EndFrame we don't have here.
+        if isinstance(frame, ParticipantJoinedFrame):
+            await self._ensure_destination(frame.participant_id)
 
     async def stop(self, frame: EndFrame):
         await super().stop(frame)
@@ -198,22 +243,29 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         participant to send it back to. The two facts together used to
         drop every TTS / chime frame on the floor.
 
-        Single-participant routing is handled at the hub layer:
-        ``write_audio_frame`` reads ``self._target_participant``
-        (steered by ``BrainProcessor`` on ``ParticipantJoinedFrame``) and
-        addresses the return-audio chunk accordingly. Re-pointing the
-        frame at the default sender preserves the pid information at the
-        transport layer without forcing every sample to register a
-        per-pid pipecat ``MediaSender`` lifecycle.
+        Per-participant routing: each pid has its own ``MediaSender``
+        (created on join, or lazily here). The frame keeps its
+        ``transport_destination = pid`` so the router delivers it to that
+        participant's sender, which stamps the pid back onto the chunk for
+        ``write_audio_frame``. Only frames with no pid (or arriving before
+        the sender could be created) fall back to the default ``None``
+        sender + ``_target_participant``.
         """
-        # Route through the default (None) sender, but preserve the pid so
-        # any downstream tap/sink still sees which participant the frame was
-        # addressed to. Leaving it nulled would strip the pid for everyone
-        # observing the frame after us.
         pid = frame.transport_destination
-        frame.transport_destination = None
+        if pid and pid not in self._media_senders:
+            await self._ensure_destination(pid)
+        if pid and pid not in self._media_senders:
+            # Could not create a per-pid sender (no StartFrame yet) — fall back
+            # to the default sender so the frame is not dropped at the router.
+            # Null ``transport_destination`` only across the super() call, then
+            # restore it so downstream taps/sinks still see which participant
+            # the frame was addressed to (the save/restore intent main carried
+            # before per-pid routing existed).
+            frame.transport_destination = None
+            await super()._handle_frame(frame)
+            frame.transport_destination = pid
+            return
         await super()._handle_frame(frame)
-        frame.transport_destination = pid
 
     async def write_audio_frame(self, frame: OutputAudioRawFrame) -> bool:
         """Pipecat's audio-out hook — invoked once per chunked output
@@ -232,7 +284,12 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         never invoked it, which is why every TTS chunk was silently
         dropped before reaching the hub.
         """
-        if not self._target_participant:
+        # Address the chunk at the participant whose sender produced it. The
+        # per-pid MediaSender stamps ``transport_destination`` onto the frame;
+        # the default sender leaves it None, so fall back to the room-wide
+        # target for any unaddressed audio.
+        pid = frame.transport_destination or self._target_participant
+        if not pid:
             if not self._missing_target_warned:
                 logger.warning(
                     "no target participant — dropping audio frame",
@@ -247,7 +304,7 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
             channels=frame.num_channels,
             samples=num_samples,
             data=pcm_float32,
-            participant_id=self._target_participant,
+            participant_id=pid,
             track_id="tts",
         )
         await self._ep.send_return_audio(chunk)

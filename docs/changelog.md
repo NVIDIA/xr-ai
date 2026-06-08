@@ -63,6 +63,27 @@ StreamKit's `timestamp_us` through that parameter can turn an increasing media
 timestamp into a long capture wait and add audio latency. The C++ LiveKit backend
 now preserves the StreamKit timestamp as API metadata and calls
 `AudioSource::captureFrame(frame)` so the SDK uses its realtime default timeout.
+### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
+
+Follow-up to #184. That PR added a dedicated `_EXIT_VOICE_UNAVAILABLE = 3`
+(retryable → test skips) for the "voice can't be obtained" case, but the
+`except LocalEntryNotFoundError` handler was ordered *after*
+`except (EntryNotFoundError, RepositoryNotFoundError)`. `LocalEntryNotFoundError`
+subclasses `EntryNotFoundError`, so Python's first-match dispatch sent it to the
+exit-1 (bad-voice-name) branch and the exit-3 branch was dead code. A transient
+HF **429** with no cached copy surfaces as `LocalEntryNotFoundError`, so the
+flake #184 was meant to de-flake still hard-failed `test_piper_tts_smoke` on
+`main` (run 26995999535). Fix: order the subclass handler first, so the
+empty-cache / transient-download case exits 3 and only a genuine bad voice
+name (`EntryNotFoundError` from the repo) exits 1 (fail).
+
+With the ordering fixed, `test_piper_tts_smoke` now **skips cleanly** on the
+voice-unavailable exit (offline empty cache or transient HF 429) — the smoke
+test only asserts the server path when the voice can actually be obtained, so a
+HuggingFace hiccup no longer red-fails CI. (An earlier draft of this PR tried to
+pre-fetch + cache the voice in CI and fail loudly on a real outage; that was
+dropped in favour of the simpler skip — the smoke test isn't worth blocking the
+suite on HF availability.)
 
 ### 2026-06-05 — Android: synthetic "Virtual Camera" provider over injectVideoFrame
 
@@ -91,6 +112,81 @@ adapters). Always available even on a camera-less device/emulator.
 Builds on PR #172 (the `injectVideoFrame` API); not buildable in CI here —
 on-device verification is the gate.
 
+### 2026-06-04 — Multi-client isolation: each client talks only to the hub
+
+Two human clients sharing a room saw each other's data-channel messages,
+heard each other's microphones, and (on the pipecat voice path) could receive
+each other's agent answers. Three independent leaks, fixed at the layer each
+belongs to. All client changes are gated on `hubIdentity`
+(default `xr-hub-connector`, the connector's join identity); set it
+`null`/`nil` to restore the legacy whole-room behaviour.
+
+**1. Outbound data — publish-side (web/web-xr/android/iOS).** `send()` now
+addresses data to the hub participant only (`destinationIdentities` /
+`identities`), so a client's text/ping/custom messages never reach peers.
+
+**2. Inbound data + audio — subscribe-side (web/web-xr/android/iOS).** The
+`DataReceived` handler drops messages whose publisher is not the hub, and the
+room connects with auto-subscribe disabled + subscribes only to the hub
+participant's tracks (track-published event + a connect-time sweep). A client
+no longer receives or plays another participant's microphone — it subscribes
+to the hub's per-pid return-audio track only.
+
+**3. Agent return audio — per-participant routing (`xr-ai-pipecat`
+foundation).** The pipecat voice pipeline was per-pid on input (VAD/STT/brain
+keyed by participant) but collapsed to a single `_target_participant`
+(last-join-wins) on output: `XRMediaHubOutputTransport` nulled every frame's
+`transport_destination` and routed all TTS through the default sender, so
+participant A's spoken-query answer was published on participant B's
+return-audio track. Now a per-participant `MediaSender` is registered on
+`ParticipantJoinedFrame` (and lazily in `_handle_frame`), frames keep their
+`transport_destination = pid`, and `write_audio_frame` addresses the chunk at
+the frame's own pid (falling back to `_target_participant` only for
+unaddressed audio). Both pipecat samples (simple-vlm, xr-render-demo) inherit
+the fix. Covered by `test_output_transport_routes_audio_by_frame_pid_not_single_target`
+(fails pre-fix: both answers addressed to the last joiner).
+
+**Known follow-ups (not yet fixed):** within the pipecat foundation,
+`StreamingTtsProcessor`'s sentence buffer is still a single shared `_pending`
+(two simultaneous speakers' tokens can interleave), interruption is still
+global (`InterruptionFrame` → cancel-all rather than pid-scoped, so one
+participant's "stop"/supersede cancels another's in-flight response), and
+`UserStarted/StoppedSpeaking` frames are pid-less (speculative camera warmup
+fans to all joined pids). These degrade only under concurrent speech and are
+tracked separately. The native client edits (android/iOS) compile-verify
+pending an on-device build; web is syntax-checked and the foundation fix is
+unit-tested here.
+
+### 2026-06-04 — Terminate the pid segment on return-traffic topics
+
+The connector subscribed to return traffic on `return_audio.{pid}`,
+`return_audio_flush.{pid}`, and `return_data.{pid}` with no delimiter after
+the pid (`ipc/_connector.py`). ZMQ `SUBSCRIBE` is a byte-prefix match, so a
+connector owning `alice` also matched topics addressed to `alice2` — the same
+hazard the processor inbound path already guards against by appending a
+trailing `.` (`xr_ai_agent._processor._prefixes`).
+
+**Inert in production, latent elsewhere.** Production runs one connector per
+room (`transport/livekit/connector.py`), and that connector subscribes for
+every participant in the room anyway, with `RoomClient` routing each return
+message to the correct LiveKit participant by payload pid
+(`destination_identities` / per-pid `xr-hub-return-{pid}` track). The
+over-match delivered nothing the connector wasn't already entitled to. The
+leak only manifests in a connector-per-participant topology (what the test
+suite constructs), so this is correctness-by-construction hardening, not a
+fix for an observed production cross-talk.
+
+**Fix.** Both ends now terminate the pid segment with a trailing `.`. The hub
+publishes `return_audio.{pid}.` / `return_audio_flush.{pid}.` (the data topic
+was already delimited by its trailing `.{topic}`) and the connector subscribes
+with the matching trailing `.`. This assumes participant identities do not
+contain the `.` delimiter — the same assumption the processor path already
+carries. Added `tests/test_participant_isolation_prefix.py`, which fails on the
+pre-fix code (`alice` over-receives `alice2`'s return data/audio/flush) and
+passes after. The LiveKit-transport enforcement layer
+(`destination_identities`, per-pid return tracks, subscribe permissions)
+remains without automated coverage — tracked separately.
+
 ### 2026-06-04 — piper TTS smoke test: de-flake + dedicated voice-unavailable exit code
 
 `test_piper_tts_smoke` was failing intermittently in CI with an opaque
@@ -111,6 +207,51 @@ Two fixes:
   retryable — restores the documented "skip cleanly when the voice can't be
   obtained" contract); any other code → `pytest.fail` with the captured
   output so real regressions are diagnosable in the CI log.
+
+### 2026-06-03 — NVIDIA NIM as a model backend option (LLM + VLM)
+
+Agent samples can now run their LLM and VLM on hosted [NVIDIA
+NIM](https://build.nvidia.com) instead of local vLLM, selectable per sample
+by config. NIM is OpenAI-compatible, so this rides the existing
+`xr-ai-models` client layer — no new `kind`, no worker code changes.
+
+**One code change: `health_check` on every spec (default `true`).** Workers
+gate readiness on `service.health()`, which probes `base_url/health`. Hosted
+NIM has no such route, so a NIM spec sets `health_check: false` and
+`health()` returns `True` without probing. Threaded config → factory →
+all four `OpenAICompat*` clients. Chosen over auto-detecting "remote" from
+the URL because explicit is safer and self-hosted NIM containers *do* expose
+`/v1/health` (operator sets the flag to match their deployment).
+
+**Selection is one config key — `model_backend: local|nim` (no env/CLI
+switch, no main.py edits).** Each sample ships a `yaml/models.nim.yaml`
+overlay (LLM/VLM → `integrate.api.nvidia.com` with `api_key_env: NGC_API_KEY`;
+STT/TTS stay local). Setting `model_backend: nim` in the worker YAML does
+everything: the worker loads `models.nim.yaml`, and the orchestrator — which
+reads the same key — skips the local model server(s) NIM replaces. The
+orchestrator stays stdlib-only by reading the scalar with a regex (the same
+technique already used for `lovr_bin`), since orchestrators may not depend on
+pyyaml. For xr-render-demo the worker reaches the VLM through `vlm-mcp`, so a
+matching `yaml/vlm_mcp_server.nim.yaml` is shipped and the orchestrator points
+the `vlm-mcp` process at it automatically in NIM mode. `NGC_API_KEY` is a
+managed credential (auto-injected by `run_stack`); the orchestrator prompts
+for it once in NIM mode if unset.
+
+**Scope: LLM + VLM only.** Hosted NIM speech (Riva) is not OpenAI
+`/v1/audio`-compatible, so STT/TTS remain local. The agentic loop in
+xr-render-demo is tuned for the local Nemotron stack; hosted model ids in the
+overlay are examples to confirm at build.nvidia.com.
+
+**Security hardening.** Since this feature is the first to ship an
+`api_key_env` over a configurable `base_url`, the `OpenAICompat*` clients now
+warn at construction when a key would be sent over plain `http://` to a
+non-loopback host (cleartext bearer-token transmission, CWE-319); loopback and
+`https` are exempt. The shipped overlays use `https://integrate.api.nvidia.com`
+so this only trips on a misconfigured self-hosted endpoint. Audit otherwise
+clean: keys are read from env and sent only as a header (never logged),
+credentials are stored `0600`, `base_url` is operator config (no runtime SSRF
+surface), and `httpx` uses `trust_env=False` (no proxy/.netrc token
+redirection).
 
 ### 2026-06-03 — Removed on-demand camera mode; clients always stream
 
@@ -193,7 +334,6 @@ of `system.txt`). Per `AGENTS.md` "Prompt-driven samples", the
 warnings surface at every run; `--strict-overlap` turns them into a
 CI-grade rc=2 failure. Clearing a warning means changing the prompt's
 worked example, not the case fixture.
-
 ### 2026-05-21 — `xr-ai-vad` is Silero-only; `xr-render-demo` migrated
 
 Dropped the adaptive-energy fallback path that shipped in the initial

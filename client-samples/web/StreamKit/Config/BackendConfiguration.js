@@ -72,19 +72,34 @@ export class LiveKitConfig {
   tokenURL;
 
   /**
+   * Identity of the server-side hub participant that the agent publishes
+   * through (the LiveKit connector — `xr-hub-connector` by default, see
+   * `server-runtime/.../transport/livekit/config.py`). Outbound data is
+   * addressed only to this identity so it is never delivered to peer
+   * participants in the same room. Set to `null` to broadcast to the whole
+   * room (the pre-isolation behaviour).
+   *
+   * @type {string|null}
+   */
+  hubIdentity;
+
+  /**
    * @param {object}      opts
    * @param {string}      opts.host
    * @param {number}      [opts.port=7880]
    * @param {boolean}     [opts.secure=false]
    * @param {string|null} [opts.token=null]
    * @param {string|null} [opts.tokenURL=null]
+   * @param {string|null} [opts.hubIdentity='xr-hub-connector']
    */
-  constructor({ host, port = 7880, secure = false, token = null, tokenURL = null }) {
+  constructor({ host, port = 7880, secure = false, token = null, tokenURL = null,
+                hubIdentity = 'xr-hub-connector' }) {
     this.host = host;
     this.port = port;
     this.secure = secure;
     this.token = token;
     this.tokenURL = tokenURL;
+    this.hubIdentity = hubIdentity;
   }
 }
 

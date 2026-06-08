@@ -4,9 +4,17 @@
 # Simple VLM example worker configuration.
 # Auto-discovered by the launcher and passed as --config to the worker process.
 
-# Path to models.yaml (resolved relative to this file's directory).
-# Switch to models.omni.yaml to use Nemotron-Omni on port 8108
-# instead of Cosmos on port 8100.
+# Model backend: where the VLM runs.
+#   local — host the VLM on the local vlm-server (default)
+#   nim   — host the VLM on NVIDIA NIM (build.nvidia.com); the worker loads
+#           models.nim.yaml and the orchestrator skips the local vlm-server.
+#           Requires NGC_API_KEY (see docs/credentials.md). STT/TTS stay local.
+# This is the ONLY change needed to switch — no main.py edits.
+model_backend: local
+
+# Path to models.yaml for the LOCAL backend (resolved relative to this file's
+# directory). Switch to models.omni.yaml to use Nemotron-Omni on port 8108
+# instead of Cosmos on port 8100. Ignored when model_backend is "nim".
 models_yaml: models.yaml
 
 # Path to the voice-gate config (resolved relative to this file's

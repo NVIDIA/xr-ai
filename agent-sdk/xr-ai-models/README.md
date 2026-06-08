@@ -124,13 +124,29 @@ class TTSService(Protocol):
 `reasoning_field` knob normalizes `reasoning_content` (nemotron_v3 parser)
 into the same surface.
 
-## Phase B preview
+## Remote / hosted-NIM endpoints
 
-Cloud / remote endpoints are a `base_url` change — any spec can point at a
-non-localhost OpenAI-compatible URL and pass `api_key_env:
-OPENAI_API_KEY` for `Authorization: Bearer …`.  Future non-OpenAI-compat
-backends (LiteLLM, vendor SDKs) plug in as new `kind`s in
-`factory.py::make_*`; the protocols and callers do not change.
+Cloud / remote endpoints (e.g. hosted [NVIDIA NIM](https://build.nvidia.com))
+are a config change — point `base_url` at the OpenAI-compatible URL and set:
+
+```yaml
+vlm:
+  kind:        openai_compat
+  category:    vlm
+  base_url:    https://integrate.api.nvidia.com
+  model_name:  nvidia/cosmos-reason1-7b
+  api_key_env: NGC_API_KEY    # → Authorization: Bearer <env value>
+  health_check: false         # remote endpoints have no local /health route
+```
+
+`health_check` (default `true`) gates whether `health()` probes
+`base_url/health`. Remote endpoints don't expose it, so `false` makes
+`health()` return `True` without a request — otherwise a worker's readiness
+gate would block forever. See
+[`docs/ai-services.md`](../../docs/ai-services.md#hosting-models-on-nvidia-nim).
+
+Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
+`kind`s in `factory.py::make_*`; the protocols and callers do not change.
 
 ## Tests
 

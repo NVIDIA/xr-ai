@@ -129,6 +129,56 @@ not change.  Full protocol surface, the preset table, and the explicit
 (no-preset) spec are in
 [`agent-sdk/xr-ai-models/README.md`](../agent-sdk/xr-ai-models/README.md).
 
+## Hosting models on NVIDIA NIM
+
+The LLM and VLM can run on [NVIDIA NIM](https://build.nvidia.com) instead of
+local vLLM — NIM exposes the same OpenAI-compatible `/v1/chat/completions`
+API, so this is a `models.yaml` change with no worker code edits. STT and TTS
+stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
+
+A NIM model entry differs from a local one in three fields:
+
+```yaml
+vlm:
+  kind:        openai_compat
+  category:    vlm
+  base_url:    https://integrate.api.nvidia.com   # client appends /v1/...
+  model_name:  nvidia/cosmos-reason1-7b           # confirm slug at build.nvidia.com
+  api_key_env: NGC_API_KEY                         # → Authorization: Bearer
+  health_check: false                              # hosted NIM has no /health
+  capabilities: { vision: true, streaming: true }
+```
+
+- **`api_key_env: NGC_API_KEY`** sends the key as a bearer token. The key is a
+  managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
+  subprocess (see [`docs/credentials.md`](credentials.md)); or export it.
+- **`health_check: false`** is required for hosted endpoints — they have no
+  local `/health` route, so the worker readiness gate must not probe them.
+  (Default is `true` for local servers.)
+- **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
+
+Each sample ships a ready-made `yaml/models.nim.yaml` overlay, selected by a
+**single key** — no `main.py` edits. To switch a sample to NIM:
+
+1. Set `model_backend: nim` in the sample's `*_worker.yaml` (default
+   `local`). The worker then loads `models.nim.yaml`, and the orchestrator
+   (which reads the same key) skips the local model server(s) NIM replaces —
+   for xr-render-demo it also points `vlm-mcp` at
+   `yaml/vlm_mcp_server.nim.yaml`.
+2. Provide `NGC_API_KEY` — in NIM mode the orchestrator prompts for it once
+   if it isn't already saved or exported.
+3. For xr-render-demo, run the demo without the local `llm` / `agent-llm` /
+   `vlm` model-servers (they're `launch_mode="reuse"`, so just don't start
+   them in the model-servers stack).
+
+Set `model_backend: local` to switch back. (The orchestrator reads
+`model_backend` from the worker YAML with a stdlib regex, so it stays
+pyyaml-free.)
+
+**Self-hosted NIM containers** work the same way — point `base_url` at the
+container (e.g. `http://localhost:8000`) and set `health_check: true` if it
+exposes `/v1/health`.
+
 ## vLLM model persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,

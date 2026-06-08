@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# NIM backend for simple-vlm-example — the VLM runs on hosted NVIDIA NIM
+# (https://build.nvidia.com) instead of the local vlm-server; STT and TTS
+# stay local.
+#
+# To activate, set ONE key in simple_vlm_example_worker.yaml:
+#   model_backend: nim
+# The worker then loads this file and the orchestrator skips the local
+# vlm-server automatically (STT + TTS still run locally). Provide an NGC API
+# key (env NGC_API_KEY, or the launcher credential prompt) — see
+# docs/credentials.md. Full guide: docs/ai-services.md.
+#
+# Self-hosted NIM container instead of hosted? Point base_url at the
+# container (e.g. http://localhost:8000) and set health_check: true if it
+# exposes /v1/health.
+
+vlm:
+  kind:        openai_compat
+  category:    vlm
+  # Hosted NIM is OpenAI-compatible; the client appends /v1/chat/completions.
+  base_url:    https://integrate.api.nvidia.com
+  # Example model id — confirm the exact slug for your account at
+  # https://build.nvidia.com (any hosted vision model works, e.g.
+  # meta/llama-3.2-11b-vision-instruct).
+  model_name:  nvidia/nemotron-nano-12b-v2-vl
+  api_key_env: NGC_API_KEY
+  # Hosted NIM has no local /health route — skip the worker readiness probe.
+  health_check: false
+  capabilities:
+    streaming: true
+    vision:    true
+
+# STT and TTS remain local — hosted NIM speech (Riva) is not OpenAI
+# /v1/audio-compatible. Keep the local servers running for these.
+stt:
+  kind:     preset:parakeet_stt
+  base_url: http://localhost:8103
+
+tts:
+  kind:     preset:piper_tts
+  base_url: http://localhost:8105

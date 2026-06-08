@@ -183,7 +183,7 @@ export class LiveKitBackend {
       this.onConnectionStateChanged?.(mapState(lkState));
     });
 
-    room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
+    room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
       // Intercept internal SDK messages; never forward them to the application.
       if (topic === LiveKitBackend.#STATUS_TOPIC) {
         try {
@@ -192,8 +192,27 @@ export class LiveKitBackend {
         } catch { /* malformed — ignore */ }
         return;
       }
+      // Isolation: only surface data from the hub/agent, never from peer
+      // participants. Each client talks to the hub only. When `hubIdentity`
+      // is null we keep the legacy behaviour (accept from anyone).
+      if (this.#config.hubIdentity && participant?.identity !== this.#config.hubIdentity) {
+        return;
+      }
       this.onDataReceived?.(topic ?? '', payload);
     });
+
+    // Audio isolation: when `hubIdentity` is set we connect with
+    // autoSubscribe disabled and subscribe only to the hub participant's
+    // tracks (below), so a client never receives — or plays — another
+    // participant's microphone. The hub's per-pid return-audio track is the
+    // only thing each client subscribes to.
+    if (this.#config.hubIdentity) {
+      room.on(RoomEvent.TrackPublished, (publication, participant) => {
+        if (participant?.identity === this.#config.hubIdentity) {
+          publication.setSubscribed(true);
+        }
+      });
+    }
 
     room.on(RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) {
@@ -216,7 +235,21 @@ export class LiveKitBackend {
     });
 
     // ── Connect ───────────────────────────────────────────────────────────────
-    await room.connect(wsURL, token);
+    // autoSubscribe off when isolating to the hub — we subscribe to the hub's
+    // tracks explicitly (above + below). With no hubIdentity, keep LiveKit's
+    // default auto-subscribe.
+    await room.connect(wsURL, token, { autoSubscribe: !this.#config.hubIdentity });
+
+    // Subscribe to any hub tracks already published before we connected
+    // (TrackPublished only fires for tracks published after subscribe).
+    if (this.#config.hubIdentity) {
+      for (const participant of room.remoteParticipants.values()) {
+        if (participant.identity !== this.#config.hubIdentity) continue;
+        for (const publication of participant.trackPublications.values()) {
+          publication.setSubscribed(true);
+        }
+      }
+    }
   }
 
   /**
@@ -360,7 +393,16 @@ export class LiveKitBackend {
     if (topic === LiveKitBackend.#STATUS_TOPIC) {
       throw new Error(`topic '${topic}' is reserved for internal SDK use`);
     }
-    await this.#room.localParticipant.publishData(bytes, { reliable, topic });
+
+    // Address outbound data to the hub participant only. Clients only ever
+    // talk to the hub/agent, so targeting it keeps a message from being
+    // broadcast to — and surfaced by — other participants sharing the room.
+    // When `hubIdentity` is null the data broadcasts to the whole room.
+    const opts = { reliable, topic };
+    if (this.#config.hubIdentity) {
+      opts.destinationIdentities = [this.#config.hubIdentity];
+    }
+    await this.#room.localParticipant.publishData(bytes, opts);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

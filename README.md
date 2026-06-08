@@ -248,6 +248,24 @@ When pointing at a remote model, `vlm_server.yaml` is unused — remove
 the `vlm_server` entry from the launcher's process list so no local
 vLLM process is started.
 
+**Hosted NVIDIA NIM** — run the VLM on hosted NIM
+([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS
+stay local) by setting **one key** in `simple_vlm_example_worker.yaml`:
+
+```yaml
+model_backend: nim     # default is "local"
+```
+
+The worker then loads the ready-made `yaml/models.nim.yaml` overlay and the
+orchestrator skips the local vlm-server automatically — no `main.py` edits.
+Pick the hosted model id in `models.nim.yaml` and provide an `NGC_API_KEY` as
+an **environment variable** (or save it once via the launcher credential
+prompt) — it is not stored in YAML; the overlay only names the env var via
+`api_key_env: NGC_API_KEY`. See
+[`docs/credentials.md`](docs/credentials.md). Full details (and self-hosted
+NIM containers):
+[`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
+
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
 for the full option list.
@@ -320,6 +338,21 @@ To stop the model servers when done:
 cd agent-samples/model-servers
 uv run model_servers --stop
 ```
+
+**Hosted NVIDIA NIM** — run the LLMs and VLM on hosted NIM
+([build.nvidia.com](https://build.nvidia.com)) instead of local vLLM
+(STT/TTS stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
+
+```yaml
+model_backend: nim     # default is "local"
+```
+
+The worker loads `yaml/models.nim.yaml` and the orchestrator points `vlm-mcp`
+at `yaml/vlm_mcp_server.nim.yaml` automatically — no `main.py` edits. Provide
+an `NGC_API_KEY` as an **environment variable** (or via the launcher
+credential prompt — not in YAML) and just don't start the local `llm` /
+`agent-llm` / `vlm` model-servers. See
+[`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
 
 ---
 

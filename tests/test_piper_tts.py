@@ -190,9 +190,11 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
             await _wait_for_port(port, proc=proc, timeout=300.0)
         except _ServerExited as exc:
             tail = exc.output.strip()[-2000:]
-            # A transient HF download failure on a cold cache is environmental,
-            # not a regression — skip rather than fail the suite (matches the
-            # "skipped cleanly if the voice can't be obtained" contract above).
+            # A voice-unavailable exit is environmental, not a code bug: an
+            # offline empty cache or a transient HuggingFace download failure
+            # (HTTP 429 rate-limit on the anonymous voice download). Skip
+            # cleanly rather than fail the suite — the smoke test only asserts
+            # the server path when the voice can actually be obtained.
             if exc.returncode == _EXIT_VOICE_UNAVAILABLE:
                 pytest.skip(
                     "piper voice could not be obtained (offline cache or "

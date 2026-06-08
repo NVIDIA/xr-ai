@@ -102,6 +102,19 @@ def _ensure_voice(voice: str, cache_dir: Path) -> tuple[Path, Path]:
     try:
         onnx_path = Path(hf_hub_download(_HF_REPO, onnx_hf, cache_dir=str(hf_cache)))
         json_path = Path(hf_hub_download(_HF_REPO, json_hf, cache_dir=str(hf_cache)))
+    # LocalEntryNotFoundError subclasses EntryNotFoundError, so it MUST be caught
+    # first — otherwise the (EntryNotFoundError, …) handler below swallows it and
+    # exits 1 (hard fail) instead of the retryable _EXIT_VOICE_UNAVAILABLE. A
+    # transient HF 429 with no cached copy surfaces as LocalEntryNotFoundError,
+    # which is exactly the flake this ordering prevents.
+    except LocalEntryNotFoundError:
+        logger.error(
+            "Voice {!r} is not cached in {} and could not be downloaded "
+            "(HF_HUB_OFFLINE / no network / transient HF failure). Pre-fetch it "
+            "on a connected host or retry.",
+            voice, hf_cache,
+        )
+        sys.exit(_EXIT_VOICE_UNAVAILABLE)
     except (EntryNotFoundError, RepositoryNotFoundError) as exc:
         logger.error(
             "Voice {!r} not found in {} ({}). "
@@ -110,14 +123,6 @@ def _ensure_voice(voice: str, cache_dir: Path) -> tuple[Path, Path]:
             voice, _HF_REPO, exc.__class__.__name__,
         )
         sys.exit(1)
-    except LocalEntryNotFoundError:
-        logger.error(
-            "Voice {!r} is not in {} and downloads are disabled "
-            "(HF_HUB_OFFLINE / no network). Pre-fetch it on a connected host "
-            "or remove the offline restriction.",
-            voice, hf_cache,
-        )
-        sys.exit(_EXIT_VOICE_UNAVAILABLE)
     except Exception as exc:
         # Any other huggingface_hub error (HfHubHTTPError, connection reset,
         # read timeout, 429 rate-limit, …) is a transient download problem,

@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# NIM backend for xr-render-demo — the LLMs and VLM run on hosted NVIDIA NIM
+# (https://build.nvidia.com) instead of local vLLM; STT and TTS stay local.
+#
+# To activate, set ONE key in xr_render_demo_worker.yaml:
+#   model_backend: nim
+# The worker then loads this file and the orchestrator points vlm-mcp at
+# yaml/vlm_mcp_server.nim.yaml automatically (the worker reaches the VLM via
+# vlm-mcp, so both must use NIM). Provide an NGC API key (env NGC_API_KEY, or
+# the launcher credential prompt) — see docs/credentials.md. Then run the
+# demo without the local llm / agent-llm / vlm model-servers. STT/TTS stay
+# local. Full guide: docs/ai-services.md "Hosting models on NVIDIA NIM".
+#
+# Model ids below are examples — confirm the exact slugs for your account at
+# https://build.nvidia.com. The agentic loop is tuned for the local Nemotron
+# stack; a hosted model that supports tool calling (and, for agent_llm,
+# reasoning) gives the closest behaviour.
+
+# Fast reactive model (quick-ack / still-working). No tool calling needed.
+llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    https://integrate.api.nvidia.com
+  model_name:  meta/llama-3.1-8b-instruct
+  api_key_env: NGC_API_KEY
+  health_check: false
+
+# Agentic tool-calling loop. Needs a hosted model with function calling.
+agent_llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    https://integrate.api.nvidia.com
+  model_name:  meta/llama-3.1-70b-instruct
+  api_key_env: NGC_API_KEY
+  health_check: false
+  capabilities:
+    tool_calls: true
+    reasoning:  true
+
+# Visual question answering (served to the agent via vlm-mcp).
+# nvidia/cosmos-reason1-7b mirrors the local default (ai-services/vlm-server
+# also runs Cosmos-Reason1-7B), so the render-demo's ask_image prompts behave
+# the same on NIM as locally. Swap to any hosted vision model on
+# build.nvidia.com if you prefer.
+vlm:
+  kind:        openai_compat
+  category:    vlm
+  base_url:    https://integrate.api.nvidia.com
+  model_name:  nvidia/cosmos-reason1-7b
+  api_key_env: NGC_API_KEY
+  health_check: false
+  capabilities:
+    streaming: true
+    vision:    true
+
+# STT and TTS remain local — hosted NIM speech (Riva) is not OpenAI
+# /v1/audio-compatible.
+stt:
+  kind:     preset:parakeet_stt
+  base_url: http://localhost:8103
+
+tts:
+  kind:     preset:piper_tts
+  base_url: http://localhost:8105

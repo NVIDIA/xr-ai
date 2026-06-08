@@ -36,6 +36,7 @@ class LLMSpec:
     capabilities: dict[str, Any] = field(default_factory=dict)
     default_extras: dict[str, Any] = field(default_factory=dict)
     timeout: float = 60.0
+    health_check: bool = True
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class VLMSpec:
     capabilities: dict[str, Any] = field(default_factory=dict)
     default_extras: dict[str, Any] = field(default_factory=dict)
     timeout: float = 60.0
+    health_check: bool = True
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,7 @@ class STTSpec:
     base_url: str = ""
     api_key_env: str | None = None
     timeout: float = 30.0
+    health_check: bool = True
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,7 @@ class TTSSpec:
     base_url: str = ""
     api_key_env: str | None = None
     timeout: float = 30.0
+    health_check: bool = True
 
 
 Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec
@@ -165,6 +169,9 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
     common: dict[str, Any] = {
         "kind":     body.get("kind", KIND_OPENAI_COMPAT),
         "base_url": _require_str(body, "base_url"),
+        # Remote endpoints (e.g. hosted NIM) have no local /health route; set
+        # ``health_check: false`` so the worker readiness gate doesn't block.
+        "health_check": bool(body.get("health_check", True)),
     }
     if "api_key_env" in body:
         common["api_key_env"] = body["api_key_env"]

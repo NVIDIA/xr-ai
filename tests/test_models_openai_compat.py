@@ -295,6 +295,49 @@ async def test_llm_health_false_on_503() -> None:
         assert (await llm.health()) is False
 
 
+async def test_llm_health_true_when_health_check_disabled() -> None:
+    # Remote endpoints (hosted NIM) have no /health route — health_check=False
+    # makes readiness assumed without probing, even if the route would 503.
+    stub = StubOpenAI()
+    stub.set_health_status(503)
+    async with OpenAICompatLLM(
+        "http://stub", "llm", health_check=False, client=stub.client(),
+    ) as llm:
+        assert (await llm.health()) is True
+
+
+async def test_vlm_stt_tts_health_true_when_health_check_disabled() -> None:
+    stub = StubOpenAI()
+    stub.set_health_status(503)
+    async with OpenAICompatVLM(
+        "http://stub", "vlm", health_check=False, client=stub.client(),
+    ) as vlm:
+        assert (await vlm.health()) is True
+    async with OpenAICompatSTT(
+        "http://stub", health_check=False, client=stub.client(),
+    ) as stt:
+        assert (await stt.health()) is True
+    async with OpenAICompatTTS(
+        "http://stub", health_check=False, client=stub.client(),
+    ) as tts:
+        assert (await tts.health()) is True
+
+
+def test_cleartext_key_transport_detection() -> None:
+    # A bearer token over plain http:// to a non-loopback host is cleartext
+    # credential transmission (CWE-319) — must be flagged. https, loopback,
+    # or no key configured are all fine.
+    from xr_ai_models.openai_compat import _is_cleartext_key_transport as is_ct
+    assert is_ct("http://example.com", "k") is True
+    assert is_ct("http://example.com:8000", "k") is True
+    assert is_ct("https://example.com", "k") is False
+    assert is_ct("https://integrate.api.nvidia.com", "k") is False
+    assert is_ct("http://localhost:8000", "k") is False
+    assert is_ct("http://127.0.0.1:8000", "k") is False
+    assert is_ct("http://example.com", None) is False
+    assert is_ct("http://example.com", "") is False
+
+
 # ── VLM ───────────────────────────────────────────────────────────────────
 
 

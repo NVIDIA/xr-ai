@@ -2019,6 +2019,54 @@ async def test_output_transport_writes_audio_to_target_participant():
 
 
 @pytest.mark.asyncio
+async def test_output_transport_routes_audio_by_frame_pid_not_single_target():
+    """Multi-client isolation: ``write_audio_frame`` must address each chunk
+    at the frame's own ``transport_destination`` (stamped by that
+    participant's ``MediaSender``), NOT a single room-wide
+    ``_target_participant``. Two participants speaking must each get their own
+    answer; participant A's audio must never be delivered to B.
+
+    Pre-fix the output transport nulled every frame's destination and used
+    ``self._target_participant`` (set on each ``ParticipantJoinedFrame``, so
+    last-join-wins) for every chunk — so A's TTS answer was published on B's
+    return-audio track. This locks per-frame routing in."""
+    from xr_ai_agent import AudioChunk
+    from xr_ai_pipecat.transport import (
+        TTS_NATIVE_SAMPLE_RATE,
+        XRMediaHubOutputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    captured: list[AudioChunk] = []
+
+    class _StubEndpoint:
+        async def send_return_audio(self, chunk: AudioChunk) -> None:
+            captured.append(chunk)
+
+    params = TransportParams(
+        audio_out_enabled=True,
+        audio_out_sample_rate=TTS_NATIVE_SAMPLE_RATE,
+        audio_out_channels=1,
+    )
+    transport = XRMediaHubOutputTransport(_StubEndpoint(), params)
+    # Simulate the pre-fix steering: brain set the room-wide target to the
+    # last participant that joined. Per-frame routing must override this.
+    transport.set_target_participant("bob")
+
+    pcm = b"\x00\x00" * 320
+    frame_a = OutputAudioRawFrame(audio=pcm, sample_rate=TTS_NATIVE_SAMPLE_RATE, num_channels=1)
+    frame_a.transport_destination = "alice"
+    frame_b = OutputAudioRawFrame(audio=pcm, sample_rate=TTS_NATIVE_SAMPLE_RATE, num_channels=1)
+    frame_b.transport_destination = "bob"
+
+    assert await transport.write_audio_frame(frame_a) is True
+    assert await transport.write_audio_frame(frame_b) is True
+
+    # Each chunk addressed at its own participant — not both at "bob".
+    assert [c.participant_id for c in captured] == ["alice", "bob"]
+
+
+@pytest.mark.asyncio
 async def test_output_transport_write_audio_frame_returns_false_without_target():
     """No target participant configured — drop the frame at the hub
     boundary instead of emitting an unaddressable AudioChunk. Returning

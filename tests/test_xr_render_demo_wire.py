@@ -12,6 +12,7 @@ GPU verification skipped — stub-server tests only.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -25,6 +26,13 @@ sys.path.insert(0, str(_WORKER_DIR))
 
 from _stub_openai import StubOpenAI
 
+from pipecat.frames.frames import EndFrame, Frame, TextFrame
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.worker import PipelineWorker
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.workers.runner import WorkerRunner
+
+from xr_ai_agent import DataMessage
 from xr_ai_models import (
     ChatMessage,
     OpenAICompatLLM,
@@ -351,3 +359,176 @@ def test_tool_def_to_openai_wire_shape() -> None:
             },
         },
     }
+
+
+# ── XR-launch-failure notice delivery (yield → TTS + _send → panel) ────────────
+#
+# When start_xr / the LOVR-spawn poll fails, RenderDemoAgent calls
+# RenderSceneProcessor.enqueue_notice(pid, msg). The notice must be delivered
+# with the SAME shape as a normal final answer: spoken (yielded → TextFrame at
+# the TTS-facing sink) AND on the agent.response data topic (panel). The notice
+# path runs no LLM/MCP, so the brain is built with None clients and the real
+# prompt files — only the transport is faked to capture _send.
+
+_PROMPTS_DIR = _WORKER_DIR / "prompts"
+_SYSTEM_PROMPT = _PROMPTS_DIR / "system.txt"
+
+_LAUNCH_FAIL_MSG = "I couldn't start the XR session — try Launch XR again."
+
+
+class _CaptureSink(FrameProcessor):
+    """Tail processor — collects every downstream frame it sees."""
+
+    def __init__(self) -> None:
+        super().__init__(enable_direct_mode=True)
+        self.frames: list[Frame] = []
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        self.frames.append(frame)
+        await self.push_frame(frame, direction)
+
+
+class _CaptureTransport:
+    """XRMediaHubTransport double — records send_return_data and owns the
+    target participant. Only the surface the notice path touches."""
+
+    def __init__(self) -> None:
+        self.target_participant = ""
+        self.sent: list[DataMessage] = []
+
+    def set_target_participant(self, pid: str) -> None:
+        self.target_participant = pid
+
+    async def send_return_data(self, msg: DataMessage) -> None:
+        self.sent.append(msg)
+
+
+def _make_brain(transport: _CaptureTransport):
+    """Build a real RenderSceneProcessor whose LLM/MCP clients are None.
+
+    The notice path (enqueue_notice → handle_query short-circuit →
+    _emit_notice) never dereferences them. The constructor eagerly reads
+    the real prompt files, so point at the bundled prompts/ directory.
+    """
+    from processors import RenderSceneProcessor
+
+    return RenderSceneProcessor(
+        transport   = transport,
+        cfg         = None,
+        render      = None,
+        oxr         = None,
+        vlm         = None,
+        video       = None,
+        vec         = None,
+        prompt_path = _SYSTEM_PROMPT,
+        tools       = [],
+        llm         = None,
+        agent_llm   = None,
+    )
+
+
+async def _drive_notice(brain, transport: _CaptureTransport,
+                        pid: str, msg: str) -> _CaptureSink:
+    """Run brain → sink in a PipelineWorker and call enqueue_notice once the
+    pipeline has started, then drain with EndFrame. Returns the sink."""
+    sink = _CaptureSink()
+    pipeline = Pipeline([brain, sink])
+    worker = PipelineWorker(
+        pipeline, cancel_on_idle_timeout=False, enable_rtvi=False,
+    )
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        # Let StartFrame propagate before injecting the notice.
+        await asyncio.sleep(0.05)
+        await brain.enqueue_notice(pid, msg)
+        await asyncio.sleep(0.15)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+    return sink
+
+
+async def test_launch_failure_notice_spoken_and_paneled() -> None:
+    """enqueue_notice delivers BOTH: a yielded TextFrame (→ TTS) and an
+    agent.response data message (→ panel), routed to the originating pid.
+
+    Because agent_llm is None, if the query had wrongly fallen through to
+    the agentic loop it would have returned "Done." — so seeing the exact
+    notice string at the sink proves the LLM loop was skipped.
+    """
+    transport = _CaptureTransport()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    sink = await _drive_notice(brain, transport, "pid-1", _LAUNCH_FAIL_MSG)
+
+    # Spoken: exactly one TextFrame carrying the notice verbatim.
+    texts = [f.text for f in sink.frames if isinstance(f, TextFrame)]
+    assert texts == [_LAUNCH_FAIL_MSG]
+
+    # Panel: exactly one agent.response send to the originating pid.
+    assert len(transport.sent) == 1
+    sent = transport.sent[0]
+    assert sent.topic == "agent.response"
+    assert sent.participant_id == "pid-1"
+    assert sent.data.decode() == _LAUNCH_FAIL_MSG
+    # No brain.close() — that closes the (None) LLM clients; the notice
+    # path never opened them.
+
+
+async def test_pending_notice_not_consumed_by_real_query() -> None:
+    """Exact-text match: a real query that interleaves before the notice
+    task runs must NOT be mistaken for the pending notice. The pending
+    entry survives a non-matching handle_query; the matching one drains it.
+
+    handle_query returns the generator without iterating, so no LLM fires —
+    we only assert on _pending_notices bookkeeping here.
+    """
+    transport = _CaptureTransport()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    # Register a pending notice the way enqueue_notice does, without spawning.
+    brain._pending_notices.setdefault("pid-1", []).append(_LAUNCH_FAIL_MSG)
+
+    # A real, different query for the same pid must not consume the notice.
+    await brain.handle_query("pid-1", "move the cube left", False)
+    assert brain._pending_notices.get("pid-1") == [_LAUNCH_FAIL_MSG]
+
+    # The matching text drains it.
+    await brain.handle_query("pid-1", _LAUNCH_FAIL_MSG, False)
+    assert "pid-1" not in brain._pending_notices
+
+
+async def test_quick_ack_spoken_on_non_thinking_turn() -> None:
+    """ACK-SPEAK POLICY: the quick-ack is yielded (→ TTS) on EVERY turn,
+    including a non-thinking one, so a tool-using turn is never silent until
+    the final reply. Pre-change the ack was spoken only when needs_thinking.
+
+    _quick_ack and _agentic_loop are stubbed so no LLM/MCP client is touched.
+    """
+    transport = _CaptureTransport()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    async def _fake_quick_ack(_text):
+        return ("On it.", False)  # ack present, needs_thinking = False
+
+    async def _fake_loop(*_a, **_k):
+        return "All set."
+
+    brain._quick_ack = _fake_quick_ack      # noqa: SLF001
+    brain._agentic_loop = _fake_loop        # noqa: SLF001
+
+    gen = await brain.handle_query("pid-1", "place a cube", False)
+    spoken = [s async for s in gen]
+
+    # Ack is spoken first (so the turn isn't silent), then the final reply.
+    assert spoken and spoken[0] == "On it."
+    assert "All set." in spoken
+    # Ack is also mirrored to the panel on agent.progress.
+    progress = [m for m in transport.sent if m.topic == "agent.progress"]
+    assert any(m.data.decode() == "On it." for m in progress)
