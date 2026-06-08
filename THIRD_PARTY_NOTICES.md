@@ -21,7 +21,7 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | Package        | Version  | License       | Upstream |
 |---             |---       |---            |---|
 | `msgpack`      | 1.0.0    | Apache-2.0    | https://github.com/msgpack/msgpack-python |
-| `pyzmq`        | 26.0.0   | BSD-3-Clause  | https://github.com/zeromq/pyzmq |
+| `pyzmq`        | 27.0.0   | BSD-3-Clause  | https://github.com/zeromq/pyzmq |
 | `uvicorn`      | 0.29.0   | BSD-3-Clause  | https://github.com/encode/uvicorn |
 | `fastapi`      | 0.111.0  | MIT           | https://github.com/fastapi/fastapi |
 | `httpx`        | 0.27.0   | BSD-3-Clause  | https://github.com/encode/httpx |
