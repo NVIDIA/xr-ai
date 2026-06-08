@@ -17,11 +17,41 @@ import os
 import wave
 from pathlib import Path
 from typing import Any, AsyncIterator, Sequence
+from urllib.parse import urlparse
 
 import httpx
 from loguru import logger
 
 from ._utils import merge_dicts
+
+
+# Hosts where plaintext http is acceptable for a bearer token (never leaves
+# the machine). Anything else over http:// with a key set is cleartext
+# credential transmission (CWE-319).
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _is_cleartext_key_transport(base_url: str, api_key: str | None) -> bool:
+    """True when an API key would ride an unencrypted, non-loopback connection.
+
+    A bearer token sent over plain ``http://`` to a remote host is exposed in
+    transit. Loopback is exempt (the request never leaves the machine).
+    """
+    if not api_key:
+        return False
+    parsed = urlparse(base_url if "://" in base_url else f"//{base_url}")
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "http" and host not in _LOOPBACK_HOSTS
+
+
+def _warn_if_cleartext_key(base_url: str, api_key: str | None) -> None:
+    if _is_cleartext_key_transport(base_url, api_key):
+        logger.warning(
+            "API key set for {!r}: a bearer token over plain http:// to a "
+            "non-loopback host is sent unencrypted — use https:// for remote "
+            "endpoints.",
+            base_url,
+        )
 from .protocols import (
     Capabilities,
     ChatMessage,
@@ -214,6 +244,7 @@ class OpenAICompatLLM:
         default_extras: dict[str, Any] | None = None,
         api_key_env: str | None = None,
         timeout: float = 60.0,
+        health_check: bool = True,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
@@ -224,6 +255,8 @@ class OpenAICompatLLM:
         self._reasoning_field = reasoning_field
         self._default_extras  = default_extras or {}
         self._api_key = os.environ.get(api_key_env) if api_key_env else None
+        _warn_if_cleartext_key(base_url, self._api_key)
+        self._health_check = health_check
         self._client  = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
@@ -333,6 +366,10 @@ class OpenAICompatLLM:
                     yield content
 
     async def health(self) -> bool:
+        # Remote endpoints (hosted NIM) expose no local /health route; the
+        # spec sets health_check=false, in which case readiness is assumed.
+        if not self._health_check:
+            return True
         try:
             resp = await self._client.get(self.health_url, timeout=3.0)
             return resp.is_success
@@ -365,6 +402,7 @@ class OpenAICompatVLM:
         default_extras: dict[str, Any] | None = None,
         api_key_env: str | None = None,
         timeout: float = 60.0,
+        health_check: bool = True,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self._llm = OpenAICompatLLM(
@@ -374,6 +412,7 @@ class OpenAICompatVLM:
             default_extras=default_extras,
             api_key_env=api_key_env,
             timeout=timeout,
+            health_check=health_check,
             client=client,
         )
 
@@ -492,12 +531,15 @@ class OpenAICompatSTT:
         *,
         api_key_env: str | None = None,
         timeout: float = 30.0,
+        health_check: bool = True,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
         self._url       = base + "/v1/audio/transcriptions"
         self.health_url = base + "/health"
         self._api_key   = os.environ.get(api_key_env) if api_key_env else None
+        _warn_if_cleartext_key(base_url, self._api_key)
+        self._health_check = health_check
         self._client    = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
@@ -527,6 +569,8 @@ class OpenAICompatSTT:
         return resp.json().get("text", "")
 
     async def health(self) -> bool:
+        if not self._health_check:
+            return True
         try:
             resp = await self._client.get(self.health_url, timeout=3.0)
             return resp.is_success
@@ -556,12 +600,15 @@ class OpenAICompatTTS:
         *,
         api_key_env: str | None = None,
         timeout: float = 30.0,
+        health_check: bool = True,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
         self._url       = base + "/v1/audio/speech"
         self.health_url = base + "/health"
         self._api_key   = os.environ.get(api_key_env) if api_key_env else None
+        _warn_if_cleartext_key(base_url, self._api_key)
+        self._health_check = health_check
         self._client    = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
@@ -588,6 +635,8 @@ class OpenAICompatTTS:
         return resp.content
 
     async def health(self) -> bool:
+        if not self._health_check:
+            return True
         try:
             resp = await self._client.get(self.health_url, timeout=3.0)
             return resp.is_success

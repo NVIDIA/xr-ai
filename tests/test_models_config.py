@@ -108,6 +108,26 @@ agent_llm:
     assert spec.reasoning_field == "reasoning_content"
 
 
+def test_health_check_defaults_true_and_parses_false(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+local_llm:
+  kind:     preset:nemotron3_nano
+  base_url: http://localhost:8107
+nim_llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    https://integrate.api.nvidia.com
+  model_name:  meta/llama-3.1-8b-instruct
+  api_key_env: NGC_API_KEY
+  health_check: false
+"""))
+    assert cfg.llm("local_llm").health_check is True
+    nim = cfg.llm("nim_llm")
+    assert nim.health_check is False
+    assert nim.api_key_env == "NGC_API_KEY"
+    assert nim.base_url == "https://integrate.api.nvidia.com"
+
+
 def test_vlm_preset(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
 vlm:

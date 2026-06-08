@@ -5,10 +5,19 @@
 # Paths resolve relative to this file's directory.
 
 # ── AI model services ─────────────────────────────────────────────────────────
+# Model backend: where the LLM and VLM run.
+#   local — local vLLM model-servers (default)
+#   nim   — hosted NVIDIA NIM (build.nvidia.com); the worker loads
+#           models.nim.yaml and the orchestrator points vlm-mcp at
+#           vlm_mcp_server.nim.yaml. Requires NGC_API_KEY (docs/credentials.md).
+#           STT/TTS stay local. This is the ONLY change needed — no main.py edit.
+model_backend: local
+
 # Model endpoints (URLs, presets, timeouts) are declared in models.yaml and
 # loaded via xr-ai-models.  Edit that file to change which model runs where.
 # Path is resolved relative to THIS file's directory (`yaml/`), so the bare
 # `models.yaml` here points at `agent-samples/xr-render-demo/yaml/models.yaml`.
+# Used by the LOCAL backend; ignored when model_backend is "nim".
 models_yaml: models.yaml
 
 # ── Voice gate ────────────────────────────────────────────────────────────────

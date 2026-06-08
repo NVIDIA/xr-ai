@@ -46,10 +46,24 @@ import urllib.request
 from pathlib import Path
 
 from loguru import logger
-from xr_ai_launcher import Process, run_stack
+from xr_ai_launcher import Process, ensure_credentials, run_stack
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
+
+_WORKER_CONFIG = "yaml/xr_render_demo_worker.yaml"
+
+# Read the model_backend scalar from the worker YAML without pyyaml — the
+# orchestrator is stdlib-only (mirrors the lovr_bin regex read below).
+_BACKEND_RE = re.compile(r"^\s*model_backend\s*:\s*[\"']?(\w+)[\"']?", re.MULTILINE)
+
+
+def _model_backend() -> str:
+    try:
+        m = _BACKEND_RE.search((_BASE / _WORKER_CONFIG).read_text())
+    except OSError:
+        return "local"
+    return m.group(1).lower() if m else "local"
 
 
 # ── Process stack ─────────────────────────────────────────────────────────────
@@ -58,34 +72,46 @@ _BASE = Path(__file__).resolve().parent
 # model-servers, not this demo.  The entries document the dependency and
 # the launcher skips spawning them; start them first with:
 #   uv run --project agent-samples/model-servers model_servers
-
-_PROCESSES: list[Process] = [
-    Process("stt",       "../../ai-services/stt-server",         "stt_server",
-            launch_mode="reuse"),
-    Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
-            launch_mode="reuse"),
-    Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
-            launch_mode="reuse"),
-    Process("llm",       "../../ai-services/llm/llama_nemotron",  "llama_nemotron_llm_server",
-            launch_mode="reuse"),
-    Process("hub",        "../../server-runtime",                "xr_media_hub",
-            config="yaml/xr_media_hub.yaml"),
-    Process("cloudxr",    "../../cloudxr-runtime",               "cloudxr_runtime",
-            config="yaml/cloudxr_runtime.yaml"),
-    Process("tts",        "../../ai-services/tts/piper",         "piper_tts_server",
-            config="yaml/piper_tts_server.yaml"),
-    Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",     "vlm_mcp_server",
-            config="yaml/vlm_mcp_server.yaml"),
-    Process("video-mcp",  "../../agent-mcp-servers/video-mcp",   "video_mcp_server",
-            config="yaml/video_mcp_server.yaml"),
-    Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),
-    Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server",
-            config="yaml/oxr_mcp_server.yaml",
-            quiet_native_output=True),
-    Process("vec-mcp",    "../../agent-mcp-servers/vec-mcp",     "vec_mcp_server"),
-    Process("worker",     "worker",                              "xr_render_demo_worker",
-            config="yaml/xr_render_demo_worker.yaml"),
-]
+#
+# With model_backend: nim (in xr_render_demo_worker.yaml) the worker loads
+# models.nim.yaml and vlm-mcp is pointed at vlm_mcp_server.nim.yaml here
+# automatically — run LLM/VLM on hosted NIM and just don't start the local
+# llm / agent-llm / vlm model-servers. STT/TTS stay local. See
+# docs/ai-services.md "Hosting models on NVIDIA NIM".
+def _build_processes(backend: str) -> list[Process]:
+    # The worker reaches the VLM through vlm-mcp, so vlm-mcp must use the same
+    # backend as the worker's models config.
+    vlm_mcp_config = (
+        "yaml/vlm_mcp_server.nim.yaml" if backend == "nim"
+        else "yaml/vlm_mcp_server.yaml"
+    )
+    return [
+        Process("stt",       "../../ai-services/stt-server",         "stt_server",
+                launch_mode="reuse"),
+        Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+                launch_mode="reuse"),
+        Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
+                launch_mode="reuse"),
+        Process("llm",       "../../ai-services/llm/llama_nemotron",  "llama_nemotron_llm_server",
+                launch_mode="reuse"),
+        Process("hub",        "../../server-runtime",                "xr_media_hub",
+                config="yaml/xr_media_hub.yaml"),
+        Process("cloudxr",    "../../cloudxr-runtime",               "cloudxr_runtime",
+                config="yaml/cloudxr_runtime.yaml"),
+        Process("tts",        "../../ai-services/tts/piper",         "piper_tts_server",
+                config="yaml/piper_tts_server.yaml"),
+        Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",     "vlm_mcp_server",
+                config=vlm_mcp_config),
+        Process("video-mcp",  "../../agent-mcp-servers/video-mcp",   "video_mcp_server",
+                config="yaml/video_mcp_server.yaml"),
+        Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),
+        Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server",
+                config="yaml/oxr_mcp_server.yaml",
+                quiet_native_output=True),
+        Process("vec-mcp",    "../../agent-mcp-servers/vec-mcp",     "vec_mcp_server"),
+        Process("worker",     "worker",                              "xr_render_demo_worker",
+                config=_WORKER_CONFIG),
+    ]
 
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.
@@ -215,7 +241,10 @@ def run() -> None:
     setup_logging("orchestrator", namespace="xr-render-demo")
     _ensure_web_vendor()
     _ensure_lovr_bin()
-    run_stack(_PROCESSES, _BASE)
+    backend = _model_backend()
+    if backend == "nim":
+        ensure_credentials("NGC_API_KEY")
+    run_stack(_build_processes(backend), _BASE)
 
 
 if __name__ == "__main__":

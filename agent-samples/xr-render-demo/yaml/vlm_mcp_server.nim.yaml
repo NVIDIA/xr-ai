@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# vlm-mcp configured against hosted NVIDIA NIM (https://build.nvidia.com)
+# instead of the local vlm-server. The xr-render-demo worker reaches the VLM
+# through vlm-mcp's ask_image tool, so vlm-mcp must use NIM whenever the worker
+# does. The orchestrator points vlm-mcp at this file automatically when
+# model_backend: nim is set in xr_render_demo_worker.yaml — no manual wiring.
+#
+# Requires an NGC API key (env NGC_API_KEY) — see docs/credentials.md.
+
+host: 0.0.0.0
+port: 8240
+
+models:
+  vlm:
+    kind:        openai_compat
+    category:    vlm
+    # Hosted NIM is OpenAI-compatible; the client appends /v1/chat/completions.
+    base_url:    https://integrate.api.nvidia.com
+    # Confirm the exact slug for your account at https://build.nvidia.com.
+    model_name:  nvidia/cosmos-reason1-7b
+    api_key_env: NGC_API_KEY
+    # Set for parity with the worker's models.nim.yaml. vlm-mcp itself has no
+    # startup readiness gate that calls vlm.health(), so this flag is inert
+    # here — it's the worker's VLM health gate that the models.nim.yaml flag
+    # actually satisfies. Harmless to keep; documents the remote endpoint.
+    health_check: false
+    capabilities:
+      vision:    true
+      streaming: true
+
+# httpx timeout applied to each POST /v1/chat/completions call.
+vlm_request_timeout_s: 60.0
