@@ -113,6 +113,17 @@ for it once in NIM mode if unset.
 xr-render-demo is tuned for the local Nemotron stack; hosted model ids in the
 overlay are examples to confirm at build.nvidia.com.
 
+**Security hardening.** Since this feature is the first to ship an
+`api_key_env` over a configurable `base_url`, the `OpenAICompat*` clients now
+warn at construction when a key would be sent over plain `http://` to a
+non-loopback host (cleartext bearer-token transmission, CWE-319); loopback and
+`https` are exempt. The shipped overlays use `https://integrate.api.nvidia.com`
+so this only trips on a misconfigured self-hosted endpoint. Audit otherwise
+clean: keys are read from env and sent only as a header (never logged),
+credentials are stored `0600`, `base_url` is operator config (no runtime SSRF
+surface), and `httpx` uses `trust_env=False` (no proxy/.netrc token
+redirection).
+
 ### 2026-06-03 — Removed on-demand camera mode; clients always stream
 
 Dropped the "camera on demand" feature across the stack. Clients now
