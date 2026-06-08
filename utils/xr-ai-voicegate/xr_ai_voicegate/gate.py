@@ -141,6 +141,13 @@ class VoiceGate:
     # ── event ladder ──────────────────────────────────────────────────────────
 
     async def feed(self, pid: str, text: str) -> None:
+        """Run one transcript through the event ladder; fires exactly one event.
+
+        Not re-entrant per-pid: the follow-up window (``_followup_until``) is
+        read-then-mutated without locking, so two concurrent ``feed`` calls
+        for the same pid can race the window state. Consumers must serialize
+        calls per participant (e.g. a per-pid ``transcribing`` flag).
+        """
         # Always-on mode: no phrases configured, so the magic-phrase /
         # follow-up / phrase-only / drop branches don't apply. STOP still
         # wins (interrupts must work even without a phrase), and every
@@ -152,7 +159,6 @@ class VoiceGate:
                     "followup_window_open=False",
                     pid,
                 )
-                logger.info("stop bypass pid=%r (text suppressed)", pid)
                 logger.debug("stop bypass pid=%r %r", pid, text[:80])
                 await self._invoke(self._on_stop_h, "on_stop", pid)
                 return
@@ -161,7 +167,6 @@ class VoiceGate:
                 "followup_window_open=False",
                 pid,
             )
-            logger.info("audio query pid=%r (text suppressed)", pid)
             logger.debug("audio query pid=%r %r", pid, text[:80])
             await self._invoke(self._on_query_h, "on_query", pid, text, True)
             return
@@ -181,7 +186,6 @@ class VoiceGate:
                 "followup_window_open=%s",
                 pid, matched_magic, in_followup,
             )
-            logger.info("stop bypass pid=%r (text suppressed)", pid)
             logger.debug("stop bypass pid=%r %r", pid, stop_candidate[:80])
             self._followup_until.pop(pid, None)
             await self._invoke(self._on_stop_h, "on_stop", pid)
@@ -199,7 +203,6 @@ class VoiceGate:
                     pid, in_followup,
                 )
                 self._followup_until.pop(pid, None)
-                logger.info("audio query pid=%r (text suppressed)", pid)
                 logger.debug("audio query pid=%r %r", pid, query[:80])
                 await self._invoke(self._on_query_h, "on_query", pid, query, True)
                 return
@@ -229,7 +232,6 @@ class VoiceGate:
                 pid,
             )
             self._followup_until.pop(pid, None)
-            logger.info("followup query pid=%r (text suppressed)", pid)
             logger.debug("followup query pid=%r %r", pid, text[:80])
             await self._invoke(self._on_query_h, "on_query", pid, text, False)
             return
@@ -240,7 +242,6 @@ class VoiceGate:
             "followup_window_open=%s",
             pid, in_followup,
         )
-        logger.info("drop pid=%r (text suppressed)", pid)
         logger.debug("drop pid=%r %r", pid, text[:80])
         self._followup_until.pop(pid, None)
         await self._invoke(self._on_drop_h, "on_drop", pid, text)

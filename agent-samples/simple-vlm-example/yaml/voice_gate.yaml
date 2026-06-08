@@ -15,7 +15,7 @@ magic_phrases:
 # Audible "I heard you" feedback. When true (and magic_phrases is
 # non-empty), a short two-tone chime plays the moment a phrase matches —
 # before STT+VLM finish — so the user knows the agent is processing.
-listening_chime: true
+listening_chime: false
 
 # Follow-up grace window. After a successful magic-phrase match, the
 # next utterance from the same participant within this many seconds

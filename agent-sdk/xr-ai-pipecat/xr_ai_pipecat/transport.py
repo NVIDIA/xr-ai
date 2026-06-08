@@ -255,9 +255,16 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         if pid and pid not in self._media_senders:
             await self._ensure_destination(pid)
         if pid and pid not in self._media_senders:
-            # Could not create a sender (no StartFrame yet) — fall back to the
-            # default sender so the frame is not dropped at the router.
+            # Could not create a per-pid sender (no StartFrame yet) — fall back
+            # to the default sender so the frame is not dropped at the router.
+            # Null ``transport_destination`` only across the super() call, then
+            # restore it so downstream taps/sinks still see which participant
+            # the frame was addressed to (the save/restore intent main carried
+            # before per-pid routing existed).
             frame.transport_destination = None
+            await super()._handle_frame(frame)
+            frame.transport_destination = pid
+            return
         await super()._handle_frame(frame)
 
     async def write_audio_frame(self, frame: OutputAudioRawFrame) -> bool:

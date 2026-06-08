@@ -52,14 +52,12 @@ final class AppModel {
     var cameraPosition: CameraConfig.Position = AppModel.loadCameraPosition() {
         didSet { AppModel.defaults.set(AppModel.encode(cameraPosition), forKey: Keys.cameraPosition) }
     }
-    /// When `true`, ``clientControl`` startCamera/stopCamera messages from
-    /// the agent are honoured.  When `false` (default — always-on), they are
-    /// ignored and the camera button is the sole control.
-    /// `bool(forKey:)` returns `false` for missing keys, which matches the
-    /// always-on default.
-    var cameraOnDemand: Bool = AppModel.defaults.bool(forKey: Keys.cameraOnDemand) {
-        didSet { AppModel.defaults.set(cameraOnDemand, forKey: Keys.cameraOnDemand) }
-    }
+
+    // MARK: - Topic routing
+
+    /// Topics carrying the agent's final text reply (mirrors web client).
+    /// Routed to `agentResponse`; never appended to `receivedMessages`.
+    static let agentReplyTopics: Set<String> = ["agent.response", "vlm.response"]
 
     // MARK: - Persistence helpers
 
@@ -72,7 +70,6 @@ final class AppModel {
         static let identity       = "settings.identity"
         static let audioMode      = "settings.audioMode"
         static let cameraPosition = "settings.cameraPosition"
-        static let cameraOnDemand = "settings.cameraOnDemand"
     }
 
     private static func encode(_ mode: AudioConfig.MicrophoneMode) -> String {
@@ -98,7 +95,8 @@ final class AppModel {
         }
     }
     private static func loadCameraPosition() -> CameraConfig.Position {
-        defaults.string(forKey: Keys.cameraPosition) == "back" ? .back : .front
+        // Default to the back camera; honour an explicitly saved "front".
+        defaults.string(forKey: Keys.cameraPosition) == "front" ? .front : .back
     }
 
     // MARK: - Live state
@@ -106,6 +104,9 @@ final class AppModel {
     var session: StreamSession?
     var connectionState: ConnectionState = .disconnected
     var agentStatus: String?
+    /// Latest final-reply text received on `agent.response` or `vlm.response`.
+    /// Mirrors the web client's Agent panel; nil shows the "Waiting for agent..." placeholder.
+    var agentResponse: String?
     var isAudioActive = false
     var isCameraActive = false
     private var isCameraStarting = false
@@ -148,6 +149,7 @@ final class AppModel {
                 self.isAudioActive = false
                 self.isCameraActive = false
                 self.agentStatus = nil
+                self.agentResponse = nil
             }
         }
         newSession.onAgentStatus = { [weak self, weak newSession] status in
@@ -157,19 +159,17 @@ final class AppModel {
         newSession.onDataReceived = { [weak self, weak newSession] topic, data in
             guard let self, self.session === newSession else { return }
 
-            // Camera on demand: intercept clientControl signals from the agent.
-            // In always-on mode (cameraOnDemand = false) they are silently ignored.
+            // Final agent reply text: route to the Agent panel and never list.
+            // Topic set mirrors web/App/app.js AGENT_REPLY_TOPICS.
+            if AppModel.agentReplyTopics.contains(topic) {
+                self.agentResponse = String(data: data, encoding: .utf8) ?? ""
+                return
+            }
+
+            // Always-on streaming: clientControl signals from the agent are
+            // silently dropped and never surfaced in received messages.
             if topic == "clientControl" {
-                if self.cameraOnDemand,
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let action = json["action"] as? String {
-                    if action == "startCamera" && !self.isCameraActive {
-                        Task { await self.startCamera() }
-                    } else if action == "stopCamera" && self.isCameraActive {
-                        Task { await self.stopCamera() }
-                    }
-                }
-                return  // never surface in received messages
+                return
             }
 
             let body = String(data: data, encoding: .utf8) ?? "[\(data.count) bytes binary]"
@@ -196,6 +196,7 @@ final class AppModel {
         session = nil
         connectionState = .disconnected
         agentStatus = nil
+        agentResponse = nil
         isAudioActive = false
         isCameraActive = false
     }
@@ -277,11 +278,6 @@ final class AppModel {
     // MARK: - Data
 
     func sendPing() async {
-        // In on-demand mode, start the camera now so it warms up in parallel
-        // with the ping's round-trip and agent processing.
-        if cameraOnDemand && !isCameraActive {
-            Task { await startCamera() }
-        }
         do {
             try await session?.send(Data("ping".utf8))
         } catch {

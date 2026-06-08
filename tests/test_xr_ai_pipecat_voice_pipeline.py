@@ -181,6 +181,26 @@ class _NullSink:
         return
 
 
+class _CallbackStubEndpoint:
+    """Endpoint stub that records the audio / participant callbacks the
+    input transport registers in its ``__init__``. ``stop`` is a no-op so
+    tests can flip ``transport._started`` directly without the ZMQ run
+    loop. Shared by the InputTransport audio/participant routing tests."""
+
+    def __init__(self) -> None:
+        self.audio_cb = None
+        self.participant_cb = None
+
+    def on_audio(self, cb) -> None:
+        self.audio_cb = cb
+
+    def on_participant(self, cb) -> None:
+        self.participant_cb = cb
+
+    def stop(self) -> None:
+        return
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # VadSttProcessor
 # ════════════════════════════════════════════════════════════════════════════
@@ -1411,21 +1431,7 @@ async def test_input_transport_populates_transport_source_from_chunk_pid():
     )
     from pipecat.transports.base_transport import TransportParams
 
-    class _StubEndpoint:
-        def __init__(self) -> None:
-            self.audio_cb = None
-            self.participant_cb = None
-
-        def on_audio(self, cb) -> None:
-            self.audio_cb = cb
-
-        def on_participant(self, cb) -> None:
-            self.participant_cb = cb
-
-        def stop(self) -> None:
-            return
-
-    ep = _StubEndpoint()
+    ep = _CallbackStubEndpoint()
     params = TransportParams(
         audio_in_enabled=True,
         audio_in_sample_rate=SAMPLE_RATE,
@@ -1475,21 +1481,7 @@ async def test_input_transport_emits_participant_joined_frame():
     )
     from pipecat.transports.base_transport import TransportParams
 
-    class _StubEndpoint:
-        def __init__(self) -> None:
-            self.audio_cb = None
-            self.participant_cb = None
-
-        def on_audio(self, cb) -> None:
-            self.audio_cb = cb
-
-        def on_participant(self, cb) -> None:
-            self.participant_cb = cb
-
-        def stop(self) -> None:
-            return
-
-    ep = _StubEndpoint()
+    ep = _CallbackStubEndpoint()
     params = TransportParams(
         audio_in_enabled=True,
         audio_in_sample_rate=SAMPLE_RATE,
@@ -1531,21 +1523,7 @@ async def test_input_transport_emits_participant_left_frame():
     )
     from pipecat.transports.base_transport import TransportParams
 
-    class _StubEndpoint:
-        def __init__(self) -> None:
-            self.audio_cb = None
-            self.participant_cb = None
-
-        def on_audio(self, cb) -> None:
-            self.audio_cb = cb
-
-        def on_participant(self, cb) -> None:
-            self.participant_cb = cb
-
-        def stop(self) -> None:
-            return
-
-    ep = _StubEndpoint()
+    ep = _CallbackStubEndpoint()
     params = TransportParams(
         audio_in_enabled=True,
         audio_in_sample_rate=SAMPLE_RATE,
@@ -1583,21 +1561,7 @@ async def test_input_transport_drops_participant_event_before_start():
     )
     from pipecat.transports.base_transport import TransportParams
 
-    class _StubEndpoint:
-        def __init__(self) -> None:
-            self.audio_cb = None
-            self.participant_cb = None
-
-        def on_audio(self, cb) -> None:
-            self.audio_cb = cb
-
-        def on_participant(self, cb) -> None:
-            self.participant_cb = cb
-
-        def stop(self) -> None:
-            return
-
-    ep = _StubEndpoint()
+    ep = _CallbackStubEndpoint()
     params = TransportParams(
         audio_in_enabled=True,
         audio_in_sample_rate=SAMPLE_RATE,
@@ -2001,9 +1965,13 @@ async def test_output_transport_handle_frame_routes_pid_to_default_sender(monkey
     assert seen, "super._handle_frame was not invoked"
     delegated_frame, dest_at_super_entry = seen[0]
     assert delegated_frame is frame
+    # The super-class (default media sender router) must see destination=None
+    # so it accepts the frame...
     assert dest_at_super_entry is None
-    assert frame.transport_destination is None, (
-        "destination must be rewritten to None so the default media sender accepts the frame"
+    # ...but the pid is restored afterward so any downstream tap/sink still
+    # sees which participant the frame was addressed to.
+    assert frame.transport_destination == "web-client", (
+        "destination must be restored after delegating to the default sender"
     )
 
 

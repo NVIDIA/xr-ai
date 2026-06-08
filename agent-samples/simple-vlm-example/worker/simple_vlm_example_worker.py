@@ -99,7 +99,8 @@ async def main(
         camera_grace_s      = float(cfg.get("camera_grace_s",       5.0)),
     )
 
-    _pipeline, task = make_voice_pipeline(
+    # make_voice_pipeline returns (pipeline, task); only the task is run.
+    _, task = make_voice_pipeline(
         transport      = transport,
         stt            = stt,
         tts            = tts,
@@ -114,9 +115,21 @@ async def main(
     )
 
     loop = asyncio.get_running_loop()
+    cancel_requested = False
+
+    def _request_cancel() -> None:
+        # PipelineTask.cancel is a coroutine; add_signal_handler needs a
+        # sync callable. Guard against a second signal (e.g. double
+        # ctrl-c) spawning a redundant cancel task while the first is
+        # still draining the pipeline.
+        nonlocal cancel_requested
+        if cancel_requested:
+            return
+        cancel_requested = True
+        asyncio.create_task(task.cancel())
+
     for sig in (signal.SIGINT, signal.SIGTERM):
-        # PipelineTask.cancel is a coroutine; add_signal_handler needs a sync callable.
-        loop.add_signal_handler(sig, lambda: asyncio.create_task(task.cancel()))
+        loop.add_signal_handler(sig, _request_cancel)
 
     logger.info("simple-vlm-example starting pipecat pipeline")
     try:
