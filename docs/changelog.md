@@ -9,6 +9,20 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Hub: release held slots before closing a re-registered ring
+
+On `CONNECTOR_REGISTER` for a known `connector_id`, `_handle_registration`
+closed and replaced the ring buffer while `_latest_slots` could still hold
+`SlotView`s backed by that ring's mmap. Because a live `SlotView` keeps a
+sliced memoryview exported, `ShmRingBuffer.close()`'s `self._buf.release()`
+raises `BufferError` — leaving the old ring half-closed but still referenced,
+so the next `FRAME_SIGNAL` writes through a released/closing buffer
+(use-after-close). `_handle_registration` now releases the memoryview and slot
+for every `_latest_slots` entry backed by the old ring before closing it,
+matching the teardown order already in `close()`. Triggered by a connector
+crash/reconnect that re-sends its registration while frames are held.
+Regression test: `test_connector_reregistration_releases_held_slots`. Fixes #197.
+
 ### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
 
 Follow-up to #184. That PR added a dedicated `_EXIT_VOICE_UNAVAILABLE = 3`
