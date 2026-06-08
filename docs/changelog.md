@@ -9,6 +9,18 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Magpie TTS: honor the launcher's --ready-file contract
+
+The launcher injects `--ready-file <path>` into every spawned process and
+blocks in `_wait_ready` (no timeout) until that file appears or the process
+exits. Piper and STT touch it after their model loads; Magpie didn't — `run()`
+only registered `--config`, so `--ready-file` landed in the ignored unknowns
+and `_run` never created the file. Magpie then stays alive serving, so
+`proc.poll()` stays `None` too — the launcher deadlocked at startup on the
+Magpie TTS service. Mirrored piper/stt: register `--ready-file`, thread it
+into `_run`, and `ready_file.touch()` after `_ensure_loaded()` completes
+(before `server.serve()`). Fixes #191.
+
 ### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
 
 Follow-up to #184. That PR added a dedicated `_EXIT_VOICE_UNAVAILABLE = 3`
