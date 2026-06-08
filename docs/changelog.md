@@ -9,6 +9,28 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
+
+Follow-up to #184. That PR added a dedicated `_EXIT_VOICE_UNAVAILABLE = 3`
+(retryable → test skips) for the "voice can't be obtained" case, but the
+`except LocalEntryNotFoundError` handler was ordered *after*
+`except (EntryNotFoundError, RepositoryNotFoundError)`. `LocalEntryNotFoundError`
+subclasses `EntryNotFoundError`, so Python's first-match dispatch sent it to the
+exit-1 (bad-voice-name) branch and the exit-3 branch was dead code. A transient
+HF **429** with no cached copy surfaces as `LocalEntryNotFoundError`, so the
+flake #184 was meant to de-flake still hard-failed `test_piper_tts_smoke` on
+`main` (run 26995999535). Fix: order the subclass handler first, so the
+empty-cache / transient-download case exits 3 and only a genuine bad voice
+name (`EntryNotFoundError` from the repo) exits 1 (fail).
+
+With the ordering fixed, `test_piper_tts_smoke` now **skips cleanly** on the
+voice-unavailable exit (offline empty cache or transient HF 429) — the smoke
+test only asserts the server path when the voice can actually be obtained, so a
+HuggingFace hiccup no longer red-fails CI. (An earlier draft of this PR tried to
+pre-fetch + cache the voice in CI and fail loudly on a real outage; that was
+dropped in favour of the simpler skip — the smoke test isn't worth blocking the
+suite on HF availability.)
+
 ### 2026-06-05 — Android: synthetic "Virtual Camera" provider over injectVideoFrame
 
 Adds a selectable "Virtual Camera (synthetic)" entry to the Android sample's
