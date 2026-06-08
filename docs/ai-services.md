@@ -11,9 +11,11 @@ orchestrator pattern that wires servers into a sample, see
 
 Multiple reusable HTTP servers are available as launchable peers of
 `server-runtime/`. All expose an OpenAI-compatible REST API so agent workers
-can call them with any OpenAI SDK client or plain `httpx` / `requests`. Three
-LLM backends ship side-by-side under `ai-services/llm/` — pick one per sample
-based on the tool-calling / reasoning / hardware trade-offs documented below.
+can call them with any OpenAI SDK client or plain `httpx` / `requests`.
+Reference services cover vision-language reasoning, speech recognition,
+text-to-speech, and large language models. Three LLM backends ship
+side-by-side under `ai-services/llm/` — pick one per sample based on the
+tool-calling / reasoning / hardware trade-offs documented below.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
@@ -53,10 +55,11 @@ PROCESSES = [
 ]
 ```
 
-The agent samples in this repo (`simple-vlm-example`) default to Piper
-TTS — it runs on CPU with ~100 ms/sentence latency and avoids the NeMo
-dep tree. Magpie is still a supported option (better voice quality,
-multilingual) when GPU is available; swap the `Process` row and YAML.
+The agent samples in this repo (`simple-vlm-example` and `xr-render-demo`)
+default to Piper TTS — it runs on CPU with ~100 ms/sentence latency and avoids
+the NeMo dep tree. Magpie is still a supported NVIDIA TTS option with better
+voice quality and multilingual support when GPU is available; swap the
+`Process` row and YAML.
 
 **2 — Copy the reference YAML to your sample's `yaml/` directory:**
 

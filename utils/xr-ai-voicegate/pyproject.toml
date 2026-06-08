@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xr-ai-voicegate"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+# Speech-only opt-in gate shared by agent workers that ingest microphone
+# audio.  Owns the magic-phrase + follow-up + STOP ladder, the lazy
+# listening chime, and the participant-joined greeting hook so each
+# worker only wires handlers and feeds STT transcripts.  numpy is used
+# for the chime tone synthesis; pyyaml parses the standalone
+# voice_gate.yaml file referenced from each worker YAML.
+dependencies = [
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["xr_ai_voicegate"]

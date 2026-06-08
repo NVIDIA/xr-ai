@@ -15,13 +15,13 @@
  *
  * ## Workflow
  *
- *   // 1. Connect to the session.
+ *   1. Connect to the session.
  *   session.Connect();
  *
- *   // 2. Arm the audio track.
+ *   2. Arm the audio track.
  *   session.StartAudio();
  *
- *   // 3. In your mic callback, push each buffer:
+ *   3. In your mic callback, push each buffer:
  *   if (auto* sink = dynamic_cast<AudioSink*>(session.GetBackend())) {
  *       sink->InjectAudioFrame(pcm, sample_rate, channels,
  *                              samples_per_channel, timestamp_us);

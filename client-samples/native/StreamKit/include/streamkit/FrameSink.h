@@ -14,20 +14,32 @@
  *
  * ## Workflow
  *
- *   // 1. Connect to the session.
+ *   1. Connect to the session.
  *   session.Connect();
  *
- *   // 2. In your frame callback, inject each buffer:
+ *   2. In your frame callback, inject each buffer:
  *   if (auto* sink = dynamic_cast<FrameSink*>(session.GetBackend())) {
  *       sink->InjectVideoFrame(pixels, width, height, format, timestamp_us);
  *   }
  *
- * ## Frame publication
+ * ## Frame publication contract
  *
- * The first InjectVideoFrame() call creates a BufferCapturer-backed LiveKit
- * track and publishes it to the room. The track is published after the first
- * frame (not before) because LiveKit requires at least one captured frame to
- * resolve stream dimensions before the publish handshake can complete.
+ * Every `FrameSink` implementation MUST publish its video track on the
+ * first `InjectVideoFrame()` call — not at `StartCamera()` time, not at
+ * `Connect()` time. This is the cross-backend contract: hosts can rely on
+ * "no track exists until the first frame arrives" regardless of which
+ * backend is wired up.
+ *
+ * The contract is shaped by the underlying SDKs:
+ *   - iOS's `BufferCapturer` derives dimensions from the first buffer, so
+ *     the track only becomes publishable once a frame has been captured.
+ *   - The C++ `livekit::VideoSource` ctor requires explicit `width` and
+ *     `height` up front, but those aren't known until the host pushes the
+ *     first frame.
+ *
+ * Both paths converge on first-frame publish. Custom backends that wrap a
+ * different SDK must follow the same rule even if their SDK could publish
+ * earlier.
  */
 
 #include <cstddef>
@@ -115,8 +127,9 @@ public:
                                   int height,
                                   PixelFormat format,
                                   int64_t timestamp_us) {
+        auto owned = std::move(data);
         std::span<const std::byte> as_span(
-            reinterpret_cast<const std::byte*>(data.data()), data.size());
+            reinterpret_cast<const std::byte*>(owned.data()), owned.size());
         InjectVideoFrame(as_span, width, height, format, timestamp_us);
     }
 };

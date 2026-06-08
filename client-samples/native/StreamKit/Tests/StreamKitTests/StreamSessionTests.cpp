@@ -14,14 +14,23 @@
 #include "streamkit/ConnectionState.h"
 #include "streamkit/StreamSession.h"
 
+#include <algorithm>
 #include <cstddef>
-#include <cstring>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace {
+
+std::string BytesToString(std::span<const std::byte> data) {
+    std::string payload(data.size(), '\0');
+    std::ranges::transform(data, payload.begin(), [](std::byte byte) {
+        return static_cast<char>(std::to_integer<unsigned char>(byte));
+    });
+    return payload;
+}
 
 struct MockBackend : streamkit::StreamingBackend {
     int connect_calls = 0;
@@ -52,18 +61,17 @@ struct MockBackend : streamkit::StreamingBackend {
     void StopCamera() override { ++stop_camera_calls; }
     void Send(std::span<const std::byte> data, bool, std::string_view topic) override {
         sent_topics.emplace_back(topic);
-        sent_payloads.emplace_back(reinterpret_cast<const char*>(data.data()), data.size());
+        sent_payloads.emplace_back(BytesToString(data));
     }
 
     // Helpers for tests to drive the event hooks the backend would normally
     // fire from its event loop.
-    void fire_data(std::string_view topic, std::string_view payload) {
+    void fire_data(std::string_view topic, std::string_view payload) const {
         if (!on_data_received) return;
-        std::span<const std::byte> bytes(
-            reinterpret_cast<const std::byte*>(payload.data()), payload.size());
+        auto bytes = std::as_bytes(std::span<const char>(payload.data(), payload.size()));
         on_data_received(topic, bytes);
     }
-    void fire_agent_status(std::string_view status) {
+    void fire_agent_status(std::string_view status) const {
         if (on_agent_status) on_agent_status(status);
     }
 };
@@ -71,6 +79,9 @@ struct MockBackend : streamkit::StreamingBackend {
 }  // namespace
 
 int main() {
+    using streamkit::test::Expect;
+    using streamkit::test::ExpectEq;
+
     auto backend = std::make_unique<MockBackend>();
     auto* raw = backend.get();
     streamkit::StreamSession session(std::move(backend));
@@ -78,7 +89,8 @@ int main() {
     // ── Wire session-level callbacks ───────────────────────────────────────
     int state_changes = 0;
     streamkit::ConnectionState last_state = streamkit::ConnectionState::kDisconnected;
-    session.on_connection_state_changed = [&](streamkit::ConnectionState s) {
+    session.on_connection_state_changed =
+        [&state_changes, &last_state](streamkit::ConnectionState s) {
         ++state_changes;
         last_state = s;
     };
@@ -86,62 +98,63 @@ int main() {
     int data_calls = 0;
     std::string last_topic;
     std::string last_payload;
-    session.on_data_received = [&](std::string_view topic,
-                                   std::span<const std::byte> data) {
+    session.on_data_received =
+        [&data_calls, &last_topic, &last_payload](
+            std::string_view topic,
+            std::span<const std::byte> data) {
         ++data_calls;
         last_topic = std::string(topic);
-        last_payload.assign(reinterpret_cast<const char*>(data.data()), data.size());
+        last_payload = BytesToString(data);
     };
 
     int agent_calls = 0;
     std::string last_agent_status;
-    session.on_agent_status = [&](std::string_view status) {
+    session.on_agent_status = [&agent_calls, &last_agent_status](std::string_view status) {
         ++agent_calls;
         last_agent_status = std::string(status);
     };
 
     // ── Connect lifecycle ──────────────────────────────────────────────────
-    SK_EXPECT(session.connection_state() == streamkit::ConnectionState::kDisconnected);
+    Expect(session.connection_state() == streamkit::ConnectionState::kDisconnected);
     session.Connect(streamkit::SessionConfig{"test-identity"});
-    SK_EXPECT_EQ(raw->connect_calls, 1);
-    SK_EXPECT_EQ(state_changes, 2);
-    SK_EXPECT(last_state == streamkit::ConnectionState::kConnected);
-    SK_EXPECT(session.connection_state() == streamkit::ConnectionState::kConnected);
+    ExpectEq(raw->connect_calls, 1);
+    ExpectEq(state_changes, 2);
+    Expect(last_state == streamkit::ConnectionState::kConnected);
+    Expect(session.connection_state() == streamkit::ConnectionState::kConnected);
 
     // ── Media independent of connection ────────────────────────────────────
     session.StartAudio();
     session.StartCamera();
-    SK_EXPECT_EQ(raw->start_audio_calls, 1);
-    SK_EXPECT_EQ(raw->start_camera_calls, 1);
+    ExpectEq(raw->start_audio_calls, 1);
+    ExpectEq(raw->start_camera_calls, 1);
 
     // ── Send + data delivery ───────────────────────────────────────────────
     const std::string msg = "hello";
-    std::vector<std::byte> payload(msg.size());
-    std::memcpy(payload.data(), msg.data(), msg.size());
+    auto payload = std::as_bytes(std::span<const char>(msg.data(), msg.size()));
     session.Send(payload, /*reliable=*/true, "test.topic");
-    SK_EXPECT_EQ(raw->sent_topics.size(), std::size_t{1});
-    SK_EXPECT_EQ(raw->sent_topics[0], std::string("test.topic"));
-    SK_EXPECT_EQ(raw->sent_payloads[0], std::string("hello"));
+    ExpectEq(raw->sent_topics.size(), std::size_t{1});
+    ExpectEq(raw->sent_topics[0], std::string("test.topic"));
+    ExpectEq(raw->sent_payloads[0], std::string("hello"));
 
     raw->fire_data("incoming.topic", "world");
-    SK_EXPECT_EQ(data_calls, 1);
-    SK_EXPECT_EQ(last_topic, std::string("incoming.topic"));
-    SK_EXPECT_EQ(last_payload, std::string("world"));
+    ExpectEq(data_calls, 1);
+    ExpectEq(last_topic, std::string("incoming.topic"));
+    ExpectEq(last_payload, std::string("world"));
 
     raw->fire_agent_status("processing");
-    SK_EXPECT_EQ(agent_calls, 1);
-    SK_EXPECT_EQ(last_agent_status, std::string("processing"));
+    ExpectEq(agent_calls, 1);
+    ExpectEq(last_agent_status, std::string("processing"));
 
     // ── Stop media + disconnect ────────────────────────────────────────────
     session.StopAudio();
     session.StopCamera();
-    SK_EXPECT_EQ(raw->stop_audio_calls, 1);
-    SK_EXPECT_EQ(raw->stop_camera_calls, 1);
+    ExpectEq(raw->stop_audio_calls, 1);
+    ExpectEq(raw->stop_camera_calls, 1);
 
     session.Disconnect();
-    SK_EXPECT_EQ(raw->disconnect_calls, 1);
-    SK_EXPECT(last_state == streamkit::ConnectionState::kDisconnected);
-    SK_EXPECT(session.connection_state() == streamkit::ConnectionState::kDisconnected);
+    ExpectEq(raw->disconnect_calls, 1);
+    Expect(last_state == streamkit::ConnectionState::kDisconnected);
+    Expect(session.connection_state() == streamkit::ConnectionState::kDisconnected);
 
     return 0;
 }

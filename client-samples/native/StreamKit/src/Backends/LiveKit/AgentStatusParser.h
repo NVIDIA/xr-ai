@@ -19,7 +19,7 @@
 namespace streamkit::internal {
 
 inline std::optional<std::string> ExtractAgentStatus(std::span<const std::byte> payload) {
-    std::string_view sv(reinterpret_cast<const char*>(payload.data()), payload.size());
+    std::string_view sv(reinterpret_cast<const char*>(payload.data()), payload.size());  // NOSONAR: payload bytes are JSON text.
     auto key = sv.find("\"status\"");
     if (key == std::string_view::npos) return std::nullopt;
     auto colon = sv.find(':', key + 8);
