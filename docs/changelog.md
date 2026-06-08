@@ -9,6 +9,18 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — pipecat input transport: downmix multi-channel hub audio before resampling
+
+`XRMediaHubInputTransport._on_hub_audio` resampled non-16 kHz hub audio by
+passing the int16 PCM straight to `resample_poly` as a 1-D array. For
+multi-channel chunks the hub delivers *interleaved* samples (L R L R …), so
+the polyphase filter mixed adjacent L/R samples and produced the wrong output
+length — corrupting stereo+ audio before STT (the mono common case was fine,
+hence latent). Extracted `_hub_pcm_to_mono_16k`, which downmixes to mono
+(channel mean) *before* resampling — STT is mono anyway — and the frame is now
+emitted with `num_channels=1`. The mono-16 kHz common case is a byte-identical
+fast path. Regression test: `tests/test_pipecat_audio_resample.py`. Fixes #193.
+
 ### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
 
 Follow-up to #184. That PR added a dedicated `_EXIT_VOICE_UNAVAILABLE = 3`
