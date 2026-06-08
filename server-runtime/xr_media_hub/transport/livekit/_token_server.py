@@ -84,12 +84,25 @@ class TokenServer:
             scheme = "http"
 
         self._server = uvicorn.Server(uvicorn.Config(**uv_cfg))
-        self._task = asyncio.create_task(self._server.serve())
+        self._task = asyncio.create_task(self._serve_safe())
         logger.info(
             "Token server → {}://{}:{}  room={!r}",
             scheme, self._cfg.token_server_host, self._cfg.token_server_port,
             self._cfg.room_name,
         )
+
+    async def _serve_safe(self) -> None:
+        # uvicorn calls sys.exit(1) on bind failure; SystemExit is a BaseException
+        # that ``await self._task`` in stop() would re-raise into the caller,
+        # aborting the rest of graceful shutdown. Swallow it here (matches
+        # WebServer._serve_safe).
+        try:
+            await self._server.serve()
+        except SystemExit as exc:
+            logger.error(
+                "Token server failed to start on port {} — is it already in use? (exit code {})",
+                self._cfg.token_server_port, exc.code,
+            )
 
     async def stop(self) -> None:
         if self._server:

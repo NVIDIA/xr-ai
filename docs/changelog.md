@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — TokenServer: swallow uvicorn SystemExit so shutdown stays graceful
+
+`TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls
+`sys.exit(1)` on a bind failure (e.g. port already in use), so the task ends
+with `SystemExit` (a `BaseException`); `stop()`'s `await self._task` then
+re-raised it into `LiveKitConnector.stop()`, aborting the remaining
+graceful-shutdown steps. Wrapped the task in a `_serve_safe()` coroutine that
+catches `SystemExit` and logs a clear "port in use?" error — mirroring the
+sibling `WebServer._serve_safe`, which already guards this. Fixes #192.
+
 ### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
 
 Follow-up to #184. That PR added a dedicated `_EXIT_VOICE_UNAVAILABLE = 3`
