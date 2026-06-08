@@ -86,17 +86,18 @@ livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
 std::size_t PackedFrameSize(int width, int height, PixelFormat format) {
     const auto pixels =
         static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    using enum PixelFormat;
     switch (format) {
-        case PixelFormat::kI420:
-        case PixelFormat::kNV12: {
+        case kI420:
+        case kNV12: {
             const auto chroma_w =
                 (static_cast<std::size_t>(width)  + 1) / 2;
             const auto chroma_h =
                 (static_cast<std::size_t>(height) + 1) / 2;
             return pixels + 2 * chroma_w * chroma_h;
         }
-        case PixelFormat::kRGBA:
-        case PixelFormat::kBGRA:
+        case kRGBA:
+        case kBGRA:
             return pixels * 4;
     }
     return 0;  // unreachable
@@ -165,6 +166,8 @@ LiveKitBackend::~LiveKitBackend() noexcept {
     try {
         TearDown();
     } catch (...) {
+        // Swallowed: a destructor must not propagate, and a failed teardown
+        // here has no recoverable action.
     }
 }
 

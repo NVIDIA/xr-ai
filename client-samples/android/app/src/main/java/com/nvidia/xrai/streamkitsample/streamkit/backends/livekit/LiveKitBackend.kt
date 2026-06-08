@@ -17,6 +17,7 @@ import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
+import io.livekit.android.room.participant.VideoTrackPublishOptions
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
 import io.livekit.android.room.track.LocalVideoTrack
@@ -229,7 +230,10 @@ internal class LiveKitBackend(
                 ),
             )
             track.startCapture()
-            lp.publishVideoTrack(track)
+            // Publish as the CAMERA source so it appears in the local preview
+            // (CameraPreviewView reads getTrackPublication(Track.Source.CAMERA))
+            // and is treated as the participant's camera feed by the hub.
+            lp.publishVideoTrack(track, VideoTrackPublishOptions(source = Track.Source.CAMERA))
             injectedVideoTrack = track
             injectedCapturer = newCapturer
             newCapturer

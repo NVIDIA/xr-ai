@@ -17,10 +17,25 @@ import com.nvidia.xrai.streamkitsample.streamkit.config.BackendConfiguration
 import com.nvidia.xrai.streamkitsample.streamkit.config.CameraConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.LiveKitConfig
 import com.nvidia.xrai.streamkitsample.streamkit.config.SessionConfig
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Sentinel camera id for the synthetic "Virtual Camera" provider, which feeds
+ *  generated I420 frames through `StreamSession.injectVideoFrame` instead of a
+ *  physical Camera2 device. */
+const val VIRTUAL_CAMERA_ID = "__virtual_camera__"
+
+/** Synthetic-camera frame interval (~30 fps). */
+private const val VIRTUAL_CAMERA_FRAME_MS = 33L
 
 /** A message received from the agent or other remote participants. */
 data class ReceivedMessage(
@@ -60,12 +75,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val availableCameras: List<CameraInfo> = enumerateCameras(application.applicationContext)
 
     /**
-     * Currently selected Camera2 id. Defaults to the first back-facing camera
-     * if any, else the first camera, else null (device has no camera).
+     * Cameras offered in the selector: the physical Camera2 devices plus the
+     * synthetic "Virtual Camera" provider (always available, even on a device
+     * or emulator with no real camera), which demonstrates
+     * `StreamSession.injectVideoFrame`.
+     */
+    val selectableCameras: List<CameraInfo> =
+        availableCameras + CameraInfo(VIRTUAL_CAMERA_ID, "Virtual Camera (synthetic)", null)
+
+    /**
+     * Currently selected camera id. Defaults to the first back-facing camera if
+     * any, else the first physical camera, else the virtual camera (so a
+     * camera-less device still has a working selection).
      */
     var selectedCameraId by mutableStateOf(
         availableCameras.firstOrNull { it.facing == CameraConfig.CameraFacing.BACK }?.id
             ?: availableCameras.firstOrNull()?.id
+            ?: VIRTUAL_CAMERA_ID
     )
 
     // ── Live state ─────────────────────────────────────────────────────────────
@@ -102,6 +128,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var session by mutableStateOf<StreamSession?>(null)
         private set
 
+    /** Running synthetic-camera frame loop, if the Virtual Camera is active. */
+    private var syntheticJob: Job? = null
+
     // ── Connect / disconnect ──────────────────────────────────────────────────
 
     fun connect() {
@@ -134,6 +163,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 newSession.onConnectionStateChanged = { state ->
                     connectionState = state
                     if (state == ConnectionState.DISCONNECTED) {
+                        // Stop the synthetic feed so it doesn't keep calling
+                        // injectVideoFrame on a torn-down session.
+                        syntheticJob?.cancel()
+                        syntheticJob = null
                         isAudioActive = false
                         isCameraActive = false
                         agentStatus = null
@@ -188,6 +221,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnect() {
         viewModelScope.launch {
+            syntheticJob?.cancelAndJoin()
+            syntheticJob = null
             session?.disconnect()
             session = null
             connectionState = ConnectionState.DISCONNECTED
@@ -225,6 +260,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── Camera ─────────────────────────────────────────────────────────────────
 
     fun startCamera() {
+        if (selectedCameraId == VIRTUAL_CAMERA_ID) {
+            startVirtualCamera()
+            return
+        }
         viewModelScope.launch {
             try {
                 val info = availableCameras.firstOrNull { it.id == selectedCameraId }
@@ -237,8 +276,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Drives the synthetic "Virtual Camera": a coroutine that generates I420
+     * frames and feeds them through the public `injectVideoFrame` API at ~30 fps.
+     * No physical camera or CAMERA permission is involved.
+     */
+    private fun startVirtualCamera() {
+        if (connectionState != ConnectionState.CONNECTED) {
+            lastError = "Connect before starting the virtual camera."
+            return
+        }
+        if (syntheticJob?.isActive == true) return
+        syntheticJob = viewModelScope.launch(Dispatchers.Default) {
+            val source = SyntheticCameraSource()
+            var frame = 0
+            try {
+                // Inject the first frame and await it: this lazily publishes the
+                // injected camera track. Only AFTER it exists do we flip
+                // isCameraActive, so the preview card composes when
+                // session.localCameraTrack is already non-null. The getter is
+                // not Compose-observable, so a track that appears after the
+                // card composes would never be picked up — mirrors the real
+                // camera, where startCamera() publishes before we mark active.
+                session?.injectVideoFrame(
+                    source.renderFrame(frame++), source.width, source.height,
+                    System.nanoTime() / 1_000,
+                )
+                withContext(Dispatchers.Main) { isCameraActive = true }
+                while (isActive) {
+                    session?.injectVideoFrame(
+                        source.renderFrame(frame++), source.width, source.height,
+                        System.nanoTime() / 1_000,
+                    )
+                    delay(VIRTUAL_CAMERA_FRAME_MS)
+                }
+            } catch (e: CancellationException) {
+                throw e // normal stop — let the coroutine cancel
+            } catch (e: Exception) {
+                // A mid-loop failure may have already published the injected
+                // track (first frame succeeded, a later one threw). Unpublish
+                // it so we don't leave a live track lingering until the next
+                // stopCamera()/disconnect().
+                runCatching { session?.stopCamera() }
+                withContext(Dispatchers.Main) {
+                    lastError = e.message
+                    isCameraActive = false
+                }
+            }
+        }
+    }
+
     fun stopCamera() {
         viewModelScope.launch {
+            // Stop the synthetic feed BEFORE unpublishing the track, so a
+            // trailing frame can't lazily republish the injected track after
+            // stopCamera() tore it down.
+            syntheticJob?.cancelAndJoin()
+            syntheticJob = null
             try {
                 session?.stopCamera()
             } catch (e: Exception) {
