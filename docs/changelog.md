@@ -9,6 +9,18 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — STT: serialize NeMo transcribe() on the shared model
+
+`_AsrBackend._lock` guarded only model *loading*; the hot path `transcribe()`
+ran `self._model.transcribe(...)` lock-free. The endpoint dispatches each
+`POST /v1/audio/transcriptions` to a thread pool, so concurrent requests
+invoked inference on the same NeMo `ASRModel` simultaneously — which is not
+re-entrant/thread-safe (shared model buffers, shared CUDA device state),
+risking garbled transcriptions or a crash under load. Inference is now wrapped
+in the existing lock, mirroring the magpie TTS backend's stated serialization.
+`_ensure_loaded()` still runs before the lock (it takes the same non-reentrant
+lock for the one-time load). Fixes #199.
+
 ### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
 
 Follow-up to #184. That PR added a dedicated `_EXIT_VOICE_UNAVAILABLE = 3`
