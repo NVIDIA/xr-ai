@@ -64,7 +64,6 @@ endpoint and no local GPU is required for the agent or hub.
 | NVIDIA driver | 570+ | required for local model inference |
 | Docker | 24+ | required: all vLLM-backed services (LLM, VLM) run in `nvcr.io/nvidia/vllm` containers |
 | NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU.  Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
-| npm | 18+ | only needed to rebuild the web vendor bundle |
 
 `uv` handles all Python dependencies per-sample — no global `pip install`
 or virtual-environment setup needed.  If you do not have it:
@@ -303,12 +302,13 @@ in the background.
 
 #### Step 2 — Start the demo
 
-The CloudXR compositor and LOVR render through Vulkan, so the Vulkan loader and
-headers must be installed on the host before running the demo:
+This demo has two extra host prerequisites beyond the shared
+[Requirements](#requirements):
 
-```bash
-sudo apt install libvulkan-dev
-```
+- **Vulkan loader + headers** — the CloudXR compositor and LOVR render through
+  Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
+- **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
+  run (skipped on subsequent runs).
 
 ```bash
 cd agent-samples/xr-render-demo
