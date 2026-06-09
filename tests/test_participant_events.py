@@ -123,3 +123,40 @@ async def test_participant_leave_releases_held_slots(hub, make_connector, settle
 
     # The most recent frame for ("fresh", "cam") should be the one held.
     assert ("fresh", "cam") in hub._latest_slots
+
+
+async def test_connector_reregistration_releases_held_slots(hub, make_connector, settle):
+    """Regression for #197: when a connector re-registers while a frame is
+    still held, the hub must release the slots backed by the old ring BEFORE
+    closing it. Otherwise the still-exported SlotView memoryview makes
+    ``ShmRingBuffer.close()``'s ``_buf.release()`` raise (leaving the ring
+    half-closed) and ``_latest_slots`` keeps pointing at it — a use-after-close
+    on the next frame for that participant."""
+    conn = make_connector()
+    await conn.register()
+    await settle()
+
+    await conn.notify_participant_joined("alice", pts_us=1)
+    await settle()
+    await conn.push_frame(
+        data=_FRAME, width=_W, height=_H, fmt=PixelFormat.I420,
+        pts_us=1, participant_id="alice", track_id="cam",
+    )
+    await settle()
+    assert ("alice", "cam") in hub._latest_slots  # frame held in the ring
+
+    # Re-register the same connector (crash/reconnect while a frame is held).
+    # Pre-fix: the held slot is left dangling and close() raises BufferError
+    # (swallowed by the run loop), so the stale entry survives. Post-fix: the
+    # held slot is released and dropped before the old ring is closed.
+    await conn.register()
+    await settle()
+    assert ("alice", "cam") not in hub._latest_slots
+
+    # And the hub is still healthy — a fresh frame after re-registration lands.
+    await conn.push_frame(
+        data=_FRAME, width=_W, height=_H, fmt=PixelFormat.I420,
+        pts_us=2, participant_id="alice", track_id="cam",
+    )
+    await settle()
+    assert ("alice", "cam") in hub._latest_slots

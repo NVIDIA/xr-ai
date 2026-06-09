@@ -12,6 +12,7 @@
 
 #include "test_assert.h"
 
+#include "streamkit/Backends/LiveKit/LiveKitBackend.h"
 #include "streamkit/Config/BackendConfiguration.h"
 #include "streamkit/ConnectionState.h"
 #include "streamkit/FrameSink.h"
@@ -33,6 +34,10 @@ int main() {
 
     streamkit::StreamSession session{
         streamkit::BackendConfiguration{lk}};
+    auto* livekit_backend =
+        dynamic_cast<streamkit::LiveKitBackend*>(session.GetBackend());
+    Expect(livekit_backend != nullptr);
+    Expect(!livekit_backend->GetRoom());
 
     std::vector<ConnectionState> states;
     session.on_connection_state_changed = [&states](ConnectionState s) {
@@ -45,11 +50,13 @@ int main() {
     ExpectEq(states.size(), std::size_t{2});
     Expect(states[0] == ConnectionState::kConnecting);
     Expect(states[1] == ConnectionState::kConnected);
+    Expect(!livekit_backend->GetRoom());
 
     // ── Disconnect — exactly one kDisconnected. ──────────────────────────
     session.Disconnect();
     ExpectEq(states.size(), std::size_t{3});
     Expect(states[2] == ConnectionState::kDisconnected);
+    Expect(!livekit_backend->GetRoom());
 
     // ── Reconnect — still no spurious leading kDisconnected. The
     //    TearDown() at the top of Connect sees last_fired_state_ ==
