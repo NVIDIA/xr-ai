@@ -40,7 +40,7 @@ CI matrices:
 
 ```
 xr-ai-agent  (agent-sdk/)
-    └── pyzmq >=26.0
+    └── pyzmq >=27.0
     └── msgpack >=1.0
 
 xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
@@ -118,7 +118,7 @@ xr-ai-vad  (utils/xr-ai-vad/)
 
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]
-    └── pyzmq >=26.0
+    └── pyzmq >=27.0
     └── livekit >=0.17
     └── livekit-api >=0.7
     └── fastapi >=0.111
@@ -169,7 +169,7 @@ cloudxr-runtime  (cloudxr-runtime/)
 
 render-mcp-server  (agent-mcp-servers/render-mcp/)
     └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (ManagedProcess + load_cloudxr_env)
-    └── pyzmq >=26.0       (PUSH socket → LOVR; libzmq.so reused by LOVR FFI)
+    └── pyzmq >=27.0       (PUSH socket → LOVR; libzmq.so reused by LOVR FFI)
     └── msgpack >=1.0      (wire format for LOVR ops)
     └── pyyaml >=6.0
     └── fastapi >=0.111

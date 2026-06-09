@@ -10,7 +10,7 @@ name = "xr-ai-agent"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "pyzmq>=26.0",
+    "pyzmq>=27.0",
     "msgpack>=1.0",
 ]
 

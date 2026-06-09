@@ -9,6 +9,83 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Native StreamKit: Android NDK C++20 portability
+
+Native StreamKit no longer depends on C++20 `<format>`. Some Android NDK
+libc++ versions used by embedded clients do not ship that header even though
+the project otherwise builds as C++20. The affected identity and error-message
+strings now use `std::to_string` plus string concatenation, preserving behavior
+while keeping the C++ backend portable to those toolchains. The backend also
+uses fully qualified enum labels instead of `using enum`, which older NDK r23
+compilers reject.
+
+### 2026-06-05 — Native StreamKit: LiveKit room access for receiver-side audio
+
+`LiveKitBackend` now exposes `GetRoom()` for advanced native integrations that
+need receiver-side LiveKit APIs, such as rendering remote participant audio
+locally or feeding an acoustic echo canceller with the agent's playback audio.
+This remains intentionally transport-specific: the generic `StreamingBackend`
+surface is unchanged, and callers must opt in by depending on `LiveKitBackend`.
+The accessor returns `nullptr` before connect, after disconnect, and in stub
+mode.
+
+### 2026-06-05 — Native StreamKit: vector-backed LiveKit AudioFrame construction
+
+`LiveKitBackend::InjectAudioFrame` now constructs `livekit::AudioFrame` through
+the vector-data constructor. Some LiveKit C++ SDK builds expose only
+`AudioFrame(std::vector<int16_t>, sample_rate, channels, samples_per_channel)`
+and not the pointer-data constructor. StreamKit still accepts
+`std::span<const int16_t>` at the public `AudioSink` boundary; the conversion is
+contained inside the LiveKit backend so callers and custom backends are
+unaffected.
+
+### 2026-06-05 — Native StreamKit: publish options for externally captured video
+
+The C++ `LiveKitBackend` publishes camera tracks lazily on the first
+`FrameSink::InjectVideoFrame` call because externally captured frames provide
+the stream dimensions. That made callers unable to set LiveKit publish-side
+encoding options before track creation. `CameraConfig` now includes an optional
+`CameraEncodingConfig` with max bitrate, max framerate, and simulcast controls.
+The built-in C++ backend stores the config at `StartCamera()` time and applies
+it when the first frame creates the `LocalVideoTrack`.
+
+Backends that open and manage their own platform camera may ignore
+`CameraConfig::encoding`; it is primarily for C++ hosts that own capture outside
+StreamKit and use `FrameSink` for injection.
+
+### 2026-06-05 — Native StreamKit: AudioSink timestamps stay media timestamps
+
+`AudioSink::InjectAudioFrame` carries a capture timestamp in microseconds so
+hosts can pass audio and video frames through the same monotonic-clock model.
+The LiveKit C++ SDK's `AudioSource::captureFrame` API uses its optional second
+argument for a bounded-wait timeout in milliseconds, not for media time. Passing
+StreamKit's `timestamp_us` through that parameter can turn an increasing media
+timestamp into a long capture wait and add audio latency. The C++ LiveKit backend
+now preserves the StreamKit timestamp as API metadata and calls
+`AudioSource::captureFrame(frame)` so the SDK uses its realtime default timeout.
+
+### 2026-06-05 — iOS: reset isCameraActive when a camera switch fails
+
+`AppModel.switchCamera(to:)` only ran on an already-active camera and, on a
+failed publish, set `lastError` but left `isCameraActive = true`. Because the
+LiveKit backend's `startCamera()` stops the previous track before publishing
+the new one, a publish failure mid-switch left nothing streaming while the UI
+still showed "Streaming" with a green status and a working Stop button. The
+`catch` now sets `isCameraActive = false`, matching the consistency that
+`startCamera()`/`stopCamera()` already maintain. Fixes #195.
+
+### 2026-06-05 — STT: serialize NeMo transcribe() on the shared model
+
+`_AsrBackend._lock` guarded only model *loading*; the hot path `transcribe()`
+ran `self._model.transcribe(...)` lock-free. The endpoint dispatches each
+`POST /v1/audio/transcriptions` to a thread pool, so concurrent requests
+invoked inference on the same NeMo `ASRModel` simultaneously — which is not
+re-entrant/thread-safe (shared model buffers, shared CUDA device state),
+risking garbled transcriptions or a crash under load. Inference is now wrapped
+in the existing lock, mirroring the magpie TTS backend's stated serialization.
+`_ensure_loaded()` still runs before the lock (it takes the same non-reentrant
+lock for the one-time load). Fixes #199.
+
 ### 2026-06-05 — Hub: release held slots before closing a re-registered ring
 
 On `CONNECTOR_REGISTER` for a known `connector_id`, `_handle_registration`
