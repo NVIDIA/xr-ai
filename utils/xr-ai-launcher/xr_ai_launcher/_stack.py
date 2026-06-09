@@ -33,6 +33,7 @@ the IPC socket connects, after the HTTP server starts listening, etc.
 """
 from __future__ import annotations
 
+import glob
 import logging
 import os
 import re
@@ -151,6 +152,48 @@ def _forward(stream, prefix: str, *, quiet_native: bool = False) -> None:
             print(formatted, flush=True)
 
 
+# Dedup key for the LD_LIBRARY_PATH cuDNN warning — the dropped dirs are the
+# same for every spawned process, so warn once per unique set rather than once
+# per process.
+_warned_cudnn_ld: set[str] = set()
+
+
+def _strip_conflicting_cudnn(ld_library_path: str | None) -> tuple[str | None, list[str]]:
+    """Drop ``LD_LIBRARY_PATH`` entries that ship their own ``libcudnn``.
+
+    Each sub-project's venv installs (via the ``nvidia-cudnn-cu12`` wheel that
+    PyTorch pulls in) the exact cuDNN that its PyTorch was compiled against.
+    When the host exports an ``LD_LIBRARY_PATH`` pointing at a *different*
+    system cuDNN, the dynamic loader finds the system copy first and PyTorch
+    aborts at import with, e.g.::
+
+        RuntimeError: cuDNN version incompatibility: PyTorch was compiled
+        against (9, 20, 0) but found runtime version (9, 13, 1) ...
+
+    Removing only the directories that actually contain a ``libcudnn.so*``
+    lets the venv-bundled cuDNN win while leaving every unrelated entry (CUDA
+    toolkit, driver libs, application libraries) on the path untouched.
+
+    Returns the cleaned value (``None`` when nothing remains, so the caller
+    drops the variable entirely) and the list of removed directories.
+    """
+    if not ld_library_path:
+        return ld_library_path, []
+
+    kept: list[str] = []
+    dropped: list[str] = []
+    for entry in ld_library_path.split(os.pathsep):
+        # An empty entry means "current directory" — never a cuDNN dir; keep it.
+        if entry and glob.glob(os.path.join(entry, "libcudnn.so*")):
+            dropped.append(entry)
+        else:
+            kept.append(entry)
+
+    if not dropped:
+        return ld_library_path, []
+    return (os.pathsep.join(kept) if kept else None), dropped
+
+
 def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     project = (base / proc.project).resolve()
 
@@ -167,6 +210,25 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     if proc.gpu is not None:
         env["CUDA_VISIBLE_DEVICES"] = proc.gpu
+
+    # Keep a host system cuDNN on LD_LIBRARY_PATH from shadowing the
+    # venv-bundled cuDNN each project's PyTorch was compiled against — without
+    # this, GPU services (e.g. the NeMo STT server) abort at torch import with
+    # a "cuDNN version incompatibility" RuntimeError.
+    cleaned, dropped = _strip_conflicting_cudnn(env.get("LD_LIBRARY_PATH"))
+    if dropped:
+        if cleaned is None:
+            env.pop("LD_LIBRARY_PATH", None)
+        else:
+            env["LD_LIBRARY_PATH"] = cleaned
+        key = os.pathsep.join(dropped)
+        if key not in _warned_cudnn_ld:
+            _warned_cudnn_ld.add(key)
+            log.warning(
+                "Removed cuDNN dir(s) from LD_LIBRARY_PATH so the venv-bundled "
+                "cuDNN (which PyTorch was compiled against) is used instead: %s",
+                key,
+            )
 
     # start_new_session=True puts uv + its children (e.g. xr_media_hub) in a
     # new process group.  _shutdown then kills the whole group so grandchild
