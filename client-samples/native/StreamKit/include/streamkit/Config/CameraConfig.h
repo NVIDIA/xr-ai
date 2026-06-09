@@ -3,16 +3,30 @@
 
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
 namespace streamkit {
 
+/// Optional publish-side encoding controls for externally captured video.
+///
+/// Backends that open their own platform camera may ignore this. The C++
+/// LiveKitBackend consumes it because callers push frames through FrameSink
+/// and need to specify publish options before the first frame creates the
+/// LocalVideoTrack.
+struct CameraEncodingConfig {
+    std::uint64_t max_bitrate_bps = 0;
+    double max_framerate = 0.0;
+    std::optional<bool> simulcast;
+};
+
 /// Configures camera capture passed to StreamSession::StartCamera().
 ///
-/// Resolution and frame-rate are intentionally not exposed: the LiveKit
-/// backend negotiates the best supported format with the hardware
-/// automatically (matching the iOS and Android behaviour).
+/// Capture resolution is intentionally not exposed: backends that open a
+/// camera negotiate the best supported format with the hardware automatically
+/// (matching the iOS and Android behaviour). `encoding` only controls
+/// publish-side media options after capture.
 ///
 /// ## Platform contract for `facing` and `device_id`
 ///
@@ -40,10 +54,13 @@ struct CameraConfig {
     /// When set, this takes precedence over `facing`.
     std::optional<std::string> device_id;
 
+    /// Optional publish-side encoding controls for externally captured video.
+    std::optional<CameraEncodingConfig> encoding;
+
     // ── Presets ────────────────────────────────────────────────────────────
 
     static CameraConfig Default() { return {}; }
-    static CameraConfig Rear()    { return {Facing::kBack, std::nullopt}; }
+    static CameraConfig Rear()    { return {Facing::kBack, std::nullopt, std::nullopt}; }
 };
 
 } // namespace streamkit

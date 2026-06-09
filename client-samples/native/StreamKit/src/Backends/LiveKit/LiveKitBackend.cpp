@@ -21,7 +21,6 @@
 
 #include <cstdint>
 #include <cstring>
-#include <format>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -69,12 +68,11 @@ ConnectionState MapState(livekit::ConnectionState lk) {
 }
 
 livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
-    using enum PixelFormat;
     switch (fmt) {
-        case kI420: return livekit::VideoBufferType::I420;
-        case kNV12: return livekit::VideoBufferType::NV12;
-        case kRGBA: return livekit::VideoBufferType::RGBA;
-        case kBGRA: return livekit::VideoBufferType::BGRA;
+        case PixelFormat::kI420: return livekit::VideoBufferType::I420;
+        case PixelFormat::kNV12: return livekit::VideoBufferType::NV12;
+        case PixelFormat::kRGBA: return livekit::VideoBufferType::RGBA;
+        case PixelFormat::kBGRA: return livekit::VideoBufferType::BGRA;
     }
     return livekit::VideoBufferType::I420;
 }
@@ -86,18 +84,17 @@ livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
 std::size_t PackedFrameSize(int width, int height, PixelFormat format) {
     const auto pixels =
         static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
-    using enum PixelFormat;
     switch (format) {
-        case kI420:
-        case kNV12: {
+        case PixelFormat::kI420:
+        case PixelFormat::kNV12: {
             const auto chroma_w =
                 (static_cast<std::size_t>(width)  + 1) / 2;
             const auto chroma_h =
                 (static_cast<std::size_t>(height) + 1) / 2;
             return pixels + 2 * chroma_w * chroma_h;
         }
-        case kRGBA:
-        case kBGRA:
+        case PixelFormat::kRGBA:
+        case PixelFormat::kBGRA:
             return pixels * 4;
     }
     return 0;  // unreachable
@@ -185,7 +182,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
 
     const std::string scheme = config_.secure ? "wss" : "ws";
     const std::string ws_url =
-        std::format("{}://{}:{}", scheme, config_.host, config_.port);
+        scheme + "://" + config_.host + ":" + std::to_string(config_.port);
 
     std::string token;
     if (config_.token.has_value() && !config_.token->empty()) {
@@ -213,8 +210,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
         room_.reset();
         delegate_.reset();
         FireStateChanged(ConnectionState::kDisconnected);
-        throw StreamError(std::format(
-            "LiveKit Room::Connect returned false for {}", ws_url));
+        throw StreamError("LiveKit Room::Connect returned false for " + ws_url);
     }
     is_connected_.store(true);
     // The SDK delegate may have already fired kConnected during the
@@ -292,8 +288,8 @@ void LiveKitBackend::StartCamera(const CameraConfig& config) {
     // VideoSource ctor requires explicit width/height, so the track cannot
     // be created here. Arm the backend; the first FrameSink::InjectVideoFrame
     // call creates the source and publishes lazily.
-    (void)config;
     StopCamera();
+    camera_config_ = config;
     camera_armed_.store(true);
 }
 
@@ -345,12 +341,12 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
     // their padded HAL or GPU readback buffer?" mistake.
     if (const auto expected = PackedFrameSize(width, height, format);
         data.size() != expected) {
-        throw std::invalid_argument(std::format(
-            "InjectVideoFrame: buffer size {} does not match the packed size "
-            "{} expected for the given dimensions and format. FrameSink "
+        throw std::invalid_argument(
+            "InjectVideoFrame: buffer size " + std::to_string(data.size()) +
+            " does not match the packed size " + std::to_string(expected) +
+            " expected for the given dimensions and format. FrameSink "
             "requires tightly packed input - repack padded buffers before "
-            "calling.",
-            data.size(), expected));
+            "calling.");
     }
 
 #if STREAMKIT_HAVE_LIVEKIT
@@ -371,8 +367,23 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
         std::lock_guard<std::mutex> lock(tracks_mutex_);
         if (!video_source_) {
             video_source_ = std::make_shared<livekit::VideoSource>(width, height);
-            video_track_ = room_->localParticipant()->publishVideoTrack(
-                "camera", video_source_, livekit::TrackSource::SOURCE_CAMERA);
+            video_track_ = livekit::LocalVideoTrack::createLocalVideoTrack(
+                "camera", video_source_);
+            livekit::TrackPublishOptions options;
+            options.source = livekit::TrackSource::SOURCE_CAMERA;
+            if (camera_config_.encoding.has_value()) {
+                const auto& encoding = *camera_config_.encoding;
+                if (encoding.max_bitrate_bps > 0 || encoding.max_framerate > 0.0) {
+                    livekit::VideoEncodingOptions video_encoding;
+                    video_encoding.max_bitrate = encoding.max_bitrate_bps;
+                    video_encoding.max_framerate = encoding.max_framerate;
+                    options.video_encoding = video_encoding;
+                }
+                if (encoding.simulcast.has_value()) {
+                    options.simulcast = encoding.simulcast;
+                }
+            }
+            room_->localParticipant()->publishTrack(video_track_, options);
         }
         source = video_source_;
     }
@@ -407,22 +418,26 @@ void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
             static_cast<std::size_t>(channels) *
             static_cast<std::size_t>(samples_per_channel);
         pcm.size() != expected) {
-        throw std::invalid_argument(std::format(
-            "InjectAudioFrame: sample count {} does not match channels * "
-            "samples_per_channel = {}",
-            pcm.size(), expected));
+        throw std::invalid_argument(
+            "InjectAudioFrame: sample count " + std::to_string(pcm.size()) +
+            " does not match channels * samples_per_channel = " +
+            std::to_string(expected));
     }
 
 #if STREAMKIT_HAVE_LIVEKIT
-    livekit::AudioFrame frame(sample_rate, channels, samples_per_channel,
-                              pcm.data());
+    // AudioSink timestamps are media timestamps; AudioSource::captureFrame's
+    // second parameter is a bounded-wait timeout in milliseconds.
+    (void)timestamp_us;
+    std::vector<std::int16_t> data(pcm.begin(), pcm.end());
+    livekit::AudioFrame frame(std::move(data), sample_rate, channels,
+                              samples_per_channel);
     std::shared_ptr<livekit::AudioSource> source;
     {
         std::lock_guard<std::mutex> lock(tracks_mutex_);
         source = audio_source_;
     }
     if (source) {
-        source->captureFrame(frame, timestamp_us);
+        source->captureFrame(frame);
     }
 #else
     (void)sample_rate;
@@ -443,8 +458,8 @@ void LiveKitBackend::Send(std::span<const std::byte> data,
         throw NotConnectedError{};
     }
     if (topic == kAgentStatusTopic) {
-        throw std::invalid_argument(std::format(
-            "topic '{}' is reserved for internal SDK use", topic));
+        throw std::invalid_argument(
+            "topic '" + std::string(topic) + "' is reserved for internal SDK use");
     }
 
 #if STREAMKIT_HAVE_LIVEKIT
@@ -535,10 +550,9 @@ std::string LiveKitBackend::FetchToken(
     const std::string& /*identity*/) {
     // No HTTP client shipped — callers must pass an inline JWT via
     // `LiveKitConfig::token` (computed server-side).
-    throw TokenFetchFailedError(std::format(
-        "{} - FetchToken is not implemented in this backend; supply an "
-        "inline token in LiveKitConfig::token",
-        token_url));
+    throw TokenFetchFailedError(
+        token_url + " - FetchToken is not implemented in this backend; supply "
+        "an inline token in LiveKitConfig::token");
 }
 
 } // namespace streamkit
