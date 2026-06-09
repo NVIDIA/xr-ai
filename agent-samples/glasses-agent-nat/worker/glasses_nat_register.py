@@ -6,8 +6,10 @@
 from pydantic import Field
 
 from nat.builder.builder import Builder
+from nat.builder.framework_enum import LLMFrameworkEnum
 from nat.builder.function import FunctionGroup
 from nat.cli.register_workflow import register_function_group
+from nat.data_models.component_ref import LLMRef
 from nat.data_models.function import FunctionGroupBaseConfig
 
 from glasses_nat_schemas import AnalyzeRecordingInput
@@ -28,15 +30,26 @@ class GlassesAgentToolsConfig(FunctionGroupBaseConfig, name="glasses_agent_tools
 
 
 class GlassesWorkerTasksConfig(FunctionGroupBaseConfig, name="glasses_worker_tasks"):
-    """Worker-internal NAT tasks for bounded LLM/tool work."""
+    """Worker-internal NAT tasks for bounded LLM/tool work.
 
-    agent_llm_server: str = Field(
-        default="http://localhost:8107",
-        description="OpenAI-compatible agent LLM base URL.",
+    LLM endpoints are not configured here: the tasks resolve their models from
+    the workflow ``llms:`` block via ``builder.get_llm(...)``, so model config,
+    retries, and timeouts live in one place.
+
+    The fields are typed ``LLMRef`` (not ``str``) so NAT's dependency resolver
+    records this group's edge to those LLMs and builds them *before* this group
+    — otherwise ``get_llm`` runs before the LLM exists and raises
+    ``LLM `agent_llm` not found`` (the agent LLM is otherwise built lazily as
+    the workflow's ``llm_name``, after function groups).
+    """
+
+    agent_llm_name: LLMRef = Field(
+        default=LLMRef("agent_llm"),
+        description="Name of the agentic LLM in the workflow `llms:` block.",
     )
-    llm_server: str = Field(
-        default="http://localhost:8106",
-        description="OpenAI-compatible smaller LLM base URL.",
+    worker_llm_name: LLMRef = Field(
+        default=LLMRef("worker_llm"),
+        description="Name of the smaller worker LLM in the workflow `llms:` block.",
     )
 
 
@@ -70,16 +83,24 @@ async def glasses_worker_tasks(config: GlassesWorkerTasksConfig, builder: Builde
     get_latest_frame = await builder.get_function("video_mcp__get_latest_frame")
     ask_image = await builder.get_function("vlm_mcp__ask_image")
     ask_frames = await builder.get_function("vlm_mcp__ask_frames")
+    # Bounded worker-task LLM calls now go through NAT's LLM layer instead of
+    # hand-rolled httpx, so endpoint/retry/timeout config lives in `llms:`.
+    agent_llm = await builder.get_llm(
+        config.agent_llm_name, wrapper_type=LLMFrameworkEnum.LANGCHAIN,
+    )
+    worker_llm = await builder.get_llm(
+        config.worker_llm_name, wrapper_type=LLMFrameworkEnum.LANGCHAIN,
+    )
     group = FunctionGroup(config=config)
 
     async def analyze_recording(request: AnalyzeRecordingInput) -> dict:
         """Analyze recorded frame and narration timelines into demo steps."""
-        result = await analyze_recording_impl(request, agent_llm_server=config.agent_llm_server)
+        result = await analyze_recording_impl(request, agent_llm=agent_llm)
         return result.model_dump()
 
     async def condense_observations(request: CondenseObservationsInput) -> dict:
         """Condense recent observations into a scene summary and event list."""
-        result = await condense_observations_impl(request, llm_server=config.llm_server)
+        result = await condense_observations_impl(request, worker_llm=worker_llm)
         return result.model_dump()
 
     async def check_guidance_step_complete(request: GuidanceStepInput) -> dict:
@@ -104,16 +125,12 @@ async def glasses_worker_tasks(config: GlassesWorkerTasksConfig, builder: Builde
 
     async def derive_step_requirements(request: DeriveStepRequirementsInput) -> dict:
         """Derive an atomic visual checklist for one analyzed step."""
-        result = await derive_step_requirements_impl(
-            request, agent_llm_server=config.agent_llm_server,
-        )
+        result = await derive_step_requirements_impl(request, agent_llm=agent_llm)
         return result.model_dump()
 
     async def derive_step_key_info(request: DeriveStepKeyInfoInput) -> dict:
         """Distill one step into structured key info (objects/action/position/...)."""
-        result = await derive_step_key_info_impl(
-            request, agent_llm_server=config.agent_llm_server,
-        )
+        result = await derive_step_key_info_impl(request, agent_llm=agent_llm)
         return result.model_dump()
 
     group.add_function(

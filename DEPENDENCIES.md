@@ -472,7 +472,11 @@ NAT LangChain plugin internally.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `glasses-agent-nat` | `xr-ai-launcher`, `xr-ai-logging` | - |
-| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17 |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17, torchaudio >=2.10,<2.11 |
+
+`torchaudio` is pinned to torch's minor (nvidia-nat constrains torch to 2.10.x;
+torchaudio otherwise floats to 2.11.x and its native lib fails the ABI load,
+silently dropping Silero VAD to the energy fallback). Bump both together.
 
 Starts the same services as `glasses-agent`: hub, stt (8103), piper-tts
 (8105), nemotron3-nano-llm (8107), vlm-server (8100),

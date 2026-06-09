@@ -195,13 +195,24 @@ tasks (`analyze_recording`, `derive_step_requirements`,
 `condense_observations`, `check_guidance_step_complete`) are real NAT
 functions with typed pydantic I/O.
 
-**Where NAT is under-used.**
-- **LLM calls bypass NAT's LLM layer.** The worker tasks hand-roll `httpx`
-  POSTs to `/v1/chat/completions` (`_post_chat` in `glasses_nat_tasks.py`)
-  even though the workflow already declares `llms: { agent_llm, worker_llm }`.
-  The NAT-idiomatic path is `llm = await builder.get_llm(name, wrapper_type=
-  LLMFrameworkEnum.LANGCHAIN)` and invoking through that, which gives NAT
-  ret/timeout/observability for *every* model call, not just the agent's.
+**Implemented on this branch.**
+- **Worker-task LLM calls now go through NAT's LLM layer.** The four bounded
+  tasks (`analyze_recording`, `condense_observations`,
+  `derive_step_requirements`, `derive_step_key_info`) no longer hand-roll
+  `httpx` POSTs to `/v1/chat/completions`. `glasses_worker_tasks` resolves the
+  models declared in the workflow `llms:` block via
+  `builder.get_llm(name, wrapper_type=LLMFrameworkEnum.LANGCHAIN)` and the
+  tasks invoke through a single `_chat(llm, messages, …)` helper
+  (`.bind(...)` for per-call `max_tokens`/`temperature`/`extra_body`). Endpoint,
+  retry, and timeout config now live once in the YAML `llms:` block instead of
+  the function-group's `agent_llm_server`/`llm_server` URLs (replaced by
+  `agent_llm_name`/`worker_llm_name`). The carefully tuned prompt dicts are
+  unchanged — LangChain normalizes the OpenAI-style message dicts — so this is
+  a transport swap, not a prompt change. This removes the only hand-rolled HTTP
+  in the NAT task layer. (The worker's own latency-critical quick-ack/intent
+  path stays direct by design; it is not a NAT function.)
+
+**Where NAT is still under-used.**
 - **No NAT observability.** NAT ships tracing/telemetry and an `eval`
   harness; neither is configured. Enabling `general.telemetry` tracing would
   surface every function/LLM call (latency, tokens, errors) — exactly the
@@ -213,10 +224,8 @@ functions with typed pydantic I/O.
   reasoning function, and run the recording-analysis as a NAT pipeline.
 
 **Recommended (designs, in priority order).**
-1. Route `glasses_worker_tasks` LLM calls through `builder.get_llm(...)`
-   instead of `_post_chat` — highest-leverage NAT-nativeness win; removes the
-   only hand-rolled HTTP in the task layer and unifies model config under the
-   workflow YAML `llms:` block.
+1. ~~Route `glasses_worker_tasks` LLM calls through `builder.get_llm(...)`
+   instead of `_post_chat`.~~ **Done on this branch** (see "Implemented" above).
 2. Add a `general.telemetry` tracing block to
    `glasses_agent_nat_workflow.yaml` and document `nat eval` for the guidance
    completion check, so the sample demonstrates NAT observability + eval, not
@@ -232,13 +241,14 @@ functions with typed pydantic I/O.
 |---|---|
 | `worker/memory.py` | New `StepKeyInfo` (objects/action/position/target_state/ignore); `DemoStep.key_info`. |
 | `worker/glasses_nat_schemas.py` | `DeriveStepKeyInfo{Input,Output}`; key-info fields on `GuidanceStepInput`. |
-| `worker/glasses_nat_tasks.py` | New `derive_step_key_info_impl`; key-info-guided + background-tolerant prompts in the two-tier completion check; `_key_info_correction`. |
-| `worker/glasses_nat_register.py` | Register `derive_step_key_info`; thread key-info into the completion check. |
+| `worker/glasses_nat_tasks.py` | New `derive_step_key_info_impl`; key-info-guided + background-tolerant prompts in the two-tier completion check; `_key_info_correction`. **NAT-native LLM:** replaced hand-rolled `_post_chat` httpx with a `_chat(llm, …)` helper over NAT's LangChain LLM. |
+| `worker/glasses_nat_register.py` | Register `derive_step_key_info`; thread key-info into the completion check. **NAT-native LLM:** resolve `agent_llm`/`worker_llm` via `builder.get_llm(..., LLMFrameworkEnum.LANGCHAIN)`; config now takes `agent_llm_name`/`worker_llm_name` instead of base URLs. |
 | `worker/processors.py` | Extract+store key info at finalize; pass it into the guidance check. Auto-advance monitor: static-frame skip (cheap `_latest_live_frame_ts`, behavior-preserving) + configurable confirmation count. |
 | `worker/config.py` | New tunables: `recording_warmup_s`, `guidance_advance_confirmations`, `guidance_skip_static_frames`. |
 | `worker/agent.py` | Recording warmup window now uses `recording_warmup_s`. |
-| `yaml/glasses_agent_nat_workflow.yaml` | `derive_step_key_info` added to the worker-task group. |
+| `yaml/glasses_agent_nat_workflow.yaml` | `derive_step_key_info` added to the worker-task group. **NAT-native LLM:** `glasses_worker_tasks` now takes `agent_llm_name`/`worker_llm_name` (resolved from the `llms:` block) instead of `agent_llm_server`/`llm_server` URLs. |
 | `yaml/glasses_agent_nat_worker.yaml` | Documents the three new knobs. |
+| `README.md` | Notes the worker tasks run through NAT's LLM layer. |
 | `IMPROVEMENTS.md` | This review. |
 
 All other items above are left as concrete, prioritized recommendations for

@@ -59,8 +59,9 @@ function_groups:
       - derive_step_requirements
       - derive_step_key_info
       - condense_observations
-    agent_llm_server: http://localhost:8107
-    llm_server: http://localhost:8106
+    # LLMs resolve from the `llms:` block below via builder.get_llm(...).
+    agent_llm_name: agent_llm
+    worker_llm_name: worker_llm
 
 llms:
   agent_llm:

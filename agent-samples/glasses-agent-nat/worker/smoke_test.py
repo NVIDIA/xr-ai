@@ -78,6 +78,9 @@ def _make_cfg(freshness_s: float = 120.0) -> WorkerConfig:
         silence_duration            = 0.8,
         min_speech                  = 0.15,
         silero_threshold            = 0.3,
+        recording_warmup_s             = 2.0,
+        guidance_advance_confirmations = 2,
+        guidance_skip_static_frames    = True,
     )
 
 

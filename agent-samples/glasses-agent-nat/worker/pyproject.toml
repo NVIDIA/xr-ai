@@ -20,6 +20,13 @@ dependencies = [
     "pydantic>=2.7",
     "silero-vad>=5.1",
     "onnxruntime>=1.17",
+    # torchaudio MUST share torch's minor version or its native lib
+    # (libtorchaudio) fails to load with an ABI error, which makes
+    # silero-vad's load_silero_vad(onnx=True) raise and the VAD silently
+    # degrades to the crude energy fallback (garbled, multi-sentence STT).
+    # nvidia-nat constrains torch to 2.10.x here, but torchaudio otherwise
+    # floats to 2.11.x — pin it to the matching minor. Bump both together.
+    "torchaudio>=2.10,<2.11",
 ]
 
 [tool.uv.sources]

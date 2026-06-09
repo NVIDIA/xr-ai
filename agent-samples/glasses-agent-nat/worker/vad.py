@@ -19,7 +19,15 @@ log = logging.getLogger("glasses_agent_nat.vad")
 
 _SILERO_SR       = 16_000
 _SILERO_WINDOW   = 512
-_MAX_UTT_S       = 30.0
+# Hard cap on a single utterance. Only fires when end-of-speech silence is
+# never detected — e.g. the energy-VAD fallback in a noisy room, where the
+# gate stays above threshold continuously. 30 s let several sentences pile into
+# one blob, so STT returned munged multi-sentence garbage ("…what do you see?
+# It's really state to day but don't cross over…") and the agent answered the
+# wrong question / dropped guidance commands. 15 s still covers any real spoken
+# command or demo-step narration (which finalize on the 0.8 s silence gate far
+# sooner) while bounding the runaway case to something STT can transcribe.
+_MAX_UTT_S       = 15.0
 _PRE_ROLL_CHUNKS = 10
 
 

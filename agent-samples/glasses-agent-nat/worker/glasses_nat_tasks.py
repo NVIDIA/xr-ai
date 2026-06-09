@@ -12,8 +12,6 @@ import string
 import time
 from typing import Any
 
-import httpx
-
 from glasses_nat_schemas import AnalyzeRecordingInput
 from glasses_nat_schemas import AnalyzeRecordingOutput
 from glasses_nat_schemas import CondenseObservationsInput
@@ -239,28 +237,43 @@ def _payload(value: Any) -> dict[str, Any] | list[Any] | str | None:
     return str(value)
 
 
-async def _post_chat(
-    *,
-    base_url: str,
+async def _chat(
+    llm,
     messages: list[dict[str, Any]],
-    max_tokens: int,
-    temperature: float,
-    timeout: float,
+    *,
+    max_tokens: int | None = None,
+    temperature: float | None = None,
     extra_body: dict[str, Any] | None = None,
 ) -> str:
-    body: dict[str, Any] = {
-        "model": "llm",
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
+    """Invoke a NAT-provided LangChain chat model and return its text.
+
+    Replaces the previous hand-rolled httpx POST to ``/v1/chat/completions``:
+    the worker tasks now go through NAT's LLM layer (``builder.get_llm(...,
+    LLMFrameworkEnum.LANGCHAIN)``), so model endpoint, retries, timeout, and
+    observability are unified under the workflow YAML ``llms:`` block instead
+    of duplicated here. LangChain normalizes OpenAI-style ``{"role", "content"}``
+    message dicts, so the tuned prompts pass through unchanged; per-call
+    ``max_tokens`` / ``temperature`` / ``extra_body`` overrides ride a
+    ``.bind(...)`` so they don't mutate the shared client.
+    """
+    bind_kwargs: dict[str, Any] = {}
+    if max_tokens is not None:
+        bind_kwargs["max_tokens"] = max_tokens
+    if temperature is not None:
+        bind_kwargs["temperature"] = temperature
     if extra_body:
-        body.update(extra_body)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(base_url.rstrip("/") + "/v1/chat/completions", json=body)
-    if resp.is_error:
-        raise RuntimeError(f"LLM {resp.status_code}: {resp.text[:300]}")
-    return (resp.json()["choices"][0]["message"].get("content") or "").strip()
+        bind_kwargs["extra_body"] = extra_body
+    client = llm.bind(**bind_kwargs) if bind_kwargs else llm
+    result = await client.ainvoke(messages)
+
+    content = getattr(result, "content", result)
+    if isinstance(content, list):
+        # Some chat models return content as a list of parts/blocks.
+        content = "".join(
+            blk.get("text", "") if isinstance(blk, dict) else str(blk)
+            for blk in content
+        )
+    return content.strip() if isinstance(content, str) else str(content).strip()
 
 
 async def describe_current_view_impl(
@@ -318,7 +331,7 @@ async def describe_current_view_impl(
 async def analyze_recording_impl(
     request: AnalyzeRecordingInput,
     *,
-    agent_llm_server: str,
+    agent_llm,
 ) -> AnalyzeRecordingOutput:
     frames = request.frames
     if not frames:
@@ -400,12 +413,11 @@ async def analyze_recording_impl(
             ),
         },
     ]
-    raw = await _post_chat(
-        base_url=agent_llm_server,
-        messages=messages,
+    raw = await _chat(
+        agent_llm,
+        messages,
         max_tokens=1024,
         temperature=0.0,
-        timeout=90.0,
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
     content = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
@@ -437,7 +449,7 @@ async def analyze_recording_impl(
 async def condense_observations_impl(
     request: CondenseObservationsInput,
     *,
-    llm_server: str,
+    worker_llm,
 ) -> CondenseObservationsOutput:
     if not request.observations:
         return CondenseObservationsOutput()
@@ -462,12 +474,11 @@ async def condense_observations_impl(
         },
         {"role": "user", "content": f"Observations:\n{obs_text}"},
     ]
-    raw = await _post_chat(
-        base_url=llm_server,
-        messages=messages,
+    raw = await _chat(
+        worker_llm,
+        messages,
         max_tokens=256,
         temperature=0.1,
-        timeout=20.0,
     )
     if raw.startswith("```"):
         raw = raw.split("```")[1].lstrip("json").strip()
@@ -497,7 +508,7 @@ async def condense_observations_impl(
 async def derive_step_requirements_impl(
     request: DeriveStepRequirementsInput,
     *,
-    agent_llm_server: str,
+    agent_llm,
 ) -> DeriveStepRequirementsOutput:
     """Turn one step instruction into a small atomic checklist.
 
@@ -543,12 +554,11 @@ async def derive_step_requirements_impl(
         },
     ]
     try:
-        raw = await _post_chat(
-            base_url=agent_llm_server,
-            messages=messages,
+        raw = await _chat(
+            agent_llm,
+            messages,
             max_tokens=256,
             temperature=0.0,
-            timeout=20.0,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
     except Exception:
@@ -581,7 +591,7 @@ async def derive_step_requirements_impl(
 async def derive_step_key_info_impl(
     request: DeriveStepKeyInfoInput,
     *,
-    agent_llm_server: str,
+    agent_llm,
 ) -> DeriveStepKeyInfoOutput:
     """Distill one step's instruction + teacher caption into structured key info.
 
@@ -628,12 +638,11 @@ async def derive_step_key_info_impl(
         },
     ]
     try:
-        raw = await _post_chat(
-            base_url=agent_llm_server,
-            messages=messages,
+        raw = await _chat(
+            agent_llm,
+            messages,
             max_tokens=256,
             temperature=0.0,
-            timeout=20.0,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
     except Exception:

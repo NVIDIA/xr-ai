@@ -69,6 +69,13 @@ to the next step.
 - `workflow` as `tool_calling_agent` with `handle_tool_errors: true` and
   `max_iterations: 8`.
 
+The bounded worker tasks call the LLMs declared in the workflow `llms:` block
+(`agent_llm`, `worker_llm`) through NAT's LLM layer — `glasses_worker_tasks`
+resolves them with `builder.get_llm(..., LLMFrameworkEnum.LANGCHAIN)` rather
+than hand-rolled HTTP, so model endpoint, retry, and timeout config live in one
+place. Point those LLMs at different servers (or backends) by editing only the
+`llms:` block.
+
 The configured `include` lists are the LLM-facing tool contract. If you enable
 recorded video tools in `video-mcp`, update the NAT workflow YAML and custom
 function groups in the same change so the exposed tools stay explicit.
