@@ -72,6 +72,9 @@ class TokenServer:
         self._cfg = cfg
         self._server: uvicorn.Server | None = None
         self._task: asyncio.Task | None = None
+        # Startup failure captured by _serve_safe so start() can surface the
+        # real cause (and so the serve task's exception is always retrieved).
+        self._serve_error: BaseException | None = None
 
     async def start(self) -> None:
         app = build_app(self._cfg)
@@ -88,6 +91,7 @@ class TokenServer:
         else:
             scheme = "http"
 
+        self._serve_error = None
         self._server = uvicorn.Server(uvicorn.Config(**uv_cfg))
         self._task = asyncio.create_task(self._serve_safe())
 
@@ -107,11 +111,25 @@ class TokenServer:
                 break
             await asyncio.sleep(0.05)
         if not self._server.started:
+            # Pathological case: the task neither bound nor exited within the
+            # timeout. Cancel and await it so we don't leave an orphan running,
+            # then drop the reference so a later stop() doesn't re-await (and
+            # re-raise) the cancelled task.
+            if not self._task.done():
+                self._task.cancel()
+                try:
+                    await self._task
+                except asyncio.CancelledError:
+                    pass
+            self._task = None
+            self._server = None
+            # Chain the real cause (SystemExit with exit code, or any other
+            # serve() failure) captured by _serve_safe; None on pure timeout.
             raise RuntimeError(
                 f"Token server failed to start on "
                 f"{self._cfg.token_server_host}:{self._cfg.token_server_port} "
                 "— port already in use, or startup timed out."
-            )
+            ) from self._serve_error
         logger.info(
             "Token server → {}://{}:{}  room={!r}",
             scheme, self._cfg.token_server_host, self._cfg.token_server_port,
@@ -122,13 +140,24 @@ class TokenServer:
         # uvicorn calls sys.exit(1) on bind failure; SystemExit is a BaseException
         # that ``await self._task`` in stop() would re-raise into the caller,
         # aborting the rest of graceful shutdown. Swallow it here (matches
-        # WebServer._serve_safe).
+        # WebServer._serve_safe). Record the failure so start() can surface the
+        # real cause and the task's exception is always retrieved.
+        #
+        # CancelledError (a BaseException, not an Exception) is intentionally
+        # NOT caught: start()'s timeout path cancels this task and awaits it.
         try:
             await self._server.serve()
         except SystemExit as exc:
+            self._serve_error = exc
             logger.error(
                 "Token server failed to start on port {} — is it already in use? (exit code {})",
                 self._cfg.token_server_port, exc.code,
+            )
+        except Exception as exc:
+            self._serve_error = exc
+            logger.error(
+                "Token server crashed on port {}: {!r}",
+                self._cfg.token_server_port, exc,
             )
 
     async def stop(self) -> None:
