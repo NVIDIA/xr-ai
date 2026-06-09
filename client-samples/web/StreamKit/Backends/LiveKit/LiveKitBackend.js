@@ -373,7 +373,10 @@ export class LiveKitBackend {
    * @throws {StreamError} `notConnected` if not connected.
    */
   async send(data, { reliable = true, topic } = {}) {
-    if (!this.#room || this.#room.state !== 'connected') {
+    // Snapshot the room so a concurrent #tearDown() nulling this.#room across
+    // the await below can't turn the publishData() deref into a null crash.
+    const room = this.#room;
+    if (!room || room.state !== 'connected') {
       throw StreamError.notConnected();
     }
 
@@ -402,7 +405,7 @@ export class LiveKitBackend {
     if (this.#config.hubIdentity) {
       opts.destinationIdentities = [this.#config.hubIdentity];
     }
-    await this.#room.localParticipant.publishData(bytes, opts);
+    await room.localParticipant.publishData(bytes, opts);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # IPC layer
-pyzmq>=26.0
+pyzmq>=27.0
 msgpack>=1.0
 
 # LiveKit transport
