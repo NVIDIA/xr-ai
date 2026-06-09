@@ -100,8 +100,15 @@ class _AsrBackend:
         """Synchronous. Call from a thread pool."""
         self._ensure_loaded()
         import torch
-        with torch.inference_mode():
-            results = self._model.transcribe([audio_path], verbose=False)
+        # NeMo ASR .transcribe() is not re-entrant/thread-safe (shared model
+        # buffers and, on CUDA, shared device state), and the endpoint
+        # dispatches each request to a thread pool — serialize inference on the
+        # shared model, mirroring the magpie TTS backend. _ensure_loaded() runs
+        # BEFORE acquiring the lock because _lock is non-reentrant and
+        # _ensure_loaded() takes it itself (the post-load fast path is lock-free).
+        with self._lock:
+            with torch.inference_mode():
+                results = self._model.transcribe([audio_path], verbose=False)
         # NeMo returns a list of strings (or Hypothesis objects).
         if not results:
             return ""

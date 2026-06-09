@@ -180,7 +180,17 @@ class _PiperBackend:
         self._ensure_loaded()
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
-            self._voice.synthesize_wav(text, wf)
+            if text.strip():
+                self._voice.synthesize_wav(text, wf)
+            else:
+                # Empty/whitespace input yields no synthesized chunks, and
+                # Piper's synthesize_wav sets the WAV format params only on the
+                # first chunk — so they'd never be set and wave.close() would
+                # raise "# channels not specified" (→ unhandled HTTP 500, #194).
+                # Emit a valid, empty (silent) WAV instead, matching magpie.
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(self.sample_rate)
         return buf.getvalue()
 
 

@@ -208,6 +208,12 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
         body = await asyncio.get_running_loop().run_in_executor(
             None, _post_speech, port, voice, "Hello, world.",
         )
+        # Regression #194: whitespace-only input must return a valid (empty)
+        # WAV, not an HTTP 500 (wave.Error: # channels not specified).
+        # _post_speech asserts status 200, so a 500 here fails the test.
+        empty_body = await asyncio.get_running_loop().run_in_executor(
+            None, _post_speech, port, voice, "   ",
+        )
     finally:
         if proc.poll() is None:
             proc.send_signal(signal.SIGTERM)
@@ -219,3 +225,7 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
 
     assert body, "empty response body"
     assert body[:4] == b"RIFF", f"expected WAV RIFF header, got {body[:8]!r}"
+    # Whitespace-only input → a valid WAV header (zero audio frames), not a 500.
+    assert empty_body[:4] == b"RIFF", (
+        f"expected WAV for whitespace input, got {empty_body[:8]!r}"
+    )
