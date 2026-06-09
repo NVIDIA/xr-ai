@@ -83,6 +83,35 @@ sudo apt install nvidia-cuda-toolkit
 
 This applies to the `xr-render-demo/yaml/96G_blackwell/` profile.
 
+### GPU service aborts with `cuDNN version incompatibility`
+
+**Symptom:** a GPU service (commonly the NeMo STT server) crashes at torch
+import with:
+
+```
+RuntimeError: cuDNN version incompatibility: PyTorch was compiled against
+(9, 20, 0) but found runtime version (9, 13, 1). ... Looks like your
+LD_LIBRARY_PATH contains incompatible version of cudnn.
+```
+
+**Cause:** the host exports an `LD_LIBRARY_PATH` that points at a system cuDNN
+(common on cloud GPU images). It shadows the cuDNN bundled in the service's
+venv — the exact version that venv's PyTorch was compiled against — so torch
+loads the wrong runtime and aborts.
+
+**Fix:** the launcher handles this automatically — `model_servers` /
+`xr_render_demo` strip any `libcudnn`-bearing directory from each child's
+`LD_LIBRARY_PATH` before spawning (logged once as a WARNING), so the
+venv-bundled cuDNN is used. If you hit this running a service **directly**
+(outside the launcher), clear the conflicting path yourself first:
+
+```bash
+# Inspect what's on the path
+echo "$LD_LIBRARY_PATH"
+# Run the service without the host cuDNN shadowing the venv copy
+env -u LD_LIBRARY_PATH uv run <command>
+```
+
 ### `vllm_backend: docker` — image pull fails with "unauthorized" / "denied"
 
 **Symptom:** the wrapper logs `[<service>] Launching vLLM (docker)` and then

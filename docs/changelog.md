@@ -9,6 +9,22 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-09 — Launcher: strip a host cuDNN off LD_LIBRARY_PATH before spawning
+
+Each sub-project's venv ships the exact cuDNN its PyTorch was compiled against
+(via the `nvidia-cudnn-cu12` wheel). On hosts that export an `LD_LIBRARY_PATH`
+pointing at a *different* system cuDNN (common on cloud GPU images), the dynamic
+loader found the system copy first and GPU services aborted at torch import with
+`RuntimeError: cuDNN version incompatibility: PyTorch was compiled against
+(9, 20, 0) but found runtime version (9, 13, 1)`. The launcher's `_spawn` now
+sanitizes the child `LD_LIBRARY_PATH`, dropping only the directories that
+actually contain a `libcudnn.so*` so the venv-bundled cuDNN wins while every
+unrelated entry (CUDA toolkit, driver, app libs) stays put. Done once at the
+single point where the child env is built (alongside the existing `VIRTUAL_ENV`
+strip), so it covers every launched service; a one-time WARNING records what was
+removed. Chosen over editing each service or documenting a manual `unset` so the
+stack works out-of-the-box on misconfigured hosts.
+
 ### 2026-06-09 — Voice pipeline: idle-timeout auto-cancel off by default, opt-in via YAML
 
 pipecat's `PipelineWorker` defaults to `cancel_on_idle_timeout=True` at
