@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-09 — README: fix invalid CUDA image tag in the GPU smoke-test
+
+The Container Toolkit smoke-test in the README used
+`nvidia/cuda:13.0-base`, which is not a published Docker Hub tag —
+`nvidia/cuda` tags require a full patch version *and* a distro suffix
+(e.g. `13.0.3-base-ubuntu24.04`). The command failed at `docker pull`
+(manifest not found) before it could test GPU passthrough at all. Pinned to
+`13.0.3-base-ubuntu24.04` (newest 13.0.x, matching the repo's CUDA 13.0
+target and the Ubuntu 22.04/24.04 support row above it).
+
 ### 2026-06-05 — Native StreamKit: Android NDK C++20 portability
 
 Native StreamKit no longer depends on C++20 `<format>`. Some Android NDK

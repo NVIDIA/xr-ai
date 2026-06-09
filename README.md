@@ -82,7 +82,7 @@ there:
 Quick smoke-test once installed:
 
 ```bash
-docker run --rm --gpus all nvidia/cuda:13.0-base nvidia-smi
+docker run --rm --gpus all nvidia/cuda:13.0.3-base-ubuntu24.04 nvidia-smi
 ```
 
 **GPU-profile prerequisites** — install before `uv sync` for these targets:
