@@ -18,6 +18,7 @@ import time
 
 import numpy as np
 from loguru import logger
+from scipy.signal import resample_poly
 from pipecat.frames.frames import (
     CancelFrame,
     EndFrame,
@@ -71,9 +72,12 @@ def _hub_pcm_to_mono_16k(pcm_int16: bytes, channels: int, sample_rate: int) -> b
         return pcm_int16  # common case — already mono 16 kHz, no work
     audio = np.frombuffer(pcm_int16, dtype=np.int16)
     if channels > 1:
-        audio = audio.reshape(-1, channels).mean(axis=1)
+        # Each interleaved frame is `channels` int16 samples; a complete hub
+        # chunk is always a whole number of frames. Truncate any trailing
+        # partial frame defensively so reshape can't raise on a malformed chunk.
+        usable = (audio.size // channels) * channels
+        audio = audio[:usable].reshape(-1, channels).mean(axis=1)
     if sample_rate != SAMPLE_RATE:
-        from scipy.signal import resample_poly
         audio = resample_poly(audio.astype(np.float64), SAMPLE_RATE, sample_rate)
     return np.clip(np.round(audio), -32768, 32767).astype(np.int16).tobytes()
 
