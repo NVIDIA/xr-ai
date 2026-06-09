@@ -83,6 +83,35 @@ sudo apt install nvidia-cuda-toolkit
 
 This applies to the `xr-render-demo/yaml/96G_blackwell/` profile.
 
+### GPU service aborts with `cuDNN version incompatibility`
+
+**Symptom:** a GPU service (commonly the NeMo STT server) crashes at torch
+import with:
+
+```
+RuntimeError: cuDNN version incompatibility: PyTorch was compiled against
+(9, 20, 0) but found runtime version (9, 13, 1). ... Looks like your
+LD_LIBRARY_PATH contains incompatible version of cudnn.
+```
+
+**Cause:** the host exports an `LD_LIBRARY_PATH` that points at a system cuDNN
+(common on cloud GPU images). It shadows the cuDNN bundled in the service's
+venv — the exact version that venv's PyTorch was compiled against — so torch
+loads the wrong runtime and aborts.
+
+**Fix:** the launcher handles this automatically — `model_servers` /
+`xr_render_demo` strip any `libcudnn`-bearing directory from each child's
+`LD_LIBRARY_PATH` before spawning (logged once as a WARNING), so the
+venv-bundled cuDNN is used. If you hit this running a service **directly**
+(outside the launcher), clear the conflicting path yourself first:
+
+```bash
+# Inspect what's on the path
+echo "$LD_LIBRARY_PATH"
+# Run the service without the host cuDNN shadowing the venv copy
+env -u LD_LIBRARY_PATH uv run <command>
+```
+
 ### `vllm_backend: docker` — image pull fails with "unauthorized" / "denied"
 
 **Symptom:** the wrapper logs `[<service>] Launching vLLM (docker)` and then
@@ -189,6 +218,20 @@ back to OpenH264 (which is royalty-bearing). See
   device nodes) when starting the container.
 
 ## Runtime / connection issues
+
+### Voice session drops / agent goes silent after a few minutes idle
+
+**Cause:** an idle-timeout that auto-cancels the voice pipeline after a stretch
+with no user/bot speech.
+
+**Status:** disabled by default. `make_voice_pipeline` passes
+`cancel_on_idle_timeout=False` (overriding pipecat's on-by-default
+`IDLE_TIMEOUT_SECS`), so a quiet session stays connected indefinitely.
+
+**If you want it:** set `idle_timeout_secs: <seconds>` (e.g. `300` for 5 min)
+in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
+`xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
+threaded to `xr_ai_pipecat.make_voice_pipeline`, where it's documented.
 
 ### Browser client connects but no audio / no video
 

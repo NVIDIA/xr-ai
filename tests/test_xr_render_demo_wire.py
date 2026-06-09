@@ -82,6 +82,29 @@ def test_models_yaml_loads() -> None:
     assert agent_llm_spec.reasoning_field == "reasoning"
 
 
+def test_worker_config_idle_timeout_disabled_by_default() -> None:
+    """The shipped worker YAML ships idle_timeout_secs: 0, which the loader
+    maps to None (disabled) so a quiet session is never auto-cancelled."""
+    from config import load_config
+
+    worker_yaml = (
+        Path(__file__).resolve().parent.parent
+        / "agent-samples" / "xr-render-demo" / "yaml" / "xr_render_demo_worker.yaml"
+    )
+    cfg = load_config(worker_yaml)
+    assert cfg.idle_timeout_secs is None
+
+
+def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
+    """A positive idle_timeout_secs in the YAML is parsed to a float."""
+    from config import load_config
+
+    y = tmp_path / "w.yaml"
+    y.write_text("idle_timeout_secs: 300\n")
+    cfg = load_config(y)
+    assert cfg.idle_timeout_secs == 300.0
+
+
 # ── quick-ack wire golden ─────────────────────────────────────────────────────
 
 

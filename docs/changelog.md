@@ -42,6 +42,76 @@ restored once the container reaches ready, so steady-state/`--stop` behavior is
 unchanged. The same wrapper backs simple-vlm-example's vlm-server, so its
 identical lingering-container bug is fixed for free.
 
+### 2026-06-09 — README: fix invalid CUDA image tag in the GPU smoke-test
+
+The Container Toolkit smoke-test in the README used
+`nvidia/cuda:13.0-base`, which is not a published Docker Hub tag —
+`nvidia/cuda` tags require a full patch version *and* a distro suffix
+(e.g. `13.0.3-base-ubuntu24.04`). The command failed at `docker pull`
+(manifest not found) before it could test GPU passthrough at all. Pinned to
+`13.0.3-base-ubuntu24.04` (newest 13.0.x, matching the repo's CUDA 13.0
+target and the Ubuntu 22.04/24.04 support row above it).
+
+### 2026-06-09 — Launcher: strip a host cuDNN off LD_LIBRARY_PATH before spawning
+
+Each sub-project's venv ships the exact cuDNN its PyTorch was compiled against
+(via the `nvidia-cudnn-cu12` wheel). On hosts that export an `LD_LIBRARY_PATH`
+pointing at a *different* system cuDNN (common on cloud GPU images), the dynamic
+loader found the system copy first and GPU services aborted at torch import with
+`RuntimeError: cuDNN version incompatibility: PyTorch was compiled against
+(9, 20, 0) but found runtime version (9, 13, 1)`. The launcher's `_spawn` now
+sanitizes the child `LD_LIBRARY_PATH`, dropping only the directories that
+actually contain a `libcudnn.so*` so the venv-bundled cuDNN wins while every
+unrelated entry (CUDA toolkit, driver, app libs) stays put. Done once at the
+single point where the child env is built (alongside the existing `VIRTUAL_ENV`
+strip), so it covers every launched service; a one-time WARNING records what was
+removed. Chosen over editing each service or documenting a manual `unset` so the
+stack works out-of-the-box on misconfigured hosts.
+
+### 2026-06-09 — Voice pipeline: idle-timeout auto-cancel off by default, opt-in via YAML
+
+pipecat's `PipelineWorker` defaults to `cancel_on_idle_timeout=True` at
+`IDLE_TIMEOUT_SECS`, so an idle voice pipeline is silently cancelled after a
+few minutes of no user/bot speech. `make_voice_pipeline` constructed
+`PipelineWorker(pipeline)` with no override, so we inherited that — a quiet XR
+session (user simply not talking) would drop on its own, which is the wrong
+default for this product.
+
+`make_voice_pipeline` now takes `idle_timeout_secs: float | None = None` and is
+**disabled by default**: when `None` it passes `cancel_on_idle_timeout=False`
+and `cancel_runner_on_idle_timeout=False` so the pipeline is never cancelled
+for inactivity. The mechanism is preserved, not deleted — a positive value
+opts back in (worker then cancels after that many idle seconds). Surfaced in
+each sample's worker YAML as `idle_timeout_secs: 0` (0/unset → disabled) with a
+comment, threaded through `simple_vlm_example_worker` and the xr-render-demo
+`WorkerConfig`. Documented in `make_voice_pipeline`'s docstring and
+`docs/troubleshooting.md`. Tests cover the default-off and opt-in paths at both
+the factory and the xr-render config loader.
+
+### 2026-06-09 — Credentials: stop prompting for HF_TOKEN; document it instead
+
+`simple-vlm-example` was the only sample that called
+`ensure_credentials("HF_TOKEN")`, which blocks first-run startup on an
+interactive `getpass` prompt. The model servers (the heavier, more
+download-intensive path) never prompted — they rely on `run_stack`'s automatic
+`load_credentials()` (env / `huggingface-cli login` / saved creds). That
+asymmetry was confusing, and the prompt isn't warranted: the samples' default
+models are **public** (`nvidia/Cosmos-Reason1-7B` is not gated), so `HF_TOKEN`
+only raises HuggingFace rate limits / download speed and is strictly required
+only for gated models.
+
+Replaced the interactive prompt with a non-blocking path: new
+`warn_if_missing(*names)` launcher helper loads any saved/env/CLI token, and if
+the token is still absent prints one actionable line (pointing at
+`docs/credentials.md`) and continues — it never prompts. `simple-vlm-example`
+and `model-servers` now call `warn_if_missing("HF_TOKEN")`. `ensure_credentials`
+is unchanged and still used for `NGC_API_KEY`, where the prompt is intentional —
+the NIM backend is opt-in and cannot function without the key.
+`docs/credentials.md` rewritten to document HF_TOKEN as auto-picked-up +
+optional (required-vs-optional spelled out) with the three ways to provide it,
+plus pointers from the README quickstart and the `vlm_server.yaml` `hf_token`
+field.
+
 ### 2026-06-05 — TokenServer: fail startup loudly on bind error; keep shutdown graceful
 
 `TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls

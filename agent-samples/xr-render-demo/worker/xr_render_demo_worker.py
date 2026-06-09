@@ -177,6 +177,8 @@ async def main(
             # ``RenderDemoBrain._run_turn``); opting out of the
             # pipeline-level echo here avoids a duplicate send.
             text_topic="",
+            # Idle-timeout auto-cancel — disabled unless set in the worker YAML.
+            idle_timeout_secs=cfg.idle_timeout_secs,
         )
 
         loop = asyncio.get_running_loop()

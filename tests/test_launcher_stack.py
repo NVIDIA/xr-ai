@@ -4,6 +4,8 @@
 """Unit tests for xr_ai_launcher._stack data structures and pure helpers."""
 from __future__ import annotations
 
+import os
+
 import pytest
 
 import xr_ai_launcher._stack as _stack
@@ -137,3 +139,53 @@ class TestRunStackShutdownContract:
 
         # Clean exit preserves the persist set so the container outlives us.
         assert stub_stack["no_kill"] == {"vlm"}
+class TestStripConflictingCudnn:
+    """LD_LIBRARY_PATH sanitization so a host cuDNN can't shadow the venv one."""
+
+    def _make_cudnn_dir(self, tmp_path, name):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "libcudnn.so.9").touch()
+        return str(d)
+
+    def test_none_and_empty_pass_through(self):
+        assert _stack._strip_conflicting_cudnn(None) == (None, [])
+        assert _stack._strip_conflicting_cudnn("") == ("", [])
+
+    def test_no_cudnn_dirs_unchanged(self, tmp_path):
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        value = os.pathsep.join([str(plain), "/usr/lib"])
+        assert _stack._strip_conflicting_cudnn(value) == (value, [])
+
+    def test_drops_only_the_cudnn_dir(self, tmp_path):
+        cudnn = self._make_cudnn_dir(tmp_path, "cudnn")
+        keep = tmp_path / "keep"
+        keep.mkdir()
+        value = os.pathsep.join([cudnn, str(keep)])
+        cleaned, dropped = _stack._strip_conflicting_cudnn(value)
+        assert cleaned == str(keep)
+        assert dropped == [cudnn]
+
+    def test_returns_none_when_only_cudnn_dir(self, tmp_path):
+        cudnn = self._make_cudnn_dir(tmp_path, "cudnn")
+        cleaned, dropped = _stack._strip_conflicting_cudnn(cudnn)
+        assert cleaned is None
+        assert dropped == [cudnn]
+
+    def test_preserves_empty_cwd_entry(self, tmp_path):
+        cudnn = self._make_cudnn_dir(tmp_path, "cudnn")
+        # Leading "" => current-directory entry; must survive untouched.
+        value = os.pathsep.join(["", cudnn, "/usr/lib"])
+        cleaned, dropped = _stack._strip_conflicting_cudnn(value)
+        assert cleaned == os.pathsep.join(["", "/usr/lib"])
+        assert dropped == [cudnn]
+
+    def test_matches_versioned_soname(self, tmp_path):
+        # glob libcudnn.so* must catch libcudnn.so.9.13.1 etc.
+        d = tmp_path / "lib"
+        d.mkdir()
+        (d / "libcudnn.so.9.13.1").touch()
+        cleaned, dropped = _stack._strip_conflicting_cudnn(str(d))
+        assert cleaned is None
+        assert dropped == [str(d)]

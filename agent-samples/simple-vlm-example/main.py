@@ -29,7 +29,7 @@ How to run (from agent-samples/simple-vlm-example/):
 import re
 from pathlib import Path
 
-from xr_ai_launcher import Process, ensure_credentials, run_stack
+from xr_ai_launcher import Process, ensure_credentials, run_stack, warn_if_missing
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
@@ -77,7 +77,10 @@ def _build_processes(backend: str) -> list[Process]:
 def run() -> None:
     setup_logging("orchestrator", namespace="simple-vlm-example")
     backend = _model_backend()
-    ensure_credentials("HF_TOKEN")
+    # HF_TOKEN is optional for the default (public) model — it only raises HF
+    # rate limits / download speed and is required only for gated models.
+    # Warn instead of prompting; see docs/credentials.md.
+    warn_if_missing("HF_TOKEN")
     if backend == "nim":
         ensure_credentials("NGC_API_KEY")
     run_stack(_build_processes(backend), _BASE)
