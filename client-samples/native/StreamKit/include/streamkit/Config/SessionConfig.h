@@ -6,7 +6,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <format>
 #include <string>
 
 namespace streamkit {
@@ -27,9 +26,9 @@ struct SessionConfig {
         static std::atomic_uint64_t sequence{0};
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
-        return SessionConfig{std::format(
-            "participant-{}-{}", timestamp,
-            sequence.fetch_add(1, std::memory_order_relaxed))};
+        return SessionConfig{
+            "participant-" + std::to_string(timestamp) + "-" +
+            std::to_string(sequence.fetch_add(1, std::memory_order_relaxed))};
     }
 };
 

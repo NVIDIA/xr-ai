@@ -272,6 +272,10 @@ final class AppModel {
             try await session?.startCamera(config: CameraConfig(position: cameraPosition))
         } catch {
             lastError = error.localizedDescription
+            // The backend's startCamera() stops the previous track before
+            // publishing the new one, so on a failed publish nothing is
+            // streaming — reflect that instead of leaving the UI on "Streaming".
+            isCameraActive = false
         }
     }
 
