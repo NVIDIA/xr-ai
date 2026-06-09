@@ -23,7 +23,20 @@ failure from looking healthy, `start()` now awaits the bind (polls
 raises `RuntimeError` if the server never bound within `_STARTUP_TIMEOUT_S` —
 the token server is the browser-facing auth/signaling entry point, so a dead
 endpoint must abort connector startup rather than silently swallow the error.
-Fixes #192.
+`_serve_safe` also captures non-`SystemExit` serve failures (so the task's
+exception is always retrieved and `start()` chains the real cause), and the
+timeout path cancels the orphan serve task before raising. Fixes #192.
+
+### 2026-06-05 — iOS sample: guard switchCamera against concurrent start/switch
+
+Follow-up to #200. `AppModel.switchCamera(to:)` re-invokes the backend's
+`startCamera()` (which tears down the active track before publishing the new
+one) but, unlike `startCamera()`, took no `isCameraStarting` re-entrancy guard
+— so a switch overlapping a concurrent start could interleave backend calls
+across `await` suspension points on the main actor. Applied the same
+`guard … !isCameraStarting` + `isCameraStarting = true` / `defer` pattern
+`startCamera()` uses, so start and switch are serialized. Sample-only, low
+severity. Fixes #208.
 
 ### 2026-06-05 — Native StreamKit: Android NDK C++20 portability
 
