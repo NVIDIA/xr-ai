@@ -60,3 +60,11 @@ camera_grace_s:       5.0   # keep camera on this long after a query (avoids res
 silero_threshold:  0.5    # Silero speech-probability gate (0..1); lower = more sensitive
 silence_duration:  0.4    # seconds of silence that ends an utterance
 min_speech:        0.1    # minimum seconds of speech before STT is called
+
+# ── Idle timeout ──────────────────────────────────────────────────────────
+# Auto-cancel the voice pipeline after this many seconds with no user/bot
+# speech. DISABLED by default (0 = off) — a quiet session stays connected
+# indefinitely, which is what XR sessions usually want. Set a positive value
+# (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down
+# after that long idle. Threaded to xr_ai_pipecat.make_voice_pipeline.
+idle_timeout_secs: 0

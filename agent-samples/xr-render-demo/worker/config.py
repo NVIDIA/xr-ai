@@ -31,6 +31,10 @@ class WorkerConfig:
     min_speech:        float
     silero_threshold:  float   # Silero speech probability gate (0..1)
 
+    # Idle-timeout auto-cancel (seconds). None = disabled (default): a quiet
+    # session is never cancelled for inactivity. A positive value opts in.
+    idle_timeout_secs: float | None
+
 
 def load_config(path: pathlib.Path | None) -> WorkerConfig:
     data: dict = {}
@@ -68,6 +72,9 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),
         silero_threshold  = float(data.get("silero_threshold",  0.5)),
+        # 0 / unset → disabled (None); a positive value opts into idle cancel.
+        idle_timeout_secs = (float(data["idle_timeout_secs"])
+                             if data.get("idle_timeout_secs") else None),
     )
 
 

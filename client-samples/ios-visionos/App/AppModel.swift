@@ -267,7 +267,13 @@ final class AppModel {
 
     func switchCamera(to position: CameraConfig.Position) async {
         cameraPosition = position
-        guard isCameraActive else { return }
+        // Serialize against a concurrent start/switch via the same flag
+        // startCamera() uses. switchCamera re-invokes the backend's
+        // startCamera() (which tears down the active track before publishing
+        // the new one), so an overlapping start must not interleave (#208).
+        guard isCameraActive, !isCameraStarting else { return }
+        isCameraStarting = true
+        defer { isCameraStarting = false }
         do {
             try await session?.startCamera(config: CameraConfig(position: cameraPosition))
         } catch {

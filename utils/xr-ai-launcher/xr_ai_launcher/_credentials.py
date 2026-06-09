@@ -100,6 +100,33 @@ def load_credentials() -> None:
             os.environ["HF_TOKEN"] = hf
 
 
+def warn_if_missing(*names: str) -> None:
+    """
+    Non-interactively surface missing optional tokens — NEVER prompts.
+
+    Loads saved / `huggingface-cli login` / env tokens, then prints one
+    actionable line per still-missing token (pointing at docs/credentials.md)
+    so a missing token is visible early without blocking startup on an
+    interactive prompt. Use this in orchestrators that pull HuggingFace / NGC
+    artifacts instead of ``ensure_credentials`` when the token is optional
+    (e.g. the default models are public — a token only raises rate limits and
+    download speed, and is required only for gated models).
+    """
+    load_credentials()
+    for name in names:
+        if os.environ.get(name):
+            continue
+        label, url, why = _KNOWN.get(name, (name, "", ""))
+        print(f"\n[credentials] {label} not set — continuing without it.", file=sys.stderr)
+        if why:
+            print(f"  {why}", file=sys.stderr)
+        if url:
+            how = ("`export HF_TOKEN=...` or `huggingface-cli login`"
+                   if name == "HF_TOKEN" else f"`export {name}=...`")
+            print(f"  To enable it: get one at {url}, then {how}.", file=sys.stderr)
+        print("  See docs/credentials.md.", file=sys.stderr)
+
+
 def ensure_credentials(*names: str) -> None:
     """
     Ensure each named token is available in os.environ.

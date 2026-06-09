@@ -1672,6 +1672,56 @@ async def test_make_voice_pipeline_audio_in_to_audio_out(monkeypatch):
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# make_voice_pipeline idle-timeout knob
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def test_make_voice_pipeline_idle_timeout_disabled_by_default():
+    """Default: idle-timeout auto-cancel is OFF (pipecat's on-by-default is
+    overridden), so a quiet session is never dropped for inactivity."""
+    from xr_ai_pipecat import make_voice_pipeline
+    from xr_ai_pipecat.transport import XRMediaHubTransport
+
+    transport = XRMediaHubTransport()
+    try:
+        _, worker = make_voice_pipeline(
+            transport      = transport,
+            stt            = _FakeStt(),
+            tts            = _FakeTts(),
+            brain          = _EchoBrain(),
+            vad_cfg        = VadConfig(),
+            voice_gate_cfg = VoiceGateConfig(),
+        )
+        assert worker._cancel_on_idle_timeout is False
+        assert worker._cancel_runner_on_idle_timeout is False
+        assert worker._idle_timeout_secs is None
+    finally:
+        transport.shutdown()
+
+
+def test_make_voice_pipeline_idle_timeout_opt_in():
+    """A positive idle_timeout_secs opts into pipecat's idle auto-cancel."""
+    from xr_ai_pipecat import make_voice_pipeline
+    from xr_ai_pipecat.transport import XRMediaHubTransport
+
+    transport = XRMediaHubTransport()
+    try:
+        _, worker = make_voice_pipeline(
+            transport      = transport,
+            stt            = _FakeStt(),
+            tts            = _FakeTts(),
+            brain          = _EchoBrain(),
+            vad_cfg        = VadConfig(),
+            voice_gate_cfg = VoiceGateConfig(),
+            idle_timeout_secs = 300.0,
+        )
+        assert worker._cancel_on_idle_timeout is True
+        assert worker._idle_timeout_secs == 300.0
+    finally:
+        transport.shutdown()
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # Regression: brain tags TextFrames with pid (Bug #2)
 # ════════════════════════════════════════════════════════════════════════════
 

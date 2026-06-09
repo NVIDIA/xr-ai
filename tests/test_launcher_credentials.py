@@ -140,3 +140,31 @@ class TestEnsureCredentials:
         saved = json.loads(creds_file.read_text())
         assert saved["HF_TOKEN"] == "new_tok"
         assert hf_file.read_text().strip() == "new_tok"
+
+
+class TestWarnIfMissing:
+    """warn_if_missing surfaces a missing token but NEVER prompts."""
+
+    def test_missing_token_does_not_prompt(self, fake_creds_dir, monkeypatch):
+        # If getpass were called this would raise; warn_if_missing must not call it.
+        with patch("getpass.getpass", side_effect=AssertionError("must not prompt")):
+            _creds.warn_if_missing("HF_TOKEN")
+        assert not os.environ.get("HF_TOKEN")  # still unset, nothing saved
+
+    def test_missing_token_not_saved(self, fake_creds_dir, monkeypatch):
+        _creds.warn_if_missing("HF_TOKEN")
+        creds_file, _ = fake_creds_dir
+        assert not creds_file.exists()
+
+    def test_present_token_is_loaded_from_saved(self, fake_creds_dir, monkeypatch):
+        creds_file, _ = fake_creds_dir
+        creds_file.write_text(json.dumps({"HF_TOKEN": "saved_tok"}))
+        with patch("getpass.getpass", side_effect=AssertionError("must not prompt")):
+            _creds.warn_if_missing("HF_TOKEN")
+        assert os.environ.get("HF_TOKEN") == "saved_tok"
+
+    def test_env_token_short_circuits(self, fake_creds_dir, monkeypatch):
+        monkeypatch.setenv("HF_TOKEN", "env_tok")
+        with patch("getpass.getpass", side_effect=AssertionError("must not prompt")):
+            _creds.warn_if_missing("HF_TOKEN")
+        assert os.environ.get("HF_TOKEN") == "env_tok"

@@ -24,7 +24,7 @@ import argparse
 import os
 from pathlib import Path
 
-from xr_ai_launcher import Process, detect_gpu_config, run_stack
+from xr_ai_launcher import Process, detect_gpu_config, run_stack, warn_if_missing
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
 
@@ -77,6 +77,10 @@ def run() -> None:
         _stop_models()
         return
 
+    # HF_TOKEN is optional for the default (public) models — it only raises HF
+    # rate limits / download speed and is required only for gated models.
+    # Warn instead of prompting; see docs/credentials.md.
+    warn_if_missing("HF_TOKEN")
     run_stack(_build_processes(), _BASE, exit_after_ready=True)
 
 

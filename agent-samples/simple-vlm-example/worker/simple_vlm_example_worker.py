@@ -120,6 +120,11 @@ async def main(
         ),
         voice_gate_cfg = voice_gate_cfg,
         text_topic     = "vlm.response",
+        # Idle-timeout auto-cancel. Disabled by default (0 / unset → None) so a
+        # quiet session stays connected; set a positive seconds value in the
+        # worker YAML to opt in. See xr_ai_pipecat.make_voice_pipeline.
+        idle_timeout_secs = (float(cfg["idle_timeout_secs"])
+                             if cfg.get("idle_timeout_secs") else None),
     )
 
     loop = asyncio.get_running_loop()

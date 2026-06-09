@@ -190,6 +190,20 @@ back to OpenH264 (which is royalty-bearing). See
 
 ## Runtime / connection issues
 
+### Voice session drops / agent goes silent after a few minutes idle
+
+**Cause:** an idle-timeout that auto-cancels the voice pipeline after a stretch
+with no user/bot speech.
+
+**Status:** disabled by default. `make_voice_pipeline` passes
+`cancel_on_idle_timeout=False` (overriding pipecat's on-by-default
+`IDLE_TIMEOUT_SECS`), so a quiet session stays connected indefinitely.
+
+**If you want it:** set `idle_timeout_secs: <seconds>` (e.g. `300` for 5 min)
+in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
+`xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
+threaded to `xr_ai_pipecat.make_voice_pipeline`, where it's documented.
+
 ### Browser client connects but no audio / no video
 
 **Most common cause:** firewall blocking WebRTC media on UDP 7882 (LiveKit).

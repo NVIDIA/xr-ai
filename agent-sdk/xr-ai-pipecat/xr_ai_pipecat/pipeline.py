@@ -36,6 +36,7 @@ def make_voice_pipeline(
     vad_cfg: VadConfig,
     voice_gate_cfg: VoiceGateConfig,
     text_topic: str = "agent.response",
+    idle_timeout_secs: float | None = None,
 ) -> tuple[Pipeline, PipelineWorker]:
     """Assemble the unified voice pipeline.
 
@@ -49,6 +50,16 @@ def make_voice_pipeline(
     :class:`StreamingTtsProcessor`. Set to ``""`` to opt out — samples
     whose brain pushes its own response data message (e.g.
     xr-render-demo) want this off to avoid duplicate sends.
+
+    ``idle_timeout_secs`` controls pipecat's idle-timeout auto-cancel.
+    **Disabled by default** (``None``): the pipeline is *never* cancelled for
+    inactivity, so a quiet session stays connected indefinitely — important
+    for XR sessions where the user may simply not be speaking. Set a positive
+    number of seconds to opt in: the worker then cancels the pipeline (and its
+    runner) after that long with no user/bot speech. We pass this explicitly
+    rather than inheriting pipecat's default, which is ``cancel_on_idle_timeout
+    =True`` at ``IDLE_TIMEOUT_SECS`` — i.e. on by default upstream, which would
+    silently drop idle sessions.
     """
     voice_gate_proc = VoiceGateProcessor(cfg=voice_gate_cfg, tts=tts)
     streaming_tts   = StreamingTtsProcessor(
@@ -67,5 +78,20 @@ def make_voice_pipeline(
         streaming_tts,
         transport.output(),
     ])
-    worker = PipelineWorker(pipeline)
+    if idle_timeout_secs is None:
+        # Disabled: never cancel the pipeline for inactivity. Override
+        # pipecat's on-by-default idle cancel (and the runner cancel) so a
+        # quiet XR session is not silently dropped.
+        worker = PipelineWorker(
+            pipeline,
+            idle_timeout_secs=None,
+            cancel_on_idle_timeout=False,
+            cancel_runner_on_idle_timeout=False,
+        )
+    else:
+        worker = PipelineWorker(
+            pipeline,
+            idle_timeout_secs=idle_timeout_secs,
+            cancel_on_idle_timeout=True,
+        )
     return pipeline, worker

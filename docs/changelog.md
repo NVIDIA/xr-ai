@@ -19,6 +19,79 @@ The Container Toolkit smoke-test in the README used
 `13.0.3-base-ubuntu24.04` (newest 13.0.x, matching the repo's CUDA 13.0
 target and the Ubuntu 22.04/24.04 support row above it).
 
+### 2026-06-09 — Voice pipeline: idle-timeout auto-cancel off by default, opt-in via YAML
+
+pipecat's `PipelineWorker` defaults to `cancel_on_idle_timeout=True` at
+`IDLE_TIMEOUT_SECS`, so an idle voice pipeline is silently cancelled after a
+few minutes of no user/bot speech. `make_voice_pipeline` constructed
+`PipelineWorker(pipeline)` with no override, so we inherited that — a quiet XR
+session (user simply not talking) would drop on its own, which is the wrong
+default for this product.
+
+`make_voice_pipeline` now takes `idle_timeout_secs: float | None = None` and is
+**disabled by default**: when `None` it passes `cancel_on_idle_timeout=False`
+and `cancel_runner_on_idle_timeout=False` so the pipeline is never cancelled
+for inactivity. The mechanism is preserved, not deleted — a positive value
+opts back in (worker then cancels after that many idle seconds). Surfaced in
+each sample's worker YAML as `idle_timeout_secs: 0` (0/unset → disabled) with a
+comment, threaded through `simple_vlm_example_worker` and the xr-render-demo
+`WorkerConfig`. Documented in `make_voice_pipeline`'s docstring and
+`docs/troubleshooting.md`. Tests cover the default-off and opt-in paths at both
+the factory and the xr-render config loader.
+
+### 2026-06-09 — Credentials: stop prompting for HF_TOKEN; document it instead
+
+`simple-vlm-example` was the only sample that called
+`ensure_credentials("HF_TOKEN")`, which blocks first-run startup on an
+interactive `getpass` prompt. The model servers (the heavier, more
+download-intensive path) never prompted — they rely on `run_stack`'s automatic
+`load_credentials()` (env / `huggingface-cli login` / saved creds). That
+asymmetry was confusing, and the prompt isn't warranted: the samples' default
+models are **public** (`nvidia/Cosmos-Reason1-7B` is not gated), so `HF_TOKEN`
+only raises HuggingFace rate limits / download speed and is strictly required
+only for gated models.
+
+Replaced the interactive prompt with a non-blocking path: new
+`warn_if_missing(*names)` launcher helper loads any saved/env/CLI token, and if
+the token is still absent prints one actionable line (pointing at
+`docs/credentials.md`) and continues — it never prompts. `simple-vlm-example`
+and `model-servers` now call `warn_if_missing("HF_TOKEN")`. `ensure_credentials`
+is unchanged and still used for `NGC_API_KEY`, where the prompt is intentional —
+the NIM backend is opt-in and cannot function without the key.
+`docs/credentials.md` rewritten to document HF_TOKEN as auto-picked-up +
+optional (required-vs-optional spelled out) with the three ways to provide it,
+plus pointers from the README quickstart and the `vlm_server.yaml` `hf_token`
+field.
+
+### 2026-06-05 — TokenServer: fail startup loudly on bind error; keep shutdown graceful
+
+`TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls
+`sys.exit(1)` on a bind failure (e.g. port already in use), so the task ends
+with `SystemExit` (a `BaseException`); `stop()`'s `await self._task` then
+re-raised it into `LiveKitConnector.stop()`, aborting the remaining
+graceful-shutdown steps. Wrapped the task in a `_serve_safe()` coroutine that
+catches `SystemExit` and logs a clear "port in use?" error — mirroring the
+sibling `WebServer._serve_safe`, which already guards this. To stop a bind
+failure from looking healthy, `start()` now awaits the bind (polls
+`uvicorn.Server.started` until the serve task either binds or finishes) and
+raises `RuntimeError` if the server never bound within `_STARTUP_TIMEOUT_S` —
+the token server is the browser-facing auth/signaling entry point, so a dead
+endpoint must abort connector startup rather than silently swallow the error.
+`_serve_safe` also captures non-`SystemExit` serve failures (so the task's
+exception is always retrieved and `start()` chains the real cause), and the
+timeout path cancels the orphan serve task before raising. Fixes #192.
+
+### 2026-06-05 — iOS sample: guard switchCamera against concurrent start/switch
+
+Follow-up to #200. `AppModel.switchCamera(to:)` re-invokes the backend's
+`startCamera()` (which tears down the active track before publishing the new
+one) but, unlike `startCamera()`, took no `isCameraStarting` re-entrancy guard
+— so a switch overlapping a concurrent start could interleave backend calls
+across `await` suspension points on the main actor. Applied the same
+`guard … !isCameraStarting` + `isCameraStarting = true` / `defer` pattern
+`startCamera()` uses, so start and switch are serialized. Sample-only, low
+severity. Fixes #208.
+
 ### 2026-06-05 — Native StreamKit: Android NDK C++20 portability
 
 Native StreamKit no longer depends on C++20 `<format>`. Some Android NDK
