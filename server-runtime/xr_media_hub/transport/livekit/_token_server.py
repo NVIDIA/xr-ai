@@ -120,6 +120,8 @@ class TokenServer:
                 try:
                     await self._task
                 except asyncio.CancelledError:
+                    # Expected: we just cancelled the serve task to avoid
+                    # leaving it orphaned during startup-timeout handling.
                     pass
             self._task = None
             self._server = None
