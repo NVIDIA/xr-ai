@@ -7,12 +7,11 @@ from __future__ import annotations
 import pytest
 
 import xr_ai_launcher._stack as _stack
-from xr_ai_launcher._stack import Parallel, Process, run_stack
 
 
 class TestProcessDataclass:
     def test_defaults(self):
-        p = Process("hub", "../../server-runtime", "xr_media_hub")
+        p = _stack.Process("hub", "../../server-runtime", "xr_media_hub")
         assert p.name == "hub"
         assert p.project == "../../server-runtime"
         assert p.command == "xr_media_hub"
@@ -22,7 +21,7 @@ class TestProcessDataclass:
         assert p.port is None
 
     def test_all_fields(self):
-        p = Process(
+        p = _stack.Process(
             "vlm", "../../ai-services/vlm-server", "vlm_server",
             config="yaml/vlm.yaml",
             gpu="0",
@@ -35,35 +34,35 @@ class TestProcessDataclass:
         assert p.port == 8100
 
     def test_frozen_immutability(self):
-        p = Process("hub", "../../server-runtime", "xr_media_hub")
+        p = _stack.Process("hub", "../../server-runtime", "xr_media_hub")
         with pytest.raises((AttributeError, TypeError)):
             p.name = "other"  # type: ignore[misc]
 
     def test_reuse_launch_mode(self):
-        p = Process("stt", "../../ai-services/stt-server", "stt_server",
+        p = _stack.Process("stt", "../../ai-services/stt-server", "stt_server",
                     launch_mode="reuse")
         assert p.launch_mode == "reuse"
 
 
 class TestParallelDataclass:
     def test_stores_processes_as_tuple(self):
-        p1 = Process("stt", "../../ai-services/stt-server", "stt_server")
-        p2 = Process("tts", "../../ai-services/tts/piper", "piper_tts_server")
-        group = Parallel([p1, p2])
+        p1 = _stack.Process("stt", "../../ai-services/stt-server", "stt_server")
+        p2 = _stack.Process("tts", "../../ai-services/tts/piper", "piper_tts_server")
+        group = _stack.Parallel([p1, p2])
         assert isinstance(group.processes, tuple)
         assert group.processes == (p1, p2)
 
     def test_accepts_single_process(self):
-        p = Process("stt", "../../ai-services/stt-server", "stt_server")
-        group = Parallel([p])
+        p = _stack.Process("stt", "../../ai-services/stt-server", "stt_server")
+        group = _stack.Parallel([p])
         assert len(group.processes) == 1
 
     def test_empty_parallel_ok(self):
-        group = Parallel([])
+        group = _stack.Parallel([])
         assert group.processes == ()
 
     def test_frozen_immutability(self):
-        group = Parallel([])
+        group = _stack.Parallel([])
         with pytest.raises((AttributeError, TypeError)):
             group.processes = ()  # type: ignore[misc]
 
@@ -113,11 +112,11 @@ class TestRunStackShutdownContract:
 
         monkeypatch.setattr(_stack, "_wait_ready", _boom)
 
-        processes = [Process("vlm", "../../vlm", "vlm_server",
+        processes = [_stack.Process("vlm", "../../vlm", "vlm_server",
                              launch_mode="persist", port=8100)]
 
         with pytest.raises(SystemExit) as excinfo:
-            run_stack(processes, tmp_path)
+            _stack.run_stack(processes, tmp_path)
 
         assert excinfo.value.code == 130
         # Despite a persist process, abort must tear down EVERYTHING.
@@ -130,11 +129,11 @@ class TestRunStackShutdownContract:
         # Ready file appears immediately; no interruption.
         monkeypatch.setattr(_stack, "_wait_ready", lambda name, rf, proc: None)
 
-        processes = [Process("vlm", "../../vlm", "vlm_server",
+        processes = [_stack.Process("vlm", "../../vlm", "vlm_server",
                              launch_mode="persist", port=8100)]
 
         # exit_after_ready returns normally (no SystemExit) after readiness.
-        run_stack(processes, tmp_path, exit_after_ready=True)
+        _stack.run_stack(processes, tmp_path, exit_after_ready=True)
 
         # Clean exit preserves the persist set so the container outlives us.
         assert stub_stack["no_kill"] == {"vlm"}
