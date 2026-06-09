@@ -9,6 +9,35 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-11 — iOS/visionOS: pre-warm the LiveKit recording engine on mic start
+
+`LiveKitBackend.startAudio` now calls
+`AudioManager.shared.setRecordingAlwaysPreparedMode(true)` (after resetting
+`setEngineAvailability(.default)`) *before* `setMicrophone(enabled: true)`.
+
+The symptom was an intermittent mic-publish timeout
+(`io.livekit.swift-sdk Code=101 "Timed out"`) on Apple Vision Pro: the publish
+arms an `AsyncCompleter` that waits ~5s for the first captured audio frame, but
+the `AVAudioEngine` recording path sometimes never started, so no frame ever
+arrived and the publish failed. Pre-warming the recording path makes a frame
+available immediately, so the completer resolves and the publish succeeds.
+
+Because prepared mode keeps the engine input hot for fast re-enable, the OS mic
+indicator (orange dot) stayed lit after the user stopped audio. So `stopAudio`
+now drops prepared mode and pins
+`setEngineAvailability(isInputAvailable: false, isOutputAvailable: true)` —
+input goes down so the dot clears, output stays up for agent playback. (The
+disconnect path already clears the dot on its own — `room.disconnect()` releases
+the engine — verified on device by disabling a defensive `tearDown` reset and
+confirming the dot still cleared, so no extra teardown handling was needed.)
+A failed start also rolls the recording engine back (drop prepared mode, pin
+input down) so the mic indicator doesn't linger after a failed start, and
+`stopAudio` runs that same rollback even if the unpublish throws.
+App-side, `AppModel.startAudio` gained an
+`isAudioStarting` re-entrancy guard (surfaced as a "Starting…" state and a
+locked mic-mode picker in `ContentView`) and reports an honest failure message
+instead of silently leaving the UI in a half-started state.
+
 ### 2026-06-09 — render-mcp: scene resync survives a LOVR respawn (blocking send, not NOBLOCK)
 
 After a LOVR (re)start, `render-mcp` re-pushed every stored primitive via
@@ -294,7 +323,6 @@ params set, zero audio frames — matching the magpie backend (whose `sf.write`
 already emits a valid header for empty audio). The non-empty path is
 unchanged. Regression covered by the piper smoke test (`test_piper_tts_smoke`
 now also POSTs whitespace input and asserts a 200 + WAV header). Fixes #194.
-
 ### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
 
 Follow-up to #184. That PR added a dedicated `_EXIT_VOICE_UNAVAILABLE = 3`

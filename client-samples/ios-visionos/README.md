@@ -263,6 +263,27 @@ now forwards `Authorization` (and every other end-to-end header) on both
 the `/rtc/validate` HTTP shim and the `/rtc[/<version>]` WebSocket. No
 client-side action needed.
 
+### Microphone fails to start with a "Timed out" error
+
+If tapping **Start** under Microphone occasionally fails — the SDK throws
+`io.livekit.swift-sdk Code=101 "Timed out"` after ~5s — the LiveKit recording
+engine didn't start, so the publish's frame watcher never saw a buffer. The
+CoreAudio `-50` and `FigAudioSession err=-19224` lines that show up around the
+same time are benign; they appear on successful starts too.
+
+**Fix:** `LiveKitBackend.startAudio` pre-warms the recording engine
+(`AudioManager.shared.setRecordingAlwaysPreparedMode(true)`) before publishing,
+so a frame is available immediately and the publish completes. No client action
+needed — it's built in.
+
+### Orange mic indicator stays lit after stopping audio
+
+Prepared mode keeps the engine input hot for fast re-enable, which the OS reads
+as the mic still being in use. `LiveKitBackend.stopAudio` now drops prepared
+mode and disables engine *input* while leaving *output* up (so the agent can
+still be heard); the dot clears while you stay connected, and is fully released
+on disconnect.
+
 ---
 
 ## Quick-start usage

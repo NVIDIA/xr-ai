@@ -175,7 +175,7 @@ struct ContentView: View {
             Text("Software (AEC on)").tag(AudioConfig.MicrophoneMode.softwareProcessing)
             Text("Raw (no DSP)").tag(AudioConfig.MicrophoneMode.raw)
         }
-        .disabled(!isConnected || model.isAudioActive)
+        .disabled(!isConnected || model.isAudioActive || model.isAudioStarting)
 
         LabeledContent("Microphone") {
             HStack {
@@ -191,7 +191,7 @@ struct ContentView: View {
                         Task { await model.startAudio() }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(!isConnected)
+                    .disabled(!isConnected || model.isAudioStarting)
                 }
             }
         }
@@ -199,6 +199,7 @@ struct ContentView: View {
 
     private var micStatusLabel: String {
         if model.isAudioActive { return "Live" }
+        if model.isAudioStarting { return "Starting…" }
         return model.connectionState == .connected ? "Idle" : "Not connected"
     }
 

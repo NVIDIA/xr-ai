@@ -142,16 +142,38 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
             throw StreamError.notConnected
         }
 
-        let captureOptions = AudioCaptureOptions(from: config)
-        try await room.localParticipant.setMicrophone(
-            enabled: true,
-            captureOptions: captureOptions
-        )
+        // Pre-warm the recording engine before publishing, or the publish's
+        // frame watcher never sees a buffer and times out. Reset availability
+        // first — stopAudio pins input down, and prepared mode can't start a
+        // disabled engine.
+        try? AudioManager.shared.setEngineAvailability(.default)
+        try? await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
+
+        do {
+            let captureOptions = AudioCaptureOptions(from: config)
+            try await room.localParticipant.setMicrophone(
+                enabled: true,
+                captureOptions: captureOptions
+            )
+        } catch {
+            // A failed publish must not leave the engine hot, or the mic
+            // indicator stays lit with no way to clear it but disconnecting.
+            await releaseRecordingEngine()
+            throw error
+        }
     }
 
     public func stopAudio() async throws {
         guard let room else { return }
-        try await room.localParticipant.setMicrophone(enabled: false)
+        let micError: Error?
+        do {
+            try await room.localParticipant.setMicrophone(enabled: false)
+            micError = nil
+        } catch {
+            micError = error
+        }
+        await releaseRecordingEngine()
+        if let micError { throw micError }
     }
 
     // MARK: - StreamingBackend: camera
@@ -283,6 +305,16 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     }
 
     // MARK: - Private helpers
+
+    /// Roll the recording engine back to its idle state: drop prepared mode and
+    /// take the mic input side down so the OS mic indicator clears, leaving output
+    /// up for agent playback.
+    private func releaseRecordingEngine() async {
+        try? await AudioManager.shared.setRecordingAlwaysPreparedMode(false)
+        try? AudioManager.shared.setEngineAvailability(
+            AudioEngineAvailability(isInputAvailable: false, isOutputAvailable: true)
+        )
+    }
 
     private func tearDown() async {
         #if targetEnvironment(simulator)
