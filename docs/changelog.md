@@ -9,6 +9,83 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — Native StreamKit: Android NDK C++20 portability
+
+Native StreamKit no longer depends on C++20 `<format>`. Some Android NDK
+libc++ versions used by embedded clients do not ship that header even though
+the project otherwise builds as C++20. The affected identity and error-message
+strings now use `std::to_string` plus string concatenation, preserving behavior
+while keeping the C++ backend portable to those toolchains. The backend also
+uses fully qualified enum labels instead of `using enum`, which older NDK r23
+compilers reject.
+
+### 2026-06-05 — Native StreamKit: LiveKit room access for receiver-side audio
+
+`LiveKitBackend` now exposes `GetRoom()` for advanced native integrations that
+need receiver-side LiveKit APIs, such as rendering remote participant audio
+locally or feeding an acoustic echo canceller with the agent's playback audio.
+This remains intentionally transport-specific: the generic `StreamingBackend`
+surface is unchanged, and callers must opt in by depending on `LiveKitBackend`.
+The accessor returns `nullptr` before connect, after disconnect, and in stub
+mode.
+
+### 2026-06-05 — Native StreamKit: vector-backed LiveKit AudioFrame construction
+
+`LiveKitBackend::InjectAudioFrame` now constructs `livekit::AudioFrame` through
+the vector-data constructor. Some LiveKit C++ SDK builds expose only
+`AudioFrame(std::vector<int16_t>, sample_rate, channels, samples_per_channel)`
+and not the pointer-data constructor. StreamKit still accepts
+`std::span<const int16_t>` at the public `AudioSink` boundary; the conversion is
+contained inside the LiveKit backend so callers and custom backends are
+unaffected.
+
+### 2026-06-05 — Native StreamKit: publish options for externally captured video
+
+The C++ `LiveKitBackend` publishes camera tracks lazily on the first
+`FrameSink::InjectVideoFrame` call because externally captured frames provide
+the stream dimensions. That made callers unable to set LiveKit publish-side
+encoding options before track creation. `CameraConfig` now includes an optional
+`CameraEncodingConfig` with max bitrate, max framerate, and simulcast controls.
+The built-in C++ backend stores the config at `StartCamera()` time and applies
+it when the first frame creates the `LocalVideoTrack`.
+
+Backends that open and manage their own platform camera may ignore
+`CameraConfig::encoding`; it is primarily for C++ hosts that own capture outside
+StreamKit and use `FrameSink` for injection.
+
+### 2026-06-05 — Native StreamKit: AudioSink timestamps stay media timestamps
+
+`AudioSink::InjectAudioFrame` carries a capture timestamp in microseconds so
+hosts can pass audio and video frames through the same monotonic-clock model.
+The LiveKit C++ SDK's `AudioSource::captureFrame` API uses its optional second
+argument for a bounded-wait timeout in milliseconds, not for media time. Passing
+StreamKit's `timestamp_us` through that parameter can turn an increasing media
+timestamp into a long capture wait and add audio latency. The C++ LiveKit backend
+now preserves the StreamKit timestamp as API metadata and calls
+`AudioSource::captureFrame(frame)` so the SDK uses its realtime default timeout.
+
+### 2026-06-05 — Magpie TTS: honor the launcher's --ready-file contract
+
+The launcher injects `--ready-file <path>` into every spawned process and
+blocks in `_wait_ready` (no timeout) until that file appears or the process
+exits. Piper and STT touch it after their model loads; Magpie didn't — `run()`
+only registered `--config`, so `--ready-file` landed in the ignored unknowns
+and `_run` never created the file. Magpie then stays alive serving, so
+`proc.poll()` stays `None` too — the launcher deadlocked at startup on the
+Magpie TTS service. Mirrored piper/stt: register `--ready-file`, thread it
+into `_run`, and `ready_file.touch()` after `_ensure_loaded()` completes
+(before `server.serve()`). Fixes #191.
+
+### 2026-06-05 — iOS: reset isCameraActive when a camera switch fails
+
+`AppModel.switchCamera(to:)` only ran on an already-active camera and, on a
+failed publish, set `lastError` but left `isCameraActive = true`. Because the
+LiveKit backend's `startCamera()` stops the previous track before publishing
+the new one, a publish failure mid-switch left nothing streaming while the UI
+still showed "Streaming" with a green status and a working Stop button. The
+`catch` now sets `isCameraActive = false`, matching the consistency that
+`startCamera()`/`stopCamera()` already maintain. Fixes #195.
+
 ### 2026-06-05 — TokenServer: swallow uvicorn SystemExit so shutdown stays graceful
 
 `TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls
@@ -18,6 +95,45 @@ re-raised it into `LiveKitConnector.stop()`, aborting the remaining
 graceful-shutdown steps. Wrapped the task in a `_serve_safe()` coroutine that
 catches `SystemExit` and logs a clear "port in use?" error — mirroring the
 sibling `WebServer._serve_safe`, which already guards this. Fixes #192.
+
+### 2026-06-05 — STT: serialize NeMo transcribe() on the shared model
+
+`_AsrBackend._lock` guarded only model *loading*; the hot path `transcribe()`
+ran `self._model.transcribe(...)` lock-free. The endpoint dispatches each
+`POST /v1/audio/transcriptions` to a thread pool, so concurrent requests
+invoked inference on the same NeMo `ASRModel` simultaneously — which is not
+re-entrant/thread-safe (shared model buffers, shared CUDA device state),
+risking garbled transcriptions or a crash under load. Inference is now wrapped
+in the existing lock, mirroring the magpie TTS backend's stated serialization.
+`_ensure_loaded()` still runs before the lock (it takes the same non-reentrant
+lock for the one-time load). Fixes #199.
+
+### 2026-06-05 — Hub: release held slots before closing a re-registered ring
+
+On `CONNECTOR_REGISTER` for a known `connector_id`, `_handle_registration`
+closed and replaced the ring buffer while `_latest_slots` could still hold
+`SlotView`s backed by that ring's mmap. Because a live `SlotView` keeps a
+sliced memoryview exported, `ShmRingBuffer.close()`'s `self._buf.release()`
+raises `BufferError` — leaving the old ring half-closed but still referenced,
+so the next `FRAME_SIGNAL` writes through a released/closing buffer
+(use-after-close). `_handle_registration` now releases the memoryview and slot
+for every `_latest_slots` entry backed by the old ring before closing it,
+matching the teardown order already in `close()`. Triggered by a connector
+crash/reconnect that re-sends its registration while frames are held.
+Regression test: `test_connector_reregistration_releases_held_slots`. Fixes #197.
+
+### 2026-06-05 — Piper TTS: valid empty WAV on empty/whitespace input
+
+`_PiperBackend.synthesize` returned an HTTP 500 for empty/whitespace input.
+Piper's `synthesize_wav` sets the WAV format params only on the first
+synthesized chunk; empty input produces no chunks, so the params were never
+set and `wave.close()` raised `wave.Error: # channels not specified`, which
+propagated out of the `/v1/audio/speech` handler unhandled. `synthesize` now
+short-circuits empty/whitespace input to a valid, empty (silent) WAV — header
+params set, zero audio frames — matching the magpie backend (whose `sf.write`
+already emits a valid header for empty audio). The non-empty path is
+unchanged. Regression covered by the piper smoke test (`test_piper_tts_smoke`
+now also POSTs whitespace input and asserts a 200 + WAV header). Fixes #194.
 
 ### 2026-06-05 — piper voice fetch: catch LocalEntryNotFoundError before EntryNotFoundError
 

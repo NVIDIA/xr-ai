@@ -117,6 +117,13 @@ public:
                           int samples_per_channel,
                           int64_t timestamp_us) override;
 
+    // ── LiveKit-specific integrations ───────────────────────────────────────
+
+    /// Returns the underlying LiveKit room for advanced receiver-side
+    /// integrations such as remote-audio rendering or AEC reference capture.
+    /// Returns nullptr before Connect(), after Disconnect(), and in stub mode.
+    std::shared_ptr<livekit::Room> GetRoom() const { return room_; }
+
 protected:
     /// Fetches a LiveKit JWT from `config_.token_url`.
     ///
@@ -158,6 +165,7 @@ private:
 
     LiveKitConfig config_;
     SessionConfig session_config_;
+    CameraConfig camera_config_;
 
     // shared_ptr (not unique_ptr) because the type-erased deleter is
     // captured at construction. That keeps the class destructor valid when

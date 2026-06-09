@@ -329,7 +329,19 @@ class HubEndpoint:
     def _handle_registration(self, reg: ConnectorRegistration) -> None:
         if reg.connector_id in self._ring_registry:
             logger.warning("Connector {} re-registered — replacing ring buffer", reg.connector_id)
-            self._ring_registry[reg.connector_id].close()
+            old_ring = self._ring_registry[reg.connector_id]
+            # Drop any frames still held in the old ring BEFORE closing it.
+            # A live SlotView keeps a sliced memoryview exported into the ring's
+            # mmap; closing with that outstanding makes ShmRingBuffer.close()'s
+            # self._buf.release() raise BufferError, and leaves _latest_slots
+            # referencing a half-closed ring whose slot the next FRAME_SIGNAL
+            # would write through (#197). Release the memoryview before the slot
+            # and close, matching the teardown order in close().
+            for key in [k for k, (ring, _) in self._latest_slots.items() if ring is old_ring]:
+                _, view = self._latest_slots.pop(key)
+                view.data.release()
+                old_ring.release_slot(view.signal.slot)
+            old_ring.close()
         try:
             self._ring_registry[reg.connector_id] = ShmRingBuffer(
                 name=reg.shm_name, create=False,

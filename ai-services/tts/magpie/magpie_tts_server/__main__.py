@@ -157,7 +157,7 @@ def _build_app(cfg: dict, model_cache: Path):
     return app, backend
 
 
-async def _run(cfg: dict, yaml_dir: Path) -> None:
+async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> None:
     import uvicorn
 
     if not cfg.get("model"):
@@ -182,6 +182,11 @@ async def _run(cfg: dict, yaml_dir: Path) -> None:
     server = uvicorn.Server(config)
 
     logger.info("Ready  →  http://localhost:{}/v1", port)
+    # Signal readiness to the launcher AFTER the model is loaded (above) so
+    # _wait_ready unblocks. Without this the launcher blocks forever — the
+    # process stays alive serving, so it never appears via proc.poll() either.
+    if ready_file:
+        ready_file.touch()
     await server.serve()
     logger.info("Stopped.")
 
@@ -193,7 +198,8 @@ def run() -> None:
     setup_logging("tts-magpie")
 
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config", type=Path, default=None)
+    p.add_argument("--config",     type=Path, default=None)
+    p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -203,7 +209,7 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    asyncio.run(_run(cfg, yaml_dir))
+    asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
 
 
 if __name__ == "__main__":
