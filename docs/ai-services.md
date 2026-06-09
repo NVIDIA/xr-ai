@@ -277,6 +277,49 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 (escalating to `docker kill` after 20 s); for pip mode it falls back to the
 port → PID → SIGTERM/SIGKILL path. Same UX for both.
 
+## Choosing the NeMo runtime (pip vs Docker)
+
+The two **NeMo** servers (`stt_server`, `magpie_tts_server`) load torch+NeMo in
+the wrapper's venv and inherit the host's cuDNN/CUDA via `LD_LIBRARY_PATH`. On
+hosts where that system cuDNN differs from torch's bundled one, the in-venv path
+aborts at torch import (`cuDNN version incompatibility: compiled against
+(9,20,0) but found runtime (9,13,1)`). They accept a `backend:` key to escape
+this by running inside an NGC NeMo container:
+
+| `backend` | Runtime | Default | Use when |
+|---|---|---|---|
+| `pip` | NeMo loaded in the wrapper's venv | yes | Standard development; the host cuDNN/CUDA matches torch's. |
+| `docker` | `docker run nvcr.io/nvidia/nemo:<tag> …` hosting the same FastAPI server | no | The in-venv torch hits a cuDNN/CUDA runtime error; pinning an NGC NeMo release. |
+
+```yaml
+backend: docker
+# nemo_image: nvcr.io/nvidia/nemo:25.04   # confirm a tag available to your NGC account
+```
+
+This is a **bespoke** NeMo path (in `utils/xr-ai-nemo-runtime/`), separate from
+the vLLM one — vLLM's container ships the `vllm serve` binary, whereas the NeMo
+image ships torch+nemo but not our server. So the runner bind-mounts the repo
+read-only, points `PYTHONPATH` at the mounted server package + `xr-ai-logging`,
+pip-installs only the light deps the image lacks (fastapi, uvicorn, hf_transfer,
+loguru, pyyaml, plus `python-multipart` for stt / `soundfile`+`numpy` for
+magpie), and runs `python -m <server> --_serve`. It never installs the server's
+own pyproject (that would drag nemo_toolkit/torch and conflict with the image).
+
+Prerequisites (Docker Engine, NVIDIA Container Toolkit, NGC pull access) are
+identical to the vLLM docker mode above. `--network host --ipc host --gpus …`,
+the same-path `model_cache` bind-mount, `HF_TOKEN` pass-through, and a Ctrl-C
+self-stop all mirror the vLLM runner. `piper` TTS is **not** affected — it is
+ONNX/CPU and never touches torch/cuDNN.
+
+Unlike vLLM, the NeMo container **dies with the stack** — it is not persisted
+across restarts (NeMo reloads in ~20s from cached weights, so persistence isn't
+worth orphaning a container the vLLM-keyed `--stop` reaper can't find). The
+wrapper stops and removes its own container on the shutdown SIGTERM.
+
+> On-device gate: the real NeMo image pull + cuDNN-clean model load can only be
+> verified on a GPU host with docker + NGC access. The hermetic test suite
+> covers argv construction and the pip/docker toggle only.
+
 ## Per-server notes
 
 - **vlm-server** is a thin launcher around `vllm serve` for Cosmos-Reason1-7B

@@ -259,6 +259,33 @@ def _idle_until_stopped(health_url: str) -> None:
             return
 
 
+def _run_docker(cfg: dict, yaml_dir: Path, ns) -> None:
+    """Delegate to the NeMo docker runner (opt-in `backend: docker`)."""
+    from xr_ai_nemo_runtime import DEFAULT_IMAGE, run_nemo_docker
+
+    if not ns.config:
+        sys.exit("[stt_server] backend: docker requires --config (a YAML on a "
+                 "host-visible path the container can mount)")
+
+    model_cache = _resolve_model_cache(cfg, yaml_dir)
+    run_nemo_docker(
+        image=cfg.get("nemo_image", DEFAULT_IMAGE),
+        container_name="xr-ai-nemo-stt-server",
+        log_prefix="stt_server",
+        server_module="stt_server",
+        server_pkg_dir=Path(__file__).resolve().parent.parent,
+        config_path=ns.config.resolve(),
+        model_cache=model_cache,
+        nemo_cache_dir=model_cache / "nemo",
+        host=cfg.get("host", "0.0.0.0"),
+        port=int(cfg.get("port", _DEFAULT_PORT)),
+        hf_token=os.environ.get("HF_TOKEN"),
+        cuda_visible_devices=cfg.get("cuda_visible_devices"),
+        extra_pip=["python-multipart"],
+        ready_file=ns.ready_file,
+    )
+
+
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
@@ -281,7 +308,16 @@ def run() -> None:
 
     if ns._serve:
         # Persistent server subprocess — loads model and serves until killed.
+        # Also the in-container entry for the docker backend; it bypasses the
+        # backend dispatch below so the container never re-spawns itself.
         asyncio.run(_run(cfg, yaml_dir, ready_file=None))
+        return
+
+    # Opt-in docker backend: run inside an NGC NeMo image so torch+nemo+cuDNN
+    # come from the container, escaping host cuDNN/LD_LIBRARY_PATH mismatches.
+    # Default `pip` (or unset) keeps the unchanged in-venv path below.
+    if cfg.get("backend", "pip") == "docker":
+        _run_docker(cfg, yaml_dir, ns)
         return
 
     # ── wrapper mode ──────────────────────────────────────────────────────────

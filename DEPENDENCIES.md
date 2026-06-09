@@ -105,6 +105,19 @@ xr-ai-vllm  (utils/xr-ai-vllm/)
     container.  Imported by the four vllm wrappers and by the orchestrator
     `--stop` flow.
 
+xr-ai-nemo-runtime  (utils/xr-ai-nemo-runtime/)
+    └── (stdlib only — zero runtime deps)
+    Opt-in NGC NeMo container backend for the two in-process NeMo servers
+    (stt-server, magpie TTS).  When a server's YAML sets `backend: docker` its
+    `run()` delegates here, which `docker run`s an NGC NeMo image, bind-mounts
+    the repo, pip-installs only the light deps the NeMo image lacks
+    (fastapi/uvicorn/hf_transfer/loguru/pyyaml + per-server extras), and runs
+    `python -m <server> --_serve` off PYTHONPATH — never the server's own
+    pyproject, so nemo_toolkit/torch are NOT reinstalled.  Stays stdlib-only so
+    docker mode adds nothing to the wrapper's venv.  Bespoke and separate from
+    `xr-ai-vllm` (different in-container command + packaging).  Imported by
+    stt-server and magpie-tts-server.
+
 xr-ai-vad  (utils/xr-ai-vad/)
     └── numpy >=1.24
     └── silero-vad >=5.1  (pulls torch + onnxruntime transitively)
@@ -252,7 +265,12 @@ stt-server  (ai-services/stt-server/)
     └── uvicorn[standard] >=0.29
     └── python-multipart >=0.0.9
     └── pyyaml >=6.0
+    └── xr-ai-logging       [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-nemo-runtime  [editable: ../../utils/xr-ai-nemo-runtime]
     Model: nvidia/parakeet-tdt-0.6b-v3 (NeMo ASR, in-process)
+    backend: pip|docker — pip path loads NeMo in this venv; docker path runs
+    inside an NGC NeMo image via xr-ai-nemo-runtime (escapes host cuDNN/CUDA
+    mismatches).
 
 magpie-tts-server  (ai-services/tts/magpie/)
     └── nemo_toolkit[tts] >=2.5
@@ -263,7 +281,12 @@ magpie-tts-server  (ai-services/tts/magpie/)
     └── uvicorn[standard] >=0.29
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
+    └── xr-ai-logging       [editable: ../../../utils/xr-ai-logging]
+    └── xr-ai-nemo-runtime  [editable: ../../../utils/xr-ai-nemo-runtime]
     Model: nvidia/magpie_tts_multilingual_357m (NeMo TTS, in-process)
+    backend: pip|docker — pip path loads NeMo in this venv; docker path runs
+    inside an NGC NeMo image via xr-ai-nemo-runtime (escapes host cuDNN/CUDA
+    mismatches).
 
 llama-nemotron-llm-server  (ai-services/llm/llama_nemotron/)
     └── vllm >=0.12.0
@@ -453,6 +476,8 @@ updated in the same commit**.
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
 | `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
+| `utils/xr-ai-nemo-runtime/` API (`run_nemo_docker`, `DEFAULT_IMAGE`) | `ai-services/stt-server/stt_server/__main__.py`, `ai-services/tts/magpie/magpie_tts_server/__main__.py` |
+| `backend` / `nemo_image` YAML keys (NeMo servers) | `ai-services/stt-server/stt_server.yaml`, `ai-services/tts/magpie/magpie_tts_server.yaml`, the per-profile stt copies in `agent-samples/model-servers/yaml/*/` |
 | `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
 | Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `_PERSISTENT_SERVERS` in `agent-samples/xr-render-demo/main.py` |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
@@ -476,6 +501,9 @@ updated in the same commit**.
 - `utils/xr-ai-vllm/` — zero runtime dependencies. Stdlib only. Adding deps
   here would defeat docker mode (whose point is to keep heavy vllm-side deps
   out of the wrapper's venv).
+- `utils/xr-ai-nemo-runtime/` — zero runtime dependencies. Stdlib only. Same
+  reasoning as xr-ai-vllm: docker mode exists to keep torch/nemo/cuDNN out of
+  the host venv, so the runner that manages the container must not import them.
 - `agent-sdk/` (`xr-ai-agent`) — only `pyzmq` + `msgpack`. No server-side packages.
 - `agent-sdk/xr-ai-models/` — `xr-ai-logging` + `httpx` + `pyyaml` only. No
   vendor SDKs (no `openai`, no `anthropic`, no `litellm`). All in-tree

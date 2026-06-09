@@ -16,6 +16,10 @@ device: auto
 # GPU 1 only — GPU 0 is fully allocated to vlm + llm.
 cuda_visible_devices: "1"
 
+# "pip" (default, in-venv) or "docker" (NGC NeMo image — escapes host
+# cuDNN/CUDA mismatches). See ai-services/stt-server/stt_server.yaml.
+backend: pip
+
 port: 8103
 host: "0.0.0.0"
 

@@ -21,6 +21,7 @@ dependencies = [
     "xr-ai-vad",
     "xr-ai-voicegate",
     "xr-ai-vllm",
+    "xr-ai-nemo-runtime",
     # MCP servers exercised by subprocess tests (fastmcp pulled in transitively).
     "transcript-mcp-server",
     "vlm-mcp-server",
@@ -46,6 +47,7 @@ xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable
 xr-ai-vad             = { path = "../utils/xr-ai-vad",                  editable = true }
 xr-ai-voicegate       = { path = "../utils/xr-ai-voicegate",            editable = true }
 xr-ai-vllm            = { path = "../utils/xr-ai-vllm",                 editable = true }
+xr-ai-nemo-runtime    = { path = "../utils/xr-ai-nemo-runtime",         editable = true }
 transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable = true }
 vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
 render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }

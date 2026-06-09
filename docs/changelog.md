@@ -9,6 +9,55 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-09 — NeMo servers: opt-in `backend: docker` to escape host cuDNN/CUDA
+
+The two in-process NeMo servers (stt-server, magpie TTS) load torch+NeMo in the
+wrapper's venv and inherit the host's cuDNN/CUDA via `LD_LIBRARY_PATH`. On hosts
+whose system cuDNN differs from torch's bundled one this aborts at torch import
+(`cuDNN version incompatibility: compiled against (9,20,0) but found runtime
+(9,13,1)`, observed on an L40S box). The launcher's `LD_LIBRARY_PATH` strip
+(same date, above) handles the common case, but where it can't, the vLLM
+services already escape by running in NGC containers. NeMo now gets the same
+escape hatch.
+
+New stdlib-only package `utils/xr-ai-nemo-runtime/` provides `run_nemo_docker`,
+a bespoke NeMo container runner (deliberately separate from `xr-ai-vllm` — the
+in-container command and packaging differ). Each NeMo server's YAML gains
+`backend: pip|docker`; `run()` delegates to the runner only when `docker`.
+**Default `pip` is exactly today's in-venv behavior — zero change unless opted
+in.** piper TTS is excluded: it is ONNX / CPU (`use_cuda: false`) and never hits
+the torch/cuDNN path.
+
+The key new piece is in-container packaging. The NGC NeMo image ships
+torch+nemo+cuDNN but not our FastAPI server, so the runner bind-mounts the repo
+read-only, points `PYTHONPATH` at the mounted server package + `xr-ai-logging`,
+pip-installs only the light deps the image lacks (fastapi, uvicorn[standard],
+hf_transfer, loguru, pyyaml, plus per-server extras — `python-multipart` for
+stt, `soundfile`/`numpy` for magpie), and runs `python -m <server> --_serve`.
+It never `pip install`s the server's own pyproject, which would drag
+nemo_toolkit/torch and conflict with the image's. `--_serve` short-circuits the
+backend dispatch so the in-container process can't re-read `backend: docker` and
+recursively spawn another container. The host launcher touches the ready-file
+once `/health` returns 200 (the ready-file is not passed into the container,
+sidestepping bind-mount write permissions).
+
+The runner mirrors `xr-ai-vllm`'s container mechanics: `--network host` +
+`--ipc host`, same-path model-cache mount, `HF_TOKEN` pass-through, label-based
+stop/rm, and a SIGINT/SIGTERM handler that stops+removes the container so Ctrl-C
+during a slow NeMo image pull / weight download cleans up (mirroring the same
+self-stop added to `xr_ai_vllm/_docker.run()`).
+
+One deliberate divergence from vLLM: the NeMo container **dies with the stack**,
+it does NOT persist across restarts. vLLM persists to dodge multi-minute model
+reloads; NeMo reloads in ~20s from the HF-cached weights on the mounted volume,
+so persistence isn't worth the failure mode it would create — the
+`model-servers --stop` reaper (`xr_ai_vllm.stop_persistent_servers`) finds
+containers by the `xr-ai-vllm.port=…` label and could not reap an
+`xr-ai-nemo.port=…` container, orphaning it. So the wrapper keeps its
+stop+remove signal handler installed through the idle loop and tears its own
+container down on the shutdown SIGTERM. (`xr_ai_vllm` is intentionally left
+untouched.)
+
 ### 2026-06-09 — Launcher: strip a host cuDNN off LD_LIBRARY_PATH before spawning
 
 Each sub-project's venv ships the exact cuDNN its PyTorch was compiled against

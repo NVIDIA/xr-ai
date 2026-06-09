@@ -4,6 +4,9 @@
 # STT server — DGX Spark (1× Blackwell, 128 GB).
 model: nvidia/parakeet-tdt-0.6b-v3
 device: auto
+# "pip" (default, in-venv) or "docker" (NGC NeMo image — escapes host
+# cuDNN/CUDA mismatches). See ai-services/stt-server/stt_server.yaml.
+backend: pip
 port: 8103
 host: "0.0.0.0"
 model_cache: ../../../../models

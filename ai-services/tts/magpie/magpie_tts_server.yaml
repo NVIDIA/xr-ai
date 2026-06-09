@@ -13,6 +13,17 @@ model: nvidia/magpie_tts_multilingual_357m
 # Inference device: "cuda", "cpu", or "auto" (CUDA if available, else CPU).
 device: auto
 
+# Runtime backend: "pip" (default — load NeMo in this venv) or "docker" (run
+# inside an NGC NeMo image). Use "docker" on hosts where the in-venv torch hits
+# a cuDNN/CUDA runtime error (e.g. "cuDNN version incompatibility: compiled
+# against (9,20,0) but found runtime (9,13,1)") — the container's cuDNN/CUDA
+# escape the host's LD_LIBRARY_PATH. Default "pip" = unchanged behavior.
+backend: pip
+
+# NGC NeMo image used when backend: docker. Confirm a tag available to your NGC
+# account (`docker pull <tag>`); the example default may roll over.
+# nemo_image: nvcr.io/nvidia/nemo:25.04
+
 port: 8104
 host: "0.0.0.0"
 

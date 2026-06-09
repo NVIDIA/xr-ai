@@ -191,6 +191,33 @@ async def _run(cfg: dict, yaml_dir: Path, ready_file: Path | None = None) -> Non
     logger.info("Stopped.")
 
 
+def _run_docker(cfg: dict, yaml_dir: Path, ns) -> None:
+    """Delegate to the NeMo docker runner (opt-in `backend: docker`)."""
+    from xr_ai_nemo_runtime import DEFAULT_IMAGE, run_nemo_docker
+
+    if not ns.config:
+        sys.exit("[magpie_tts_server] backend: docker requires --config (a YAML "
+                 "on a host-visible path the container can mount)")
+
+    model_cache = _resolve_model_cache(cfg, yaml_dir)
+    run_nemo_docker(
+        image=cfg.get("nemo_image", DEFAULT_IMAGE),
+        container_name="xr-ai-nemo-magpie-tts-server",
+        log_prefix="magpie_tts_server",
+        server_module="magpie_tts_server",
+        server_pkg_dir=Path(__file__).resolve().parent.parent,
+        config_path=ns.config.resolve(),
+        model_cache=model_cache,
+        nemo_cache_dir=model_cache / "nemo",
+        host=cfg.get("host", "0.0.0.0"),
+        port=int(cfg.get("port", _DEFAULT_PORT)),
+        hf_token=os.environ.get("HF_TOKEN"),
+        cuda_visible_devices=cfg.get("cuda_visible_devices"),
+        extra_pip=["soundfile", "numpy"],
+        ready_file=ns.ready_file,
+    )
+
+
 def run() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
@@ -200,6 +227,8 @@ def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--config",     type=Path, default=None)
     p.add_argument("--ready-file", type=Path, default=None)
+    p.add_argument("--_serve",     action="store_true",
+                   help=argparse.SUPPRESS)  # internal: in-container serve mode
     ns, _ = p.parse_known_args()
 
     cfg: dict = {}
@@ -208,6 +237,12 @@ def run() -> None:
         yaml_dir = ns.config.parent.resolve()
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
+
+    # `--_serve` is the in-container entry for the docker backend; it bypasses
+    # the dispatch below so the container never re-spawns itself.
+    if not ns._serve and cfg.get("backend", "pip") == "docker":
+        _run_docker(cfg, yaml_dir, ns)
+        return
 
     asyncio.run(_run(cfg, yaml_dir, ready_file=ns.ready_file))
 
