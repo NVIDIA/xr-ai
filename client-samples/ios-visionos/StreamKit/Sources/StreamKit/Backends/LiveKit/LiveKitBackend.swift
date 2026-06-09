@@ -144,8 +144,8 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
 
         // Pre-warm the recording engine before publishing, or the publish's
         // frame watcher never sees a buffer and times out. Reset availability
-        // first — stopAudio pins input down, and prepared mode can't start a
-        // disabled engine.
+        // first because stopAudio pins input down, and prepared mode can't
+        // start a disabled engine.
         try? AudioManager.shared.setEngineAvailability(.default)
         try? await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
 
