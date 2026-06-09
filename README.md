@@ -64,7 +64,6 @@ endpoint and no local GPU is required for the agent or hub.
 | NVIDIA driver | 570+ | required for local model inference |
 | Docker | 24+ | required: all vLLM-backed services (LLM, VLM) run in `nvcr.io/nvidia/vllm` containers |
 | NVIDIA Container Toolkit | latest | required: gives Docker access to the GPU.  Without it, `model_servers` fails with `failed to discover GPU vendor from CDI: no known GPU vendor found` |
-| npm | 18+ | only needed to rebuild the web vendor bundle |
 
 `uv` handles all Python dependencies per-sample — no global `pip install`
 or virtual-environment setup needed.  If you do not have it:
@@ -154,6 +153,11 @@ GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
 On first run each model downloads from HuggingFace (~50 GB total; can take
 tens of minutes).  On subsequent runs the containers restart in under a minute.
 
+The default models are public, so no HuggingFace token is required.  Set
+`HF_TOKEN` to lift download rate limits / speed, or to use a gated model — see
+[`docs/credentials.md`](docs/credentials.md).  The launcher won't prompt; it
+prints a one-line notice and continues if the token is unset.
+
 To stop all model servers when done:
 
 ```bash
@@ -181,7 +185,9 @@ uv run simple_vlm_example
 ```
 
 On the very first run weights download from HuggingFace (~23 GB; can take
-several minutes).
+several minutes).  The default model is public — no HuggingFace token needed;
+set `HF_TOKEN` only to lift rate limits / speed or for a gated model (see
+[`docs/credentials.md`](docs/credentials.md)).
 
 **With model-servers pre-running** — if VLM (port 8100) and STT (port 8103)
 are already up from `model-servers`, the demo detects them at startup and
@@ -302,6 +308,14 @@ This exits immediately once all four services are ready.  Weights stay loaded
 in the background.
 
 #### Step 2 — Start the demo
+
+This demo has two extra host prerequisites beyond the shared
+[Requirements](#requirements):
+
+- **Vulkan loader + headers** — the CloudXR compositor and LOVR render through
+  Vulkan, so install them before running the demo: `sudo apt install libvulkan-dev`
+- **npm 18+** on PATH — the orchestrator builds the web vendor bundle on first
+  run (skipped on subsequent runs).
 
 ```bash
 cd agent-samples/xr-render-demo
