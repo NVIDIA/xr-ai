@@ -303,6 +303,13 @@ in the background.
 
 #### Step 2 — Start the demo
 
+The CloudXR compositor and LOVR render through Vulkan, so the Vulkan loader and
+headers must be installed on the host before running the demo:
+
+```bash
+sudo apt install libvulkan-dev
+```
+
 ```bash
 cd agent-samples/xr-render-demo
 uv sync
