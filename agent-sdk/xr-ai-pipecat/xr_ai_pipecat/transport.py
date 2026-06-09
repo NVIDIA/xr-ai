@@ -18,6 +18,7 @@ import time
 
 import numpy as np
 from loguru import logger
+from scipy.signal import resample_poly
 from pipecat.frames.frames import (
     CancelFrame,
     EndFrame,
@@ -57,6 +58,28 @@ def _float32_to_int16(data: bytes) -> bytes:
 def _int16_to_float32(data: bytes) -> bytes:
     i16 = np.frombuffer(data, dtype=np.int16)
     return (i16.astype(np.float32) / 32767.0).tobytes()
+
+
+def _hub_pcm_to_mono_16k(pcm_int16: bytes, channels: int, sample_rate: int) -> bytes:
+    """Convert hub int16 PCM to mono 16 kHz int16 for the (mono) STT path.
+
+    The hub delivers *interleaved* samples for multi-channel audio (L R L R …).
+    Downmix to mono BEFORE resampling: passing an interleaved buffer straight to
+    ``resample_poly`` treats it as one stream, mixing adjacent L/R samples and
+    destroying channel alignment (#193). STT is mono, so we average channels.
+    """
+    if channels == 1 and sample_rate == SAMPLE_RATE:
+        return pcm_int16  # common case — already mono 16 kHz, no work
+    audio = np.frombuffer(pcm_int16, dtype=np.int16)
+    if channels > 1:
+        # Each interleaved frame is `channels` int16 samples; a complete hub
+        # chunk is always a whole number of frames. Truncate any trailing
+        # partial frame defensively so reshape can't raise on a malformed chunk.
+        usable = (audio.size // channels) * channels
+        audio = audio[:usable].reshape(-1, channels).mean(axis=1)
+    if sample_rate != SAMPLE_RATE:
+        audio = resample_poly(audio.astype(np.float64), SAMPLE_RATE, sample_rate)
+    return np.clip(np.round(audio), -32768, 32767).astype(np.int16).tobytes()
 
 
 # ── Input ─────────────────────────────────────────────────────────────────────
@@ -100,18 +123,13 @@ class XRMediaHubInputTransport(BaseInputTransport):
     async def _on_hub_audio(self, chunk: AudioChunk) -> None:
         if not self._started:
             return
-        pcm_int16 = _float32_to_int16(chunk.data)
-        if chunk.sample_rate != SAMPLE_RATE:
-            from scipy.signal import resample_poly
-            audio_array = np.frombuffer(pcm_int16, dtype=np.int16).astype(np.float64)
-            audio_array = resample_poly(
-                audio_array, SAMPLE_RATE, chunk.sample_rate,
-            ).astype(np.int16)
-            pcm_int16 = audio_array.tobytes()
+        pcm_int16 = _hub_pcm_to_mono_16k(
+            _float32_to_int16(chunk.data), chunk.channels, chunk.sample_rate,
+        )
         frame = InputAudioRawFrame(
             audio=pcm_int16,
             sample_rate=SAMPLE_RATE,
-            num_channels=chunk.channels,
+            num_channels=NUM_CHANNELS,
         )
         # pipecat's ``transport_source`` is the standard "which input
         # track did this come from" hook — set it to the hub-side

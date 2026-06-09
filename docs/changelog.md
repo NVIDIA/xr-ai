@@ -75,6 +75,18 @@ timestamp into a long capture wait and add audio latency. The C++ LiveKit backen
 now preserves the StreamKit timestamp as API metadata and calls
 `AudioSource::captureFrame(frame)` so the SDK uses its realtime default timeout.
 
+### 2026-06-05 — Magpie TTS: honor the launcher's --ready-file contract
+
+The launcher injects `--ready-file <path>` into every spawned process and
+blocks in `_wait_ready` (no timeout) until that file appears or the process
+exits. Piper and STT touch it after their model loads; Magpie didn't — `run()`
+only registered `--config`, so `--ready-file` landed in the ignored unknowns
+and `_run` never created the file. Magpie then stays alive serving, so
+`proc.poll()` stays `None` too — the launcher deadlocked at startup on the
+Magpie TTS service. Mirrored piper/stt: register `--ready-file`, thread it
+into `_run`, and `ready_file.touch()` after `_ensure_loaded()` completes
+(before `server.serve()`). Fixes #191.
+
 ### 2026-06-05 — iOS: reset isCameraActive when a camera switch fails
 
 `AppModel.switchCamera(to:)` only ran on an already-active camera and, on a
@@ -84,6 +96,18 @@ the new one, a publish failure mid-switch left nothing streaming while the UI
 still showed "Streaming" with a green status and a working Stop button. The
 `catch` now sets `isCameraActive = false`, matching the consistency that
 `startCamera()`/`stopCamera()` already maintain. Fixes #195.
+
+### 2026-06-05 — pipecat input transport: downmix multi-channel hub audio before resampling
+
+`XRMediaHubInputTransport._on_hub_audio` resampled non-16 kHz hub audio by
+passing the int16 PCM straight to `resample_poly` as a 1-D array. For
+multi-channel chunks the hub delivers *interleaved* samples (L R L R …), so
+the polyphase filter mixed adjacent L/R samples and produced the wrong output
+length — corrupting stereo+ audio before STT (the mono common case was fine,
+hence latent). Extracted `_hub_pcm_to_mono_16k`, which downmixes to mono
+(channel mean) *before* resampling — STT is mono anyway — and the frame is now
+emitted with `num_channels=1`. The mono-16 kHz common case is a byte-identical
+fast path. Regression test: `tests/test_pipecat_audio_resample.py`. Fixes #193.
 
 ### 2026-06-05 — STT: serialize NeMo transcribe() on the shared model
 
