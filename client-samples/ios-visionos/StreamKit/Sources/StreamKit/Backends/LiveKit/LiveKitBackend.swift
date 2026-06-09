@@ -146,8 +146,20 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // frame watcher never sees a buffer and times out. Reset availability
         // first because stopAudio pins input down, and prepared mode can't
         // start a disabled engine.
-        try? AudioManager.shared.setEngineAvailability(.default)
-        try? await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
+        do {
+            try AudioManager.shared.setEngineAvailability(.default)
+        } catch {
+            #if DEBUG
+            print("startAudio: setEngineAvailability(.default) failed: \(error)")
+            #endif
+        }
+        do {
+            try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
+        } catch {
+            #if DEBUG
+            print("startAudio: setRecordingAlwaysPreparedMode(true) failed: \(error)")
+            #endif
+        }
 
         do {
             let captureOptions = AudioCaptureOptions(from: config)

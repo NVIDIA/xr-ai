@@ -148,6 +148,7 @@ final class AppModel {
             self.connectionState = state
             if state == .disconnected {
                 self.isAudioActive = false
+                self.isAudioStarting = false
                 self.isCameraActive = false
                 self.agentStatus = nil
                 self.agentResponse = nil
@@ -199,6 +200,7 @@ final class AppModel {
         agentStatus = nil
         agentResponse = nil
         isAudioActive = false
+        isAudioStarting = false
         isCameraActive = false
     }
 
