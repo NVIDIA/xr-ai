@@ -9,6 +9,22 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-05 — TokenServer: fail startup loudly on bind error; keep shutdown graceful
+
+`TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls
+`sys.exit(1)` on a bind failure (e.g. port already in use), so the task ends
+with `SystemExit` (a `BaseException`); `stop()`'s `await self._task` then
+re-raised it into `LiveKitConnector.stop()`, aborting the remaining
+graceful-shutdown steps. Wrapped the task in a `_serve_safe()` coroutine that
+catches `SystemExit` and logs a clear "port in use?" error — mirroring the
+sibling `WebServer._serve_safe`, which already guards this. To stop a bind
+failure from looking healthy, `start()` now awaits the bind (polls
+`uvicorn.Server.started` until the serve task either binds or finishes) and
+raises `RuntimeError` if the server never bound within `_STARTUP_TIMEOUT_S` —
+the token server is the browser-facing auth/signaling entry point, so a dead
+endpoint must abort connector startup rather than silently swallow the error.
+Fixes #192.
+
 ### 2026-06-05 — Native StreamKit: Android NDK C++20 portability
 
 Native StreamKit no longer depends on C++20 `<format>`. Some Android NDK
@@ -86,21 +102,17 @@ still showed "Streaming" with a green status and a working Stop button. The
 `catch` now sets `isCameraActive = false`, matching the consistency that
 `startCamera()`/`stopCamera()` already maintain. Fixes #195.
 
-### 2026-06-05 — TokenServer: fail startup loudly on bind error; keep shutdown graceful
+### 2026-06-05 — pipecat input transport: downmix multi-channel hub audio before resampling
 
-`TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls
-`sys.exit(1)` on a bind failure (e.g. port already in use), so the task ends
-with `SystemExit` (a `BaseException`); `stop()`'s `await self._task` then
-re-raised it into `LiveKitConnector.stop()`, aborting the remaining
-graceful-shutdown steps. Wrapped the task in a `_serve_safe()` coroutine that
-catches `SystemExit` and logs a clear "port in use?" error — mirroring the
-sibling `WebServer._serve_safe`, which already guards this. To stop a bind
-failure from looking healthy, `start()` now awaits the bind (polls
-`uvicorn.Server.started` until the serve task either binds or finishes) and
-raises `RuntimeError` if the server never bound within `_STARTUP_TIMEOUT_S` —
-the token server is the browser-facing auth/signaling entry point, so a dead
-endpoint must abort connector startup rather than silently swallow the error.
-Fixes #192.
+`XRMediaHubInputTransport._on_hub_audio` resampled non-16 kHz hub audio by
+passing the int16 PCM straight to `resample_poly` as a 1-D array. For
+multi-channel chunks the hub delivers *interleaved* samples (L R L R …), so
+the polyphase filter mixed adjacent L/R samples and produced the wrong output
+length — corrupting stereo+ audio before STT (the mono common case was fine,
+hence latent). Extracted `_hub_pcm_to_mono_16k`, which downmixes to mono
+(channel mean) *before* resampling — STT is mono anyway — and the frame is now
+emitted with `num_channels=1`. The mono-16 kHz common case is a byte-identical
+fast path. Regression test: `tests/test_pipecat_audio_resample.py`. Fixes #193.
 
 ### 2026-06-05 — STT: serialize NeMo transcribe() on the shared model
 
