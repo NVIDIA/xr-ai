@@ -24,6 +24,11 @@ from . import _lk_proxy
 from ._token import make_client_token
 from .config import LiveKitConnectorConfig
 
+# Max seconds start() waits for uvicorn to bind before treating startup as
+# failed. Binding the token port is near-instant (no model load); the bound is
+# a backstop for a startup that neither binds nor exits.
+_STARTUP_TIMEOUT_S = 10.0
+
 
 def build_app(cfg: LiveKitConnectorConfig) -> FastAPI:
     lk_internal_http = f"http://127.0.0.1:{cfg.lk_port_ws}"
@@ -85,6 +90,28 @@ class TokenServer:
 
         self._server = uvicorn.Server(uvicorn.Config(**uv_cfg))
         self._task = asyncio.create_task(self._serve_safe())
+
+        # Wait until the server has actually bound (or the serve task died
+        # trying). _serve_safe swallows uvicorn's SystemExit so the SHUTDOWN
+        # path stays clean — but a bind failure must NOT look healthy here: the
+        # token server is the browser-facing auth/signaling entry point, so a
+        # non-bind has to abort connector startup loudly instead of leaving a
+        # dead endpoint that every browser client silently fails to reach.
+        # uvicorn sets `started` True only after a successful bind; on bind
+        # failure startup() sys.exit(1)s first, so the task finishes with
+        # `started` still False.
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _STARTUP_TIMEOUT_S
+        while not self._server.started and not self._task.done():
+            if loop.time() >= deadline:
+                break
+            await asyncio.sleep(0.05)
+        if not self._server.started:
+            raise RuntimeError(
+                f"Token server failed to start on "
+                f"{self._cfg.token_server_host}:{self._cfg.token_server_port} "
+                "— port already in use, or startup timed out."
+            )
         logger.info(
             "Token server → {}://{}:{}  room={!r}",
             scheme, self._cfg.token_server_host, self._cfg.token_server_port,

@@ -86,7 +86,7 @@ still showed "Streaming" with a green status and a working Stop button. The
 `catch` now sets `isCameraActive = false`, matching the consistency that
 `startCamera()`/`stopCamera()` already maintain. Fixes #195.
 
-### 2026-06-05 — TokenServer: swallow uvicorn SystemExit so shutdown stays graceful
+### 2026-06-05 — TokenServer: fail startup loudly on bind error; keep shutdown graceful
 
 `TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls
 `sys.exit(1)` on a bind failure (e.g. port already in use), so the task ends
@@ -94,7 +94,13 @@ with `SystemExit` (a `BaseException`); `stop()`'s `await self._task` then
 re-raised it into `LiveKitConnector.stop()`, aborting the remaining
 graceful-shutdown steps. Wrapped the task in a `_serve_safe()` coroutine that
 catches `SystemExit` and logs a clear "port in use?" error — mirroring the
-sibling `WebServer._serve_safe`, which already guards this. Fixes #192.
+sibling `WebServer._serve_safe`, which already guards this. To stop a bind
+failure from looking healthy, `start()` now awaits the bind (polls
+`uvicorn.Server.started` until the serve task either binds or finishes) and
+raises `RuntimeError` if the server never bound within `_STARTUP_TIMEOUT_S` —
+the token server is the browser-facing auth/signaling entry point, so a dead
+endpoint must abort connector startup rather than silently swallow the error.
+Fixes #192.
 
 ### 2026-06-05 — STT: serialize NeMo transcribe() on the shared model
 
