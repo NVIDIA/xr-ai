@@ -9,6 +9,30 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-09 — Credentials: stop prompting for HF_TOKEN; document it instead
+
+`simple-vlm-example` was the only sample that called
+`ensure_credentials("HF_TOKEN")`, which blocks first-run startup on an
+interactive `getpass` prompt. The model servers (the heavier, more
+download-intensive path) never prompted — they rely on `run_stack`'s automatic
+`load_credentials()` (env / `huggingface-cli login` / saved creds). That
+asymmetry was confusing, and the prompt isn't warranted: the samples' default
+models are **public** (`nvidia/Cosmos-Reason1-7B` is not gated), so `HF_TOKEN`
+only raises HuggingFace rate limits / download speed and is strictly required
+only for gated models.
+
+Replaced the interactive prompt with a non-blocking path: new
+`warn_if_missing(*names)` launcher helper loads any saved/env/CLI token, and if
+the token is still absent prints one actionable line (pointing at
+`docs/credentials.md`) and continues — it never prompts. `simple-vlm-example`
+and `model-servers` now call `warn_if_missing("HF_TOKEN")`. `ensure_credentials`
+is unchanged and still used for `NGC_API_KEY`, where the prompt is intentional —
+the NIM backend is opt-in and cannot function without the key.
+`docs/credentials.md` rewritten to document HF_TOKEN as auto-picked-up +
+optional (required-vs-optional spelled out) with the three ways to provide it,
+plus pointers from the README quickstart and the `vlm_server.yaml` `hf_token`
+field.
+
 ### 2026-06-05 — TokenServer: fail startup loudly on bind error; keep shutdown graceful
 
 `TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls
