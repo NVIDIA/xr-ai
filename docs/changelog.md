@@ -9,6 +9,26 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-09 — Voice pipeline: idle-timeout auto-cancel off by default, opt-in via YAML
+
+pipecat's `PipelineWorker` defaults to `cancel_on_idle_timeout=True` at
+`IDLE_TIMEOUT_SECS`, so an idle voice pipeline is silently cancelled after a
+few minutes of no user/bot speech. `make_voice_pipeline` constructed
+`PipelineWorker(pipeline)` with no override, so we inherited that — a quiet XR
+session (user simply not talking) would drop on its own, which is the wrong
+default for this product.
+
+`make_voice_pipeline` now takes `idle_timeout_secs: float | None = None` and is
+**disabled by default**: when `None` it passes `cancel_on_idle_timeout=False`
+and `cancel_runner_on_idle_timeout=False` so the pipeline is never cancelled
+for inactivity. The mechanism is preserved, not deleted — a positive value
+opts back in (worker then cancels after that many idle seconds). Surfaced in
+each sample's worker YAML as `idle_timeout_secs: 0` (0/unset → disabled) with a
+comment, threaded through `simple_vlm_example_worker` and the xr-render-demo
+`WorkerConfig`. Documented in `make_voice_pipeline`'s docstring and
+`docs/troubleshooting.md`. Tests cover the default-off and opt-in paths at both
+the factory and the xr-render config loader.
+
 ### 2026-06-05 — TokenServer: fail startup loudly on bind error; keep shutdown graceful
 
 `TokenServer` ran `self._server.serve()` directly as its task. uvicorn calls

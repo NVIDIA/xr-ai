@@ -45,3 +45,11 @@ vec_mcp_url:    http://localhost:8250
 silence_duration:  0.8
 min_speech:        0.15
 silero_threshold:  0.3
+
+# ── Idle timeout ──────────────────────────────────────────────────────────
+# Auto-cancel the voice pipeline after this many seconds with no user/bot
+# speech. DISABLED by default (0 = off) — a quiet session stays connected
+# indefinitely, which is what XR sessions usually want. Set a positive value
+# (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down
+# after that long idle. Threaded to xr_ai_pipecat.make_voice_pipeline.
+idle_timeout_secs: 0
