@@ -96,20 +96,18 @@ jobs:
         # but failing here gives a clearer error than a stuck queue).
         run: |
           set -euo pipefail
-          echo "--- brev ls (raw, for diagnosis) ---"
-          brev ls || true
-          echo "------------------------------------"
           for i in $(seq 1 60); do
-            line=$(brev ls | grep -iw "$BREV_INSTANCE_NAME" || true)
-            echo "[$i] ${line:-<$BREV_INSTANCE_NAME not found in brev ls>}"
-            if echo "$line" | grep -qi "RUNNING"; then
-              echo "Instance $BREV_INSTANCE_NAME is RUNNING."
+            # grep by name keeps other orgs' instance names out of the
+            # log; report just this instance's status field.
+            status=$(brev ls | grep -iw "$BREV_INSTANCE_NAME" | grep -oiE 'RUNNING|STOPPED|STARTING|STOPPING|FAILED' | head -n1 || true)
+            echo "[$i] $BREV_INSTANCE_NAME status: ${status:-<not found>}"
+            if [[ "$status" == "RUNNING" ]]; then
+              echo "Instance is RUNNING."
               exit 0
             fi
             sleep 15
           done
           echo "::error::Timed out waiting for $BREV_INSTANCE_NAME to reach RUNNING"
-          brev ls
           exit 1
 
   pytest:
