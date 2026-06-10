@@ -9,6 +9,10 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-25 — CloudXR WSS signaling proxy is WebRTC-only
+
+The WSS proxy (port 48322) is started only for WebRTC device profiles.
+
 ### 2026-06-11 — iOS/visionOS: pre-warm the LiveKit recording engine on mic start
 
 `LiveKitBackend.startAudio` now calls

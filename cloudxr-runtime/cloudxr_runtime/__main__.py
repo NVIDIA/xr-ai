@@ -6,7 +6,7 @@ cloudxr_runtime — launcher for isaacteleop.cloudxr.
 
 Starts the native CloudXR service (libcloudxr.so) in a subprocess, waits for
 it to become ready, then runs isaacteleop's WSS proxy (port 48322) required by
-the auto-webrtc device profile.  auto-native skips the WSS step.
+WebRTC device profiles.  Native device profiles skip the WSS step.
 
 Accepts --config <path>.yaml (auto-passed by xr-ai-launcher).
 """
@@ -37,6 +37,11 @@ from isaacteleop.cloudxr.runtime import (
 from isaacteleop.cloudxr.wss import run as wss_run
 from loguru import logger
 from xr_ai_logging import setup_logging
+
+# NV_DEVICE_PROFILE values that use CloudXR's direct native transport.
+# Profiles not listed here (e.g. quest3 — no native CloudXR Android client)
+# connect over WebRTC and go through the WSS proxy.
+_NATIVE_DEVICE_PROFILES = {"auto-native", "apple-vision-pro", "ipad-pro"}
 
 
 async def _wait_with_progress(
@@ -226,18 +231,25 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
         if ready_file:
             ready_file.touch()
 
-        from datetime import datetime, timezone
-        ts      = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-        wss_log = logs_dir / f"wss.{ts}.log"
-        try:
-            await wss_run(log_file_path=wss_log, stop_future=stop)
-        except RuntimeError as exc:
-            logger.error(
-                "CloudXR WSS proxy failed: {}\n"
-                "  If another process owns port 48322, stop it first:\n"
-                "    sudo fuser -k 48322/tcp",
-                exc,
-            )
+        # Native-transport profiles connect directly; only WebRTC profiles need
+        # the WSS signaling proxy.
+        profile = os.environ.get("NV_DEVICE_PROFILE", "")
+        if profile in _NATIVE_DEVICE_PROFILES:
+            logger.info("native device profile {}, skipping WSS proxy", profile)
+            await stop
+        else:
+            from datetime import datetime, timezone
+            ts      = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+            wss_log = logs_dir / f"wss.{ts}.log"
+            try:
+                await wss_run(log_file_path=wss_log, stop_future=stop)
+            except RuntimeError as exc:
+                logger.error(
+                    "CloudXR WSS proxy failed: {}\n"
+                    "  If another process owns port 48322, stop it first:\n"
+                    "    sudo fuser -k 48322/tcp",
+                    exc,
+                )
     finally:
         terminate_or_kill_runtime(runtime_proc)
 
