@@ -268,3 +268,40 @@ jobs:
           else
             echo "$BREV_INSTANCE_NAME is not RUNNING; nothing to stop."
           fi
+
+  notify:
+    name: alert on failure
+    needs: [start, pytest, stop]
+    # Fire whenever any job above failed (a timeout counts as a failure)
+    # so a broken nightly is visible without anyone polling the Actions
+    # tab. Skip on PRs — those are pre-merge dry-runs, not the nightly.
+    if: failure() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update tracking issue
+        # Update-don't-stack: comment on the open tracking issue if one
+        # exists, otherwise open a fresh one. One issue accumulates the
+        # run links until someone fixes it and closes it.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          LABEL="nightly-failure"
+          TITLE="Nightly XR AI test is failing"
+          gh label create "$LABEL" --color B60205 \
+            --description "Automated nightly GPU test failures" 2>/dev/null || true
+          body=$(printf 'Nightly run **failed** (event: %s, commit \x60%s\x60).\n\n- Run: %s' \
+            "$GITHUB_EVENT_NAME" "${GITHUB_SHA:0:7}" "$RUN_URL")
+          existing=$(gh issue list --state open --label "$LABEL" \
+            --json number --jq '.[0].number' || true)
+          if [[ -n "$existing" ]]; then
+            echo "Commenting on existing issue #$existing"
+            gh issue comment "$existing" --body "$body"
+          else
+            echo "Opening new tracking issue"
+            gh issue create --title "$TITLE" --label "$LABEL" --body "$body"
+          fi
