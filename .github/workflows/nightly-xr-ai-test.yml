@@ -53,7 +53,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Install Brev CLI
-        run: sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+        # The installer drops the binary in $HOME/.local/bin (no sudo);
+        # add it to $GITHUB_PATH so later steps in this job find `brev`.
+        run: |
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Brev login
         env:
@@ -219,7 +223,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Install Brev CLI
-        run: sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+        # The installer drops the binary in $HOME/.local/bin (no sudo);
+        # add it to $GITHUB_PATH so later steps in this job find `brev`.
+        run: |
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Brev login
         env:
