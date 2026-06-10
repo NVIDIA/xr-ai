@@ -235,9 +235,10 @@ user/bot speech.
 
 ### Writing a brain
 
-Subclass `BrainProcessor` and implement `handle_query`. Return either a single
-string (one downstream `TextFrame`) or an async iterator of strings (one
-`TextFrame` per yielded chunk — this is how token streaming reaches TTS):
+Subclass `BrainProcessor` and implement `handle_query`. It is a coroutine that
+*returns* either a single string (one downstream `TextFrame`) or an async
+iterator of strings (one `TextFrame` per chunk — this is how token streaming
+reaches TTS). Note it returns the iterator; it is not itself a generator:
 
 ```python
 from xr_ai_pipecat import BrainProcessor
@@ -248,8 +249,10 @@ class MyBrain(BrainProcessor):
         self._llm = llm          # the sample injects its own LLMService
 
     async def handle_query(self, pid, text, fresh_match):
-        async for chunk in self._llm.stream([...]):
-            yield chunk
+        # Return the AsyncIterator[str]; the base class consumes it and
+        # pushes one TextFrame per chunk. For a non-streaming brain,
+        # `return resp.content` (a single string) instead.
+        return self._llm.stream([...])
 ```
 
 The base class owns the per-participant in-flight task, cancellation, and the
