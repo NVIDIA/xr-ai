@@ -60,6 +60,25 @@ of leaving the GPU billing unnoticed. `BREV_INSTANCE_NAME`/`BREV_ORG` are
 repository **secrets** (not variables); the guards abort if they resolve
 empty. The top-level token is `contents: read`, with `notify` overriding to
 `issues: write`.
+### 2026-06-10 — Sphinx documentation site (isaacteleop-style), scaffold
+
+Stood up a Sphinx documentation site under `docs/source/`, mirroring the
+NVIDIA/IsaacTeleop docs setup (NVIDIA Sphinx theme, GitHub Pages publish). It
+uses **MyST** so the existing `docs/*.md` content is reused as Markdown pages
+rather than rewritten as reStructuredText. Organized into five sections —
+Overview, Getting Started, Components, Guides, Reference — each section index
+uses a **`:glob:` toctree** so new pages self-register by simply being dropped
+into the section directory (this is what lets documentation pages be authored as
+independent, individually-mergeable PRs without all touching a shared nav file).
+
+`.github/workflows/docs.yaml` runs a strict build (`sphinx-build -W`) on every
+docs PR and deploys to GitHub Pages on push to `main` of the canonical repo
+(deploy is a no-op until Pages is enabled in repo settings). `docs/requirements.txt`
+pins the toolchain to IsaacTeleop's versions. The existing `docs/*.md` files are
+intentionally **kept in place** (the README and in-flight PRs link to them); the
+site ingests/ports their content, and a later cleanup can collapse the
+duplication once the site is the source of truth. `sphinx-multiversion` is a
+deliberate follow-up — single-version first to de-risk CI.
 
 ### 2026-06-09 — render-mcp: scene resync survives a LOVR respawn (blocking send, not NOBLOCK)
 
