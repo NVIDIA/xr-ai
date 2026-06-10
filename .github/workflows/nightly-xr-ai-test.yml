@@ -11,16 +11,25 @@ name: nightly XR AI test
 #
 # The GPU host is a Brev instance that is kept *stopped* between runs to
 # save GPU cost. The job graph is therefore:
-#   start (ubuntu-latest) -> pytest (gpu) -> stop (ubuntu-latest)
-# The Brev CLI calls run on GitHub-hosted runners because the GPU runner
-# itself is asleep before `start` and is being paused by `stop`. The
+#   start (brev-controller) -> pytest (gpu) -> stop (brev-controller)
+# The Brev CLI calls run on a separate, always-on "controller" VM (a
+# small self-hosted runner labelled `brev-controller`) that is already
+# `brev login`'d — the GPU runner itself is asleep before `start` and is
+# being paused by `stop`, so it can't run its own lifecycle commands, and
+# the controller's persistent login avoids needing a CLI token in CI. The
 # `stop` job runs even when the tests fail so a bad run never leaves the
 # instance billing.
 #
+# Runner setup:
+#   - `gpu`             — self-hosted runner on the GPU Brev instance.
+#   - `brev-controller` — self-hosted runner on the always-on VM that has
+#                         the Brev CLI installed and is logged in.
+#
 # Required repo config (Settings -> Secrets and variables -> Actions):
-#   secret  BREV_API_TOKEN      — token for headless `brev login --token`
 #   secret  BREV_INSTANCE_NAME  — name of the GPU Brev instance to manage
-#   secret  BREV_ORG            — org the instance lives in (`brev set`)
+#   secret  BREV_ORG            — (optional) org the instance lives in;
+#                                 set only if the controller isn't already
+#                                 pinned to it (`brev set`)
 
 on:
   schedule:
@@ -51,25 +60,18 @@ env:
 jobs:
   start:
     name: start brev instance
-    runs-on: ubuntu-latest
+    # Runs on the always-on controller VM, which already has the Brev CLI
+    # installed and is logged in — no install/login/token step needed.
+    runs-on: brev-controller
     timeout-minutes: 20
     steps:
-      - name: Install Brev CLI
-        # The installer drops the binary in $HOME/.local/bin (no sudo);
-        # add it to $GITHUB_PATH so later steps in this job find `brev`.
-        run: |
-          bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Brev login
-        env:
-          BREV_API_TOKEN: ${{ secrets.BREV_API_TOKEN }}
-        run: brev login --token "$BREV_API_TOKEN"
-
       - name: Select org
-        # Login defaults to the personal org; the GPU instance lives in
-        # BREV_ORG, so switch before ls/start.
-        run: brev set "$BREV_ORG"
+        # The controller is normally already pinned to the right org;
+        # switch only if BREV_ORG is provided.
+        run: |
+          if [[ -n "${BREV_ORG:-}" ]]; then
+            brev set "$BREV_ORG"
+          fi
 
       - name: Start instance
         run: |
@@ -234,25 +236,16 @@ jobs:
     # out, so a bad run never leaves the GPU billing. `keep_running` lets
     # a manual `workflow_dispatch` hold the box up for debugging.
     if: always() && inputs.keep_running != true
-    runs-on: ubuntu-latest
+    runs-on: brev-controller
     timeout-minutes: 15
     steps:
-      - name: Install Brev CLI
-        # The installer drops the binary in $HOME/.local/bin (no sudo);
-        # add it to $GITHUB_PATH so later steps in this job find `brev`.
-        run: |
-          bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Brev login
-        env:
-          BREV_API_TOKEN: ${{ secrets.BREV_API_TOKEN }}
-        run: brev login --token "$BREV_API_TOKEN"
-
       - name: Select org
-        # Login defaults to the personal org; the GPU instance lives in
-        # BREV_ORG, so switch before stop.
-        run: brev set "$BREV_ORG"
+        # The controller is normally already pinned to the right org;
+        # switch only if BREV_ORG is provided.
+        run: |
+          if [[ -n "${BREV_ORG:-}" ]]; then
+            brev set "$BREV_ORG"
+          fi
 
       - name: Stop instance
         run: |
