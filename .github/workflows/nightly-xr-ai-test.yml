@@ -8,13 +8,31 @@ name: nightly XR AI test
 # filtered out of the default `tests` workflow (which targets
 # `ubuntu-latest`). Mirrors the local `tests/run_local_gpu_tests.sh`
 # entry point.
+#
+# The GPU host is a Brev instance that is kept *stopped* between runs to
+# save GPU cost. The job graph is therefore:
+#   start (ubuntu-latest) -> pytest (gpu) -> stop (ubuntu-latest)
+# The Brev CLI calls run on GitHub-hosted runners because the GPU runner
+# itself is asleep before `start` and is being paused by `stop`. The
+# `stop` job runs even when the tests fail so a bad run never leaves the
+# instance billing.
+#
+# Required repo config (Settings -> Secrets and variables -> Actions):
+#   secret  BREV_API_TOKEN      — token for headless `brev login --token`
+#   var     BREV_INSTANCE_NAME  — name of the GPU Brev instance to manage
 
 on:
   schedule:
     - cron: "0 4 * * *"  # 04:00 UTC daily
   workflow_dispatch:
+    inputs:
+      keep_running:
+        description: "Leave the Brev instance running after the tests (skip the stop job)"
+        type: boolean
+        default: false
   # Also fire on PRs that edit this workflow itself, so changes to the
-  # CI definition get exercised against the GPU runner before merge.
+  # CI definition — including the Brev start/stop wiring — get exercised
+  # end-to-end against the GPU runner before merge.
   pull_request:
     paths:
       - .github/workflows/nightly-xr-ai-test.yml
@@ -25,9 +43,57 @@ concurrency:
   group: nightly-xr-ai-test
   cancel-in-progress: false
 
+env:
+  BREV_INSTANCE_NAME: ${{ vars.BREV_INSTANCE_NAME }}
+
 jobs:
+  start:
+    name: start brev instance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install Brev CLI
+        run: sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+
+      - name: Brev login
+        env:
+          BREV_API_TOKEN: ${{ secrets.BREV_API_TOKEN }}
+        run: brev login --token "$BREV_API_TOKEN"
+
+      - name: Start instance
+        run: |
+          set -euo pipefail
+          if [[ -z "${BREV_INSTANCE_NAME:-}" ]]; then
+            echo "::error::BREV_INSTANCE_NAME repo variable is not set"
+            exit 1
+          fi
+          echo "Starting Brev instance: $BREV_INSTANCE_NAME"
+          brev start "$BREV_INSTANCE_NAME"
+
+      - name: Wait until RUNNING
+        # `brev start` returns before the VM is fully up and the GitHub
+        # Actions runner service has re-registered. Poll `brev ls` until
+        # the instance reports RUNNING so the `pytest` job has a live
+        # `gpu` runner to land on (GitHub queues it until then anyway,
+        # but failing here gives a clearer error than a stuck queue).
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            line=$(brev ls | grep -iw "$BREV_INSTANCE_NAME" || true)
+            echo "[$i] ${line:-<$BREV_INSTANCE_NAME not found in brev ls>}"
+            if echo "$line" | grep -qi "RUNNING"; then
+              echo "Instance $BREV_INSTANCE_NAME is RUNNING."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Timed out waiting for $BREV_INSTANCE_NAME to reach RUNNING"
+          brev ls
+          exit 1
+
   pytest:
     name: pytest (gpu)
+    needs: start
     runs-on: gpu
     timeout-minutes: 60
 
@@ -141,3 +207,31 @@ jobs:
           else
             echo "No xr-ai-vllm-* containers to remove."
           fi
+
+  stop:
+    name: stop brev instance
+    needs: [start, pytest]
+    # Pause the instance even when the tests fail or the start job errors
+    # out, so a bad run never leaves the GPU billing. `keep_running` lets
+    # a manual `workflow_dispatch` hold the box up for debugging.
+    if: always() && inputs.keep_running != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Install Brev CLI
+        run: sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+
+      - name: Brev login
+        env:
+          BREV_API_TOKEN: ${{ secrets.BREV_API_TOKEN }}
+        run: brev login --token "$BREV_API_TOKEN"
+
+      - name: Stop instance
+        run: |
+          set -euo pipefail
+          if [[ -z "${BREV_INSTANCE_NAME:-}" ]]; then
+            echo "::error::BREV_INSTANCE_NAME repo variable is not set"
+            exit 1
+          fi
+          echo "Stopping Brev instance: $BREV_INSTANCE_NAME"
+          brev stop "$BREV_INSTANCE_NAME"
