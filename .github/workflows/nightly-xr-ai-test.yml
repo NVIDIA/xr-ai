@@ -20,6 +20,7 @@ name: nightly XR AI test
 # Required repo config (Settings -> Secrets and variables -> Actions):
 #   secret  BREV_API_TOKEN      — token for headless `brev login --token`
 #   secret  BREV_INSTANCE_NAME  — name of the GPU Brev instance to manage
+#   secret  BREV_ORG            — org the instance lives in (`brev set`)
 
 on:
   schedule:
@@ -45,6 +46,7 @@ concurrency:
 
 env:
   BREV_INSTANCE_NAME: ${{ secrets.BREV_INSTANCE_NAME }}
+  BREV_ORG: ${{ secrets.BREV_ORG }}
 
 jobs:
   start:
@@ -63,6 +65,11 @@ jobs:
         env:
           BREV_API_TOKEN: ${{ secrets.BREV_API_TOKEN }}
         run: brev login --token "$BREV_API_TOKEN"
+
+      - name: Select org
+        # Login defaults to the personal org; the GPU instance lives in
+        # BREV_ORG, so switch before ls/start.
+        run: brev set "$BREV_ORG"
 
       - name: Start instance
         run: |
@@ -236,6 +243,11 @@ jobs:
         env:
           BREV_API_TOKEN: ${{ secrets.BREV_API_TOKEN }}
         run: brev login --token "$BREV_API_TOKEN"
+
+      - name: Select org
+        # Login defaults to the personal org; the GPU instance lives in
+        # BREV_ORG, so switch before stop.
+        run: brev set "$BREV_ORG"
 
       - name: Stop instance
         run: |
