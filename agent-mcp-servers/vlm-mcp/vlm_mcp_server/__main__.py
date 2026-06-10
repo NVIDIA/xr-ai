@@ -13,9 +13,11 @@ encodes it as a JPEG data URL, and calls the VLM via ``xr-ai-models``
 
 Typical two-step agent flow
 ───────────────────────────
-1. Call ``video_mcp.get_frame_from_time(participant_id, second_ago=0)``
-   (or ``second_ago=N`` for a frame from N seconds ago) to obtain a PNG
-   path on the local filesystem.
+1. Call the video-mcp frame tool to obtain a PNG path on the local
+   filesystem — ``get_latest_frame(participant_id)`` for the live camera
+   frame (recording-disabled deployments expose only this), or
+   ``get_frame_from_time(participant_id, second_ago=N)`` when video
+   recording is enabled and you want a frame from N seconds ago.
 2. Pass that path straight into ``ask_image`` along with your question.
 
 vlm-mcp itself knows nothing about participants, the hub, or the frame
@@ -173,14 +175,11 @@ def build_mcp(vlm: VLMService) -> FastMCP:
         ---------------------
         Step 1 — acquire a frame::
 
-            frame = video_mcp.get_frame_from_time(
-                participant_id="alice",
-                second_ago=0,            # live frame (what the user sees right now)
-                # second_ago=3,          # frame from 3 seconds ago
-                # reference_time_us=..., # pass the user's speech timestamp to avoid
-                #                        # LLM-thinking delay shifting the frame
-            )
-            # frame["path"] is an absolute path to a PNG on the local filesystem
+            frame = video_mcp.get_latest_frame(participant_id="alice")
+            # live camera frame; frame["path"] is an absolute PNG path.
+            # When video recording is enabled, use instead:
+            #   video_mcp.get_frame_from_time(participant_id="alice",
+            #                                 second_ago=N)  # frame N s ago
 
         Step 2 — ask the VLM::
 

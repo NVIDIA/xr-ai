@@ -27,7 +27,8 @@ web_client_dir:    ../../../client-samples/web-xr
 enable_token_server: true
 
 # ── Video recording ──────────────────────────────────────────────────────────
-# Disabled: xr-render-demo uses get_latest_frame (live IPC) for visual queries.
+# Disabled: xr-render-demo uses look_at_current_frame (brain-executed live-frame
+# perception) for visual queries.
 # Enable and set recordings_dir in video_mcp_server.yaml to unlock historical tools.
 video_recording:
   enabled: false

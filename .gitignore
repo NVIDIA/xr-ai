@@ -234,9 +234,16 @@ cython_debug/
 
 # xr-render-demo eval inner-loop filter
 #  `.only` is a sibling of eval.py; when present and non-empty, the harness
-#  restricts the suite to the listed case names. Per-developer iteration aid,
-#  never committed.
+#  restricts the suite to the listed case names (and a bare `ROBUSTNESS` line in
+#  it toggles the robustness sweep — see eval/README.md). Per-developer
+#  iteration aid, never committed.
 agent-samples/xr-render-demo/eval/.only
+
+# xr-render-demo eval watcher runtime artifacts
+#  Per-checkout lock (flock target) and log written by eval_watch.sh. Kept
+#  repo-local so watchers in different checkouts don't share global /tmp state.
+agent-samples/xr-render-demo/eval/.eval_watch.lock
+agent-samples/xr-render-demo/eval/.eval_loop.log
 
 # Marimo
 marimo/_static/

@@ -14,8 +14,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_PROMPT="$HERE/../worker/prompts/system.txt"
 
 PROMPT="${1:-$DEFAULT_PROMPT}"
-LOG=/tmp/eval_loop.log
-LOCK=/tmp/eval_watch.pid
+LOG="$HERE/.eval_loop.log"
+LOCKFILE="$HERE/.eval_watch.lock"
 EVAL="$HERE/eval.py"
 WORKER="$HERE/../worker"
 SELF="$(readlink -f "$0")"
@@ -38,19 +38,40 @@ is_watcher() {
     [[ "${argv0##*/}" == "bash" && "$argv1" == "$SELF" ]]
 }
 
-others=()
-for d in /proc/[0-9]*/; do
-    pid="${d#/proc/}"; pid="${pid%/}"
-    [[ "$pid" == "$$" ]] && continue
-    is_watcher "$pid" && others+=("$pid")
-done
-if (( ${#others[@]} > 0 )); then
+# Fail early with a readable message if the eval dir isn't writable, rather
+# than letting the `exec 9<>` below die with a raw redirection error.
+if ! : >>"$LOCKFILE" 2>/dev/null; then
+    echo "ERROR: cannot write $LOCKFILE — is $HERE read-only?" >&2
+    echo "       eval_watch.sh needs a writable eval dir for its lock + log." >&2
+    exit 1
+fi
+
+# Single-instance guard. The authoritative, race-safe lock is an exclusive
+# flock held for this process's lifetime (two simultaneous starts can't both
+# acquire it, and the kernel drops it automatically when the holder exits — no
+# stale lock to clear). The /proc scan only names the running watcher for the
+# error message. Open read-write WITHOUT O_TRUNC so a failed acquisition below
+# doesn't wipe the live holder's pid breadcrumb before flock even fails.
+exec 9<>"$LOCKFILE"
+if ! flock -n 9; then
+    others=()
+    for d in /proc/[0-9]*/; do
+        pid="${d#/proc/}"; pid="${pid%/}"
+        [[ "$pid" == "$$" ]] && continue
+        is_watcher "$pid" && others+=("$pid")
+    done
     echo "ERROR: watcher already running at PID ${others[*]}" >&2
-    echo "       to use it:     tail -f $LOG" >&2
+    echo "       to iterate:    just edit the prompt's content — this watcher" >&2
+    echo "                      re-runs the eval automatically (a no-op 'touch'" >&2
+    echo "                      won't; the trigger is a content hash)" >&2
+    echo "       to read it:    tail -f $LOG" >&2
     echo "       to replace it: kill ${others[*]} && $0 ${1:+$1}" >&2
     exit 1
 fi
-echo $$ > "$LOCK"
+# Now that we hold the lock, reset the file to just our pid as a human-readable
+# breadcrumb; flock itself is the lock.
+truncate -s 0 "$LOCKFILE" 2>/dev/null || true
+echo $$ >&9
 
 # Hash the file's content — using mtime alone causes spurious triggers because
 # editors / language servers / git tools re-save the file without changing
@@ -94,12 +115,18 @@ trigger() {
 
 cleanup() {
     kill_running
-    rm -f "$LOCK"
     return 0
 }
-trap cleanup EXIT INT TERM HUP
+# A signal trap that only returns lets bash resume the watch loop, so the
+# watcher would survive the very SIGINT/SIGTERM/SIGHUP meant to stop it. Route
+# signals through `exit`, which fires the EXIT trap exactly once for both
+# signalled and normal termination.
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
 
 echo "watching $PROMPT — log $LOG  debounce ${DEBOUNCE_SECS}s  (stop: kill $$)"
+echo "to iterate: edit the prompt's content — it re-runs automatically;"
+echo "            a no-op 'touch' won't (the trigger is a content hash)."
 echo "started $(date "$TIME_FMT") (PID $$)" >> "$LOG"
 
 # Baseline run on startup so the user sees a score immediately.

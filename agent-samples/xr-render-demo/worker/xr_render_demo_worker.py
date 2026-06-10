@@ -40,6 +40,10 @@ _TRACE_FILE = "/tmp/xr-agent-trace.log"
 # object ids before any manipulation.
 _WORKER_MANAGED_TOOLS = frozenset({"start_xr", "get_health"})
 
+# MCP tools retired in favor of the brain-executed look_at_current_frame; the
+# servers/clients stay up for infra/routing but the model is never offered them.
+_SUPERSEDED_PERCEPTION_TOOLS = frozenset({"get_latest_frame", "ask_image"})
+
 
 def _build_tools(render_tools: list, oxr_tools: list,
                  vlm_tools: list = (), video_tools: list = (),
@@ -51,7 +55,7 @@ def _build_tools(render_tools: list, oxr_tools: list,
     all_tools = (list(oxr_tools) + list(vec_tools) + list(render_tools)
                  + list(vlm_tools) + list(video_tools))
     for t in all_tools:
-        if t.name in _WORKER_MANAGED_TOOLS:
+        if t.name in _WORKER_MANAGED_TOOLS or t.name in _SUPERSEDED_PERCEPTION_TOOLS:
             continue
         schema = getattr(t, "inputSchema", None) or {"type": "object", "properties": {}}
         tools.append(ToolDef(

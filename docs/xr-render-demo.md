@@ -207,8 +207,20 @@ On each `TranscriptionFrame`:
      `place_inside_by_id`, `displace_object`, `displace_objects`) →
      `oxr-mcp`; vec-mcp tools (`between_anchors`, `world_offset`,
      `along_direction`, `scale_value`) → `vec-mcp`; `ask_image` →
-     `vlm-mcp` (with path existence guard); video tools → `video-mcp`;
-     everything else → `render-mcp`.
+     `vlm-mcp` (served for routing, but withheld from the model — see
+     `look_at_current_frame` supersession below); video tools →
+     `video-mcp`; everything else → `render-mcp`.
+   - Real-world visual queries (what the user is holding / looking at / a
+     real object named by noun) route to the camera, NOT the virtual scene:
+     the brain executes `look_at_current_frame`, which turns the camera on
+     and runs the VLM on the current live frame (a single brain-executed
+     tool, not an MCP two-step). The `REAL-WORLD VISUAL QUERIES` prompt
+     section enforces this so the agent never reports a virtual primitive's
+     colour as the real object's. Each such query fetches a FRESH frame: a
+     repeat or follow-up ("what about now?") re-runs `look_at_current_frame`
+     rather than reusing the prior turn's frame or spoken answer — the real
+     world can change between asks, and only the text reply (not the frame)
+     survives in `[Recent conversation]`.
    - Progress message sent on `agent.progress` topic before each tool
      executes (data channel).
    - If `think=true`: reasoning preamble injected into system prompt
@@ -233,8 +245,8 @@ On each `TranscriptionFrame`:
 | `render-mcp` | 8220 | `start_xr`, `get_health`, `add_primitive`, `update_primitive`, `remove_primitive`, `get_scene_state` |
 | `oxr-mcp` | 8230 | `get_head_pose`, `position_ahead`, `position_relative`, `place_user_relative`, `place_object_relative`, `place_inside_by_id`, `displace_object`, `displace_objects`, `get_health` |
 | `vec-mcp` | 8250 | `between_anchors`, `world_offset`, `along_direction`, `scale_value` |
-| `vlm-mcp` | 8240 | `ask_image` |
-| `video-mcp` | 8210 | `list_live_participants`, `list_recorded_participants`, `get_video_stats`, `query_video`, `get_latest_frame`, `get_frame_at_time` |
+| `vlm-mcp` | 8240 | `ask_image` (served for routing, but withheld from the model — see `look_at_current_frame` supersession) |
+| `video-mcp` | 8210 | `list_live_participants`, `get_latest_frame` (served for routing, but withheld from the model — see `look_at_current_frame` supersession; recording disabled in this sample — historical tools `list_recorded_participants` / `get_video_stats` / `query_video` / `get_frame_from_time` are hidden; enable `video_recording` to unlock them) |
 
 `render-mcp` owns the LOVR child process and is the only thing that pushes
 ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `oxr-mcp` opens a
@@ -323,14 +335,27 @@ a streaming client connects. LOVR cannot start before then.
 ## Eval harness
 
 Offline regression suite for the agentic loop, run against the live model
-stack (no LLM/MCP mocks; render-mcp tools are fake-succeeded so the live
-LOVR scene is not mutated). See
+stack (render-mcp tools are fake-succeeded so the live LOVR scene is not
+mutated, and `look_at_current_frame` is mocked in vision cases so
+perception is deterministic). See
 [`agent-samples/xr-render-demo/eval/README.md`](../agent-samples/xr-render-demo/eval/README.md)
 for the case format and the watch-mode loop. Run with:
 
 ```bash
 agent-samples/xr-render-demo/eval/eval.py
 ```
+
+### Iterating on the prompt (watcher)
+
+The eval is driven by a watcher the user starts once: edit the prompt,
+wait for the debounce, read the gitignored log in the eval dir
+(`eval/.eval_loop.log`) — never re-launch the
+eval, and never `touch` to force a run (the trigger is a content hash,
+not mtime). The full agent iteration loop, priorities, and prompt
+hygiene live in
+[`agent-samples/xr-render-demo/AGENTS.md`](../agent-samples/xr-render-demo/AGENTS.md);
+human harness details (single-instance guard, stop command) are in
+[`eval/README.md`](../agent-samples/xr-render-demo/eval/README.md).
 
 ### Prompt/eval overlap audit
 
@@ -343,3 +368,11 @@ in both a case fixture and a worked-example block. Reserved vocab
 lives in `_EVAL_VOCAB_COLORS` / `_EVAL_VOCAB_SHAPES`; clearing a
 warning means changing the prompt's worked example, not the case.
 `--strict-overlap` turns the audit into a hard failure (rc=2) for CI.
+
+Colour-fidelity cases (`"category": "color"`) are exempt from the
+reserved-vocab check: they sweep a wide palette on purpose, so their
+colours do not constrain the prompt's worked examples (shapes stay
+covered by the spatial cases). Each such case asserts the created
+object's `r`/`g`/`b` and a `reply_colors` allow-set that fails the
+case if the spoken reply names a different colour — the "built white,
+said magenta" regression.

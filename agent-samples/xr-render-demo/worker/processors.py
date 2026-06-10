@@ -93,6 +93,7 @@ _VIDEO_TOOLS = frozenset({
 # recording is disabled), mirroring simple-vlm-example's live-frame VLM path.
 _PERCEPTION_TOOL = "look_at_current_frame"
 
+# Keep in sync with eval/eval.py `_PERCEPTION_TOOL_DEF` (mirrored, not imported).
 _PERCEPTION_TOOL_DEF = ToolDef(
     name=_PERCEPTION_TOOL,
     description=(

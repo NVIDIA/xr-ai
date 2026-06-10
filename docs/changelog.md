@@ -9,6 +9,39 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-12 — xr-render-demo eval: opt-in robustness sweep (revisits a same-day rejection)
+
+The eval↔worker context mirror rejected earlier today (reorder context blocks,
+add a `Reference time` line, add the `--thinking` scaffold) returns as opt-in
+robustness tooling rather than default behaviour. The earlier decision held
+that mirroring must not change the default score; this delta honours that by
+gating all three perturbations behind `--robustness` (or a `ROBUSTNESS` line in
+`.only`) and re-scoring only an explicit case subset, so the default suite is
+untouched. The sweep refuses to run without a case subset (full-suite ×4 is a
+rarely-intended cost). `_run_one` also now mirrors the worker's plain-text
+tool-call recovery so the `think` variant doesn't flag a failure mode
+production tolerates. New eval cases pin the two "exactly N" prompt rules that
+prior tautological cases left unverified (ordered containment sequence, exact
+stack count) and that the timestamp metadata is not mistaken for a coordinate.
+
+### 2026-06-12 — xr-render-demo eval: harness hardening
+
+A round of eval correctness/hardening fixes landed in `eval/eval.py` with no
+prompt change and no score regression: several checks were tightened to fail
+only for the right reason, and a malformed model tool-call now fails its own
+case instead of aborting the whole batch with a traceback.
+
+An eval↔worker context-block mirror (reorder the context blocks, add a
+`Reference time` line and a `--thinking` scaffold so the eval feeds the model
+exactly what the worker does) was evaluated and rejected: it knocked six
+otherwise-green cases off the full suite without catching any real model fault,
+so the eval keeps its prior context assembly.
+
+The colour-fidelity suite covers only the basic palette the demo is observed to
+confuse; an earlier sweep over secondary/colloquial colours (salmon, lavender,
+olive, …) was dropped because it failed on slight in-family hue drift that is
+noise, not a bug.
+
 ### 2026-06-11 — iOS/visionOS: pre-warm the LiveKit recording engine on mic start
 
 `LiveKitBackend.startAudio` now calls
@@ -60,6 +93,72 @@ of leaving the GPU billing unnoticed. `BREV_INSTANCE_NAME`/`BREV_ORG` are
 repository **secrets** (not variables); the guards abort if they resolve
 empty. The top-level token is `contents: read`, with `notify` overriding to
 `issues: write`.
+
+### 2026-06-11 — xr-render-demo eval watcher: per-checkout lock and log
+
+`eval_watch.sh`'s lock and log moved from global `/tmp` to repo-local paths in
+the eval dir (`.eval_watch.lock`, `.eval_loop.log`, both gitignored). The
+separate pid file (`/tmp/eval_watch.pid`) is dropped — the exclusive `flock`
+held for the process's lifetime is the single source of truth, and the holder
+pid is now written into the flocked file as a breadcrumb. `cleanup` no longer
+removes any lock file (flock releases on process death). The global paths were
+shared across checkouts, so a watcher in one checkout clobbered another's pid
+breadcrumb and interleaved the shared log; making the eval dir the namespace
+removes the cross-checkout clobber.
+
+### 2026-06-11 — xr-render-demo: withhold the superseded perception two-step from the model
+
+The worker (and the eval, to match the surface) now drop `get_latest_frame`
+(video-mcp) and `ask_image` (vlm-mcp) from the LLM tool list — a
+`_SUPERSEDED_PERCEPTION_TOOLS` filter alongside `_WORKER_MANAGED_TOOLS` in
+`_build_tools`, mirrored by `SUPERSEDED_PERCEPTION` in the eval's
+`_discover_tools`. `look_at_current_frame` is now the sole perception tool the
+model can reach; the model can no longer take the broken/stale two-step path
+under nondeterminism. The MCP servers and clients stay up for routing — only
+the offer to the model is withdrawn — and `system.txt`'s explicit ban remains
+as belt-and-suspenders.
+
+### 2026-06-11 — xr-render-demo eval: colour-fidelity suite, vision routing, built-vs-said honesty
+
+The eval harness now grades colour and perception, not just spatial tool
+routing. A `category="color"` suite calibrated to catch only the two failures
+that matter in the demo — gross colour-family confusion and built-vs-said
+dishonesty — with intentionally wide r/g/b boxes that ignore in-family hue
+drift. Real-world visual queries are graded via `look_at_current_frame`, the
+single brain-executed perception tool that replaced the retired
+`get_latest_frame`→`ask_image` two-step; the harness mocks it (returning a
+canned `{"answer": …}` on success or `{"error": …, "spoken": …}` on a
+perception failure, mirroring the worker's short-circuit) so vision cases are
+deterministic without real image understanding. Honesty is enforced by
+comparing the spoken reply's named colour against the colour actually built
+(`_built_rgb`), so "built white, said magenta" fails even when magenta was
+requested. The reserved-vocab overlap audit is exempted for `category="color"`
+cases because they deliberately sweep the basic palette and so cannot constrain
+the prompt's worked examples; the audit still binds spatial cases.
+
+### 2026-06-11 — Document the eval-watcher iteration loop for agents
+
+`agent-samples/xr-render-demo/eval/eval_watch.sh` re-runs the eval on every
+content change to `system.txt` (sha1 of the bytes, not mtime; 10 s debounce;
+log at the gitignored `eval/.eval_loop.log`). The user starts it once and a prompt-engineering
+agent iterates by editing the prompt and reading the log — never re-launching
+the eval. Two failure modes kept recurring because the contract lived only
+implicitly in the watcher's source: the agent would run `eval.py` manually
+(re-asking the user for permission, defeating the watcher), or `touch` the
+prompt to force a re-run (which changes mtime but not the content hash, so the
+watcher never fires).
+
+No behaviour change — the watcher was already correct. The fix makes the
+edit→hash→rerun loop and both anti-patterns explicit where they'll be read,
+and single-sources them by placement: the agent iteration loop, priorities,
+and prompt hygiene live in the sample-level `agent-samples/xr-render-demo/AGENTS.md`
+(auto-read by agents working in that tree, tool-agnostic); human harness
+details stay in `eval/README.md`; `docs/xr-render-demo.md` and the root
+`AGENTS.md` "Prompt-driven samples" bullet carry one-line pointers; and the
+watcher's startup banner plus its "already running" error (the spot an agent
+lands on when it tries to re-run the script) now explain the content-hash
+trigger.
+
 ### 2026-06-10 — Sphinx documentation site (isaacteleop-style), scaffold
 
 Stood up a Sphinx documentation site under `docs/source/`, mirroring the

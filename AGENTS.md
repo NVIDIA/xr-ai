@@ -132,6 +132,15 @@ When a sample's behaviour is driven by an LLM prompt (e.g.
   check. The harness audits this at startup and warns; clear the
   warning by changing the prompt example, not the case.
 
+- **Iterate via the eval watcher — don't re-run the eval yourself.** When a
+  sample ships an `eval/` watcher, the user starts it once and it re-runs the
+  eval automatically on every prompt change; your loop is edit `system.txt` →
+  wait for the debounce → read the log. Don't run `eval.py` / `eval_watch.sh`
+  manually (re-asks for permission and defeats the watcher), and don't `touch`
+  the prompt to force a run — the trigger is a content hash, so a no-op touch
+  changes mtime but not bytes and won't fire. For the full loop, priorities,
+  and prompt hygiene, see `agent-samples/xr-render-demo/AGENTS.md`.
+
 ## Dependency discipline
 
 `DEPENDENCIES.md` at the repo root is the authoritative dependency map.

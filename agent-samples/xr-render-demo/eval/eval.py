@@ -7,8 +7,9 @@
 # ///
 """
 agent-llm eval harness for xr-render-demo. Talks to the running stack
-(no mocks for the LLMs / MCP servers — render-mcp tools are fake-succeeded
-so the harness never mutates the live LOVR scene).
+with a real LLM; render-mcp tools are fake-succeeded so the harness never
+mutates the live LOVR scene, and look_at_current_frame is mocked in vision
+cases so perception is deterministic.
 
 Usage:
   ./eval.py                  # run all built-in cases against system.txt
@@ -68,6 +69,92 @@ VEC_MCP     = f"{_WORKER_CFG.vec_mcp}/mcp"
 # Tools the worker manages internally; hidden from the agent LLM so
 # the eval and the live worker advertise the same tool surface.
 WORKER_MANAGED = {"start_xr", "get_health"}
+
+# Mirrors the worker's _SUPERSEDED_PERCEPTION_TOOLS: MCP tools superseded by the
+# brain-executed look_at_current_frame and withheld from the model. Keep in sync.
+SUPERSEDED_PERCEPTION = {"get_latest_frame", "ask_image"}
+
+# Brain-executed live-frame perception tool — not served by any MCP, so tool
+# discovery misses it. The eval must advertise the same look_at_current_frame
+# surface the live worker does, so keep this in sync with processors.py
+# `_PERCEPTION_TOOL_DEF` (no shared import: that would drag the worker's deps
+# into this stdlib-light harness and cross the eval↔worker layering line).
+_PERCEPTION_TOOL_DEF = {
+    "type": "function",
+    "function": {
+        "name": "look_at_current_frame",
+        "description": (
+            "Look at the user's LIVE camera feed right now and answer a "
+            "question about the real world — what they are holding, pointing "
+            "at, or looking at; a real-world colour, shape, text, or object. "
+            "Turns the camera on automatically and inspects the current frame. "
+            "Use this whenever the answer cannot be known from the XR scene "
+            "state alone."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": (
+                        "The specific question to answer about the live camera "
+                        "frame, e.g. 'What colour is the object the user is "
+                        "holding?'"
+                    ),
+                },
+            },
+            "required": ["question"],
+        },
+    },
+}
+
+# Synthetic participant id injected into every rollout's context, mirroring
+# the worker's "Participant: {pid}" line. look_at_current_frame resolves the
+# active participant worker-side, so it is context only (not a tool argument).
+EVAL_PID = "eval-user"
+
+# Robustness sweep (opt-in): re-score selected cases under semantically-
+# irrelevant context perturbations to tell a robust result from one balanced on
+# a decision boundary. Off by default; see eval/README.md.
+EVAL_REF_US_A = 1749760000000000
+EVAL_REF_US_B = 1783000123456789
+
+# Read by _build_messages; the robustness loop swaps it per variant and restores
+# it afterward, so its resting value is the clean default.
+_ROBUSTNESS_VARIANT: dict = {"order": "clean", "ref_us": None}
+
+# Mirror of the worker's needs_thinking scaffold, prepended to the system
+# prompt when a variant turns thinking on.
+_THINK_SCAFFOLD = (
+    "Use your private <think> block to work through these steps. "
+    "NEVER output these steps as your response — your only text output "
+    "to the user is ONE SHORT sentence AFTER all tool calls are done.\n"
+    "\n"
+    "THINK STEP 1 — RESOLVE: Which object? "
+    "Pronouns ('it', 'that') = most recently added/modified object. "
+    "Named ('the blue sphere') = match by color/type in scene.\n"
+    "\n"
+    "THINK STEP 2 — LOCATE: Copy the exact x, y, z of the target object "
+    "and the head pose right/forward/up vectors from the context.\n"
+    "\n"
+    "THINK STEP 3 — COMPUTE: Calculate new coordinates with explicit arithmetic. "
+    "User-relative move: new = old + head_vec × distance (per component). "
+    "Near object: new = obj.pos ± world_offset. "
+    "Midpoint: new = (A + B) / 2 per component. "
+    "Write out each component: x=…, y=…, z=…\n"
+    "\n"
+    "THINK STEP 4 — EXECUTE: call the tool with the computed values, "
+    "then reply with ONE short sentence to the user.\n\n"
+)
+
+# clean is the default context; the rest perturb it in ways a robust prompt
+# must be invariant to.
+_ROBUSTNESS_VARIANTS = [
+    {"tag": "clean",  "order": "clean",  "ref_us": None,          "thinking": False, "scaffold": False},
+    {"tag": "refB",   "order": "clean",  "ref_us": EVAL_REF_US_B, "thinking": False, "scaffold": False},
+    {"tag": "order2", "order": "worker", "ref_us": EVAL_REF_US_A, "thinking": False, "scaffold": False},
+    {"tag": "think",  "order": "worker", "ref_us": EVAL_REF_US_A, "thinking": True,  "scaffold": True},
+]
 
 # Mirror the worker's WorkerConfig defaults — same fixture pose for every
 # test, so prompt regressions are reproducible.
@@ -155,6 +242,54 @@ def _stacked_vertically(muts: list[dict]) -> tuple[bool, str]:
         if b - a < 0.05:
             return False, f"y values not separated (need ≥5 cm gap): {ys}"
     return True, f"stacked at y={ys}"
+
+
+def _stacked_exactly(n: int):
+    """Predicate factory for a stack case that must emit EXACTLY ``n``
+    add_primitive calls (catching over-stacking the default ``ignore_extra``
+    matcher would hide) AND stack them vertically."""
+    def _pred(muts: list[dict]) -> tuple[bool, str]:
+        adds = [tc for tc in muts if tc["function"]["name"] == "add_primitive"]
+        if len(adds) != n:
+            return False, f"need exactly {n} add_primitive calls, got {len(adds)}"
+        return _stacked_vertically(muts)
+    return _pred
+
+
+def _containment_sequence(container: tuple[float, float, float], *, tol: float = 0.1):
+    """Ordered-call predicate factory for containment: assert the rollout
+    calls place_inside_by_id and then IMMEDIATELY update_primitive on the
+    placed object at the container centre. Reads the full ordered tool-call
+    list (helper calls included), so a model that skips the place_inside_by_id
+    compute step fails even if its final coordinates happen to land."""
+    cx, cy, cz = container
+
+    def _pred(tcs: list[dict]) -> tuple[bool, str]:
+        names = [tc["function"]["name"] for tc in tcs]
+        if "place_inside_by_id" not in names:
+            return False, f"no place_inside_by_id call; calls={names}"
+        i = names.index("place_inside_by_id")
+        pi = tcs[i]["function"]["arguments"]
+        pi = json.loads(pi) if isinstance(pi, str) else pi
+        movee = pi.get("movee_id")
+        if i + 1 >= len(names) or names[i + 1] != "update_primitive":
+            return False, (f"place_inside_by_id not immediately followed by "
+                           f"update_primitive; calls={names}")
+        up = tcs[i + 1]["function"]["arguments"]
+        up = json.loads(up) if isinstance(up, str) else up
+        oid = up.get("obj_id") or up.get("object_id")
+        if movee and oid and oid != movee:
+            return False, (f"update_primitive targets {oid!r}, not the placed "
+                           f"object {movee!r}")
+        for k, want in (("x", cx), ("y", cy), ("z", cz)):
+            v = up.get(k)
+            if v is None:
+                return False, f"update_primitive missing {k}"
+            if abs(float(v) - want) > tol:
+                return False, f"update {k}={v} not ≈ container {k}={want}"
+        return True, (f"place_inside_by_id → update_primitive at "
+                      f"container centre ({cx}, {cy}, {cz})")
+    return _pred
 
 
 CASES = [
@@ -276,6 +411,26 @@ CASES = [
         "result": [
             {"tool": "update_primitive",
              "args": {"obj_id": "sphere-0", "y": (1.35, 1.45)}},
+        ],
+    },
+    # ── CONTEXT METADATA is not a coordinate ──────────────────────────────────
+    # A Reference-time line is injected whose leading digits ("2.5…") read like
+    # a tempting coordinate/offset. Coordinates must come from the cube's
+    # position + head pose; a model that mistakes the µs timestamp for an
+    # offset lands far outside the box. Proves the timestamp is treated as
+    # bookkeeping, not spatial input.
+    {
+        "name":  "context_metadata_not_a_coordinate",
+        "scene": [{"id": "box-0", "type": "box",
+                   "pos": [0.2, 1.45, -1.8], "color": [0, 0.4, 1], "size": 0.1}],
+        "ref_us": 2500000000000000,
+        "user":  "Move the cube to my right by half a metre.",
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "box-0",
+                      "x": (0.65, 0.75),
+                      "y": (1.40, 1.50),
+                      "z": (-1.85, -1.75)}},
         ],
     },
     # ── object-relative placement (above, behind, etc.) ───────────────────────
@@ -992,6 +1147,26 @@ CASES = [
         "predicate": _stacked_vertically,
     },
 
+    # ── stack EXACTLY the requested count ─────────────────────────────────────
+    # "Stack two" must emit exactly two adds: ignore_extra=False plus a
+    # predicate pinning the count catches the over-stacking the >=2 predicate
+    # on stack_three_cubes lets through.
+    {
+        "name":  "stack_two_yellow_pyramids",
+        "scene": [],
+        "user":  "Stack two yellow pyramids.",
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "pyramid",
+                      "r": (0.7, 1.0), "g": (0.7, 1.0), "b": (0.0, 0.4)}},
+            {"tool": "add_primitive",
+             "args": {"prim_type": "pyramid",
+                      "r": (0.7, 1.0), "g": (0.7, 1.0), "b": (0.0, 0.4)}},
+        ],
+        "predicate": _stacked_exactly(2),
+        "ignore_extra": False,
+    },
+
     # ── way to the left, no number ────────────────────────────────────────────
     {
         "name":  "way_to_the_left_no_number",
@@ -1238,6 +1413,31 @@ CASES = [
         "ignore_extra": False,
     },
 
+    # ── containment is exactly TWO ordered calls ──────────────────────────────
+    # place_inside_by_id COMPUTES the destination; update_primitive MOVES the
+    # object there. ordered_calls enforces the SEQUENCE, so a model that jumps
+    # straight to update_primitive (skipping the compute step) fails even if
+    # its coordinates happen to land at the container centre.
+    {
+        "name":  "containment_place_inside_then_update",
+        "scene": [
+            {"id": "box-0", "type": "box",
+             "pos": [-0.6, 1.4, -2.0], "color": [0, 0.8, 0], "size": 0.3},
+            {"id": "pyramid-0", "type": "pyramid",
+             "pos": [1.2, 1.5, -0.8], "color": [1, 1, 0], "size": 0.1},
+        ],
+        "user":  "Put the pyramid in the cube.",
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "pyramid-0",
+                      "x": (-0.65, -0.55),
+                      "y": ( 1.35, 1.45),
+                      "z": (-2.05, -1.95)}},
+        ],
+        "ordered_calls": _containment_sequence((-0.6, 1.4, -2.0)),
+        "ignore_extra": False,
+    },
+
     # ── spatial disambiguation on the LEFT side (mirror of …rightmost) ───────
     # Same scene shape as the rightmost case but the cue is "leftmost".
     {
@@ -1342,6 +1542,464 @@ CASES = [
              "args": {"obj_id": "sphere-0", "y": (0.5, 1.61)}},
         ],
     },
+
+    # ══ COLOUR FIDELITY ═══════════════════════════════════════════════════════
+    # category="color" cases catch two failures that matter in the live demo:
+    # gross colour-family confusion (white when asked for magenta) and
+    # built-vs-said dishonesty (narrating one colour while painting another).
+    # The r/g/b boxes are intentionally wide — each admits any reasonable
+    # rendering of the requested colour and fails only a clearly wrong one;
+    # in-family hue drift is not policed. `reply_colors` is the honesty
+    # allow-set: the spoken reply may not name a colour outside it, nor (via
+    # _built_rgb) one inconsistent with what was actually built.
+    {
+        "name":     "color_make_magenta_sphere",
+        "category": "color",
+        "scene":    [],
+        "user":     "Make a magenta sphere.",
+        # high R, LOW G, high B — excludes white (G high), red (B low),
+        # blue (R low). This is the white↔magenta trap, magenta direction.
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.7, 1.0), "g": (0.0, 0.4), "b": (0.7, 1.0)}},
+        ],
+        "reply_colors": {"magenta", "pink"},
+    },
+    {
+        "name":     "color_make_white_sphere",
+        "category": "color",
+        "scene":    [],
+        "user":     "Make a white sphere.",
+        # all channels high — excludes any saturated hue (magenta has G=0).
+        # This is the white↔magenta trap, white direction.
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.8, 1.0), "g": (0.8, 1.0), "b": (0.8, 1.0)}},
+        ],
+        "reply_colors": {"white"},
+    },
+    {
+        "name":     "color_make_sphere_default_white",
+        "category": "color",
+        "scene":    [],
+        # No colour specified → the prompt defaults to WHITE. Beyond the RGB
+        # default, this guards say==build on the unspecified-default path (the
+        # live "built white / said orange" shape): reply_colors={"white"} lets
+        # the reply name no colour at all OR name white, but a non-white colour
+        # word — cross-checked against the built rgb — FAILS.
+        "user":     "Make a sphere.",
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.8, 1.0), "g": (0.8, 1.0), "b": (0.8, 1.0)}},
+        ],
+        "reply_colors": {"white"},
+    },
+    {
+        "name":     "color_make_coloured_sphere_self_consistent",
+        "category": "color",
+        "scene":    [],
+        # User-side underspecified hue: "coloured" names no specific colour.
+        # BOTH honest behaviors are accepted — the model may ask which colour,
+        # OR pick one and build it — and only a say!=built colour mismatch
+        # fails. T1 accepts a clarifying question OR a self-consistent build.
+        # T2 ("just pick one") additionally requires a self-consistent coloured
+        # sphere to exist (built now or carried from T1). No fixed target: the
+        # allowed reply colours are derived from whatever the model built.
+        "turns": [
+            {"user": "Make a coloured sphere.",
+             "accept_clarify_or_consistent": True},
+            {"user": "Just pick one.",
+             "accept_clarify_or_consistent": True,
+             "require_coloured_result": True},
+        ],
+    },
+    {
+        "name":     "color_make_red_sphere",
+        "category": "color",
+        "scene":    [],
+        "user":     "Make a red sphere.",
+        # high R, low G, low B — excludes green/blue (R low), yellow
+        # (G high), white (G/B high), magenta (B high).
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.6, 1.0), "g": (0.0, 0.45), "b": (0.0, 0.45)}},
+        ],
+        "reply_colors": {"red"},
+    },
+    {
+        "name":     "color_make_green_cube",
+        "category": "color",
+        "scene":    [],
+        "user":     "Create a green cube.",
+        # low R, high G, low B — excludes red/yellow (R high), cyan/blue
+        # (B high), white.
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "box",
+                      "r": (0.0, 0.45), "g": (0.55, 1.0), "b": (0.0, 0.45)}},
+        ],
+        "reply_colors": {"green"},
+    },
+    {
+        "name":     "color_make_blue_pyramid",
+        "category": "color",
+        "scene":    [],
+        "user":     "Add a blue pyramid.",
+        # low R, high B — excludes red/orange/magenta (R high), green
+        # (B low), cyan (G maxed), white.
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "pyramid",
+                      "r": (0.0, 0.45), "g": (0.0, 0.65), "b": (0.55, 1.0)}},
+        ],
+        "reply_colors": {"blue"},
+    },
+    {
+        "name":     "color_make_yellow_sphere",
+        "category": "color",
+        "scene":    [],
+        "user":     "Make a yellow sphere.",
+        # high R, high G, low B — excludes white (B high), orange (G mid),
+        # green (R low), red (G low).
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.6, 1.0), "g": (0.6, 1.0), "b": (0.0, 0.4)}},
+        ],
+        "reply_colors": {"yellow"},
+    },
+    {
+        "name":     "color_make_orange_cube",
+        "category": "color",
+        "scene":    [],
+        "user":     "Create an orange cube.",
+        # high R, MID G, low B — excludes red (G low), yellow (G high),
+        # white (B high), magenta (B high).
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "box",
+                      "r": (0.7, 1.0), "g": (0.25, 0.7), "b": (0.0, 0.4)}},
+        ],
+        "reply_colors": {"orange"},
+    },
+    {
+        "name":     "color_make_purple_pyramid",
+        "category": "color",
+        "scene":    [],
+        "user":     "Add a purple pyramid.",
+        # mid-high R, low G, high B — excludes blue (R low), magenta/pink
+        # (R near 1), white (G high).
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "pyramid",
+                      "r": (0.25, 0.8), "g": (0.0, 0.45), "b": (0.5, 1.0)}},
+        ],
+        "reply_colors": {"purple", "violet"},
+    },
+    {
+        "name":     "color_make_cyan_sphere",
+        "category": "color",
+        "scene":    [],
+        "user":     "Make a cyan sphere.",
+        # low R, high G, high B — excludes blue (G low), green (B low),
+        # white (R high). Admits a teal-leaning cyan.
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.0, 0.45), "g": (0.5, 1.0), "b": (0.5, 1.0)}},
+        ],
+        "reply_colors": {"cyan", "teal", "turquoise"},
+    },
+    {
+        "name":     "color_make_black_cube",
+        "category": "color",
+        "scene":    [],
+        "user":     "Add a black cube.",
+        # all channels low — excludes any bright colour.
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "box",
+                      "r": (0.0, 0.2), "g": (0.0, 0.2), "b": (0.0, 0.2)}},
+        ],
+        "reply_colors": {"black"},
+    },
+    {
+        "name":     "color_make_gray_sphere",
+        "category": "color",
+        "scene":    [],
+        "user":     "Make a gray sphere.",
+        # all channels mid — excludes any saturated hue (which maxes one
+        # channel and zeroes another). Admits dark grey through silver.
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.25, 0.75), "g": (0.25, 0.75), "b": (0.25, 0.75)}},
+        ],
+        "reply_colors": {"gray", "grey", "silver"},
+    },
+    # Recolour a WHITE object to magenta — the dedicated built-white/
+    # said-magenta lie catcher. update_primitive is a partial update, so a
+    # call that omits channels resolves them against the white scene object:
+    # built reads white, which fails BOTH the magenta box (G stays 1) and
+    # the build-vs-said honesty check if the reply still says "magenta".
+    {
+        "name":     "color_recolor_to_magenta",
+        "category": "color",
+        "scene":    [{"id": "box-0", "type": "box",
+                      "pos": [0.0, 1.6, -1.5], "color": [1, 1, 1], "size": 0.1}],
+        "user":     "Make it magenta.",
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "box-0",
+                      "r": (0.7, 1.0), "g": (0.0, 0.4), "b": (0.7, 1.0)}},
+        ],
+        "reply_colors": {"magenta", "pink"},
+    },
+
+    # ── real-world visual queries (camera routing) ────────────────────────────
+    # These cases catch the agent answering a real-world question ("what am I
+    # holding?") from a VIRTUAL scene primitive instead of the live camera.
+    # Each case mocks the vision path — look_at_current_frame returns the
+    # case's ``vision`` description as {"answer": "<KNOWN colour>"} — then
+    # asserts (a) the FIRST tool call is look_at_current_frame, (b) no scene
+    # mutation happens, and (c) the FINAL reply repeats the camera's colour.
+    # ``reply_forbids`` (distractor cases) additionally fails any reply that
+    # leaks the virtual primitive's colour. ``first_call`` triggers the
+    # vision-routing branch in _check.
+    {
+        "name":        "vision_what_am_i_holding",
+        "category":    "vision",
+        "scene":       [],
+        "user":        "What am I holding right now?",
+        "vision":      "The user is holding a lavender ceramic vase.",
+        "first_call":  ["look_at_current_frame"],
+        "reply_names": ["lavender"],
+    },
+    {
+        "name":        "vision_color_of_held_object",
+        "category":    "vision",
+        "scene":       [],
+        "user":        "What colour is the object I'm holding?",
+        "vision":      "The object in the user's hand is a turquoise rubber ball.",
+        "first_call":  ["look_at_current_frame"],
+        "reply_names": ["turquoise"],
+    },
+    {
+        "name":        "vision_what_am_i_looking_at",
+        "category":    "vision",
+        "scene":       [],
+        "user":        "What am I looking at?",
+        "vision":      "The user is looking at a maroon leather armchair.",
+        "first_call":  ["look_at_current_frame"],
+        "reply_names": ["maroon"],
+    },
+    {
+        "name":        "vision_whats_in_front_of_me",
+        "category":    "vision",
+        "scene":       [],
+        "user":        "What is that thing in front of me?",
+        "vision":      "Directly in front of the user is an olive backpack.",
+        "first_call":  ["look_at_current_frame"],
+        "reply_names": ["olive"],
+    },
+    # Distractor: a VIRTUAL orange sphere sits in the scene, but the user asks
+    # about a REAL mug. The camera says teal; a correct turn reports teal and
+    # never the sphere's orange. This is the proof that scene state is ignored.
+    {
+        "name":         "vision_real_mug_vs_virtual_sphere",
+        "category":     "vision",
+        "scene":        [{"id": "sphere-0", "type": "sphere",
+                          "pos": [0.42, 1.53, -1.83], "color": [1, 0.5, 0],
+                          "size": 0.1}],
+        "user":         "What colour is my coffee mug?",
+        "vision":       "The user is holding a teal coffee mug.",
+        "first_call":   ["look_at_current_frame"],
+        "reply_names":  ["teal"],
+        "reply_forbids": ["orange"],
+        "reply_forbids_always": True,
+    },
+    # Distractor #2: a VIRTUAL navy cone in the scene; the user asks about a
+    # REAL shirt. Camera says gold; the reply must say gold, not navy.
+    {
+        "name":         "vision_real_shirt_vs_virtual_cone",
+        "category":     "vision",
+        "scene":        [{"id": "cone-0", "type": "cone",
+                          "pos": [-0.63, 1.47, -2.05], "color": [0, 0, 0.5],
+                          "size": 0.1}],
+        "user":         "What colour is my shirt?",
+        "vision":       "The user is wearing a gold button-up shirt.",
+        "first_call":   ["look_at_current_frame"],
+        "reply_names":  ["gold"],
+        "reply_forbids": ["navy"],
+        "reply_forbids_always": True,
+    },
+    # Multi-turn re-query: the real world can change between asks. Turn 1 the
+    # camera sees colour B1; turn 2 (a fresh "and now?" ask) it sees B2. The
+    # ``vision`` SEQUENCE feeds B1 then B2 to successive look_at_current_frame
+    # calls. The bug: on turn 2 the model sees its own turn-1 reply in [Recent
+    # conversation] and repeats B1 instead of looking again. A correct turn 2
+    # routes to the camera AGAIN (first_call) and reports the FRESH B2, never
+    # the stale B1 (reply_forbids). Each turn is checked independently; the
+    # case passes only if both pass.
+    {
+        "name":      "vision_requery_returns_fresh_colour",
+        "category":  "vision",
+        "scene":     [],
+        "vision":    ["The user is holding a vermilion water bottle.",
+                      "The user is now holding a chartreuse water bottle."],
+        "turns": [
+            {"user":        "What am I holding?",
+             "first_call":  ["look_at_current_frame"],
+             "reply_names": ["vermilion"]},
+            {"user":         "And what about now?",
+             "first_call":   ["look_at_current_frame"],
+             "reply_names":  ["chartreuse"],
+             "reply_forbids": ["vermilion"]},
+        ],
+    },
+    # Multi-turn APPLY: the model must USE the camera-perceived colour in a
+    # build, not just report it, and RE-QUERY on every ask (T3 reuses neither
+    # T2's colour nor its frame). Each turn asserts look_at_current_frame first,
+    # the correct-colour mutation on the carried sphere, and build-vs-said
+    # honesty via ``reply_colors``. Mock-only colours (no train-on-test).
+    {
+        "name":     "vision_apply_perceived_colour",
+        "category": "vision",
+        "scene":    [],
+        "vision":   ["The user is holding a green apple.",
+                     "The user's shirt is blue.",
+                     "The user's shirt is red."],
+        "turns": [
+            {"user":       "Make a sphere the colour of the thing I'm holding.",
+             "first_call": ["look_at_current_frame"],
+             "result": [
+                 {"tool": "add_primitive",
+                  "args": {"prim_type": "sphere",
+                           "r": (0.0, 0.5), "g": (0.5, 1.0), "b": (0.0, 0.5)}},
+             ],
+             "reply_colors": {"green"}},
+            {"user":       "Now change its colour to match my shirt.",
+             "first_call": ["look_at_current_frame"],
+             # Recolour must target the carried T1 sphere (sphere-0, pinned by
+             # the exactly-one-build guard), so updating a distractor fails.
+             "result": [
+                 {"tool": "update_primitive",
+                  "args": {"obj_id": "sphere-0",
+                           "r": (0.0, 0.5), "g": (0.0, 0.5), "b": (0.5, 1.0)}},
+             ],
+             "reply_colors": {"blue"}},
+            {"user":       "Actually, match my shirt colour again.",
+             "first_call": ["look_at_current_frame"],
+             "result": [
+                 {"tool": "update_primitive",
+                  "args": {"obj_id": "sphere-0",
+                           "r": (0.5, 1.0), "g": (0.0, 0.4), "b": (0.0, 0.4)}},
+             ],
+             "reply_colors": {"red"}},
+        ],
+    },
+    # Achromatic realism — the exact live-demo scenario: the held object is
+    # BLACK (a mouse), so the model must build a BLACK sphere AND say "black",
+    # not fabricate a hue. Asserts look_at_current_frame first, an all-low RGB
+    # box, and (via reply_colors) build-vs-said honesty: a reply naming any
+    # non-black colour, or a reply colour inconsistent with the built RGB,
+    # fails. Mock-only colour (no train-on-test).
+    {
+        "name":         "vision_apply_neutral_black",
+        "category":     "vision",
+        "scene":        [],
+        "user":         "Make a sphere the same colour as the mouse I'm holding.",
+        "vision":       "The user is holding a black computer mouse.",
+        "first_call":   ["look_at_current_frame"],
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.0, 0.25), "g": (0.0, 0.25), "b": (0.0, 0.25)}},
+        ],
+        "reply_colors": {"black"},
+    },
+    # Hard perception failure: ``vision_error`` short-circuits look_at_current_frame
+    # to its canned spoken line (mirroring the worker's _PerceptionUnavailableError),
+    # so the model never sees the error. Contract: the query is routed to the
+    # camera (first_call) and the failed look produces NO scene mutation (no
+    # fabricated build).
+    {
+        "name":         "vision_camera_error_canned_message",
+        "category":     "vision",
+        "scene":        [],
+        "user":         "Make a sphere the colour of the thing I'm holding.",
+        "vision_error": True,
+        "first_call":   ["look_at_current_frame"],
+    },
+    # Vague success answer: the VLM answered but named no usable colour, so the
+    # answer goes back to the model unguarded and honesty is purely prompt-driven.
+    # Assert no fabrication: with no ``result`` the turn must not mutate, and
+    # ``reply_colors=set()`` forbids the reply naming ANY colour (it should say it
+    # couldn't tell / ask the user). Mock answer has no colour word (no train-on-test).
+    {
+        "name":         "vision_vague_answer_no_fabrication",
+        "category":     "vision",
+        "scene":        [],
+        "user":         "Make a sphere the colour of the thing I'm holding.",
+        "vision":       "I can't quite tell — it's partly out of frame and the "
+                        "lighting is too dim to make it out.",
+        "first_call":   ["look_at_current_frame"],
+        "reply_colors": set(),
+    },
+    # Ambiguous-colour SELF-CONSISTENCY — different from the no-fabrication
+    # cases: the camera answer IS a real colour, just one a model could
+    # legitimately name two ways (a blue-green object → "teal" or "blue"). The
+    # model is EXPECTED to pick one and build + speak a colour. Two checks
+    # combine: the build must land in the blue-green family (the ``result`` rgb
+    # box admits teal/cyan/green/blue but rejects warm/neutral hues — so a model
+    # that builds RED and says "red" fails even though it's self-consistent),
+    # AND ``reply_self_consistent`` derives the allowed spoken names from the
+    # BUILT rgb so a "build teal / say green" split still FAILS. The box pins no
+    # single hue — either honest reading of the percept passes. Mock colour
+    # avoids the prompt's worked examples (no train-on-test).
+    {
+        "name":         "vision_ambiguous_colour_self_consistent",
+        "category":     "vision",
+        "scene":        [],
+        "user":         "Make a sphere the colour of the thing I'm holding.",
+        "vision":       "It's a blue-green object — somewhere between blue and "
+                        "green, hard to pin down exactly.",
+        "first_call":   ["look_at_current_frame"],
+        # Blue-green family box: low red rejects red/orange/yellow/purple/white;
+        # a green floor rejects black and warm neutrals. Admits the correct
+        # teal/cyan/green/blue percepts (the blue anchor carries g≈0.4).
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere", "r": (0.0, 0.5), "g": (0.3, 1.0)}},
+        ],
+        "reply_self_consistent": True,
+    },
+    # Maximally ambiguous — the camera answer acknowledges a colour EXISTS but
+    # names NONE, so NO colour is derivable. Distinct from
+    # vision_ambiguous_colour_self_consistent (which gives a dual-readable real
+    # colour): here there is nothing to pick from, so the honest path is the
+    # no-fabrication contract — ask which colour / say it can't tell, and do NOT
+    # silently build a default sphere or name a colour. Same assertion shape as
+    # the other no-fabrication cases: no ``result`` forbids a coloured mutation,
+    # ``reply_colors=set()`` forbids the reply naming ANY colour. Mock avoids the
+    # prompt's worked examples (no train-on-test).
+    {
+        "name":         "vision_colour_unspecified_no_fabrication",
+        "category":     "vision",
+        "scene":        [],
+        "user":         "Make a sphere the colour of the thing I'm holding.",
+        "vision":       "It's a coloured object.",
+        "first_call":   ["look_at_current_frame"],
+        "reply_colors": set(),
+        # The honest behaviour is to ASK (not build); a clarifying question may
+        # list sample colours without that being a fabrication. Fail only a
+        # DECLARATIVE colour claim, not colours offered inside the question.
+        "clarify_examples_ok": True,
+    },
 ]
 
 
@@ -1394,7 +2052,7 @@ async def _discover_tools() -> list[dict]:
         try:
             async with McpClient(url) as c:
                 for t in await c.list_tools():
-                    if t.name in WORKER_MANAGED:
+                    if t.name in WORKER_MANAGED or t.name in SUPERSEDED_PERCEPTION:
                         continue
                     schema = getattr(t, "inputSchema", None) or {"type": "object", "properties": {}}
                     tools.append({"type": "function", "function": {
@@ -1404,6 +2062,9 @@ async def _discover_tools() -> list[dict]:
                     }})
         except Exception as exc:
             print(f"WARN: discovery failed for {url}: {exc}", file=sys.stderr)
+    # look_at_current_frame is brain-executed (not served by any MCP), so
+    # discovery misses it — append it so the model is actually offered the tool.
+    tools.append(_PERCEPTION_TOOL_DEF)
     return tools
 
 
@@ -1442,13 +2103,32 @@ def _build_messages(system_prompt: str, scene: list[dict], pose: dict, user: str
     a ``[Recent conversation]`` block inside the single user-role
     context message — injecting them as ``role=assistant`` biases
     Nemotron toward text-only replies and away from tool calls."""
-    context_parts = [_format_scene(scene), _format_pose(pose)]
+    v = _ROBUSTNESS_VARIANT
+    scene_block = _format_scene(scene)
+    pose_block  = _format_pose(pose)
     moves_block = _format_recent_moves(recent_moves)
-    if moves_block:
-        context_parts.append(moves_block)
-    conv_block = _format_recent_conversation(history)
-    if conv_block:
-        context_parts.append(conv_block)
+    conv_block  = _format_recent_conversation(history)
+    participant = f"Participant: {EVAL_PID}"
+    ref_us = v.get("ref_us") or _CASE_REF_US[0]
+    reftime = (f"Reference time (when user spoke): {ref_us} µs"
+               if ref_us else None)
+    if v.get("order") == "worker":
+        context_parts = [scene_block, pose_block, participant]
+        if reftime:
+            context_parts.append(reftime)
+        if moves_block:
+            context_parts.append(moves_block)
+        if conv_block:
+            context_parts.append(conv_block)
+    else:
+        context_parts = [scene_block, pose_block]
+        if reftime:
+            context_parts.append(reftime)
+        if moves_block:
+            context_parts.append(moves_block)
+        if conv_block:
+            context_parts.append(conv_block)
+        context_parts.append(participant)
     context = "\n".join(context_parts)
     return [
         {"role": "system", "content": system_prompt},
@@ -1710,11 +2390,48 @@ def _reset_exec_state() -> None:
 _FIXTURE_SCENE: list[dict] = []
 _CASE_HISTORY: list[tuple[str, str]] = []
 _CASE_MOVES: list[tuple] = []
+# Canned look_at_current_frame answer(s) for the current case (real-world
+# visual-query cases). A case may give a single string or a SEQUENCE of
+# strings indexed by TURN: _run_turns advances _VISION_IDX once per turn (the
+# last entry repeats), so every look within a turn sees the same frame while a
+# re-query in the next turn "sees" a different colour — proving the agent
+# re-fetches rather than reusing a stale answer, without a model that looks
+# twice in one turn desyncing the later turns. Set ONCE per case; _VISION_IDX
+# survives across the case's turns (it is NOT cleared by _reset_exec_state) and
+# resets only in _set_case_vision.
+_CASE_VISION: list[str] = []
+_VISION_IDX: list[int] = [0]
+# When set, look_at_current_frame returns a graceful FAILURE (no colour) this
+# case instead of an answer — mirrors the worker's {"error":.., "spoken":..}
+# contract. Lets a case assert the model does NOT fabricate a colour when the
+# camera look fails (the live "Unknown tool → invented colour" regression).
+_CASE_VISION_ERROR: list[bool] = [False]
+# Per-case Reference-time injection (µs). When set, _build_messages emits the
+# "Reference time …" metadata line for this case under normal scoring, so a
+# case can prove the model treats the timestamp as bookkeeping, not a coordinate.
+_CASE_REF_US: list[int | None] = [None]
+
+
+def _set_case_ref_us(ref_us: int | None) -> None:
+    _CASE_REF_US[0] = ref_us
 
 
 def _set_fixture_scene(scene: list[dict]) -> None:
     _FIXTURE_SCENE.clear()
     _FIXTURE_SCENE.extend(scene)
+
+
+def _set_case_vision(answer: str | list[str] | None) -> None:
+    _CASE_VISION.clear()
+    if isinstance(answer, str):
+        _CASE_VISION.append(answer)
+    elif answer:
+        _CASE_VISION.extend(answer)
+    _VISION_IDX[0] = 0
+
+
+def _set_case_vision_error(err: bool | None) -> None:
+    _CASE_VISION_ERROR[0] = bool(err)
 
 
 def _set_case_history(history: list[tuple[str, str]] | None) -> None:
@@ -1785,7 +2502,75 @@ async def _exec_tool(name: str, args_json: str, pose: dict) -> dict:
         return {"ok": True}
     if name == "get_scene_state":
         return _fixture_scene_as_render()
+    # Visual-query mock: look_at_current_frame is the worker's brain-executed
+    # live-frame perception tool. It returns {"answer": "<vlm text>"}; we feed
+    # the case's canned camera description so the harness can check the model
+    # consumed the camera result, not the scene block. A ``vision`` sequence is
+    # indexed by TURN (advanced once per turn in _run_turns, last repeats), so
+    # every look within one turn sees the same frame and a re-query in the next
+    # turn "sees" the fresh colour — a model that looks twice in a turn can't
+    # desync the later turns.
+    if name == "look_at_current_frame":
+        if _CASE_VISION_ERROR[0]:
+            return {"error": "perception unavailable",
+                    "spoken": "I can't see a camera feed right now — "
+                              "please check your camera."}
+        if not _CASE_VISION:
+            return {"answer": "I can't make out the image."}
+        idx = min(_VISION_IDX[0], len(_CASE_VISION) - 1)
+        return {"answer": _CASE_VISION[idx]}
     return {"_eval_skipped": True, "reason": f"{name} not in safe-exec list"}
+
+
+def _extract_json(text: str) -> str | None:
+    """First balanced top-level ``{…}`` object in ``text`` (worker's
+    _extract_json), used to recover a tool call emitted as plain-text JSON."""
+    depth, start, in_string, escape = 0, -1, False, False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escape:        escape = False
+            elif ch == "\\":  escape = True
+            elif ch == '"':   in_string = False
+            continue
+        if ch == '"':   in_string = True; continue
+        if ch == "{":
+            if depth == 0: start = i
+            depth += 1
+        elif ch == "}":
+            if depth == 0: continue
+            depth -= 1
+            if depth == 0 and start >= 0:
+                return text[start:i + 1]
+    return None
+
+
+def _recover_text_tool_call(content: str, all_names: set[str]) -> dict | None:
+    """Recover a tool call the model emitted as text instead of via the
+    tool_calls field, matching the worker: a bare tool name, or a JSON object
+    naming a known tool. Returns a tool-call dict (or None when nothing
+    recoverable)."""
+    if not content:
+        return None
+    name: str | None = None
+    args: dict = {}
+    if content in all_names:
+        name = content
+    else:
+        obj_text = _extract_json(content)
+        if obj_text:
+            try:
+                obj = json.loads(obj_text)
+            except json.JSONDecodeError:
+                return None
+            cand = obj.get("name") or obj.get("tool") or obj.get("function")
+            if isinstance(cand, str) and cand in all_names:
+                name = cand
+                a = obj.get("arguments") or obj.get("args") or {}
+                args = a if isinstance(a, dict) else {}
+    if name is None:
+        return None
+    return {"id": f"recovered_{name}",
+            "function": {"name": name, "arguments": json.dumps(args)}}
 
 
 async def _run_one(http: httpx.AsyncClient, system_prompt: str,
@@ -1802,20 +2587,25 @@ async def _run_one(http: httpx.AsyncClient, system_prompt: str,
     _set_fixture_scene(scene)
     messages = _build_messages(system_prompt, scene, pose, user,
                                _CASE_HISTORY, _CASE_MOVES)
+    all_names = {t["function"]["name"] for t in tools}
     all_calls: list[dict] = []
     last_msg: dict = {}
     t_total = 0.0
+    # local_thinking drops thinking and retries the same step when thinking
+    # fills the token budget, as the worker does.
+    local_thinking = thinking
 
-    for _step in range(max_steps):
+    step = 0
+    while step < max_steps:
         body = {
             "model": AGENT_MODEL,
             "messages": messages,
             "tools": tools,
-            "max_tokens": 2048 if thinking else 1024,
+            "max_tokens": 2048 if local_thinking else 1024,
             "temperature": 0.0,
             "chat_template_kwargs": {
-                "enable_thinking": thinking,
-                **({"thinking_budget": 1024} if thinking else {}),
+                "enable_thinking": local_thinking,
+                **({"thinking_budget": 1024} if local_thinking else {}),
             },
         }
         t0 = time.time()
@@ -1834,28 +2624,152 @@ async def _run_one(http: httpx.AsyncClient, system_prompt: str,
                     raise
                 await asyncio.sleep(2.0 * (attempt + 1))
         t_total += time.time() - t0
-        msg = r.json()["choices"][0]["message"]
+        choice = r.json()["choices"][0]
+        msg = choice["message"]
+        finish = choice.get("finish_reason") or ""
         last_msg = msg
         tcs = msg.get("tool_calls") or []
         if not tcs:
-            break
-        # A turn can emit multiple parallel tool calls (e.g. compound
-        # utterances), so extend rather than append.
-        all_calls.extend(tcs)
-        if _step + 1 >= max_steps:
+            # Thinking filled the budget: turn it off and retry the same step.
+            if local_thinking and finish == "length":
+                local_thinking = False
+                continue
+            # Recover a tool call the model emitted as plain text, as the
+            # worker does; a genuine final response ends the turn.
+            recovered = _recover_text_tool_call(
+                (msg.get("content") or "").strip(), all_names)
+            if recovered is None:
+                break
+            tcs = [recovered]
+        # Final iteration runs no execution turn, so record the model's
+        # emitted batch verbatim — there is nothing to truncate against.
+        if step + 1 >= max_steps:
+            all_calls.extend(tcs)
             break
         new_msgs: list[dict] = [{"role": "assistant", "content": "", "tool_calls": tcs}]
+        spoken_end: str | None = None
         for tc in tcs:
+            # Record each call only as it is executed: a perception
+            # short-circuit (below) stops the live worker mid-batch, so calls
+            # after it never run and must not count as scene mutations.
+            all_calls.append(tc)
             fn = tc["function"]
             result = await _exec_tool(fn["name"], fn["arguments"], pose)
+            # Mirror the worker's _PerceptionUnavailableError short-circuit
+            # (processors.py): a perception result carrying a "spoken" message
+            # deterministically ends the turn with that canned line, so the
+            # model never sees the error and cannot fabricate.
+            if isinstance(result, dict) and result.get("spoken"):
+                spoken_end = str(result["spoken"])
+                break
             new_msgs.append({"role": "tool", "tool_call_id": tc["id"],
                              "content": json.dumps(result, default=str)})
+        if spoken_end is not None:
+            last_msg = {"content": spoken_end}
+            break
         messages = messages + new_msgs
+        step += 1
 
     return {"latency_s":  round(t_total, 2),
             "tool_calls": all_calls,
             "content":    (last_msg.get("content") or "").strip(),
             "reasoning":  (last_msg.get("reasoning_content") or "").strip()}
+
+
+def _apply_mutations(scene: list[dict], tool_calls: list[dict],
+                     add_counter: dict[str, int] | None = None) -> list[dict]:
+    """Return a NEW scene with the turn's add/update/remove calls applied,
+    mirroring _exec_tool's add_primitive id scheme (a counter per prim_type, so
+    the first sphere is ``sphere-0``). Pass a persistent ``add_counter`` to carry
+    the numbering across turns so consecutive-turn adds don't both become
+    ``sphere-0``. Lets a multi-turn case carry a created object forward so a
+    later turn can update/remove it by id, and resolves a partial update's
+    omitted colour channels against the object's carried-forward colour."""
+    out = [dict(o) for o in scene]
+    if add_counter is None:
+        add_counter = {}
+    for tc in tool_calls:
+        fn = tc.get("function", {})
+        name = fn.get("name")
+        raw = fn.get("arguments")
+        try:
+            args = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        except (TypeError, ValueError):
+            continue
+        if name == "add_primitive":
+            prim = args.get("prim_type", "sphere")
+            n = add_counter.get(prim, -1) + 1
+            add_counter[prim] = n
+            out.append({
+                "id":    f"{prim}-{n}",
+                "type":  prim,
+                "pos":   [float(args.get("x", 0.0)),
+                          float(args.get("y", 1.6)),
+                          float(args.get("z", -1.5))],
+                # Default to white, matching the prompt's unspecified-colour rule.
+                "color": [float(args.get("r", 1.0)),
+                          float(args.get("g", 1.0)),
+                          float(args.get("b", 1.0))],
+                "size":  float(args.get("size", 0.1)),
+            })
+        elif name == "update_primitive":
+            oid = args.get("obj_id") or args.get("object_id")
+            for o in out:
+                if o["id"] == oid:
+                    if any(k in args for k in ("r", "g", "b")):
+                        o["color"] = [float(args.get("r", o["color"][0])),
+                                      float(args.get("g", o["color"][1])),
+                                      float(args.get("b", o["color"][2]))]
+                    if any(k in args for k in ("x", "y", "z")):
+                        o["pos"] = [float(args.get("x", o["pos"][0])),
+                                    float(args.get("y", o["pos"][1])),
+                                    float(args.get("z", o["pos"][2]))]
+                    if "size" in args:
+                        o["size"] = float(args["size"])
+                    break
+        elif name == "remove_primitive":
+            oid = args.get("obj_id") or args.get("object_id")
+            out = [o for o in out if o["id"] != oid]
+    return out
+
+
+async def _run_turns(http: httpx.AsyncClient, system_prompt: str,
+                     tools: list[dict], scene: list[dict], pose: dict,
+                     turns: list[dict], *, thinking: bool = False,
+                     max_steps: int = 1) -> list[dict]:
+    """Run a sequence of user turns, mirroring the worker's rolling-history
+    flow: each turn is a FRESH rollout (system + scene + [Recent conversation]
+    of prior turns' spoken replies + this turn's request), exactly as
+    ``XRRenderProcessor`` rebuilds messages per turn — turn N never sees turn
+    N-1's raw tool calls, only its text reply. The case's ``vision`` sequence
+    is consumed across turns (set once by the caller), so a re-query can be
+    answered by a DIFFERENT camera colour.
+
+    Scene mutations are carried forward: turn N+1 sees the objects turn N
+    created/updated (via _apply_mutations), so an "update the sphere I just
+    made" turn has a valid obj_id to target. Each result carries the
+    ``scene`` snapshot used for that turn so the per-turn check resolves
+    partial updates against the right object state. Returns one ``_run_one``
+    result per turn, in order."""
+    history: list[tuple[str, str]] = []
+    results: list[dict] = []
+    running_scene = [dict(o) for o in scene]
+    # Carried across turns so a later turn's add_primitive doesn't reuse a prior
+    # turn's id (two ``sphere-0``s when consecutive turns each add a sphere).
+    add_counter: dict[str, int] = {}
+    for turn_i, turn in enumerate(turns):
+        # Advance the camera frame once per TURN (not per look_at_current_frame
+        # call), so a turn that looks twice doesn't desync the next turn's frame.
+        _VISION_IDX[0] = turn_i
+        _set_case_history(history)
+        turn_scene = [dict(o) for o in running_scene]
+        r = await _run_one(http, system_prompt, tools, turn_scene, pose,
+                            turn["user"], thinking=thinking, max_steps=max_steps)
+        r["scene"] = turn_scene
+        results.append(r)
+        history = history + [(turn["user"], r["content"])]
+        running_scene = _apply_mutations(running_scene, r["tool_calls"], add_counter)
+    return results
 
 
 # update_primitive arg -> (scene-object-field, optional index).  Used to
@@ -1917,6 +2831,227 @@ def _match_call(call: dict, expect: dict, scene: list[dict] | None = None) -> tu
 _MUTATING_TOOLS = frozenset({"add_primitive", "update_primitive", "remove_primitive"})
 
 
+# Colour words scanned in the model's spoken reply to catch misreporting
+# (e.g. "Here's your white sphere" after building a magenta one). Kept
+# broad on purpose so a stray wrong colour anywhere in the reply trips it.
+_REPLY_COLOR_WORDS = frozenset({
+    "red", "orange", "yellow", "green", "blue", "purple", "violet",
+    "magenta", "pink", "cyan", "teal", "turquoise", "white", "black",
+    "gray", "grey", "silver", "brown", "maroon", "navy", "gold",
+    "golden", "indigo", "lavender", "lilac", "lime", "olive", "salmon",
+    "coral", "crimson", "beige", "tan", "cream", "mint",
+})
+
+# Compound colour phrases name ONE hue; the constituent word ("green" inside
+# "blue-green") must not be mistaken for the standalone hue when scanning a
+# reply. Collapse these to their single canonical token first so honesty is
+# judged on the phrase's real meaning (blue-green == teal), not a substring.
+_COMPOUND_COLORS: dict[str, str] = {
+    "blue-green": "teal",   "blue green": "teal",   "bluegreen": "teal",
+    "green-blue": "teal",   "green blue": "teal",
+    "bluish-green": "teal", "bluish green": "teal",
+    "greenish-blue": "teal", "greenish blue": "teal",
+    "blue-ish green": "teal", "green-ish blue": "teal",
+}
+
+
+def _collapse_compound_colours(blob: str) -> str:
+    """Replace multi-word colour phrases with their single canonical hue so a
+    constituent word isn't scanned as a separate (possibly wrong) colour."""
+    # Models often join compound hues with a non-ASCII hyphen (e.g. "blue‑green"
+    # using U+2011); fold the Unicode hyphen/dash variants to a plain "-" so the
+    # phrase table matches and the constituent word isn't scanned as a hue.
+    blob = re.sub(r"[\u2010\u2011\u2012\u2013\u2014]", "-", blob)
+    for phrase, canon in _COMPOUND_COLORS.items():
+        blob = blob.replace(phrase, canon)
+    return blob
+
+
+def _declarative_colours(content: str) -> set[str]:
+    """Colour words the reply asserts as FACT, excluding any that appear only
+    inside a clarifying question or an example list — e.g. "what colour would
+    you like? (e.g. red, blue)" declares NO colour, whereas "it's red" does.
+    Lets an undeterminable-colour case accept an honest clarifying question
+    that happens to list sample colours, while still catching a fabricated
+    declarative claim."""
+    s = _collapse_compound_colours(content.lower())
+    s = re.sub(r"\([^)]*\)", " ", s)                       # parenthetical asides
+    s = re.sub(r"\b(e\.?\s*g\.?|for example|such as|"      # example clauses …
+               r"examples?\s*:|options?\s*:)\b[^.?!]*", " ", s)  # … to sentence end
+    # Strip only the clause that actually ends in '?', bounded on the left by a
+    # clause separator, so a declarative before the question survives ("it's
+    # red, what did you want?" keeps "red") while colours offered inside the
+    # question are still dropped.
+    s = re.sub(r"[^.?!,;:—–-]*\?", " ", s)                 # interrogative clause
+    return {w for w in _REPLY_COLOR_WORDS if re.search(rf"\b{w}\b", s)}
+
+# Canonical RGB for every word the reply scanner knows, used to map an
+# actually-built colour back to the names that honestly describe it.
+# Values are nominal hue anchors, not the prompt's worked-example triples.
+_COLOR_ANCHORS: dict[str, tuple[float, float, float]] = {
+    "red": (1.0, 0.0, 0.0),     "orange": (1.0, 0.5, 0.0),
+    "yellow": (1.0, 1.0, 0.0),  "green": (0.0, 0.8, 0.0),
+    "blue": (0.0, 0.4, 1.0),    "purple": (0.6, 0.0, 1.0),
+    "violet": (0.6, 0.0, 1.0),  "magenta": (1.0, 0.0, 1.0),
+    "pink": (1.0, 0.45, 0.7),   "cyan": (0.0, 1.0, 1.0),
+    "teal": (0.0, 0.5, 0.5),    "turquoise": (0.0, 0.8, 0.8),
+    "white": (1.0, 1.0, 1.0),   "black": (0.0, 0.0, 0.0),
+    "gray": (0.5, 0.5, 0.5),    "grey": (0.5, 0.5, 0.5),
+    "silver": (0.75, 0.75, 0.75), "brown": (0.4, 0.2, 0.05),
+    "maroon": (0.5, 0.0, 0.0),  "navy": (0.0, 0.0, 0.5),
+    "gold": (1.0, 0.84, 0.0),   "golden": (1.0, 0.84, 0.0),
+    "indigo": (0.3, 0.0, 0.5),  "lavender": (0.7, 0.6, 0.9),
+    "lilac": (0.78, 0.6, 0.85), "lime": (0.6, 1.0, 0.0),
+    "olive": (0.5, 0.5, 0.0),   "salmon": (0.98, 0.5, 0.45),
+    "coral": (1.0, 0.5, 0.31),  "crimson": (0.86, 0.08, 0.24),
+    "beige": (0.8, 0.75, 0.6),  "tan": (0.82, 0.71, 0.55),
+    "cream": (1.0, 0.99, 0.82), "mint": (0.6, 1.0, 0.75),
+}
+
+# Words that may honestly stand in for one another in a reply, so an
+# accurate paraphrase ("navy" object called "blue") is not flagged as a
+# build/say mismatch regardless of raw RGB distance.
+_COLOR_SYNONYMS: dict[str, set[str]] = {
+    "gray": {"grey", "silver"}, "grey": {"gray", "silver"},
+    "silver": {"gray", "grey"},
+    "purple": {"violet"}, "violet": {"purple"},
+    "magenta": {"pink"}, "pink": {"magenta", "salmon"},
+    "cyan": {"teal", "turquoise"}, "teal": {"cyan", "turquoise"},
+    "turquoise": {"cyan", "teal"},
+    "navy": {"blue"}, "indigo": {"purple", "violet", "blue"},
+    "gold": {"golden", "yellow"}, "golden": {"gold", "yellow"},
+    "maroon": {"red", "brown"}, "crimson": {"red"},
+    "olive": {"green", "yellow"}, "lime": {"green"},
+    "salmon": {"pink", "coral"}, "coral": {"salmon", "orange", "pink"},
+    "lavender": {"lilac", "purple", "violet"},
+    "lilac": {"lavender", "purple", "violet"},
+    "beige": {"tan", "cream"}, "tan": {"beige", "brown"},
+    "cream": {"beige", "white"}, "mint": {"green"},
+}
+
+# A reply colour farther than this (Euclidean, unit RGB cube) from every
+# built-consistent name is treated as a build/say mismatch.  Generous
+# enough that honest paraphrases pass via the synonym map; tight enough
+# that "built white, said magenta" (distance 1.0) trips.
+_BUILD_NEAR = 0.55
+
+
+def _built_color_names(rgb: tuple[float, float, float]) -> set[str]:
+    """Names that honestly describe an as-built colour: every anchor
+    within ``_BUILD_NEAR`` plus the single globally-nearest anchor,
+    expanded through the synonym map both ways."""
+    scored = sorted(
+        (math.dist(rgb, anc), name) for name, anc in _COLOR_ANCHORS.items()
+    )
+    names = {name for d, name in scored if d <= _BUILD_NEAR}
+    names.add(scored[0][1])
+    for n in list(names):
+        names |= _COLOR_SYNONYMS.get(n, set())
+    for base, syns in _COLOR_SYNONYMS.items():
+        if names & syns:
+            names.add(base)
+    return names
+
+
+def _color_family(word: str) -> set[str]:
+    """Synonym-connected family of a colour word, via _COLOR_SYNONYMS in both
+    directions (the word, its listed synonyms, and any base that lists it).
+    Lets the requested-colour check accept an honest in-family paraphrase
+    (e.g. "crimson"/"lime" for a "red"/"green" allow-set) while a cross-family
+    name still fails. Falls back to {word} for words with no synonyms."""
+    fam = {word} | _COLOR_SYNONYMS.get(word, set())
+    for base, syns in _COLOR_SYNONYMS.items():
+        if word in syns:
+            fam.add(base)
+    return fam
+
+
+def _reply_color_ok(content: str, allowed: set[str],
+                    built_rgb: tuple[float, float, float] | None = None
+                    ) -> tuple[bool, str]:
+    """Colour-focused cases vet the spoken reply two ways.  First the
+    requested check: the reply must not name a colour outside the case's
+    allow-set (in-family synonyms of an allowed colour are accepted via
+    _color_family; cross-family names fail).  Second the build/say check:
+    any colour the reply does name must also be consistent with what was
+    ACTUALLY built — catching "built X, narrated Y" even when Y was the
+    requested colour.  Only colours the reply utters are checked, so a reply
+    naming no colour passes."""
+    blob = _collapse_compound_colours(content.lower())
+    named = {w for w in _REPLY_COLOR_WORDS if re.search(rf"\b{w}\b", blob)}
+    allowed_family: set[str] = set()
+    for a in allowed:
+        allowed_family |= _color_family(a)
+    wrong = {w for w in named if not (_color_family(w) & allowed_family)}
+    if wrong:
+        snippet = " ".join(content.split())[:160]
+        return False, (f"reply names colour {sorted(wrong)} ≠ requested "
+                       f"(allowed {sorted(allowed)}) | reply={snippet!r}")
+    if built_rgb is not None and named:
+        honest = _built_color_names(built_rgb)
+        mismatched = {
+            w for w in named
+            if not ({w} | _COLOR_SYNONYMS.get(w, set())) & honest
+        }
+        if mismatched:
+            return False, (
+                f"reply names {sorted(mismatched)} but built rgb "
+                f"({built_rgb[0]:.2f}, {built_rgb[1]:.2f}, {built_rgb[2]:.2f}) "
+                f"reads as {sorted(honest)}"
+            )
+    return True, "reply colour matches"
+
+
+def _built_rgb(muts: list[dict],
+               scene: list[dict]) -> tuple[float, float, float] | None:
+    """Extract the as-built (r, g, b) from the latest colour-bearing
+    add/update_primitive, resolving channels omitted on an update against
+    the named scene object.  Returns None when all three aren't known."""
+    for tc in reversed(muts):
+        if tc["function"]["name"] not in ("add_primitive", "update_primitive"):
+            continue
+        args = tc["function"]["arguments"]
+        args = json.loads(args) if isinstance(args, str) else args
+        if not any(ch in args for ch in ("r", "g", "b")):
+            continue
+        obj_id = args.get("obj_id")
+        chans: list[float] = []
+        for ch in ("r", "g", "b"):
+            v = args.get(ch)
+            if v is None and obj_id:
+                v = _resolve_arg(obj_id, ch, scene)
+            if v is None:
+                break
+            try:
+                chans.append(float(v))
+            except (TypeError, ValueError):
+                break
+        if len(chans) == 3:
+            return (chans[0], chans[1], chans[2])
+    return None
+
+
+def _is_achromatic(rgb: tuple[float, float, float]) -> bool:
+    """True for white / gray / black-ish colours — the channel spread is tiny,
+    so there is no real hue. ``make a coloured sphere`` demands a saturated hue,
+    so an achromatic build is a silent dodge of the request."""
+    return (max(rgb) - min(rgb)) < 0.2
+
+
+def _scene_last_rgb(scene: list[dict]) -> tuple[float, float, float] | None:
+    """The (r, g, b) of the most-recent colour-bearing object already in the
+    scene — used by self-consistency turns to check a reply that confirms a
+    PREVIOUSLY-built object's colour without mutating again."""
+    for obj in reversed(scene or []):
+        col = obj.get("color")
+        if isinstance(col, (list, tuple)) and len(col) == 3:
+            try:
+                return (float(col[0]), float(col[1]), float(col[2]))
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
 def _check(actual: dict, case: dict) -> tuple[bool, str]:
     """Match ``case['result']`` against the mutating tool calls
     (add/update/remove_primitive) emitted during the rollout.  Order-
@@ -1928,6 +3063,160 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
     silent no-op would pass).
     """
     tcs = actual["tool_calls"]
+
+    # Opt-in ordered-call assertion: runs against the FULL ordered call list
+    # (helper/compute tools included), unlike the order-independent matcher
+    # below. Only cases that set ``ordered_calls`` use it.
+    ordered = case.get("ordered_calls")
+    if ordered is not None:
+        ok, why = ordered(tcs)
+        if not ok:
+            return False, f"ordered-call check failed: {why}"
+
+    # ── exactly-one-build guard ──────────────────────────────────────────────
+    # A single-object create case must emit EXACTLY ONE add_primitive; >1 means
+    # the model re-added the same object in several colours, which the default
+    # matcher would hide by finding one matching add among many. Scoped to the
+    # colour/vision single-object cases (a ``result`` with exactly one
+    # add_primitive in those categories, or forced via ``expect_single_build``);
+    # cases that create 2+ objects on purpose (2+ adds, or ``allow_multi_build``)
+    # and spatial cases are unaffected.
+    _n_add_expected = sum(1 for e in (case.get("result") or [])
+                          if e.get("tool") == "add_primitive")
+    _single_create_cat = case.get("category") in ("color", "vision")
+    if (case.get("expect_single_build")
+            or (_single_create_cat and _n_add_expected == 1
+                and not case.get("allow_multi_build"))):
+        adds = sum(1 for tc in tcs if tc["function"]["name"] == "add_primitive")
+        if adds != 1:
+            return False, (f"expected exactly 1 add_primitive for a single-object "
+                           f"request, model created {adds}")
+
+    # ── real-world visual-query routing cases ────────────────────────────────
+    # A case with ``first_call`` asserts the model treated the utterance as a
+    # REAL-WORLD query: its FIRST tool call routes to the camera/VLM (never a
+    # scene mutation, never a scene-state text answer). ``reply_names`` /
+    # ``reply_forbids`` then check the FINAL reply repeats the colour the mocked
+    # camera returned (and NOT a virtual SCENE primitive's colour) — proving the
+    # model consumed the camera result instead of reading the scene block.
+    first_allowed = case.get("first_call")
+    if first_allowed is not None:
+        allowed = set(first_allowed)
+        if not tcs:
+            return False, (f"no tool call — a real-world query must route to the "
+                           f"camera {sorted(allowed)}, not be answered from "
+                           f"scene state")
+        first = tcs[0]["function"]["name"]
+        if first not in allowed:
+            names = [tc["function"]["name"] for tc in tcs]
+            return False, f"first call {first!r} not in {sorted(allowed)}; calls={names}"
+        # Two modes, distinguished by whether the case also carries a ``result``:
+        #   - pure query (no result): the turn must NOT mutate the scene; check
+        #     the spoken reply repeats / avoids the camera colour.
+        #   - apply-colour (result present): the turn SHOULD mutate using the
+        #     PERCEIVED colour — camera-first is verified here, then we fall
+        #     through to the RGB/tool-call matcher below so the mutation's colour
+        #     is checked. This proves the model USED the camera answer, not just
+        #     reported it.
+        if not case.get("result"):
+            bad = [tc["function"]["name"] for tc in tcs
+                   if tc["function"]["name"] in _MUTATING_TOOLS]
+            if bad:
+                return False, f"mutated the scene on a real-world query: {bad}"
+            content = (actual.get("content") or "")
+            blob = content.lower()
+            names_wanted = case.get("reply_names") or []
+            for want in names_wanted:
+                if not re.search(rf"\b{re.escape(want.lower())}\b", blob):
+                    return False, (f"final reply {content!r} omits the camera-reported "
+                                   f"colour {want!r}")
+            # reply_forbids guards against naming a stale or virtual-scene
+            # colour. Stale re-query cases enforce it conditionally: once the
+            # fresh colour is named, an honest "it's not <stale> anymore, it's
+            # <fresh>" should pass, so the forbid only bites when the fresh
+            # colour is absent. The virtual-distractor cases set
+            # ``reply_forbids_always`` — naming the scene primitive's colour is
+            # always wrong, even alongside the real one. Forbid-only cases (no
+            # reply_names) stay fully guarded.
+            names_satisfied = bool(names_wanted) and all(
+                re.search(rf"\b{re.escape(w.lower())}\b", blob) for w in names_wanted
+            )
+            if case.get("reply_forbids_always") or not names_satisfied:
+                for forbid in case.get("reply_forbids") or []:
+                    if re.search(rf"\b{re.escape(forbid.lower())}\b", blob):
+                        return False, (f"final reply {content!r} names the VIRTUAL scene "
+                                       f"colour {forbid!r} instead of the real one")
+            # No-grounding honesty: with reply_colors={} the reply must name NO
+            # colour at all — so a failed look that still narrates a fabricated
+            # colour fails (the live "couldn't see → invented a colour" bug).
+            reply_colors = case.get("reply_colors")
+            if reply_colors is not None:
+                if reply_colors == set() and case.get("clarify_examples_ok"):
+                    # Undeterminable colour: an honest clarifying question is
+                    # correct even if it lists sample colours. Fail ONLY a
+                    # declarative colour claim, not colours offered as examples.
+                    decl = _declarative_colours(content)
+                    if decl:
+                        snippet = " ".join(content.split())[:160]
+                        return False, (f"reply declares colour {sorted(decl)} on an "
+                                       f"undeterminable colour | reply={snippet!r}")
+                else:
+                    rc_ok, rc_msg = _reply_color_ok(content, set(reply_colors), None)
+                    if not rc_ok:
+                        return False, rc_msg
+            return True, (f"routed first to {first}"
+                          + (f"; reply reports {case['reply_names']}"
+                             if case.get("reply_names") else "")
+                          + ("; no fabricated colour"
+                             if reply_colors == set() else ""))
+        # apply-colour mode: camera verified as the first call; fall through to
+        # the result matcher to check the colour was applied to the mutation.
+
+    # Accept-either honesty for a USER-underspecified hue ("make a coloured
+    # sphere"): BOTH a clarifying question and a self-consistent build are
+    # correct — only a say!=built colour mismatch fails. Passes if the reply
+    # names no committed colour (a clarifying question / neutral confirm), or
+    # if a named colour is consistent with what was built this turn OR already
+    # exists in the carried scene. ``require_coloured_result`` (turn 2) further
+    # demands a coloured sphere actually exist by the end of the turn.
+    if case.get("accept_clarify_or_consistent"):
+        scene = case.get("scene") or []
+        adds = sum(1 for tc in tcs if tc["function"]["name"] == "add_primitive")
+        if adds > 1:
+            return False, (f"expected at most 1 add_primitive (one sphere), "
+                           f"model created {adds} (multiple add_primitive calls)")
+        muts = [tc for tc in tcs if tc["function"]["name"] in _MUTATING_TOOLS]
+        content = actual.get("content", "")
+        # Both honest paths speak — a clarifying question or a one-line confirm
+        # of the built hue — so an empty reply is never acceptable.
+        if not content.strip():
+            return False, "empty reply on a 'coloured' request (expected a question or a colour)"
+        named = {w for w in _REPLY_COLOR_WORDS
+                 if re.search(rf"\b{w}\b", _collapse_compound_colours(content.lower()))}
+        built = _built_rgb(muts, scene) if muts else _scene_last_rgb(scene)
+        if case.get("require_coloured_result") and built is None:
+            return False, "no self-consistent coloured sphere exists after this turn"
+        if muts and built is None:
+            return False, "built an object with no colour on a 'coloured' request"
+        # "Coloured" means a saturated hue: a white/gray/black build dodges the
+        # request even when narrated honestly.
+        if built is not None and _is_achromatic(built):
+            return False, (f"built an achromatic colour "
+                           f"({built[0]:.2f}, {built[1]:.2f}, {built[2]:.2f}) "
+                           f"on a 'coloured' request")
+        if not named:
+            return True, ("asked to clarify (no colour committed)" if not muts
+                          else f"built rgb ({built[0]:.2f}, {built[1]:.2f}, "
+                               f"{built[2]:.2f}); named no colour")
+        if built is None:
+            return False, f"reply names {sorted(named)} but nothing coloured was built"
+        ok, msg = _reply_color_ok(content, _built_color_names(built), built)
+        if not ok:
+            return False, msg
+        return True, (f"said {sorted(named)} consistent with built rgb "
+                      f"({built[0]:.2f}, {built[1]:.2f}, {built[2]:.2f})"
+                      + ("" if muts else " [carried]"))
+
     wanted = list(case.get("result") or [])
     muts = [tc for tc in tcs if tc["function"]["name"] in _MUTATING_TOOLS]
     if not wanted and not muts:
@@ -1960,6 +3249,41 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
         ok, msg = predicate(muts)
         if not ok:
             return False, f"predicate failed: {msg}"
+    # Self-consistency mode: no fixed expected colour. The spoken reply must
+    # name SOME colour and that colour must be consistent with the colour the
+    # model ACTUALLY built — allowed names are derived from the build itself
+    # (_built_color_names) rather than pinned, so any honest interpretation of
+    # an ambiguous object passes ("build teal / say teal") while a said!=built
+    # mismatch fails ("build blue / say green", "build white / say orange").
+    if case.get("reply_self_consistent"):
+        built = _built_rgb(muts, scene)
+        if built is None:
+            return False, "self-consistency case built no colour to check"
+        content = actual.get("content", "")
+        named = {w for w in _REPLY_COLOR_WORDS
+                 if re.search(rf"\b{w}\b", _collapse_compound_colours(content.lower()))}
+        route = (f"routed first to {tcs[0]['function']['name']}; "
+                 if case.get("first_call") else "")
+        # The invariant is consistency, not mandatory speaking: naming NO
+        # colour is never a say!=built mismatch, so it's acceptable. Only a
+        # named colour that disagrees with the built rgb fails.
+        if not named:
+            return True, (f"{route}built rgb ({built[0]:.2f}, {built[1]:.2f}, "
+                          f"{built[2]:.2f}); named no colour")
+        ok, msg = _reply_color_ok(content, _built_color_names(built), built)
+        if not ok:
+            return False, msg
+        return True, (f"{route}said {sorted(named)} consistent with built rgb "
+                      f"({built[0]:.2f}, {built[1]:.2f}, {built[2]:.2f})")
+    allowed = case.get("reply_colors")
+    if allowed is not None:
+        ok, msg = _reply_color_ok(actual.get("content", ""), set(allowed),
+                                  _built_rgb(muts, scene))
+        if not ok:
+            return False, msg
+    if case.get("first_call"):
+        return True, (f"routed first to {tcs[0]['function']['name']}; "
+                      f"matched {len(wanted)} colour mutation(s)")
     return True, f"matched {len(wanted)} mutation(s)"
 
 
@@ -2038,9 +3362,13 @@ def _extract_example_blocks(sp: str) -> list[tuple[int, str]]:
 
 
 def _case_fixture_vocab(c: dict) -> tuple[set[str], set[str]]:
-    """Eval-vocab colour/shape words actually present in this case's
-    fixture (user utterance, history dialogue, scene type tags, ids).
-    Used to attribute reserved-vocab violations to specific cases."""
+    """Reserved spatial-vocab colour/shape words (``_EVAL_VOCAB_*``) present in
+    this case's MODEL-VISIBLE fixture: user utterance, history dialogue, scene
+    type tags, ids. Scans only model-visible fields, not ``vision`` /
+    ``reply_names`` / ``reply_colors`` / ``result`` — those hold runtime-only
+    mock colours that never reach the prompt, so flagging them would false-
+    positive on the recommended worked-example palette. Used to attribute
+    reserved-vocab violations to specific cases."""
     parts: list[str] = [c.get("user") or ""]
     for pair in c.get("history") or []:
         parts.extend(pair)
@@ -2128,8 +3456,14 @@ def _check_prompt_eval_overlap(
     for c in cases:
         cname = c.get("name", "<unnamed>")
         cc, cs = _case_fixture_vocab(c)
-        for w in cc:
-            case_index_colors[w].append(cname)
+        # Colour-focused cases (category="color") deliberately sweep the
+        # palette, so their colour WORDS can't constrain the prompt's worked
+        # examples and are exempt. Only the colour vocabulary is dropped, not
+        # the whole case: their shapes (here) and coords/utterances (checks
+        # 1-3 above) are still audited.
+        if c.get("category") != "color":
+            for w in cc:
+                case_index_colors[w].append(cname)
         for w in cs:
             case_index_shapes[w].append(cname)
 
@@ -2182,6 +3516,52 @@ def _check_prompt_eval_overlap(
     return overlapping, issues
 
 
+async def _robustness_eval_case(http: httpx.AsyncClient, base_prompt: str,
+                              tools: list[dict], c: dict, pose: dict,
+                              variant: dict) -> tuple[bool, str]:
+    """Run one case under one robustness perturbation variant; return
+    ``(ok, why)``.  Sets the module-level _ROBUSTNESS_VARIANT (read by
+    _build_messages) and the thinking flag / scaffold per variant, mirroring
+    the worker's surfaces.  ``why`` is a short reason on failure (for the
+    iteration log), empty on pass.  Restores _ROBUSTNESS_VARIANT to its resting
+    value on exit so an in-process reuse isn't poisoned by the last variant."""
+    global _ROBUSTNESS_VARIANT
+    prior_variant = _ROBUSTNESS_VARIANT
+    _ROBUSTNESS_VARIANT = variant
+    thinking = variant.get("thinking", False)
+    sys_prompt = (_THINK_SCAFFOLD + base_prompt) if variant.get("scaffold") else base_prompt
+    scene_c = c["scene"]
+    pose_c  = c.get("pose", pose)
+    _set_case_moves(c.get("recent_moves"))
+    _set_case_vision(c.get("vision"))
+    _set_case_vision_error(c.get("vision_error"))
+    _set_case_ref_us(c.get("ref_us"))
+    try:
+        if c.get("turns"):
+            turn_rs = await _run_turns(http, sys_prompt, tools, scene_c, pose_c,
+                                       c["turns"], thinking=thinking,
+                                       max_steps=_MAX_STEPS)
+            ok = True
+            why = ""
+            for ti, (tr, td) in enumerate(zip(turn_rs, c["turns"])):
+                check_case = {**{k: v for k, v in c.items() if k != "turns"},
+                              **td, "scene": tr.get("scene", [])}
+                tok, twhy = _check(tr, check_case)
+                if not tok and not why:
+                    why = f"t{ti + 1}: {twhy}"
+                ok = ok and tok
+            return ok, why
+        _set_case_history(c.get("history"))
+        r = await _run_one(http, sys_prompt, tools, scene_c, pose_c,
+                           c["user"], thinking=thinking, max_steps=_MAX_STEPS)
+        ok, why = _check(r, c)
+        return ok, ("" if ok else why)
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    finally:
+        _ROBUSTNESS_VARIANT = prior_variant
+
+
 async def main() -> None:
     global AGENT_LLM, AGENT_MODEL, AGENT_KEY
 
@@ -2195,6 +3575,11 @@ async def main() -> None:
                         "positional `query` arg.")
     p.add_argument("--thinking", action="store_true")
     p.add_argument("--verbose",  action="store_true")
+    p.add_argument("--robustness", action="store_true",
+                   help="robustness sweep: re-score the --only/.only subset "
+                        "under clean + irrelevant context perturbations, ROBUST "
+                        "only when every variant passes. Requires a case subset. "
+                        "See eval/README.md.")
     p.add_argument("--strict-overlap", action="store_true",
                    help="fail (rc=2) if any case fixture overlaps with the "
                         "system prompt's worked examples — turn on in CI to "
@@ -2223,6 +3608,7 @@ async def main() -> None:
     # Honour a sibling .only file as a shorthand for --only (see
     # eval/README.md "Watcher" section for the file format).
     only_file = _HERE / ".only"
+    robustness_from_only = False
     if not args.only and not args.query and only_file.exists():
         names: list[str] = []
         for raw in only_file.read_text(encoding="utf-8").splitlines():
@@ -2231,11 +3617,22 @@ async def main() -> None:
                 continue
             for tok in line.split(","):
                 tok = tok.strip()
-                if tok:
-                    names.append(tok)
+                if not tok:
+                    continue
+                # A bare ROBUSTNESS token enables the sweep (see eval/README.md).
+                if tok.upper() == "ROBUSTNESS":
+                    if any(c["name"] == tok for c in CASES):
+                        print(f"WARNING: {only_file.name} token {tok!r} is the "
+                              f"robustness directive, NOT the case of that name; "
+                              f"that case will not be selected by this token.")
+                    robustness_from_only = True
+                    continue
+                names.append(tok)
         if names:
             args.only = ",".join(names)
             print(f"FILTER: {only_file.name} → {names}")
+        if robustness_from_only:
+            print(f"ROBUSTNESS: enabled via {only_file.name} directive")
 
     system_prompt = args.prompt.read_text(encoding="utf-8").strip()
     print(f"PROMPT: {args.prompt}  ({len(system_prompt)} chars)")
@@ -2290,15 +3687,90 @@ async def main() -> None:
                       file=sys.stderr)
                 sys.exit(2)
         else:
-            print("PROMPT/EVAL OVERLAP: clean (no verbatim utterances, coords, or "
-                  "reserved-vocab leaks)")
+            print("PROMPT/EVAL OVERLAP: clean (no verbatim utterances/coords; no "
+                  "reserved spatial-vocab leaks in worked examples — vision-case "
+                  "mock colours are runtime-only and out of scope)")
+
+        # Robustness sweep, opt-in via --robustness or a ROBUSTNESS line in
+        # eval/.only (see eval/README.md). Off by default.
+        robustness_mode = args.robustness or robustness_from_only
+        if robustness_mode and not args.only:
+            print("\nROBUSTNESS: refusing to sweep the FULL suite ×"
+                  f"{len(_ROBUSTNESS_VARIANTS)} variants: that is a large, "
+                  "rarely-intended backend cost. Restrict the sweep to a case "
+                  "subset via --only or case names in eval/.only alongside the "
+                  "ROBUSTNESS line.", file=sys.stderr)
+            sys.exit(2)
+        if robustness_mode:
+            print("\n── ROBUSTNESS SWEEP (clean + irrelevant perturbations) ──")
+            tags = [v["tag"] for v in _ROBUSTNESS_VARIANTS]
+            all_robust = True
+            for c in cases:
+                verdict = {}
+                reasons = {}
+                for v in _ROBUSTNESS_VARIANTS:
+                    ok, why = await _robustness_eval_case(
+                        http, system_prompt, tools, c, pose, v)
+                    verdict[v["tag"]] = ok
+                    reasons[v["tag"]] = why
+                robust = all(verdict.values())
+                all_robust = all_robust and robust
+                cells = " ".join(
+                    f"{t}={'PASS' if verdict[t] else 'FAIL'}" for t in tags)
+                print(f"{c['name']:48s} {cells}  → "
+                      f"{'ROBUST' if robust else 'STILL FRAGILE'}")
+                for t in tags:
+                    if not verdict[t]:
+                        print(f"    {t} FAIL: {reasons[t]}")
+            print(f"\nROBUSTNESS: {'ALL ROBUST' if all_robust else 'SOME FRAGILE'}")
+            sys.exit(0 if all_robust else 1)
 
         results = []
         for c in cases:
             scene_c = c["scene"]
             pose_c  = c.get("pose", pose)
-            _set_case_history(c.get("history"))
             _set_case_moves(c.get("recent_moves"))
+            _set_case_vision(c.get("vision"))
+            _set_case_vision_error(c.get("vision_error"))
+            _set_case_ref_us(c.get("ref_us"))
+            # Multi-turn case: run each turn as a fresh rollout with rolling
+            # text history; the case passes only if every turn's check passes.
+            if c.get("turns"):
+                try:
+                    turn_rs = await _run_turns(http, system_prompt, tools,
+                                               scene_c, pose_c, c["turns"],
+                                               thinking=args.thinking,
+                                               max_steps=_MAX_STEPS)
+                except Exception as exc:
+                    ok, why = False, f"network error: {type(exc).__name__}: {exc}"
+                    print(f"✗ {c['name']:32s}   ----  {why}")
+                    results.append((c["name"], ok))
+                    continue
+                ok = True
+                lat = round(sum(r["latency_s"] for r in turn_rs), 2)
+                print(f"  {c['name']:32s} {lat:5.1f}s  (multi-turn)")
+                for ti, (tr, td) in enumerate(zip(turn_rs, c["turns"])):
+                    # Merge the parent case under the per-turn dict so case-level
+                    # keys (category, expect_single_build, …) reach the per-turn
+                    # check while per-turn keys still override.
+                    check_case = {**{k: v for k, v in c.items() if k != "turns"},
+                                  **td, "scene": tr.get("scene", [])}
+                    # Guard the check too: a malformed model tool-call JSON
+                    # (json.loads in _built_rgb/_match_call) must fail this one
+                    # turn, not abort the whole batch with a traceback.
+                    try:
+                        tok, twhy = _check(tr, check_case)
+                    except Exception as exc:
+                        tok, twhy = False, f"check error: {type(exc).__name__}: {exc}"
+                    ok = ok and tok
+                    tmark = "✓" if tok else "✗"
+                    print(f"  {tmark} turn {ti + 1}: {td['user'][:40]!r}  {twhy}")
+                    for i, tc in enumerate(tr["tool_calls"]):
+                        fn = tc["function"]
+                        print(f"      [{i}] {fn['name']}({fn['arguments']})")
+                results.append((c["name"], ok))
+                continue
+            _set_case_history(c.get("history"))
             try:
                 r = await _run_one(http, system_prompt, tools, scene_c, pose_c,
                                    c["user"], thinking=args.thinking,
@@ -2308,7 +3780,13 @@ async def main() -> None:
                      "reasoning": ""}
                 ok, why = False, f"network error: {type(exc).__name__}: {exc}"
             else:
-                ok, why = _check(r, c)
+                # Guard the check separately from the rollout: a malformed model
+                # tool-call JSON (json.loads in _built_rgb/_match_call) must fail
+                # this one case gracefully, not abort the batch with a traceback.
+                try:
+                    ok, why = _check(r, c)
+                except Exception as exc:
+                    ok, why = False, f"check error: {type(exc).__name__}: {exc}"
             mark = "✓" if ok else "✗"
             print(f"{mark} {c['name']:32s} {r['latency_s']:5.1f}s  {why}")
             for i, tc in enumerate(r["tool_calls"]):
