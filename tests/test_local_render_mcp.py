@@ -312,7 +312,7 @@ class TestMcpToolsThroughDispatcher:
 
 
 class _FakeLovrProc:
-    """Stand-in for ManagedProcess that never exits until cancelled."""
+    """Stand-in for ManagedProcess that exits only when told (or never)."""
     def __init__(self) -> None:
         self._done = asyncio.Event()
 
@@ -320,15 +320,23 @@ class _FakeLovrProc:
         await self._done.wait()
         return 0
 
+    def trigger_exit(self) -> None:
+        """Simulate the LOVR child exiting, unblocking ``wait()``."""
+        self._done.set()
+
 
 class _FakeManagedProcessCtx:
     def __init__(self) -> None:
         self.proc = _FakeLovrProc()
+        # Records whether this launch's context was torn down — the leak in
+        # issue #196 is exactly that this never ran until process shutdown.
+        self.exited = False
 
     async def __aenter__(self) -> _FakeLovrProc:
         return self.proc
 
     async def __aexit__(self, *exc) -> None:
+        self.exited = True
         return None
 
 
@@ -372,3 +380,77 @@ async def test_close_cancels_lovr_watch_task(tmp_path: Path, monkeypatch):
         assert disp._watch_task.done()
     finally:
         await stack.__aexit__(None, None, None)
+
+
+@_asyncio
+async def test_lovr_respawn_closes_previous_launch_context(tmp_path: Path, monkeypatch):
+    """Issue #196: each LOVR launch's ManagedProcess context must be torn down
+    on respawn instead of accumulating in the app-lifetime stack.
+
+    Without the fix the previous context's ``__aexit__`` (pipe-task cancel +
+    log-sink close) only runs at whole-process shutdown, so N restarts leak
+    N-1 contexts. With the fix, ``_watch`` closes the per-launch stack as soon
+    as the child exits, before the next ``start_lovr_once``.
+    """
+    sock_path = _unique_ipc(tmp_path)
+    lovr_bin  = tmp_path / "lovr.sh"
+    lovr_bin.write_text("#!/bin/sh\nsleep 999\n")
+    lovr_bin.chmod(0o755)
+    xr_app_dir = tmp_path / "xr_app"
+    xr_app_dir.mkdir()
+
+    cfg = Config(
+        lovr_bin         = lovr_bin,
+        xr_app_dir       = xr_app_dir,
+        scene_socket     = sock_path,
+        cloudxr_env_file = None,
+        host             = "127.0.0.1",
+        port             = 0,
+    )
+
+    created: list[_FakeManagedProcessCtx] = []
+
+    def _make_ctx(*_a, **_kw) -> _FakeManagedProcessCtx:
+        ctx = _FakeManagedProcessCtx()
+        created.append(ctx)
+        return ctx
+
+    monkeypatch.setattr(render_main, "ManagedProcess", _make_ctx)
+
+    stack = contextlib.AsyncExitStack()
+    await stack.__aenter__()
+    try:
+        disp = SceneDispatcher(cfg, stack)
+
+        # First launch.
+        assert await disp.start_lovr_once() == {"status": "started"}
+        assert len(created) == 1
+        assert disp._launch_stack is not None
+        assert created[0].exited is False  # live
+
+        # Simulate the LOVR child exiting and let _watch run to completion.
+        created[0].proc.trigger_exit()
+        await disp._watch_task
+
+        # The previous launch context is torn down on respawn — not leaked.
+        assert created[0].exited is True
+        assert disp._launch_stack is None
+        assert disp._lovr_started is False
+
+        # Second launch reuses a fresh context; the first stays closed (no
+        # accumulation), the second is live.
+        assert await disp.start_lovr_once() == {"status": "started"}
+        assert len(created) == 2
+        assert created[0].exited is True
+        assert created[1].exited is False
+        assert sum(c.exited for c in created) == 1  # only the dead one closed
+
+        disp.close()
+        with contextlib.suppress(asyncio.CancelledError):
+            await disp._watch_task
+    finally:
+        await stack.__aexit__(None, None, None)
+
+    # Safety net: the still-live second context is closed when the
+    # app-lifetime stack unwinds at shutdown.
+    assert created[1].exited is True

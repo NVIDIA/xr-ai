@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-09 — render-mcp: per-launch context for LOVR respawn (no leaked pipe tasks / log handles)
+
+`render-mcp` parked every LOVR launch's `ManagedProcess` in the
+process-lifetime `AsyncExitStack`, so on each respawn the previous context's
+teardown (its two `_forward` pipe tasks + open log-file handle) never ran until
+whole-process shutdown — N restarts leaked N-1 dead contexts. Each launch now
+gets its own `AsyncExitStack`, closed inside `_watch` as soon as the child
+exits (before a respawn is allowed); a single `_aclose_live_launch` callback on
+the app-lifetime stack covers the shutdown-while-LOVR-running case, so it never
+accumulates per launch. Fixes #196.
+
 ### 2026-06-09 — Ctrl-C during startup tears down everything, incl. persist + docker containers
 
 Pressing Ctrl-C while `model-servers` was launching (slow image pull / weight

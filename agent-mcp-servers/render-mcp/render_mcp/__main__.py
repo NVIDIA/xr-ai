@@ -177,6 +177,15 @@ class SceneDispatcher:
         self._render_drops: int = 0
         self._spawn_error: str | None = None
         self._watch_task: asyncio.Task | None = None
+        # Per-launch context for the current LOVR child. Each launch gets its
+        # own AsyncExitStack so its ManagedProcess teardown (pipe-task cancel +
+        # log-sink close) can run on respawn instead of piling up in the
+        # app-lifetime stack until whole-process shutdown (issue #196).
+        self._launch_stack: contextlib.AsyncExitStack | None = None
+        # Safety net: close whatever launch context is live when the server
+        # shuts down (LOVR still running). Registered once on the app-lifetime
+        # stack so it never accumulates per launch.
+        self._stack.push_async_callback(self._aclose_live_launch)
 
         # Scene state: { id → { type, position, color, scale } }
         self._objects: dict[str, dict] = {}
@@ -216,9 +225,11 @@ class SceneDispatcher:
             logger.info(
                 "render-mcp: starting LOVR  bin={}  app={}", cfg.lovr_bin, cfg.xr_app_dir,
             )
-            lovr_proc = await self._stack.enter_async_context(
+            launch_stack = contextlib.AsyncExitStack()
+            lovr_proc = await launch_stack.enter_async_context(
                 ManagedProcess("lovr", lovr_cmd, cwd=cfg.xr_app_dir)
             )
+            self._launch_stack = launch_stack
 
             async def _watch() -> None:
                 rc = await lovr_proc.wait()
@@ -226,6 +237,14 @@ class SceneDispatcher:
                     "render-mcp: LOVR child exited (rc={}) — "
                     "resetting lovr_started so next start_xr respawns it", rc,
                 )
+                # Tear down this launch's context (cancel the two pipe-forward
+                # tasks, close the log sink; terminate is a no-op since the
+                # child already exited) BEFORE allowing a respawn, so dead
+                # contexts don't accumulate in the app-lifetime stack (#196).
+                with contextlib.suppress(Exception):
+                    await launch_stack.aclose()
+                if self._launch_stack is launch_stack:
+                    self._launch_stack = None
                 self._lovr_started = False
 
             self._watch_task = asyncio.create_task(_watch(), name="lovr-watch")
@@ -325,6 +344,18 @@ class SceneDispatcher:
             return {"ok": True}
         except zmq.Again:
             return {"ok": False, "reason": "backpressure"}
+
+    async def _aclose_live_launch(self) -> None:
+        """Close the current launch context, if any.
+
+        Registered once on the app-lifetime stack so a LOVR child still running
+        at server shutdown is torn down. On a normal LOVR exit ``_watch`` has
+        already closed and cleared the launch stack, so this is a no-op.
+        """
+        launch_stack, self._launch_stack = self._launch_stack, None
+        if launch_stack is not None:
+            with contextlib.suppress(Exception):
+                await launch_stack.aclose()
 
     def close(self) -> None:
         if self._watch_task is not None and not self._watch_task.done():
