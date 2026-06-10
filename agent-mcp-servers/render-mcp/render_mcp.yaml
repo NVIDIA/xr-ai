@@ -7,9 +7,10 @@
 # Overridable per sample by dropping a render_mcp.yaml next to the sample's
 # orchestrator (the launcher auto-discovers <command>.yaml by convention).
 
-# Path to the LOVR engine binary. Required. If left commented out, render-mcp
-# falls back to $LOVR_BIN. Point this at your existing LOVR build (e.g.
-# ~/hub/lovr/build/bin/lovr); render-mcp does not build or bundle LOVR.
+# Path to the LOVR engine binary. render-mcp needs one from either this key or
+# $LOVR_BIN (this key takes precedence); it exits if neither is set. Point it at
+# your LOVR build (e.g. ~/hub/lovr/build/bin/lovr); render-mcp does not build or
+# bundle LOVR.
 # lovr_bin: /home/you/hub/lovr/build/bin/lovr
 
 # Directory passed to LOVR as the project to run. Resolved relative to this

@@ -43,6 +43,17 @@ Before starting the stack, the orchestrator runs two setup steps:
   not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
   `lovr_bin:` in `render_mcp.yaml` → cached AppImage → fresh download.
 
+## Selecting the client type (WebRTC vs native)
+
+`NV_DEVICE_PROFILE` in `yaml/cloudxr_runtime.yaml` selects which XR clients can
+connect. The default `auto-webrtc` serves WebRTC / web XR clients. For the
+native iOS / visionOS client apps, change it to `auto-native`:
+
+```yaml
+cloudxr_env:
+  NV_DEVICE_PROFILE: auto-native
+```
+
 ## GPU pinning for the XR side
 
 `gpu_index` (int) in `yaml/cloudxr_runtime.yaml` selects the physical GPU
