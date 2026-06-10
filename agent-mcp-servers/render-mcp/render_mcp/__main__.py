@@ -46,6 +46,11 @@ from xr_ai_logging import setup_logging
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "render_mcp.yaml"
 
+# Max seconds the post-spawn scene resync waits for LOVR to connect its PULL
+# socket. LOVR normally attaches within a second or two of spawn; the bound
+# stops a LOVR that never connects from wedging the spawn path indefinitely.
+_RESYNC_TIMEOUT_S = 10.0
+
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -238,20 +243,55 @@ class SceneDispatcher:
             return {"status": "started"}
 
     async def _resync_scene(self) -> None:
-        """Push scene.add for every known primitive into LOVR's ZMQ buffer.
-        Called after LOVR (re)starts so primitives added in a previous session
-        are visible immediately when LOVR connects."""
-        for obj_id, obj in list(self._objects.items()):
+        """Re-push scene.add for every known primitive after a LOVR (re)start.
+
+        LOVR has just been spawned and has NOT yet connected its PULL socket.
+        A PUSH socket with zero connected peers does NOT buffer up to SNDHWM —
+        it returns ``EAGAIN`` immediately under ``NOBLOCK`` — so routing the
+        resync through the live ``forward()`` path silently dropped the entire
+        restore (issue #198). Send these as *blocking* sends instead, so each
+        one queues the moment LOVR attaches, bounded by an overall deadline so
+        a LOVR that never connects can't wedge the spawn (we hold the spawn
+        lock here)."""
+        objs = list(self._objects.items())
+        if not objs:
+            return
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _RESYNC_TIMEOUT_S
+        sent = 0
+        for obj_id, obj in objs:
             pos = obj["position"]
             col = obj["color"]
-            await self.forward("scene.add", {
-                "id":       obj_id,
-                "type":     obj["type"],
-                "position": [pos["x"], pos["y"], pos["z"]],
-                "color":    [col["r"], col["g"], col["b"]],
-                "size":    obj["size"],
-            })
+            payload = msgpack.packb(
+                {"op": "scene.add", "value": {
+                    "id":       obj_id,
+                    "type":     obj["type"],
+                    "position": [pos["x"], pos["y"], pos["z"]],
+                    "color":    [col["r"], col["g"], col["b"]],
+                    "size":     obj["size"],
+                }},
+                use_bin_type=True,
+            )
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            try:
+                # Blocking send (no NOBLOCK): the first one waits until LOVR's
+                # PULL connects; the rest queue (up to SNDHWM) and return fast.
+                await asyncio.wait_for(self._push.send(payload), timeout=remaining)
+            except asyncio.TimeoutError:
+                break
+            sent += 1
             logger.debug("render-mcp: resync  id={}", obj_id)
+
+        if sent == len(objs):
+            if sent:
+                logger.info("render-mcp: scene resync sent {} primitive(s) to LOVR", sent)
+        else:
+            logger.warning(
+                "render-mcp: scene resync incomplete ({}/{} primitives) — LOVR did "
+                "not connect within {:.0f}s", sent, len(objs), _RESYNC_TIMEOUT_S,
+            )
 
     # ── scene state ───────────────────────────────────────────────────────────
 

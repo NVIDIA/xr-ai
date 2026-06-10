@@ -372,3 +372,81 @@ async def test_close_cancels_lovr_watch_task(tmp_path: Path, monkeypatch):
         assert disp._watch_task.done()
     finally:
         await stack.__aexit__(None, None, None)
+
+
+# ── Issue #198: scene resync survives a late LOVR connect ─────────────────────
+
+
+@_asyncio
+async def test_resync_delivers_after_late_peer_connect(tmp_path: Path):
+    """Resync must reach LOVR even though LOVR connects AFTER it starts.
+
+    The old path routed resync through ``forward()`` (NOBLOCK); a PUSH with no
+    connected peer returns EAGAIN immediately (SNDHWM only buffers after a peer
+    attaches), so every restore message was dropped. The blocking resync queues
+    once LOVR's PULL connects.
+    """
+    sock_path = _unique_ipc(tmp_path)
+    cfg = Config(
+        lovr_bin=Path("/nonexistent"), xr_app_dir=tmp_path,
+        scene_socket=sock_path, cloudxr_env_file=None,
+        host="127.0.0.1", port=0,
+    )
+    stack = contextlib.AsyncExitStack()
+    await stack.__aenter__()
+    pull = None
+    try:
+        disp = SceneDispatcher(cfg, stack)
+        # Two primitives "carried over" from a previous LOVR session.
+        a = disp.add("sphere", {"x": 0, "y": 0, "z": 0}, {"r": 1, "g": 0, "b": 0}, 0.1)
+        b = disp.add("box",    {"x": 1, "y": 2, "z": 3}, {"r": 0, "g": 1, "b": 0}, 0.2)
+
+        # Start the resync with NO peer connected. The old code would have
+        # dropped both messages instantly; the fix blocks until a peer attaches.
+        resync_task = asyncio.create_task(disp._resync_scene())
+        await asyncio.sleep(0.1)
+        assert not resync_task.done()  # waiting for LOVR, not dropping
+
+        # LOVR connects late.
+        ctx = zmq.asyncio.Context.instance()
+        pull = ctx.socket(zmq.PULL)
+        pull.setsockopt(zmq.LINGER, 0)
+        pull.connect(sock_path)
+
+        ops = [await _recv_op(pull, timeout=2.0) for _ in range(2)]
+        await asyncio.wait_for(resync_task, timeout=2.0)
+
+        assert all(o["op"] == "scene.add" for o in ops)
+        assert {o["value"]["id"] for o in ops} == {a, b}
+    finally:
+        if pull is not None:
+            pull.close(linger=0)
+        disp.close()
+        await stack.__aexit__(None, None, None)
+
+
+@_asyncio
+async def test_resync_is_bounded_when_lovr_never_connects(tmp_path: Path, monkeypatch):
+    """A LOVR that never connects must not wedge the spawn — resync returns
+    after the deadline instead of blocking forever."""
+    monkeypatch.setattr(render_main, "_RESYNC_TIMEOUT_S", 0.2)
+    sock_path = _unique_ipc(tmp_path)
+    cfg = Config(
+        lovr_bin=Path("/nonexistent"), xr_app_dir=tmp_path,
+        scene_socket=sock_path, cloudxr_env_file=None,
+        host="127.0.0.1", port=0,
+    )
+    stack = contextlib.AsyncExitStack()
+    await stack.__aenter__()
+    try:
+        disp = SceneDispatcher(cfg, stack)
+        disp.add("sphere", {"x": 0, "y": 0, "z": 0}, {"r": 1, "g": 1, "b": 1}, 0.1)
+
+        start = asyncio.get_running_loop().time()
+        # No peer ever connects; must return ~promptly, not hang.
+        await asyncio.wait_for(disp._resync_scene(), timeout=3.0)
+        elapsed = asyncio.get_running_loop().time() - start
+        assert elapsed < 2.0
+    finally:
+        disp.close()
+        await stack.__aexit__(None, None, None)

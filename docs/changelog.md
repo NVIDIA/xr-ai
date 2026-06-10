@@ -9,6 +9,18 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-09 — render-mcp: scene resync survives a LOVR respawn (blocking send, not NOBLOCK)
+
+After a LOVR (re)start, `render-mcp` re-pushed every stored primitive via
+`_resync_scene` → `forward()`, which sends with `zmq.NOBLOCK`. But LOVR has not
+yet connected its PULL socket at that instant, and a PUSH with zero peers does
+not buffer up to `SNDHWM` — it returns `EAGAIN` immediately under `NOBLOCK` — so
+the entire resync was silently dropped and the scene came back empty after a
+crash/respawn even though `_objects` still held everything. `_resync_scene` now
+sends the restore as *blocking* sends (the first waits for LOVR's PULL to
+attach, the rest queue up to `SNDHWM`), bounded by `_RESYNC_TIMEOUT_S` so a LOVR
+that never connects can't wedge the spawn path. Fixes #198.
+
 ### 2026-06-09 — Ctrl-C during startup tears down everything, incl. persist + docker containers
 
 Pressing Ctrl-C while `model-servers` was launching (slow image pull / weight
