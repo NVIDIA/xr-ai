@@ -19,7 +19,7 @@ name: nightly XR AI test
 #
 # Required repo config (Settings -> Secrets and variables -> Actions):
 #   secret  BREV_API_TOKEN      — token for headless `brev login --token`
-#   var     BREV_INSTANCE_NAME  — name of the GPU Brev instance to manage
+#   secret  BREV_INSTANCE_NAME  — name of the GPU Brev instance to manage
 
 on:
   schedule:
@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BREV_INSTANCE_NAME: ${{ vars.BREV_INSTANCE_NAME }}
+  BREV_INSTANCE_NAME: ${{ secrets.BREV_INSTANCE_NAME }}
 
 jobs:
   start:
