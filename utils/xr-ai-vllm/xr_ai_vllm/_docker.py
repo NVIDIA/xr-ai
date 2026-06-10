@@ -22,6 +22,7 @@ import logging
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -391,6 +392,43 @@ def run(
 
     health_url = _lifecycle.health_url(host, port)
 
+    # On abort (Ctrl-C during model-servers startup) the launcher passes
+    # no_kill=set() and SIGTERMs every wrapper's process group. Without a
+    # handler, SIGTERM kills *this* wrapper but leaves the dockerd-managed
+    # container running (still pulling the image / downloading weights). The
+    # --stop path can't clean that up either: it gates on /health 200 and a
+    # mid-download container is never healthy. So the wrapper stops its own
+    # container by name (works regardless of health) when it receives a signal.
+    # On a clean run no signal arrives and these handlers stay dormant.
+    _state: dict[str, object] = {"proc": None, "streamer": None, "handling": False}
+    orig_int  = signal.getsignal(signal.SIGINT)
+    orig_term = signal.getsignal(signal.SIGTERM)
+
+    def _on_signal(_sig, _frame):
+        # Guard FIRST: Python does not block re-entry during the handler's own
+        # docker stop, and the user will mash Ctrl-C. A second signal no-ops.
+        if _state["handling"]:
+            return
+        _state["handling"] = True
+        print(
+            f"[{log_prefix}] signal received — stopping container {container_name}…",
+            flush=True,
+        )
+        cp = _state["proc"]
+        if isinstance(cp, subprocess.Popen) and cp.poll() is None:
+            cp.terminate()
+        # Modest timeout so this completes inside the launcher's _STOP_TIMEOUT
+        # (20s) window before it escalates to SIGKILL. Both helpers work by
+        # name and are idempotent regardless of container health.
+        stop_container(container_name, timeout_s=10)
+        remove_container(container_name)
+        sp = _state["streamer"]
+        _stop_log_streamer(sp if isinstance(sp, subprocess.Popen) else None)
+        sys.exit(130)
+
+    signal.signal(signal.SIGINT,  _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
+
     # Reuse a container that survived a wrapper restart (weight persistence).
     if _lifecycle.health_ok(health_url):
         print(
@@ -399,6 +437,8 @@ def run(
         )
         if ready_file:
             ready_file.touch()
+        signal.signal(signal.SIGINT,  orig_int)
+        signal.signal(signal.SIGTERM, orig_term)
         _lifecycle.idle_until_stopped(health_url, log_prefix)
         return
 
@@ -413,6 +453,7 @@ def run(
             ["docker", "start", "-a", container_name],
             start_new_session=True,
         )
+        _state["proc"] = proc
     else:
         _maybe_ngc_login(image)
         argv = build_run_argv(
@@ -432,14 +473,24 @@ def run(
             flush=True,
         )
         proc = subprocess.Popen(argv, start_new_session=True)
+        _state["proc"] = proc
 
     streamer_proc, log_path = _start_log_streamer(container_name)
+    _state["streamer"] = streamer_proc
     try:
         _lifecycle.wait_until_healthy(
             health_url,
             is_alive=lambda: proc.poll() is None,
         )
     except SystemExit:
+        # Two ways to land here: (a) wait_until_healthy raised SystemExit(1)
+        # because the container died on its own — the post-mortem log is
+        # valuable; (b) our signal handler called sys.exit(130) on abort — it
+        # already stopped+removed the container, so a "container failed"
+        # post-mortem on a now-removed container is misleading and wasteful.
+        # Skip the post-mortem only in the handler case.
+        if _state["handling"]:
+            raise
         time.sleep(0.5)
         _append_post_mortem(container_name, log_path)
         _stop_log_streamer(streamer_proc)
@@ -450,6 +501,13 @@ def run(
     log.info("Ready  →  http://localhost:%d/v1  (docker: %s)", port, container_name)
     if ready_file:
         ready_file.touch()
+
+    # Past readiness the abort-cleanup handler is no longer needed: a persist
+    # container that reached ready is meant to outlive the launcher, and the
+    # --stop path (health-gated) can now reach it. Restore the original
+    # handlers so steady-state signal behavior is unchanged.
+    signal.signal(signal.SIGINT,  orig_int)
+    signal.signal(signal.SIGTERM, orig_term)
 
     try:
         _lifecycle.idle_until_stopped(health_url, log_prefix)

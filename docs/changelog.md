@@ -9,6 +9,39 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-09 — Ctrl-C during startup tears down everything, incl. persist + docker containers
+
+Pressing Ctrl-C while `model-servers` was launching (slow image pull / weight
+download) left half-started vLLM docker containers running: the user could not
+simply abort and retry (e.g. after forgetting `HF_TOKEN`). Two coupled causes,
+two coupled fixes.
+
+`run_stack` (`utils/xr-ai-launcher/_stack.py`) treated every interruption like a
+clean exit: its `finally` always ran `_shutdown(launched, _no_kill)`, and
+model-servers' processes are all `launch_mode="persist"`, so `_no_kill`
+contained all of them — abort skipped every one ("keeping alive"). Now it tracks
+an `aborted` flag (set in the `except (SystemExit, KeyboardInterrupt)` handler,
+and in a generic `except Exception` that re-raises to preserve the traceback)
+and calls `_shutdown(launched, no_kill=set() if aborted else _no_kill)`. So a
+clean ready-exit (including `exit_after_ready`'s early `return`) keeps persist
+alive as before, while an abort kills EVERYTHING — sending SIGTERM to each
+wrapper's process group — and then `sys.exit(130)`.
+
+That SIGTERM alone still didn't stop the dockerd-managed container: the docker
+wrapper (`utils/xr-ai-vllm/_docker.py` `run`) spawns `docker run` with
+`start_new_session=True` (its own session) and installed no signal handler, so
+killing the wrapper orphaned the container. The `--stop` path
+(`stop_persistent_servers`) was no help — it gates on `/health` 200 and skips
+anything not healthy, so it can never reach a mid-download container. That
+health-gate is precisely why a wrapper-signal approach was chosen instead: `run`
+now installs SIGINT/SIGTERM handlers up front that idempotently (guard flag)
+terminate the in-flight `docker` client, `stop_container(name, timeout_s=10)` +
+`remove_container(name)` (both by name, health-independent, inside the launcher's
+20s SIGKILL window), stop the log streamer, and `sys.exit(130)`. Handlers are
+restored once the container reaches ready, so steady-state/`--stop` behavior is
+unchanged. The same wrapper backs simple-vlm-example's vlm-server, so its
+identical lingering-container bug is fixed for free.
+
 ### 2026-06-09 — README: fix invalid CUDA image tag in the GPU smoke-test
 
 The Container Toolkit smoke-test in the README used

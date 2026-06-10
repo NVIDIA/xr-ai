@@ -455,6 +455,13 @@ def run_stack(
 
     launched: dict[str, subprocess.Popen] = {}
 
+    # Tracks whether startup got interrupted before/at the "All processes ready"
+    # milestone. On abort we must tear down EVERYTHING — including persist
+    # processes — so each wrapper's process group gets SIGTERM and (for the
+    # vLLM docker wrapper) its self-stop signal handler kills the half-started
+    # container. Keeping persist alive is correct only on a clean ready-exit.
+    aborted = False
+
     with tempfile.TemporaryDirectory(prefix="xr-ai-") as _tmpdir:
         tmpdir = Path(_tmpdir)
         try:
@@ -485,6 +492,31 @@ def run_stack(
             _monitor(launched)
 
         except (SystemExit, KeyboardInterrupt):
-            pass
+            # Ctrl-C (or a _wait_ready SystemExit) during startup: abort and
+            # tear everything down. Swallow it here as before so orchestrators
+            # don't each need their own handler; the non-zero exit happens
+            # below, after the finally has run shutdown.
+            aborted = True
+            print(
+                "\nAborting — stopping launched processes and containers…",
+                flush=True,
+            )
+        except Exception:
+            # A spawn/wait failure before ready is also an abort: kill
+            # everything, but re-raise so the real traceback isn't lost (only
+            # the KI/SystemExit path is the user-driven Ctrl-C case).
+            aborted = True
+            print(
+                "\nAborting — stopping launched processes and containers…",
+                flush=True,
+            )
+            raise
         finally:
-            _shutdown(launched, _no_kill)
+            # Clean exit (including exit_after_ready's early return, which runs
+            # this finally with aborted=False) keeps persist/reuse alive. Abort
+            # passes no_kill=set() so persist processes are killed too.
+            _shutdown(launched, no_kill=(set() if aborted else _no_kill))
+
+    if aborted:
+        # Tempdir is now cleaned up; exit non-zero so callers/CI see the abort.
+        sys.exit(130)
