@@ -19,7 +19,10 @@ the entire resync was silently dropped and the scene came back empty after a
 crash/respawn even though `_objects` still held everything. `_resync_scene` now
 sends the restore as *blocking* sends (the first waits for LOVR's PULL to
 attach, the rest queue up to `SNDHWM`), bounded by `_RESYNC_TIMEOUT_S` so a LOVR
-that never connects can't wedge the spawn path. Fixes #198.
+that never connects can't wedge the spawn path. `_lovr_started` is now flipped
+True only *after* resync completes (and only if LOVR is still alive), so live
+`forward()` ops fast-drop as `not_started` during the resync window instead of
+contending on the shared PUSH socket behind the parked send. Fixes #198.
 
 ### 2026-06-09 — Ctrl-C during startup tears down everything, incl. persist + docker containers
 

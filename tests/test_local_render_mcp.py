@@ -426,6 +426,62 @@ async def test_resync_delivers_after_late_peer_connect(tmp_path: Path):
 
 
 @_asyncio
+async def test_live_forward_fast_drops_during_resync_window(tmp_path: Path, monkeypatch):
+    """PR #219 review nit: while the post-spawn resync is parked waiting for
+    LOVR to connect, ``_lovr_started`` stays False, so a concurrent live
+    ``forward()`` fast-drops as ``not_started`` instead of contending on the
+    shared PUSH socket behind the parked (blocking) resync send. The flag flips
+    to True only once resync completes (LOVR connected and scene restored).
+    """
+    sock_path = _unique_ipc(tmp_path)
+    lovr_bin  = tmp_path / "lovr.sh"
+    lovr_bin.write_text("#!/bin/sh\nsleep 999\n")
+    lovr_bin.chmod(0o755)
+    xr_app_dir = tmp_path / "xr_app"
+    xr_app_dir.mkdir()
+    cfg = Config(
+        lovr_bin=lovr_bin, xr_app_dir=xr_app_dir, scene_socket=sock_path,
+        cloudxr_env_file=None, host="127.0.0.1", port=0,
+    )
+    monkeypatch.setattr(render_main, "ManagedProcess",
+                        lambda *a, **kw: _FakeManagedProcessCtx())
+
+    stack = contextlib.AsyncExitStack()
+    await stack.__aenter__()
+    pull = None
+    try:
+        disp = SceneDispatcher(cfg, stack)
+        disp.add("sphere", {"x": 0, "y": 0, "z": 0}, {"r": 1, "g": 0, "b": 0}, 0.1)
+
+        # start_lovr_once parks inside _resync_scene (blocking send, no peer).
+        start_task = asyncio.create_task(disp.start_lovr_once())
+        await asyncio.sleep(0.1)
+        assert not start_task.done()         # parked waiting for LOVR
+        assert disp._lovr_started is False   # not advertised during resync
+
+        # A live op in this window must fast-drop, not queue behind the parked
+        # send. (Before the fix, _lovr_started was True here and forward() would
+        # attempt the contended NOBLOCK send.)
+        res = await disp.forward("scene.update", {"id": "sphere-0", "x": 1})
+        assert res == {"ok": False, "reason": "not_started"}
+
+        # LOVR connects → resync drains → start_lovr_once finishes.
+        ctx = zmq.asyncio.Context.instance()
+        pull = ctx.socket(zmq.PULL)
+        pull.setsockopt(zmq.LINGER, 0)
+        pull.connect(sock_path)
+        _ = await _recv_op(pull, timeout=2.0)            # the resync scene.add
+        result = await asyncio.wait_for(start_task, timeout=2.0)
+        assert result == {"status": "started"}
+        assert disp._lovr_started is True
+    finally:
+        if pull is not None:
+            pull.close(linger=0)
+        disp.close()
+        await stack.__aexit__(None, None, None)
+
+
+@_asyncio
 async def test_resync_is_bounded_when_lovr_never_connects(tmp_path: Path, monkeypatch):
     """A LOVR that never connects must not wedge the spawn — resync returns
     after the deadline instead of blocking forever."""

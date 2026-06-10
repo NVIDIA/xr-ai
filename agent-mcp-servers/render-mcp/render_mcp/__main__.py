@@ -235,11 +235,20 @@ class SceneDispatcher:
 
             self._watch_task = asyncio.create_task(_watch(), name="lovr-watch")
 
-            self._lovr_started = True
             logger.info("render-mcp: LOVR spawned (xr.start handled)")
-            # Resync current scene state into LOVR's ZMQ receive buffer so any
-            # previously-added primitives survive a LOVR restart.
+            # Restore the scene BEFORE advertising started. While resync's first
+            # (blocking) send is parked waiting for LOVR's PULL to attach,
+            # ``_lovr_started`` stays False so concurrent live ``forward()`` ops
+            # keep fast-dropping as "not_started" instead of queueing behind the
+            # parked send on the shared PUSH socket (PR #219 review nit). It also
+            # makes the flag mean what it says: LOVR connected AND scene restored.
             await self._resync_scene()
+            # Only advertise started if LOVR is still alive — it may have exited
+            # during the resync wait, in which case ``_watch`` has already run to
+            # completion (its post-wait body has no awaits) and cleared the flag,
+            # so we must not re-set it True.
+            if self._watch_task is not None and not self._watch_task.done():
+                self._lovr_started = True
             return {"status": "started"}
 
     async def _resync_scene(self) -> None:
