@@ -78,8 +78,15 @@ jobs:
             echo "::error::BREV_INSTANCE_NAME repo variable is not set"
             exit 1
           fi
-          echo "Starting Brev instance: $BREV_INSTANCE_NAME"
-          brev start "$BREV_INSTANCE_NAME"
+          # `brev start` errors if the instance is already RUNNING, so
+          # make this idempotent — skip when it's already up (e.g. a
+          # previous run left it on, or a manual `keep_running`).
+          if brev ls | grep -iw "$BREV_INSTANCE_NAME" | grep -qi "RUNNING"; then
+            echo "$BREV_INSTANCE_NAME is already RUNNING; skipping start."
+          else
+            echo "Starting Brev instance: $BREV_INSTANCE_NAME"
+            brev start "$BREV_INSTANCE_NAME"
+          fi
 
       - name: Wait until RUNNING
         # `brev start` returns before the VM is fully up and the GitHub
@@ -256,5 +263,10 @@ jobs:
             echo "::error::BREV_INSTANCE_NAME repo variable is not set"
             exit 1
           fi
-          echo "Stopping Brev instance: $BREV_INSTANCE_NAME"
-          brev stop "$BREV_INSTANCE_NAME"
+          # Idempotent: don't error out if it's already stopped.
+          if brev ls | grep -iw "$BREV_INSTANCE_NAME" | grep -qi "RUNNING"; then
+            echo "Stopping Brev instance: $BREV_INSTANCE_NAME"
+            brev stop "$BREV_INSTANCE_NAME"
+          else
+            echo "$BREV_INSTANCE_NAME is not RUNNING; nothing to stop."
+          fi
