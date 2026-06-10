@@ -35,7 +35,6 @@ import intent
 from config import WorkerConfig
 from memory import AgentMemory, Demonstration, DemoStep, RecordedFrame, VoiceNote
 from processors import QueryProcessor, _after_frame_for_step, _select_reference_frames_for_step
-from vad import VadDetector
 
 
 # ── test scaffolding ─────────────────────────────────────────────────────────
@@ -82,6 +81,20 @@ def _make_cfg(freshness_s: float = 120.0) -> WorkerConfig:
         guidance_advance_confirmations = 2,
         guidance_skip_static_frames    = True,
     )
+
+
+def _stub_stt() -> "mock.AsyncMock":
+    """Stand-in xr-ai-models STTService (never hits the network in tests)."""
+    s = mock.AsyncMock(name="STTService")
+    s.transcribe = mock.AsyncMock(return_value="")
+    return s
+
+
+def _stub_tts() -> "mock.AsyncMock":
+    """Stand-in xr-ai-models TTSService (synthesize returns empty WAV bytes)."""
+    t = mock.AsyncMock(name="TTSService")
+    t.synthesize = mock.AsyncMock(return_value=b"")
+    return t
 
 
 def _seed_demo(memory: AgentMemory, name: str, *, finished_ago_s: float = 0.0) -> Demonstration:
@@ -156,8 +169,8 @@ def _make_ga(memory: AgentMemory, qp: QueryProcessor) -> Any:
             memory=memory,
             transcript_client=mock.MagicMock(name="TranscriptClient"),
             query_processor=qp,
-            stt_url="http://stub",
-            tts_url="http://stub",
+            stt=_stub_stt(),
+            tts=_stub_tts(),
             nat_runtime=fake_runtime,
         )
 
@@ -212,82 +225,9 @@ def count_starting_with(events: list[str], prefix: str) -> int:
 
 PID = "p1"
 
-_VAD_SR        = 16_000
-_VAD_CHUNK_N   = int(_VAD_SR * 0.02)
-_VAD_SPEECH    = (12_000).to_bytes(2, "little", signed=True) * _VAD_CHUNK_N
-_VAD_SILENCE   = b"\x00\x00" * _VAD_CHUNK_N
-
-
-async def _feed_vad_many(vad: VadDetector, n: int, chunk: bytes) -> None:
-    for _ in range(n):
-        await vad.feed(chunk, _VAD_SR)
-
-
-async def scenario_0_vad_fallback_constructs_without_silero() -> None:
-    received: list[bytes] = []
-
-    async def on_utt(audio: bytes, _sr: int) -> None:
-        received.append(audio)
-
-    with mock.patch.dict(sys.modules, {"silero_vad": None}):
-        vad = VadDetector(on_utterance=on_utt)
-
-    expect(vad._silero is None, "silero should be disabled after import failure")  # type: ignore[attr-defined]
-    expect(received == [], f"constructor should not emit utterances: {received}")
-
-
-async def scenario_0b_vad_energy_fallback_finalizes_utterance() -> None:
-    received: list[tuple[bytes, int]] = []
-
-    async def on_utt(audio: bytes, sr: int) -> None:
-        received.append((audio, sr))
-
-    with mock.patch.dict(sys.modules, {"silero_vad": None}):
-        vad = VadDetector(
-            on_utterance     = on_utt,
-            silence_duration = 0.10,
-            min_speech       = 0.06,
-            silero_threshold = 0.5,
-        )
-
-    await _feed_vad_many(vad, 10, _VAD_SPEECH)
-    await _feed_vad_many(vad, 7, _VAD_SILENCE)
-
-    expect(len(received) == 1, f"fallback VAD should emit one utterance: {received}")
-    audio, sr = received[0]
-    expect(sr == _VAD_SR, f"wrong sample rate: {sr}")
-    expect(len(audio) // 2 >= int(_VAD_SR * 0.20), "utterance lost speech samples")
-
-
-async def scenario_0c_vad_speech_start_rearms_with_fallback() -> None:
-    starts: list[int] = []
-    finalized: list[int] = []
-
-    async def on_start() -> None:
-        starts.append(1)
-
-    async def on_utt(_audio: bytes, _sr: int) -> None:
-        finalized.append(1)
-
-    with mock.patch.dict(sys.modules, {"silero_vad": None}):
-        vad = VadDetector(
-            on_utterance     = on_utt,
-            on_speech_start  = on_start,
-            silence_duration = 0.10,
-            min_speech       = 0.06,
-            silero_threshold = 0.5,
-        )
-
-    await _feed_vad_many(vad, 10, _VAD_SPEECH)
-    await asyncio.sleep(0)
-    expect(starts == [1], f"speech_start should fire once: {starts}")
-
-    await _feed_vad_many(vad, 7, _VAD_SILENCE)
-    expect(finalized == [1], f"utterance should finalize once: {finalized}")
-
-    await _feed_vad_many(vad, 10, _VAD_SPEECH)
-    await asyncio.sleep(0)
-    expect(starts == [1, 1], f"speech_start should re-arm: {starts}")
+# NOTE: VAD scenarios live with the shared component now (tests/test_xr_ai_vad.py).
+# glasses-agent-nat reuses xr_ai_vad.VadDetector rather than a local fork, so the
+# VAD internals are no longer re-tested here.
 
 
 async def scenario_1_what_do_you_see_with_fresh_demo() -> None:
@@ -865,8 +805,8 @@ async def scenario_13_recording_loop_not_paused_by_query() -> None:
             memory=mem,
             transcript_client=mock.MagicMock(name="TranscriptClient"),
             query_processor=qp,
-            stt_url="http://stub",
-            tts_url="http://stub",
+            stt=_stub_stt(),
+            tts=_stub_tts(),
             nat_runtime=fake_runtime,
         )
 
@@ -938,8 +878,8 @@ async def scenario_13b_guidance_suppresses_background_observation() -> None:
             memory=mem,
             transcript_client=mock.MagicMock(name="TranscriptClient"),
             query_processor=qp,
-            stt_url="http://stub",
-            tts_url="http://stub",
+            stt=_stub_stt(),
+            tts=_stub_tts(),
             nat_runtime=fake_runtime,
         )
 
@@ -2502,9 +2442,6 @@ def _enter_guidance(
 # ── runner ───────────────────────────────────────────────────────────────────
 
 SCENARIOS = [
-    scenario_0_vad_fallback_constructs_without_silero,
-    scenario_0b_vad_energy_fallback_finalizes_utterance,
-    scenario_0c_vad_speech_start_rearms_with_fallback,
     scenario_1_what_do_you_see_with_fresh_demo,
     scenario_2_bare_stop_outside_guidance,
     scenario_3_layer1_filler_dropped,

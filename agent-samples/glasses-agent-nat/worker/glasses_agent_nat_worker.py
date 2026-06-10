@@ -29,6 +29,7 @@ import signal
 import time
 
 from xr_ai_logging import setup_logging
+from xr_ai_models import load_models_config_from_dict, make_stt, make_tts
 
 from agent import GlassesAgent
 from config import WorkerConfig, load_config
@@ -185,6 +186,19 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         "transcript-mcp":("mcp", cfg.transcript_mcp.rstrip("/")    + "/mcp"),
     })
 
+    # Shared STT/TTS clients (xr-ai-models) — same OpenAI-compatible servers
+    # the rest of the agent-samples use, built from this worker's stt_server /
+    # tts_server URLs via the standard preset specs.
+    models_cfg = load_models_config_from_dict(
+        {
+            "stt": {"kind": "preset:parakeet_stt", "base_url": cfg.stt_server},
+            "tts": {"kind": "preset:piper_tts",    "base_url": cfg.tts_server},
+        },
+        source="glasses-agent-nat",
+    )
+    stt = make_stt(models_cfg, "stt")
+    tts = make_tts(models_cfg, "tts")
+
     nat_runtime = await NatRuntime.create(cfg.nat_workflow_config)
     agent: GlassesAgent | None = None
     query_proc: QueryProcessor | None = None
@@ -232,8 +246,8 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
             memory            = memory,
             transcript_client = transcript,
             query_processor   = query_proc,
-            stt_url           = cfg.stt_server,
-            tts_url           = cfg.tts_server,
+            stt               = stt,
+            tts               = tts,
             nat_runtime       = nat_runtime,
         )
 
@@ -253,6 +267,8 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         if transcript is not None:
             await transcript.close()
         await nat_runtime.close()
+        await stt.close()
+        await tts.close()
 
     log.info("glasses-agent-nat stopped")
 

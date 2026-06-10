@@ -245,7 +245,10 @@ functions with typed pydantic I/O.
 | `worker/glasses_nat_register.py` | Register `derive_step_key_info`; thread key-info into the completion check. **NAT-native LLM:** resolve `agent_llm`/`worker_llm` via `builder.get_llm(..., LLMFrameworkEnum.LANGCHAIN)`; config now takes `agent_llm_name`/`worker_llm_name` instead of base URLs. |
 | `worker/processors.py` | Extract+store key info at finalize; pass it into the guidance check. Auto-advance monitor: static-frame skip (cheap `_latest_live_frame_ts`, behavior-preserving) + configurable confirmation count. |
 | `worker/config.py` | New tunables: `recording_warmup_s`, `guidance_advance_confirmations`, `guidance_skip_static_frames`. |
-| `worker/agent.py` | Recording warmup window now uses `recording_warmup_s`. |
+| `worker/agent.py` | Recording warmup window now uses `recording_warmup_s`. **Shared services:** VAD now uses `xr_ai_vad.VadDetector`; STT/TTS go through `xr-ai-models` `STTService`/`TTSService` instead of hand-rolled httpx. |
+| `worker/vad.py` | **Removed** — replaced by the shared `xr-ai-vad` package (same Silero detector simple-vlm-example uses). |
+| `worker/glasses_agent_nat_worker.py` | Build `make_stt`/`make_tts` from the stt/tts server URLs and pass the services into `GlassesAgent`; close them on shutdown. |
+| `worker/pyproject.toml` | Depend on `xr-ai-vad` + `xr-ai-models`; drop direct `silero-vad`/`onnxruntime` (transitive via `xr-ai-vad`); keep the `torchaudio` minor pin so Silero loads. |
 | `yaml/glasses_agent_nat_workflow.yaml` | `derive_step_key_info` added to the worker-task group. **NAT-native LLM:** `glasses_worker_tasks` now takes `agent_llm_name`/`worker_llm_name` (resolved from the `llms:` block) instead of `agent_llm_server`/`llm_server` URLs. |
 | `yaml/glasses_agent_nat_worker.yaml` | Documents the three new knobs. |
 | `README.md` | Notes the worker tasks run through NAT's LLM layer. |

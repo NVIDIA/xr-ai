@@ -12,18 +12,20 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
     "xr-ai-logging",
+    # Shared VAD + STT/TTS clients reused across agent-samples (same as
+    # simple-vlm-example). xr-ai-vad pulls silero-vad + onnxruntime; xr-ai-models
+    # owns the OpenAI-compatible STT/TTS clients.
+    "xr-ai-vad",
+    "xr-ai-models",
     "numpy>=1.24",
     "Pillow>=10.0",
     "httpx>=0.27",
     "pyyaml>=6.0",
     "nvidia-nat[langchain,mcp]>=1.6",
     "pydantic>=2.7",
-    "silero-vad>=5.1",
-    "onnxruntime>=1.17",
     # torchaudio MUST share torch's minor version or its native lib
     # (libtorchaudio) fails to load with an ABI error, which makes
-    # silero-vad's load_silero_vad(onnx=True) raise and the VAD silently
-    # degrades to the crude energy fallback (garbled, multi-sentence STT).
+    # silero-vad's load_silero_vad(onnx=True) — used by xr-ai-vad — raise.
     # nvidia-nat constrains torch to 2.10.x here, but torchaudio otherwise
     # floats to 2.11.x — pin it to the matching minor. Bump both together.
     "torchaudio>=2.10,<2.11",
@@ -32,6 +34,8 @@ dependencies = [
 [tool.uv.sources]
 xr-ai-agent   = { path = "../../../agent-sdk",            editable = true }
 xr-ai-logging = { path = "../../../utils/xr-ai-logging",  editable = true }
+xr-ai-vad     = { path = "../../../utils/xr-ai-vad",      editable = true }
+xr-ai-models  = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
 glasses_agent_nat_worker = "glasses_agent_nat_worker:run"

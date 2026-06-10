@@ -459,10 +459,12 @@ recording disabled), transcript-mcp (8200), worker.
 
 ### glasses-agent-nat  (agent-samples/glasses-agent-nat/)
 
-NeMo Agent Toolkit variant of `glasses-agent`.  The process stack, IPC, VAD,
-STT/TTS, background VLM observation, memory, demonstration recording, and
-guidance lifecycle remain aligned with `glasses-agent`; bounded LLM/tool work
-runs through NAT functions.  The YAML workflow declares VLM/video/transcript
+NeMo Agent Toolkit variant of `glasses-agent`.  The process stack, IPC,
+background VLM observation, memory, demonstration recording, and guidance
+lifecycle remain aligned with `glasses-agent`; bounded LLM/tool work runs
+through NAT functions.  VAD and STT/TTS reuse the shared services every other
+agent-sample uses — `xr-ai-vad` (Silero) and `xr-ai-models` (OpenAI-compatible
+STT/TTS clients) — instead of a local fork.  The YAML workflow declares VLM/video/transcript
 MCP endpoints as NAT `mcp_client` function groups, exposes a custom
 `glasses_agent_tools` group to the request-time `tool_calling_agent`, and uses
 an internal `glasses_worker_tasks` group for recording analysis, observation
@@ -472,11 +474,12 @@ NAT LangChain plugin internally.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `glasses-agent-nat` | `xr-ai-launcher`, `xr-ai-logging` | - |
-| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17, torchaudio >=2.10,<2.11 |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-vad`, `xr-ai-models`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, torchaudio >=2.10,<2.11 (silero-vad + onnxruntime come via xr-ai-vad) |
 
 `torchaudio` is pinned to torch's minor (nvidia-nat constrains torch to 2.10.x;
 torchaudio otherwise floats to 2.11.x and its native lib fails the ABI load,
-silently dropping Silero VAD to the energy fallback). Bump both together.
+which would make `xr-ai-vad`'s `load_silero_vad(onnx=True)` raise). Bump both
+together.
 
 Starts the same services as `glasses-agent`: hub, stt (8103), piper-tts
 (8105), nemotron3-nano-llm (8107), vlm-server (8100),

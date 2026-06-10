@@ -46,7 +46,8 @@ from intent import is_real_assistant_request, is_shape_noise
 from memory import AgentMemory, Observation, RecordedFrame, TranscriptClient
 from nat_runtime import NatRuntime
 from processors import QueryProcessor
-from vad import VadDetector
+from xr_ai_models import STTService, TTSService
+from xr_ai_vad import VadDetector
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -59,21 +60,6 @@ _DEFAULT_PID = "web-client"
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
-
-
-def _chunks_to_wav(int16_pcm: bytes, sample_rate: int, channels: int = 1) -> bytes:
-    """Wrap raw int16 PCM bytes in a WAV container for the STT server.
-
-    ``xr_ai_vad`` emits int16 PCM directly via on_utterance, so the bytes
-    can be wrapped as-is.
-    """
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(int16_pcm)
-    return buf.getvalue()
 
 
 def _wav_to_chunks(wav_bytes: bytes, participant_id: str) -> list[AudioChunk]:
@@ -109,8 +95,8 @@ class GlassesAgent:
     memory:            AgentMemory — shared observation + demo store.
     transcript_client: TranscriptClient — persists observations to transcript-mcp.
     query_processor:   QueryProcessor — handles transcribed utterances.
-    stt_url:           STT server base URL (OpenAI-compatible /v1/audio/transcriptions).
-    tts_url:           TTS server base URL (OpenAI-compatible /v1/audio/speech).
+    stt:               Shared xr-ai-models STTService (OpenAI-compatible STT).
+    tts:               Shared xr-ai-models TTSService (OpenAI-compatible TTS).
     nat_runtime:       Shared NAT workflow/runtime for MCP-backed tools.
     """
 
@@ -121,16 +107,16 @@ class GlassesAgent:
         transcript_client: TranscriptClient,
         query_processor:   QueryProcessor,
         *,
-        stt_url:      str,
-        tts_url:      str,
+        stt:          STTService,
+        tts:          TTSService,
         nat_runtime:  NatRuntime,
     ) -> None:
         self._cfg               = cfg
         self._memory            = memory
         self._transcript        = transcript_client
         self._qproc             = query_processor
-        self._stt_url           = stt_url.rstrip("/")
-        self._tts_url           = tts_url.rstrip("/")
+        self._stt               = stt
+        self._tts               = tts
         self._nat_runtime       = nat_runtime
 
         self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
@@ -174,7 +160,8 @@ class GlassesAgent:
         self._rec_last_ts:    int = 0
         self._rec_warmup_end: int = 0
 
-        # Shared HTTP client for STT / TTS / LLM calls.
+        # HTTP client for the worker's own LLM calls (intent gate / quick-ack).
+        # STT and TTS go through the shared xr-ai-models services above.
         self._http = httpx.AsyncClient(timeout=120.0)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
@@ -248,17 +235,10 @@ class GlassesAgent:
         explicitly sent it, so the user means it).
         """
         ref_us = _now_us()
-        wav    = _chunks_to_wav(pcm_bytes, sample_rate)
         try:
-            resp = await self._http.post(
-                self._stt_url + "/v1/audio/transcriptions",
-                files={"file": ("audio.wav", wav, "audio/wav")},
-                data={"response_format": "json"},
-            )
-            if resp.is_error:
-                log.error("stt %s: %s", resp.status_code, resp.text[:200])
-                return
-            text = resp.json().get("text", "").strip()
+            # Shared STTService wraps the OpenAI-compatible /v1/audio/transcriptions
+            # endpoint and does the int16-PCM → WAV framing internally.
+            text = (await self._stt.transcribe(pcm_bytes, sample_rate=sample_rate)).strip()
         except Exception as exc:
             log.error("stt request failed pid=%r: %s", pid, exc)
             return
@@ -770,15 +750,9 @@ class GlassesAgent:
         """
         my_gen = self._speech_generation.get(pid, 0)
         try:
-            resp = await self._http.post(
-                self._tts_url + "/v1/audio/speech",
-                json={"input": text, "response_format": "wav"},
-                timeout=60.0,
-            )
-            if resp.is_error:
-                log.error("tts %s: %s", resp.status_code, resp.text[:200])
-                return
-            wav = resp.content
+            # Shared TTSService wraps the OpenAI-compatible /v1/audio/speech
+            # endpoint and returns the raw WAV bytes we chunk back to the hub.
+            wav = await self._tts.synthesize(text, response_format="wav", timeout=60.0)
             for chunk in _wav_to_chunks(wav, pid):
                 if self._speech_generation.get(pid, 0) != my_gen:
                     log.debug("say pid=%r — generation bumped, stopping chunk send", pid)
