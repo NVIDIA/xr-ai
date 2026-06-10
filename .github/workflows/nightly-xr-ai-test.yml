@@ -82,6 +82,9 @@ jobs:
         # but failing here gives a clearer error than a stuck queue).
         run: |
           set -euo pipefail
+          echo "--- brev ls (raw, for diagnosis) ---"
+          brev ls || true
+          echo "------------------------------------"
           for i in $(seq 1 60); do
             line=$(brev ls | grep -iw "$BREV_INSTANCE_NAME" || true)
             echo "[$i] ${line:-<$BREV_INSTANCE_NAME not found in brev ls>}"
