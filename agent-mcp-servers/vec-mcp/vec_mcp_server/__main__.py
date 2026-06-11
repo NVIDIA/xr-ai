@@ -165,9 +165,9 @@ def run() -> None:
     p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
-    setup_logging("vec-mcp")
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+    setup_logging("vec-mcp")
 
     yaml_path = ns.config or _DEFAULT_YAML
     raw = _load_raw(yaml_path) if yaml_path.exists() else {}
