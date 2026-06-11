@@ -5,8 +5,8 @@
 
 # Decision changelog
 
-XR AI records every non-trivial architectural or design decision, newest first,
-so the rationale is preserved. The canonical log lives in the repository at
-`docs/changelog.md`.
+Significant architectural and design decisions are recorded newest-first so the
+rationale is preserved. The full decision log is maintained on GitHub.
 
-This page is a placeholder seeded by the docs scaffold.
+Read the full changelog on GitHub:
+[`docs/changelog.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/changelog.md).

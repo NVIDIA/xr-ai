@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Build the XR-AI Sphinx docs. On every docs PR: strict build (warnings = errors).
+# Build the XR AI Sphinx docs. On every docs PR: strict build (warnings = errors).
 # On push to main of the canonical repo: build + deploy to GitHub Pages.
-# Deploy is a no-op until Pages is enabled for the repo (Settings → Pages → GitHub Actions).
+# Deploy is push-to-main only — the github-pages environment restricts deploys to
+# main, so PR-branch deploys are rejected by environment protection.
 name: Docs
 
 on:

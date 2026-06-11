@@ -5,11 +5,14 @@
 
 # Getting Started
 
-Requirements, the quickstart paths, connecting clients, networking, and credentials.
+The quickstart paths, requirements, connecting clients, networking, and credentials.
 
 ```{toctree}
-:glob:
 :maxdepth: 1
 
-*
+quickstart
+requirements
+clients
+networking
+credentials
 ```
