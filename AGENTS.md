@@ -17,13 +17,15 @@ agent-sdk/          # Three packages:
                     #   xr-ai-agent   — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models  — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-pipecat — optional Pipecat transport bridge (heavier deps)
-utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
+utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
 ai-services/        # OpenAI-compatible inference servers (VLM, STT, TTS, LLM)
-agent-mcp-servers/  # MCP adapters: oxr, render, transcript, video, vlm
+agent-mcp-servers/  # MCP adapters: oxr, render, transcript, vec, video, vlm
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
 docs/               # Topic deep-dives + changelog
+models/             # Gitignored model-weight cache (per-YAML model_cache target)
+deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 ```
 
 ## Hard rules
@@ -43,7 +45,9 @@ docs/               # Topic deep-dives + changelog
   `make_vlm` / `make_stt` / `make_tts`.  Hand-rolled `httpx` clients
   against `/v1/chat/completions`, `/v1/audio/transcriptions`, or
   `/v1/audio/speech` are forbidden — model quirks belong in this one
-  package's presets, not in callers.
+  package's presets, not in callers. No vendor SDKs (no `openai`, no
+  `anthropic`, no `litellm`); all in-tree backends speak
+  OpenAI-compatible HTTP.
 - **Workers never import from `server-runtime` or `xr_ai_launcher`.** Only
   `xr_ai_agent` + `xr_ai_models` + task-specific libs (numpy, torch, …).
 - **MCP servers are the agent's only interface to XR data and rendering.**
