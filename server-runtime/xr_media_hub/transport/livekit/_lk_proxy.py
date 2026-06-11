@@ -90,8 +90,8 @@ async def pump_rtc_ws(
                             await client_ws.send_bytes(frame)
                         else:
                             await client_ws.send_text(frame)
-                except Exception:
-                    pass  # disconnect races during teardown
+                except Exception as exc:
+                    logger.debug("WS proxy /rtc l2c ended: {}", exc)
 
             await asyncio.gather(c2l(), l2c(), return_exceptions=True)
     except Exception as exc:

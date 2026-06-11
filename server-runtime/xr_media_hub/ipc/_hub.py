@@ -262,13 +262,19 @@ class HubEndpoint:
 
         elif type_id == MsgType.AUDIO_CHUNK:
             for cb in self._audio_cbs:
-                await cb(msg)
+                try:
+                    await cb(msg)
+                except Exception:
+                    logger.exception("audio callback error")
             topic = f"audio.{msg.participant_id}.{msg.track_id}".encode()
             await self._pub.send_multipart([topic, encode(MsgType.AUDIO_CHUNK, msg)])
 
         elif type_id == MsgType.DATA_MESSAGE:
             for cb in self._data_cbs:
-                await cb(msg)
+                try:
+                    await cb(msg)
+                except Exception:
+                    logger.exception("data callback error")
             topic = f"data.{msg.participant_id}.{msg.topic}".encode()
             await self._pub.send_multipart([topic, encode(MsgType.DATA_MESSAGE, msg)])
 
@@ -285,12 +291,18 @@ class HubEndpoint:
                     ring, view = self._latest_slots.pop(k)
                     ring.release_slot(view.signal.slot)
             for cb in self._participant_cbs:
-                await cb(msg)
+                try:
+                    await cb(msg)
+                except Exception:
+                    logger.exception("participant callback error")
             await self._pub.send_multipart([b"participant", encode(MsgType.PARTICIPANT_EVENT, msg)])
 
         elif type_id == MsgType.CONTROL:
             for cb in self._control_cbs:
-                await cb(msg)
+                try:
+                    await cb(msg)
+                except Exception:
+                    logger.exception("control callback error")
             await self._pub.send_multipart([TOPIC_CONTROL, encode(MsgType.CONTROL, msg)])
 
         elif type_id == MsgType.RETURN_AUDIO:

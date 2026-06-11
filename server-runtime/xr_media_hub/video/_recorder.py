@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
+from xr_ai_agent import PixelFormat
 
 if TYPE_CHECKING:
     from xr_media_hub.ipc import SlotView
@@ -188,6 +189,10 @@ class VideoRecorder:
 
             if enc.chunk_frames >= self._cfg.chunk_frames:
                 self._rotate_chunk(enc, pid)
+                # _rotate_chunk marks the track failed if it cannot recreate
+                # the encoder; bail before dereferencing enc.encoder=None.
+                if enc.failed:
+                    return
 
             encoded = enc.encoder.Encode(nv12)
             if encoded:
@@ -203,7 +208,17 @@ class VideoRecorder:
         except Exception as e:
             logger.warning("recorder  EndEncode error pid={!r}: {}", pid, e)
         self._flush_chunk(enc)
-        enc.encoder        = self._create_encoder(enc.width, enc.height)
+        try:
+            enc.encoder = self._create_encoder(enc.width, enc.height)
+        except Exception as e:
+            logger.error(
+                "recorder  CreateEncoder failed pid={!r} {}x{}: {} — "
+                "recording disabled for this track",
+                pid, enc.width, enc.height, e,
+            )
+            enc.encoder = None
+            enc.failed  = True
+            return
         enc.chunk_start_us = time.time_ns() // 1_000
         enc.chunk_frames   = 0
 
@@ -292,25 +307,29 @@ class VideoRecorder:
     # ── public API ────────────────────────────────────────────────────────────
 
     def close_participant(self, pid: str) -> None:
+        # Pop under the lock so a frame arriving mid-close can't re-insert an
+        # encoder that then never gets flushed/closed. Flush I/O stays outside
+        # self._lock (it only needs each encoder's own lock).
         with self._lock:
             keys = [k for k in self._encoders if k[0] == pid]
-        for key in keys:
-            enc = self._encoders.pop(key, None)
-            if enc:
-                with enc.lock:
+            encs = [enc for k in keys if (enc := self._encoders.pop(k, None))]
+        for enc in encs:
+            with enc.lock:
+                # enc.encoder is None on a track whose encoder (re)creation
+                # failed; skip EndEncode but still flush any buffered chunk.
+                if enc.encoder is not None:
                     try:
                         flushed = enc.encoder.EndEncode()
                         if flushed:
                             enc.chunk_buf.extend(flushed)
                     except Exception as e:
                         logger.warning("recorder  flush error pid={!r}: {}", pid, e)
-                    self._flush_chunk(enc)
+                self._flush_chunk(enc)
 
 
 # ── pixel format conversion ───────────────────────────────────────────────────
 
 def _to_nv12(data: bytes, width: int, height: int, fmt: object) -> np.ndarray | None:
-    from xr_ai_agent import PixelFormat
     arr = np.frombuffer(data, dtype=np.uint8)
 
     if fmt == PixelFormat.NV12:

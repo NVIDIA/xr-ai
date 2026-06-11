@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING
 
 import numpy as np
 from livekit import rtc
@@ -33,9 +32,6 @@ from xr_media_hub.ipc import (
 
 from ._token import make_client_token
 from .config import LiveKitConnectorConfig
-
-if TYPE_CHECKING:
-    pass
 
 
 def _now_us() -> int:
@@ -141,16 +137,7 @@ class RoomClient:
             _pub: rtc.RemoteTrackPublication,
             participant: rtc.RemoteParticipant,
         ) -> None:
-            if track.kind == rtc.TrackKind.KIND_VIDEO:
-                self._start_track_task(
-                    track.sid,
-                    self._stream_video(track, participant.identity, track.sid),
-                )
-            elif track.kind == rtc.TrackKind.KIND_AUDIO:
-                self._start_track_task(
-                    track.sid,
-                    self._stream_audio(track, participant.identity, track.sid),
-                )
+            self._maybe_start_track(track, participant.identity)
 
         @self._room.on("track_unsubscribed")
         def _on_track_end(
@@ -193,20 +180,18 @@ class RoomClient:
             await self._handle_joined(participant)
             for pub in participant.track_publications.values():
                 if pub.track is not None and pub.subscribed:
-                    if pub.track.kind == rtc.TrackKind.KIND_VIDEO:
-                        self._start_track_task(
-                            pub.track.sid,
-                            self._stream_video(
-                                pub.track, participant.identity, pub.track.sid
-                            ),
-                        )
-                    elif pub.track.kind == rtc.TrackKind.KIND_AUDIO:
-                        self._start_track_task(
-                            pub.track.sid,
-                            self._stream_audio(
-                                pub.track, participant.identity, pub.track.sid
-                            ),
-                        )
+                    self._maybe_start_track(pub.track, participant.identity)
+
+    def _maybe_start_track(self, track: rtc.Track, identity: str) -> None:
+        """Start a stream task for a video/audio track; ignore other kinds."""
+        if track.kind == rtc.TrackKind.KIND_VIDEO:
+            self._start_track_task(
+                track.sid, self._stream_video(track, identity, track.sid),
+            )
+        elif track.kind == rtc.TrackKind.KIND_AUDIO:
+            self._start_track_task(
+                track.sid, self._stream_audio(track, identity, track.sid),
+            )
 
     async def run(self) -> None:
         """Wait until stop() is called."""
@@ -230,6 +215,17 @@ class RoomClient:
         task = asyncio.create_task(coro)
         self._pending_tasks.add(task)
         task.add_done_callback(self._pending_tasks.discard)
+        task.add_done_callback(self._log_task_exception)
+
+    @staticmethod
+    def _log_task_exception(task: asyncio.Task) -> None:
+        # Surface failures in push_data/join/leave handlers instead of letting
+        # them stay silent until disconnect retrieves the exception.
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.opt(exception=exc).error("spawned room-client task failed")
 
     async def disconnect(self) -> None:
         for t in self._track_tasks.values():
@@ -251,8 +247,6 @@ class RoomClient:
 
     async def send_return_data(self, msg: DataMessage) -> None:
         """Publish data to the target participant via LiveKit data channel."""
-        if not self._room:
-            return
         try:
             await self._room.local_participant.publish_data(
                 msg.data,
@@ -271,8 +265,6 @@ class RoomClient:
         recv loop responsive so flush messages are not stuck FIFO
         behind a burst of chunks.
         """
-        if not self._room:
-            return
         pid   = chunk.participant_id
         entry = self._return_audio.get(pid)
         if entry is None:

@@ -14,6 +14,7 @@ regardless of where the process is started from.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from pathlib import Path
 
 import yaml
@@ -61,7 +62,6 @@ def load_config() -> LiveKitConnectorConfig:
             data[key] = _resolve_path(data[key], base)
 
     # Filter to only fields that exist on the dataclass.
-    import dataclasses
     valid = {f.name for f in dataclasses.fields(LiveKitConnectorConfig)}
     filtered = {k: v for k, v in data.items() if k in valid}
 

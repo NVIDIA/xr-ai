@@ -59,7 +59,6 @@ class LiveKitConnector:
             max_frame_bytes=self._cfg.shm_max_frame_bytes,
         )
         self._room_client = RoomClient(self._cfg, self._ep)
-        self._stop = asyncio.Event()
 
     # ── callback registration ─────────────────────────────────────────────────
 

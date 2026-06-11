@@ -137,7 +137,7 @@ class LiveKitDocker:
         # this is reliable even if the docker run process is also killed
         # externally (e.g. by the launcher's killpg).
         try:
-            await asyncio.get_event_loop().run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: subprocess.run(
                     ["docker", "stop", "--time", str(int(_STOP_TIMEOUT)), _CONTAINER_NAME],
@@ -182,7 +182,7 @@ class LiveKitDocker:
             )
 
     async def _wait_ready(self, port: int) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         deadline = loop.time() + _READY_TIMEOUT
         while True:
             if self._proc is not None and self._proc.returncode is not None:

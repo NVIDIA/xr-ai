@@ -25,8 +25,6 @@ from xr_media_hub._errors import StartupError
 from xr_media_hub.ipc import AudioChunk, DataMessage, HubEndpoint, ParticipantEvent, SlotView
 from xr_media_hub.transport.livekit import LiveKitConnector, make_client_token
 
-PULL_ADDR      = "ipc:///tmp/xr_hub_in"
-PUB_ADDR       = "ipc:///tmp/xr_hub_pub"
 STATS_INTERVAL = 5.0
 
 _frame_counts: dict[str, int] = collections.defaultdict(int)
@@ -89,13 +87,14 @@ async def main(ready_file: Path | None = None) -> None:
 
     setup_logging("hub")
 
-    hub = HubEndpoint(pull_addr=PULL_ADDR, pub_addr=PUB_ADDR)
+    cfg = load_config()
+
+    hub = HubEndpoint(pull_addr=cfg.hub_push_addr, pub_addr=cfg.hub_sub_addr)
     hub.on_frame(on_frame)
     hub.on_audio(on_audio)
     hub.on_data(on_data)
     hub.on_participant(on_participant)
 
-    cfg = load_config()
     connector = LiveKitConnector(cfg)
     await connector.start()
 
@@ -136,7 +135,7 @@ async def main(ready_file: Path | None = None) -> None:
         ready_file.touch()
 
     stop = asyncio.Event()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
