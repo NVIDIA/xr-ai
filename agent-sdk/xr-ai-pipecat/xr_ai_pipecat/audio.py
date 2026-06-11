@@ -2,22 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Audio helpers: PCM ↔ WAV conversion, sentence-batched TTS, VAD bookkeeping.
+Audio helpers: PCM ↔ WAV conversion, float32 ↔ int16, VAD bookkeeping.
 """
 from __future__ import annotations
 
-import asyncio
 import io
-import re
 import time
 import wave
 
 import numpy as np
-from loguru import logger
+from pipecat.frames.frames import OutputAudioRawFrame
 
-from xr_ai_agent import AudioChunk, ProcessorEndpoint
-
-SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+from xr_ai_agent import AudioChunk
 
 _CHUNK_MS = 20
 _CHUNK_US = _CHUNK_MS * 1_000
@@ -27,9 +23,14 @@ def now_us() -> int:
     return time.time_ns() // 1_000
 
 
-def rms_float32(data: bytes) -> float:
-    arr = np.frombuffer(data, dtype=np.float32)
-    return float(np.sqrt(np.mean(arr ** 2))) if len(arr) else 0.0
+def float32_to_int16(data: bytes) -> bytes:
+    f32 = np.frombuffer(data, dtype=np.float32)
+    return np.clip(f32 * 32767.0, -32768, 32767).astype(np.int16).tobytes()
+
+
+def int16_to_float32(data: bytes) -> bytes:
+    i16 = np.frombuffer(data, dtype=np.int16)
+    return (i16.astype(np.float32) / 32767.0).tobytes()
 
 
 def chunks_to_wav(chunks: list[AudioChunk]) -> bytes:
@@ -73,58 +74,21 @@ def wav_to_chunks(wav_bytes: bytes, participant_id: str) -> list[AudioChunk]:
     return out
 
 
-def split_sentences(text: str) -> list[str]:
-    parts = SENTENCE_RE.split(text.strip())
-    return [s.strip() for s in parts if s.strip()]
+def wav_to_output_frames(wav_bytes: bytes, pid: str) -> list[OutputAudioRawFrame]:
+    """Decode a WAV blob into 20 ms int16 ``OutputAudioRawFrame``s for *pid*.
 
-
-async def stream_sentences_to_audio(
-    endpoint: ProcessorEndpoint,
-    tts_synth,
-    text: str,
-    participant_id: str,
-) -> float:
-    """Split *text* into sentences, synthesise in parallel, send in order."""
-    sentences = split_sentences(text)
-    if not sentences:
-        return 0.0
-
-    queue: asyncio.Queue = asyncio.Queue()
-    total_samples = 0
-    sample_rate   = 0
-
-    async def _sender() -> None:
-        nonlocal total_samples, sample_rate
-        while True:
-            task = await queue.get()
-            if task is None:
-                return
-            try:
-                wav = await task
-            except Exception:
-                logger.exception("tts synth failed  pid={!r}", participant_id)
-                continue
-            if not wav:
-                continue
-            try:
-                for chunk in wav_to_chunks(wav, participant_id):
-                    await endpoint.send_return_audio(chunk)
-                    total_samples += chunk.samples
-                    if sample_rate == 0:
-                        sample_rate = chunk.sample_rate
-            except Exception:
-                logger.exception("send_return_audio failed  pid={!r}", participant_id)
-
-    sender = asyncio.create_task(_sender(), name=f"tts-sender-{participant_id}")
-    try:
-        for i, sentence in enumerate(sentences):
-            await queue.put(asyncio.create_task(
-                tts_synth(sentence),
-                name=f"tts-synth-{participant_id}-{i}",
-            ))
-    finally:
-        await queue.put(None)
-        if not sender.done():
-            await asyncio.gather(sender)
-
-    return (total_samples / sample_rate) if sample_rate else 0.0
+    ``wav_to_chunks`` yields float32 ``AudioChunk``s; pipecat's output path
+    expects int16 PCM, so each chunk is converted here and stamped with
+    ``transport_destination`` so the output transport knows which participant
+    to address. Raises on a malformed WAV — callers log and skip.
+    """
+    frames: list[OutputAudioRawFrame] = []
+    for c in wav_to_chunks(wav_bytes, pid):
+        out = OutputAudioRawFrame(
+            audio        = float32_to_int16(c.data),
+            sample_rate  = c.sample_rate,
+            num_channels = c.channels,
+        )
+        out.transport_destination = pid
+        frames.append(out)
+    return frames

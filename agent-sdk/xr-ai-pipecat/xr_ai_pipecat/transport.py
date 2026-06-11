@@ -40,6 +40,7 @@ from xr_ai_agent import (
     Subscribe,
 )
 
+from .audio import float32_to_int16, int16_to_float32
 from .frames import ParticipantJoinedFrame, ParticipantLeftFrame
 
 _HUB_PUB  = "ipc:///tmp/xr_hub_pub"
@@ -48,16 +49,6 @@ _HUB_PUSH = "ipc:///tmp/xr_hub_in"
 SAMPLE_RATE            = 16_000
 NUM_CHANNELS           = 1
 TTS_NATIVE_SAMPLE_RATE = 22_050
-
-
-def _float32_to_int16(data: bytes) -> bytes:
-    f32 = np.frombuffer(data, dtype=np.float32)
-    return np.clip(f32 * 32767.0, -32768, 32767).astype(np.int16).tobytes()
-
-
-def _int16_to_float32(data: bytes) -> bytes:
-    i16 = np.frombuffer(data, dtype=np.int16)
-    return (i16.astype(np.float32) / 32767.0).tobytes()
 
 
 def _hub_pcm_to_mono_16k(pcm_int16: bytes, channels: int, sample_rate: int) -> bytes:
@@ -124,7 +115,7 @@ class XRMediaHubInputTransport(BaseInputTransport):
         if not self._started:
             return
         pcm_int16 = _hub_pcm_to_mono_16k(
-            _float32_to_int16(chunk.data), chunk.channels, chunk.sample_rate,
+            float32_to_int16(chunk.data), chunk.channels, chunk.sample_rate,
         )
         frame = InputAudioRawFrame(
             audio=pcm_int16,
@@ -183,6 +174,10 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         # StartFrame stashed at start() so per-participant MediaSenders can
         # be created on demand (they need it to .start()).
         self._start_frame: StartFrame | None = None
+
+    @property
+    def target_participant(self) -> str:
+        return self._target_participant
 
     def set_target_participant(self, pid: str) -> None:
         # Retained as a fallback for frames that reach the output with no
@@ -258,8 +253,7 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         upstream processors (``VoiceGateProcessor``,
         ``StreamingTtsProcessor``) tag outbound audio with
         ``transport_destination = pid`` so the hub knows which
-        participant to send it back to. The two facts together used to
-        drop every TTS / chime frame on the floor.
+        participant to send it back to.
 
         Per-participant routing: each pid has its own ``MediaSender``
         (created on join, or lazily here). The frame keeps its
@@ -296,11 +290,8 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
         no target participant is set — the hub would drop the message
         anyway, so we avoid emitting an unaddressable chunk.
 
-        Note: the pipecat upstream method is ``write_audio_frame``
-        (per-frame, returns bool), NOT ``write_raw_audio_frames`` —
-        the previous implementation overrode a phantom name and pipecat
-        never invoked it, which is why every TTS chunk was silently
-        dropped before reaching the hub.
+        The upstream hook is ``write_audio_frame`` (per-frame, returns
+        bool), NOT ``write_raw_audio_frames``.
         """
         # Address the chunk at the participant whose sender produced it. The
         # per-pid MediaSender stamps ``transport_destination`` onto the frame;
@@ -314,10 +305,10 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
                 )
                 self._missing_target_warned = True
             return False
-        pcm_float32 = _int16_to_float32(frame.audio)
+        pcm_float32 = int16_to_float32(frame.audio)
         num_samples = len(frame.audio) // (2 * frame.num_channels)
         chunk = AudioChunk(
-            pts_us=int(time.time() * 1_000_000),
+            pts_us=time.time_ns() // 1_000,
             sample_rate=frame.sample_rate,
             channels=frame.num_channels,
             samples=num_samples,
@@ -358,7 +349,6 @@ class XRMediaHubTransport(BaseTransport):
 
         self._input  = XRMediaHubInputTransport(self._ep, params, name=self._input_name)
         self._output = XRMediaHubOutputTransport(self._ep, params, name=self._output_name)
-        self._target_participant: str = ""
 
     def input(self) -> XRMediaHubInputTransport:
         return self._input
@@ -375,15 +365,13 @@ class XRMediaHubTransport(BaseTransport):
 
     @property
     def target_participant(self) -> str:
-        return self._target_participant
+        return self._output.target_participant
 
     def set_target_participant(self, pid: str) -> None:
-        self._target_participant = pid
         self._output.set_target_participant(pid)
 
     def cleanup_participant(self, pid: str) -> None:
-        if self._target_participant == pid:
-            self._target_participant = ""
+        if self._output.target_participant == pid:
             self._output.set_target_participant("")
 
     def shutdown(self) -> None:

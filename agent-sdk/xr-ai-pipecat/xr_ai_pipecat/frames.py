@@ -61,8 +61,7 @@ class BrainResponseEndFrame(DataFrame):
     Emitted by :class:`BrainProcessor` in :meth:`_run_query`'s finally
     block. Carries ``text`` — the full assembled response — so the
     downstream :class:`StreamingTtsProcessor` can echo the per-turn
-    response on the data channel exactly once, matching the
-    pre-migration "send full response at end" behavior. ``pid`` is the
+    response on the data channel exactly once. ``pid`` is the
     participant whose turn ended; the data echo addresses the same pid.
 
     A turn that was cancelled (new query, interruption) still produces

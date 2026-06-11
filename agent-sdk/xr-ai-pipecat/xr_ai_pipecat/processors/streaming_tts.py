@@ -28,12 +28,10 @@ import asyncio
 import re
 from typing import TYPE_CHECKING
 
-import numpy as np
 from loguru import logger
 from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
-    OutputAudioRawFrame,
     TextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
@@ -42,7 +40,7 @@ from xr_ai_agent import DataMessage
 from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate
 
-from ..audio import wav_to_chunks
+from ..audio import wav_to_output_frames
 from ..frames import BrainResponseEndFrame
 
 if TYPE_CHECKING:
@@ -62,9 +60,8 @@ _TRAILING_SENTENCE_END = re.compile(r"""[.!?]["')\]]*\s*$""")
 class StreamingTtsProcessor(FrameProcessor):
     """Sentence-batched parallel TTS at the tail of the voice pipeline.
 
-    Lifts the parallel-synth-with-ordered-send pattern from
-    :func:`xr_ai_pipecat.audio.stream_sentences_to_audio` and exposes it
-    as a frame processor.
+    Synthesizes each sentence in parallel and streams the WAVs out in
+    order so playback stays monotonic.
 
     ``transport`` and ``text_topic`` are optional; when both are
     supplied (and the topic is non-empty), the processor emits one
@@ -247,19 +244,11 @@ class StreamingTtsProcessor(FrameProcessor):
 
     async def _push_wav(self, wav_bytes: bytes, *, pid: str) -> None:
         try:
-            chunks = wav_to_chunks(wav_bytes, pid)
+            frames = wav_to_output_frames(wav_bytes, pid)
         except Exception:
             logger.exception("tts WAV decode failed pid={!r}", pid)
             return
-        for c in chunks:
-            f32 = np.frombuffer(c.data, dtype=np.float32)
-            i16 = np.clip(f32 * 32767.0, -32768, 32767).astype(np.int16).tobytes()
-            out = OutputAudioRawFrame(
-                audio        = i16,
-                sample_rate  = c.sample_rate,
-                num_channels = c.channels,
-            )
-            out.transport_destination = pid
+        for out in frames:
             await self.push_frame(out)
 
     async def _drain_on_interrupt(self) -> None:

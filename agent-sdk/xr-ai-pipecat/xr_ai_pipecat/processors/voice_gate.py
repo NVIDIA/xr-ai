@@ -19,12 +19,10 @@ from __future__ import annotations
 
 import time
 
-import numpy as np
 from loguru import logger
 from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
-    OutputAudioRawFrame,
     TextFrame,
     TranscriptionFrame,
 )
@@ -33,7 +31,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate, VoiceGateConfig
 
-from ..audio import wav_to_chunks
+from ..audio import wav_to_output_frames
 from ..frames import GatedQueryFrame, ParticipantJoinedFrame, ParticipantLeftFrame
 
 
@@ -93,22 +91,11 @@ class VoiceGateProcessor(FrameProcessor):
         transport knows which participant to send the audio back to.
         """
         try:
-            chunks = wav_to_chunks(wav_bytes, pid)
+            frames = wav_to_output_frames(wav_bytes, pid)
         except Exception:
             logger.exception("voice-gate audio sink decode failed pid={!r}", pid)
             return
-        for c in chunks:
-            # AudioChunk holds float32 in `.data`; OutputAudioRawFrame is
-            # int16. Convert here so callers never have to think about
-            # the dtype mismatch.
-            f32 = np.frombuffer(c.data, dtype=np.float32)
-            i16 = np.clip(f32 * 32767.0, -32768, 32767).astype(np.int16).tobytes()
-            out = OutputAudioRawFrame(
-                audio        = i16,
-                sample_rate  = c.sample_rate,
-                num_channels = c.channels,
-            )
-            out.transport_destination = pid
+        for out in frames:
             await self.push_frame(out)
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────

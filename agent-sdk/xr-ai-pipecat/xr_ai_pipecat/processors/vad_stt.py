@@ -131,18 +131,8 @@ class VadSttProcessor(FrameProcessor):
 
         async def on_speech_start() -> None:
             self._current_pid = pid
-            # Reset probe state for the new utterance. Any leftover task
-            # from a previous utterance is cancelled AND awaited to
-            # completion before scheduling the next probe — otherwise the
-            # cancelled task may still be mid ``await self.push_frame(...)``
-            # when the new probe task starts, leaving its
-            # ``__process_frame_task_handler`` coroutine in pipecat's
-            # downstream processor in a state where its cancellation
-            # propagates after a fresh one has already been scheduled.
-            # That overlap was the source of intermittent
-            # "coroutine '...__process_frame_task_handler' was never
-            # awaited" RuntimeWarnings observed in production right after
-            # a probe-STOP match.
+            # Await the cancelled task before scheduling the next probe so
+            # the two tasks never overlap mid-push_frame.
             self._stop_fired_for_current_utterance.discard(pid)
             await self._cancel_probe_task(pid)
             self._probe_buffer[pid] = bytearray()
