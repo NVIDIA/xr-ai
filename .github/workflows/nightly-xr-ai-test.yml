@@ -69,6 +69,7 @@ jobs:
         # The controller is normally already pinned to the right org;
         # switch only if BREV_ORG is provided.
         run: |
+          set -euo pipefail
           if [[ -n "${BREV_ORG:-}" ]]; then
             brev set "$BREV_ORG"
           fi
@@ -250,6 +251,7 @@ jobs:
         # The controller is normally already pinned to the right org;
         # switch only if BREV_ORG is provided.
         run: |
+          set -euo pipefail
           if [[ -n "${BREV_ORG:-}" ]]; then
             brev set "$BREV_ORG"
           fi
@@ -272,10 +274,14 @@ jobs:
   notify:
     name: alert on failure
     needs: [start, pytest, stop]
-    # Fire whenever any job above failed (a timeout counts as a failure)
-    # so a broken nightly is visible without anyone polling the Actions
-    # tab. Skip on PRs — those are pre-merge dry-runs, not the nightly.
-    if: failure() && github.event_name != 'pull_request'
+    # Fire whenever any job above failed OR was cancelled so a broken
+    # nightly is visible without anyone polling the Actions tab. A
+    # timeout-minutes hit concludes as `cancelled`, not `failure`, so
+    # failure() alone would silently skip the alert on the most important
+    # case. Skip on PRs — those are pre-merge dry-runs, not the nightly.
+    if: >-
+      (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+      && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
