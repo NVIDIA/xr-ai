@@ -800,6 +800,13 @@ def _parse_grounded_completion(
         if c["visible"] and not _check_has_student_evidence(c["requirement"], current_obs, c):
             return False, current_obs, checks, missing, f"no grounded evidence for: {c['requirement']}"
 
+    # A requirement the VLM explicitly marked visible=false is UNMET — e.g. the
+    # wrong object is in place. Do NOT complete on a partial match just because a
+    # sibling check (e.g. "mouse present") is visible: that is exactly how a
+    # wrong object used to slip through and auto-advance with no correction.
+    if missing:
+        return False, current_obs, checks, missing, f"requirement not met: {missing[0]}"
+
     if not any(c["visible"] and c["evidence"] for c in checks):
         return False, current_obs, checks, missing, "no grounded evidence"
     return True, current_obs, checks, missing, ""
@@ -851,6 +858,54 @@ def _key_info_correction(
     if action.strip():
         return f"{action.strip()} isn't done yet"
     return ""
+
+
+async def _diagnose_mistake(
+    ask_image,
+    image_path: str,
+    *,
+    instruction: str,
+    objects: list[str],
+    action: str,
+    position: str,
+    target_state: str,
+) -> str:
+    """Tier 3 — actively name what the student is doing wrong.
+
+    Runs only after the screenshot (tier 1) and text (tier 2) checks have both
+    failed WITHOUT producing a concrete, human-readable correction. A dedicated
+    VLM call, told the step is not complete, names the single most important
+    mistake (most often the wrong object) so the student always hears something
+    specific instead of silence or a generic template.
+    """
+    facts: list[str] = []
+    objs = [o for o in objects if o and o.strip()]
+    if objs:
+        facts.append(f"required object(s): {', '.join(objs)}")
+    if action.strip():
+        facts.append(f"action: {action.strip()}")
+    if position.strip():
+        facts.append(f"placement: {position.strip()}")
+    if target_state.strip():
+        facts.append(f"done when: {target_state.strip()}")
+    facts_block = ("\n".join(f"  - {f}" for f in facts) + "\n") if facts else ""
+
+    question = (
+        f"The student is trying to do this step: {instruction}\n"
+        f"{facts_block}"
+        "The step is NOT complete. Look ONLY at this live image and say, in ONE "
+        "short second-person sentence, the single most important thing that is "
+        "wrong — most often the WRONG OBJECT (name what you actually see vs what "
+        "the step needs), otherwise wrong placement or that it is not done yet. "
+        "Do NOT claim it is correct.\n\n"
+        'Output ONLY this JSON: {"issue": "<one short correction to the student>"}'
+    )
+    try:
+        raw = _str_payload(await ask_image.ainvoke({"question": question, "image_path": image_path}))
+    except Exception:
+        log.exception("guidance tier-3 diagnosis failed")
+        return ""
+    return _human_issue_from_raw(raw)
 
 
 def _output_from_parse(
@@ -954,23 +1009,30 @@ async def check_guidance_step_complete_impl(
             f"Teacher reference caption: {teacher_caption or 'not available'}\n"
             f"{key_lines}"
             f"{checklist_lines}"
-            "Decide whether Image 2 matches Image 1 for the KEY INFO only — the "
-            "key objects, the action, and the spatial placement. Differences in "
-            "anything listed under IGNORE (background, lighting, camera angle, "
-            "distance, clothing, hand pose, color-name) MUST NOT change your "
-            "verdict: judge the step, not the scene.\n\n"
+            "Decide whether Image 2 matches Image 1 for the KEY INFO — the key "
+            "OBJECTS (by type/identity), the action, and the spatial placement.\n"
+            "OBJECT IDENTITY IS STRICT: the student must be using the SAME kind "
+            "of object the step calls for. A DIFFERENT object in the right place "
+            "is a MISMATCH, not a match (e.g. a phone where an AirPod case is "
+            "required — fail it).\n"
+            "You MAY ignore: color shade, exact brand, background, lighting, "
+            "camera angle, distance, clothing, hand pose. You may NOT ignore the "
+            "object's type/identity, its placement, or the action.\n\n"
             "Output ONLY this JSON, no prose, no markdown:\n"
             "{\n"
-            '  "observation": "<one sentence about Image 2>",\n'
+            '  "observation": "<one sentence naming the object(s) you actually see in Image 2>",\n'
             '  "requirements": {\n'
-            '    "<task-relevant visual check>": {"visible": true|false, "evidence": "<student visual cue or empty>"}\n'
+            '    "<each key object/placement, named>": {"visible": true|false, "evidence": "<Image 2 cue, or empty>"}\n'
             "  },\n"
-            '  "issue": "<concise correction if Image 2 differs from Image 1, else empty>"\n'
+            '  "issue": "<if any check is false, a concrete correction naming the wrong/missing object vs the expected one; else empty>"\n'
             "}\n\n"
             "Rules:\n"
+            "- Add one check per key object/placement; set visible=false when the "
+            "object is the wrong type, missing, or misplaced.\n"
             "- Evidence must come from Image 2, not Image 1.\n"
-            "- Mark at least one task-relevant check visible=true with Image 2 evidence when the arrangement matches.\n"
-            "- If the arrangement matches Image 1, leave issue empty."
+            "- If every key check is visible=true with Image 2 evidence, leave issue empty.\n"
+            "- If any check is false, issue MUST name what is wrong (e.g. "
+            '"that looks like a phone, but this step needs the AirPod case").'
         )
         result = await ask_frames.ainvoke({
             "question": comparison_question,
@@ -1014,23 +1076,27 @@ async def check_guidance_step_complete_impl(
         f"{key_lines}"
         f"{checklist_lines}"
         "Look ONLY at this live student image.\n"
-        "Decide whether the live image satisfies the KEY INFO — the key "
-        "objects in the target end-state/placement, performing the action. The "
-        "teacher caption and requirements are supporting hints; do not reject a "
-        "correct arrangement because of wording, or because of anything listed "
-        "under IGNORE (background, lighting, camera angle, clothing).\n\n"
+        "Decide whether it satisfies the KEY INFO — the key OBJECTS (by "
+        "type/identity) in the target end-state/placement, performing the action.\n"
+        "OBJECT IDENTITY IS STRICT: if the student is using a DIFFERENT object "
+        "than the step requires (e.g. a phone instead of an AirPod case), the "
+        "step is NOT satisfied — even if it is placed correctly.\n"
+        "You MAY ignore color shade, exact brand, background, lighting, camera "
+        "angle, and clothing; you may NOT ignore the object's type/identity, its "
+        "placement, or the action.\n\n"
         "Output ONLY this JSON, no prose, no markdown:\n"
         "{\n"
-        '  "observation": "<one sentence about what is in the live image>",\n'
+        '  "observation": "<one sentence naming the object(s) you actually see>",\n'
         '  "requirements": {\n'
-        '    "<task-relevant visual check>": {"visible": true|false, "evidence": "<short visual cue from the live image or empty>"}\n'
+        '    "<each key object/placement, named>": {"visible": true|false, "evidence": "<live-image cue, or empty>"}\n'
         "  },\n"
-        '  "issue": "<concise correction if the instruction is not satisfied, else empty>"\n'
+        '  "issue": "<if any check is false, a concrete correction naming the wrong/missing object vs the expected one; else empty>"\n'
         "}\n\n"
         "Rules:\n"
-        "- observation MUST be a non-empty sentence about THIS live image.\n"
-        "- visible=true REQUIRES non-empty evidence from THIS live image.\n"
-        "- Do not invent evidence the image does not actually show."
+        "- observation MUST be a non-empty sentence about THIS live image, naming the object(s) present.\n"
+        "- Add one check per key object/placement; set visible=false when the object is the wrong type, missing, or misplaced.\n"
+        "- visible=true REQUIRES non-empty evidence from THIS live image; do not invent evidence.\n"
+        "- If any check is false, issue MUST name what is wrong vs what the step expects."
     )
     live_result = await ask_image.ainvoke({"question": live_question, "image_path": image_path})
     live_raw = _str_payload(live_result)
@@ -1060,15 +1126,25 @@ async def check_guidance_step_complete_impl(
         )
         else live_issue
     )
-    # Both image-to-image and image-to-text failed without a usable human
-    # correction — fall back to a key-info-grounded "what's wrong" line so the
-    # student hears something concrete instead of a parser reason.
+    # Tiers 1 & 2 failed without a usable human correction. Tier 3: actively ask
+    # the VLM what is wrong (names the wrong object / placement) so the student
+    # always hears a concrete mistake. Only fires on this otherwise-silent path,
+    # so it adds no cost when a correction already exists.
     if not final_issue or _parser_issue(final_issue):
-        ki_issue = _key_info_correction(
-            key_objects or [], key_action, key_position, key_target_state,
+        diagnosed = await _diagnose_mistake(
+            ask_image, image_path,
+            instruction=instruction,
+            objects=key_objects or [], action=key_action,
+            position=key_position, target_state=key_target_state,
         )
-        if ki_issue:
-            final_issue = ki_issue
+        if diagnosed:
+            final_issue = diagnosed
+        else:
+            ki_issue = _key_info_correction(
+                key_objects or [], key_action, key_position, key_target_state,
+            )
+            if ki_issue:
+                final_issue = ki_issue
     return _output_from_parse(
         completed=False,
         current_obs=current_obs,

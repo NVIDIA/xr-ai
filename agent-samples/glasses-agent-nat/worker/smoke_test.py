@@ -1822,7 +1822,10 @@ async def _run_parser_case(
 
     class _FakeAsk:
         async def ainvoke(self, args: dict) -> str:
-            if prompt_capture is not None:
+            # Capture the FIRST ask_image prompt (the tier-2 completion check).
+            # A later tier-3 diagnosis call reuses ask_image; don't let it
+            # overwrite the captured tier-2 prompt the tests assert on.
+            if prompt_capture is not None and "question" not in prompt_capture:
                 prompt_capture["question"]   = args.get("question", "")
                 prompt_capture["image_path"] = args.get("image_path", "")
             return vlm_json_response
@@ -2176,6 +2179,28 @@ async def parser_test_q_negative_visual_statement_rejected() -> None:
            f"negative visual statement must not pass: {out}")
 
 
+async def parser_test_r_wrong_object_false_check_blocks_completion() -> None:
+    """Wrong-object regression: a check the VLM marks visible=false (the wrong
+    object) must block completion even though a sibling check (mouse present) is
+    visible=true. Previously the parser completed on ANY visible check, so a
+    wrong object next to the right object auto-advanced with no correction."""
+    out = await _run_parser_case(
+        expected_requirements=["airpod case next to mouse"],
+        vlm_json_response=(
+            '{"observation": "a phone is sitting next to the mouse", '
+            '"requirements": {'
+            '"mouse present": {"visible": true, "evidence": "mouse on the desk"}, '
+            '"airpod case next to mouse": {"visible": false, "evidence": ""}'
+            "}}"
+        ),
+        instruction="Put the airpod case next to the mouse",
+    )
+    expect(out["completed"] is False,
+           f"a visible=false key check must block completion, got {out}")
+    expect(out.get("issue", "").strip() != "",
+           f"wrong object must surface a correction to speak, got {out}")
+
+
 async def scenario_33_guidance_noise_transcript_does_not_dispatch_or_flush() -> None:
     mem = AgentMemory()
     demo = _seed_demo(mem, "pico headset", finished_ago_s=5.0)
@@ -2515,6 +2540,7 @@ SCENARIOS = [
     parser_test_o_teacher_mismatch_instruction_fallback_can_pass,
     parser_test_p_malformed_teacher_falls_back_to_instruction,
     parser_test_q_negative_visual_statement_rejected,
+    parser_test_r_wrong_object_false_check_blocks_completion,
 ]
 
 
