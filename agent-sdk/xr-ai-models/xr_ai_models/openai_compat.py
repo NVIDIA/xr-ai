@@ -23,6 +23,19 @@ import httpx
 from loguru import logger
 
 from ._utils import merge_dicts
+from .protocols import (
+    Capabilities,
+    ChatMessage,
+    ChatResponse,
+    ContentPart,
+    ImageInput,
+    ImagePart,
+    TextPart,
+    ToolCall,
+    ToolDef,
+    VideoInput,
+    VideoPart,
+)
 
 
 # Hosts where plaintext http is acceptable for a bearer token (never leaves
@@ -52,22 +65,25 @@ def _warn_if_cleartext_key(base_url: str, api_key: str | None) -> None:
             "endpoints.",
             base_url,
         )
-from .protocols import (
-    Capabilities,
-    ChatMessage,
-    ChatResponse,
-    ContentPart,
-    ImageInput,
-    ImagePart,
-    TextPart,
-    ToolCall,
-    ToolDef,
-    VideoInput,
-    VideoPart,
-)
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
+
+
+def _auth_headers(api_key: str | None) -> dict[str, str]:
+    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+
+async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool) -> bool:
+    # Remote endpoints (hosted NIM) expose no local /health route; the spec
+    # sets health_check=false, in which case readiness is assumed.
+    if not enabled:
+        return True
+    try:
+        resp = await client.get(url, timeout=3.0)
+        return resp.is_success
+    except httpx.HTTPError:
+        return False
 
 
 def _msg_to_openai(msg: ChatMessage) -> dict[str, Any]:
@@ -260,9 +276,6 @@ class OpenAICompatLLM:
         self._client  = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
-
     def _build_payload(
         self,
         messages: Sequence[ChatMessage],
@@ -316,7 +329,7 @@ class OpenAICompatLLM:
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
             stream=False,
         )
-        kwargs: dict[str, Any] = {"json": payload, "headers": self._headers()}
+        kwargs: dict[str, Any] = {"json": payload, "headers": _auth_headers(self._api_key)}
         if timeout is not None:
             kwargs["timeout"] = timeout
         resp = await self._client.post(self._chat_url, **kwargs)
@@ -342,7 +355,7 @@ class OpenAICompatLLM:
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
             stream=True,
         )
-        kwargs: dict[str, Any] = {"json": payload, "headers": self._headers()}
+        kwargs: dict[str, Any] = {"json": payload, "headers": _auth_headers(self._api_key)}
         if timeout is not None:
             kwargs["timeout"] = timeout
         async with self._client.stream("POST", self._chat_url, **kwargs) as resp:
@@ -366,15 +379,7 @@ class OpenAICompatLLM:
                     yield content
 
     async def health(self) -> bool:
-        # Remote endpoints (hosted NIM) expose no local /health route; the
-        # spec sets health_check=false, in which case readiness is assumed.
-        if not self._health_check:
-            return True
-        try:
-            resp = await self._client.get(self.health_url, timeout=3.0)
-            return resp.is_success
-        except httpx.HTTPError:
-            return False
+        return await _http_health(self._client, self.health_url, self._health_check)
 
     async def close(self) -> None:
         if self._owns_client:
@@ -543,9 +548,6 @@ class OpenAICompatSTT:
         self._client    = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
-
     async def transcribe(
         self,
         audio: bytes,
@@ -558,7 +560,7 @@ class OpenAICompatSTT:
         kwargs: dict[str, Any] = {
             "files":   {"file": ("audio.wav", wav_bytes, "audio/wav")},
             "data":    {"response_format": "json"},
-            "headers": self._headers(),
+            "headers": _auth_headers(self._api_key),
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
@@ -569,13 +571,7 @@ class OpenAICompatSTT:
         return resp.json().get("text", "")
 
     async def health(self) -> bool:
-        if not self._health_check:
-            return True
-        try:
-            resp = await self._client.get(self.health_url, timeout=3.0)
-            return resp.is_success
-        except httpx.HTTPError:
-            return False
+        return await _http_health(self._client, self.health_url, self._health_check)
 
     async def close(self) -> None:
         if self._owns_client:
@@ -612,9 +608,6 @@ class OpenAICompatTTS:
         self._client    = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
         self._owns_client = client is None
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
-
     async def synthesize(
         self,
         text: str,
@@ -624,7 +617,7 @@ class OpenAICompatTTS:
     ) -> bytes:
         kwargs: dict[str, Any] = {
             "json":    {"input": text, "response_format": response_format},
-            "headers": self._headers(),
+            "headers": _auth_headers(self._api_key),
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
@@ -635,13 +628,7 @@ class OpenAICompatTTS:
         return resp.content
 
     async def health(self) -> bool:
-        if not self._health_check:
-            return True
-        try:
-            resp = await self._client.get(self.health_url, timeout=3.0)
-            return resp.is_success
-        except httpx.HTTPError:
-            return False
+        return await _http_health(self._client, self.health_url, self._health_check)
 
     async def close(self) -> None:
         if self._owns_client:
