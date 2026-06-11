@@ -3,33 +3,14 @@
 
 name: nightly XR AI test
 
-# Runs the `gpu`-marked pytest suite on a self-hosted runner labelled
-# `gpu`. These tests need real GPU / Docker / NVENC hardware and are
-# filtered out of the default `tests` workflow (which targets
-# `ubuntu-latest`). Mirrors the local `tests/run_local_gpu_tests.sh`
-# entry point.
+# Runs the `gpu`-marked pytest suite on a self-hosted GPU runner — these
+# tests need real GPU / Docker / NVENC hardware, so they're filtered out of
+# the default `tests` workflow (ubuntu-latest). Mirrors the local
+# `tests/run_local_gpu_tests.sh` entry point.
 #
-# The GPU host is a Brev instance that is kept *stopped* between runs to
-# save GPU cost. The job graph is therefore:
-#   start (brev-controller) -> pytest (gpu) -> stop (brev-controller)
-# The Brev CLI calls run on a separate, always-on "controller" VM (a
-# small self-hosted runner labelled `brev-controller`) that is already
-# `brev login`'d — the GPU runner itself is asleep before `start` and is
-# being paused by `stop`, so it can't run its own lifecycle commands, and
-# the controller's persistent login avoids needing a CLI token in CI. The
-# `stop` job runs even when the tests fail so a bad run never leaves the
-# instance billing.
-#
-# Runner setup:
-#   - `gpu`             — self-hosted runner on the GPU Brev instance.
-#   - `brev-controller` — self-hosted runner on the always-on VM that has
-#                         the Brev CLI installed and is logged in.
-#
-# Required repo config (Settings -> Secrets and variables -> Actions):
-#   secret  BREV_INSTANCE_NAME  — name of the GPU Brev instance to manage
-#   secret  BREV_ORG            — (optional) org the instance lives in;
-#                                 set only if the controller isn't already
-#                                 pinned to it (`brev set`)
+# Setup note: the GPU runner's Docker needs the NVIDIA runtime registered
+# (`sudo nvidia-ctk runtime configure --runtime=docker`); without it the
+# vLLM tests fail at container launch.
 
 on:
   schedule:
