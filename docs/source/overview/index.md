@@ -5,7 +5,7 @@
 
 # Overview
 
-What XR-AI is, the layer model, and how the hub, transport, and agents fit together.
+What XR AI is, the layer model, and how the hub, transport, and agents fit together.
 
 ```{toctree}
 :glob:

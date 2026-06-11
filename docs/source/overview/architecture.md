@@ -5,7 +5,7 @@
 
 # Architecture
 
-XR-AI follows a **one hub, many clients, many agents** model. The
+XR AI follows a **one hub, many clients, many agents** model. The
 **XR-Media-Hub** (server runtime) fans each client's inbound media to every
 agent and routes return traffic back to the originating client only. Clients
 reach the hub over a transport (LiveKit internally), agents attach over an IPC

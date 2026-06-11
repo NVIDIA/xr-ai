@@ -5,7 +5,7 @@
 
 # Decision changelog
 
-XR-AI records every non-trivial architectural or design decision, newest first,
+XR AI records every non-trivial architectural or design decision, newest first,
 so the rationale is preserved. The canonical log lives in the repository at
 `docs/changelog.md`.
 

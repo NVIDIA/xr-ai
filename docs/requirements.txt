@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Pins for building the XR-AI Sphinx documentation site.
+# Pins for building the XR AI Sphinx documentation site.
 # Mirrors the NVIDIA/IsaacTeleop docs toolchain.
 sphinx==8.1.3
 nvidia-sphinx-theme==0.0.9.post1
