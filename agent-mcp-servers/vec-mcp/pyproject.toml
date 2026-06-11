@@ -13,7 +13,11 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "fastmcp>=0.4",
     "pyyaml>=6.0",
+    "xr-ai-logging",
 ]
+
+[tool.uv.sources]
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 vec_mcp_server = "vec_mcp_server.__main__:run"

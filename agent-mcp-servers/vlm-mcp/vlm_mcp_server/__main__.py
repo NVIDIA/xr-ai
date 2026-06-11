@@ -52,6 +52,7 @@ import base64
 import io
 import pathlib
 import re
+import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -290,7 +291,8 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
 
     app.router.lifespan_context = _combined
 
-    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+    config = uvicorn.Config(app, host=host, port=port, log_level="warning",
+                            log_config=None)
     server = uvicorn.Server(config)
 
     logger.info(
@@ -314,6 +316,8 @@ def run() -> None:
             cfg = yaml.safe_load(f) or {}
 
     setup_logging("vlm-mcp")
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
     asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 

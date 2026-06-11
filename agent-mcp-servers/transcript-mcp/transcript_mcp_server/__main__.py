@@ -58,6 +58,7 @@ import asyncio
 import json
 import os
 import pathlib
+import sys
 
 import uvicorn
 import yaml
@@ -305,6 +306,8 @@ def run() -> None:
             cfg = yaml.safe_load(f) or {}
 
     setup_logging("transcript-mcp")
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
 
     _run_dir = os.environ.get("XR_RUN_DIR")
     _default_transcripts = (
@@ -318,7 +321,8 @@ def run() -> None:
     app   = build_app(store)
 
     async def _serve() -> None:
-        config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+        config = uvicorn.Config(app, host=host, port=port, log_level="warning",
+                                log_config=None)
         server = uvicorn.Server(config)
         logger.info("transcript-mcp-server  mcp=/mcp  port={}  dir={}", port, transcripts_dir)
         if ns.ready_file:

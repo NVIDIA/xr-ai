@@ -41,7 +41,7 @@ import zmq.asyncio
 from fastmcp import FastMCP
 from loguru import logger
 
-from xr_ai_launcher import ManagedProcess, XR_RUNTIME_VAR, load_cloudxr_env
+from xr_ai_launcher import ManagedProcess, load_cloudxr_env
 from xr_ai_logging import setup_logging
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "render_mcp.yaml"
@@ -168,11 +168,8 @@ class SceneDispatcher:
 
         ctx = zmq.asyncio.Context.instance()
         self._push: zmq.asyncio.Socket = ctx.socket(zmq.PUSH)
-        # 8 = enough headroom for a single LLM-round-trip burst, small enough
-        # that anything beyond a burst is dropped via NOBLOCK rather than queued.
-        # 256 = room for ~5 s of 50 Hz scale messages while LOVR starts up,
-        # plus command messages. The old value of 8 let scale messages crowd
-        # out scene.add before LOVR connected.
+        # SNDHWM 256: headroom for a burst of scene ops while LOVR's PULL socket
+        # connects on spawn; anything beyond that is NOBLOCK-dropped, not queued.
         self._push.setsockopt(zmq.SNDHWM, 256)
         self._push.bind(cfg.scene_socket)
         logger.info("render-mcp: bound PUSH on {}", cfg.scene_socket)
@@ -185,7 +182,7 @@ class SceneDispatcher:
         # Per-launch context for the current LOVR child. Each launch gets its
         # own AsyncExitStack so its ManagedProcess teardown (pipe-task cancel +
         # log-sink close) can run on respawn instead of piling up in the
-        # app-lifetime stack until whole-process shutdown (issue #196).
+        # app-lifetime stack until whole-process shutdown.
         self._launch_stack: contextlib.AsyncExitStack | None = None
         # Safety net: close whatever launch context is live when the server
         # shuts down (LOVR still running). Registered once on the app-lifetime
@@ -245,7 +242,7 @@ class SceneDispatcher:
                 # Tear down this launch's context (cancel the two pipe-forward
                 # tasks, close the log sink; terminate is a no-op since the
                 # child already exited) BEFORE allowing a respawn, so dead
-                # contexts don't accumulate in the app-lifetime stack (#196).
+                # contexts don't accumulate in the app-lifetime stack.
                 with contextlib.suppress(Exception):
                     await launch_stack.aclose()
                 if self._launch_stack is launch_stack:
@@ -259,8 +256,8 @@ class SceneDispatcher:
             # (blocking) send is parked waiting for LOVR's PULL to attach,
             # ``_lovr_started`` stays False so concurrent live ``forward()`` ops
             # keep fast-dropping as "not_started" instead of queueing behind the
-            # parked send on the shared PUSH socket (PR #219 review nit). It also
-            # makes the flag mean what it says: LOVR connected AND scene restored.
+            # parked send on the shared PUSH socket. It also makes the flag mean
+            # what it says: LOVR connected AND scene restored.
             await self._resync_scene()
             # Only advertise started if LOVR is still alive — it may have exited
             # during the resync wait, in which case ``_watch`` has already run to
@@ -276,8 +273,8 @@ class SceneDispatcher:
         LOVR has just been spawned and has NOT yet connected its PULL socket.
         A PUSH socket with zero connected peers does NOT buffer up to SNDHWM —
         it returns ``EAGAIN`` immediately under ``NOBLOCK`` — so routing the
-        resync through the live ``forward()`` path silently dropped the entire
-        restore (issue #198). Send these as *blocking* sends instead, so each
+        resync through the live ``forward()`` path silently drops the entire
+        restore. Send these as *blocking* sends instead, so each
         one queues the moment LOVR attaches, bounded by an overall deadline so
         a LOVR that never connects can't wedge the spawn (we hold the spawn
         lock here)."""
@@ -621,7 +618,8 @@ async def _serve(cfg: Config, ready_file: Path | None = None) -> None:
         disp = SceneDispatcher(cfg, stack)
         try:
             app = build_app(disp)
-            uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="warning")
+            uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port,
+                                    log_level="warning", log_config=None)
             server = uvicorn.Server(uv_cfg)
             logger.info(
                 "render-mcp  mcp=/mcp  port={}  scene_socket={}",

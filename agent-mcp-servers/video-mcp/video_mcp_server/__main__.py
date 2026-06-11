@@ -66,6 +66,7 @@ import ctypes
 import json
 import os
 import pathlib
+import sys
 import time
 
 import numpy as np
@@ -322,6 +323,41 @@ def _save_png(rgb: np.ndarray, out_path: pathlib.Path) -> None:
     Image.fromarray(rgb, "RGB").save(out_path, "PNG")
 
 
+async def _live_frame_result(
+    provider: "FrameProvider",
+    participant_id: str,
+    out_dir: pathlib.Path,
+    now_us: int,
+) -> dict:
+    """Fetch the latest live IPC frame for *participant_id*, encode it to PNG,
+    and return the ``get_frame_from_time(second_ago=0)`` result dict (or an
+    error dict). Shared by the live-only and full tool surfaces so the two
+    registrations can't drift."""
+    frame = await provider.fetch_latest(participant_id)
+    if frame is None:
+        return {"error": f"No live frame available for {participant_id!r}"}
+    try:
+        rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    safe     = _safe_name(participant_id)
+    out_path = out_dir / f"{safe}_ago0_{frame.pts_us}.png"
+    _save_png(rgb, out_path)
+    actual = (now_us - frame.pts_us) / 1_000_000
+    logger.debug(
+        "get_frame_from_time(0)  pid={!r}  {}x{}  ts={} (~{:.2f}s ago, live) → {}",
+        participant_id, frame.width, frame.height, frame.pts_us, actual, out_path,
+    )
+    return {
+        "path":              str(out_path),
+        "width":             frame.width,
+        "height":            frame.height,
+        "timestamp_us":      frame.pts_us,
+        "second_ago":        0,
+        "actual_second_ago": actual,
+    }
+
+
 # ── H.264 decode (PyNvVideoCodec) ────────────────────────────────────────────
 
 def _decoded_frame_to_nv12(frame) -> np.ndarray:
@@ -390,11 +426,12 @@ def build_mcp(
     """Return a composed FastMCP server with video tools bound.
 
     When *store* is ``None`` (recording disabled) only live tools are
-    registered: ``list_live_participants`` and ``get_frame_from_time``
-    (live-only path).  Historical tools — ``list_recorded_participants``,
-    ``get_video_stats``, ``query_video``, and the chunk-lookup path of
-    ``get_frame_from_time`` — are omitted entirely so the LLM never sees
-    them and cannot attempt to call them.
+    registered: ``list_live_participants`` and a live-only
+    ``get_frame_from_time`` (plus the deprecated ``get_latest_frame``).
+    Historical tools — ``list_recorded_participants``, ``get_video_stats``,
+    ``query_video``, and the chunk-lookup path of ``get_frame_from_time`` —
+    are omitted entirely so the LLM never sees them and cannot attempt to
+    call them.
     """
     mcp = FastMCP("video-mcp")
 
@@ -406,12 +443,34 @@ def build_mcp(
         a live frame."""
         return sorted(provider.connected_participants())
 
-    # ── recording disabled: live-only tool ───────────────────────────────────
+    # ── recording disabled: live-only tools ──────────────────────────────────
     if store is None:
+        @mcp.tool()
+        async def get_frame_from_time(
+            participant_id:    str,
+            second_ago:        int = 0,
+            reference_time_us: int = 0,
+        ) -> dict:
+            """Return the current live camera frame for *participant_id* as a PNG.
+
+            Recording is disabled on this server, so only the live frame is
+            available: ``second_ago`` and ``reference_time_us`` must both be
+            ``0`` (any past lookup needs the recorded chunk store).
+
+            Keys: path, width, height, timestamp_us, second_ago,
+            actual_second_ago. Returns ``{"error": "..."}`` if the participant
+            has no live frame or a past frame is requested.
+            """
+            if second_ago != 0 or reference_time_us != 0:
+                return {"error": "recording disabled — only second_ago=0 (live) is available"}
+            now_us = int(time.time() * 1_000_000)
+            return await _live_frame_result(provider, participant_id, out_dir, now_us)
+
         @mcp.tool()
         async def get_latest_frame(participant_id: str) -> dict:
             """Return the current live camera frame for *participant_id* as a PNG.
 
+            Deprecated — prefer ``get_frame_from_time(participant_id)``.
             Keys: path, width, height, timestamp_us.
             Returns ``{"error": "..."}`` if the participant has no live frame.
             """
@@ -550,29 +609,7 @@ def build_mcp(
 
         # Live IPC path: caller wants "right now, wall clock" (no anchor, no offset).
         if reference_time_us == 0 and second_ago == 0:
-            frame = await provider.fetch_latest(participant_id)
-            if frame is None:
-                return {"error": f"No live frame available for {participant_id!r}"}
-            try:
-                rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
-            except ValueError as exc:
-                return {"error": str(exc)}
-            safe     = _safe_name(participant_id)
-            out_path = out_dir / f"{safe}_ago0_{frame.pts_us}.png"
-            _save_png(rgb, out_path)
-            actual = (now_us - frame.pts_us) / 1_000_000
-            logger.debug(
-                "get_frame_from_time(0)  pid={!r}  {}x{}  ts={} (~{:.2f}s ago, live) → {}",
-                participant_id, frame.width, frame.height, frame.pts_us, actual, out_path,
-            )
-            return {
-                "path":              str(out_path),
-                "width":             frame.width,
-                "height":            frame.height,
-                "timestamp_us":      frame.pts_us,
-                "second_ago":        0,
-                "actual_second_ago": actual,
-            }
+            return await _live_frame_result(provider, participant_id, out_dir, now_us)
 
         # Anchored chunk lookup (recording path).
         target_us = anchor_us - second_ago * 1_000_000
@@ -660,7 +697,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # store is None when recordings_dir is not configured; historical tools
-    # are hidden and only get_latest_frame is exposed.
+    # are hidden and only the live-frame tools are exposed.
     store: ChunkStore | None = (
         ChunkStore(pathlib.Path(recordings_dir_raw)) if recordings_dir_raw else None
     )
@@ -673,7 +710,8 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     provider = FrameProvider(ep)
     app      = build_app(store, out_dir, provider, gpu_id=gpu_id)
 
-    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+    config = uvicorn.Config(app, host=host, port=port, log_level="warning",
+                            log_config=None)
     server = uvicorn.Server(config)
 
     ep_task = asyncio.create_task(ep.run(), name="video_mcp_processor")
@@ -712,6 +750,8 @@ def run() -> None:
             cfg = yaml.safe_load(f) or {}
 
     setup_logging("video-mcp")
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
     asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 

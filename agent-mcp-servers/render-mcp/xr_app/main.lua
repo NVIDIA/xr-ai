@@ -7,7 +7,6 @@
 --   { op="scene.add",    value={ id, type, position={x,y,z}, color={r,g,b}, scale } }
 --   { op="scene.update", value={ id, [position=…], [color=…], [scale=…] } }
 --   { op="scene.remove", value={ id } }
---   { op="scene.scale",  value={ id, scale } }    -- high-frequency audio path
 
 -- ── lovr.log override ────────────────────────────────────────────────────────
 -- Emit a tab-separated marker so render-mcp's Python side (the
@@ -30,7 +29,6 @@ lovr.log("lib.zmq + lib.msgpack loaded", "info", "render-mcp-scene")
 -- ── Scene state ───────────────────────────────────────────────────────────────
 
 local primitives      = {}
-local scale_warned    = {}   -- set of ids for which the "unknown scale" warning was printed
 
 local pos_lerp   = 6.0
 local color_lerp = 6.0
@@ -91,7 +89,6 @@ local function handle_scene_add(v)
     local cr, cg, cb = read_vec3(v.color, 0.2, 0.9, 1.0)
     local size       = tonumber(v.size) or 0.1
     primitives[id]   = make_primitive(ptype, px, py, pz, cr, cg, cb, size)
-    scale_warned[id] = nil   -- clear so the id can warn again if it goes missing
     lovr.log(string.format(
         "scene.add  id=%s type=%s pos=(%.2f,%.2f,%.2f) color=(%.2f,%.2f,%.2f) size=%.3fm  total=%d",
         id, ptype, px, py, pz, cr, cg, cb, size, count_primitives()),
@@ -137,20 +134,6 @@ local function handle_scene_remove(v)
                  "info", "render-mcp-scene")
     elseif id then
         lovr.log(string.format("scene.remove: unknown id=%s", id),
-                 "info", "render-mcp-scene")
-    end
-end
-
-local function handle_scene_scale(v)
-    local id  = v.id
-    local obj = id and primitives[id]
-    if obj then
-        local s = tonumber(v.size)
-        if s then obj.target_scale = s end
-    elseif id and not scale_warned[id] then
-        -- Log exactly once per unknown id so it doesn't drown other output.
-        scale_warned[id] = true
-        lovr.log(string.format("scene.scale: unknown id=%s (logged once)", tostring(id)),
                  "info", "render-mcp-scene")
     end
 end
@@ -201,7 +184,6 @@ local function drain_commands()
         if     op == "scene.add"    then ok_h, herr = pcall(handle_scene_add,    v)
         elseif op == "scene.update" then ok_h, herr = pcall(handle_scene_update, v)
         elseif op == "scene.remove" then ok_h, herr = pcall(handle_scene_remove, v)
-        elseif op == "scene.scale"  then ok_h, herr = pcall(handle_scene_scale,  v)
         elseif op ~= nil then
             lovr.log("unknown op=" .. tostring(op), "info", "render-mcp-scene")
         else

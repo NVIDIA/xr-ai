@@ -14,6 +14,8 @@ dependencies = [
     "fastmcp>=0.4",
     "pyyaml>=6.0",
     "Pillow>=10.0",
+    # Imported directly to catch httpx.HTTPError from xr-ai-models' transport.
+    "httpx>=0.27",
     "xr-ai-logging",
     "xr-ai-models",
 ]

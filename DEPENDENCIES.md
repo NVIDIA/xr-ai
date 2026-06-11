@@ -147,6 +147,7 @@ vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
     └── fastmcp >=0.4
     └── pyyaml >=6.0
     └── Pillow >=10.0
+    └── httpx >=0.27   (imported directly to catch httpx.HTTPError from xr-ai-models)
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
     Pure FastMCP — one tool at /mcp (no REST). Reads a local image file,
@@ -165,7 +166,8 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
     Reads NVENC H.264 chunks written by the hub from disk for historical
     queries; connects to the hub as a ProcessorEndpoint to fetch live
-    frames for `get_latest_frame`. Decodes chunks via NVDEC and
+    frames for `get_frame_from_time` (the live-only path; `get_latest_frame`
+    remains as a deprecated alias). Decodes chunks via NVDEC and
     re-encodes selected frames as PNG via Pillow.
 
 cloudxr-runtime  (cloudxr-runtime/)
@@ -177,9 +179,9 @@ render-mcp-server  (agent-mcp-servers/render-mcp/)
     └── pyzmq >=27.0       (PUSH socket → LOVR; libzmq.so reused by LOVR FFI)
     └── msgpack >=1.0      (wire format for LOVR ops)
     └── pyyaml >=6.0
-    └── fastapi >=0.111
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
+    Pure FastMCP at /mcp → LOVR (msgpack/ZMQ); no REST routes.
     Spawns LOVR (the OpenXR rendering app) on the first start_xr call.
     cloudxr-runtime must start before render-mcp (serial launch order);
     cloudxr.env is read synchronously via load_cloudxr_env at start_xr time.
@@ -198,6 +200,7 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=0.4
     └── pyyaml >=6.0
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     Pure FastMCP at /mcp. Deterministic spatial-math primitives
     (between_anchors, world_offset, along_direction, scale_value).
     Offloads vector arithmetic from the LLM.
@@ -339,7 +342,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `ai-services/llm/nemotron_omni/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} | vLLM (pip or docker) — multimodal text+video |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
-| `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | FastAPI streaming + FastMCP tools → LOVR (msgpack/ZMQ) |
+| `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | Pure FastMCP → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
 | `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
 | `agent-mcp-servers/vec-mcp/` | `vec-mcp-server` | `vec_mcp_server` | 8250 | — | Pure FastMCP; deterministic spatial-math primitives (no model) |

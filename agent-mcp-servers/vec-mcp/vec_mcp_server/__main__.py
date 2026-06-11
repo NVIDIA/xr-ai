@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import math
 import sys
 from dataclasses import dataclass
@@ -39,8 +38,8 @@ from pathlib import Path
 import uvicorn
 import yaml
 from fastmcp import FastMCP
-
-log = logging.getLogger("vec_mcp_server")
+from loguru import logger
+from xr_ai_logging import setup_logging
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "vec_mcp_server.yaml"
 
@@ -151,9 +150,10 @@ def build_mcp() -> FastMCP:
 
 async def _serve(cfg: Config, ready_file: Path | None = None) -> None:
     app = build_mcp().http_app(path="/mcp")
-    uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="warning")
+    uv_cfg = uvicorn.Config(app, host=cfg.host, port=cfg.port,
+                            log_level="warning", log_config=None)
     server = uvicorn.Server(uv_cfg)
-    log.info("vec-mcp  mcp=/mcp  port=%d", cfg.port)
+    logger.info("vec-mcp  mcp=/mcp  port={}", cfg.port)
     if ready_file:
         ready_file.touch()
     await server.serve()
@@ -165,10 +165,7 @@ def run() -> None:
     p.add_argument("--ready-file", type=Path, default=None)
     ns, _ = p.parse_known_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    setup_logging("vec-mcp")
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
 

@@ -14,9 +14,6 @@ dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
     "pyyaml>=6.0",
-    # FastAPI hosts the high-rate /sphere/radius route alongside the FastMCP
-    # tool surface (mounted at /mcp) for the discrete tools.
-    "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "fastmcp>=0.4",
     # render-mcp → LOVR uses ZMQ PUSH/PULL with msgpack-encoded {op, ...} frames.
