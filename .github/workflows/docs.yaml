@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Build the XR-AI Sphinx docs. On every docs PR: strict build (warnings = errors).
+# On push to main of the canonical repo: build + deploy to GitHub Pages.
+# Deploy is a no-op until Pages is enabled for the repo (Settings → Pages → GitHub Actions).
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yaml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yaml"
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install doc deps
+        run: pip install -r docs/requirements.txt
+      - name: Strict Sphinx build
+        run: sphinx-build -W --keep-going -b html docs/source docs/_build
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.repository == 'NVIDIA/xr-ai'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name == 'push' && github.repository == 'NVIDIA/xr-ai'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
