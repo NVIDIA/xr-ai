@@ -17,17 +17,17 @@ Features, APIs, documentation, and behavior may change as the project evolves.
 Expect bugs, incomplete functionality, and breaking changes. Use at your own
 discretion, and please report issues or feedback to help improve the project.
 
-## What is XR-AI?
+## What is XR AI?
 
-XR-AI is a developer stack for building powerful XR and AI systems across devices, platforms, and deployment environments. It connects web, iOS/visionOS, AR glasses, and XR headset clients to GPU-accelerated AI services, tool-using agents, and the CloudXR stack for remote rendering.
+XR AI is a developer stack for building powerful XR and AI systems across devices, platforms, and deployment environments. It connects web, iOS/visionOS, AR glasses, and XR headset clients to GPU-accelerated AI services, tool-using agents, and the CloudXR stack for remote rendering.
 
-With XR-AI, developers can build agents that see and hear what the user experiences, reason over live physical context, call external tools through MCP, and respond with audio or data in the same XR session. The stack provides an end-to-end foundation for multimodal spatial computing applications: real-time media routing, participant-aware response handling, agent interfaces, AI service integration, remote rendering, and sample applications that show the pieces working together.
+With XR AI, developers can build agents that see and hear what the user experiences, reason over live physical context, call external tools through MCP, and respond with audio or data in the same XR session. The stack provides an end-to-end foundation for multimodal spatial computing applications: real-time media routing, participant-aware response handling, agent interfaces, AI service integration, remote rendering, and sample applications that show the pieces working together.
 
-The value is speed without lock-in. XR-AI is designed to work quickly with NVIDIA open models for vision, language, and speech, plus swappable speech synthesis services, while still giving developers the flexibility to bring their own models, services, tools, and application logic. Because it is built around NVIDIA GPU infrastructure, the same architecture can be deployed where the workload needs to run: cloud, data center, workstation, or edge.
+The value is speed without lock-in. XR AI is designed to work quickly with NVIDIA open models for vision, language, and speech, plus swappable speech synthesis services, while still giving developers the flexibility to bring their own models, services, tools, and application logic. Because it is built around NVIDIA GPU infrastructure, the same architecture can be deployed where the workload needs to run: cloud, data center, workstation, or edge.
 
-XR-AI also gives developers a practical path across product categories. Teams can start with AI glasses-style experiences that use live camera, audio, and agent responses, then extend the same framework to richer AR glasses or XR headset experiences that use CloudXR remote rendering. This lets developers build for today's lightweight AI devices while keeping a clear path to immersive, GPU-rendered spatial applications.
+XR AI also gives developers a practical path across product categories. Teams can start with AI glasses-style experiences that use live camera, audio, and agent responses, then extend the same framework to richer AR glasses or XR headset experiences that use CloudXR remote rendering. This lets developers build for today's lightweight AI devices while keeping a clear path to immersive, GPU-rendered spatial applications.
 
-XR-AI is especially useful when you need to:
+XR AI is especially useful when you need to:
 
 - **Build multimodal XR agents** that can see, hear, reason, use tools, and respond in real time.
 - **Target multiple client platforms** including web, iOS/visionOS, AR glasses, and XR headsets.
@@ -41,7 +41,7 @@ XR-AI is especially useful when you need to:
 
 **Hardware**
 
-XR-AI samples are designed for a single NVIDIA RTX PRO 6000 Blackwell workstation GPU or an
+XR AI samples are designed for a single NVIDIA RTX PRO 6000 Blackwell workstation GPU or an
 NVIDIA DGX Spark.  Both provide enough VRAM to run the
 full model stack locally.  If you prefer not to run models on local hardware,
 model endpoints are plain URLs — point the worker config at a cloud NIM or model
