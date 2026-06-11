@@ -212,7 +212,14 @@ jobs:
 
       - name: Run gpu-marked tests
         working-directory: tests
-        run: uv run pytest -v --tb=short --color=yes -m gpu
+        # Per-test wall-clock guard so one hung test fails with a traceback
+        # instead of burning the 60-min job cap as a silent cancel. signal
+        # method interrupts blocked reads (thread method can't); 1200s > the
+        # 900s cold-start budget. pytest-timeout layered CI-only via --with
+        # to keep it out of tests/pyproject.toml + uv.lock + DEPENDENCIES.md.
+        run: >-
+          uv run --with pytest-timeout pytest -v --tb=short --color=yes -m gpu
+          --timeout=1200 --timeout-method=signal
 
       - name: Purge xr-ai-vllm containers (post)
         # Always-run cleanup so a failed test (or a cancelled job) does
