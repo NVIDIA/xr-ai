@@ -360,8 +360,14 @@ async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
 # break this suite on the day the fix lands.
 @pytest.mark.xfail(
     reason="vLLM 0.19.0 in nvcr.io/nvidia/vllm:26.04-py3 does not register "
-           "the NemotronH_Nano_Omni_Reasoning_V3 architecture; remove xfail "
-           "after bumping DEFAULT_IMAGE to a tag whose vLLM has it.",
+           "the NemotronH_Nano_Omni_Reasoning_V3 architecture, so startup "
+           "fails in create_model_config (config.json arch check) — before "
+           "any model code loads. The test config below sets extra_pip=[] so "
+           "this guaranteed failure no longer pays the ~16 min mamba-ssm / "
+           "causal-conv1d CUDA-kernel compile it never reaches. When vLLM "
+           "registers the arch, the failure mode shifts to a mamba_ssm "
+           "ImportError at model load — that's the signal to restore extra_pip "
+           "(and bump DEFAULT_IMAGE) and run this for real.",
     strict=False,
 )
 async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
@@ -390,6 +396,11 @@ async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
         "video_num_frames":       8,
         # docker backend: nvcc + flashinfer are pre-built in the NGC image.
         "vllm_backend":           "docker",
+        # This test xfails at the vLLM arch check (see the xfail reason),
+        # which runs before any model code imports mamba_ssm. Skip the
+        # default mamba-ssm/causal-conv1d source build — it's a ~16 min
+        # CUDA-kernel compile this guaranteed failure never reaches.
+        "extra_pip":              [],
     }
     cfg_yaml = tmp_path / "nemotron_omni_llm_server.yaml"
     cfg_yaml.write_text(yaml.safe_dump(cfg))

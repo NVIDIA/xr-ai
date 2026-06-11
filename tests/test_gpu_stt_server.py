@@ -30,6 +30,8 @@ from pathlib import Path
 
 import pytest
 
+from xr_ai_vllm import stop_persistent_servers
+
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
@@ -136,21 +138,31 @@ async def _wait_for_health(port: int, deadline_s: float) -> None:
     raise TimeoutError(f"stt server did not become healthy on :{port}")
 
 
-def _terminate(proc: subprocess.Popen) -> None:
-    if proc.poll() is not None:
-        return
-    proc.send_signal(signal.SIGTERM)
-    try:
-        proc.wait(timeout=_SHUTDOWN_TIMEOUT_S)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=5)
-    # Drain stdout/stderr so the subprocess isn't blocked on a full pipe.
-    if proc.stdout is not None:
+def _terminate(proc: subprocess.Popen) -> bytes:
+    """Reap the launcher and return whatever it buffered on stdout.
+
+    The launcher spawns a *detached* ``--_serve`` server in its own session
+    (see ``stt_server/__main__.py``); that child outlives the launcher's
+    SIGTERM and keeps the inherited write-end of this pipe open. A plain
+    ``read()``-to-EOF would therefore block forever on a pipe the persistent
+    server never closes — callers must stop that server first via
+    ``stop_persistent_servers``. Drain non-blocking regardless so teardown can
+    never wedge even if the server is somehow still up.
+    """
+    if proc.poll() is None:
+        proc.send_signal(signal.SIGTERM)
         try:
-            proc.stdout.read()
-        except (ValueError, OSError):
-            pass  # pipe already closed by the kernel during teardown
+            proc.wait(timeout=_SHUTDOWN_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+    if proc.stdout is None:
+        return b""
+    try:
+        os.set_blocking(proc.stdout.fileno(), False)
+        return proc.stdout.read() or b""
+    except (ValueError, OSError):
+        return b""  # pipe already closed by the kernel during teardown
 
 
 @pytest.fixture
@@ -194,8 +206,8 @@ async def test_stt_server_transcribes_sine_wav(stt_yaml: tuple[Path, int]) -> No
             await _wait_for_health(port, _STARTUP_TIMEOUT_S)
         except TimeoutError:
             # Drain whatever the subprocess printed so the failure is debuggable.
-            _terminate(proc)
-            tail = proc.stdout.read().decode(errors="replace") if proc.stdout else ""
+            stop_persistent_servers([("stt", port)])
+            tail = _terminate(proc).decode(errors="replace")
             pytest.fail(
                 f"stt server failed to start on :{port}\n"
                 f"--- subprocess output ---\n{tail[-4000:]}",
@@ -230,4 +242,9 @@ async def test_stt_server_transcribes_sine_wav(stt_yaml: tuple[Path, int]) -> No
         assert isinstance(obj["text"], str), f"'text' is not a string: {obj}"
 
     finally:
+        # The launcher's detached `--_serve` server (own session) survives the
+        # launcher's SIGTERM and holds ~3 GB of GPU plus the inherited stdout
+        # pipe. Stop it by port first — that frees the GPU for the next gpu
+        # test and lets `_terminate`'s drain reach EOF instead of blocking.
+        stop_persistent_servers([("stt", port)])
         _terminate(proc)
