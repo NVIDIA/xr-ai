@@ -104,17 +104,22 @@ class TestBuildRunArgv:
         assert "--network" in argv
         assert argv[argv.index("--network") + 1] == "host"
 
-    def test_gpus_all_when_no_cuda_filter(self, tmp_path):
+    def test_nvidia_runtime_all_gpus_when_no_cuda_filter(self, tmp_path):
+        # nvidia runtime (not legacy --gpus) so the launch works under both
+        # legacy and CDI toolkit modes; "all" requests every GPU.
         argv = build_run_argv(**self._base_kwargs(tmp_path))
-        assert "--gpus" in argv
-        assert argv[argv.index("--gpus") + 1] == "all"
+        assert "--gpus" not in argv
+        assert argv[argv.index("--runtime") + 1] == "nvidia"
+        env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
+        assert "NVIDIA_VISIBLE_DEVICES=all" in env_flags
 
     def test_cuda_visible_devices_applied(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
         kwargs["cuda_visible_devices"] = "0,1"
         argv = build_run_argv(**kwargs)
-        assert "--gpus" in argv
-        assert argv[argv.index("--gpus") + 1] == "device=0,1"
+        assert argv[argv.index("--runtime") + 1] == "nvidia"
+        env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
+        assert "NVIDIA_VISIBLE_DEVICES=0,1" in env_flags
 
     def test_hf_token_in_env(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))

@@ -114,7 +114,8 @@ def run() -> None:
     cuda_devices = cfg.get("cuda_visible_devices")
     if cuda_devices is not None:
         cuda_devices = str(cuda_devices)
-        # Pip mode reads it from the env; docker mode forwards via --gpus.
+        # Pip mode reads it from the env; docker mode forwards it as
+        # NVIDIA_VISIBLE_DEVICES via the nvidia runtime.
         os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
 
     extra_serve_args = [

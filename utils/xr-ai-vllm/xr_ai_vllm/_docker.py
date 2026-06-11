@@ -71,10 +71,19 @@ def build_run_argv(
     # shared memory namespace.
     argv += ["--ipc", "host"]
 
-    if cuda_visible_devices:
-        argv += ["--gpus", f"device={cuda_visible_devices}"]
-    else:
-        argv += ["--gpus", "all"]
+    # Request GPUs via the nvidia runtime, not the legacy `--gpus` hook.
+    # Under nvidia-container-toolkit `mode = "auto"`, `--gpus` is rejected
+    # whenever the toolkit auto-detects CDI mode (the prestart hook refuses
+    # with "use --runtime=nvidia instead"), so it fails non-deterministically
+    # across hosts. The nvidia runtime injects devices itself and works under
+    # both legacy and CDI modes — don't depend on a host's mutable toolkit
+    # mode. NVIDIA_VISIBLE_DEVICES takes the same comma list as
+    # CUDA_VISIBLE_DEVICES, or "all".
+    argv += ["--runtime", "nvidia"]
+    argv += ["-e", f"NVIDIA_VISIBLE_DEVICES={cuda_visible_devices or 'all'}"]
+    # The NGC image sets compute,utility,video, but set it explicitly so a
+    # non-NGC image (or one with a narrower default) still gets CUDA compute.
+    argv += ["-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility"]
 
     env_vars: dict[str, str] = {
         "HF_HOME": str(model_cache),
