@@ -20,6 +20,9 @@ dependencies = [
     "numpy>=1.24",
     "silero-vad>=5.1",
     "onnxruntime>=1.17",
+    # detector.py imports torch directly (silero's __call__ takes a Tensor);
+    # declared explicitly rather than relying on silero-vad to pull it in.
+    "torch>=2.0",
 ]
 
 [tool.hatch.build.targets.wheel]

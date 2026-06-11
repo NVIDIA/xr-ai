@@ -108,7 +108,6 @@ class _TtsBackend:
 
 
 def _build_app(cfg: dict, model_cache: Path):
-    import numpy as np
     from fastapi import FastAPI
     from fastapi.responses import Response
     from pydantic import BaseModel

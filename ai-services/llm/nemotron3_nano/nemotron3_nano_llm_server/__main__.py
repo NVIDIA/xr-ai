@@ -30,17 +30,20 @@ Config keys
     vllm_image:              str    NGC image when vllm_backend=docker
                                     (default: nvcr.io/nvidia/vllm:26.04-py3).
 """
-import argparse
 import os
-import subprocess
-import sys
 import urllib.request
 from pathlib import Path
 
-import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import DEFAULT_IMAGE, serve
+from xr_ai_vllm import (
+    DEFAULT_IMAGE,
+    gpu_compute_major,
+    load_config,
+    resolve_model_cache,
+    serve,
+    setup_hf_env,
+)
 
 _MODEL_BLACKWELL  = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
 _MODEL_ADA        = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
@@ -62,32 +65,6 @@ _PARSER_URL_DEFAULT = (
 _CONTAINER_NAME = "xr-ai-vllm-nemotron3-nano-llm-server"
 
 
-def _gpu_compute_major() -> int:
-    try:
-        out = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"],
-            text=True, stderr=subprocess.DEVNULL,
-        ).strip().splitlines()
-        if out:
-            return int(out[0].split(".")[0])
-    except Exception as exc:
-        logger.warning(
-            "nemotron3_nano: nvidia-smi compute-cap query failed ({}) — "
-            "defaulting to pre-Blackwell model variant",
-            exc,
-        )
-    return 0
-
-
-def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
-    raw = cfg.get("model_cache", "../../models")
-    p = Path(raw)
-    if not p.is_absolute():
-        p = (yaml_dir / p).resolve()
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def _ensure_reasoning_parser(model_cache: Path, url: str) -> Path:
     path = model_cache / _PARSER_FILENAME
     if not path.exists():
@@ -98,30 +75,16 @@ def _ensure_reasoning_parser(model_cache: Path, url: str) -> Path:
 
 
 def run() -> None:
-    sys.stdout.reconfigure(line_buffering=True)
-    sys.stderr.reconfigure(line_buffering=True)
-
     setup_logging("llm-nemotron3-nano")
 
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config",     type=Path, default=None)
-    p.add_argument("--ready-file", type=Path, default=None)
-    ns, _ = p.parse_known_args()
+    cfg, yaml_dir, ready_file = load_config()
 
-    cfg: dict = {}
-    yaml_dir = Path.cwd()
-    if ns.config and ns.config.exists():
-        yaml_dir = ns.config.parent.resolve()
-        with open(ns.config) as f:
-            cfg = yaml.safe_load(f) or {}
+    model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
+    # setup_hf_env sets CUDA_VISIBLE_DEVICES before gpu_compute_major() so
+    # nvidia-smi queries the right device.
+    cuda_devices = setup_hf_env(cfg, model_cache)
 
-    # Set before _gpu_compute_major() so nvidia-smi queries the right device.
-    cuda_devices = cfg.get("cuda_visible_devices")
-    if cuda_devices is not None:
-        cuda_devices = str(cuda_devices)
-        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
-
-    major = _gpu_compute_major()
+    major = gpu_compute_major()
     if major >= 10:
         model = cfg.get("model_blackwell", _MODEL_BLACKWELL)
         logger.info("Blackwell (SM{}0) → {}", major, model)
@@ -142,22 +105,15 @@ def run() -> None:
     backend       = cfg.get("vllm_backend",        "pip")
     image         = cfg.get("vllm_image",          DEFAULT_IMAGE)
 
-    model_cache = _resolve_model_cache(cfg, yaml_dir)
-    hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
-    if hf_token:
-        os.environ["HF_TOKEN"] = hf_token
-    os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-    os.environ["HF_HOME"] = str(model_cache)
-
-    # FlashInfer JIT-compiles CUTLASS MoE kernels on first run via nvcc.
-    # Ensure nvcc is on PATH and cap ninja parallelism so concurrent nvcc
-    # processes don't exhaust RAM on unified-memory machines like DGX Spark.
-    # In docker mode the container ships its own toolchain, but exporting
-    # CUDA_HOME / MAX_JOBS here is harmless.
-    _cuda_bin = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda")) / "bin"
-    if _cuda_bin.exists():
-        os.environ["PATH"] = str(_cuda_bin) + ":" + os.environ.get("PATH", "")
-    os.environ.setdefault("MAX_JOBS", "4")
+    if backend == "pip":
+        # FlashInfer JIT-compiles CUTLASS MoE kernels on first run via nvcc.
+        # Ensure nvcc is on PATH and cap ninja parallelism so concurrent nvcc
+        # processes don't exhaust RAM on unified-memory machines like DGX Spark.
+        # The docker container ships its own toolchain, so this is pip-only.
+        _cuda_bin = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda")) / "bin"
+        if _cuda_bin.exists():
+            os.environ["PATH"] = str(_cuda_bin) + ":" + os.environ.get("PATH", "")
+        os.environ.setdefault("MAX_JOBS", "4")
 
     parser_path = _ensure_reasoning_parser(model_cache, parser_url)
 
@@ -189,9 +145,9 @@ def run() -> None:
         host=host,
         port=port,
         model_cache=model_cache,
-        hf_token=hf_token or None,
+        hf_token=os.environ.get("HF_TOKEN") or None,
         cuda_visible_devices=cuda_devices,
-        ready_file=ns.ready_file,
+        ready_file=ready_file,
     )
 
 

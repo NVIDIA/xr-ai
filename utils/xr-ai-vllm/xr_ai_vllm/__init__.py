@@ -47,6 +47,12 @@ import urllib.request
 from pathlib import Path
 
 from . import _docker, _pip
+from ._config import (
+    gpu_compute_major,
+    load_config,
+    resolve_model_cache,
+    setup_hf_env,
+)
 
 log = logging.getLogger(__name__)
 
@@ -122,7 +128,6 @@ def serve(
         )
     elif backend == "docker":
         _docker.run(
-            persistent=persistent,
             image=image,
             container_name=container_name,
             log_prefix=log_prefix,
@@ -226,4 +231,12 @@ def stop_persistent_servers(
         print("  No persistent servers found running.", flush=True)
 
 
-__all__ = ["serve", "stop_persistent_servers", "DEFAULT_IMAGE"]
+__all__ = [
+    "serve",
+    "stop_persistent_servers",
+    "DEFAULT_IMAGE",
+    "resolve_model_cache",
+    "load_config",
+    "setup_hf_env",
+    "gpu_compute_major",
+]

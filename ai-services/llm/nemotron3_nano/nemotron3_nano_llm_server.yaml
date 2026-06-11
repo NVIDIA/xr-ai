@@ -25,7 +25,7 @@ hf_token: ""
 model_cache: ../../models
 
 # Pin to a specific GPU (or comma-separated list for multi-GPU).
-# Also controls which GPU _gpu_compute_major() queries for model selection.
+# Also controls which GPU the compute-capability query targets for model selection.
 # Unset to use all GPUs visible to the process.
 # cuda_visible_devices: "0"
 

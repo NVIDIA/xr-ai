@@ -377,7 +377,6 @@ def _append_post_mortem(container_name: str, log_path: Path | None, n: int = 200
 
 def run(
     *,
-    persistent: bool = True,  # accepted for backwards compat; docker always runs foreground
     image: str,
     container_name: str,
     log_prefix: str,

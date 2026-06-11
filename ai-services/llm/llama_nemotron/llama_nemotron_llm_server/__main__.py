@@ -30,16 +30,20 @@ Config keys
     vllm_image:              str    NGC image when vllm_backend=docker
                                     (default: nvcr.io/nvidia/vllm:26.04-py3).
 """
-import argparse
 import os
 import sys
 from pathlib import Path
 
-import yaml
+from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import DEFAULT_IMAGE, serve
+from xr_ai_vllm import (
+    DEFAULT_IMAGE,
+    load_config,
+    resolve_model_cache,
+    serve,
+    setup_hf_env,
+)
 
-_DEFAULT_MODEL              = "nvidia/Llama-3.1-Nemotron-Nano-8B-v1"
 _DEFAULT_PORT               = 8106
 _DEFAULT_HOST               = "0.0.0.0"
 _DEFAULT_SERVED_NAME        = "llm"
@@ -54,34 +58,16 @@ _DEFAULT_ENABLE_TOOL_CHOICE = True
 _CONTAINER_NAME = "xr-ai-vllm-llama-nemotron-llm-server"
 
 
-def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
-    raw = cfg.get("model_cache", "../../../models")
-    p = Path(raw)
-    if not p.is_absolute():
-        p = (yaml_dir / p).resolve()
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def run() -> None:
-    sys.stdout.reconfigure(line_buffering=True)
-    sys.stderr.reconfigure(line_buffering=True)
-
     setup_logging("llm-llama-nemotron")
 
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config",     type=Path, default=None)
-    p.add_argument("--ready-file", type=Path, default=None)
-    ns, _ = p.parse_known_args()
+    cfg, yaml_dir, ready_file = load_config()
 
-    cfg: dict = {}
-    yaml_dir = Path.cwd()
-    if ns.config and ns.config.exists():
-        yaml_dir = ns.config.parent.resolve()
-        with open(ns.config) as f:
-            cfg = yaml.safe_load(f) or {}
+    if not cfg.get("model"):
+        logger.error("'model' is required in config")
+        sys.exit(1)
 
-    model              = cfg.get("model",                _DEFAULT_MODEL)
+    model              = cfg["model"]
     host               = cfg.get("host",                 _DEFAULT_HOST)
     port               = int(cfg.get("port",             _DEFAULT_PORT))
     served_name        = cfg.get("served_model_name",    _DEFAULT_SERVED_NAME)
@@ -95,17 +81,8 @@ def run() -> None:
     backend            = cfg.get("vllm_backend",         "pip")
     image              = cfg.get("vllm_image",           DEFAULT_IMAGE)
 
-    cuda_devices = cfg.get("cuda_visible_devices")
-    if cuda_devices is not None:
-        cuda_devices = str(cuda_devices)
-        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
-
-    model_cache = _resolve_model_cache(cfg, yaml_dir)
-    hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
-    if hf_token:
-        os.environ["HF_TOKEN"] = hf_token
-    os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-    os.environ["HF_HOME"] = str(model_cache)
+    model_cache = resolve_model_cache(cfg, yaml_dir, default="../../../models")
+    cuda_devices = setup_hf_env(cfg, model_cache)
 
     extra_serve_args = [
         "--served-model-name", served_name,
@@ -131,9 +108,9 @@ def run() -> None:
         host=host,
         port=port,
         model_cache=model_cache,
-        hf_token=hf_token or None,
+        hf_token=os.environ.get("HF_TOKEN") or None,
         cuda_visible_devices=cuda_devices,
-        ready_file=ns.ready_file,
+        ready_file=ready_file,
     )
 
 

@@ -38,17 +38,20 @@ Config keys (nemotron_omni_llm_server.yaml)
                                      Nemotron-Omni's hybrid SSM backbone
                                      requires both at model-load time).
 """
-import argparse
 import json
 import os
-import subprocess
-import sys
 from pathlib import Path
 
-import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_vllm import DEFAULT_IMAGE, serve
+from xr_ai_vllm import (
+    DEFAULT_IMAGE,
+    gpu_compute_major,
+    load_config,
+    resolve_model_cache,
+    serve,
+    setup_hf_env,
+)
 
 _MODEL_BLACKWELL = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4"
 _MODEL_ADA       = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8"
@@ -69,52 +72,22 @@ _DEFAULT_FRAMES  = 256
 _CONTAINER_NAME = "xr-ai-vllm-nemotron-omni-llm-server"
 
 
-def _gpu_compute_major() -> int:
-    try:
-        out = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader,nounits"],
-            text=True, stderr=subprocess.DEVNULL,
-        ).strip().splitlines()
-        if out:
-            return int(out[0].split(".")[0])
-    except Exception:
-        pass
-    return 0
-
-
-def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
-    raw = cfg.get("model_cache", "../../models")
-    p = Path(raw)
-    if not p.is_absolute():
-        p = (yaml_dir / p).resolve()
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def run() -> None:
-    sys.stdout.reconfigure(line_buffering=True)
-    sys.stderr.reconfigure(line_buffering=True)
-
     setup_logging("llm-nemotron-omni")
 
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config",     type=Path, default=None)
-    p.add_argument("--ready-file", type=Path, default=None)
-    ns, _ = p.parse_known_args()
+    cfg, yaml_dir, ready_file = load_config()
 
-    cfg: dict = {}
-    yaml_dir = Path.cwd()
-    if ns.config and ns.config.exists():
-        yaml_dir = ns.config.parent.resolve()
-        with open(ns.config) as f:
-            cfg = yaml.safe_load(f) or {}
+    model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
+    # setup_hf_env sets CUDA_VISIBLE_DEVICES before gpu_compute_major() so
+    # nvidia-smi queries the right device.
+    cuda_devices = setup_hf_env(cfg, model_cache)
 
     if cfg.get("use_bf16", False):
         model = cfg.get("model_bf16", _MODEL_BF16)
         use_kv_fp8 = False
         logger.info("use_bf16=true → {}", model)
     else:
-        major = _gpu_compute_major()
+        major = gpu_compute_major()
         if major >= 10:
             model = cfg.get("model_blackwell", _MODEL_BLACKWELL)
             use_kv_fp8 = True
@@ -144,18 +117,6 @@ def run() -> None:
     # into the container before `vllm serve` runs. Configurable via YAML
     # for users who want to pin specific versions or add more wheels.
     extra_pip     = cfg.get("extra_pip", ["mamba-ssm", "causal-conv1d"])
-
-    cuda_devices = cfg.get("cuda_visible_devices")
-    if cuda_devices is not None:
-        cuda_devices = str(cuda_devices)
-        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
-
-    model_cache = _resolve_model_cache(cfg, yaml_dir)
-    hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")
-    if hf_token:
-        os.environ["HF_TOKEN"] = hf_token
-    os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-    os.environ["HF_HOME"] = str(model_cache)
 
     media_io_kwargs = json.dumps({"video": {"fps": video_fps, "num_frames": video_frames}})
 
@@ -189,10 +150,10 @@ def run() -> None:
         host=host,
         port=port,
         model_cache=model_cache,
-        hf_token=hf_token or None,
+        hf_token=os.environ.get("HF_TOKEN") or None,
         cuda_visible_devices=cuda_devices,
         extra_pip=extra_pip,
-        ready_file=ns.ready_file,
+        ready_file=ready_file,
     )
 
 
