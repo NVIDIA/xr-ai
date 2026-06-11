@@ -35,7 +35,6 @@ The implementation below follows the SVD formulation from the paper directly.
 from __future__ import annotations
 
 import importlib.util
-import os
 from pathlib import Path
 
 import numpy as np

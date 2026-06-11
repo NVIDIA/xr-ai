@@ -35,7 +35,6 @@ inside a thread-pool executor — not from asyncio directly).
 """
 from __future__ import annotations
 
-import importlib
 from dataclasses import dataclass
 from typing import Optional
 
@@ -168,7 +167,6 @@ class DPVOSlam:
             return None
 
         SE3 = self._SE3
-        torch = self._torch
 
         # pg.poses_[i] is T_cam_from_world (camera-in-world is inverted).
         # Invert to get T_world_from_cam: pos_world = T.t, R = T.R.
