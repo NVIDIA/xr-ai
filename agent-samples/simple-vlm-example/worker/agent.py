@@ -34,7 +34,6 @@ import json
 import time
 from typing import AsyncIterator
 
-import httpx
 from loguru import logger
 from pipecat.frames.frames import InterruptionFrame
 from xr_ai_agent import DataMessage, FrameSignal
@@ -384,7 +383,10 @@ class SimpleVlmBrain(BrainProcessor):
                 yield "Frame data unavailable — please retry."
                 return
 
-            image_url = encode_image(frame_to_pil(frame))
+            loop = asyncio.get_running_loop()
+            image_url = await loop.run_in_executor(
+                None, lambda: encode_image(frame_to_pil(frame)),
+            )
             logger.info(
                 "vlm  pid={!r}  {}x{}  query={!r}",
                 pid, frame.width, frame.height, query[:60],
@@ -397,7 +399,7 @@ class SimpleVlmBrain(BrainProcessor):
                         image_url, query, system_prompt=self._system_prompt,
                     ):
                         yield token
-                except httpx.HTTPError as exc:
+                except Exception as exc:
                     logger.error("vlm-server error: {}", exc)
                     yield "VLM server unavailable — please retry."
                     return

@@ -51,6 +51,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
 from xr_ai_pipecat import VadConfig, make_voice_pipeline
+from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
 from xr_ai_voicegate import load_voice_gate_config
 
@@ -87,7 +88,7 @@ async def main(
     vlm = make_vlm(models_cfg, "vlm")
     tts = make_tts(models_cfg, "tts")
 
-    await _wait_for_health(stt=stt, vlm=vlm, tts=tts)
+    await wait_for_services({"stt": stt.health, "vlm": vlm.health, "tts": tts.health})
 
     if ready_file:
         ready_file.touch()
@@ -155,28 +156,6 @@ async def main(
             except Exception:
                 logger.opt(exception=True).warning("service close failed")
     logger.info("simple-vlm-example stopped")
-
-
-async def _wait_for_health(**services: object) -> None:
-    """Block until every service's health endpoint reports healthy."""
-    pending: dict[str, object] = dict(services)
-    while pending:
-        results = await asyncio.gather(
-            *(svc.health() for svc in pending.values()),  # type: ignore[attr-defined]
-            return_exceptions=True,
-        )
-        still_waiting = {
-            name: svc
-            for (name, svc), ok in zip(pending.items(), results)
-            if not (isinstance(ok, bool) and ok)
-        }
-        for name in pending:
-            if name not in still_waiting:
-                logger.info("{} ready", name)
-        pending = still_waiting
-        if pending:
-            logger.info("still waiting for: {}", ", ".join(sorted(pending)))
-            await asyncio.sleep(5.0)
 
 
 def run() -> None:
