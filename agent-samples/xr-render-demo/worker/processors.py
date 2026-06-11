@@ -76,6 +76,10 @@ _VEC_TOOLS = frozenset({
 _VLM_TOOLS   = frozenset({"ask_image"})
 _VIDEO_TOOLS = frozenset({
     "get_frame_from_time",
+    # video-mcp exposes get_latest_frame instead of get_frame_from_time when
+    # recording is disabled (the default for this demo), so it must still route
+    # to video-mcp — otherwise the call falls through to render-mcp.
+    "get_latest_frame",
     "list_live_participants", "list_recorded_participants",
     "get_video_stats", "query_video",
 })
