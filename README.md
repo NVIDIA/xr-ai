@@ -5,7 +5,7 @@
 
 <!-- TODO: hero image -->
 
-# xr-ai
+# XR AI
 
 Agentic AI for XR — an open-source foundation for multi-modal, real-time
 conversational AI within the CloudXR ecosystem.
