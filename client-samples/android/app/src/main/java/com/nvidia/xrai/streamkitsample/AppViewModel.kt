@@ -344,6 +344,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopCamera() {
         viewModelScope.launch {
+            // Clear any in-flight start guard first: a reconnect-triggered stop
+            // must not leave isCameraStarting stuck true, or a later startCamera()
+            // would be blocked by the guard at the top of startCamera().
+            isCameraStarting = false
             // Stop the synthetic feed BEFORE unpublishing the track, so a
             // trailing frame can't lazily republish the injected track after
             // stopCamera() tore it down.
