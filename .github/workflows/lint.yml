@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: lint
+
+# First-cut ruff lint, governed by the root `ruff.toml` (E,F,W,I; line-length
+# 120; pre-existing violations grandfathered via per-file-ignores). This is
+# check-only — it does NOT run `ruff format`. Repo-wide formatting is a
+# separate human-gated decision (touches every file); enable it in a follow-up
+# once the format commit lands.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    name: ruff check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ruff check
+        uses: astral-sh/ruff-action@v3
+        with:
+          version: 0.15.16
+          args: check .

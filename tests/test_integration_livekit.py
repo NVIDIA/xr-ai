@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-import socket
 import subprocess
 import uuid
 from dataclasses import replace
@@ -28,6 +27,7 @@ from typing import AsyncIterator
 import pytest
 from livekit import rtc
 
+from _helpers_subprocess import pick_free_port
 from xr_media_hub.ipc                       import ConnectorEndpoint
 from xr_media_hub.transport.livekit         import _docker as _docker_mod
 from xr_media_hub.transport.livekit._docker import LiveKitDocker
@@ -43,27 +43,6 @@ _PORT_CLOSE_WAIT = 10.0
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-
-
-def _port_is_free(port: int) -> bool:
-    """Return True if ``port`` can be bound on 127.0.0.1 right now."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            s.bind(("127.0.0.1", port))
-        except OSError:
-            return False
-    return True
-
-
-def _pick_free_port_near(preferred: int) -> int:
-    """Return *preferred* if free, otherwise an ephemeral free port."""
-    if _port_is_free(preferred):
-        return preferred
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 async def _wait_port_open(port: int, timeout: float) -> bool:
@@ -107,9 +86,9 @@ def _container_running(name: str) -> bool:
 
 def _build_cfg() -> LiveKitConnectorConfig:
     """Build a config bound to free ports and a unique room name."""
-    lk_ws  = _pick_free_port_near(7880)
-    lk_tcp = _pick_free_port_near(7881)
-    lk_udp = _pick_free_port_near(7882)
+    lk_ws  = pick_free_port(7880)
+    lk_tcp = pick_free_port(7881)
+    lk_udp = pick_free_port(7882)
     return LiveKitConnectorConfig(
         lk_port_ws=lk_ws,
         lk_port_tcp=lk_tcp,

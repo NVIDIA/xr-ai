@@ -13,6 +13,7 @@ Multi-client / multi-agent coverage for the XR-Media-Hub IPC pipeline.
 |-------------------------------|--------------------------------------------------------------------------|
 | `conftest.py`                 | Shared fixtures: `hub`, `make_connector`, `make_processor`, `settle`.   |
 | `_helpers.py`                 | `setup_client` / `teardown_clients` / `wait_for` / `wait_for_subscribed` / `silence`. |
+| `_helpers_subprocess.py`      | `pick_free_port` / `port_is_free` / `health_ok` — shared port + HTTP-health primitives for subprocess-spawning tests. |
 | `test_hub_data_routing.py`    | Topic preservation; data fanout to multiple agents; per-client attribution. |
 | `test_participant_events.py`  | Join/leave fanout; auto-maintained `connected_participants` roster.      |
 | `test_audio_routing.py`       | Inbound audio attribution; return audio targeted only at one connector. |
@@ -50,6 +51,27 @@ bash tests/run_local_gpu_tests.sh        # or pass extra pytest args
 
 Mark new tests with `@pytest.mark.gpu` whenever they need any of those
 resources.
+
+## MCP server smoke tests
+
+CPU-viable MCP servers get a subprocess smoke test that spawns the server,
+polls `McpClient.list_tools()` for readiness, then drives the tool surface
+over StreamableHTTP (pattern: `test_transcript_mcp.py`). These carry the
+`integration` marker and run in CI:
+
+* `test_transcript_mcp.py` — JSONL transcript store.
+* `test_vec_mcp.py` — pure-math spatial primitives (no external state).
+
+**oxr-mcp is not CPU-viable.** It imports `isaacteleop` (native OpenXR +
+HeadTracker bindings) at module top and opens a headless OpenXR session
+against a running CloudXR runtime — neither installs nor runs on a CPU-only
+CI box. It is therefore intentionally absent from `pyproject.toml`, and
+`test_oxr_mcp.py` self-skips via `pytest.importorskip("isaacteleop")`. To
+exercise it manually on a GPU host with CloudXR, install oxr-mcp into the
+test venv (`uv pip install -e ../agent-mcp-servers/oxr-mcp`) with the
+CloudXR runtime available, then spawn `python -m oxr_mcp_server --config
+<yaml>` and call `get_health` / `get_head_pose` once a streaming client is
+connected.
 
 ## Test taxonomy
 

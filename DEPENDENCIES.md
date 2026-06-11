@@ -216,6 +216,7 @@ xr-ai-tests  (tests/)
     └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
     └── render-mcp              [editable: ../agent-mcp-servers/render-mcp]
     └── video-mcp-server        [editable: ../agent-mcp-servers/video-mcp]
+    └── vec-mcp-server          [editable: ../agent-mcp-servers/vec-mcp]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
@@ -226,8 +227,11 @@ xr-ai-tests  (tests/)
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages
     (launcher, logging, vllm), a CI-viable subprocess test for
-    transcript-mcp-server (fastmcp pulled in transitively), and the
-    vlm-mcp / render-mcp adapter surfaces (mocked upstreams).
+    CPU-viable subprocess smoke tests for transcript-mcp-server and
+    vec-mcp-server (fastmcp pulled in transitively), and the vlm-mcp /
+    render-mcp adapter surfaces (mocked upstreams). oxr-mcp is not
+    included: it needs native isaacteleop + a CloudXR runtime, so its
+    smoke test self-skips on CPU (see tests/README.md).
 
     Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
     `-m "not gpu"` in CI). They spawn real ai-services via `uv run` (e.g.

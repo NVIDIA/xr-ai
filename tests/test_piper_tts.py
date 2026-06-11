@@ -32,6 +32,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _helpers_subprocess import pick_free_port
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -60,20 +62,6 @@ class _ServerExited(Exception):
         self.returncode = returncode
         self.output = output
         super().__init__(f"piper_tts_server exited early with code {returncode}")
-
-
-def _pick_port(preferred: int) -> int:
-    """Return *preferred* if free, else ask the kernel for an ephemeral one."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.bind(("127.0.0.1", preferred))
-            return preferred
-        # EADDRINUSE on the preferred port — fall through to an ephemeral bind.
-        except OSError:
-            pass
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def _port_open(port: int) -> bool:
@@ -162,7 +150,7 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
     # on startup (see ai-services/tts/piper/piper_tts_server/__main__.py),
     # so we don't pre-check voice cache state here.
 
-    port = _pick_port(_DEFAULT_PORT)
+    port = pick_free_port(_DEFAULT_PORT)
 
     cfg_path = tmp_path / "piper_tts_server.yaml"
     cfg_path.write_text(yaml.safe_dump({

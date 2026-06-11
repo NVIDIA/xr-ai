@@ -26,6 +26,7 @@ dependencies = [
     "vlm-mcp-server",
     "render-mcp",
     "video-mcp-server",
+    "vec-mcp-server",
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -50,6 +51,7 @@ transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable
 vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
 render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }
 video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
+vec-mcp-server        = { path = "../agent-mcp-servers/vec-mcp",        editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_tests"]
@@ -59,4 +61,5 @@ asyncio_mode = "auto"
 testpaths    = ["."]
 markers = [
     "gpu: requires local GPU / Docker / NVENC; skipped in CI",
+    "integration: spawns a real server subprocess (CPU-only); runs in CI",
 ]

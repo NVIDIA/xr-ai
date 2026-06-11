@@ -1,0 +1,103 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# First-cut lint config. Conservative ruleset (E,F,W,I); no `ruff format`.
+# 120 is the line-length ceiling chosen to cover existing code with minimal
+# grandfathering (most code wraps ~100). The per-file-ignores block below is a
+# generated grandfather snapshot of pre-existing violations at ruff
+# introduction: new code must pass clean, and the list burns down as cleanup
+# PRs land. Regenerate after a cleanup with `ruff check . --output-format=json`.
+
+line-length = 120
+
+# Nested per-package .venv dirs hold third-party code; ruff's default excludes
+# the top-level .venv but not these. .claude holds agent worktrees (copies of
+# the repo) that must never be linted; deps/models are auto-downloaded assets.
+extend-exclude = [
+    "**/.venv",
+    ".claude",
+    "deps",
+    "models",
+]
+
+[lint]
+select = ["E", "F", "W", "I"]
+
+[lint.isort]
+# The test suite's shared helpers are local modules (sibling files on the
+# test dir's sys.path), not third-party packages — group them accordingly.
+known-first-party = ["_helpers", "_helpers_subprocess"]
+
+[lint.per-file-ignores]
+"agent-mcp-servers/oxr-mcp/oxr_mcp_server/__main__.py" = ["I001"]
+"agent-mcp-servers/render-mcp/render_mcp/__main__.py" = ["F401", "I001"]
+"agent-mcp-servers/video-mcp/video_mcp_server/__main__.py" = ["I001"]
+"agent-mcp-servers/vlm-mcp/vlm_mcp_server/__main__.py" = ["I001"]
+"agent-samples/model-servers/main.py" = ["F401"]
+"agent-samples/simple-vlm-example/worker/agent.py" = ["I001"]
+"agent-samples/simple-vlm-example/worker/pixels.py" = ["I001"]
+"agent-samples/simple-vlm-example/worker/simple_vlm_example_worker.py" = ["I001"]
+"agent-samples/xr-render-demo/eval/eval.py" = ["E702", "I001"]
+"agent-samples/xr-render-demo/worker/agent.py" = ["I001"]
+"agent-samples/xr-render-demo/worker/processors.py" = ["E701", "E702", "E741", "I001"]
+"agent-samples/xr-render-demo/worker/xr_render_demo_worker.py" = ["I001"]
+"agent-sdk/xr-ai-models/xr_ai_models/__init__.py" = ["I001"]
+"agent-sdk/xr-ai-models/xr_ai_models/config.py" = ["I001"]
+"agent-sdk/xr-ai-models/xr_ai_models/openai_compat.py" = ["E402", "I001"]
+"agent-sdk/xr-ai-models/xr_ai_models/presets/__init__.py" = ["I001"]
+"agent-sdk/xr-ai-models/xr_ai_models/protocols.py" = ["I001"]
+"agent-sdk/xr-ai-pipecat/xr_ai_pipecat/audio.py" = ["I001"]
+"agent-sdk/xr-ai-pipecat/xr_ai_pipecat/pipeline.py" = ["I001"]
+"agent-sdk/xr-ai-pipecat/xr_ai_pipecat/processors/streaming_tts.py" = ["I001"]
+"agent-sdk/xr-ai-pipecat/xr_ai_pipecat/processors/vad_stt.py" = ["I001"]
+"agent-sdk/xr-ai-pipecat/xr_ai_pipecat/processors/voice_gate.py" = ["E501", "I001"]
+"agent-sdk/xr-ai-pipecat/xr_ai_pipecat/services.py" = ["I001"]
+"agent-sdk/xr-ai-pipecat/xr_ai_pipecat/transport.py" = ["I001"]
+"agent-sdk/xr_ai_agent/_codec.py" = ["E501", "I001"]
+"agent-sdk/xr_ai_agent/_processor.py" = ["I001"]
+"ai-services/stt-server/stt_server/__main__.py" = ["E402", "I001"]
+"ai-services/tts/magpie/magpie_tts_server/__main__.py" = ["F401", "I001"]
+"ai-services/tts/piper/piper_tts_server/__main__.py" = ["I001"]
+"cloudxr-runtime/cloudxr_runtime/__main__.py" = ["F401", "I001"]
+"server-runtime/xr_media_hub/__main__.py" = ["F401"]
+"server-runtime/xr_media_hub/ipc/_connector.py" = ["I001"]
+"server-runtime/xr_media_hub/ipc/_hub.py" = ["F401", "I001"]
+"server-runtime/xr_media_hub/transport/livekit/__init__.py" = ["I001"]
+"server-runtime/xr_media_hub/transport/livekit/_docker.py" = ["F401"]
+"tests/_helpers.py" = ["I001"]
+"tests/_stub_openai.py" = ["I001"]
+"tests/conftest.py" = ["F401", "I001"]
+"tests/test_agent_codec.py" = ["I001"]
+"tests/test_audio_routing.py" = ["I001"]
+"tests/test_cross_talk.py" = ["F841", "I001"]
+"tests/test_gpu_llm_servers.py" = ["I001"]
+"tests/test_gpu_video_mcp.py" = ["I001"]
+"tests/test_gpu_video_recorder.py" = ["I001"]
+"tests/test_gpu_vlm_server.py" = ["I001"]
+"tests/test_hub_data_routing.py" = ["I001"]
+"tests/test_integration_livekit.py" = ["I001"]
+"tests/test_launcher_cloudxr_env.py" = ["F541", "I001"]
+"tests/test_launcher_stack.py" = ["I001"]
+"tests/test_local_render_mcp.py" = ["I001"]
+"tests/test_logging_setup.py" = ["I001"]
+"tests/test_models_config.py" = ["I001"]
+"tests/test_models_openai_compat.py" = ["I001"]
+"tests/test_multi_agent.py" = ["F401", "I001"]
+"tests/test_participant_events.py" = ["I001"]
+"tests/test_participant_isolation_prefix.py" = ["I001"]
+"tests/test_pipecat_audio_resample.py" = ["I001"]
+"tests/test_pipecat_services_wire.py" = ["I001"]
+"tests/test_return_audio_flush.py" = ["I001"]
+"tests/test_return_audio_pacing.py" = ["I001"]
+"tests/test_return_routing.py" = ["F401", "I001"]
+"tests/test_simple_vlm_example_wire.py" = ["I001"]
+"tests/test_subscriptions.py" = ["I001"]
+"tests/test_vllm_lifecycle.py" = ["I001"]
+"tests/test_vlm_mcp.py" = ["I001"]
+"tests/test_xr_ai_pipecat_voice_pipeline.py" = ["E501", "I001"]
+"tests/test_xr_ai_vad.py" = ["I001"]
+"tests/test_xr_ai_voicegate.py" = ["I001"]
+"tests/test_xr_render_demo_wire.py" = ["E402", "I001"]
+"utils/xr-ai-vllm/xr_ai_vllm/_pip.py" = ["F401"]
+"utils/xr-ai-voicegate/xr_ai_voicegate/_phrases.py" = ["I001"]
+"utils/xr-ai-voicegate/xr_ai_voicegate/gate.py" = ["I001"]

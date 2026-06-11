@@ -33,7 +33,6 @@ import json
 import os
 import shutil
 import signal
-import socket
 import struct
 import subprocess
 import time
@@ -45,6 +44,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _helpers_subprocess import health_ok, pick_free_port
 from xr_ai_vllm import stop_persistent_servers
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
@@ -71,12 +71,6 @@ _SHUTDOWN_TIMEOUT_S     = 30.0
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
-
-
-def _pick_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def _hf_model_cached(repo_id: str) -> bool:
@@ -113,17 +107,6 @@ def _tiny_png_bytes(size: int = 32) -> bytes:
     return sig + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
 
 
-def _health_ok(port: int, timeout: float = 2.0) -> bool:
-    try:
-        with urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/health", timeout=timeout,
-        ) as r:
-            return r.status == 200
-    # Connection refused / DNS / timeout while the server is still booting — caller retries.
-    except Exception:
-        return False
-
-
 async def _wait_for_health(
     port: int, deadline_s: float, proc: subprocess.Popen,
 ) -> None:
@@ -135,7 +118,7 @@ async def _wait_for_health(
                 f"wrapper exited early with code {proc.returncode} before "
                 f":{port} became healthy",
             )
-        if await loop.run_in_executor(None, _health_ok, port):
+        if await loop.run_in_executor(None, health_ok, port):
             return
         await asyncio.sleep(1.0)
     raise TimeoutError(f"server did not become healthy on :{port} within {deadline_s}s")
@@ -187,7 +170,7 @@ async def test_llama_nemotron_tool_call(tmp_path: Path) -> None:
     if not _LLAMA_DIR.exists():
         pytest.skip(f"llama_nemotron source tree missing: {_LLAMA_DIR}")
 
-    port = _pick_free_port()
+    port = pick_free_port()
     cfg = {
         "model":                  _LLAMA_MODEL,
         "host":                   "127.0.0.1",
@@ -274,7 +257,7 @@ async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
     # into the HF cache below. Cached runs reuse the weights.
     hf_root = Path("~/.cache/huggingface").expanduser()
 
-    port = _pick_free_port()
+    port = pick_free_port()
     cfg = {
         "host":                   "127.0.0.1",
         "port":                   port,
@@ -323,7 +306,7 @@ async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
             _terminate(proc1)
 
         # Inner vLLM is in its own session group; it should still be serving.
-        assert _health_ok(port), (
+        assert health_ok(port), (
             "persistent vLLM died with the wrapper — persistence broken"
         )
 
@@ -380,7 +363,7 @@ async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
     # run, reuses on subsequent runs.
     hf_root = Path("~/.cache/huggingface").expanduser()
 
-    port = _pick_free_port()
+    port = pick_free_port()
     cfg = {
         "host":                   "127.0.0.1",
         "port":                   port,
