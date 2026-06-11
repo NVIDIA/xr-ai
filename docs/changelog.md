@@ -38,6 +38,29 @@ App-side, `AppModel.startAudio` gained an
 locked mic-mode picker in `ContentView`) and reports an honest failure message
 instead of silently leaving the UI in a half-started state.
 
+### 2026-06-11 — nightly GPU host paused/restarted via Brev CLI, fail-loud on cost leaks
+
+The `gpu` runner sits on a billed Brev instance, so leaving it up between
+the 04:00 UTC nightly runs wastes GPU-hours. The workflow now brackets the
+pytest job with Brev lifecycle management on an always-on `brev-controller`
+runner: a `start` job idempotently boots the instance and polls `brev ls`
+until `RUNNING` before pytest lands on the `gpu` runner, and a `stop` job
+(`if: always() && inputs.keep_running != true`) pauses it afterward. A
+`keep_running` `workflow_dispatch` input holds the box up for debugging; a
+`notify` job opens/updates a single `nightly-failure` tracking issue when
+any prior job fails or is cancelled.
+
+The cost-leak guard is the point, so the `stop` job fails loudly rather than
+silently skipping: `brev ls` is captured outside the grep pipe (a failing
+CLI/auth/network call aborts the step instead of reading as "nothing to
+stop"), and any non-`STOPPED` state — including a transient
+`STARTING`/`STOPPING` left by a timed-out `start` — triggers `brev stop` and
+a re-poll until `STOPPED`. Either failure surfaces through `notify` instead
+of leaving the GPU billing unnoticed. `BREV_INSTANCE_NAME`/`BREV_ORG` are
+repository **secrets** (not variables); the guards abort if they resolve
+empty. The top-level token is `contents: read`, with `notify` overriding to
+`issues: write`.
+
 ### 2026-06-09 — render-mcp: scene resync survives a LOVR respawn (blocking send, not NOBLOCK)
 
 After a LOVR (re)start, `render-mcp` re-pushed every stored primitive via

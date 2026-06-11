@@ -34,6 +34,14 @@ concurrency:
   group: nightly-xr-ai-test
   cancel-in-progress: false
 
+# Least-privilege default for every job; `notify` overrides with
+# `issues: write` for the tracking-issue step.
+permissions:
+  contents: read
+
+# Source of truth: repository **secrets** (Settings → Secrets and
+# variables → Actions → Secrets), not repo variables. The guard steps
+# below abort if BREV_INSTANCE_NAME resolves empty.
 env:
   BREV_INSTANCE_NAME: ${{ secrets.BREV_INSTANCE_NAME }}
   BREV_ORG: ${{ secrets.BREV_ORG }}
@@ -59,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${BREV_INSTANCE_NAME:-}" ]]; then
-            echo "::error::BREV_INSTANCE_NAME repo variable is not set"
+            echo "::error::BREV_INSTANCE_NAME secret is not set"
             exit 1
           fi
           # `brev start` errors if the instance is already RUNNING, so
@@ -241,16 +249,50 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${BREV_INSTANCE_NAME:-}" ]]; then
-            echo "::error::BREV_INSTANCE_NAME repo variable is not set"
+            echo "::error::BREV_INSTANCE_NAME secret is not set"
             exit 1
           fi
-          # Idempotent: don't error out if it's already stopped.
-          if brev ls | grep -iw "$BREV_INSTANCE_NAME" | grep -qi "RUNNING"; then
-            echo "Stopping Brev instance: $BREV_INSTANCE_NAME"
-            brev stop "$BREV_INSTANCE_NAME"
-          else
-            echo "$BREV_INSTANCE_NAME is not RUNNING; nothing to stop."
+
+          # Capture `brev ls` outside the grep pipe so a failing CLI aborts
+          # the step instead of reading as "nothing to stop" and silently
+          # leaving the GPU billing. Errors go to stderr — this runs in a
+          # command substitution, so stdout would be captured into $status.
+          get_status() {
+            local ls_out rc=0
+            ls_out=$(brev ls 2>&1) || rc=$?
+            if [[ "$rc" -ne 0 ]]; then
+              echo "::error::\`brev ls\` failed (exit $rc):" >&2
+              echo "$ls_out" >&2
+              exit 1
+            fi
+            printf '%s\n' "$ls_out" | grep -iw "$BREV_INSTANCE_NAME" \
+              | grep -oiE 'RUNNING|STOPPED|STARTING|STOPPING|FAILED' | head -n1 || true
+          }
+
+          status=$(get_status)
+          echo "$BREV_INSTANCE_NAME status: ${status:-<not found>}"
+          # Skip only a confirmed STOPPED box; RUNNING or a transient
+          # STARTING/STOPPING must be stopped or it bills indefinitely.
+          if [[ "${status^^}" == "STOPPED" ]]; then
+            echo "$BREV_INSTANCE_NAME is already STOPPED; nothing to do."
+            exit 0
           fi
+
+          echo "Stopping Brev instance: $BREV_INSTANCE_NAME (status: ${status:-<not found>})"
+          brev stop "$BREV_INSTANCE_NAME"
+
+          # Re-verify: don't conclude success while it's still STOPPING.
+          for i in $(seq 1 20); do
+            status=$(get_status)
+            echo "[$i] $BREV_INSTANCE_NAME status: ${status:-<not found>}"
+            if [[ "${status^^}" == "STOPPED" ]]; then
+              echo "Instance is STOPPED."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Timed out waiting for $BREV_INSTANCE_NAME to reach STOPPED"
+          exit 1
 
   notify:
     name: alert on failure
@@ -274,6 +316,8 @@ jobs:
         # run links until someone fixes it and closes it.
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_SHA: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -282,7 +326,7 @@ jobs:
           gh label create "$LABEL" --color B60205 \
             --description "Automated nightly GPU test failures" 2>/dev/null || true
           body=$(printf 'Nightly run **failed** (event: %s, commit \x60%s\x60).\n\n- Run: %s' \
-            "$GITHUB_EVENT_NAME" "${GITHUB_SHA:0:7}" "$RUN_URL")
+            "$EVENT_NAME" "${COMMIT_SHA:0:7}" "$RUN_URL")
           existing=$(gh issue list --state open --label "$LABEL" \
             --json number --jq '.[0].number' || true)
           if [[ -n "$existing" ]]; then
