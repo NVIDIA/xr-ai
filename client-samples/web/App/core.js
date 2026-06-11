@@ -505,11 +505,8 @@ export async function stopCamera(model, render, showError) {
   render();
 }
 
-/**
- * @param {object} model
- * @param {() => Promise<void>} _startCamera  bound startCamera for the caller
- */
-export async function sendPing(model, _startCamera) {
+/** @param {object} model */
+export async function sendPing(model) {
   try {
     await model.session?.send('ping');
   } catch { /* ignore */ }

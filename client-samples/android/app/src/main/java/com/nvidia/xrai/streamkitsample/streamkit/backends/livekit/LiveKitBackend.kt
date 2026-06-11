@@ -247,8 +247,8 @@ internal class LiveKitBackend(
         connectionScope = null
         room?.disconnect()
         room = null
-        // Emit DISCONNECTED only when we initiated the teardown — a network-driven
-        // disconnect will have already fired via RoomEvent.Disconnected.
+        // connectionScope.cancel() above stops the RoomEvent collector, so this
+        // is the single DISCONNECTED notification emitted per teardown.
         onConnectionStateChanged?.invoke(ConnectionState.DISCONNECTED)
     }
 

@@ -29,10 +29,6 @@ import {
   wireBaseEvents,
 } from '/App/core.js';
 
-const dbg = (typeof window !== 'undefined' && window.__dbg) || {
-  info: () => {}, warn: () => {}, err: () => {},
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Model state — base fields + XR extensions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,11 +82,10 @@ function startCamera()      { return _startCamera(model, { render, showError, en
 function startAudio()       { return _startAudio(model, render, showError); }
 function stopAudio()        { return _stopAudio(model, render, showError); }
 function disconnect()       { return _disconnect(model, render); }
-function sendPing()         { return _sendPing(model, startCamera); }
+function sendPing()         { return _sendPing(model); }
 function sendCustom(text)   { return _sendCustom(model, text, showError); }
 
 function connect() {
-  dbg.info(`connect() ${model.secure ? 'wss' : 'ws'}://${model.host}:${model.port} identity=${model.identity}`);
   return _connect(model, {
     render,
     showError,
@@ -111,7 +106,6 @@ function connect() {
 function _onDataReceived(topic, _data) {
   // render.ready: agent confirms the XR scene is ready.
   if (topic === 'render.ready') {
-    dbg.info('render.ready received');
     return true;  // informational — don't clutter the message list
   }
   return false;
@@ -237,11 +231,9 @@ async function startXR() {
   model.xrError = null;
   const host = model.xrHost.trim() || window.location.hostname || 'localhost';
   const port = Number(model.xrPort) || 48322;
-  dbg.info(`startXR() ${host}:${port}`);
   try {
     await xrStream.startXR(host, port);
   } catch (err) {
-    dbg.err('startXR failed: ' + (err?.stack ?? err));
     model.xrError = String(err?.message ?? err);
     model.xrState = 'error';
     render();
@@ -250,12 +242,9 @@ async function startXR() {
 
 async function stopXR() {
   if (!xrStream) return;
-  dbg.info('stopXR()');
   try {
     await xrStream.stopXR();
-  } catch (err) {
-    dbg.err('stopXR failed: ' + (err?.stack ?? err));
-  }
+  } catch { /* stop failures surface via the CloudXR onStateChange handler */ }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,18 +271,16 @@ function wireEvents() {
 
   xrStream = new CloudXRStream({
     canvasId: 'xr-canvas',
-    dbg,
     onStateChange: (state, detail) => {
       model.xrState = state;
       if (state === 'error') model.xrError = detail ?? null;
       if (state === 'idle')  model.xrError = null;
-      dbg.info(`xr state → ${state}${detail ? ': ' + detail : ''}`);
 
       // Notify the agent that an XR client is now connected to CloudXR.
       // render-mcp gates its LOVR launch on this signal.
       if (state === 'streaming') {
         model.session?.send(new Uint8Array(0), { topic: 'xr.session.started' })
-          .catch((err) => dbg.warn('xr.session.started publish failed: ' + err));
+          .catch(() => {});
       }
 
       render();
@@ -301,7 +288,6 @@ function wireEvents() {
   });
 
   $('xr-launch-btn').addEventListener('click', () => {
-    dbg.info('xr-launch-btn clicked (state=' + model.xrState + ')');
     if (model.xrState === 'streaming') stopXR();
     else if (model.xrState === 'idle' || model.xrState === 'error') startXR();
   });

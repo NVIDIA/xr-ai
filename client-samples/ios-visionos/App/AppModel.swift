@@ -152,6 +152,11 @@ final class AppModel {
                 self.isCameraActive = false
                 self.agentStatus = nil
                 self.agentResponse = nil
+            } else if state == .reconnecting {
+                // Session persists across a reconnect, so stop the camera to
+                // resume from a known-off state. stopCamera() is async (the
+                // unpublish suspends) and clears isCameraActive. Mirrors web.
+                Task { await self.stopCamera() }
             }
         }
         newSession.onAgentStatus = { [weak self, weak newSession] status in
