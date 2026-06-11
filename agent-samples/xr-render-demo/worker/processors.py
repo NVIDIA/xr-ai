@@ -41,6 +41,12 @@ from xr_ai_pipecat import BrainProcessor
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 from config import WorkerConfig
+from tooling import (
+    extract_json,
+    looks_like_leaked_tool_call,
+    normalize_tool_args,
+    tool_payload,
+)
 
 # Dedicated trace logger — writes a clean session transcript to a file.
 # Key events: user speech, pre-fetched context, think flag, tool calls +
@@ -69,7 +75,7 @@ _VEC_TOOLS = frozenset({
 # Tools served by vlm-mcp and video-mcp.
 _VLM_TOOLS   = frozenset({"ask_image"})
 _VIDEO_TOOLS = frozenset({
-    "get_latest_frame", "get_frame_from_time",
+    "get_frame_from_time",
     "list_live_participants", "list_recorded_participants",
     "get_video_stats", "query_video",
 })
@@ -355,7 +361,7 @@ class RenderSceneProcessor(BrainProcessor):
             return
 
         display = response
-        if _looks_like_leaked_tool_call(response):
+        if looks_like_leaked_tool_call(response):
             logger.warning(
                 "response looks like a leaked tool call, sanitizing: {!r}",
                 response[:120],
@@ -404,7 +410,7 @@ class RenderSceneProcessor(BrainProcessor):
                 timeout=8.0,
             )
             raw = resp.content.strip()
-            obj_text = _extract_json(raw)
+            obj_text = extract_json(raw)
             if obj_text:
                 try:
                     obj = json.loads(obj_text)
@@ -511,7 +517,7 @@ class RenderSceneProcessor(BrainProcessor):
                 timeout=8.0,
             )
             raw = resp.content.strip()
-            obj_text = _extract_json(raw)
+            obj_text = extract_json(raw)
             if obj_text:
                 obj = json.loads(obj_text)
                 ok    = bool(obj.get("ok", True))
@@ -524,20 +530,16 @@ class RenderSceneProcessor(BrainProcessor):
             )
         return True, ""
 
-    async def _agentic_loop(self, transcript: str, pid: str, *,
-                            ref_us: int = 0,
-                            needs_thinking: bool = False,
-                            thinking_ctx: list[str] | None = None) -> str:
-        """
-        Multi-turn tool-calling loop using the OpenAI tool calling protocol.
+    async def _build_turn_context(self, pid: str, *, ref_us: int = 0) -> str:
+        """Pre-fetch scene/pose and format the turn-context block.
 
-        Scene state and head pose are pre-fetched concurrently before the
-        loop starts and included in the user message, so the model skips
-        those tool calls and goes straight to the operation.  Tools remain
-        available for refresh queries or follow-up calls.
+        Fetches scene state, head pose, and the most common spatial position
+        (1.5 m ahead) concurrently — saves 1-3 tool-call iterations per turn —
+        and renders them, plus the move log and conversation history, into the
+        text injected into the agentic loop's user message. Side effect: resets
+        ``self._pre_move_positions`` to the current scene so update_primitive
+        calls during this turn can be recorded as (prev → new) move-log entries.
         """
-        # Pre-fetch scene state, head pose, and the most common spatial position
-        # (1.5 m ahead) concurrently.  Saves 1-3 tool-call iterations per turn.
         scene, pose, ahead = await asyncio.gather(
             self._call_mcp(self._render, "get_scene_state",  {}, silent=True),
             self._call_mcp(self._oxr,    "get_head_pose",    {}, silent=True),
@@ -547,8 +549,6 @@ class RenderSceneProcessor(BrainProcessor):
         ctx_parts: list[str] = []
 
         # ── Scene ──────────────────────────────────────────────────────────────
-        # Snapshot pre-move positions so update_primitive calls during this
-        # turn can be recorded as (prev → new) entries in _recent_moves.
         self._pre_move_positions = {}
         if isinstance(scene, dict) and scene.get("objects"):
             objs = scene["objects"]
@@ -638,6 +638,47 @@ class RenderSceneProcessor(BrainProcessor):
         context = "\n".join(ctx_parts)
         logger.debug("pre-fetched context for turn")
         _trace_log.debug("CTX   {}", context.replace("\n", " | "))
+        return context
+
+    def _recover_text_tool_call(
+        self, content: str, all_names: set[str],
+    ) -> dict | None:
+        """Recover a tool call the model emitted as plain text instead of via
+        the tool_calls field. Two shapes seen in practice:
+          (a) bare name:  "get_head_pose"
+          (b) JSON obj:   {"name": "update_primitive", "arguments": {...}}
+        Returns {"name", "arguments"} or None if *content* isn't a tool call.
+        """
+        if content in all_names:
+            # Shape (a): bare tool name, no args.
+            return {"name": content, "arguments": {}}
+
+        obj_text = extract_json(content)
+        if obj_text:
+            try:
+                obj = json.loads(obj_text)
+                name = obj.get("name") or obj.get("tool") or obj.get("function")
+                if isinstance(name, str) and name in all_names:
+                    args = obj.get("arguments") or obj.get("args") or {}
+                    return {"name": name, "arguments": args if isinstance(args, dict) else {}}
+            except json.JSONDecodeError:
+                # Best-effort recovery: the plain-text fragment is not valid JSON.
+                logger.debug("failed to decode recovered tool-call JSON: {!r}", obj_text)
+        return None
+
+    async def _agentic_loop(self, transcript: str, pid: str, *,
+                            ref_us: int = 0,
+                            needs_thinking: bool = False,
+                            thinking_ctx: list[str] | None = None) -> str:
+        """
+        Multi-turn tool-calling loop using the OpenAI tool calling protocol.
+
+        Scene state and head pose are pre-fetched concurrently before the
+        loop starts and included in the user message, so the model skips
+        those tool calls and goes straight to the operation.  Tools remain
+        available for refresh queries or follow-up calls.
+        """
+        context = await self._build_turn_context(pid, ref_us=ref_us)
 
         try:
             system_content = self._prompt_path.read_text(encoding="utf-8").strip()
@@ -726,30 +767,10 @@ class RenderSceneProcessor(BrainProcessor):
                     needs_thinking = False
                     continue
 
-                # Recover from off-script tool call output.
-                # The model sometimes emits tool calls as plain-text JSON instead
-                # of using the tool_calls field.  Two shapes seen in practice:
-                #   (a) bare name:  "get_head_pose"
-                #   (b) JSON obj:   {"name": "update_primitive", "arguments": {...}}
+                # Recover from off-script tool call output (model emitted a
+                # tool call as plain text instead of via the tool_calls field).
                 all_names = {t.name for t in self._tools}
-                recovered: dict | None = None
-
-                if content in all_names:
-                    # Shape (a): bare tool name, no args.
-                    recovered = {"name": content, "arguments": {}}
-                else:
-                    obj_text = _extract_json(content)
-                    if obj_text:
-                        try:
-                            obj = json.loads(obj_text)
-                            name = obj.get("name") or obj.get("tool") or obj.get("function")
-                            if isinstance(name, str) and name in all_names:
-                                args = obj.get("arguments") or obj.get("args") or {}
-                                recovered = {"name": name, "arguments": args if isinstance(args, dict) else {}}
-                        except json.JSONDecodeError:
-                            # Best-effort recovery: the plain-text fragment is not valid JSON —
-                            # leave recovered=None and fall through to the no-tool-call path.
-                            logger.debug("failed to decode recovered tool-call JSON: {!r}", obj_text)
+                recovered = self._recover_text_tool_call(content, all_names)
 
                 if recovered:
                     logger.warning("text-format tool call {!r} — recovering", recovered["name"])
@@ -816,7 +837,7 @@ class RenderSceneProcessor(BrainProcessor):
         """Route a tool call to render-mcp, oxr-mcp, vec-mcp, vlm-mcp, or video-mcp."""
         # Normalize nested dicts that the LLM sometimes generates instead of
         # flat scalar args — e.g. {"position": {x,y,z}} → x=, y=, z=.
-        args = _normalize_tool_args(args)
+        args = normalize_tool_args(args)
 
         if tool in _OXR_TOOLS:
             return await self._call_mcp(self._oxr, tool, args)
@@ -874,7 +895,7 @@ class RenderSceneProcessor(BrainProcessor):
     ) -> dict | str | None:
         try:
             res  = await client.call_tool(tool, args)
-            data = _tool_payload(res)
+            data = tool_payload(res)
             return data
         except Exception as exc:
             if not silent:
@@ -897,92 +918,3 @@ class RenderSceneProcessor(BrainProcessor):
     async def close(self) -> None:
         await self._llm.close()
         await self._agent_llm.close()
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-
-def _tool_payload(result) -> dict | list | None:
-    if hasattr(result, "data") and result.data is not None:
-        return result.data
-    return getattr(result, "structured_content", None)
-
-
-_TOOL_CALL_KEY_SHAPES: tuple[frozenset[str], ...] = (
-    frozenset({"name", "arguments"}),
-    frozenset({"tool", "args"}),
-    frozenset({"function", "arguments"}),
-)
-
-
-def _looks_like_leaked_tool_call(text: str) -> bool:
-    """True if *text* is a JSON object/array whose top level matches an
-    OpenAI-style tool-call envelope (name+arguments, tool+args, or
-    function+arguments). Plain prose that happens to start with "{" returns
-    False; only parseable JSON with the right keys is sanitized.
-    """
-    obj_text = _extract_json(text)
-    if obj_text is None:
-        return False
-    try:
-        obj = json.loads(obj_text)
-    except json.JSONDecodeError:
-        return False
-    candidates: list[dict] = []
-    if isinstance(obj, dict):
-        candidates.append(obj)
-    elif isinstance(obj, list):
-        candidates.extend(c for c in obj if isinstance(c, dict))
-    else:
-        return False
-    for c in candidates:
-        keys = set(c.keys())
-        if any(shape <= keys for shape in _TOOL_CALL_KEY_SHAPES):
-            return True
-    return False
-
-
-def _extract_json(text: str) -> str | None:
-    depth, start, in_string, escape = 0, -1, False, False
-    for i, ch in enumerate(text):
-        if in_string:
-            if escape:        escape = False
-            elif ch == "\\": escape = True
-            elif ch == '"':  in_string = False
-            continue
-        if ch == '"':   in_string = True; continue
-        if ch == "{":
-            if depth == 0: start = i
-            depth += 1
-        elif ch == "}":
-            if depth == 0: continue
-            depth -= 1
-            if depth == 0 and start >= 0:
-                return text[start:i + 1]
-    return None
-
-
-def _normalize_tool_args(args: dict) -> dict:
-    """Flatten nested position/color dicts that the LLM sometimes generates.
-
-    The LLM may produce {"position": {"x":0,"y":1.6,"z":-1.5}} because it
-    pattern-matches the get_scene_state output format. Flatten to scalar kwargs
-    so FastMCP validation passes.
-    """
-    args = dict(args)
-
-    if "position" in args and isinstance(args["position"], dict):
-        pos = args.pop("position")
-        for k in ("x", "y", "z"):
-            if k in pos and k not in args:
-                args[k] = float(pos[k])
-
-    if "color" in args and isinstance(args["color"], dict):
-        col = args.pop("color")
-        for k in ("r", "g", "b"):
-            if k in col and k not in args:
-                args[k] = float(col[k])
-
-    # Strip None and empty-string values — the model sometimes emits r=''
-    # when thinking is enabled and the value wasn't filled in.
-    return {k: v for k, v in args.items() if v is not None and v != ""}

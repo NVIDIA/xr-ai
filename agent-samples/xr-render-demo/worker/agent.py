@@ -21,7 +21,8 @@ from fastmcp import Client as McpClient
 from loguru import logger
 from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent
 
-from processors import RenderSceneProcessor, _tool_payload
+from processors import RenderSceneProcessor
+from tooling import tool_payload
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 _XR_SESSION_STARTED_TOPIC = "xr.session.started"
@@ -171,7 +172,7 @@ class RenderDemoAgent:
     async def _call_render(self, tool: str, args: dict, *, silent: bool = False) -> dict | None:
         try:
             res  = await self._render.call_tool(tool, args)
-            data = _tool_payload(res)
+            data = tool_payload(res)
             if not isinstance(data, dict):
                 if not silent:
                     logger.error("render-mcp {} non-dict: {!r}", tool, data)

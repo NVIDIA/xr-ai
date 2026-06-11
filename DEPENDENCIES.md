@@ -424,8 +424,8 @@ forwarding.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
-| Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | — |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | numpy >=1.24, scipy >=1.11, httpx >=0.27, fastmcp >=0.4, pyyaml >=6.0, pipecat-ai >=0.0.46 (silero-vad pulled in via xr-ai-pipecat → xr-ai-vad) |
+| Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | fastmcp >=0.4, pyyaml >=6.0, pipecat-ai >=0.0.46 (silero-vad pulled in via xr-ai-pipecat → xr-ai-vad) |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /

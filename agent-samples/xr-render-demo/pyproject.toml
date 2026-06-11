@@ -12,6 +12,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
+    "loguru>=0.7",
 ]
 
 [tool.uv.sources]
