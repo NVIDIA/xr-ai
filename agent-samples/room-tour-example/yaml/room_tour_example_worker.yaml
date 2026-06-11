@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# room-tour-example worker configuration.
+# Auto-discovered by the launcher and passed as --config to the worker process.
+
+# Path to the model endpoints (resolved relative to this file's directory).
+models_yaml: models.yaml
+
+# Path to the always-on voice-gate config (resolved relative to this file).
+voice_gate_yaml: voice_gate.yaml
+
+# Spoken-answer style for every VLM call. Override to change persona/length.
+system_prompt: |
+  You are a spatial memory assistant for smart glasses. You help the wearer
+  remember the layout of their home after a guided room tour. Answer in ONE
+  short, plain spoken sentence — never JSON, lists, or markdown. Speak in
+  second person ("you are in the kitchen", "the sofa is to your left"). Do not
+  mention lighting, mood, or aesthetics.
+
+# A live frame older than this (seconds) is re-fetched before a VLM call.
+frame_max_age_s: 5.0
+
+# While a tour is recording, how often (seconds) to perceive the live frame and
+# ingest it into the map (TextSLAM's incremental build step). Lower = denser
+# capture as the user pans, at higher VLM load.
+tour_capture_interval_s: 3.0
+
+# TextSLAM place data-association threshold: a perceived frame joins an existing
+# place when its text-similarity score clears this, else it starts a new place
+# (the aliasing/fragmentation knob). Within a named room, fragmentation is
+# harmless — every node inherits the same spoken label.
+match_threshold: 0.62
+
+# ── Guided navigation ("take me to the monitor") ─────────────────────────────
+# While guiding, how often (seconds) to re-perceive the live frame, re-localize
+# the wearer along the route, and speak progress / corrective guidance.
+nav_monitor_interval_s: 4.0
+# Give up guiding after this many seconds if the wearer hasn't arrived.
+nav_max_secs: 120.0
+
+# ── Voice activity detection (Silero via xr-ai-vad) ──────────────────────────
+silero_threshold: 0.5    # speech-probability gate (0..1); lower = more sensitive
+silence_duration: 0.4    # seconds of silence that ends an utterance
+min_speech:       0.1    # minimum seconds of speech before STT is called
+
+# Auto-cancel the voice pipeline after this many idle seconds. 0 = disabled
+# (stay connected) — what a room-tour session usually wants.
+idle_timeout_secs: 0

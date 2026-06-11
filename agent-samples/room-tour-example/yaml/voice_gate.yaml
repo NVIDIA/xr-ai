@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Voice-gate config for room-tour-example, consumed by xr_ai_voicegate.VoiceGate
+# inside the shared pipecat pipeline.
+#
+# ALWAYS-ON: magic_phrases is empty, so every finalized utterance is dispatched
+# to the brain (no wake word). The brain parses tour commands ("start room
+# tour", "this is the living room", "stop tour") and spatial questions ("where
+# am I", "where is the sofa") itself. Saying "stop" still interrupts playback.
+magic_phrases: []
+
+# No "I heard you" chime (there is no wake-word match to acknowledge).
+listening_chime: false
+
+# Follow-up grace is inert without magic phrases.
+followup_grace_s: 0

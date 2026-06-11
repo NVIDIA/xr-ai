@@ -400,6 +400,38 @@ in-process.  Model endpoints are configured via `yaml/models.yaml`
 (default: Cosmos profile) or `yaml/models.omni.yaml` (Nemotron-Omni
 on port 8108). Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
+### room-tour-example  (agent-samples/room-tour-example/)
+
+Voice-driven semantic room tour: a **direct in-process port of
+[TextSLAM](https://github.com/nvddr/textslam)** (text-space SLAM), chosen
+because the XR input is monocular (no depth/pose). The upstream library lives at
+`worker/textslam/` — `types`/`scoring`/`relations`/`landmarks`/`topomap`
+(`SemanticTopoMap`) carried over intact; only the model backends are XR-native
+(`VLMPerceptor` via the shared VLM, `HashingEmbedder` in place of BGE so no
+embedding model is pulled). The VLM perceives each frame into text — caption +
+objects + OCR/signage — the pixels are discarded, and the brain feeds the text
+into the map's online step (`SemanticTopoMap.ingest`). The wearer names places
+out loud ("this is the living room"), which voice-supervises the node labels.
+"where am I" → `SemanticTopoMap.relocalize` by text similarity (caption cosine +
+object Jaccard + OCR overlap, OCR weighted heaviest, best-of-observations);
+"where is the sofa" → object/sign lookup over the stored place text, plus a live
+left/center/right bearing when the wearer is in that room. No SLAM/pose backend;
+the map is pure text, in-memory and per-session.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `room-tour-example` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `room-tour-example-worker` | `xr-ai-agent`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (in-process `textslam` place map; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx also via xr-ai-pipecat) |
+
+Worker runs on the shared pipecat voice pipeline
+(`xr_ai_pipecat.make_voice_pipeline`). `RoomTourBrain` (a `BrainProcessor`)
+owns the tour state machine, per-room object capture loop, frame tracking, and
+the VLM query calls; VAD/STT and sentence-batched TTS come from the pipeline.
+The voice gate is **always-on** (`yaml/voice_gate.yaml` → empty
+`magic_phrases`), so plain tour commands need no wake word. Calls stt-server
+(8103), vlm-server (8100), and piper-tts-server (8105) over HTTP via
+`xr-ai-models`; endpoints configured in `yaml/models.yaml`.
+
 ### model-servers  (agent-samples/model-servers/)
 
 Standalone launcher that starts the four AI inference servers and keeps

@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# vlm-server configuration for vlm-agent.
+# Auto-discovered by the launcher and passed as --config to vlm_server.
+
+model:       nvidia/Cosmos-Reason1-7B
+port:        8100
+model_cache: ../../../models
+
+# vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
+# See ai-services/vlm-server/vlm_server.yaml for the full toggle docs.
+vllm_backend: docker
+vllm_image:   nvcr.io/nvidia/vllm:26.04-py3

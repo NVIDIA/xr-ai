@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Model endpoints for room-tour-example. Same shared services the other
+# agent-samples use (NeMo Parakeet STT, Cosmos VLM, Piper TTS), resolved by
+# xr-ai-models make_stt / make_vlm / make_tts.
+
+stt:
+  kind:     preset:parakeet_stt
+  base_url: http://localhost:8103
+
+vlm:
+  kind:     preset:cosmos_vlm
+  base_url: http://localhost:8100
+
+tts:
+  kind:     preset:piper_tts
+  base_url: http://localhost:8105
