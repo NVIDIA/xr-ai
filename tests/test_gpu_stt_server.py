@@ -29,7 +29,6 @@ import wave
 from pathlib import Path
 
 import pytest
-
 from xr_ai_vllm import stop_persistent_servers
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
