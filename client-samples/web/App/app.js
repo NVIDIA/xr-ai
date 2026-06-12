@@ -158,7 +158,7 @@ async function disconnect() {
     render();
   }
 }
-function sendPing()         { return _sendPing(model, startCamera); }
+function sendPing()         { return _sendPing(model); }
 function sendCustom(text)   { return _sendCustom(model, text, showError); }
 function connect()          {
   return _connect(model, {

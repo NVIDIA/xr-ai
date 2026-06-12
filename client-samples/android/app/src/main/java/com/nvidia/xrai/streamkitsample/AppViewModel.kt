@@ -108,6 +108,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var isCameraActive by mutableStateOf(false)
         private set
+    /** Guards the physical-camera start path so two rapid taps can't interleave
+     *  stopCamera/startCamera (mirrors iOS `isCameraStarting`). */
+    private var isCameraStarting = false
     var isConnecting by mutableStateOf(false)
         private set
     val receivedMessages = mutableStateListOf<ReceivedMessage>()
@@ -171,6 +174,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         isCameraActive = false
                         agentStatus = null
                         agentResponse = null
+                    } else if (state == ConnectionState.RECONNECTING) {
+                        // Session persists across a reconnect, so unpublish the
+                        // camera (and stop the synthetic feed) to resume from a
+                        // known-off state. stopCamera() launches its own
+                        // coroutine, the only place the suspending unpublish can
+                        // run from this non-suspend callback. Mirrors web.
+                        stopCamera()
                     }
                 }
                 newSession.onAgentStatus = { status ->
@@ -264,6 +274,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             startVirtualCamera()
             return
         }
+        // Check-and-set synchronously before launch: the guard inside the
+        // coroutine would let two rapid taps both pass before either runs.
+        if (isCameraStarting || isCameraActive) return
+        isCameraStarting = true
         viewModelScope.launch {
             try {
                 val info = availableCameras.firstOrNull { it.id == selectedCameraId }
@@ -272,6 +286,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 isCameraActive = true
             } catch (e: Exception) {
                 lastError = e.message
+            } finally {
+                isCameraStarting = false
             }
         }
     }
@@ -328,6 +344,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopCamera() {
         viewModelScope.launch {
+            // Clear any in-flight start guard first: a reconnect-triggered stop
+            // must not leave isCameraStarting stuck true, or a later startCamera()
+            // would be blocked by the guard at the top of startCamera().
+            isCameraStarting = false
             // Stop the synthetic feed BEFORE unpublishing the track, so a
             // trailing frame can't lazily republish the injected track after
             // stopCamera() tore it down.
