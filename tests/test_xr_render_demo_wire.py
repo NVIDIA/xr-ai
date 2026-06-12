@@ -434,9 +434,7 @@ def _make_brain(transport: _CaptureTransport):
     _emit_notice) never dereferences them. The constructor eagerly reads
     the real prompt files, so point at the bundled prompts/ directory.
     """
-    from processors import RenderSceneProcessor
-
-    return RenderSceneProcessor(
+    return _proc.RenderSceneProcessor(
         transport   = transport,
         cfg         = None,
         render      = None,
@@ -642,9 +640,7 @@ def _now_us_test() -> int:
 
 
 def _make_perception_brain(transport, vlm: _FakeVLM):
-    from processors import RenderSceneProcessor
-
-    return RenderSceneProcessor(
+    return _proc.RenderSceneProcessor(
         transport   = transport,
         cfg         = None,
         render      = None,
