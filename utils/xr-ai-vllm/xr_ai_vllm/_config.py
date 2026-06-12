@@ -62,10 +62,19 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
     """Apply the shared HuggingFace / CUDA env block.
 
     Sets ``CUDA_VISIBLE_DEVICES`` (when configured), ``HF_TOKEN`` (when
-    provided), ``HF_HUB_ENABLE_HF_TRANSFER``, and ``HF_HOME``. ``HF_HOME`` is
-    set via ``setdefault`` so an externally-set HF cache wins over the YAML
-    default. Returns the resolved ``cuda_visible_devices`` string (or ``None``)
-    so callers that run GPU detection can confirm the device filter is applied.
+    provided), ``HF_HUB_ENABLE_HF_TRANSFER``, ``HF_HOME``, and
+    ``TRANSFORMERS_CACHE``.
+
+    Both ``HF_HOME`` and ``TRANSFORMERS_CACHE`` are set via ``setdefault``, so
+    an externally-set value wins over the YAML default. This intentionally
+    differs from the pre-consolidation per-server code where the LLM wrappers
+    used an unconditional assignment for ``HF_HOME``; callers that need the
+    YAML value to take priority must unset the env var before calling.
+    ``TRANSFORMERS_CACHE`` mirrors ``HF_HOME`` for Transformers <4.36 and
+    third-party libraries that have not yet adopted the ``HF_HOME`` superset.
+
+    Returns the resolved ``cuda_visible_devices`` string (or ``None``) so
+    callers that run GPU detection can confirm the device filter is applied.
     """
     cuda_devices = cfg.get("cuda_visible_devices")
     if cuda_devices is not None:
@@ -78,6 +87,7 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
         os.environ["HF_TOKEN"] = hf_token
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ.setdefault("HF_HOME", str(model_cache))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(model_cache))
 
     return cuda_devices
 
