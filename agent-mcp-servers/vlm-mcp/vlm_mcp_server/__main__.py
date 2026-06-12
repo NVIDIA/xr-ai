@@ -315,9 +315,9 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    setup_logging("vlm-mcp")
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+    setup_logging("vlm-mcp")
     asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 

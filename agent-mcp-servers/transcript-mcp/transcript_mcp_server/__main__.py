@@ -305,9 +305,9 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    setup_logging("transcript-mcp")
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+    setup_logging("transcript-mcp")
 
     _run_dir = os.environ.get("XR_RUN_DIR")
     _default_transcripts = (

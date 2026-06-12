@@ -459,7 +459,9 @@ def build_mcp(
 
             Keys: path, width, height, timestamp_us, second_ago,
             actual_second_ago. Returns ``{"error": "..."}`` if the participant
-            has no live frame or a past frame is requested.
+            has no live frame or a past frame is requested. Use
+            ``list_live_participants`` to confirm which participants have an
+            active camera feed before calling this tool.
             """
             if second_ago != 0 or reference_time_us != 0:
                 return {"error": "recording disabled — only second_ago=0 (live) is available"}
@@ -749,9 +751,9 @@ def run() -> None:
         with open(ns.config) as f:
             cfg = yaml.safe_load(f) or {}
 
-    setup_logging("video-mcp")
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+    setup_logging("video-mcp")
     asyncio.run(_serve(cfg, ready_file=ns.ready_file))
 
 
