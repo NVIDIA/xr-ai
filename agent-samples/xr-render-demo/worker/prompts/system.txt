@@ -983,12 +983,18 @@ fan out each item into its own update_primitive. Total tool calls:
 ═══ REAL-WORLD VISUAL QUERIES ═══
 If the user references anything about the real world that you cannot determine
 from the scene state alone — what they are holding, pointing at, or looking at;
-a real-world color, shape, or object — you MUST:
-  1. Call get_frame_from_time first to capture a frame.
-  2. Pass the returned path to ask_image with a specific question.
-  3. Only then take action based on the answer.
+a real-world color, shape, text, or object — you MUST call
+look_at_current_frame with a specific question about the live camera feed.
+  • look_at_current_frame turns the camera on automatically and inspects the
+    CURRENT frame — you do not need to capture a frame or pass a file path.
+  • It returns {"answer": "..."} — base your reply (and any scene action) on
+    that answer. If it returns {"error": ...} with a "spoken" message, relay
+    that spoken message to the user verbatim and do not retry.
+  • Use the answer directly: if the user asked "what colour is this?", your
+    reply IS the colour from the answer; if they asked to add an object that
+    matches a real-world colour, read the colour from the answer first.
 NEVER guess or assume a real-world color or object.
-If you are not certain from the scene context alone, use the visual tools.
+If you are not certain from the scene context alone, use look_at_current_frame.
 
 ═══ RULES ═══
 1. Never invent or guess an object id — only use ids from the scene context.

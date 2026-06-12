@@ -34,13 +34,14 @@ from typing import AsyncIterator
 from fastmcp import Client as McpClient
 from loguru import logger
 
-from xr_ai_agent import DataMessage
+from xr_ai_agent import DataMessage, FrameSignal
 from xr_ai_logging import print_task_done_banner
-from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
+from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef, VLMService
 from xr_ai_pipecat import BrainProcessor
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 from config import WorkerConfig
+from pixels import encode_image, frame_to_pil
 from tooling import (
     extract_json,
     looks_like_leaked_tool_call,
@@ -84,6 +85,50 @@ _VIDEO_TOOLS = frozenset({
     "get_video_stats", "query_video",
 })
 
+# Brain-executed perception tool. Not served by any MCP server — the brain
+# intercepts it in _execute_tool, turns the camera on (if needed), grabs the
+# latest live frame for the active participant, and runs the VLM on it. This
+# replaces the broken get_frame_from_time→ask_image two-step (the camera was
+# never turned on, and get_frame_from_time isn't even registered when video
+# recording is disabled), mirroring simple-vlm-example's live-frame VLM path.
+_PERCEPTION_TOOL = "look_at_current_frame"
+
+_PERCEPTION_TOOL_DEF = ToolDef(
+    name=_PERCEPTION_TOOL,
+    description=(
+        "Look at the user's LIVE camera feed right now and answer a question "
+        "about the real world — what they are holding, pointing at, or looking "
+        "at; a real-world colour, shape, text, or object. Turns the camera on "
+        "automatically and inspects the current frame. Use this whenever the "
+        "answer cannot be known from the XR scene state alone."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": (
+                    "The specific question to answer about the live camera "
+                    "frame, e.g. 'What colour is the object the user is "
+                    "holding?'"
+                ),
+            },
+        },
+        "required": ["question"],
+    },
+)
+
+# Spoken when a perception query is asked but no live camera frame can be
+# obtained. Short, user-actionable, never a hang or silent failure.
+_NO_FRAME_MSG = "I can't see a camera feed right now — please check your camera."
+
+# VLM guidance for the live-frame answer. Plain spoken English, terse.
+_PERCEPTION_SYSTEM_PROMPT = (
+    "You are looking at the user's live camera feed. Answer the question "
+    "directly from what is visible in the image, in one short plain-English "
+    "sentence. Never reply with JSON, code, or markdown."
+)
+
 # Brief human-readable progress message shown while a tool runs.
 _TOOL_PROGRESS: dict[str, str] = {
     "get_head_pose":        "Checking your position...",
@@ -110,6 +155,17 @@ _AGENT_PROGRESS_TOPIC  = "agent.progress"
 
 class _SceneNotReadyError(Exception):
     """Raised when render-mcp returns not_started — LOVR hasn't launched yet."""
+
+
+class _PerceptionUnavailableError(Exception):
+    """Raised when a perception (look_at_current_frame) query cannot be
+    answered — no camera feed, no frame, or VLM failure. Carries a short
+    user-facing spoken message so the turn ends with a graceful spoken+panel
+    line instead of hanging in the reasoning loop or failing silently."""
+
+    def __init__(self, spoken: str) -> None:
+        super().__init__(spoken)
+        self.spoken = spoken
 
 
 def _now_us() -> int:
@@ -148,6 +204,10 @@ class RenderSceneProcessor(BrainProcessor):
         tools:       list[ToolDef],
         llm:         LLMService,
         agent_llm:   LLMService,
+        vlm_service: VLMService | None = None,
+        frame_max_age_s:     float = 2.0,
+        camera_on_timeout_s: float = 15.0,
+        camera_grace_s:      float = 5.0,
     ):
         super().__init__()
         self._transport      = transport
@@ -157,6 +217,9 @@ class RenderSceneProcessor(BrainProcessor):
         self._vlm            = vlm
         self._video          = video
         self._vec            = vec
+        # Worker-local VLM service for live-frame perception (look_at_current_frame).
+        # None in unit tests / notice-only paths that never hit the perception tool.
+        self._vlm_service    = vlm_service
         self._prompt_path      = prompt_path
         self._prompt_cache     = prompt_path.read_text(encoding="utf-8").strip()
         _prompts               = prompt_path.parent
@@ -187,6 +250,27 @@ class RenderSceneProcessor(BrainProcessor):
         # handle_query, which short-circuits the LLM loop for a matching entry.
         # See enqueue_notice / _emit_notice.
         self._pending_notices: dict[str, list[str]] = {}
+
+        # ── live-frame perception state (look_at_current_frame) ──────────────
+        # Mirrors simple-vlm-example: track the latest FrameSignal per
+        # (pid, track_id), turn the camera on on demand, and pull pixels via
+        # request_frame. The render-demo worker previously had NO frame path —
+        # the camera was never turned on, so any visual query failed.
+        self._frame_max_age_us  = int(frame_max_age_s * 1_000_000)
+        self._camera_on_timeout = camera_on_timeout_s
+        self._camera_grace_s    = camera_grace_s
+        self._latest: dict[tuple[str, str], FrameSignal] = {}
+        self._camera_on:         dict[str, bool]          = {}
+        self._frame_events:      dict[str, asyncio.Event] = {}
+        self._camera_off_timers: dict[str, asyncio.Task]  = {}
+
+        # Register the hub frame callback directly: FrameSignal events are not
+        # surfaced as pipecat frames, so the brain subscribes on the endpoint
+        # (same pattern as SimpleVlmBrain). Guarded for the unit-test transport
+        # double, which has no .endpoint.
+        ep = getattr(transport, "endpoint", None)
+        if ep is not None:
+            ep.on_frame(self._on_frame)
 
     # ── public: text-channel entry ────────────────────────────────────────────
 
@@ -817,12 +901,16 @@ class RenderSceneProcessor(BrainProcessor):
                     ", ".join(f"{k}={v}" for k, v in args.items()),
                 )
                 try:
-                    result = await self._execute_tool(name, args)
+                    result = await self._execute_tool(name, args, pid=pid)
                 except _SceneNotReadyError:
                     return (
                         "The XR scene isn't ready yet. "
                         "Please click 'Launch XR' to start the headset session first."
                     )
+                except _PerceptionUnavailableError as exc:
+                    # No camera feed / frame / VLM — end the turn with a short
+                    # spoken+panel message rather than looping or going silent.
+                    return exc.spoken
                 result_str = json.dumps(result, default=str)
                 logger.info("tool result  tool={}  {}", name, result_str[:200])
                 _trace_log.info("RES   [{}] {} → {}", iteration, name, result_str[:300])
@@ -835,10 +923,172 @@ class RenderSceneProcessor(BrainProcessor):
 
         return "Done."
 
+    # ── live-frame perception (look_at_current_frame) ─────────────────────────
+
+    async def _on_frame(self, sig: FrameSignal) -> None:
+        """Hub frame-signal callback: cache the latest signal per (pid, track)
+        and wake any waiter. Mirrors SimpleVlmBrain._on_frame."""
+        self._latest[(sig.participant_id, sig.track_id)] = sig
+        ev = self._frame_events.get(sig.participant_id)
+        if ev is not None:
+            ev.set()
+
+    def _latest_signal(self, pid: str) -> FrameSignal | None:
+        candidates = [v for k, v in self._latest.items() if k[0] == pid]
+        if not candidates:
+            return None
+        # pts_us is wall-clock; seq restarts per camera restart so pick by ts.
+        return max(candidates, key=lambda s: s.pts_us)
+
+    def _is_fresh(self, sig: FrameSignal) -> bool:
+        return _now_us() - sig.pts_us < self._frame_max_age_us
+
+    async def _client_control(self, pid: str, action: str) -> None:
+        await self._transport.send_return_data(DataMessage(
+            participant_id = pid,
+            topic          = "clientControl",
+            pts_us         = _now_us(),
+            data           = json.dumps({"action": action}).encode(),
+        ))
+
+    async def _ensure_camera_on(self, pid: str) -> None:
+        """Send startCamera once (idempotent). Claims the flag before the
+        first await so concurrent callers can't double-send."""
+        if self._camera_on.get(pid, False):
+            return
+        self._camera_on[pid] = True
+        try:
+            logger.info("camera.on → pid={!r}", pid)
+            await self._client_control(pid, "startCamera")
+        except Exception:
+            self._camera_on[pid] = False
+            raise
+
+    def _schedule_camera_off(self, pid: str) -> None:
+        """Schedule stopCamera after the grace window so rapid follow-up
+        perception queries don't repay camera startup. Replaces any pending
+        timer."""
+        old = self._camera_off_timers.pop(pid, None)
+        if old and not old.done():
+            old.cancel()
+
+        async def _off() -> None:
+            try:
+                await asyncio.sleep(self._camera_grace_s)
+                self._camera_on[pid] = False
+                await self._client_control(pid, "stopCamera")
+            except asyncio.CancelledError:
+                pass  # a newer query cancelled the grace timer — keep camera on
+
+        self._camera_off_timers[pid] = asyncio.create_task(_off())
+
+    async def _wait_for_camera_frame(
+        self, pid: str, timeout: float,
+    ) -> FrameSignal | None:
+        """Wait up to *timeout* for a FRESH FrameSignal for *pid*.
+
+        Only signals that pass _is_fresh are accepted — a stale signal from a
+        stopped track is still cached, and returning it makes request_frame
+        deliver a placeholder. Mirrors SimpleVlmBrain._wait_for_camera_frame.
+        """
+        ev = self._frame_events.setdefault(pid, asyncio.Event())
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + timeout
+
+        ev.clear()
+        sig = self._latest_signal(pid)
+        if sig is not None and self._is_fresh(sig):
+            return sig
+
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                logger.warning("camera timeout pid={!r}  waited={:.1f}s", pid, timeout)
+                return None
+            try:
+                await asyncio.wait_for(ev.wait(), timeout=min(remaining, 5.0))
+            except asyncio.TimeoutError:
+                ev.clear()
+                continue
+            sig = self._latest_signal(pid)
+            if sig is not None and self._is_fresh(sig):
+                return sig
+            ev.clear()
+
+    async def _look_at_current_frame(self, pid: str, question: str) -> dict:
+        """Turn the camera on (if needed), capture the latest live frame for
+        *pid*, and run the VLM on it. Returns a dict the agentic loop relays:
+          {"answer": "<vlm text>"}                  on success
+          {"error":  "<reason>", "spoken": "..."}   on graceful failure
+
+        On any failure the user should hear, the dict carries a short ``spoken``
+        message; the loop relays the answer/error text and never hangs.
+        """
+        if not pid:
+            return {"error": "no active participant", "spoken": _NO_FRAME_MSG}
+        if self._vlm_service is None:
+            logger.error("look_at_current_frame called but no VLM service wired")
+            return {"error": "vlm unavailable", "spoken": _NO_FRAME_MSG}
+
+        # Keep the camera alive across rapid follow-ups; cancel a pending off.
+        old_timer = self._camera_off_timers.pop(pid, None)
+        if old_timer and not old_timer.done():
+            old_timer.cancel()
+
+        try:
+            sig = self._latest_signal(pid)
+            if not (sig and self._is_fresh(sig)):
+                await self._ensure_camera_on(pid)
+                sig = await self._wait_for_camera_frame(pid, self._camera_on_timeout)
+                if sig is None:
+                    self._camera_on[pid] = False
+                    return {"error": "no live camera frame", "spoken": _NO_FRAME_MSG}
+
+            frame = await self._transport.endpoint.request_frame(sig)
+            if frame is None:
+                return {"error": "frame data unavailable", "spoken": _NO_FRAME_MSG}
+
+            image_url = encode_image(frame_to_pil(frame))
+            logger.info(
+                "perception vlm  pid={!r}  {}x{}  q={!r}",
+                pid, frame.width, frame.height, question[:80],
+            )
+            _trace_log.info("LOOK  {}x{}  {}", frame.width, frame.height, question[:120])
+            resp = await self._vlm_service.ask_image(
+                image_url, question, system_prompt=_PERCEPTION_SYSTEM_PROMPT,
+            )
+            answer = (resp.content or "").strip()
+            _trace_log.info("VLM   {}", answer[:200])
+            if not answer:
+                return {"error": "empty vlm answer", "spoken": _NO_FRAME_MSG}
+            return {"answer": answer}
+        except Exception as exc:
+            logger.exception("look_at_current_frame failed")
+            return {"error": str(exc), "spoken": _NO_FRAME_MSG}
+        finally:
+            # Keep camera on briefly for follow-ups, then auto-off.
+            self._schedule_camera_off(pid)
+
     # ── tool routing ──────────────────────────────────────────────────────────
 
-    async def _execute_tool(self, tool: str, args: dict) -> dict | str | None:
-        """Route a tool call to render-mcp, oxr-mcp, vec-mcp, vlm-mcp, or video-mcp."""
+    async def _execute_tool(
+        self, tool: str, args: dict, *, pid: str = "",
+    ) -> dict | str | None:
+        """Route a tool call to render-mcp, oxr-mcp, vec-mcp, vlm-mcp,
+        video-mcp, or the brain-local perception path."""
+        # Brain-executed live-frame perception — not an MCP tool. Intercept
+        # before _normalize_tool_args (which would strip the question text if
+        # it ever produced an empty value) and before MCP routing.
+        if tool == _PERCEPTION_TOOL:
+            question = str(args.get("question") or "").strip()
+            result = await self._look_at_current_frame(pid, question)
+            # Deterministic graceful failure: end the turn with the spoken
+            # message instead of feeding an error back to the model (which a
+            # flaky 30B might silently swallow → the "hangs in thinking" bug).
+            if isinstance(result, dict) and result.get("spoken"):
+                raise _PerceptionUnavailableError(result["spoken"])
+            return result
+
         # Normalize nested dicts that the LLM sometimes generates instead of
         # flat scalar args — e.g. {"position": {x,y,z}} → x=, y=, z=.
         args = normalize_tool_args(args)
@@ -919,6 +1169,21 @@ class RenderSceneProcessor(BrainProcessor):
         except Exception:
             logger.exception("send failed  topic={}", topic)
 
+    async def on_participant_left(self, pid: str) -> None:
+        """Tear down per-pid live-frame / camera state. The base class cancels
+        in-flight query tasks; we only own the frame + camera bookkeeping."""
+        self._latest = {k: v for k, v in self._latest.items() if k[0] != pid}
+        self._frame_events.pop(pid, None)
+        self._camera_on.pop(pid, None)
+        timer = self._camera_off_timers.pop(pid, None)
+        if timer and not timer.done():
+            timer.cancel()
+
     async def close(self) -> None:
         await self._llm.close()
         await self._agent_llm.close()
+        if self._vlm_service is not None:
+            try:
+                await self._vlm_service.close()
+            except Exception:
+                logger.opt(exception=True).debug("vlm_service close failed")

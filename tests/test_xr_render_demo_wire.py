@@ -555,3 +555,205 @@ async def test_quick_ack_spoken_on_non_thinking_turn() -> None:
     # Ack is also mirrored to the panel on agent.progress.
     progress = [m for m in transport.sent if m.topic == "agent.progress"]
     assert any(m.data.decode() == "On it." for m in progress)
+
+
+# ── live-frame perception routing (look_at_current_frame) ──────────────────────
+#
+# A real-world visual question — "what colour is this thing I'm holding?" — must
+# reach the LIVE-FRAME VLM path, not stall in the reasoning loop. Before the fix
+# the render-demo worker had no frame tracking and never turned the camera on, so
+# a perception query looped on an unanswerable tool (get_frame_from_time, which
+# isn't even registered when recording is disabled) and hung. These tests stub
+# the VLM client + the hub frame path and assert the routing mechanically.
+
+from xr_ai_agent import FrameData, FrameSignal, PixelFormat  # noqa: E402
+from xr_ai_models import ChatResponse, ToolCall  # noqa: E402
+
+import processors as _proc  # noqa: E402
+
+
+class _FakeEndpoint:
+    """Hub ProcessorEndpoint double — frame callback + pixel request only."""
+
+    def __init__(self) -> None:
+        self.frame_cbs: list = []
+        self.frame: FrameData | None = None
+        self.frame_requests: list[FrameSignal] = []
+        self.statuses: list[tuple[str, str]] = []
+
+    def on_frame(self, cb) -> None:
+        self.frame_cbs.append(cb)
+
+    async def request_frame(self, sig: FrameSignal, timeout: float = 0.0):
+        self.frame_requests.append(sig)
+        return self.frame
+
+    async def set_status(self, status: str, pid: str | None = None) -> None:
+        self.statuses.append((status, pid or ""))
+
+
+class _CaptureTransportWithEndpoint(_CaptureTransport):
+    """Capture transport that also exposes a fake hub endpoint so the brain
+    can register its frame callback and pull pixels."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.endpoint = _FakeEndpoint()
+
+
+class _FakeVLM:
+    """VLMService double — records the ask_image call and returns a canned
+    ChatResponse so we can assert the perception path reached the VLM."""
+
+    def __init__(self, answer: str = "It's a red mug.") -> None:
+        self.answer = answer
+        self.calls: list[tuple[str, str]] = []
+
+    async def ask_image(self, image, question, *, system_prompt: str = "",
+                        **_kw) -> ChatResponse:
+        self.calls.append((image, question))
+        return ChatResponse(
+            content=self.answer, reasoning=None, tool_calls=None,
+            finish_reason="stop", raw={},
+        )
+
+    async def close(self) -> None:
+        pass
+
+
+def _rgb_frame(pid: str, *, w: int = 4, h: int = 4) -> tuple[FrameSignal, FrameData]:
+    """A tiny solid-colour RGB24 frame + its matching signal for *pid*."""
+    pts = _now_us_test()
+    data = bytes([200, 30, 30]) * (w * h)  # solid red
+    sig = FrameSignal(
+        slot=0, seq=1, pts_us=pts, width=w, height=h,
+        fmt=PixelFormat.RGB24, data_sz=len(data), participant_id=pid,
+    )
+    fd = FrameData(
+        seq=1, pts_us=pts, width=w, height=h,
+        fmt=PixelFormat.RGB24, data=data, participant_id=pid,
+    )
+    return sig, fd
+
+
+def _now_us_test() -> int:
+    import time as _t
+    return _t.time_ns() // 1_000
+
+
+def _make_perception_brain(transport, vlm: _FakeVLM):
+    from processors import RenderSceneProcessor
+
+    return RenderSceneProcessor(
+        transport   = transport,
+        cfg         = None,
+        render      = None,
+        oxr         = None,
+        vlm         = None,
+        video       = None,
+        vec         = None,
+        prompt_path = _SYSTEM_PROMPT,
+        tools       = [_proc._PERCEPTION_TOOL_DEF],
+        llm         = None,
+        agent_llm   = None,
+        vlm_service = vlm,
+        frame_max_age_s     = 60.0,   # generous so the seeded frame stays fresh
+        camera_on_timeout_s = 0.2,    # short — the no-frame test must not hang
+        camera_grace_s      = 0.05,
+    )
+
+
+def test_perception_tool_def_in_prompt_and_classifier() -> None:
+    """The new perception tool is named in the system prompt, and the
+    quick-ack classifier still flags real-world visual lookups as think=true
+    (so they enter the reasoning loop where the tool lives)."""
+    prompt = _SYSTEM_PROMPT.read_text(encoding="utf-8")
+    assert "look_at_current_frame" in prompt
+    # The classifier prompt routes "real-world color/shape/object" to thinking.
+    ack = (_PROMPTS_DIR / "quick_ack.txt").read_text(encoding="utf-8").lower()
+    assert "visual lookup" in ack and "real-world color" in ack
+
+
+async def test_perception_query_reaches_vlm_frame_path() -> None:
+    """A vision question routed to look_at_current_frame turns the camera on,
+    pulls the live frame, and runs the VLM — returning the VLM answer to the
+    loop (NOT a generic reasoning-loop fallback)."""
+    transport = _CaptureTransportWithEndpoint()
+    transport.set_target_participant("pid-1")
+    vlm = _FakeVLM(answer="It's a red mug.")
+    brain = _make_perception_brain(transport, vlm)
+
+    # Seed a fresh live frame for the participant (as if the hub delivered one).
+    sig, fd = _rgb_frame("pid-1")
+    brain._latest[(sig.participant_id, sig.track_id)] = sig  # noqa: SLF001
+    transport.endpoint.frame = fd
+
+    result = await brain._execute_tool(  # noqa: SLF001
+        "look_at_current_frame",
+        {"question": "What colour is this thing I'm holding?"},
+        pid="pid-1",
+    )
+
+    # Reached the VLM with the encoded frame + the question.
+    assert len(vlm.calls) == 1
+    image, question = vlm.calls[0]
+    assert image.startswith("data:image/jpeg;base64,")
+    assert "colour" in question
+    # The pixel request used the seeded live frame.
+    assert transport.endpoint.frame_requests == [sig]
+    # The VLM answer is returned to the loop, not a generic fallback.
+    assert result == {"answer": "It's a red mug."}
+
+
+async def test_perception_no_frame_yields_graceful_message() -> None:
+    """When no live camera frame can be obtained, the perception turn ends with
+    a short spoken+panel message — never a hang or a silent failure.
+
+    Driven through _agentic_loop so the full graceful path is exercised:
+    look_at_current_frame → _PerceptionUnavailableError → the loop returns the
+    spoken message (which _run_turn then speaks and panels)."""
+    transport = _CaptureTransportWithEndpoint()
+    transport.set_target_participant("pid-1")
+    vlm = _FakeVLM()
+    brain = _make_perception_brain(transport, vlm)
+
+    # No frame seeded → _wait_for_camera_frame times out (camera_on_timeout=0.2s).
+    # Stub the MCP prefetch (None clients) and script the agent LLM to emit a
+    # single look_at_current_frame tool call.
+    async def _fake_call_mcp(_client, tool, _args, *, silent=False):
+        return {}  # empty scene / pose
+
+    call_count = {"n": 0}
+
+    async def _fake_chat(messages, **kwargs):
+        call_count["n"] += 1
+        return ChatResponse(
+            content="",
+            reasoning=None,
+            tool_calls=[ToolCall(
+                id="call_look",
+                name="look_at_current_frame",
+                arguments='{"question": "What colour is this?"}',
+            )],
+            finish_reason="tool_calls",
+            raw={},
+        )
+
+    brain._call_mcp = _fake_call_mcp        # noqa: SLF001
+    class _LLM:
+        async def chat(self, messages, **kw):
+            return await _fake_chat(messages, **kw)
+    brain._agent_llm = _LLM()               # noqa: SLF001
+
+    answer = await brain._agentic_loop(     # noqa: SLF001
+        "what colour is this thing I'm holding?", "pid-1",
+        ref_us=_now_us_test(), needs_thinking=True, thinking_ctx=[""],
+    )
+
+    # Graceful spoken message, not a hang or a generic "Done." fallback.
+    assert answer == _proc._NO_FRAME_MSG
+    # The camera WAS turned on (startCamera sent) before giving up.
+    controls = [m for m in transport.sent if m.topic == "clientControl"]
+    assert any(b'"startCamera"' in m.data for m in controls)
+    # VLM was never reached — there was no frame to ask about.
+    assert vlm.calls == []

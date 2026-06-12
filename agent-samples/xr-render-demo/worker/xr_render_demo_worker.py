@@ -30,7 +30,7 @@ from xr_ai_voicegate import load_voice_gate_config
 
 from agent import RenderDemoAgent
 from config import WorkerConfig, load_config
-from processors import RenderSceneProcessor
+from processors import _PERCEPTION_TOOL_DEF, RenderSceneProcessor
 
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
 
@@ -109,7 +109,9 @@ async def main(
         "vec-mcp":   mcp_probe(cfg.vec_mcp.rstrip("/")   + "/mcp"),
     }
     await wait_for_services(probes)
-    await vlm_service.close()
+    # vlm_service is retained (NOT closed here): the brain's
+    # look_at_current_frame perception tool runs live-frame VLM calls through
+    # it. brain.close() closes it on shutdown.
 
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
 
@@ -139,6 +141,9 @@ async def main(
                 logger.warning("{} tool discovery failed: {}", name, exc)
 
         tools = _build_tools(render_tools, oxr_tools, vlm_tools, video_tools, vec_tools)
+        # Brain-executed live-frame perception tool (not served by any MCP
+        # server) — see RenderSceneProcessor._look_at_current_frame.
+        tools.append(_PERCEPTION_TOOL_DEF)
         logger.info("tool-calling tools: {}", [t.name for t in tools])
 
         transport = XRMediaHubTransport()
@@ -154,6 +159,7 @@ async def main(
             tools=tools,
             llm=llm,
             agent_llm=agent_llm,
+            vlm_service=vlm_service,
         )
         # Wire xr.session.started → start_xr lifecycle and the typed-text
         # input path. The agent registers callbacks on the transport's
