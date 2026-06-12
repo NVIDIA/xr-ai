@@ -103,11 +103,16 @@ xr-ai-vllm  (utils/xr-ai-vllm/)
     based on each YAML's `vllm_backend:` key.  Stays stdlib-only so docker mode
     does not pull vllm/torch/etc. into the wrapper's venv just to manage a
     container.  Imported by the four vllm wrappers and by the orchestrator
-    `--stop` flow.
+    `--stop` flow.  Besides `serve` / `stop_persistent_servers`, exposes the
+    shared wrapper helpers `resolve_model_cache`, `load_config`, `setup_hf_env`,
+    and `gpu_compute_major` (all stdlib-only; pyyaml is imported function-locally
+    inside `load_config` so the `--stop` path stays dependency-free).
 
 xr-ai-vad  (utils/xr-ai-vad/)
     └── numpy >=1.24
-    └── silero-vad >=5.1  (pulls torch + onnxruntime transitively)
+    └── silero-vad >=5.1  (pulls onnxruntime transitively)
+    └── torch >=2.0       (detector.py imports torch directly)
+    └── onnxruntime >=1.17
     Shared per-participant Silero VAD utterance detector for agent workers
     that ingest microphone audio.  Uses the ONNX backend (no GPU required
     at runtime).  Consumes raw int16 PCM bytes and emits int16 PCM utterance
@@ -293,7 +298,7 @@ nemotron3-nano-llm-server  (ai-services/llm/nemotron3_nano/)
     vllm_backend: pip|docker — same dispatch as vlm-server.
 
 nemotron-omni-llm-server  (ai-services/llm/nemotron_omni/)
-    └── vllm >=0.8.0
+    └── vllm >=0.12.0
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
     └── xr-ai-logging  [editable: ../../../utils/xr-ai-logging]
@@ -452,7 +457,7 @@ updated in the same commit**.
 | `agent-sdk/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
-| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
+| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
 | `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
 | Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `_PERSISTENT_SERVERS` in `agent-samples/xr-render-demo/main.py` |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
