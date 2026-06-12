@@ -244,7 +244,7 @@ async function stopXR() {
   if (!xrStream) return;
   try {
     await xrStream.stopXR();
-  } catch { /* stop failures surface via the CloudXR onStateChange handler */ }
+  } catch (err) { console.warn('stopXR failed (will surface via CloudXR onStateChange):', err); }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
