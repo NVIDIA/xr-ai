@@ -123,7 +123,10 @@ Loaded in-process by `vlm-server` via HuggingFace transformers
 returning. The `vlm-mcp` is a thin FastMCP wrapper exposing a single
 `ask_image(question, image_path)` tool: it reads the PNG at that path,
 base64-encodes it, and POSTs it to `vlm-server` as an `image_url` message.
-Only invoked when the user asks a visual question.
+Visual queries from the user are handled by the brain-local
+`look_at_current_frame(question)` tool (see tool routing below), which turns
+the camera on automatically, grabs the live frame, and calls `vlm-server`
+directly — bypassing `vlm-mcp` entirely for the default perception path.
 
 There is a deliberate startup ordering constraint: the worker's
 `wait_for_services` probe blocks on the VLM's `/health` endpoint, which
@@ -202,13 +205,14 @@ On each `TranscriptionFrame`:
 4. **Nemotron-30B :8107** runs with `tools=[…]`, up to 10 iterations:
    - Model emits `tool_calls` → worker routes and executes → result appended
      to conversation → next iteration.
-   - Tool routing: oxr-mcp tools (`get_head_pose`, `position_ahead`,
-     `position_relative`, `place_user_relative`, `place_object_relative`,
-     `place_inside_by_id`, `displace_object`, `displace_objects`) →
-     `oxr-mcp`; vec-mcp tools (`between_anchors`, `world_offset`,
-     `along_direction`, `scale_value`) → `vec-mcp`; `ask_image` →
-     `vlm-mcp` (with path existence guard); video tools → `video-mcp`;
-     everything else → `render-mcp`.
+   - Tool routing: `look_at_current_frame` → **brain-local** (intercepts before
+     MCP routing: turns camera on, grabs live frame, calls `vlm-server` directly);
+     oxr-mcp tools (`get_head_pose`, `position_ahead`, `position_relative`,
+     `place_user_relative`, `place_object_relative`, `place_inside_by_id`,
+     `displace_object`, `displace_objects`) → `oxr-mcp`; vec-mcp tools
+     (`between_anchors`, `world_offset`, `along_direction`, `scale_value`) →
+     `vec-mcp`; `ask_image` → `vlm-mcp` (with path existence guard); video
+     tools → `video-mcp`; everything else → `render-mcp`.
    - Progress message sent on `agent.progress` topic before each tool
      executes (data channel).
    - If `think=true`: reasoning preamble injected into system prompt
@@ -234,7 +238,7 @@ On each `TranscriptionFrame`:
 | `oxr-mcp` | 8230 | `get_head_pose`, `position_ahead`, `position_relative`, `place_user_relative`, `place_object_relative`, `place_inside_by_id`, `displace_object`, `displace_objects`, `get_health` |
 | `vec-mcp` | 8250 | `between_anchors`, `world_offset`, `along_direction`, `scale_value` |
 | `vlm-mcp` | 8240 | `ask_image` |
-| `video-mcp` | 8210 | `list_live_participants`, `list_recorded_participants`, `get_video_stats`, `query_video`, `get_latest_frame`, `get_frame_at_time` |
+| `video-mcp` | 8210 | `list_live_participants`, `get_frame_from_time` (always); `list_recorded_participants`, `get_video_stats`, `query_video` (recording enabled only); `get_latest_frame` (deprecated) |
 
 `render-mcp` owns the LOVR child process and is the only thing that pushes
 ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `oxr-mcp` opens a

@@ -233,9 +233,13 @@ enabled (a chunk store on disk):
   overlapping the window into a file and return its path; the stream starts with
   an IDR frame.
 
-**Recording disabled** (no chunk store): a single live-only tool,
-`get_latest_frame(participant_id)`, returning the current live frame as a PNG
-(`path`, `width`, `height`, `timestamp_us`).
+**Recording disabled** (no chunk store): two live-only tools:
+
+- `get_frame_from_time(participant_id, second_ago=0, reference_time_us=0)` — only
+  `second_ago=0` is served; any non-zero past lookup returns an error. Use
+  `list_live_participants` to confirm camera availability first.
+- `get_latest_frame(participant_id)` — deprecated alias for the `second_ago=0`
+  case; prefer `get_frame_from_time`.
 
 ### video-mcp configuration
 
@@ -266,9 +270,11 @@ forwards it to the VLM's OpenAI-compatible chat-completions endpoint via the
   model's answer text. The file is read in an executor so the asyncio loop is
   never blocked.
 
-The typical two-step agent flow is to acquire a frame from `video-mcp`
+For custom agents the two-step flow is: acquire a frame from `video-mcp`
 (`get_frame_from_time(participant_id, second_ago=0)`) and pass that PNG path
-straight into `ask_image`.
+straight into `ask_image`. The xr-render-demo worker uses a single-step
+brain-local `look_at_current_frame(question)` tool instead, which turns the
+camera on automatically and bypasses the MCP round-trip.
 
 ### vlm-mcp configuration
 
