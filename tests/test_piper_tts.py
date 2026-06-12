@@ -24,7 +24,7 @@ import json
 import os
 import shutil
 import signal
-import socket
+import socket  # used by local _port_open below; _pick_port moved to _helpers_subprocess but _port_open stays here
 import subprocess
 import urllib.request
 from pathlib import Path

@@ -26,5 +26,6 @@ pytest.importorskip(
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
+@pytest.mark.skip(reason="oxr-mcp smoke test requires a GPU host with CloudXR — see tests/README.md")
 async def test_oxr_mcp_placeholder():
-    pytest.skip("oxr-mcp smoke test requires a GPU host with CloudXR — see tests/README.md")
+    pass
