@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <format>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -84,17 +85,18 @@ livekit::VideoBufferType MapPixelFormat(PixelFormat fmt) {
 std::size_t PackedFrameSize(int width, int height, PixelFormat format) {
     const auto pixels =
         static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    using enum PixelFormat;
     switch (format) {
-        case PixelFormat::kI420:
-        case PixelFormat::kNV12: {
+        case kI420:
+        case kNV12: {
             const auto chroma_w =
                 (static_cast<std::size_t>(width)  + 1) / 2;
             const auto chroma_h =
                 (static_cast<std::size_t>(height) + 1) / 2;
             return pixels + 2 * chroma_w * chroma_h;
         }
-        case PixelFormat::kRGBA:
-        case PixelFormat::kBGRA:
+        case kRGBA:
+        case kBGRA:
             return pixels * 4;
     }
     return 0;  // unreachable
@@ -182,7 +184,7 @@ void LiveKitBackend::Connect(const SessionConfig& session_config) {
 
     const std::string scheme = config_.secure ? "wss" : "ws";
     const std::string ws_url =
-        scheme + "://" + config_.host + ":" + std::to_string(config_.port);
+        std::format("{}://{}:{}", scheme, config_.host, config_.port);
 
     std::string token;
     if (config_.token.has_value() && !config_.token->empty()) {
@@ -341,12 +343,13 @@ void LiveKitBackend::InjectVideoFrame(std::vector<std::uint8_t>&& data,
     // their padded HAL or GPU readback buffer?" mistake.
     if (const auto expected = PackedFrameSize(width, height, format);
         data.size() != expected) {
-        throw std::invalid_argument(
-            "InjectVideoFrame: buffer size " + std::to_string(data.size()) +
-            " does not match the packed size " + std::to_string(expected) +
+        throw std::invalid_argument(std::format(
+            "InjectVideoFrame: buffer size {}"
+            " does not match the packed size {}"
             " expected for the given dimensions and format. FrameSink "
             "requires tightly packed input - repack padded buffers before "
-            "calling.");
+            "calling.",
+            data.size(), expected));
     }
 
 #if STREAMKIT_HAVE_LIVEKIT
@@ -418,10 +421,10 @@ void LiveKitBackend::InjectAudioFrame(std::span<const std::int16_t> pcm,
             static_cast<std::size_t>(channels) *
             static_cast<std::size_t>(samples_per_channel);
         pcm.size() != expected) {
-        throw std::invalid_argument(
-            "InjectAudioFrame: sample count " + std::to_string(pcm.size()) +
-            " does not match channels * samples_per_channel = " +
-            std::to_string(expected));
+        throw std::invalid_argument(std::format(
+            "InjectAudioFrame: sample count {}"
+            " does not match channels * samples_per_channel = {}",
+            pcm.size(), expected));
     }
 
 #if STREAMKIT_HAVE_LIVEKIT

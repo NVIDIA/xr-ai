@@ -6,14 +6,14 @@
 #include "streamkit/ConnectionState.h"
 
 int main() {
-    using streamkit::ConnectionState;
+    using enum streamkit::ConnectionState;
     using streamkit::test::Expect;
     using streamkit::test::ExpectEq;
 
-    ExpectEq(ConnectionState::kConnected, ConnectionState::kConnected);
-    Expect(ConnectionState::kDisconnected != ConnectionState::kConnected);
-    Expect(ConnectionState::kConnecting   != ConnectionState::kConnected);
-    Expect(ConnectionState::kReconnecting != ConnectionState::kConnected);
+    ExpectEq(kConnected, kConnected);
+    Expect(kDisconnected != kConnected);
+    Expect(kConnecting   != kConnected);
+    Expect(kReconnecting != kConnected);
 
     return 0;
 }

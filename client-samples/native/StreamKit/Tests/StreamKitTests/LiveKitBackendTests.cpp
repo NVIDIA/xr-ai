@@ -34,7 +34,7 @@ int main() {
 
     streamkit::StreamSession session{
         streamkit::BackendConfiguration{lk}};
-    auto* livekit_backend =
+    const auto* livekit_backend =
         dynamic_cast<streamkit::LiveKitBackend*>(session.GetBackend());
     Expect(livekit_backend != nullptr);
     Expect(!livekit_backend->GetRoom());
