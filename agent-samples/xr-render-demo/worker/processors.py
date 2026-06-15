@@ -779,6 +779,10 @@ class RenderSceneProcessor(BrainProcessor):
                 "Use your private <think> block to work through these steps. "
                 "NEVER output these steps as your response — your only text output "
                 "to the user is ONE SHORT sentence AFTER all tool calls are done.\n"
+                "Be terse in <think>: use notation not prose. "
+                "No full sentences, no restating the request. "
+                "Example: 'obj=sphere-1 pos=(1,1.7,-1.5) above→y=1.8' not "
+                "'We need to parse the request and find the sphere...'\n"
                 "\n"
                 "THINK STEP 1 — RESOLVE: Which object? "
                 "Pronouns ('it', 'that') = most recently added/modified object. "
@@ -814,15 +818,17 @@ class RenderSceneProcessor(BrainProcessor):
         for iteration in range(_MAX_LOOP):
             try:
                 # thinking off: 1024 covers any tool-call JSON.
-                # thinking on: budget=1024 gives room for step-by-step arithmetic;
-                # 2048 total leaves 1024 for the tool-call response.
+                # thinking on: 4096 budget lets the model enumerate all scene
+                # objects and work through multi-step coordinate arithmetic
+                # without hitting the limit. 6144 total = 4096 thinking + 2048
+                # for tool-call JSON / response text.
                 resp = await self._agent_llm.chat(
                     messages,
                     tools=self._tools,
-                    max_tokens=2048 if needs_thinking else 1024,
+                    max_tokens=6144 if needs_thinking else 1024,
                     temperature=0.0,
                     enable_thinking=needs_thinking,
-                    thinking_budget=1024 if needs_thinking else None,
+                    thinking_budget=4096 if needs_thinking else None,
                 )
             except Exception:
                 logger.exception("agent-llm call failed on iteration {}", iteration)
@@ -837,6 +843,9 @@ class RenderSceneProcessor(BrainProcessor):
             reasoning = (resp.reasoning or "").strip()
             if reasoning and thinking_ctx is not None:
                 thinking_ctx[0] = reasoning
+            if reasoning:
+                logger.debug("agent-llm thinking iter={}  {}", iteration, reasoning[:300])
+                _trace_log.debug("THINK [{}]  {}", iteration, reasoning[:300])
 
             logger.debug(
                 "agent-llm iter={}  finish={}  tool_calls={}  content={!r}",
@@ -845,8 +854,9 @@ class RenderSceneProcessor(BrainProcessor):
 
             if not tool_calls:
                 # Thinking filled the token budget without emitting a tool call.
-                # Turn off thinking and retry the same iteration so messages is
-                # unchanged and the model gets another chance.
+                # Turn off thinking and retry — `continue` in a for loop advances
+                # the iteration counter, but messages is unchanged so the model
+                # gets another chance with the same context.
                 if finish == "length" and needs_thinking:
                     logger.warning(
                         "agent-llm iter={} hit length limit during thinking — "
@@ -878,6 +888,14 @@ class RenderSceneProcessor(BrainProcessor):
                 content=content or "",
                 tool_calls=list(tool_calls),
             ))
+
+            # The spatial thinking prompt helps plan the first action but
+            # actively harms subsequent iterations: it steers the model to
+            # re-anchor on the pre-fetched context (SCENE OBJECTS, HEAD POSE)
+            # instead of reading the tool results, producing wrong answers like
+            # "You're looking at empty space" when look_at_current_frame
+            # returned a valid VLM description.
+            needs_thinking = False
 
             # Execute each tool call and append results.
             for tc in tool_calls:
