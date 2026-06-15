@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "semantic-slam"
+version = "0.1.0"
+requires-python = ">=3.10,<3.12"
+# TODO: populate dependencies when code is migrated from semantic-slam-server
+
+[tool.hatch.build.targets.wheel]
+packages = ["semantic_slam"]
