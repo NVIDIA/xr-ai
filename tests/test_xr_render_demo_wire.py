@@ -665,9 +665,9 @@ def test_perception_tool_def_in_prompt_and_classifier() -> None:
     (so they enter the reasoning loop where the tool lives)."""
     prompt = _SYSTEM_PROMPT.read_text(encoding="utf-8")
     assert "look_at_current_frame" in prompt
-    # The classifier prompt routes "real-world color/shape/object" to thinking.
+    # The classifier prompt routes real-world camera queries to think=true.
     ack = (_PROMPTS_DIR / "quick_ack.txt").read_text(encoding="utf-8").lower()
-    assert "visual lookup" in ack and "real-world color" in ack
+    assert "real world" in ack and "camera" in ack
 
 
 async def test_perception_query_reaches_vlm_frame_path() -> None:

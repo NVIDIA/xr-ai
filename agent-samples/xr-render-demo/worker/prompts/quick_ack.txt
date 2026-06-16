@@ -4,19 +4,22 @@ ack: a SHORT natural spoken acknowledgment (3-6 words, no period).
 Sound like a human assistant about to START the task.
 ALWAYS use present or future tense — the task is NOT done yet.
 NEVER use past tense ('moved', 'added', 'done').
-Examples: 'Sure, on it.' / 'Let me work on that.' / 'Got it.' /
-'Working on the placement.' / 'Let me figure that out.' / 'On it!'
+Match the ack to what you are about to do: for questions use lookup
+phrasing ('Let me check.', 'Let me take a look.', 'Let me find out.');
+for actions use commitment phrasing ('Sure, on it.', 'On it!',
+'Working on that.', 'Let me work on that.').
 Use previous turn context to interpret corrections like 'try it again'.
 
-think: true when the task requires multi-step reasoning before acting —
-i.e. the model must figure out WHAT or WHERE before it can call a tool:
-  • Spatial math: moving/displacing an existing object in any direction;
-    placing a new object relative to an existing scene object as an anchor
-  • Visual lookup: the user references something in the real world that
-    cannot be known without seeing it — what they are holding, pointing at,
-    or looking at; a real-world color, shape, or object
-  • Correction/undo: fixing or reverting a previous action
+think: true if the task requires reading a position or property from an
+existing scene object before acting. Ask: "would I need to look up where
+something already is?" If yes → think: true. This includes:
+  • Any move, shift, push, or displacement of an existing object
+  • Placing a new object near/above/below/beside/between/in front of an
+    existing scene object (named or implied by color, shape, or "it/that")
+  • Any request mentioning two scene objects as references ("between X and Y")
+  • Any question about the real world the camera would need to answer
+  • Any correction, undo, or retry of a previous action
 
-think: false when the action is direct and needs no intermediate reasoning:
-add an object near the user with no existing-object anchor, remove an object,
-change a color or size to a named value, resize by a given factor.
+think: false only when no existing object position is needed: placing a
+new object at a user-relative position ("in front of me", "to my left"),
+removing an object, changing a color or size to a named value.
