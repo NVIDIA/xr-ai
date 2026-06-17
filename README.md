@@ -3,7 +3,9 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-<!-- TODO: hero image -->
+<p align="center">
+  <img src="client-samples/ios-visionos/StreamKit/Sources/StreamKit/Resources/SimulatorFeed.gif" alt="XR-AI simulator feed showing live XR media streaming" width="840">
+</p>
 
 # XR AI
 
@@ -51,6 +53,7 @@ endpoint and no local GPU is required for the agent or hub.
 |---|---|
 | model-servers (all 4 models) | ~70 GB |
 | simple-vlm-example (standalone) | ~23 GB |
+| glasses-agent / glasses-agent-langchain / glasses-agent-nat | ~70 GB |
 | xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -275,6 +278,55 @@ NIM containers):
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
 for the full option list.
+
+---
+
+### Glasses agent (smart-glasses assistant)
+
+Always-on voice + vision assistant for smart glasses. It maintains a rolling
+scene memory, answers live and past-context questions, records demonstrations,
+and guides the user through recorded steps.
+
+The baseline Python implementation is:
+
+```bash
+cd agent-samples/glasses-agent
+uv sync
+uv run glasses_agent
+```
+
+The LangChain variant keeps the same process stack and feature surface, but
+uses LangChain for the ordinary LLM/tool-calling loop. MCP tools are loaded
+with `langchain-mcp-adapters` so request-time tools are native LangChain tools
+rather than a sample-local schema wrapper; LangGraph checkpointing carries
+bounded conversation state while middleware injects current XR context per turn
+and validates image-tool paths before VLM calls. Quick acknowledgements, demo
+analysis, guidance Q&A, and scene condensation use structured LangChain model
+calls. Recorded demonstrations are
+also numbered as tasks, so users can ask for guidance by name or by saying
+`task 1`, `task 2`, and so on:
+
+```bash
+cd agent-samples/glasses-agent-langchain
+uv sync
+uv run glasses_agent_langchain
+```
+
+The NAT variant keeps the same glasses behavior while moving bounded LLM/tool
+work into NeMo Agent Toolkit functions. VLM/video/transcript MCP tools are
+declared as NAT `mcp_client` function groups in YAML; request-time answering
+uses NAT `tool_calling_agent`, and recording analysis, observation
+condensation, guidance checks, and current-view description are registered NAT
+function-group tools:
+
+```bash
+cd agent-samples/glasses-agent-nat
+uv sync
+uv run glasses_agent_nat
+```
+
+All variants start hub, STT, TTS, VLM, two LLM servers, VLM/video/transcript
+MCP servers, and the worker.
 
 ---
 

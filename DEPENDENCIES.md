@@ -427,6 +427,97 @@ vlm-server (8100, `persistent=True`), llama-nemotron-llm-server (8106, `persiste
 The three vLLM servers survive launcher restarts; use `--stop` to shut them down.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
+### glasses-agent  (agent-samples/glasses-agent/)
+
+Always-on AI assistant for smart glasses: background VLM observation loop,
+Silero VAD → STT → agentic tool-calling loop, TTS reply.  Supports
+demonstration recording and step-by-step guided playback.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `glasses-agent-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, fastmcp >=0.4, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts: hub, stt (8103), piper-tts (8105), nemotron3-nano-llm (8107),
+vlm-server (8100), llama-nemotron-llm (8106), vlm-mcp (8220),
+video-mcp (8210, recording disabled), transcript-mcp (8200), worker.
+Recording is disabled on the reference hardware (dual 48 GB Ada) due to
+NVENC OOM; only `get_latest_frame` (live IPC path) is exposed by video-mcp.
+
+### glasses-agent-langchain  (agent-samples/glasses-agent-langchain/)
+
+LangChain variant of `glasses-agent`.  The process stack, IPC, VAD, STT/TTS,
+background VLM observation, memory, demonstration recording, and guidance
+logic are copied from `glasses-agent`; the ordinary request-time LLM/tool loop
+uses LangChain `create_agent` + `ChatOpenAI`, with MCP tools loaded through
+`langchain-mcp-adapters` for LangChain-native tool objects. LangGraph
+checkpointing keeps bounded per-participant conversation state, while runtime
+middleware injects XR memory snapshots without saving them as chat messages and
+guards image-tool calls against stale paths. Quick acknowledgements, demo
+analysis, guidance Q&A, and scene condensation use structured LangChain model
+calls. Demonstration guidance can resolve recordings by stable task number
+(`task 1`, `task 2`, …) or by matching task name; ambiguous requests prompt the
+user to choose from numbered tasks.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent-langchain` | `xr-ai-launcher`, `xr-ai-logging` | — |
+| Worker | `glasses-agent-langchain-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, fastmcp >=0.4, langchain >=1.0, langchain-core >=1.0, langchain-openai >=1.0, langchain-mcp-adapters >=0.2.2, langgraph >=1.2.0, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts the same services as `glasses-agent`: hub, stt (8103), piper-tts
+(8105), nemotron3-nano-llm (8107), vlm-server (8100),
+llama-nemotron-llm (8106), vlm-mcp (8240), video-mcp (8210,
+recording disabled), transcript-mcp (8200), worker.
+
+### glasses-agent-nat  (agent-samples/glasses-agent-nat/)
+
+NeMo Agent Toolkit variant of `glasses-agent`.  The process stack, IPC, VAD,
+STT/TTS, background VLM observation, memory, demonstration recording, and
+guidance lifecycle remain aligned with `glasses-agent`; bounded LLM/tool work
+runs through NAT functions.  The YAML workflow declares VLM/video/transcript
+MCP endpoints as NAT `mcp_client` function groups, exposes a custom
+`glasses_agent_tools` group to the request-time `tool_calling_agent`, and uses
+an internal `glasses_worker_tasks` group for recording analysis, observation
+condensation, and guidance completion checks.  The tool-calling agent uses the
+NAT LangChain plugin internally.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent-nat` | `xr-ai-launcher`, `xr-ai-logging` | - |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts the same services as `glasses-agent`: hub, stt (8103), piper-tts
+(8105), nemotron3-nano-llm (8107), vlm-server (8100),
+llama-nemotron-llm (8106), vlm-mcp (8240), video-mcp (8210,
+recording disabled), transcript-mcp (8200), worker.  The NAT workflow config
+also supports `nat validate`, `nat serve`, `nat mcp serve`, and MCP client
+inspection for the configured function groups.
+
+### glasses-agent-vsop  (agent-samples/glasses-agent-vsop/)
+
+Fixed-task VSOP variant of `glasses-agent-nat` for desk arrangement.  It keeps
+the NAT process stack and student guidance monitor, but validates bundled
+teacher data (`data/steps.txt`, `data/desk_arrangement.yaml`, `frame_*.jpeg`)
+as the single task instead of recording a teacher demo at runtime.  Student
+utterances mentioning "desk arrangement" start the monitor; `stop demo` cancels
+the monitor and returns to normal visual Q&A.  These fixed-task commands bypass
+the voice-path LLM intent classifier, and the background condenser skips work
+while guidance is active so it does not compete with monitor checks.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `glasses-agent-nat` | `xr-ai-launcher`, `xr-ai-logging` | - |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` | numpy >=1.24, Pillow >=10.0, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, silero-vad >=5.1, onnxruntime >=1.17 |
+
+Starts the same services as `glasses-agent-nat`: hub, stt (8103), piper-tts
+(8105), nemotron3-nano-llm (8107), vlm-server (8100),
+llama-nemotron-llm (8106), vlm-mcp (8240), video-mcp (8210, recording
+disabled), transcript-mcp (8200), worker.  The runtime NAT worker task group
+exposes only `check_guidance_step_complete` and `condense_observations`; live
+recording analysis and requirement derivation are not part of the monitor path.
+Package names intentionally remain the copied NAT names until the sample is
+cleaned up as a separate package.
+
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM

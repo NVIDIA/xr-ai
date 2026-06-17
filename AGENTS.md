@@ -110,6 +110,8 @@ mechanically:
 
 Boilerplate templates (orchestrator, worker, `pyproject.toml`): `docs/adding-a-sample.md`.
 Reference implementation: `agent-samples/simple-vlm-example/`.
+Wrapper experiments should live as separate samples, not in-place rewrites
+of the baseline sample they compare against.
 
 ## Documentation rule
 

@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# glasses-agent-nat worker configuration.
+
+stt_server: http://localhost:8103
+tts_server: http://localhost:8105
+llm_server: http://localhost:8106
+agent_llm_server: http://localhost:8107
+vlm_mcp: http://localhost:8240
+video_mcp: http://localhost:8210
+transcript_mcp: http://localhost:8200
+
+nat_workflow_config: glasses_agent_nat_workflow.yaml
+
+vlm_interval_s: 1.0
+vlm_obs_max: 240
+condenser_interval_s: 60.0
+transcript_source: glasses-agent-nat
+guidance_check_interval_s: 2.0
+
+# Seconds after a demo finishes during which ambiguous follow-ups
+# (including STT-mangled ones like "the gym") default to guiding the
+# wearer through that just-recorded demo.
+guidance_freshness_window_s: 120.0
+
+# xr-ai-vad — Silero VAD via int16 PCM. Match glasses-agent's responsive
+# speech gate so short commands finalize promptly.
+silence_duration: 0.8
+min_speech: 0.15
+silero_threshold: 0.3

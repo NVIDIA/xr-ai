@@ -163,6 +163,31 @@ async def test_ask_image_relays_response_and_request_shape(png_path: Path):
         assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
+async def test_ask_frames_relays_multiple_images_in_order(png_path: Path, tmp_path: Path):
+    """ask_frames preserves image order and strips reasoning blocks."""
+    second = tmp_path / "student.png"
+    second.write_bytes(_tiny_png_bytes(size=6))
+    stub = StubOpenAI()
+    stub.set_chat_message(content="<think>compare</think>\nstudent matches")
+    async with _stub_vlm(stub, enable_thinking=False) as vlm:
+        mcp = build_mcp(vlm)
+
+        result = await mcp.call_tool(
+            "ask_frames",
+            {
+                "question": "compare teacher and student",
+                "image_paths": [str(png_path), str(second)],
+            },
+        )
+
+    assert result.structured_content["result"] == "student matches"
+    parts = stub.last_json()["messages"][0]["content"]
+    assert [p["type"] for p in parts] == ["image_url", "image_url", "text"]
+    assert parts[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert parts[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert parts[2]["text"] == "compare teacher and student"
+
+
 async def test_ask_image_enable_thinking_sets_template_kwarg_true(png_path: Path):
     """When enable_thinking=True, chat_template_kwargs.enable_thinking is True on the wire."""
     stub = StubOpenAI()
@@ -205,6 +230,21 @@ async def test_ask_image_missing_path_returns_error_string(png_path: Path):
         missing = await mcp.call_tool(
             "ask_image",
             {"question": "q", "image_path": "/nonexistent/path/should/not/exist.png"},
+        )
+        assert "file not found" in missing.structured_content["result"]
+
+
+async def test_ask_frames_missing_path_returns_error_string(png_path: Path):
+    stub = StubOpenAI()
+    async with _stub_vlm(stub) as vlm:
+        mcp = build_mcp(vlm)
+
+        empty = await mcp.call_tool("ask_frames", {"question": "q", "image_paths": []})
+        assert empty.structured_content["result"].startswith("ask_frames: image_paths is empty")
+
+        missing = await mcp.call_tool(
+            "ask_frames",
+            {"question": "q", "image_paths": [str(png_path), "/no/such/file.png"]},
         )
         assert "file not found" in missing.structured_content["result"]
 

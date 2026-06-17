@@ -1,0 +1,137 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# NeMo Agent Toolkit workflow for the glasses-agent-nat request-time agent.
+# Tool exposure lives here so the LLM can only call tools NAT can route.
+
+function_groups:
+  vlm_mcp:
+    _type: mcp_client
+    server:
+      transport: streamable-http
+      url: http://localhost:8240/mcp
+    include:
+      - ask_image
+      - ask_frames
+    tool_call_timeout: 60
+    tool_overrides:
+      ask_image:
+        description: >-
+          Inspect one image file captured by the glasses camera. Use only an
+          image_path returned by the video tools in the current turn.
+
+  video_mcp:
+    _type: mcp_client
+    server:
+      transport: streamable-http
+      url: http://localhost:8210/mcp
+    include:
+      - list_live_participants
+      - get_latest_frame
+    tool_call_timeout: 30
+    tool_overrides:
+      get_latest_frame:
+        description: >-
+          Return the latest live camera frame for a participant as a PNG path
+          and timestamp. Call this before ask_image when no valid image_path is
+          already provided in context.
+
+  transcript_mcp:
+    _type: mcp_client
+    server:
+      transport: streamable-http
+      url: http://localhost:8200/mcp
+    include:
+      - add_transcript
+      - query_transcripts
+    tool_call_timeout: 30
+
+  glasses_agent_tools:
+    _type: glasses_agent_tools
+    include:
+      - describe_current_view
+
+  glasses_worker_tasks:
+    _type: glasses_worker_tasks
+    include:
+      - analyze_recording
+      - check_guidance_step_complete
+      - derive_step_requirements
+      - condense_observations
+    agent_llm_server: http://localhost:8107
+    llm_server: http://localhost:8106
+
+llms:
+  agent_llm:
+    _type: openai
+    model_name: llm
+    base_url: http://localhost:8107/v1
+    api_key: EMPTY
+    temperature: 0.0
+    max_tokens: 1024
+    request_timeout: 180
+    max_retries: 0
+  worker_llm:
+    _type: openai
+    model_name: llm
+    base_url: http://localhost:8106/v1
+    api_key: EMPTY
+    temperature: 0.0
+    max_tokens: 256
+    request_timeout: 30
+    max_retries: 0
+
+workflow:
+  _type: tool_calling_agent
+  tool_names:
+    - glasses_agent_tools
+  llm_name: agent_llm
+  verbose: false
+  handle_tool_errors: true
+  max_iterations: 8
+  max_history: 8
+  truncation_retry:
+    max_retries: 2
+    token_increment: 1024
+  max_empty_response_retries: 1
+  return_direct:
+    - glasses_agent_tools__describe_current_view
+  system_prompt: |
+    You are an AI assistant integrated into smart glasses. You observe the world
+    through the wearer's camera and help them understand their environment,
+    remember past events, and learn from demonstrations.
+
+    Context is provided in each request. It may include a scene summary, recent
+    observations, available demonstrations, latest camera frame path, participant
+    ID, reference time, and recent conversation.
+
+    Be concise: respond in 1-2 short sentences. Speak in second person. Do not
+    volunteer lighting, atmosphere, aesthetics, or background design unless the
+    wearer explicitly asks about them.
+
+    For current-view questions such as "what do you see?", "describe this",
+    "what is in front of me", call
+    glasses_agent_tools__describe_current_view with the Participant value from
+    context and the user's visual question. Do not call lower-level video or
+    image tools directly.
+
+    Never invent observations. Never construct or guess image file paths. The
+    only valid image path is one returned by the video tools in the current turn
+    or explicitly provided in the current context. If no valid frame path is in
+    context, call the latest-frame tool first.
+
+    Demonstration guidance is handled by the worker — never list demo steps
+    yourself.
+
+    Decision priority (apply in order):
+    1. If the context contains the marker [Fresh demo: <name>] AND the wearer's
+       utterance is NOT clearly a current-view question, output exactly the
+       literal string __defer_to_worker__ and call no tools. The worker will
+       start guidance on the matching demo. This applies even when the
+       utterance is short, ambiguous, or appears to be a misheard transcription,
+       because right after a demo the wearer is almost always asking to be
+       guided through what they just demonstrated.
+    2. Otherwise, if the utterance asks about the current view, call
+       glasses_agent_tools__describe_current_view with the Participant value
+       from context.
+    3. Otherwise, reply directly in 1-2 short sentences.

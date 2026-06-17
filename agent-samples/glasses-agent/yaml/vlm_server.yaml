@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# VLM server configuration for glasses-agent.
+# Cosmos-Reason1-7B is a Qwen2.5-VL-based model with strong spatial reasoning.
+# gpu_memory_utilization is shared with the LLM on the same GPU — keep the
+# combined allocation below 0.95 to avoid OOM.
+
+model: nvidia/Cosmos-Reason1-7B
+port: 8100
+host: "0.0.0.0"
+hf_token: ""
+cuda_visible_devices: "0"
+# 0.43 × 47 GiB = 20.2 GiB: ~15 GiB weights + ~5 GiB KV cache.
+# LLM gets 0.45 on the same GPU. STT ~5 GiB. Total ≈ 46.4 GiB — fits in 47 GiB.
+gpu_memory_utilization: 0.43
+enforce_eager: true
+model_cache: ../../../models
+max_videos_per_prompt: 0
+max_images_per_prompt: 4

@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# transcript-mcp server configuration for glasses-agent.
+# Stores observations, scene summaries, and demonstrations as JSONL files.
+# This directory persists across restarts so memory survives agent shutdown.
+
+transcripts_dir: /tmp/xr_transcripts
+host: 0.0.0.0
+port: 8200
