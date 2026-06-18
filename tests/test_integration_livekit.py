@@ -37,7 +37,7 @@ from xr_media_hub.transport.livekit.config       import LiveKitConnectorConfig
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
-_LIVEKIT_IMAGE   = "livekit/livekit-server:latest"
+_LIVEKIT_IMAGE   = _docker_mod._LIVEKIT_IMAGE
 _PORT_OPEN_WAIT  = 30.0   # matches _docker._READY_TIMEOUT
 _PORT_CLOSE_WAIT = 10.0
 
