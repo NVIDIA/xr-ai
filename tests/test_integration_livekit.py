@@ -37,7 +37,6 @@ from xr_media_hub.transport.livekit.config       import LiveKitConnectorConfig
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
-_LIVEKIT_IMAGE   = "livekit/livekit-server:latest"
 _PORT_OPEN_WAIT  = 30.0   # matches _docker._READY_TIMEOUT
 _PORT_CLOSE_WAIT = 10.0
 
@@ -127,7 +126,7 @@ if not _docker_daemon_alive():
 # Pre-pull the LiveKit image once so the 30s ready-timeout in _docker.py
 # is not eaten by an image pull on first invocation.
 subprocess.run(
-    ["docker", "pull", _LIVEKIT_IMAGE],
+    ["docker", "pull", _docker_mod._LIVEKIT_IMAGE],
     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
 )
 
