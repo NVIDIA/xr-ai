@@ -15,11 +15,11 @@ dependencies = [
     "xr-ai-models",
     "xr-ai-vad",
     "xr-ai-voicegate",
-    "pipecat-ai>=0.0.46",
+    "pipecat-ai>=1.0",
     "numpy>=1.24",
     "scipy>=1.11",
     "httpx>=0.27",
-    "fastmcp>=0.4",
+    "fastmcp>=2.0",
 ]
 
 [tool.uv.sources]

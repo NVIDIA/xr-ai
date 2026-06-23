@@ -18,8 +18,8 @@ dependencies = [
     "numpy>=1.24",
     "Pillow>=10.0",
     "pyyaml>=6.0",
-    "fastmcp>=0.4",
-    "pipecat-ai>=0.0.46",
+    "fastmcp>=2.0",
+    "pipecat-ai>=1.0",
 ]
 
 [tool.uv.sources]
