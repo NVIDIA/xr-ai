@@ -24,6 +24,8 @@ from loguru import logger
 from xr_media_hub.transport.livekit.config import LiveKitConnectorConfig
 
 DEFAULT_CONFIG_NAME = "xr_media_hub.yaml"
+LIVEKIT_API_KEY_ENV = "LIVEKIT_API_KEY"
+LIVEKIT_API_SECRET_ENV = "LIVEKIT_API_SECRET"
 
 # Clears web_client_dir when set; /token, /cert, /rtc stay up.
 NO_WEB_CLIENT_ENV = "XR_MEDIA_HUB_NO_WEB_CLIENT"
@@ -38,13 +40,39 @@ def _resolve_path(value: str, base: Path) -> str:
     return str((base / p).resolve()) if not p.is_absolute() else value
 
 
+def _apply_env_credentials(data: dict) -> None:
+    if os.environ.get(LIVEKIT_API_KEY_ENV):
+        data["api_key"] = os.environ[LIVEKIT_API_KEY_ENV]
+    if os.environ.get(LIVEKIT_API_SECRET_ENV):
+        data["api_secret"] = os.environ[LIVEKIT_API_SECRET_ENV]
+
+
+def _require_credentials(data: dict) -> None:
+    missing = [
+        key
+        for key, env_key in (
+            ("api_key", LIVEKIT_API_KEY_ENV),
+            ("api_secret", LIVEKIT_API_SECRET_ENV),
+        )
+        if not str(data.get(key, "")).strip()
+    ]
+    if missing:
+        raise ValueError(
+            "LiveKit credentials are required; set "
+            "api_key/api_secret in xr_media_hub.yaml or "
+            f"{LIVEKIT_API_KEY_ENV}/{LIVEKIT_API_SECRET_ENV} in the environment"
+        )
+
+
 def load_config() -> LiveKitConnectorConfig:
     """
     Parse --config from argv, load the YAML file if it exists, and return
     a fully populated LiveKitConnectorConfig.
 
     If no --config flag is given and no xr_media_hub.yaml exists in CWD,
-    returns default config (web server disabled, no client dir).
+    returns default non-secret config values with LiveKit credentials from
+    the environment. Missing credentials fail fast instead of using dev
+    sentinels.
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", default=None)
@@ -56,13 +84,18 @@ def load_config() -> LiveKitConnectorConfig:
         if args.config:
             raise FileNotFoundError(f"Config file not found: {config_path}")
         logger.debug("No {} found — using defaults", DEFAULT_CONFIG_NAME)
-        return LiveKitConnectorConfig(enable_web_server=False, web_client_dir="")
+        data: dict = {"enable_web_server": False, "web_client_dir": ""}
+        _apply_env_credentials(data)
+        _require_credentials(data)
+        return LiveKitConnectorConfig(**data)
 
     logger.info("Loading config from {}", config_path)
     base = config_path.parent
 
     with config_path.open() as f:
         data: dict = yaml.safe_load(f) or {}
+    _apply_env_credentials(data)
+    _require_credentials(data)
 
     if _web_client_disabled():
         data["web_client_dir"] = ""
