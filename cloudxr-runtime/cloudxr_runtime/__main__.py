@@ -61,6 +61,12 @@ async def _wait_with_progress(
     return False
 
 
+def _start_runtime_process() -> multiprocessing.Process:
+    runtime_proc = multiprocessing.get_context("spawn").Process(target=runtime_run)
+    runtime_proc.start()
+    return runtime_proc
+
+
 def _load_config(path: Path) -> dict:
     with open(path) as f:
         return yaml.safe_load(f) or {}
@@ -150,8 +156,7 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
         os.environ[key] = str(val)
 
     # XR-side GPU pinning. Set on os.environ before EnvConfig.from_args so the
-    # multiprocessing.Process that hosts the native CloudXR service inherits
-    # the three selectors via fork.
+    # process that hosts the native CloudXR service inherits the three selectors.
     pinning: dict[str, str] | None = None
     gpu_idx = cfg.get("gpu_index")
     if gpu_idx is None:
@@ -188,8 +193,7 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _on_signal)
 
-    runtime_proc = multiprocessing.Process(target=runtime_run)
-    runtime_proc.start()
+    runtime_proc = _start_runtime_process()
 
     cxr_ver = runtime_version()
     logger.info("Isaac Teleop {}  CloudXR {}", isaacteleop_version, cxr_ver)
