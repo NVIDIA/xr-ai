@@ -49,11 +49,11 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     └── xr-ai-models    [editable: ../xr-ai-models]
     └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
     └── xr-ai-voicegate [editable: ../../utils/xr-ai-voicegate]
-    └── pipecat-ai >=0.0.46
+    └── pipecat-ai >=1.0
     └── numpy >=1.24
     └── scipy >=1.11
     └── httpx >=0.27
-    └── fastmcp >=0.4
+    └── fastmcp >=2.0
     Unified Pipecat voice pipeline. Owns the transport bridge to
     ProcessorEndpoint (ZMQ IPC) plus the four library FrameProcessors —
     VadSttProcessor, VoiceGateProcessor, BrainProcessor, StreamingTtsProcessor —
@@ -124,8 +124,8 @@ xr-ai-vad  (utils/xr-ai-vad/)
 xr-media-hub  (server-runtime/)
     └── xr-ai-agent  [editable: ../agent-sdk]
     └── pyzmq >=27.0
-    └── livekit >=0.17
-    └── livekit-api >=0.7
+    └── livekit >=1.0
+    └── livekit-api >=1.0
     └── fastapi >=0.111
     └── uvicorn[standard] >=0.29
     └── httpx >=0.27
@@ -137,14 +137,14 @@ xr-media-hub  (server-runtime/)
 
 transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     └── uvicorn[standard] >=0.29
-    └── fastmcp >=0.4
+    └── fastmcp >=2.0
     └── pyyaml >=6.0
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
     Storage: JSONL files per participant in configurable transcripts_dir.
 
 vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
     └── uvicorn[standard] >=0.29
-    └── fastmcp >=0.4
+    └── fastmcp >=2.0
     └── pyyaml >=6.0
     └── Pillow >=10.0
     └── httpx >=0.27   (imported directly to catch httpx.HTTPError from xr-ai-models)
@@ -157,7 +157,7 @@ vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
 
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
-    └── fastmcp >=0.4
+    └── fastmcp >=2.0
     └── pyyaml >=6.0
     └── xr-ai-agent  [editable: ../../agent-sdk]
     └── PyNvVideoCodec >=1.0
@@ -180,7 +180,7 @@ render-mcp-server  (agent-mcp-servers/render-mcp/)
     └── msgpack >=1.0      (wire format for LOVR ops)
     └── pyyaml >=6.0
     └── uvicorn[standard] >=0.29
-    └── fastmcp >=0.4
+    └── fastmcp >=2.0
     Pure FastMCP at /mcp → LOVR (msgpack/ZMQ); no REST routes.
     Spawns LOVR (the OpenXR rendering app) on the first start_xr call.
     cloudxr-runtime must start before render-mcp (serial launch order);
@@ -191,14 +191,14 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     └── isaacteleop                                (headless OpenXR + HeadTracker)
     └── pyyaml >=6.0
     └── uvicorn[standard] >=0.29
-    └── fastmcp >=0.4
+    └── fastmcp >=2.0
     Pure FastMCP at /mcp. Reads pose from CloudXR via a second (headless)
     OpenXR session; runs alongside LOVR's rendering session.
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
 vec-mcp-server  (agent-mcp-servers/vec-mcp/)
     └── uvicorn[standard] >=0.29
-    └── fastmcp >=0.4
+    └── fastmcp >=2.0
     └── pyyaml >=6.0
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     Pure FastMCP at /mcp. Deterministic spatial-math primitives
@@ -223,7 +223,7 @@ xr-ai-tests  (tests/)
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
-    └── fastmcp >=0.4   (only used by tests marked `gpu`)
+    └── fastmcp >=2.0   (only used by tests marked `gpu`)
     └── Pillow >=10.0   (only used by tests marked `gpu`)
     └── pyyaml >=6.0    (only used by tests marked `gpu`)
     The unmarked suite is multi-client / multi-agent integration tests over
@@ -437,7 +437,7 @@ forwarding.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | numpy >=1.24, Pillow >=10.0, fastmcp >=0.4, pyyaml >=6.0, pipecat-ai >=0.0.46 (silero-vad pulled in via xr-ai-pipecat → xr-ai-vad). Pillow + numpy drive `pixels.py` (live-frame → PIL → JPEG data URL) for the `look_at_current_frame` perception tool. |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | numpy >=1.24, Pillow >=10.0, fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.0 (silero-vad pulled in via xr-ai-pipecat → xr-ai-vad). Pillow + numpy drive `pixels.py` (live-frame → PIL → JPEG data URL) for the `look_at_current_frame` perception tool. |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
