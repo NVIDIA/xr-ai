@@ -90,6 +90,8 @@ def _build_cfg() -> LiveKitConnectorConfig:
     lk_tcp = pick_free_port(7881)
     lk_udp = pick_free_port(7882)
     return LiveKitConnectorConfig(
+        api_key="devkey",
+        api_secret="devsecret-xr-livekit-prototype-2026",
         lk_port_ws=lk_ws,
         lk_port_tcp=lk_tcp,
         lk_port_udp=lk_udp,

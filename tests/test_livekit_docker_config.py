@@ -20,7 +20,8 @@ def _render_config(cfg: LiveKitConnectorConfig) -> dict:
 
 
 def test_livekit_nat_options_are_disabled_by_default() -> None:
-    rtc = _render_config(LiveKitConnectorConfig())["rtc"]
+    cfg = LiveKitConnectorConfig(api_key="test-key", api_secret="test-secret")
+    rtc = _render_config(cfg)["rtc"]
 
     assert rtc["use_external_ip"] is False
     assert rtc["skip_external_ip_validation"] is False
@@ -28,6 +29,8 @@ def test_livekit_nat_options_are_disabled_by_default() -> None:
 
 def test_livekit_nat_options_can_be_enabled() -> None:
     cfg = LiveKitConnectorConfig(
+        api_key="test-key",
+        api_secret="test-secret",
         lk_use_external_ip=True,
         lk_skip_external_ip_validation=True,
     )
@@ -40,6 +43,7 @@ def test_livekit_nat_options_can_be_enabled() -> None:
 def test_livekit_config_file_is_owner_only(tmp_path: Path) -> None:
     cfg_path = tmp_path / "livekit.yaml"
 
-    _write_livekit_config(cfg_path, LiveKitConnectorConfig())
+    cfg = LiveKitConnectorConfig(api_key="test-key", api_secret="test-secret")
+    _write_livekit_config(cfg_path, cfg)
 
     assert stat.S_IMODE(cfg_path.stat().st_mode) == 0o600

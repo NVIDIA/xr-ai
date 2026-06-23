@@ -8,6 +8,13 @@
 The launcher manages HuggingFace and NGC API tokens so they are never stored
 in source files or YAML configurations.
 
+XR-Media-Hub also requires a LiveKit API key and secret. Set `api_key` and
+`api_secret` in `xr_media_hub.yaml`, or supply `LIVEKIT_API_KEY` and
+`LIVEKIT_API_SECRET` in the environment. Environment values override the YAML
+fields, which lets deployed stacks inject credentials without rewriting the
+configuration file. Both values are required; the hub fails at startup when
+either is missing instead of silently using development credentials.
+
 Tokens are cached in `~/.config/xr-ai/credentials.json` — outside any
 project directory. Values already in `os.environ`
 always take

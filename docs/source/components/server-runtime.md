@@ -18,11 +18,13 @@ uv run xr_media_hub --config path.yaml    # explicit config
 python -m xr_media_hub                    # equivalent module form
 ```
 
-Configuration comes from a `xr_media_hub.yaml` file (defaults are used when
-none is found). `services/xr-media-hub/xr_media_hub.yaml` is the reference copy
-documenting every field; each sample ships its own copy under its `yaml/`
-directory. Relative paths inside the YAML (such as `web_client_dir`) resolve
-against the YAML file's own directory, not the working directory.
+Configuration comes from a `xr_media_hub.yaml` file. When none is found,
+non-secret defaults are used, but LiveKit credentials must still come from
+`LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. `services/xr-media-hub/xr_media_hub.yaml`
+is the reference copy documenting every field; each sample ships its own copy
+under its `yaml/` directory. Relative paths inside the YAML (such as
+`web_client_dir`) resolve against the YAML file's own directory, not the
+working directory.
 
 For where the hub sits in the wider system, refer to
 {doc}`Architecture </overview/architecture>`.
