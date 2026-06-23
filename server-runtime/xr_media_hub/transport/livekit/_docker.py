@@ -60,7 +60,6 @@ _OUTPUT_CAPTURE_BYTES = 4096  # how much subprocess output to retain for diagnos
 _BANNER = "━" * 56
 
 _CONTAINER_NAME = "xr-ai-livekit-server"
-_LIVEKIT_IMAGE = "livekit/livekit-server:v1.8.2"
 
 
 class LiveKitDocker:
@@ -96,7 +95,7 @@ class LiveKitDocker:
                 "--name", _CONTAINER_NAME,
                 "--network", "host",
                 "-v", f"{cfg_path}:/etc/livekit.yaml:ro",
-                _LIVEKIT_IMAGE,
+                "livekit/livekit-server:latest",
                 "--config", "/etc/livekit.yaml",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
