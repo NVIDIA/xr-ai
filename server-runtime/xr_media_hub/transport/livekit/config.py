@@ -11,8 +11,8 @@ from typing import Any
 @dataclass
 class LiveKitConnectorConfig:
     # ── LiveKit server credentials ────────────────────────────────────────────
-    api_key:    str = "devkey"
-    api_secret: str = "devsecret-xr-livekit-prototype-2026"
+    api_key:    str
+    api_secret: str
     room_name:  str = "xr-room"
 
     # ── LiveKit server ports (used by docker and room client) ─────────────────
