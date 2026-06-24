@@ -15,7 +15,7 @@ dependencies = [
     "xr-ai-logging",
     "pyyaml>=6.0",
     "uvicorn[standard]>=0.29",
-    "fastmcp>=0.4",
+    "fastmcp>=2.0",
     # render-mcp → LOVR uses ZMQ PUSH/PULL with msgpack-encoded {op, ...} frames.
     "pyzmq>=27.0",
     "msgpack>=1.0",

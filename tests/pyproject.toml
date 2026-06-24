@@ -32,7 +32,7 @@ dependencies = [
     "pytest-asyncio>=0.23",
     "numpy>=1.24",
     # GPU/MCP test deps — only exercised by tests marked `gpu`.
-    "fastmcp>=0.4",
+    "fastmcp>=2.0",
     "Pillow>=10.0",
     "pyyaml>=6.0",
 ]
