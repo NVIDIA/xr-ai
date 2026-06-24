@@ -55,14 +55,30 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     └── httpx >=0.27
     └── fastmcp >=2.0
     Unified Pipecat voice pipeline. Owns the transport bridge to
-    ProcessorEndpoint (ZMQ IPC) plus the four library FrameProcessors —
+    ProcessorEndpoint (ZMQ IPC) plus the library FrameProcessors —
     VadSttProcessor, VoiceGateProcessor, BrainProcessor, StreamingTtsProcessor —
     composed by ``make_voice_pipeline``. Resamples hub float32 audio →
     16 kHz int16 for STT, converts TTS int16 PCM back to float32 AudioChunks
     for return. SttClient / TtsClient are thin wrappers around xr-ai-models'
-    OpenAICompatSTT / OpenAICompatTTS — PCM→WAV conversion is handled by
-    the SDK. httpx is retained for http_probe() readiness checks.
+    OpenAICompatSTT / OpenAICompatTTS; httpx is retained for http_probe()
+    readiness checks.
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
+
+xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
+    └── xr-ai-agent   [editable: ..]
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models  [editable: ../xr-ai-models]
+    └── numpy >=1.24
+    └── Pillow >=10.0
+    Framework-agnostic, reusable agent capabilities (see AGENTS.md → "Agent
+    sample architecture"). A capability talks to the hub through a
+    ``ProcessorEndpoint`` and depends only on the core SDK — NOT on pipecat or
+    any pipeline framework — so both pipecat and non-pipecat agents can compose
+    it. Hosts ``pixels`` (frame → PIL → JPEG; numpy + Pillow) and ``vision``
+    (VisionModule — live-camera VLM Q&A with camera-on-demand, exposing ``ask``
+    for streaming TTS and ``perceive`` for agentic tool loops), so vision
+    samples no longer copy that code per-worker. A pipecat brain wires it up by
+    passing ``transport.endpoint``.
 
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24
@@ -207,6 +223,7 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
+    └── xr-ai-capabilities      [editable: ../agent-sdk/xr-ai-capabilities]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
@@ -395,7 +412,7 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-capabilities [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (VisionModule + pixels now come from xr-ai-capabilities, which pulls numpy + Pillow; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
 
 Worker runs on the unified pipecat voice pipeline assembled by
 `xr_ai_pipecat.make_voice_pipeline`. `SimpleVlmBrain` (a
@@ -437,7 +454,7 @@ forwarding.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | numpy >=1.24, Pillow >=10.0, fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.3 (silero-vad pulled in via xr-ai-pipecat → xr-ai-vad). Pillow + numpy drive `pixels.py` (live-frame → PIL → JPEG data URL) for the `look_at_current_frame` perception tool. |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-capabilities` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.3 (numpy + Pillow pulled in via xr-ai-capabilities; silero-vad via xr-ai-pipecat → xr-ai-vad). The `look_at_current_frame` perception tool reuses `xr_ai_capabilities.VisionModule` (live-frame VLM Q&A); the worker-local `pixels.py` and its frame/camera helpers were removed. |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /

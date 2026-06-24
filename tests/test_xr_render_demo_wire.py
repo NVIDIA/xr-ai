@@ -571,13 +571,17 @@ import processors as _proc  # noqa: E402
 
 
 class _FakeEndpoint:
-    """Hub ProcessorEndpoint double — frame callback + pixel request only."""
+    """Hub ProcessorEndpoint double — frame callback, pixel request, status, and
+    return-data send. VisionModule now talks to the endpoint directly (the real
+    transport.send_return_data is a pure delegate to endpoint.send_return_data),
+    so camera-control messages are recorded here into the shared ``sent`` list."""
 
-    def __init__(self) -> None:
+    def __init__(self, sent: list[DataMessage] | None = None) -> None:
         self.frame_cbs: list = []
         self.frame: FrameData | None = None
         self.frame_requests: list[FrameSignal] = []
         self.statuses: list[tuple[str, str]] = []
+        self.sent: list[DataMessage] = sent if sent is not None else []
 
     def on_frame(self, cb) -> None:
         self.frame_cbs.append(cb)
@@ -589,14 +593,18 @@ class _FakeEndpoint:
     async def set_status(self, status: str, pid: str | None = None) -> None:
         self.statuses.append((status, pid or ""))
 
+    async def send_return_data(self, msg: DataMessage) -> None:
+        self.sent.append(msg)
+
 
 class _CaptureTransportWithEndpoint(_CaptureTransport):
     """Capture transport that also exposes a fake hub endpoint so the brain
-    can register its frame callback and pull pixels."""
+    can register its frame callback and pull pixels. The endpoint shares this
+    transport's ``sent`` list so endpoint sends show up in ``transport.sent``."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.endpoint = _FakeEndpoint()
+        self.endpoint = _FakeEndpoint(sent=self.sent)
 
 
 class _FakeVLM:
@@ -680,8 +688,11 @@ async def test_perception_query_reaches_vlm_frame_path() -> None:
     brain = _make_perception_brain(transport, vlm)
 
     # Seed a fresh live frame for the participant (as if the hub delivered one).
+    # The VisionModule owns the frame cache now, so deliver via the registered
+    # frame callback rather than poking brain internals.
     sig, fd = _rgb_frame("pid-1")
-    brain._latest[(sig.participant_id, sig.track_id)] = sig  # noqa: SLF001
+    for cb in transport.endpoint.frame_cbs:
+        await cb(sig)
     transport.endpoint.frame = fd
 
     result = await brain._execute_tool(  # noqa: SLF001

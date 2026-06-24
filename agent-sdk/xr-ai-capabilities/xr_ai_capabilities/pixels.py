@@ -4,7 +4,11 @@
 """Pixel-format conversion: hub FrameData → PIL Image → JPEG data URL.
 
 The hub may deliver frames in any of several pixel formats depending on the
-client and codec.  We convert them all to RGB PIL Images for the VLM API.
+client and codec. We convert them all to RGB PIL Images for the VLM API.
+
+This was previously copy-pasted into every vision sample's worker; it now lives
+in the shared ``xr-ai-capabilities`` package alongside :class:`VisionModule`,
+its only consumer.
 """
 from __future__ import annotations
 
@@ -13,12 +17,11 @@ import io
 
 import numpy as np
 from PIL import Image
-
 from xr_ai_agent import FrameData, PixelFormat
 
 
 def _yuv_to_rgb(Y: np.ndarray, U: np.ndarray, V: np.ndarray) -> Image.Image:
-    """BT.601 limited-range YCbCr → RGB.  U/V must already be full-size (upsampled)."""
+    """BT.601 limited-range YCbCr → RGB. U/V must already be full-size (upsampled)."""
     Y = Y.astype(np.float32) - 16.0
     U = U.astype(np.float32) - 128.0
     V = V.astype(np.float32) - 128.0
