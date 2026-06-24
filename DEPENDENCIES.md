@@ -49,7 +49,7 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     └── xr-ai-models    [editable: ../xr-ai-models]
     └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
     └── xr-ai-voicegate [editable: ../../utils/xr-ai-voicegate]
-    └── pipecat-ai >=1.0
+    └── pipecat-ai >=1.3
     └── numpy >=1.24
     └── scipy >=1.11
     └── httpx >=0.27
@@ -437,7 +437,7 @@ forwarding.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | numpy >=1.24, Pillow >=10.0, fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.0 (silero-vad pulled in via xr-ai-pipecat → xr-ai-vad). Pillow + numpy drive `pixels.py` (live-frame → PIL → JPEG data URL) for the `look_at_current_frame` perception tool. |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | numpy >=1.24, Pillow >=10.0, fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.3 (silero-vad pulled in via xr-ai-pipecat → xr-ai-vad). Pillow + numpy drive `pixels.py` (live-frame → PIL → JPEG data URL) for the `look_at_current_frame` perception tool. |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
