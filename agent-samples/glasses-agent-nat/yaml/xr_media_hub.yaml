@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# XR Media Hub configuration for glasses-agent-nat.
+# Paths are relative to this file's directory.
+
+# ── LiveKit server ────────────────────────────────────────────────────────────
+api_key:    devkey
+api_secret: devsecret-xr-livekit-prototype-2026
+room_name:  xr-room
+
+lk_port_ws:  7880
+lk_port_tcp: 7881
+lk_port_udp: 7882
+
+# ── Web client server ─────────────────────────────────────────────────────────
+enable_web_server: true
+web_server_port:   8080
+web_client_dir:    ../../../client-samples/web
+web_server_tls:    true
+
+# ── Optional: token server ────────────────────────────────────────────────────
+enable_token_server: true
+
+# ── Video recording ──────────────────────────────────────────────────────────
+# Disabled: NVENC segfaults on dual_48G_ada (GPU 0 full, GPU 1 has Nemotron-30B).
+# get_latest_frame works via live IPC without recording.
+# Historical frame lookup (get_frame_from_time, second_ago > 0) is not available;
+# text observations + summaries in transcript-mcp cover that context.
+video_recording:
+  enabled: false
