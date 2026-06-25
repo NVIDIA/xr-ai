@@ -469,6 +469,23 @@ video-mcp (8210), render-mcp (8220), oxr-mcp (8230), vec-mcp (8250), worker.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
 
+### glasses-agent-nat  (agent-samples/glasses-agent-nat/)
+
+Always-on smart-glasses assistant: teacher records a demonstration → the agent
+analyzes it → guides a student through it step-by-step, monitoring completion.
+Voice I/O is the unified pipecat pipeline (`GlassesBrain` is the
+`BrainProcessor`); the NAT (NeMo Agent Toolkit) runtime — agentic tool-calling
+over vlm-mcp / video-mcp / transcript-mcp — lives inside the brain via
+`QueryProcessor`. Background scene observation, recording capture, and the
+memory condenser run in `GlassesPerception`, off the audio path, over NAT MCP.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable] | pipecat-ai >=1.3, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, torchaudio >=2.10,<2.11 (silero-vad/onnxruntime/torch pulled in via xr-ai-pipecat → xr-ai-vad; torchaudio pinned to torch's minor so Silero's ONNX backend loads). Voice I/O (VAD/STT/TTS/transport) and the always-on `VoiceGateConfig` come from xr-ai-pipecat + xr-ai-voicegate; STT/TTS clients are built with xr-ai-models `make_stt`/`make_tts`. |
+
+NAT plugin entry point `glasses_nat_register` registers the `glasses_agent_tools`
+and `glasses_worker_tasks` function groups consumed by the NAT workflow YAML.
+
 ---
 
 ## Change impact map

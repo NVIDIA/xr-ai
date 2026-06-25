@@ -12,17 +12,19 @@ import string
 import time
 from typing import Any
 
-from glasses_nat_schemas import AnalyzeRecordingInput
-from glasses_nat_schemas import AnalyzeRecordingOutput
-from glasses_nat_schemas import CondenseObservationsInput
-from glasses_nat_schemas import CondenseObservationsOutput
-from glasses_nat_schemas import DeriveStepKeyInfoInput
-from glasses_nat_schemas import DeriveStepKeyInfoOutput
-from glasses_nat_schemas import DeriveStepRequirementsInput
-from glasses_nat_schemas import DeriveStepRequirementsOutput
-from glasses_nat_schemas import FrameEntry
-from glasses_nat_schemas import GuidanceStepOutput
-from glasses_nat_schemas import StepCheck
+from glasses_nat_schemas import (
+    AnalyzeRecordingInput,
+    AnalyzeRecordingOutput,
+    CondenseObservationsInput,
+    CondenseObservationsOutput,
+    DeriveStepKeyInfoInput,
+    DeriveStepKeyInfoOutput,
+    DeriveStepRequirementsInput,
+    DeriveStepRequirementsOutput,
+    FrameEntry,
+    GuidanceStepOutput,
+    StepCheck,
+)
 
 log = logging.getLogger("glasses_agent_nat.tasks")
 

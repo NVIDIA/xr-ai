@@ -4,16 +4,17 @@
 """
 glasses-agent-nat worker — always-on AI assistant for smart glasses.
 
-Pipeline:
-  Hub audio → VadDetector (per participant) → STT → QueryProcessor
-                                                          │
-                                              ┌───────────┴────────────────┐
-                                              │  demo detection / guidance │
-                                              │  quick-ack + agentic loop  │
-                                              └───────────┬────────────────┘
-                                                    TTS audio + data
-  Background: VLM loop  →  AgentMemory  →  TranscriptClient → transcript-mcp
-              Condenser  →  scene summary
+Voice pipeline (assembled by ``xr_ai_pipecat.make_voice_pipeline``):
+  transport.input → VadStt → VoiceGate(always-on) → GlassesBrain
+                  → StreamingTts → transport.output
+
+  GlassesBrain runs the smart-glasses noise/intent gate, then delegates each
+  accepted turn to the NAT-backed QueryProcessor (demo detection / guidance /
+  quick-ack + agentic loop), which speaks + panels through the brain.
+
+  Background (GlassesPerception, off the audio path, via NAT MCP):
+    VLM loop  →  AgentMemory  →  TranscriptClient → transcript-mcp
+    Condenser →  scene summary
 
 Launch:
   cd glasses-agent-nat/worker && uv run glasses_agent_nat_worker
@@ -28,14 +29,17 @@ import pathlib
 import signal
 import time
 
+from agent import GlassesBrain, GlassesPerception
+from config import WorkerConfig, load_config
+from memory import AgentMemory, Demonstration, Observation, TranscriptClient
+from nat_runtime import NatRuntime
+from pipecat.pipeline.runner import PipelineRunner
+from processors import QueryProcessor
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config_from_dict, make_stt, make_tts
-
-from agent import GlassesAgent
-from config import WorkerConfig, load_config
-from memory import AgentMemory, Observation, Demonstration, DemoStep, TranscriptClient
-from nat_runtime import NatRuntime
-from processors import QueryProcessor
+from xr_ai_pipecat import VadConfig, make_voice_pipeline
+from xr_ai_pipecat.transport import XRMediaHubTransport
+from xr_ai_voicegate import VoiceGateConfig
 
 log = logging.getLogger("glasses_agent_nat")
 
@@ -200,9 +204,11 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
     tts = make_tts(models_cfg, "tts")
 
     nat_runtime = await NatRuntime.create(cfg.nat_workflow_config)
-    agent: GlassesAgent | None = None
-    query_proc: QueryProcessor | None = None
-    transcript: TranscriptClient | None = None
+    transport   = XRMediaHubTransport()
+    brain:       GlassesBrain | None = None
+    perception:  GlassesPerception | None = None
+    query_proc:  QueryProcessor | None = None
+    transcript:  TranscriptClient | None = None
     try:
         if ready_file:
             ready_file.touch()
@@ -215,21 +221,24 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         await _restore_memory(memory, transcript, cfg.transcript_source)
 
         # ── query processor ───────────────────────────────────────────────────
+        # The processor drives output through the brain's pipeline-frame-backed
+        # callbacks. The brain needs the processor (handle_query + gate state),
+        # so the callbacks are late-bound to ``brain`` (assigned just below).
 
         async def _say(pid: str, text: str) -> None:
-            if agent is None:
+            if brain is None:
                 return
-            await agent.say(pid, text)
+            await brain.say(pid, text)
 
         async def _send_text(pid: str, text: str, topic: str) -> None:
-            if agent is None:
+            if brain is None:
                 return
-            await agent.send_text(pid, text, topic)
+            await brain.send_text(pid, text, topic)
 
         async def _flush_audio(pid: str) -> None:
-            if agent is None:
+            if brain is None:
                 return
-            await agent.flush_audio(pid)
+            await brain.flush_audio(pid)
 
         query_proc = QueryProcessor(
             cfg           = cfg,
@@ -240,28 +249,70 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
             flush_audio   = _flush_audio,
         )
 
-        # ── main agent ────────────────────────────────────────────────────────
-        agent = GlassesAgent(
-            cfg               = cfg,
-            memory            = memory,
-            transcript_client = transcript,
-            query_processor   = query_proc,
-            stt               = stt,
-            tts               = tts,
-            nat_runtime       = nat_runtime,
+        # ── brain (pipecat) + background perception ────────────────────────────
+        brain = GlassesBrain(
+            transport       = transport,
+            cfg             = cfg,
+            memory          = memory,
+            query_processor = query_proc,
+        )
+        perception = GlassesPerception(
+            cfg             = cfg,
+            memory          = memory,
+            transcript      = transcript,
+            nat_runtime     = nat_runtime,
+            get_active_pid  = lambda: brain.active_pid,
+            is_query_active = lambda: brain.query_active,
+            is_guiding      = query_proc.is_guiding,
+        )
+        brain.perception = perception
+        perception.start()
+
+        # ── voice pipeline ─────────────────────────────────────────────────────
+        # The smart-glasses gate is the brain's noise/intent filter, not a wake
+        # word — the pipeline's VoiceGate runs always-on (empty magic phrases)
+        # and simply forwards every utterance to the brain. ``text_topic=""``
+        # opts out of the pipeline's data echo: QueryProcessor sends its own
+        # ``agent.response`` / ``agent.progress`` messages.
+        _, task = make_voice_pipeline(
+            transport      = transport,
+            stt            = stt,
+            tts            = tts,
+            brain          = brain,
+            vad_cfg        = VadConfig(
+                silence_duration = cfg.silence_duration,
+                min_speech       = cfg.min_speech,
+                silero_threshold = cfg.silero_threshold,
+            ),
+            voice_gate_cfg = VoiceGateConfig(),
+            text_topic     = "",
+            idle_timeout_secs = None,
         )
 
         loop = asyncio.get_running_loop()
+        cancel_requested = False
+
+        def _request_cancel() -> None:
+            # PipelineTask.cancel is a coroutine; add_signal_handler needs a
+            # sync callable. Guard a second signal (double ctrl-c) from spawning
+            # a redundant cancel while the first is still draining.
+            nonlocal cancel_requested
+            if cancel_requested:
+                return
+            cancel_requested = True
+            asyncio.create_task(task.cancel())
+
         for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, agent.shutdown)
+            loop.add_signal_handler(sig, _request_cancel)
 
         log.info("glasses-agent-nat running")
-        try:
-            await agent.run()
-        finally:
-            if agent is not None:
-                agent.shutdown()
+        await PipelineRunner().run(task)
     finally:
+        if perception is not None:
+            await perception.stop()
+        transport.shutdown()
+        if brain is not None:
+            await brain.close()
         if query_proc is not None:
             await query_proc.close()
         if transcript is not None:

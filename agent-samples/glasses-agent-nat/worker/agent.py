@@ -2,55 +2,63 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-GlassesAgent — always-on AI assistant for smart glasses.
+glasses-agent-nat — always-on smart-glasses assistant on the pipecat pipeline.
 
-Lifecycle
----------
-1. Connects to the XR hub via ProcessorEndpoint.
-2. Launches background tasks:
-   - _background_vlm_loop: every cfg.vlm_interval_s seconds, grabs a frame,
-     runs a brief VLM description, adds to AgentMemory.
-   - _memory_condenser_loop: every condenser_interval_s seconds, condenses
-     recent observations into a scene summary via LLM.
-3. Audio from participants is routed through per-participant VadDetector.
-4. When an utterance finalizes: STT → QueryProcessor.handle().
-5. Data messages are passed directly to QueryProcessor as text queries.
-6. Responses go back as TTS audio + data messages to the participant.
+Voice I/O is the unified ``xr_ai_pipecat`` pipeline, exactly like the other
+agent samples::
 
-Default participant
--------------------
-If no participant has joined yet, the "web-client" default is used for
-background VLM calls and initial responses.
+    transport.input → VadStt → VoiceGate(always-on) → GlassesBrain
+                     → StreamingTts → transport.output
+
+:class:`GlassesBrain` is the pipecat ``BrainProcessor`` for this sample. It is
+thin glue around the NAT-backed :class:`processors.QueryProcessor`, which is the
+real "brain" (demo detection, guidance, agentic tool loop). The NAT runtime
+stays *inside* the brain — ``handle_query`` delegates to ``QueryProcessor.handle``
+and the processor drives output through the brain's ``say`` / ``send_text`` /
+``flush_audio`` callbacks, which map onto pipeline frames:
+
+  * ``say``         → a ``TextFrame`` (+ ``BrainResponseEndFrame`` flush) so the
+                      shared ``StreamingTtsProcessor`` synthesizes + paces it;
+  * ``send_text``   → ``transport.send_return_data`` on a custom topic
+                      (``agent.response`` / ``agent.progress``);
+  * ``flush_audio`` → an ``InterruptionFrame`` so the TTS sender drains and the
+                      hub return-audio buffer is flushed (barge-in).
+
+The smart-glasses voice gate is *not* a wake word — it is a two-layer
+noise/intent filter (cheap shape gate + an LLM intent classifier) plus a
+guidance-mode control filter. That gate runs in ``process_frame`` on each gated
+query *before* the base class spawns a turn, so rejected noise never supersedes
+an in-flight answer. Typed text on the data channel bypasses the gate (the user
+explicitly sent it).
+
+:class:`GlassesPerception` owns the always-on background work that is orthogonal
+to voice I/O: the periodic VLM scene-observation loop, dense recording capture,
+and the memory condenser. These reach frames/VLM exclusively through NAT MCP
+(video-mcp / vlm-mcp), never the audio pipeline, so they live outside the brain
+and are started/stopped by the worker.
 """
 from __future__ import annotations
 
 import asyncio
-import io
 import json as _json
 import logging
 import os
 import re as _re
 import shutil as _shutil
 import time
-import wave
+from typing import Callable
 
 import httpx
-import numpy as np
-
-from xr_ai_agent import (
-    AudioChunk, DataMessage, ParticipantEvent, ProcessorEndpoint
-)
-
 from config import WorkerConfig
 from intent import is_real_assistant_request, is_shape_noise
 from memory import AgentMemory, Observation, RecordedFrame, TranscriptClient
 from nat_runtime import NatRuntime
+from pipecat.frames.frames import Frame, InterruptionFrame
+from pipecat.processors.frame_processor import FrameDirection
 from processors import QueryProcessor
-from xr_ai_models import STTService, TTSService
-from xr_ai_vad import VadDetector
-
-_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
-_HUB_PUSH = "ipc:///tmp/xr_hub_in"
+from xr_ai_agent import DataMessage
+from xr_ai_pipecat import BrainProcessor, BrainResponseEndFrame, GatedQueryFrame
+from xr_ai_pipecat.transport import XRMediaHubTransport
 
 log        = logging.getLogger("glasses_agent_nat.agent")
 _trace_log = logging.getLogger("glasses_agent_nat.trace")  # shared with glasses_agent_nat_worker
@@ -62,209 +70,183 @@ def _now_us() -> int:
     return time.time_ns() // 1_000
 
 
-def _wav_to_chunks(wav_bytes: bytes, participant_id: str) -> list[AudioChunk]:
-    """Decode WAV blob into 20 ms float32 AudioChunks for the return path."""
-    buf = io.BytesIO(wav_bytes)
-    with wave.open(buf, "rb") as wf:
-        sr  = wf.getframerate()
-        ch  = wf.getnchannels()
-        raw = wf.readframes(wf.getnframes())
-    arr = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-    chunk_frames = max(1, sr // 50)  # 20 ms
-    pts = _now_us()
-    out: list[AudioChunk] = []
-    for i in range(0, len(arr), chunk_frames * ch):
-        seg = arr[i : i + chunk_frames * ch]
-        if not len(seg):
-            break
-        out.append(AudioChunk(
-            pts_us=pts, sample_rate=sr, channels=ch,
-            samples=len(seg) // ch, data=seg.tobytes(),
-            participant_id=participant_id,
-        ))
-        pts += 20_000
-    return out
-
-
-class GlassesAgent:
-    """Always-on smart-glasses AI agent.
+class GlassesBrain(BrainProcessor):
+    """Pipecat brain for glasses-agent-nat — thin glue over ``QueryProcessor``.
 
     Parameters
     ----------
-    cfg:               WorkerConfig
-    memory:            AgentMemory — shared observation + demo store.
-    transcript_client: TranscriptClient — persists observations to transcript-mcp.
-    query_processor:   QueryProcessor — handles transcribed utterances.
-    stt:               Shared xr-ai-models STTService (OpenAI-compatible STT).
-    tts:               Shared xr-ai-models TTSService (OpenAI-compatible TTS).
-    nat_runtime:       Shared NAT workflow/runtime for MCP-backed tools.
+    transport:
+        Shared ``XRMediaHubTransport``; the brain registers the typed-text data
+        side path on its endpoint and sends ``agent.*`` data messages through
+        it. Passed to ``BrainProcessor`` so single-participant return routing is
+        steered automatically on the first join.
+    cfg:
+        ``WorkerConfig`` — VAD/gate thresholds, the intent-gate LLM server, etc.
+    memory:
+        Shared ``AgentMemory`` — read by the gate (recording / fresh-demo state).
+    query_processor:
+        The NAT-backed brain. ``handle_query`` delegates to its ``handle`` and it
+        drives output via this brain's ``say`` / ``send_text`` / ``flush_audio``.
     """
 
     def __init__(
         self,
-        cfg:               WorkerConfig,
-        memory:            AgentMemory,
-        transcript_client: TranscriptClient,
-        query_processor:   QueryProcessor,
         *,
-        stt:          STTService,
-        tts:          TTSService,
-        nat_runtime:  NatRuntime,
+        transport:       XRMediaHubTransport,
+        cfg:             WorkerConfig,
+        memory:          AgentMemory,
+        query_processor: QueryProcessor,
     ) -> None:
-        self._cfg               = cfg
-        self._memory            = memory
-        self._transcript        = transcript_client
-        self._qproc             = query_processor
-        self._stt               = stt
-        self._tts               = tts
-        self._nat_runtime       = nat_runtime
+        super().__init__(transport=transport)
+        self._cfg    = cfg
+        self._memory = memory
+        self._qproc  = query_processor
 
-        self._ep = ProcessorEndpoint(sub_addr=_HUB_PUB, push_addr=_HUB_PUSH)
-        self._ep.on_audio(self._on_audio)
-        self._ep.on_data(self._on_data)
-        self._ep.on_participant(self._on_participant)
+        # The worker links the background perception loops here so the
+        # observation timeline can be reset when a participant (re)joins.
+        self.perception: GlassesPerception | None = None
 
-        # Per-participant VAD detectors.
-        self._vad: dict[str, VadDetector] = {}
-
-        # Track connected participants.
-        self._participants: set[str] = set()
-
-        # Background tasks.
-        self._bg_task:        asyncio.Task | None = None
-        self._condenser_task: asyncio.Task | None = None
-
-        # In-flight query task + dispatch lock per pid. The lock serialises
-        # cancel-await-flush-launch so a rapid second utterance can't race
-        # past an in-flight cancellation and clobber generation bookkeeping.
-        self._query_tasks:    dict[str, asyncio.Task] = {}
-        self._dispatch_locks: dict[str, asyncio.Lock] = {}
-
-        # Per-pid TTS generation token. flush_audio() bumps it; say() checks
-        # it inside its chunk-send loop and stops emitting once the value
-        # has moved on. Without this, an in-progress say() keeps queuing
-        # chunks after the hub queue has been flushed, so flush + new
-        # response still bleed through.
-        self._speech_generation: dict[str, int] = {}
-
-        # Background VLM loop pauses while a user query is being dispatched
-        # so we don't compete with the user-facing path for VLM bandwidth.
-        self._user_query_active = False
-
-        # Last observed frame timestamp and description (observation loop).
-        # Instance variables so they can be reset on participant reconnect.
-        self._obs_last_ts:   int = 0
-        self._obs_last_desc: str = ""
-
-        # Last frame timestamp captured during recording (skip-dedup).
-        self._rec_last_ts:    int = 0
-        self._rec_warmup_end: int = 0
-
-        # HTTP client for the worker's own LLM calls (intent gate / quick-ack).
-        # STT and TTS go through the shared xr-ai-models services above.
+        # HTTP client for the worker's own LLM intent gate (Layer 2). STT/TTS
+        # ride the pipeline; this is the only direct model call the brain makes.
         self._http = httpx.AsyncClient(timeout=120.0)
 
-    # ── lifecycle ─────────────────────────────────────────────────────────────
+        # Typed-text side path. The web client's "Send" button publishes text on
+        # the data channel; feed it through the same turn machinery as a spoken
+        # utterance, bypassing VAD/STT and the noise/intent gate (the user
+        # explicitly sent it). Mirrors simple-vlm-example / xr-render-demo.
+        transport.endpoint.on_data(self._on_data)
 
-    async def run(self) -> None:
-        """Connect to hub, start background tasks, run until stopped."""
-        self._bg_task        = asyncio.create_task(
-            self._background_vlm_loop(), name="glasses-bg-vlm"
-        )
-        self._condenser_task = asyncio.create_task(
-            self._memory_condenser_loop(), name="glasses-condenser"
-        )
-        try:
-            await self._ep.run()
-        finally:
-            for task in (self._bg_task, self._condenser_task):
-                if task and not task.done():
-                    task.cancel()
-                    try:
-                        await task
-                    except (asyncio.CancelledError, Exception):
-                        pass
+    # ── state exposed to the background perception loops ───────────────────────
 
-    def shutdown(self) -> None:
-        self._ep.stop()
-        self._ep.close()
+    @property
+    def active_pid(self) -> str:
+        """The participant the background loops should address — the first
+        joined pid, or the ``web-client`` default when none is known yet (a
+        client may have connected before the worker saw the join)."""
+        for pid in self._joined:
+            return pid
+        return _DEFAULT_PID
 
-    # ── audio path: VAD → STT → QueryProcessor ───────────────────────────────
+    @property
+    def query_active(self) -> bool:
+        """True while a user-facing turn is in flight — the observation loop
+        yields VLM bandwidth to it."""
+        return bool(self._inflight)
 
-    async def _on_audio(self, chunk: AudioChunk) -> None:
-        """Feed inbound mic audio through xr-ai-vad.
+    # ── BrainProcessor overrides ──────────────────────────────────────────────
 
-        Note: we do NOT pre-filter audio based on "assistant talking" flags.
-        Pre-filtering breaks barge-in. Raw VAD speech-start is advisory only;
-        accepted transcripts interrupt playback in ``_dispatch_query`` after
-        STT and the noise/intent gates.
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        # Smart-glasses voice gate: run the noise/intent filter on each gated
+        # query BEFORE the base class spawns a turn. Dropping here (rather than
+        # inside handle_query) means rejected noise never fires the supersede
+        # hook / cancels an in-flight answer.
+        if isinstance(frame, GatedQueryFrame):
+            if not await self._passes_gate(frame.participant_id, frame.text):
+                return
+        await super().process_frame(frame, direction)
+
+    async def handle_query(self, pid: str, text: str, fresh_match: bool) -> str:
+        """Delegate the whole turn to the NAT brain.
+
+        ``QueryProcessor.handle`` produces all output itself via the ``say`` /
+        ``send_text`` callbacks below, so there is nothing to return for TTS —
+        the empty string yields no extra ``TextFrame``.
         """
-        pid = chunk.participant_id or _DEFAULT_PID
-        vad = self._get_vad(pid)
-        # xr_ai_vad expects float32 → int16 conversion. Hub AudioChunks
-        # are float32, so convert here.
-        f32 = np.frombuffer(chunk.data, dtype=np.float32)
-        i16 = (np.clip(f32, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()
-        await vad.feed(i16, chunk.sample_rate)
+        await self._qproc.handle(text, pid, _now_us())
+        return ""
 
-    def _get_vad(self, pid: str) -> VadDetector:
-        if pid not in self._vad:
-            self._vad[pid] = VadDetector(
-                on_utterance     = lambda pcm, sr: self._handle_utterance(pid, pcm, sr),
-                on_speech_start  = lambda: self._handle_speech_start(pid),
-                silence_duration = self._cfg.silence_duration,
-                min_speech       = self._cfg.min_speech,
-                silero_threshold = self._cfg.silero_threshold,
-            )
-        return self._vad[pid]
+    async def on_query_superseded(self, pid: str) -> None:
+        # A fresh query replaces the previous one: drain the prior answer's TTS
+        # (and flush the hub buffer) so the new turn lands immediately.
+        await self.push_frame(InterruptionFrame())
 
-    async def _handle_speech_start(self, pid: str) -> None:
-        """Handle raw VAD speech-start without interrupting playback.
+    async def on_participant_joined(self, pid: str) -> None:
+        if self.perception is not None:
+            self.perception.reset_observation_state()
 
-        VAD fires on background noise and speaker echo, so flushing here cuts
-        off legitimate TTS. Accepted utterances still interrupt through
-        ``_dispatch_query`` after STT plus the noise/intent gates.
+    async def close(self) -> None:
+        await self._http.aclose()
+
+    # ── QueryProcessor output callbacks (pipeline-frame backed) ────────────────
+
+    async def say(self, pid: str, text: str) -> None:
+        """Speak *text* to *pid* through the shared streaming-TTS processor.
+
+        Pushes the text downstream as a ``TextFrame`` then a
+        ``BrainResponseEndFrame`` so the pending sentence is flushed and
+        synthesized immediately — works both inside a query turn and from the
+        background guidance/finalize tasks that speak out of turn.
         """
-        log.debug("speech start detected  pid=%r", pid)
-
-    async def _handle_utterance(self, pid: str, pcm_bytes: bytes, sample_rate: int) -> None:
-        """STT-transcribe a finalized utterance, then dispatch to QueryProcessor.
-
-        Voice path only — this is where the layered noise/intent gate runs.
-        Data-channel text bypasses both layers (deliberate: the client
-        explicitly sent it, so the user means it).
-        """
-        ref_us = _now_us()
-        try:
-            # Shared STTService wraps the OpenAI-compatible /v1/audio/transcriptions
-            # endpoint and does the int16-PCM → WAV framing internally.
-            text = (await self._stt.transcribe(pcm_bytes, sample_rate=sample_rate)).strip()
-        except Exception as exc:
-            log.error("stt request failed pid=%r: %s", pid, exc)
-            return
-
         if not text:
-            log.info("stt returned empty for pid=%r", pid)
             return
+        await self._push_text(text, pid=pid)
+        # text="" — the per-turn data echo is disabled (text_topic="") since
+        # QueryProcessor sends its own agent.response message; this end frame
+        # only flushes the pending sentence into TTS.
+        await self.push_frame(BrainResponseEndFrame(pid=pid, text="", pts_us=_now_us()))
 
-        log.info("stt  pid=%r  %r", pid, text[:80])
+    async def send_text(self, pid: str, text: str, topic: str) -> None:
+        """Send a text data message to *pid* on *topic* (panel / progress)."""
+        try:
+            await self._transport.send_return_data(DataMessage(
+                participant_id = pid,
+                topic          = topic,
+                pts_us         = _now_us(),
+                data           = text.encode(),
+            ))
+        except Exception:
+            log.exception("send_text failed  pid=%r  topic=%s", pid, topic)
+
+    async def flush_audio(self, pid: str) -> None:
+        """Barge-in: drain queued TTS and flush the hub return-audio buffer."""
+        await self.push_frame(InterruptionFrame())
+
+    # ── data side path (typed text, gate-bypassing) ────────────────────────────
+
+    async def _on_data(self, msg: DataMessage) -> None:
+        try:
+            text = msg.data.decode(errors="replace").strip()
+        except Exception:
+            return
+        if not text:
+            return
+        pid = msg.participant_id or _DEFAULT_PID
+        log.info("data query  pid=%r  %r", pid, text[:80])
+        await self._spawn_query(GatedQueryFrame(
+            participant_id = pid,
+            text           = text,
+            fresh_match    = False,
+            pts_us         = msg.pts_us or _now_us(),
+        ))
+
+    # ── voice gate (noise + intent + guidance control) ─────────────────────────
+
+    async def _passes_gate(self, pid: str, text: str) -> bool:
+        """Two-layer noise/intent gate + guidance-control filter.
+
+        Returns True if the utterance should reach the brain. Voice path only —
+        data-channel text never gets here (it bypasses via ``_on_data``).
+        """
+        text = text.strip()
+        if not text:
+            return False
 
         # ── Layer 1: shape gate — cheap, synchronous. ─────────────────────
         if is_shape_noise(text):
             log.info("noise-gate L1 dropped  pid=%r  %r", pid, text[:80])
             _trace_log.info("NOISE_L1_DROP  pid=%s  %r", pid, text)
-            return
+            return False
 
         if self._qproc.is_guiding(pid) and not self._qproc.is_guidance_control_utterance(text):
             log.info("guidance noise dropped  pid=%r  %r", pid, text[:80])
             _trace_log.info("GUIDANCE_NOISE_DROP  pid=%s  %r", pid, text)
-            return
+            return False
 
         # ── Layer 2: LLM intent classifier. ───────────────────────────────
-        # Skip when worker is recording or guiding (those modes have their
-        # own narration policy) and when a fresh demo is on the table
-        # (post-demo utterances are almost always guidance requests, even
-        # if mangled). Layer 2 is fail-open: classifier error → accept.
+        # Skip when recording or guiding (those modes own their narration
+        # policy) and when a fresh demo is on the table (post-demo utterances
+        # are almost always guidance requests, even if mangled). Layer 2 is
+        # fail-open: a classifier error accepts.
         skip_l2 = (
             self._memory.recording is not None
             or self._qproc.is_guiding(pid)
@@ -281,111 +263,87 @@ class GlassesAgent:
             if not accepted:
                 log.info("noise-gate L2 dropped  pid=%r  %r", pid, text[:80])
                 _trace_log.info("NOISE_L2_DROP  pid=%s  %r", pid, text)
-                return
+                return False
 
-        await self._dispatch_query(pid, text, ref_us=ref_us, source="voice")
+        return True
 
-    # ── data path: text → QueryProcessor ─────────────────────────────────────
 
-    async def _on_data(self, msg: DataMessage) -> None:
-        try:
-            text = msg.data.decode(errors="replace").strip()
-        except Exception:
-            return
-        if not text:
-            return
-        pid    = msg.participant_id or _DEFAULT_PID
-        ref_us = msg.pts_us or _now_us()
-        log.info("data query  pid=%r  %r", pid, text[:80])
-        await self._dispatch_query(pid, text, ref_us=ref_us, source="data")
+class GlassesPerception:
+    """Always-on background scene perception, decoupled from voice I/O.
 
-    # ── interruption / dispatch ──────────────────────────────────────────────
+    Runs two loops over NAT MCP (video-mcp / vlm-mcp), independent of the
+    pipecat audio pipeline:
 
-    async def _dispatch_query(
+      * ``_background_vlm_loop`` — every ``cfg.vlm_interval_s``: dense
+        frame capture while recording a demonstration, otherwise
+        change-detection scene observations into ``AgentMemory``;
+      * ``_memory_condenser_loop`` — every ``cfg.condenser_interval_s``:
+        condense recent observations into a scene summary.
+
+    The loops query the live agent state through injected callables so this
+    component never imports the brain: ``get_active_pid`` (who to observe),
+    ``is_query_active`` (yield VLM bandwidth to user turns), and ``is_guiding``
+    (skip observation while guidance owns the VLM checks).
+    """
+
+    _UNCHANGED_RESPONSES = frozenset({
+        "unchanged", "no change", "nothing new", "same", "no changes",
+        "nothing has changed", "nothing changed", "no significant change",
+    })
+
+    def __init__(
         self,
-        pid: str,
-        text: str,
         *,
-        ref_us: int,
-        source: str,
+        cfg:            WorkerConfig,
+        memory:         AgentMemory,
+        transcript:     TranscriptClient,
+        nat_runtime:    NatRuntime,
+        get_active_pid: Callable[[], str],
+        is_query_active: Callable[[], bool],
+        is_guiding:     Callable[[str], bool],
     ) -> None:
-        """Cancel any in-flight query for *pid*, flush queued audio, dispatch a new one.
+        self._cfg             = cfg
+        self._memory          = memory
+        self._transcript      = transcript
+        self._nat_runtime     = nat_runtime
+        self._get_active_pid  = get_active_pid
+        self._is_query_active = is_query_active
+        self._is_guiding      = is_guiding
 
-        The per-pid lock serialises cancel→await→flush→launch so a rapid
-        second utterance can't race past an in-flight cancellation and
-        clobber the bookkeeping.
-        """
-        lock = self._dispatch_locks.setdefault(pid, asyncio.Lock())
-        async with lock:
-            old = self._query_tasks.get(pid)
-            current = asyncio.current_task()
-            if old is not None and not old.done() and old is not current:
-                log.info("interrupt pid=%r — cancelling in-flight response", pid)
-                old.cancel()
+        self._bg_task:        asyncio.Task | None = None
+        self._condenser_task: asyncio.Task | None = None
+
+        # Last observed frame timestamp + description (observation loop).
+        self._obs_last_ts:   int = 0
+        self._obs_last_desc: str = ""
+        # Last frame timestamp captured during recording (skip-dedup).
+        self._rec_last_ts:    int = 0
+        self._rec_warmup_end: int = 0
+
+    # ── lifecycle ─────────────────────────────────────────────────────────────
+
+    def start(self) -> None:
+        self._bg_task = asyncio.create_task(
+            self._background_vlm_loop(), name="glasses-bg-vlm"
+        )
+        self._condenser_task = asyncio.create_task(
+            self._memory_condenser_loop(), name="glasses-condenser"
+        )
+
+    async def stop(self) -> None:
+        for task in (self._bg_task, self._condenser_task):
+            if task and not task.done():
+                task.cancel()
                 try:
-                    await old
+                    await task
                 except (asyncio.CancelledError, Exception):
                     pass
-            await self.flush_audio(pid)
-            task = asyncio.create_task(
-                self._run_query(pid, text, ref_us=ref_us, source=source),
-                name=f"glasses-nat-query-{pid}",
-            )
-            self._query_tasks[pid] = task
 
-    async def _run_query(
-        self,
-        pid: str,
-        text: str,
-        *,
-        ref_us: int,
-        source: str,
-    ) -> None:
-        self._user_query_active = True
-        try:
-            await self._qproc.handle(text, pid, ref_us)
-        except asyncio.CancelledError:
-            log.info("query cancelled  pid=%r  source=%s", pid, source)
-            raise
-        except Exception:
-            log.exception("query failed pid=%r source=%s", pid, source)
-        finally:
-            self._user_query_active = False
-
-    async def flush_audio(self, pid: str) -> None:
-        """Drop any TTS audio still queued for *pid* and signal a generation bump.
-
-        Bumping ``_speech_generation`` makes the in-progress ``say()`` loop
-        stop emitting further chunks (it checks the generation on every
-        iteration). Without that guard, ``say()`` keeps queueing chunks
-        after the hub queue has been flushed and stale audio bleeds through.
-        """
-        self._speech_generation[pid] = self._speech_generation.get(pid, 0) + 1
-        try:
-            await self._ep.flush_return_audio(pid)
-        except Exception:
-            log.exception("flush_return_audio failed  pid=%r", pid)
-
-    # ── participant tracking ──────────────────────────────────────────────────
-
-    async def _on_participant(self, event: ParticipantEvent) -> None:
-        pid = event.participant_id
-        if event.joined:
-            log.info("participant joined  pid=%r", pid)
-            self._participants.add(pid)
-            # Reset observation state so the new stream is processed fresh.
-            self._obs_last_ts   = 0
-            self._obs_last_desc = ""
-        else:
-            log.info("participant left  pid=%r", pid)
-            self._participants.discard(pid)
-            self._vad.pop(pid, None)
-
-    def _active_pid(self) -> str:
-        """Return the most recently active participant, or the default."""
-        if self._participants:
-            return next(iter(self._participants))
-        return _DEFAULT_PID
+    def reset_observation_state(self) -> None:
+        """Reset the change-detection baseline so a (re)joined stream is
+        processed fresh."""
+        self._obs_last_ts   = 0
+        self._obs_last_desc = ""
 
     # ── background VLM loop ───────────────────────────────────────────────────
 
@@ -403,12 +361,11 @@ class GlassesAgent:
         was_recording:    bool = False
         while True:
             try:
-                # Run even when self._participants is empty: the client may have
-                # connected before the worker started and the join event was missed.
-                # _active_pid() falls back to _DEFAULT_PID ("web-client") so the
-                # VLM call still works; get_latest_frame returns an error dict if
-                # no stream is active, which is handled gracefully.
-                pid          = self._active_pid()
+                # Run even with no participants: the client may have connected
+                # before the worker saw the join. get_active_pid() falls back to
+                # the default; get_latest_frame returns an error dict if no
+                # stream is active, which is handled gracefully.
+                pid          = self._get_active_pid()
                 is_recording = self._memory.recording is not None
 
                 if is_recording and not was_recording:
@@ -420,12 +377,12 @@ class GlassesAgent:
                     )
                 was_recording = is_recording
 
-                # Recording capture is not gated by _user_query_active —
-                # voice notes count as part of the demonstration and must not
-                # create gaps in the recorded-frame timeline.
+                # Recording capture is not gated by query-active — voice notes
+                # count as part of the demonstration and must not create gaps in
+                # the recorded-frame timeline.
                 if is_recording:
                     if _now_us() < self._rec_warmup_end:
-                        pass  # skip first 2 s — user is still positioning
+                        pass  # skip warmup window — user is still positioning
                     else:
                         frame = await self._capture_recording_frame(
                             pid, skip_ts=self._rec_last_ts
@@ -435,7 +392,7 @@ class GlassesAgent:
                             self._memory.add_recorded_frame(frame)
                             _trace_log.info("REC_FRAME  %d  %s",
                                             frame.frame_idx + 1, frame.description[:80])
-                elif not self._user_query_active and not self._qproc.is_guiding(pid):
+                elif not self._is_query_active() and not self._is_guiding(pid):
                     # Normal change-detection observations are bandwidth-
                     # sensitive — yield while user-facing guidance owns VLM checks.
                     obs = await self._observe_frame(pid, previous=self._obs_last_desc,
@@ -470,11 +427,6 @@ class GlassesAgent:
                 return
             except Exception:
                 log.exception("background VLM loop error")
-
-    _UNCHANGED_RESPONSES = frozenset({
-        "unchanged", "no change", "nothing new", "same", "no changes",
-        "nothing has changed", "nothing changed", "no significant change",
-    })
 
     async def _observe_frame(self, pid: str, previous: str = "",
                              skip_ts: int = 0) -> Observation | None:
@@ -724,41 +676,3 @@ class GlassesAgent:
             log.info("[scene summary]\n%s", summary_text)
         except Exception:
             log.exception("condenser LLM call failed")
-
-    # ── response helpers ──────────────────────────────────────────────────────
-
-    async def send_text(self, pid: str, text: str, topic: str) -> None:
-        """Send a text data message to *pid*."""
-        try:
-            await self._ep.send_return_data(DataMessage(
-                participant_id = pid,
-                topic          = topic,
-                pts_us         = _now_us(),
-                data           = text.encode(),
-            ))
-        except Exception:
-            log.exception("send_text failed  pid=%r  topic=%s", pid, topic)
-
-    async def say(self, pid: str, text: str) -> None:
-        """TTS → send audio back to *pid*.
-
-        Snapshots the per-pid generation token before the chunk-send loop;
-        ``flush_audio()`` bumps the token, and the loop bails out the moment
-        it observes a newer value. This is what makes barge-in actually
-        feel instant — the hub queue is flushed, AND the producer stops
-        producing.
-        """
-        my_gen = self._speech_generation.get(pid, 0)
-        try:
-            # Shared TTSService wraps the OpenAI-compatible /v1/audio/speech
-            # endpoint and returns the raw WAV bytes we chunk back to the hub.
-            wav = await self._tts.synthesize(text, response_format="wav", timeout=60.0)
-            for chunk in _wav_to_chunks(wav, pid):
-                if self._speech_generation.get(pid, 0) != my_gen:
-                    log.debug("say pid=%r — generation bumped, stopping chunk send", pid)
-                    return
-                await self._ep.send_return_audio(chunk)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            log.error("tts error pid=%r: %s", pid, exc, exc_info=True)

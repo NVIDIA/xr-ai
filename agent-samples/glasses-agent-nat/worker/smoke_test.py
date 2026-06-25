@@ -36,8 +36,10 @@ from config import WorkerConfig
 from memory import AgentMemory, Demonstration, DemoStep, RecordedFrame, VoiceNote
 from processors import QueryProcessor, _after_frame_for_step, _select_reference_frames_for_step
 
-
 # ── test scaffolding ─────────────────────────────────────────────────────────
+
+PID = "p1"
+
 
 @dataclass
 class Recorder:
@@ -81,20 +83,6 @@ def _make_cfg(freshness_s: float = 120.0) -> WorkerConfig:
         guidance_advance_confirmations = 2,
         guidance_skip_static_frames    = True,
     )
-
-
-def _stub_stt() -> "mock.AsyncMock":
-    """Stand-in xr-ai-models STTService (never hits the network in tests)."""
-    s = mock.AsyncMock(name="STTService")
-    s.transcribe = mock.AsyncMock(return_value="")
-    return s
-
-
-def _stub_tts() -> "mock.AsyncMock":
-    """Stand-in xr-ai-models TTSService (synthesize returns empty WAV bytes)."""
-    t = mock.AsyncMock(name="TTSService")
-    t.synthesize = mock.AsyncMock(return_value=b"")
-    return t
 
 
 def _seed_demo(memory: AgentMemory, name: str, *, finished_ago_s: float = 0.0) -> Demonstration:
@@ -152,27 +140,41 @@ def _make_qp(memory: AgentMemory, rec: Recorder, *, freshness_s: float = 120.0) 
     return qp
 
 
-def _make_ga(memory: AgentMemory, qp: QueryProcessor) -> Any:
-    """Construct a GlassesAgent with hub I/O replaced by AsyncMocks."""
+def _make_brain(memory: AgentMemory, qp: QueryProcessor) -> Any:
+    """Construct a GlassesBrain with a fake transport (no live pipeline)."""
     import agent as agent_mod
 
-    fake_runtime = mock.MagicMock(name="NatRuntime")
-    fake_ep = mock.MagicMock(name="ProcessorEndpoint")
-    fake_ep.flush_return_audio = mock.AsyncMock()
-    fake_ep.send_return_audio = mock.AsyncMock()
-    fake_ep.send_return_data = mock.AsyncMock()
+    fake_transport = mock.MagicMock(name="XRMediaHubTransport")
+    fake_transport.endpoint.on_data = mock.Mock(name="on_data")
+    fake_transport.send_return_data = mock.AsyncMock(name="send_return_data")
 
-    with mock.patch.object(agent_mod, "ProcessorEndpoint", autospec=False) as ep_cls:
-        ep_cls.return_value = fake_ep
-        return agent_mod.GlassesAgent(
-            cfg=_make_cfg(),
-            memory=memory,
-            transcript_client=mock.MagicMock(name="TranscriptClient"),
-            query_processor=qp,
-            stt=_stub_stt(),
-            tts=_stub_tts(),
-            nat_runtime=fake_runtime,
-        )
+    return agent_mod.GlassesBrain(
+        transport=fake_transport,
+        cfg=_make_cfg(),
+        memory=memory,
+        query_processor=qp,
+    )
+
+
+def _make_perception(
+    memory: AgentMemory,
+    qp: QueryProcessor,
+    *,
+    query_active: bool = False,
+    active_pid: str = PID,
+) -> Any:
+    """Construct a GlassesPerception with live agent state injected as callables."""
+    import agent as agent_mod
+
+    return agent_mod.GlassesPerception(
+        cfg=_make_cfg(),
+        memory=memory,
+        transcript=mock.MagicMock(name="TranscriptClient"),
+        nat_runtime=mock.MagicMock(name="NatRuntime"),
+        get_active_pid=lambda: active_pid,
+        is_query_active=lambda: query_active,
+        is_guiding=qp.is_guiding,
+    )
 
 
 # ── trace capture ────────────────────────────────────────────────────────────
@@ -222,8 +224,6 @@ def count_starting_with(events: list[str], prefix: str) -> int:
 
 
 # ── scenarios ────────────────────────────────────────────────────────────────
-
-PID = "p1"
 
 # NOTE: VAD scenarios live with the shared component now (tests/test_xr_ai_vad.py).
 # glasses-agent-nat reuses xr_ai_vad.VadDetector rather than a local fork, so the
@@ -784,38 +784,16 @@ async def scenario_13_recording_loop_not_paused_by_query() -> None:
     observation branch is gated by _user_query_active, the recording
     branch is NOT).
     """
-    import agent as agent_mod
-    import xr_ai_agent
-
-    # Set up enough state on a real GlassesAgent instance to run one body
-    # of _background_vlm_loop. Patch ProcessorEndpoint / VadDetector so the
-    # constructor does no network I/O.
     mem = AgentMemory()
-    cfg = _make_cfg()
     rec = Recorder()
-    fake_runtime = mock.MagicMock(name="NatRuntime")
     qp = _make_qp(mem, rec)
-
-    with mock.patch.object(xr_ai_agent, "ProcessorEndpoint", autospec=False) as ep_cls, \
-         mock.patch.object(agent_mod, "ProcessorEndpoint", autospec=False) as ep_cls2:
-        ep_cls.return_value = mock.MagicMock(name="ProcessorEndpoint")
-        ep_cls2.return_value = mock.MagicMock(name="ProcessorEndpoint")
-        ga = agent_mod.GlassesAgent(
-            cfg=cfg,
-            memory=mem,
-            transcript_client=mock.MagicMock(name="TranscriptClient"),
-            query_processor=qp,
-            stt=_stub_stt(),
-            tts=_stub_tts(),
-            nat_runtime=fake_runtime,
-        )
+    perc = _make_perception(mem, qp, query_active=True, active_pid=PID)
 
     import dataclasses
 
     # Tighten the loop sleep so the test completes quickly.
-    ga._cfg = dataclasses.replace(cfg, vlm_interval_s=0.05)
-    ga._rec_warmup_end = 0
-    ga._user_query_active = True
+    perc._cfg = dataclasses.replace(perc._cfg, vlm_interval_s=0.05)
+    perc._rec_warmup_end = 0
 
     # Start a recording in memory.
     mem.start_recording("test demo")
@@ -831,14 +809,13 @@ async def scenario_13_recording_loop_not_paused_by_query() -> None:
         observe_calls.append(pid)
         return None
 
-    ga._capture_recording_frame = fake_capture        # type: ignore[assignment]
-    ga._observe_frame           = fake_observe        # type: ignore[assignment]
-    ga._active_pid              = lambda: PID         # type: ignore[assignment]
+    perc._capture_recording_frame = fake_capture        # type: ignore[assignment]
+    perc._observe_frame           = fake_observe        # type: ignore[assignment]
 
     # The first iteration sees was_recording=False (local) and resets
     # warmup to now + 2 s, so we have to wait past warmup AND through one
     # more sleep cycle before the capture branch runs.
-    task = asyncio.create_task(ga._background_vlm_loop())
+    task = asyncio.create_task(perc._background_vlm_loop())
     deadline = time.time() + 3.0
     while time.time() < deadline:
         if capture_calls:
@@ -858,42 +835,25 @@ async def scenario_13_recording_loop_not_paused_by_query() -> None:
 
 async def scenario_13b_guidance_suppresses_background_observation() -> None:
     """Guidance owns VLM checks; background observation must not compete."""
-    import agent as agent_mod
-    import xr_ai_agent
-
     mem = AgentMemory()
     demo = _seed_demo(mem, "pico headset", finished_ago_s=5.0)
     rec = Recorder()
-    fake_runtime = mock.MagicMock(name="NatRuntime")
     qp = _make_qp(mem, rec)
     qp._guidance_demo = demo
     qp._guidance_step = 0
 
-    with mock.patch.object(xr_ai_agent, "ProcessorEndpoint", autospec=False) as ep_cls, \
-         mock.patch.object(agent_mod, "ProcessorEndpoint", autospec=False) as ep_cls2:
-        ep_cls.return_value = mock.MagicMock(name="ProcessorEndpoint")
-        ep_cls2.return_value = mock.MagicMock(name="ProcessorEndpoint")
-        ga = agent_mod.GlassesAgent(
-            cfg=_make_cfg(),
-            memory=mem,
-            transcript_client=mock.MagicMock(name="TranscriptClient"),
-            query_processor=qp,
-            stt=_stub_stt(),
-            tts=_stub_tts(),
-            nat_runtime=fake_runtime,
-        )
+    perc = _make_perception(mem, qp, active_pid=PID)
 
     import dataclasses
-    ga._cfg = dataclasses.replace(ga._cfg, vlm_interval_s=0.02)
-    ga._active_pid = lambda: PID  # type: ignore[assignment]
+    perc._cfg = dataclasses.replace(perc._cfg, vlm_interval_s=0.02)
     observe_calls: list[str] = []
 
     async def fake_observe(pid: str, previous: str = "", skip_ts: int = 0):
         observe_calls.append(pid)
         return None
 
-    ga._observe_frame = fake_observe  # type: ignore[assignment]
-    task = asyncio.create_task(ga._background_vlm_loop())
+    perc._observe_frame = fake_observe  # type: ignore[assignment]
+    task = asyncio.create_task(perc._background_vlm_loop())
     await asyncio.sleep(0.08)
     task.cancel()
     try:
@@ -905,50 +865,10 @@ async def scenario_13b_guidance_suppresses_background_observation() -> None:
            f"background observation must pause during guidance: {observe_calls}")
 
 
-async def scenario_13c_vad_speech_start_does_not_flush_tts() -> None:
-    """Raw VAD starts can be noise; they must not interrupt active TTS."""
-    mem = AgentMemory()
-    rec = Recorder()
-    qp = _make_qp(mem, rec)
-    ga = _make_ga(mem, qp)
-    ga._speech_generation[PID] = 3
-
-    try:
-        await ga._handle_speech_start(PID)
-    finally:
-        await ga._http.aclose()
-
-    expect(ga._speech_generation[PID] == 3,
-           f"speech-start must not bump generation: {ga._speech_generation}")
-    expect(ga._ep.flush_return_audio.await_count == 0,
-           "speech-start must not flush return audio")
-
-
-async def scenario_13d_accepted_dispatch_still_flushes_tts() -> None:
-    """Accepted voice transcripts still interrupt playback at dispatch time."""
-    mem = AgentMemory()
-    rec = Recorder()
-    qp = _make_qp(mem, rec)
-    ga = _make_ga(mem, qp)
-    handled: list[tuple[str, str, int]] = []
-
-    async def fake_handle(text: str, pid: str, ref_us: int) -> None:
-        handled.append((text, pid, ref_us))
-
-    qp.handle = fake_handle  # type: ignore[method-assign]
-
-    try:
-        await ga._dispatch_query(PID, "stop", ref_us=123, source="voice")
-        await asyncio.wait_for(ga._query_tasks[PID], timeout=1.0)
-    finally:
-        await ga._http.aclose()
-
-    expect(ga._ep.flush_return_audio.await_count == 1,
-           "accepted dispatch must flush return audio")
-    expect(ga._speech_generation.get(PID) == 1,
-           f"accepted dispatch must bump generation: {ga._speech_generation}")
-    expect(handled == [("stop", PID, 123)],
-           f"accepted dispatch did not run query handler: {handled}")
+# NOTE: Voice-I/O dispatch/supersede/barge-in now live in xr-ai-pipecat (base
+# BrainProcessor + StreamingTtsProcessor), covered by tests/. The old
+# _dispatch_query / _speech_generation / _handle_speech_start scenarios were
+# removed with the GlassesAgent → GlassesBrain migration.
 
 
 async def scenario_10_pending_attempt_limit() -> None:
@@ -2207,31 +2127,17 @@ async def scenario_33_guidance_noise_transcript_does_not_dispatch_or_flush() -> 
     rec = Recorder()
     qp = _make_qp(mem, rec)
     _enter_guidance(qp, demo)
-    ga = _make_ga(mem, qp)
+    brain = _make_brain(mem, qp)
 
-    class _Resp:
-        is_error = False
-
-        def json(self) -> dict:
-            return {"text": "Catches."}
-
-    class _Http:
-        async def post(self, *_args, **_kwargs) -> _Resp:
-            return _Resp()
-
-        async def aclose(self) -> None:
-            pass
-
-    ga._http = _Http()  # type: ignore[assignment]
+    # During guidance, a non-control utterance ("Catches.") is guidance noise
+    # and the gate must drop it before it ever reaches dispatch.
     try:
-        await ga._handle_utterance(PID, b"\x01\x00" * 1600, 16_000)
+        dropped = not await brain._passes_gate(PID, "Catches.")
     finally:
-        await ga._http.aclose()
+        await brain.close()
 
-    expect(ga._ep.flush_return_audio.await_count == 0,
-           "guidance noise transcript must not flush return audio")
-    expect(PID not in ga._query_tasks,
-           f"guidance noise transcript must not dispatch query: {ga._query_tasks}")
+    expect(dropped,
+           "guidance noise transcript must be dropped by the gate, not dispatched")
 
 
 async def scenario_31_guidance_correction_is_rate_limited() -> None:
@@ -2490,8 +2396,6 @@ SCENARIOS = [
     scenario_12_issue_surfaces_in_guidance_question,
     scenario_13_recording_loop_not_paused_by_query,
     scenario_13b_guidance_suppresses_background_observation,
-    scenario_13c_vad_speech_start_does_not_flush_tts,
-    scenario_13d_accepted_dispatch_still_flushes_tts,
     scenario_14_question_form_done_runs_completion_check,
     scenario_14b_bare_done_still_exits,
     scenario_14c_is_this_complete_runs_completion_check,

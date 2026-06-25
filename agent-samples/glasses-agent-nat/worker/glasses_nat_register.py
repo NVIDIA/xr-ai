@@ -3,26 +3,28 @@
 
 """Register glasses-agent NAT function groups."""
 
-from pydantic import Field
-
+from glasses_nat_schemas import (
+    AnalyzeRecordingInput,
+    CondenseObservationsInput,
+    DeriveStepKeyInfoInput,
+    DeriveStepRequirementsInput,
+    GuidanceStepInput,
+)
+from glasses_nat_tasks import (
+    analyze_recording_impl,
+    check_guidance_step_complete_impl,
+    condense_observations_impl,
+    derive_step_key_info_impl,
+    derive_step_requirements_impl,
+    describe_current_view_impl,
+)
 from nat.builder.builder import Builder
 from nat.builder.framework_enum import LLMFrameworkEnum
 from nat.builder.function import FunctionGroup
 from nat.cli.register_workflow import register_function_group
 from nat.data_models.component_ref import LLMRef
 from nat.data_models.function import FunctionGroupBaseConfig
-
-from glasses_nat_schemas import AnalyzeRecordingInput
-from glasses_nat_schemas import CondenseObservationsInput
-from glasses_nat_schemas import DeriveStepKeyInfoInput
-from glasses_nat_schemas import DeriveStepRequirementsInput
-from glasses_nat_schemas import GuidanceStepInput
-from glasses_nat_tasks import analyze_recording_impl
-from glasses_nat_tasks import check_guidance_step_complete_impl
-from glasses_nat_tasks import condense_observations_impl
-from glasses_nat_tasks import derive_step_key_info_impl
-from glasses_nat_tasks import describe_current_view_impl
-from glasses_nat_tasks import derive_step_requirements_impl
+from pydantic import Field
 
 
 class GlassesAgentToolsConfig(FunctionGroupBaseConfig, name="glasses_agent_tools"):

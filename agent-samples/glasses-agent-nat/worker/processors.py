@@ -29,16 +29,14 @@ import logging
 import re
 import string
 import time
-from typing import Callable, Awaitable
+from typing import Awaitable, Callable
 
 import httpx
-
 from config import WorkerConfig
 from memory import (
     AgentMemory,
     Demonstration,
     DemoStep,
-    Observation,
     RecordedFrame,
     StepKeyInfo,
     VoiceNote,
@@ -721,7 +719,9 @@ class QueryProcessor:
 
         # ── voice narration during recording ─────────────────────────────────
         if self._memory.recording is not None:
-            import os as _os, json as _json, re as _re
+            import json as _json
+            import os as _os
+            import re as _re
             note = VoiceNote(timestamp_us=ref_us, text=text)
             self._memory.add_voice_note(note)
             _trace_log.info("VOICE_NOTE  t=%d  %s", ref_us, text[:80])
