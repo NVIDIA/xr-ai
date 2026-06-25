@@ -143,6 +143,20 @@ class VLMService(Protocol):
         timeout: float | None = None,
     ) -> ChatResponse: pass
 
+    async def ask_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+    ) -> ChatResponse: pass
+    """Ask one question about MULTIPLE images in a single message — e.g. a
+    teacher-vs-student frame comparison. Images are presented in the order
+    given, before the question text."""
+
     async def ask_video(
         self,
         video: VideoInput,

@@ -459,6 +459,32 @@ class OpenAICompatVLM:
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
         )
 
+    def _build_multi_image_messages(
+        self, images: Sequence[ImageInput], question: str, system_prompt: str
+    ) -> list[ChatMessage]:
+        msgs: list[ChatMessage] = []
+        if system_prompt:
+            msgs.append(ChatMessage(role="system", content=system_prompt))
+        parts: list[ContentPart] = [ImagePart(url=_normalize_image(img)) for img in images]
+        parts.append(TextPart(text=question))
+        msgs.append(ChatMessage(role="user", content=parts))
+        return msgs
+
+    async def ask_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+    ) -> ChatResponse:
+        return await self._llm.chat(
+            self._build_multi_image_messages(images, question, system_prompt),
+            max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+        )
+
     def _build_video_messages(
         self, video: VideoInput, question: str, system_prompt: str
     ) -> list[ChatMessage]:

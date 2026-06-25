@@ -128,19 +128,32 @@ The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
   always-on). No sample code — config only.
 
 **Reusable capabilities** live in `xr-ai-capabilities` — framework-agnostic
-features that talk to the hub through a `ProcessorEndpoint` and depend only on
-the core SDK (no pipecat), so both pipecat and non-pipecat agents can compose
-them:
+features that depend only on the core SDK (`xr-ai-agent` / `xr-ai-models`), never
+on pipecat or any pipeline/agent framework, so both pipecat and non-pipecat
+(e.g. NAT-based) agents can compose them:
 
 - **Live-camera vision Q&A** — `VisionModule` (frame tracking,
-  camera-on-demand, the VLM call). Two call styles over one
-  frame-acquisition path: `ask(pid, q)` **streams** tokens (for TTS) and
-  `perceive(pid, q)` returns a **string** (for agentic tool loops, raising
-  `VisionUnavailable`). `pixels` is its frame → JPEG codec. A pipecat brain
-  constructs it with `VisionModule(transport.endpoint, vlm)`.
+  camera-on-demand, the VLM call). Talks to the hub through a
+  `ProcessorEndpoint`. Two call styles over one frame-acquisition path:
+  `ask(pid, q)` **streams** tokens (for TTS) and `perceive(pid, q)` returns a
+  **string** (for agentic tool loops, raising `VisionUnavailable`). `pixels` is
+  its frame → JPEG codec. A pipecat brain constructs it with
+  `VisionModule(transport.endpoint, vlm)`.
+- **Teacher-demo analysis** — `teacher_demo` (`analyze_recording`,
+  `derive_step_requirements`, `derive_step_key_info`): turn a recorded
+  demonstration (frames + voice notes) into an overview + ordered steps, then
+  per-step visually-checkable requirements and structured key-info. Pure logic
+  over an `xr-ai-models` `LLMService`.
+- **Agent-monitor guidance** — `agent_monitor` (`check_guidance_step_complete`):
+  a tiered live-vs-teacher completion check for guiding a student through a
+  step. Logic over an `xr-ai-models` `VLMService` (single-image +
+  `ask_images` two-image compare) plus an injected `get_latest_frame` callable —
+  the live-frame source stays the caller's choice (hub endpoint, video-mcp, …).
 
-A new vision sample's brain therefore reduces to thin glue over `VisionModule`;
-a voice sample gets the wake word from config alone.
+A new vision sample's brain reduces to thin glue over `VisionModule`; a voice
+sample gets the wake word from config alone; an agent that records and guides
+demonstrations (glasses-agent-nat) reuses `teacher_demo` + `agent_monitor` by
+adapting its model access to the `LLMService` / `VLMService` seams.
 
 ### Scope decision and named follow-ups
 

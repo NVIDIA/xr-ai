@@ -71,14 +71,22 @@ xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
     └── numpy >=1.24
     └── Pillow >=10.0
     Framework-agnostic, reusable agent capabilities (see AGENTS.md → "Agent
-    sample architecture"). A capability talks to the hub through a
-    ``ProcessorEndpoint`` and depends only on the core SDK — NOT on pipecat or
-    any pipeline framework — so both pipecat and non-pipecat agents can compose
-    it. Hosts ``pixels`` (frame → PIL → JPEG; numpy + Pillow) and ``vision``
-    (VisionModule — live-camera VLM Q&A with camera-on-demand, exposing ``ask``
-    for streaming TTS and ``perceive`` for agentic tool loops), so vision
-    samples no longer copy that code per-worker. A pipecat brain wires it up by
-    passing ``transport.endpoint``.
+    sample architecture"). A capability depends only on the core SDK
+    (xr-ai-agent / xr-ai-models) — NOT on pipecat or any pipeline/agent
+    framework — so both pipecat and non-pipecat (NAT-based) agents can compose
+    it. Hosts:
+      - ``pixels`` (frame → PIL → JPEG; numpy + Pillow) + ``vision``
+        (VisionModule — live-camera VLM Q&A with camera-on-demand, via a
+        ProcessorEndpoint; ``ask`` for streaming TTS, ``perceive`` for tool
+        loops). A pipecat brain wires it up by passing ``transport.endpoint``.
+      - ``teacher_demo`` (analyze_recording / derive_step_requirements /
+        derive_step_key_info) — recorded demonstration → steps + requirements +
+        key-info, over an xr-ai-models ``LLMService``.
+      - ``agent_monitor`` (check_guidance_step_complete) — tiered live-vs-teacher
+        step-completion check, over an xr-ai-models ``VLMService`` (single +
+        two-image ``ask_images``) plus an injected ``get_latest_frame``.
+    glasses-agent-nat reuses teacher_demo + agent_monitor by adapting its
+    NAT LangChain LLM / vlm-mcp functions to the LLMService / VLMService seams.
 
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24
@@ -104,7 +112,9 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     for the seven in-tree services.  Future backends (LiteLLM, vendor SDKs)
     plug in as new `kind`s in `factory.py::make_*` without touching the
     protocols or callers.  Workers depend on this instead of rolling their
-    own httpx wrappers.
+    own httpx wrappers.  ``VLMService`` exposes ``ask_image`` (single image),
+    ``ask_images`` (multiple images in one message — e.g. a teacher-vs-student
+    frame compare, used by xr-ai-capabilities' agent_monitor), and ``ask_video``.
 
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
@@ -481,7 +491,7 @@ memory condenser run in `GlassesPerception`, off the audio path, over NAT MCP.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
-| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-logging` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable] | pipecat-ai >=1.3, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, torchaudio >=2.10,<2.11 (silero-vad/onnxruntime/torch pulled in via xr-ai-pipecat → xr-ai-vad; torchaudio pinned to torch's minor so Silero's ONNX backend loads). Voice I/O (VAD/STT/TTS/transport) and the always-on `VoiceGateConfig` come from xr-ai-pipecat + xr-ai-voicegate; STT/TTS clients are built with xr-ai-models `make_stt`/`make_tts`. |
+| Worker | `glasses-agent-nat-worker` | `xr-ai-agent`, `xr-ai-capabilities` [editable], `xr-ai-logging` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable] | pipecat-ai >=1.3, httpx >=0.27, pyyaml >=6.0, nvidia-nat[langchain,mcp] >=1.6, pydantic >=2.7, torchaudio >=2.10,<2.11 (silero-vad/onnxruntime/torch pulled in via xr-ai-pipecat → xr-ai-vad; torchaudio pinned to torch's minor so Silero's ONNX backend loads). Voice I/O (VAD/STT/TTS/transport) and the always-on `VoiceGateConfig` come from xr-ai-pipecat + xr-ai-voicegate; STT/TTS clients are built with xr-ai-models `make_stt`/`make_tts`. The teacher-demo (`analyze_recording`, `derive_step_requirements`, `derive_step_key_info`) and agent-monitor (`check_guidance_step_complete`) logic comes from xr-ai-capabilities; `glasses_nat_tasks.py` keeps only thin NAT→xr-ai-models adapters. |
 
 NAT plugin entry point `glasses_nat_register` registers the `glasses_agent_tools`
 and `glasses_worker_tasks` function groups consumed by the NAT workflow YAML.

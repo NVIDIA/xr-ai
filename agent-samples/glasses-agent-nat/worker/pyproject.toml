@@ -11,6 +11,10 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
+    # Teacher-demo (analyze_recording, derive_step_*) and agent-monitor
+    # (check_guidance_step_complete) logic lives in xr-ai-capabilities;
+    # glasses_nat_tasks keeps only thin NAT→xr-ai-models adapters over it.
+    "xr-ai-capabilities",
     "xr-ai-logging",
     # Voice I/O is the unified pipecat pipeline (same as simple-vlm-example /
     # xr-render-demo). xr-ai-pipecat owns VAD/STT/TTS/transport and pulls
@@ -35,8 +39,9 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-agent     = { path = "../../../agent-sdk",               editable = true }
-xr-ai-logging   = { path = "../../../utils/xr-ai-logging",     editable = true }
+xr-ai-agent        = { path = "../../../agent-sdk",                     editable = true }
+xr-ai-capabilities = { path = "../../../agent-sdk/xr-ai-capabilities", editable = true }
+xr-ai-logging      = { path = "../../../utils/xr-ai-logging",          editable = true }
 xr-ai-models    = { path = "../../../agent-sdk/xr-ai-models",  editable = true }
 xr-ai-pipecat   = { path = "../../../agent-sdk/xr-ai-pipecat", editable = true }
 xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate",   editable = true }
