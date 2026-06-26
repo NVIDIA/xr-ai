@@ -93,11 +93,15 @@ xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── pyyaml >=6.0
     Pipecat-free speech-input opt-in gate. Owns the magic-phrase + follow-up
     + STOP ladder, the lazy listening chime synthesized at the TTS sample
-    rate, and the participant-joined greeting hook. Workers feed STT
-    transcripts via ``feed`` and register handlers — either one-at-a-time via
-    ``on_*`` setters or together via ``bind(...)``. Consumed inside
-    xr-ai-pipecat by ``VoiceGateProcessor`` so sample workers don't import it
-    directly when they use the unified pipeline.
+    rate, and the participant-joined greeting hook. ``VoiceGateConfig`` knobs:
+    ``magic_phrases`` (empty → always-on), ``followup_grace_s``,
+    ``listening_chime``, and ``intercept_stop`` (default True; set False so the
+    gate dispatches "stop"/"be quiet" as ordinary queries — for agents like
+    glasses-agent-nat whose brain owns its own stop/command vocabulary).
+    Workers feed STT transcripts via ``feed`` and register handlers — either
+    one-at-a-time via ``on_*`` setters or together via ``bind(...)``. Consumed
+    inside xr-ai-pipecat by ``VoiceGateProcessor`` so sample workers don't
+    import it directly when they use the unified pipeline.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]

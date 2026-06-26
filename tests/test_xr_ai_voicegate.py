@@ -72,12 +72,14 @@ def _gate(
     phrases:          tuple[str, ...] = (),
     followup_grace_s: float           = 5.0,
     listening_chime:  bool            = False,
+    intercept_stop:   bool            = True,
     tts_rate:         int             = 22050,
 ) -> tuple[VoiceGate, _FakeAudioSink, _FakeTTS]:
     cfg  = VoiceGateConfig(
         magic_phrases    = phrases,
         followup_grace_s = followup_grace_s,
         listening_chime  = listening_chime,
+        intercept_stop   = intercept_stop,
     )
     sink = _FakeAudioSink()
     tts  = _FakeTTS(sample_rate=tts_rate)
@@ -324,6 +326,26 @@ async def test_feed_no_phrases_stop_still_routes_to_on_stop():
     await gate.feed("p1", "stop")
 
     assert events == [("stop", "p1")]
+
+
+@pytest.mark.asyncio
+async def test_feed_intercept_stop_false_dispatches_stop_as_query():
+    """Case 15 (c): with ``intercept_stop=False`` (consumer owns its own stop
+    vocabulary, e.g. glasses-agent-nat's "stop recording" demo command), STOP
+    utterances are NOT intercepted — they dispatch to ``on_query`` like any
+    other utterance so the brain can act on them."""
+    gate, _, _ = _gate(phrases=(), intercept_stop=False)
+    events = _recording_handlers(gate)
+
+    await gate.feed("p1", "stop recording")
+    await gate.feed("p1", "stop")
+    await gate.feed("p1", "show me how to make coffee")
+
+    assert events == [
+        ("query", "p1", "stop recording", True),
+        ("query", "p1", "stop", True),
+        ("query", "p1", "show me how to make coffee", True),
+    ]
 
 
 @pytest.mark.asyncio

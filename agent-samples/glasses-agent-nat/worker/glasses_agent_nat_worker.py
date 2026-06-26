@@ -271,9 +271,13 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         # ── voice pipeline ─────────────────────────────────────────────────────
         # The smart-glasses gate is the brain's noise/intent filter, not a wake
         # word — the pipeline's VoiceGate runs always-on (empty magic phrases)
-        # and simply forwards every utterance to the brain. ``text_topic=""``
-        # opts out of the pipeline's data echo: QueryProcessor sends its own
-        # ``agent.response`` / ``agent.progress`` messages.
+        # and forwards every utterance to the brain. ``intercept_stop=False`` is
+        # critical: QueryProcessor owns the agent's whole command vocabulary,
+        # including "stop recording" (ends a teacher demo) and a bare "stop"
+        # (stop speaking). With the default the gate would swallow any "stop…"
+        # utterance as a barge-in and the brain would never see it. ``text_topic
+        # =""`` opts out of the pipeline's data echo: QueryProcessor sends its
+        # own ``agent.response`` / ``agent.progress`` messages.
         _, task = make_voice_pipeline(
             transport      = transport,
             stt            = stt,
@@ -284,7 +288,7 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
                 min_speech       = cfg.min_speech,
                 silero_threshold = cfg.silero_threshold,
             ),
-            voice_gate_cfg = VoiceGateConfig(),
+            voice_gate_cfg = VoiceGateConfig(intercept_stop=False),
             text_topic     = "",
             idle_timeout_secs = None,
         )

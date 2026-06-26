@@ -28,20 +28,30 @@ class VoiceGateConfig:
                            because the chime is an audible "I heard you"
                            cue that most consumers want by default;
                            opt out explicitly with ``listening_chime: false``.
+    ``intercept_stop``   — when true (default), a "stop"/"be quiet" utterance
+                           is intercepted and routed to ``on_stop`` (a barge-in
+                           that drains TTS) instead of being dispatched as a
+                           query. Set ``false`` for agents that own their own
+                           stop/command vocabulary at the brain level (e.g.
+                           glasses-agent-nat, where "stop recording" is a demo
+                           command and a bare "stop" is handled by the brain) —
+                           every utterance is then dispatched as a query.
     """
     magic_phrases:    tuple[str, ...] = ()
     followup_grace_s: float           = 5.0
     listening_chime:  bool            = True
+    intercept_stop:   bool            = True
 
 
 def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     """Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
 
     Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
-    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
-    Missing file or empty file → returns the dataclass defaults (gate
-    disabled / always-on). ``magic_phrases: null`` and trailing whitespace
-    in phrases are normalized the same way the inline-block parser did.
+    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float),
+    ``intercept_stop`` (bool). Missing file or empty file → returns the
+    dataclass defaults (gate disabled / always-on). ``magic_phrases: null``
+    and trailing whitespace in phrases are normalized the same way the
+    inline-block parser did.
     """
     if not path.exists():
         return VoiceGateConfig()
@@ -58,6 +68,7 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
         magic_phrases    = phrases,
         followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
         listening_chime  = bool(raw.get("listening_chime", True)),
+        intercept_stop   = bool(raw.get("intercept_stop", True)),
     )
 
 

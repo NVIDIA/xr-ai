@@ -150,10 +150,11 @@ class VoiceGate:
         """
         # Always-on mode: no phrases configured, so the magic-phrase /
         # follow-up / phrase-only / drop branches don't apply. STOP still
-        # wins (interrupts must work even without a phrase), and every
-        # other utterance is a fresh query.
+        # wins (interrupts must work even without a phrase) unless the
+        # consumer owns its own stop vocabulary (intercept_stop=False), and
+        # every other utterance is a fresh query.
         if self._magic_re is None:
-            if STOP_RE.match(text):
+            if self._cfg.intercept_stop and STOP_RE.match(text):
                 logger.info(
                     "gate decision pid=%r kind=STOP fresh_match=False "
                     "followup_window_open=False",
@@ -177,10 +178,11 @@ class VoiceGate:
         matched_magic  = stripped is not None
         stop_candidate = stripped if (matched_magic and stripped) else text
 
-        # 1. STOP — always wins. Matched on both the raw transcript
-        #    ("stop") AND on the magic-phrase-stripped tail ("hey agent,
-        #    stop") so the fast path triggers either way.
-        if STOP_RE.match(stop_candidate):
+        # 1. STOP — always wins (unless the consumer owns its own stop
+        #    vocabulary, intercept_stop=False). Matched on both the raw
+        #    transcript ("stop") AND on the magic-phrase-stripped tail
+        #    ("hey agent, stop") so the fast path triggers either way.
+        if self._cfg.intercept_stop and STOP_RE.match(stop_candidate):
             logger.info(
                 "gate decision pid=%r kind=STOP fresh_match=%s "
                 "followup_window_open=%s",
