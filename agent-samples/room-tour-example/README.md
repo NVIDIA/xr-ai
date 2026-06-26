@@ -81,6 +81,31 @@ from speech.
 The bearing is the one non-TextSLAM affordance (re-acquired live per query); the
 *map and localization are pure text*, matching the monocular, pose-free input.
 
+### Optional: monocular pose backbone (`mono-slam-xr`)
+
+The text map is pose-free by design, but the bearing can be upgraded from the
+VLM's coarse left/center/right to a **true geometric bearing** when an optional
+single-camera pose backbone is available (`worker/pose_provider.py`, the
+`mono-slam-xr` proposal: TartanVO up-to-scale VO + Depth-Anything-V2 metric depth
+for a frozen global scale + DINOv2-CLS appearance relocalization). It is a
+**soft, additive** dependency — when absent the agent runs exactly as above.
+
+When configured it adds a continuous ~10 Hz tracking loop (separate from the slow
+VLM perceive loop), anchors each place node to a room-frame position, and answers
+"where is X" / arrival bearings geometrically (measured ~8.9° vs the VLM's ~30°
+on synthetic indoor footage). Monocular discipline is enforced: a tracked pose is
+camera-to-world in a per-session room frame (relative bearings, not compass),
+**distances are spoken only when a metric scale was recovered** (`metric_valid`),
+and on tracking loss or an unanchored target the agent falls back to the VLM
+bearing rather than guessing. The appearance relocalizer abstains by default; when
+it is tracking and abstains, "where am I" softens its phrasing.
+
+To enable it: install the `pose` extra (`uv sync --extra pose`), point
+`MONO_SLAM_WORKSPACE` at the deployed backbone workspace (its vendored SLAM code +
+model weights), and set the glasses intrinsics under `camera_intrinsics` in
+`yaml/room_tour_example_worker.yaml`. Validated on synthetic indoor footage only —
+not yet on real glasses footage or absolute metric distance.
+
 It deliberately reuses the **already-built shared services** — STT (NeMo
 Parakeet), VAD (Silero via `xr-ai-vad`), TTS (Piper), and the VLM (Cosmos) —
 through `xr-ai-models` + `xr-ai-pipecat.make_voice_pipeline`, exactly like
@@ -116,9 +141,12 @@ VLM when it needs to perceive a frame or answer a question.
 
 ## Limitations
 
-- Direction is a coarse left/center/right read of the current frame, not metric
-  3-D — there is no pose/SLAM. A future variant could consume a pose topic (see
-  the `mono-slam-example` proposal) for true bearings and cross-room directions.
+- Direction defaults to a coarse left/center/right read of the current frame.
+  The optional `mono-slam-xr` pose backbone (above) upgrades this to a true
+  geometric bearing, but it is off unless installed and configured; without it
+  there is no pose/SLAM and bearings stay frame-local.
+- Distances are never spoken unless the optional pose backbone recovered a metric
+  scale (`metric_valid`); monocular scale is otherwise ambiguous.
 - Object recall is only as good as what the VLM named while you panned; scan
   each room slowly and fully.
 - Navigation is **topological, not metric**: the route follows the place-node

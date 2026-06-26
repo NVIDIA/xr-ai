@@ -49,6 +49,7 @@ from dataclasses import dataclass
 from typing import AsyncIterator
 
 import httpx
+import numpy as np
 from loguru import logger
 from xr_ai_agent import DataMessage, FrameSignal
 from xr_ai_models import VLMService
@@ -57,6 +58,16 @@ from xr_ai_pipecat.transport import XRMediaHubTransport
 
 from pixels import encode_image, frame_to_pil
 from textslam import HashingEmbedder, SceneDescription, SemanticTopoMap, VLMPerceptor
+
+# OPTIONAL monocular pose backbone. The map is text-space (pose-free) by design;
+# when this soft dependency and its model assets are present (MONO_SLAM_WORKSPACE
+# set), the brain upgrades bearings from the VLM's coarse left/center/right to a
+# true geometric bearing and adds a continuous tracking loop. Absent → unchanged
+# pose-free behavior. See worker/pose_provider.py.
+try:
+    from pose_provider import MonoPoseProvider
+except Exception:  # noqa: BLE001 - any import failure means "stay pose-free"
+    MonoPoseProvider = None  # type: ignore[assignment]
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a spatial memory assistant for smart glasses. You help the wearer "
@@ -144,6 +155,8 @@ class RoomTourBrain(BrainProcessor):
         match_threshold: float = 0.62,
         nav_monitor_interval_s: float = 4.0,
         nav_max_secs: float = 120.0,
+        camera_intrinsics: dict | None = None,
+        track_interval_s: float = 0.1,
     ) -> None:
         super().__init__()
         self._transport = transport
@@ -155,6 +168,7 @@ class RoomTourBrain(BrainProcessor):
         self._match_threshold = match_threshold
         self._nav_monitor_interval_s = nav_monitor_interval_s
         self._nav_max_secs = nav_max_secs
+        self._track_interval_s = track_interval_s
 
         # The text-space map (TextSLAM). Perception → text; embedding → vectors.
         self._embedder = HashingEmbedder()
@@ -162,6 +176,18 @@ class RoomTourBrain(BrainProcessor):
         self._map: SemanticTopoMap | None = None
         # node_id → spoken room name (voice-supervised naming over the topo graph).
         self._place_names: dict[int, str] = {}
+
+        # OPTIONAL pose backbone (additive geometric sensor over the text map).
+        # Built only when the soft dependency imported AND glasses intrinsics were
+        # supplied — wrong/absent intrinsics would bias VO + depth, so we refuse to
+        # guess them and stay pose-free instead.
+        self._pose = self._build_pose_provider(camera_intrinsics)
+        self._track_task: asyncio.Task | None = None
+        # node_id → room-frame position (mean of the camera positions held while the
+        # node's observations were ingested). Populated only while a pose is being
+        # tracked; this is what turns a textslam place node into a bearing target.
+        self._node_positions: dict[int, np.ndarray] = {}
+        self._node_pos_counts: dict[int, int] = {}
 
         self._touring = False
         self._tour_task: asyncio.Task | None = None
@@ -181,6 +207,42 @@ class RoomTourBrain(BrainProcessor):
         ep.on_data(self._on_data)
         ep.on_frame(self._on_frame)
 
+    # ── optional pose backbone ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _build_pose_provider(camera_intrinsics: dict | None):
+        """Construct the optional MonoPoseProvider, or return None to stay pose-free.
+
+        Returns None (no error) when the backbone isn't importable or no glasses
+        intrinsics were supplied — both are normal "pose-free" configurations.
+        Model loading is deferred to ``start()`` so __init__ never blocks on GPU."""
+        if MonoPoseProvider is None or not camera_intrinsics:
+            return None
+        try:
+            from dataset import CameraParams  # backbone type, only present with the extra
+            cam = CameraParams(
+                fx=float(camera_intrinsics["fx"]), fy=float(camera_intrinsics["fy"]),
+                cx=float(camera_intrinsics["cx"]), cy=float(camera_intrinsics["cy"]),
+                width=int(camera_intrinsics["width"]), height=int(camera_intrinsics["height"]),
+            )
+            provider = MonoPoseProvider(camera_params=cam)
+            logger.info("mono-slam pose provider configured (intrinsics={})", camera_intrinsics)
+            return provider
+        except Exception as exc:  # noqa: BLE001 - any failure → pose-free
+            logger.warning("pose provider unavailable, staying pose-free: {}", exc)
+            return None
+
+    async def _start_pose_provider(self) -> None:
+        """Load the backbone models off the event loop (GPU-bound)."""
+        if self._pose is None:
+            return
+        try:
+            await asyncio.to_thread(self._pose.start)
+            logger.info("mono-slam pose provider started")
+        except Exception as exc:  # noqa: BLE001 - degrade to pose-free
+            logger.warning("pose provider start failed, staying pose-free: {}", exc)
+            self._pose = None
+
     # ── BrainProcessor overrides ──────────────────────────────────────────────
 
     async def handle_query(
@@ -196,6 +258,16 @@ class RoomTourBrain(BrainProcessor):
             self._active_pid = None
         self._stop_nav()
         await self._stop_tour_task()
+
+    async def shutdown(self) -> None:
+        """Release the pose backbone's GPU models (no-op when pose-free)."""
+        self._stop_nav()
+        await self._stop_tour_task()
+        if self._pose is not None:
+            try:
+                await asyncio.to_thread(self._pose.stop)
+            except Exception:
+                logger.opt(exception=True).warning("pose provider stop failed")
 
     # ── data-channel side path (typed queries) ────────────────────────────────
 
@@ -342,7 +414,11 @@ class RoomTourBrain(BrainProcessor):
         self._active_label = None
         self._touring = True
         self._active_pid = pid
+        self._node_positions = {}
+        self._node_pos_counts = {}
         self._tour_task = asyncio.create_task(self._tour_capture_loop(pid))
+        if self._pose is not None:
+            self._track_task = asyncio.create_task(self._tracking_loop(pid))
         return ("Room tour started. Walk through your space and tell me each "
                 "room — say 'this is the living room' as you enter it. Say "
                 "'stop tour' when you're done.")
@@ -355,6 +431,9 @@ class RoomTourBrain(BrainProcessor):
         if self._tour_task is not None and not self._tour_task.done():
             self._tour_task.cancel()
             self._tour_task = None
+        if self._track_task is not None and not self._track_task.done():
+            self._track_task.cancel()
+            self._track_task = None
         if self._map is not None:
             # consolidate over-fragmented places, then sharpen the landmark index
             # used by "where is X" — the upstream end-of-build steps.
@@ -371,13 +450,15 @@ class RoomTourBrain(BrainProcessor):
                 "Ask me where things are.")
 
     async def _stop_tour_task(self) -> None:
-        task, self._tour_task = self._tour_task, None
-        if task is not None and not task.done():
-            task.cancel()
-            try:
-                await task
-            except (asyncio.CancelledError, Exception):
-                pass
+        for attr in ("_tour_task", "_track_task"):
+            task = getattr(self, attr)
+            setattr(self, attr, None)
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     def _reconcile_place_names(self) -> None:
         """After ``consolidate`` merges nodes, some named node_ids disappear.
@@ -411,6 +492,7 @@ class RoomTourBrain(BrainProcessor):
         result = self._map.ingest(desc)
         if self._active_label is not None:
             self._place_names[result.node_id] = self._active_label
+        self._record_node_position(result.node_id)
         logger.info(
             "ingest → node {} ({}) room={!r} caption={!r} objects={} text={}",
             result.node_id, result.reason, self._active_label,
@@ -435,6 +517,99 @@ class RoomTourBrain(BrainProcessor):
             return
         except Exception:
             logger.exception("tour capture loop error")
+
+    # ── optional pose tracking (continuous, ~10 Hz) ────────────────────────────
+    #
+    # The VLM perceive loop is slow (~3 s) but monocular VO needs a continuous
+    # stream to stay tracked, so this is a SEPARATE cheap loop. It only runs when
+    # a pose provider is configured; on first frame it lazily loads the backbone
+    # models, then feeds every fresh frame so a pose is always current for
+    # bearings/relocalization. Tracking loss (pose None) is fine — the agent just
+    # falls back to the VLM path whenever there's no current pose.
+
+    async def _tracking_loop(self, pid: str) -> None:
+        if self._pose is None:
+            return
+        await self._start_pose_provider()
+        if self._pose is None:           # start() failed → degraded to pose-free
+            return
+        self._pose.reset_session()
+        logger.info("pose tracking loop started pid={!r}", pid)
+        try:
+            while self._touring:
+                await asyncio.sleep(self._track_interval_s)
+                if not self._touring:
+                    break
+                sig = self._latest_signal(pid)
+                if sig is None or not self._is_fresh(sig):
+                    continue
+                fd = await self._transport.endpoint.request_frame(sig)
+                if fd is None:
+                    continue
+                try:
+                    est = await asyncio.to_thread(
+                        self._pose.ingest_frame, fd, pts_us=sig.pts_us, frame_id=sig.seq,
+                    )
+                except Exception:
+                    logger.exception("pose ingest failed; continuing pose-free this tick")
+                    continue
+                if est.lost:
+                    logger.debug("pose lost (frame seq={})", sig.seq)
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.exception("pose tracking loop error")
+
+    def _record_node_position(self, node_id: int) -> None:
+        """Fold the current camera position into a place node's running mean
+        position. No-op without a current (non-lost) pose — the node simply has no
+        geometric anchor and bearings to it fall back to the VLM."""
+        if self._pose is None:
+            return
+        est = self._pose.current_pose
+        if est is None or est.lost:
+            return
+        p = est.position()
+        if p is None:
+            return
+        n = self._node_pos_counts.get(node_id, 0)
+        if n == 0:
+            self._node_positions[node_id] = p.astype(np.float64)
+        else:
+            self._node_positions[node_id] = (self._node_positions[node_id] * n + p) / (n + 1)
+        self._node_pos_counts[node_id] = n + 1
+
+    def _target_world_xyz(self, node_id: int) -> np.ndarray | None:
+        """Room-frame position for a place node, if one was recorded during the
+        tour. Falls back to a neighbor's position for an unlabeled transition node
+        that itself was never pose-anchored."""
+        pos = self._node_positions.get(node_id)
+        if pos is not None:
+            return pos
+        if self._map is None:
+            return None
+        neighbors = [
+            self._node_positions[nbr]
+            for nbr in self._map.neighbors(node_id)
+            if nbr in self._node_positions
+        ]
+        if neighbors:
+            return np.mean(np.stack(neighbors), axis=0)
+        return None
+
+    def _pose_bearing_phrase(self, node_id: int) -> str | None:
+        """Geometric bearing phrase from the current pose to a place node, or None
+        when there is no current pose / no anchored position (→ VLM fallback)."""
+        if self._pose is None:
+            return None
+        est = self._pose.current_pose
+        if est is None or est.lost:
+            return None
+        tgt = self._target_world_xyz(node_id)
+        if tgt is None:
+            return None
+        bearing = self._pose.bearing_to(tgt)
+        return bearing.phrase() if bearing else None
 
     # ── queries over the finished map ──────────────────────────────────────────
 
@@ -477,6 +652,13 @@ class RoomTourBrain(BrainProcessor):
         room = await self._relocalize(pid)
         if room is None:
             return "I'm not sure which room this is."
+        # Optional fusion: the appearance relocalizer abstains by default, so it
+        # never contradicts the text answer — but when a pose is tracked and it
+        # abstains, soften the phrasing (the two sensors don't both agree).
+        if self._pose is not None and self._pose.current_pose is not None:
+            reloc = self._pose.relocalize()
+            if not reloc.localized:
+                return f"I think you're in the {room}, but I'm not fully sure."
         return f"You're in the {room}."
 
     def _find_object(self, obj_name: str) -> tuple[int, str] | None:
@@ -516,15 +698,19 @@ class RoomTourBrain(BrainProcessor):
 
         current = await self._relocalize(pid)
         if current is not None and current == room:
-            frame = await self._get_frame(pid)
-            bearing = ""
-            if frame is not None:
-                raw = await self._vlm_ask(frame, (
-                    f"Is there a {label} visible in this image? If yes, is it to "
-                    "the left, in the center, or to the right? Reply with exactly "
-                    "one word: left, center, right, or no."
-                ))
-                bearing = _bearing_phrase(raw)
+            # Prefer the geometric pose bearing (true SE3 direction) when a pose is
+            # tracked and the node is anchored; otherwise read a coarse L/C/R from
+            # the live frame via the VLM.
+            bearing = self._pose_bearing_phrase(node_id)
+            if not bearing:
+                frame = await self._get_frame(pid)
+                if frame is not None:
+                    raw = await self._vlm_ask(frame, (
+                        f"Is there a {label} visible in this image? If yes, is it to "
+                        "the left, in the center, or to the right? Reply with exactly "
+                        "one word: left, center, right, or no."
+                    ))
+                    bearing = _bearing_phrase(raw)
             if bearing:
                 return f"The {label} is in the {room}, {bearing}."
             return f"The {label} is here in the {room}."
@@ -712,15 +898,16 @@ class RoomTourBrain(BrainProcessor):
         if nav.dest_room and (nav.target_label == nav.dest_room or nav.target_label in nav.dest_room):
             await self._nav_say(pid, f"You've arrived at the {room}.")
             return
-        bearing = ""
-        frame = await self._get_frame(pid)
-        if frame is not None:
-            raw = await self._vlm_ask(frame, (
-                f"Is there a {nav.target_label} visible in this image? If yes, is "
-                "it to the left, in the center, or to the right? Reply with exactly "
-                "one word: left, center, right, or no."
-            ))
-            bearing = _bearing_phrase(raw)
+        bearing = self._pose_bearing_phrase(nav.target_node)
+        if not bearing:
+            frame = await self._get_frame(pid)
+            if frame is not None:
+                raw = await self._vlm_ask(frame, (
+                    f"Is there a {nav.target_label} visible in this image? If yes, is "
+                    "it to the left, in the center, or to the right? Reply with exactly "
+                    "one word: left, center, right, or no."
+                ))
+                bearing = _bearing_phrase(raw)
         if bearing:
             await self._nav_say(pid, f"You've reached the {room}. The {nav.target_label} is {bearing}.")
         else:

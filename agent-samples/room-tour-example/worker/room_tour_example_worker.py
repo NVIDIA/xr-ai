@@ -117,6 +117,8 @@ async def main(
         match_threshold         = float(cfg.get("match_threshold",         0.62)),
         nav_monitor_interval_s  = float(cfg.get("nav_monitor_interval_s",  4.0)),
         nav_max_secs            = float(cfg.get("nav_max_secs",          120.0)),
+        camera_intrinsics       = cfg.get("camera_intrinsics"),
+        track_interval_s        = float(cfg.get("track_interval_s",        0.1)),
     )
 
     _, task = make_voice_pipeline(
@@ -152,6 +154,7 @@ async def main(
     try:
         await PipelineRunner().run(task)
     finally:
+        await brain.shutdown()
         transport.shutdown()
         for svc in (stt, vlm, tts):
             try:

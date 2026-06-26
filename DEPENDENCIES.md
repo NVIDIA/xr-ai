@@ -421,7 +421,7 @@ the map is pure text, in-memory and per-session.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `room-tour-example` | `xr-ai-launcher`, `xr-ai-logging` | — |
-| Worker | `room-tour-example-worker` | `xr-ai-agent`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (in-process `textslam` place map; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx also via xr-ai-pipecat) |
+| Worker | `room-tour-example-worker` | `xr-ai-agent`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | numpy >=1.24, Pillow >=10.0, pyyaml >=6.0 (in-process `textslam` place map; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx also via xr-ai-pipecat). **Optional `pose` extra**: torch >=2.1, opencv-python >=4.8 — enables the soft `worker/pose_provider.py` monocular pose backbone (`mono-slam-xr`). Off by default; the base worker pulls neither. The vendored SLAM code + model weights are supplied out-of-tree via `MONO_SLAM_WORKSPACE`, not declared here. |
 
 Worker runs on the shared pipecat voice pipeline
 (`xr_ai_pipecat.make_voice_pipeline`). `RoomTourBrain` (a `BrainProcessor`)

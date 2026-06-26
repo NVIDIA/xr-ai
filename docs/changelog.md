@@ -9,6 +9,27 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-26 — room-tour: optional monocular pose backbone, additive not replacing TextSLAM
+
+Wired the `mono-slam-xr` pose backbone into `room-tour-example` as an **optional,
+soft** sensor over the existing text-space map rather than replacing it. The
+research team's integration plan was explicit that the provider is additive and
+feature-flagged, which also keeps the base worker lightweight (the whole point of
+TextSLAM + HashingEmbedder was to pull no ML libs). So: `worker/pose_provider.py`
+is a try/except import that resolves the out-of-tree backbone via
+`MONO_SLAM_WORKSPACE`; the heavy runtime deps (torch, opencv) live behind a
+`pose` optional extra; and the brain builds the provider only when both the
+import and glasses `camera_intrinsics` are present, otherwise it stays exactly
+pose-free. A separate continuous ~10 Hz tracking loop feeds VO (the VLM perceive
+loop stays slow), each ingested place node is anchored to a room-frame position
+(node → mean camera position), and "where is X" / arrival bearings prefer the
+geometric `bearing_to` with a VLM left/center/right fallback. Monocular discipline
+is enforced in code: distances are spoken only when `metric_valid`, tracking loss
+(`pose is None`) falls back to the VLM/text path, and the appearance relocalizer
+abstains by default (softening "where am I" when it abstains while tracking).
+Validated on synthetic indoor footage only; the GPU backbone is not exercised in
+CI. The text map, `textslam/`, pixels.py, and pose-free behavior are unchanged.
+
 ### 2026-06-09 — render-mcp: scene resync survives a LOVR respawn (blocking send, not NOBLOCK)
 
 After a LOVR (re)start, `render-mcp` re-pushed every stored primitive via

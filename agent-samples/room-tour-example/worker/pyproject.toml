@@ -19,6 +19,17 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+# OPTIONAL monocular pose backbone (worker/pose_provider.py). The base agent is
+# pose-free; install this extra only to enable true geometric bearings. The
+# vendored SLAM code + model weights are supplied out-of-tree via
+# MONO_SLAM_WORKSPACE (they carry their own torch build); this extra pulls just
+# the pip-installable runtime deps the adapter needs.
+[project.optional-dependencies]
+pose = [
+    "torch>=2.1",
+    "opencv-python>=4.8",
+]
+
 [tool.uv.sources]
 xr-ai-agent   = { path = "../../../agent-sdk", editable = true }
 xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
@@ -33,5 +44,6 @@ only-include = [
     "room_tour_example_worker.py",
     "agent.py",
     "pixels.py",
+    "pose_provider.py",
     "textslam",
 ]

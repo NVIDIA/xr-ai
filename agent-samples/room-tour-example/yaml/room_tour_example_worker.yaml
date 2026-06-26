@@ -39,6 +39,25 @@ nav_monitor_interval_s: 4.0
 # Give up guiding after this many seconds if the wearer hasn't arrived.
 nav_max_secs: 120.0
 
+# ── Optional monocular pose backbone (mono-slam-xr) ──────────────────────────
+# OFF by default: the map is text-space (pose-free). To enable true geometric
+# bearings, install the `pose` extra (`uv sync --extra pose`), set
+# MONO_SLAM_WORKSPACE to the deployed backbone workspace, and uncomment
+# camera_intrinsics below with the GLASSES camera's pinhole intrinsics (these
+# MUST match the live stream — wrong values bias VO direction and depth scale).
+# Absent intrinsics or backbone → the agent stays pose-free (unchanged behavior).
+# camera_intrinsics:
+#   fx: 600.0
+#   fy: 600.0
+#   cx: 599.5
+#   cy: 339.5
+#   width: 1200
+#   height: 680
+# How often (seconds) the continuous pose-tracking loop ingests a frame. Monocular
+# VO needs a continuous stream (~10 Hz) to stay tracked — separate from the slow
+# VLM perceive loop above.
+track_interval_s: 0.1
+
 # ── Voice activity detection (Silero via xr-ai-vad) ──────────────────────────
 silero_threshold: 0.5    # speech-probability gate (0..1); lower = more sensitive
 silence_duration: 0.4    # seconds of silence that ends an utterance
