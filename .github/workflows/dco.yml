@@ -116,7 +116,7 @@ jobs:
               fi
             done < <(echo "$msg" | grep -P "^Signed-off-by:")
 
-          done < <(git rev-list "$BASE..$HEAD")
+          done < <(git rev-list --no-merges "$BASE..$HEAD")
 
           if [ "$fail" -ne 0 ]; then
             echo ""
@@ -125,5 +125,5 @@ jobs:
             exit 1
           fi
 
-          count=$(git rev-list --count "$BASE..$HEAD")
+          count=$(git rev-list --count --no-merges "$BASE..$HEAD")
           echo "All $count commit(s) carry a valid Signed-off-by. ✓"
