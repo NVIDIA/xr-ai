@@ -106,6 +106,16 @@ model weights), and set the glasses intrinsics under `camera_intrinsics` in
 `yaml/room_tour_example_worker.yaml`. Validated on synthetic indoor footage only —
 not yet on real glasses footage or absolute metric distance.
 
+The adapter is import-safe without the backbone: `worker/pose_provider.py`
+resolves the backbone lazily (only when a provider is constructed), so its pure
+pixel conversion and bearing geometry are usable and unit-tested even in a base
+checkout. `worker/test_pose_provider.py` runs **without** the backbone or a GPU
+(`.venv/bin/python test_pose_provider.py`) and asserts the two correctness
+invariants the integration rests on: that `frame_data_to_bgr` feeds the SLAM
+byte-identical pixels to what the VLM path sees via `pixels.frame_to_pil` (all 5
+hub formats), and the geometric bearing's left/center/right/behind label, sign,
+and `metric_valid` distance-gating.
+
 It deliberately reuses the **already-built shared services** — STT (NeMo
 Parakeet), VAD (Silero via `xr-ai-vad`), TTS (Piper), and the VLM (Cosmos) —
 through `xr-ai-models` + `xr-ai-pipecat.make_voice_pipeline`, exactly like

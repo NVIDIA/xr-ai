@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -492,7 +492,7 @@ class SemanticTopoMap:
             for lbl, e in self.nodes[nid].entities().items():
                 labels[lbl] += e.support
             portals |= self.place_portals(nid)
-        top = [l for l, _ in labels.most_common(6)]
+        top = [lab for lab, _ in labels.most_common(6)]
         s = "area with " + ", ".join(top) if top else "an area"
         if portals:
             s += f" (portals: {', '.join(sorted(portals))})"

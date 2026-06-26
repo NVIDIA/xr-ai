@@ -65,9 +65,10 @@ from textslam import HashingEmbedder, SceneDescription, SemanticTopoMap, VLMPerc
 # true geometric bearing and adds a continuous tracking loop. Absent → unchanged
 # pose-free behavior. See worker/pose_provider.py.
 try:
-    from pose_provider import MonoPoseProvider
+    from pose_provider import MonoPoseProvider, make_camera_params
 except Exception:  # noqa: BLE001 - any import failure means "stay pose-free"
     MonoPoseProvider = None  # type: ignore[assignment]
+    make_camera_params = None  # type: ignore[assignment]
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a spatial memory assistant for smart glasses. You help the wearer "
@@ -216,14 +217,16 @@ class RoomTourBrain(BrainProcessor):
         Returns None (no error) when the backbone isn't importable or no glasses
         intrinsics were supplied — both are normal "pose-free" configurations.
         Model loading is deferred to ``start()`` so __init__ never blocks on GPU."""
-        if MonoPoseProvider is None or not camera_intrinsics:
+        if MonoPoseProvider is None or make_camera_params is None or not camera_intrinsics:
             return None
         try:
-            from dataset import CameraParams  # backbone type, only present with the extra
-            cam = CameraParams(
-                fx=float(camera_intrinsics["fx"]), fy=float(camera_intrinsics["fy"]),
-                cx=float(camera_intrinsics["cx"]), cy=float(camera_intrinsics["cy"]),
-                width=int(camera_intrinsics["width"]), height=int(camera_intrinsics["height"]),
+            # make_camera_params builds the backbone CameraParams and triggers
+            # backbone resolution lazily — it raises (→ pose-free) when the
+            # MONO_SLAM_WORKSPACE backbone is absent.
+            cam = make_camera_params(
+                fx=camera_intrinsics["fx"], fy=camera_intrinsics["fy"],
+                cx=camera_intrinsics["cx"], cy=camera_intrinsics["cy"],
+                width=camera_intrinsics["width"], height=camera_intrinsics["height"],
             )
             provider = MonoPoseProvider(camera_params=cam)
             logger.info("mono-slam pose provider configured (intrinsics={})", camera_intrinsics)

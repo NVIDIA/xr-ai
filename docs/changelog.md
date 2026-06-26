@@ -9,6 +9,26 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-26 — room-tour pose adapter: import-safe soft dependency + backbone-free tests
+
+Hardened the optional pose adapter so it is genuinely soft and testable.
+`worker/pose_provider.py` previously resolved the out-of-tree backbone at module
+*import* (raising when `MONO_SLAM_WORKSPACE` was unset), so the pure pixel
+conversion and bearing math were unreachable without the GPU backbone deployed.
+Backbone resolution is now **lazy** (`_ensure_backbone`, run only when a
+`MonoPoseProvider` / `make_camera_params` is constructed), so the module — and
+`frame_data_to_bgr`, the result dataclasses, and the bearing geometry — import
+cleanly with no backbone. The bearing geometry is factored into a pure
+module-level `compute_bearing(pose, target, …)`, and the brain builds the
+backbone `CameraParams` via a new `make_camera_params` helper instead of importing
+the backbone's `dataset` directly. Added `worker/test_pose_provider.py` (7
+backbone-free tests): byte-exact parity between `frame_data_to_bgr` and
+`pixels.frame_to_pil` for all 5 hub pixel formats (guards against silent
+desync), the bearing L/C/R/behind + sign + `metric_valid` distance-gating, and
+the soft-dependency contract (construction raises cleanly with no backbone).
+Also cleaned three pre-existing `textslam/` lint nits (unused imports, an
+ambiguous `l`). No behavior change to the pose-free path; deps unchanged.
+
 ### 2026-06-26 — room-tour: optional monocular pose backbone, additive not replacing TextSLAM
 
 Wired the `mono-slam-xr` pose backbone into `room-tour-example` as an **optional,

@@ -25,11 +25,14 @@ Monocular discipline (single camera → scale is estimated, not free):
     with the text relocalizer for high-stakes navigation rather than trusting it
     alone.
 
-This is a SOFT dependency. Importing it only succeeds when the backbone code and
-its model assets are deployed (see ``MONO_SLAM_WORKSPACE``); ``agent.py`` wraps
-the import in try/except and stays pose-free otherwise. The heavy deps
-(torch+CUDA, opencv, the vendored backbone) live behind the ``pose`` optional
-extra in ``pyproject.toml`` so the base worker pulls none of them.
+This is a SOFT dependency, resolved lazily. The module itself always imports —
+the pure-numpy ``frame_data_to_bgr``, the bearing math (``compute_bearing``), and
+the result dataclasses work (and are unit-tested) with no backbone present. Only
+constructing a ``MonoPoseProvider`` (or calling ``make_camera_params``) resolves
+the out-of-tree backbone via ``MONO_SLAM_WORKSPACE`` and raises cleanly when it is
+absent; ``agent.py`` catches that and stays pose-free. The heavy deps (torch+CUDA,
+opencv, the vendored backbone) live behind the ``pose`` optional extra in
+``pyproject.toml`` so the base worker pulls none of them.
 
 Validated on Replica only (bearing ~8.9 deg vs VLM ~30 deg, pose availability
 1.0, ~31 ms/frame). NOT validated on real glasses footage or absolute metric
@@ -42,15 +45,28 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import numpy as np
 
+if TYPE_CHECKING:
+    # The backbone's intrinsics type, used only in annotations. Resolved lazily
+    # at runtime via _ensure_backbone (so this module imports without the
+    # backbone); this guarded import just binds the name for type-checkers/ruff.
+    from dataset import CameraParams  # type: ignore
+
 # The backbone lives outside this repo (it carries torch/cv2 + model weights).
 # Point MONO_SLAM_WORKSPACE at the deployed `mono-slam-xr/workspace` dir (the one
-# containing `baselines/` + `harness/`); importing this module fails cleanly when
-# it is unset or wrong, which the brain treats as "stay pose-free".
+# containing `baselines/` + `harness/`). Resolution is LAZY: importing this module
+# never touches the backbone, so the pure-numpy ``frame_data_to_bgr``, the bearing
+# math (``compute_bearing``), and the result dataclasses are always usable (and
+# unit-testable) even with no backbone deployed. Only constructing a
+# ``MonoPoseProvider`` (or ``make_camera_params``) needs it; that raises cleanly
+# when the workspace is absent, which the brain treats as "stay pose-free".
 _WORKSPACE_ENV = "MONO_SLAM_WORKSPACE"
+
+# Cached backbone dataset types, populated on first use by ``_ensure_backbone``.
+_BACKBONE: tuple | None = None
 
 
 def _resolve_workspace() -> Path:
@@ -69,14 +85,35 @@ def _resolve_workspace() -> Path:
     return ws
 
 
-_WORKSPACE = _resolve_workspace()
-for _p in (_WORKSPACE / "baselines", _WORKSPACE / "harness"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+def _ensure_backbone() -> tuple:
+    """Resolve the out-of-tree workspace, put ``baselines/`` + ``harness/`` on
+    ``sys.path``, and import the backbone dataset types. Cached. Raises
+    ``RuntimeError`` when the workspace is unset/invalid — the brain catches that
+    and stays pose-free. Kept lazy (not run at import) so this module is import-
+    safe without the backbone."""
+    global _BACKBONE
+    if _BACKBONE is not None:
+        return _BACKBONE
+    ws = _resolve_workspace()
+    for _p in (ws / "baselines", ws / "harness"):
+        if str(_p) not in sys.path:
+            sys.path.insert(0, str(_p))
+    from dataset import CameraParams, ImageFrame  # type: ignore
+    _BACKBONE = (CameraParams, ImageFrame)
+    return _BACKBONE
 
-# Pulls in the validated candidate + dataset types; requires the workspace layout
-# (baselines/ + harness/) and the model assets under baselines/models/.
-from dataset import CameraParams, ImageFrame  # type: ignore  # noqa: E402
+
+def make_camera_params(*, fx: float, fy: float, cx: float, cy: float,
+                       width: int, height: int):
+    """Build the backbone's ``CameraParams`` from plain glasses intrinsics.
+
+    Lets the brain construct intrinsics without importing the backbone's
+    ``dataset`` module directly (and triggers backbone resolution lazily). Raises
+    ``RuntimeError`` when the backbone is absent — the brain treats that as
+    "stay pose-free"."""
+    CameraParams, _ = _ensure_backbone()
+    return CameraParams(fx=float(fx), fy=float(fy), cx=float(cx), cy=float(cy),
+                        width=int(width), height=int(height))
 
 
 # ── pixel-format conversion — mirrors worker/pixels.py exactly ────────────────
@@ -202,6 +239,53 @@ class RelocResult:
     reason: str
 
 
+# ── bearing geometry (pure; testable without the backbone) ────────────────────
+
+def compute_bearing(
+    pose_cam_to_world: np.ndarray,
+    target_world_xyz,
+    *,
+    up_axis: int = 1,
+    center_cone_deg: float = 20.0,
+    metric_valid: bool = True,
+) -> BearingEstimate:
+    """Horizontal bearing from a camera pose to a room-frame target.
+
+    The geometry behind :meth:`MonoPoseProvider.bearing_to`, factored out as a
+    pure function so it is unit-testable without the GPU backbone. The target is
+    transformed into the camera's LOCAL frame (``p_cam = R^T (p_w - t)``), then
+    ``azimuth = atan2(lateral, forward)`` in the plane perpendicular to
+    ``up_axis`` — a signed ``+right`` / ``-left`` angle relative to where the
+    wearer is facing. ``distance_m`` is filled only when ``metric_valid`` (a
+    single camera's absolute scale is unreliable — never speak a distance for an
+    up-to-scale pose)."""
+    T = np.asarray(pose_cam_to_world, dtype=np.float64)
+    p_w = np.asarray(target_world_xyz, dtype=np.float64).reshape(3)
+    R = T[:3, :3]
+    t = T[:3, 3]
+    p_cam = R.T @ (p_w - t)
+
+    horiz = [i for i in range(3) if i != up_axis]
+    x = p_cam[horiz[0]]   # lateral
+    z = p_cam[horiz[1]]   # forward
+    azimuth = float(np.degrees(np.arctan2(x, z)))  # +right, -left, +-180 behind
+
+    a = abs(azimuth)
+    if a <= center_cone_deg:
+        label = "center"
+    elif a >= 180.0 - center_cone_deg:
+        label = "behind"
+    elif azimuth > 0:
+        label = "right"
+    else:
+        label = "left"
+
+    dist = float(np.linalg.norm(p_cam)) if metric_valid else None
+    return BearingEstimate(
+        azimuth_deg=azimuth, label=label, distance_m=dist, metric_valid=metric_valid
+    )
+
+
 # ── the provider ──────────────────────────────────────────────────────────────
 
 class MonoPoseProvider:
@@ -235,6 +319,9 @@ class MonoPoseProvider:
         """camera_params must match the LIVE stream intrinsics, not Replica's —
         wrong intrinsics bias both VO direction and depth scale. ``center_cone_deg``
         is the half-angle of the "center" cone for the spoken L/C/R label."""
+        # Resolve the backbone first (sets sys.path for the candidate import +
+        # gives us ImageFrame for ingest). Raises if the backbone is absent.
+        _, self._ImageFrame = _ensure_backbone()
         self.camera_params = camera_params
         self.center_cone_deg = float(center_cone_deg)
 
@@ -300,7 +387,7 @@ class MonoPoseProvider:
 
         bgr = frame_data_to_bgr(frame_data)
         cv2.imwrite(str(self._frame_png), bgr)
-        frame = ImageFrame(
+        frame = self._ImageFrame(
             timestamp_ns=int(pts_us) * 1000,
             image_path=self._frame_png,
             camera_params=self.camera_params,
@@ -350,37 +437,18 @@ class MonoPoseProvider:
         azimuth = atan2(lateral, forward) in the plane perpendicular to up_axis —
         a signed left/right angle relative to where the wearer is facing. Returns
         None if there is no current pose (agent falls back to VLM L/C/R).
-        distance_m is filled only when the current pose is metric_valid."""
+        distance_m is filled only when the current pose is metric_valid.
+
+        Delegates the geometry to the pure :func:`compute_bearing`."""
         T = from_pose
         if T is None:
             if self._last is None or self._last.pose_cam_to_world is None:
                 return None
             T = self._last.pose_cam_to_world
         metric_valid = self._last.metric_valid if (self._last and from_pose is None) else True
-
-        p_w = np.asarray(target_world_xyz, dtype=np.float64).reshape(3)
-        R = T[:3, :3]
-        t = T[:3, 3]
-        p_cam = R.T @ (p_w - t)
-
-        horiz = [i for i in range(3) if i != up_axis]
-        x = p_cam[horiz[0]]   # lateral
-        z = p_cam[horiz[1]]   # forward
-        azimuth = float(np.degrees(np.arctan2(x, z)))  # +right, -left, +-180 behind
-
-        a = abs(azimuth)
-        if a <= self.center_cone_deg:
-            label = "center"
-        elif a >= 180.0 - self.center_cone_deg:
-            label = "behind"
-        elif azimuth > 0:
-            label = "right"
-        else:
-            label = "left"
-
-        dist = float(np.linalg.norm(p_cam)) if metric_valid else None
-        return BearingEstimate(
-            azimuth_deg=azimuth, label=label, distance_m=dist, metric_valid=metric_valid
+        return compute_bearing(
+            T, target_world_xyz, up_axis=up_axis,
+            center_cone_deg=self.center_cone_deg, metric_valid=metric_valid,
         )
 
     # ── relocalize ────────────────────────────────────────────────────────────

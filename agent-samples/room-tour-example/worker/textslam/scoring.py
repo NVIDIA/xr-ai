@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .types import Observation, PlaceNode, SceneDescription
+from .types import Observation, PlaceNode
 
 
 @dataclass(slots=True)
