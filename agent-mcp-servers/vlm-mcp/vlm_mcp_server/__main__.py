@@ -4,12 +4,15 @@
 """
 VLM MCP server.
 
-Pure FastMCP — one tool at /mcp on port 8240. There are no REST endpoints,
+Pure FastMCP — tools at /mcp on port 8240. There are no REST endpoints,
 no hub IPC subscription, and no `xr-ai-agent` runtime dependency.
 
-The single tool ``ask_image(question, image_path)`` reads a local PNG path,
-encodes it as a JPEG data URL, and calls the VLM via ``xr-ai-models``
-``OpenAICompatVLM``. The model's answer is returned verbatim.
+``ask_image(question, image_path)`` reads a local PNG path, encodes it as a
+JPEG data URL, and calls the VLM via ``xr-ai-models`` ``OpenAICompatVLM``.
+``ask_frames(question, image_paths)`` does the same for 1-4 images in one turn
+(order preserved) via ``OpenAICompatVLM.ask_images`` — for prompts that compare
+across frames (e.g. a teacher-reference vs. live-student check). The model's
+answer is returned verbatim.
 
 Typical two-step agent flow
 ───────────────────────────
@@ -21,12 +24,16 @@ Typical two-step agent flow
 vlm-mcp itself knows nothing about participants, the hub, or the frame
 source — it just reads a file and forwards it to the VLM.
 
-Tool (FastMCP, mounted at /mcp)
+Tools (FastMCP, mounted at /mcp)
 ────────────────────────────────
   ask_image(question, image_path) → str
       Send the local image at *image_path* and *question* to vlm-server
       and return the answer text. Reads the file synchronously inside an
       executor; the asyncio loop is never blocked.
+  ask_frames(question, image_paths) → str
+      Send 1-4 local images (order preserved) and *question* in one turn —
+      for cross-frame comparison. Same file-read/error conventions as
+      ``ask_image`` (error strings start with ``"ask_frames: ..."``).
 
 Config (vlm_mcp_server.yaml)
 ────────────────────────────
@@ -256,6 +263,71 @@ def build_mcp(vlm: VLMService) -> FastMCP:
         logger.debug(
             "ask_image  q={!r}  image={}  -> {} chars",
             question[:80], path.name, len(content),
+        )
+        return content
+
+    @mcp.tool()
+    async def ask_frames(question: str, image_paths: list[str]) -> str:
+        """
+        Ask the vision-language model one question about MULTIPLE local frames.
+
+        Use this when a single turn must compare or reason across several images
+        — e.g. "does Image 2 (the student's current view) match Image 1 (the
+        teacher's reference)?". The images are sent in the order given, so the
+        question may refer to "Image 1", "Image 2", etc.
+
+        Parameters
+        ----------
+        question
+            Free-form natural-language question or instruction for the VLM. The
+            model receives all images and this text in the same turn.
+        image_paths
+            1-4 absolute paths to local image files (PNG or JPEG), typically the
+            ``path`` values returned by the video tools in the current turn.
+            Order is preserved. Each file is read from disk and sent to
+            vlm-server as a base64-encoded JPEG (quality 85).
+
+        Returns
+        -------
+        str
+            The VLM's answer, trimmed. On error (empty/oversized list, file not
+            found, server unreachable) returns a human-readable error string
+            starting with ``"ask_frames: ..."``.
+        """
+        if not image_paths:
+            return "ask_frames: image_paths is empty."
+        if len(image_paths) > 4:
+            return "ask_frames: at most 4 image paths are supported."
+
+        paths = [pathlib.Path(p) for p in image_paths]
+        for p in paths:
+            if not str(p):
+                return "ask_frames: image path is empty."
+            if not p.exists():
+                return f"ask_frames: file not found at {str(p)!r}."
+
+        loop = asyncio.get_running_loop()
+        try:
+            data_urls = await asyncio.gather(*(
+                loop.run_in_executor(None, _load_jpeg_data_url, str(p))
+                for p in paths
+            ))
+        except Exception as exc:
+            logger.exception("ask_frames: failed to load image paths")
+            return f"ask_frames: failed to read image paths: {exc}"
+
+        try:
+            response = await vlm.ask_images(list(data_urls), question)
+            content = response.content
+        except httpx.HTTPError as exc:
+            logger.exception("ask_frames: vlm-server HTTP error")
+            return f"ask_frames: vlm-server request failed: {exc}"
+
+        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+
+        logger.debug(
+            "ask_frames  q={!r}  images={}  -> {} chars",
+            question[:80], [p.name for p in paths], len(content),
         )
         return content
 

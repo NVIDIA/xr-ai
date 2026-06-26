@@ -176,10 +176,14 @@ vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
     └── httpx >=0.27   (imported directly to catch httpx.HTTPError from xr-ai-models)
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
-    Pure FastMCP — one tool at /mcp (no REST). Reads a local image file,
-    encodes it as a JPEG data URL, and calls vlm-server via xr-ai-models
-    ``OpenAICompatVLM``. Back-compat: legacy ``vlm_server:`` URL key is
-    still accepted with a deprecation warning.
+    Pure FastMCP at /mcp (no REST). Two tools: ``ask_image(question,
+    image_path)`` (single frame) and ``ask_frames(question, image_paths)``
+    (1-4 frames in one turn, order preserved, via
+    ``OpenAICompatVLM.ask_images`` — for cross-frame comparison such as the
+    glasses-agent-nat teacher-reference vs. live-student check). Both read
+    local image files, encode them as JPEG data URLs, and call vlm-server via
+    xr-ai-models ``OpenAICompatVLM``. Back-compat: legacy ``vlm_server:`` URL
+    key is still accepted with a deprecation warning.
 
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
@@ -371,7 +375,7 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | Pure FastMCP → LOVR (msgpack/ZMQ) |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
-| `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
+| `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; `ask_image` + `ask_frames` forward images to vlm-server via xr-ai-models |
 | `agent-mcp-servers/vec-mcp/` | `vec-mcp-server` | `vec_mcp_server` | 8250 | — | Pure FastMCP; deterministic spatial-math primitives (no model) |
 
 All model weights are cached under `models/` at the repo root (gitignored except
