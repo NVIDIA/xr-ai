@@ -191,6 +191,65 @@ async def test_ask_image_strips_think_block(png_path: Path):
     assert result.structured_content["result"] == "the answer is yes"
 
 
+async def test_ask_frames_relays_response_and_multi_image_shape(
+    png_path: Path, tmp_path: Path,
+):
+    """ask_frames sends every image (order preserved) plus the question in one
+    user message and relays the answer."""
+    second = tmp_path / "frame2.png"
+    second.write_bytes(_tiny_png_bytes())
+    stub = StubOpenAI()
+    stub.set_chat_message(content="image 2 matches image 1")
+    async with _stub_vlm(stub) as vlm:
+        mcp = build_mcp(vlm)
+        result = await mcp.call_tool(
+            "ask_frames",
+            {
+                "question": "does image 2 match image 1?",
+                "image_paths": [str(png_path), str(second)],
+            },
+        )
+        assert result.structured_content["result"] == "image 2 matches image 1"
+
+        payload = stub.last_json()
+        assert payload["model"] == "vlm"
+        msgs = payload["messages"]
+        assert len(msgs) == 1 and msgs[0]["role"] == "user"
+        parts = msgs[0]["content"]
+        image_parts = [p for p in parts if p["type"] == "image_url"]
+        text_parts  = [p for p in parts if p["type"] == "text"]
+        # Both frames, in order, followed by the question text.
+        assert len(image_parts) == 2
+        assert len(text_parts) == 1
+        assert text_parts[0]["text"] == "does image 2 match image 1?"
+        for ip in image_parts:
+            assert ip["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+async def test_ask_frames_validates_input(png_path: Path):
+    """Empty list, >4 images, and a missing file each return an
+    ``ask_frames:`` error string instead of raising."""
+    stub = StubOpenAI()
+    async with _stub_vlm(stub) as vlm:
+        mcp = build_mcp(vlm)
+
+        empty = await mcp.call_tool("ask_frames", {"question": "q", "image_paths": []})
+        assert empty.structured_content["result"].startswith("ask_frames: image_paths is empty")
+
+        too_many = await mcp.call_tool(
+            "ask_frames",
+            {"question": "q", "image_paths": [str(png_path)] * 5},
+        )
+        assert too_many.structured_content["result"].startswith("ask_frames: at most 4")
+
+        missing = await mcp.call_tool(
+            "ask_frames",
+            {"question": "q", "image_paths": [str(png_path), "/nonexistent/x.png"]},
+        )
+        result = missing.structured_content["result"]
+        assert result.startswith("ask_frames:") and "file not found" in result
+
+
 # ── error / edge-case tests ───────────────────────────────────────────────────
 
 async def test_ask_image_missing_path_returns_error_string(png_path: Path):

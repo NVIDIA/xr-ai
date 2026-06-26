@@ -160,10 +160,59 @@ def _load_jpeg_data_url(image_path: str, quality: int = 85) -> str:
     return f"data:image/jpeg;base64,{b64}"
 
 
+async def _answer_over_paths(
+    vlm: VLMService, question: str, image_paths: list[str], *, tool: str,
+) -> str:
+    """Shared body for ``ask_image`` / ``ask_frames``.
+
+    Verify each file exists, encode it to a JPEG data URL (in a thread pool so
+    the event loop never blocks), send all images + *question* to vlm-server in
+    a single turn, strip any leaked ``<think>`` block, and return the trimmed
+    answer. *tool* prefixes the error strings and the debug log. For a single
+    image, ``ask_images`` builds the same request ``ask_image`` would, so both
+    tools share one implementation here. On error returns a human-readable
+    string starting with ``"<tool>: ..."``.
+    """
+    paths = [pathlib.Path(p) for p in image_paths]
+    for raw, p in zip(image_paths, paths):
+        if not p.exists():
+            return f"{tool}: file not found at {raw!r}."
+
+    loop = asyncio.get_running_loop()
+    try:
+        data_urls = await asyncio.gather(*(
+            loop.run_in_executor(None, _load_jpeg_data_url, str(p))
+            for p in paths
+        ))
+    except Exception as exc:
+        logger.exception("{}: failed to load image path(s)", tool)
+        if len(image_paths) == 1:
+            return f"{tool}: failed to read image at {image_paths[0]!r}: {exc}"
+        return f"{tool}: failed to read image paths: {exc}"
+
+    try:
+        response = await vlm.ask_images(list(data_urls), question)
+        content = response.content
+    except httpx.HTTPError as exc:
+        logger.exception("{}: vlm-server HTTP error", tool)
+        return f"{tool}: vlm-server request failed: {exc}"
+
+    # Belt-and-suspenders: strip any <think> that leaked through despite
+    # enable_thinking=False — cosmos_vlm preset sets this to False but
+    # some model revisions may still emit reasoning tokens.
+    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+
+    logger.debug(
+        "{}  q={!r}  images={}  -> {} chars",
+        tool, question[:80], [p.name for p in paths], len(content),
+    )
+    return content
+
+
 # ── FastMCP build ─────────────────────────────────────────────────────────────
 
 def build_mcp(vlm: VLMService) -> FastMCP:
-    """Return a FastMCP server with the single ``ask_image`` tool bound."""
+    """Return a FastMCP server with the ``ask_image`` + ``ask_frames`` tools bound."""
     mcp = FastMCP("vlm-mcp")
 
     @mcp.tool()
@@ -237,34 +286,7 @@ def build_mcp(vlm: VLMService) -> FastMCP:
         """
         if not image_path:
             return "ask_image: image_path is empty — call video_mcp.get_frame_from_time first."
-        path = pathlib.Path(image_path)
-        if not path.exists():
-            return f"ask_image: file not found at {image_path!r}."
-
-        loop = asyncio.get_running_loop()
-        try:
-            data_url = await loop.run_in_executor(None, _load_jpeg_data_url, str(path))
-        except Exception as exc:
-            logger.exception("ask_image: failed to load {}", image_path)
-            return f"ask_image: failed to read image at {image_path!r}: {exc}"
-
-        try:
-            response = await vlm.ask_image(data_url, question)
-            content = response.content
-        except httpx.HTTPError as exc:
-            logger.exception("ask_image: vlm-server HTTP error")
-            return f"ask_image: vlm-server request failed: {exc}"
-
-        # Belt-and-suspenders: strip any <think> that leaked through despite
-        # enable_thinking=False — cosmos_vlm preset sets this to False but
-        # some model revisions may still emit reasoning tokens.
-        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
-
-        logger.debug(
-            "ask_image  q={!r}  image={}  -> {} chars",
-            question[:80], path.name, len(content),
-        )
-        return content
+        return await _answer_over_paths(vlm, question, [image_path], tool="ask_image")
 
     @mcp.tool()
     async def ask_frames(question: str, image_paths: list[str]) -> str:
@@ -298,38 +320,10 @@ def build_mcp(vlm: VLMService) -> FastMCP:
             return "ask_frames: image_paths is empty."
         if len(image_paths) > 4:
             return "ask_frames: at most 4 image paths are supported."
-
-        paths = [pathlib.Path(p) for p in image_paths]
-        for p in paths:
-            if not str(p):
+        for p in image_paths:
+            if not p:
                 return "ask_frames: image path is empty."
-            if not p.exists():
-                return f"ask_frames: file not found at {str(p)!r}."
-
-        loop = asyncio.get_running_loop()
-        try:
-            data_urls = await asyncio.gather(*(
-                loop.run_in_executor(None, _load_jpeg_data_url, str(p))
-                for p in paths
-            ))
-        except Exception as exc:
-            logger.exception("ask_frames: failed to load image paths")
-            return f"ask_frames: failed to read image paths: {exc}"
-
-        try:
-            response = await vlm.ask_images(list(data_urls), question)
-            content = response.content
-        except httpx.HTTPError as exc:
-            logger.exception("ask_frames: vlm-server HTTP error")
-            return f"ask_frames: vlm-server request failed: {exc}"
-
-        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
-
-        logger.debug(
-            "ask_frames  q={!r}  images={}  -> {} chars",
-            question[:80], [p.name for p in paths], len(content),
-        )
-        return content
+        return await _answer_over_paths(vlm, question, image_paths, tool="ask_frames")
 
     return mcp
 
