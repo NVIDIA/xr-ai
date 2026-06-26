@@ -308,13 +308,17 @@ async def main(cfg: WorkerConfig, ready_file: pathlib.Path | None = None) -> Non
         log.info("glasses-agent-nat running")
         await PipelineRunner().run(task)
     finally:
+        # Stop producers before their sinks: the guidance-monitor / finalize
+        # tasks (query_proc) and the background loops (perception) call say() /
+        # send_text / NAT MCP, so cancel them before tearing down the transport,
+        # NAT runtime, and transcript they target.
+        if query_proc is not None:
+            await query_proc.close()
         if perception is not None:
             await perception.stop()
         transport.shutdown()
         if brain is not None:
             await brain.close()
-        if query_proc is not None:
-            await query_proc.close()
         if transcript is not None:
             await transcript.close()
         await nat_runtime.close()

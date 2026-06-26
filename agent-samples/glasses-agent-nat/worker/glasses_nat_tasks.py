@@ -208,6 +208,15 @@ class _NatVLMService:
                                 finish_reason="stop", raw={})
         raw = _str_payload(await self._ask_frames.ainvoke(
             {"question": question, "image_paths": list(images)}))
+        # vlm-mcp signals failure with a human-readable "ask_frames: <reason>"
+        # string rather than a VLM answer. Surface that as empty content (the
+        # MCP-error convention is this adapter's concern, not the capability's)
+        # so the agent_monitor capability takes its "compare failed → fall back
+        # to the live single-image check" branch instead of feeding the error
+        # text to the JSON parser.
+        if raw.startswith("ask_frames:"):
+            log.warning("vlm-mcp ask_frames failed; falling back to live check: %s", raw)
+            raw = ""
         return ChatResponse(content=raw, reasoning=None, tool_calls=None,
                             finish_reason="stop", raw={})
 
