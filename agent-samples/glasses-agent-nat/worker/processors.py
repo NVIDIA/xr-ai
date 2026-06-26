@@ -1921,6 +1921,7 @@ class QueryProcessor:
         teacher_caption = ""
         reference_reliable = False
         key_objects: list[str] = []
+        prev_key_objects: list[str] = []
         key_action = ""
         key_position = ""
         key_target_state = ""
@@ -1937,6 +1938,13 @@ class QueryProcessor:
                 key_position     = step.key_info.position
                 key_target_state = step.key_info.target_state
                 key_ignore       = list(step.key_info.ignore)
+            # The previous step's key objects let the monitor require that THIS
+            # step shows a new object — so a step whose key objects drifted onto
+            # the prior step's (still-in-view) object cannot auto-complete.
+            if self._guidance_step > 0:
+                prev_step = self._guidance_demo.steps[self._guidance_step - 1]
+                if prev_step.key_info is not None:
+                    prev_key_objects = list(prev_step.key_info.objects)
         if require_reliable_reference and not reference_reliable:
             result = {
                 "completed": False,
@@ -1971,6 +1979,7 @@ class QueryProcessor:
                         "teacher_caption":       teacher_caption,
                         "min_live_timestamp_us": min_live_timestamp_us,
                         "key_objects":           key_objects,
+                        "prev_key_objects":      prev_key_objects,
                         "key_action":            key_action,
                         "key_position":          key_position,
                         "key_target_state":      key_target_state,

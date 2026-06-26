@@ -129,6 +129,36 @@ def _ungrounded_key_object(key_objects: list[str], observation: str) -> str:
     return ""
 
 
+def _step_retargets_previous_object(
+    key_objects: list[str],
+    prev_key_objects: list[str],
+) -> bool:
+    """True when this step's key object is the SAME object as the previous step's.
+
+    Per-step ``key_objects`` can drift onto the previous step's object — e.g. the
+    teacher frame chosen for "put a mouse next to the AirPod case" still showed the
+    case (the mouse was never isolated in a recorded frame), so key-info derivation
+    (told to prefer the teacher caption) yields the CASE, not the mouse, for BOTH
+    steps. The completion check then trivially passes: the case is still on the
+    desk from the previous step, so step 2 "completes" without the student doing
+    anything.
+
+    Detect this by identity-token containment: when the previous step's
+    identifying tokens (color/material/name, minus generic container/scene words)
+    are non-empty and wholly contained in this step's — "blue case" ⊆ "AirPod case
+    (bright blue with red strap)" — the two steps target the same object and the
+    monitor cannot tell this step's completion apart from the last one. It must NOT
+    auto-advance; the student hears a correction instead. A genuinely new object
+    (e.g. "black wireless mouse") shares no such tokens, so the guard stays clear
+    and normal grounding applies.
+    """
+    cur = {t for o in key_objects for t in _identity_tokens(o)}
+    prev = {t for o in prev_key_objects for t in _identity_tokens(o)}
+    if not cur or not prev:
+        return False
+    return prev <= cur
+
+
 def _check_has_student_evidence(requirement: str, current_obs: str, check: dict) -> bool:
     evidence_text = str(check.get("evidence", ""))
     evidence_lower = evidence_text.lower()
@@ -176,6 +206,7 @@ def _parse_grounded_completion(
     *,
     require_expected: bool = True,
     key_objects: list[str] | None = None,
+    prev_key_objects: list[str] | None = None,
 ) -> tuple[bool, str, list[dict], list[str], str]:
     """Grounded-completion parser. Accepts both the new flat shape
 
@@ -240,6 +271,16 @@ def _parse_grounded_completion(
     )
     if ungrounded:
         return False, current_obs, checks, missing, f"key object not in view: {ungrounded}"
+
+    # Retargeting guard: when this step's key object is the SAME as the previous
+    # step's (its key info drifted onto the prior object, still in view), the
+    # completion check is a no-op that auto-passes without the student doing this
+    # step. Refuse to complete so the student is corrected instead of advanced.
+    if _step_retargets_previous_object(
+        [o for o in (key_objects or []) if o and str(o).strip()],
+        [o for o in (prev_key_objects or []) if o and str(o).strip()],
+    ):
+        return False, current_obs, checks, missing, "cannot verify this step from the demo"
 
     return True, current_obs, checks, missing, ""
 
@@ -372,6 +413,7 @@ def _parser_issue(issue: str) -> bool:
         "visible without",
         "no grounded",
         "vlm omitted",
+        "cannot verify this step",
     ))
 
 
@@ -384,6 +426,7 @@ async def check_guidance_step_complete(
     teacher_caption: str = "",
     min_live_timestamp_us: int = 0,
     key_objects: list[str] | None = None,
+    prev_key_objects: list[str] | None = None,
     key_action: str = "",
     key_position: str = "",
     key_target_state: str = "",
@@ -393,6 +436,7 @@ async def check_guidance_step_complete(
 ) -> GuidanceCheckResult:
     expected_requirements = expected_requirements or []
     key_objects = key_objects or []
+    prev_key_objects = prev_key_objects or []
     key_ignore = key_ignore or []
     frame = await get_latest_frame(participant_id)
     if frame is None or not frame.image_path:
@@ -474,7 +518,8 @@ async def check_guidance_step_complete(
             log.warning("ask_frames guidance check failed; using instruction fallback: %s", compare_raw)
         else:
             cmp_completed, cmp_obs, cmp_checks, cmp_missing, cmp_reject = _parse_grounded_completion(
-                compare_raw, expected, require_expected=False, key_objects=key_objects,
+                compare_raw, expected, require_expected=False,
+                key_objects=key_objects, prev_key_objects=prev_key_objects,
             )
             cmp_issue = _issue_from_failure(compare_raw, cmp_reject, cmp_missing)
             if cmp_completed:
@@ -531,7 +576,8 @@ async def check_guidance_step_complete(
     )
     live_raw = (await vlm.ask_image(image_path, live_question)).content or ""
     completed, current_obs, checks, missing, reject_reason = _parse_grounded_completion(
-        live_raw, expected, require_expected=not bool(teacher_path), key_objects=key_objects,
+        live_raw, expected, require_expected=not bool(teacher_path),
+        key_objects=key_objects, prev_key_objects=prev_key_objects,
     )
     live_issue = _issue_from_failure(live_raw, reject_reason, missing)
     if completed:

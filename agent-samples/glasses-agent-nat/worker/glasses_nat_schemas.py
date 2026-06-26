@@ -79,6 +79,9 @@ class GuidanceStepInput(BaseModel):
     # Structured key info (see memory.StepKeyInfo). When present, the check
     # is guided by these facts and ignores irrelevant visual differences.
     key_objects: list[str] = Field(default_factory=list)
+    # The previous step's key objects, so the check can require this step to add a
+    # NEW object (guards against key objects that drifted onto the prior step's).
+    prev_key_objects: list[str] = Field(default_factory=list)
     key_action: str = ""
     key_position: str = ""
     key_target_state: str = ""

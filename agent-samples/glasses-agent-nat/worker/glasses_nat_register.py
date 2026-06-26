@@ -115,6 +115,7 @@ async def glasses_worker_tasks(config: GlassesWorkerTasksConfig, builder: Builde
             teacher_caption=request.teacher_caption,
             min_live_timestamp_us=request.min_live_timestamp_us,
             key_objects=list(request.key_objects),
+            prev_key_objects=list(request.prev_key_objects),
             key_action=request.key_action,
             key_position=request.key_position,
             key_target_state=request.key_target_state,

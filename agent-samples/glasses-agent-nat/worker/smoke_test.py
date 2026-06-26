@@ -484,6 +484,42 @@ async def scenario_11_expected_requirements_threaded_through_monitor() -> None:
     expect(result.get("completed") is True, f"result should pass through: {result}")
 
 
+async def scenario_11i_prev_key_objects_threaded_for_later_steps() -> None:
+    """For step index > 0 the monitor must thread the PREVIOUS step's key objects
+    into the tool args, so the completion check can refuse to auto-advance a step
+    whose key objects drifted onto the prior step's (still-in-view) object.
+    """
+    from memory import StepKeyInfo
+
+    mem = AgentMemory()
+    demo = _seed_demo(mem, "desk arrangement", finished_ago_s=5.0)
+    demo.steps[0].image_path = "/tmp/step0.png"
+    demo.steps[0].key_info = StepKeyInfo(objects=["blue case"])
+    demo.steps[1].image_path = "/tmp/step1.png"
+    demo.steps[1].key_info = StepKeyInfo(objects=["AirPod case (bright blue with red strap)"])
+    rec = Recorder()
+    qp = _make_qp(mem, rec)
+
+    captured: dict[str, Any] = {}
+
+    async def fake_call_tool(group: str, tool: str, args: dict, **_) -> dict:
+        captured["args"] = args
+        return {"completed": False, "current_observation": "", "checks": [],
+                "missing_or_mismatched": [], "image_path": "/tmp/x.png", "issue": ""}
+
+    qp._nat_runtime.call_tool = fake_call_tool        # type: ignore[attr-defined]
+    qp._guidance_demo = demo
+    qp._guidance_step = 1
+
+    await qp._guidance_completion_result(PID)
+
+    args = captured.get("args") or {}
+    expect(args.get("key_objects") == ["AirPod case (bright blue with red strap)"],
+           f"key_objects not threaded for step 1: {args}")
+    expect(args.get("prev_key_objects") == ["blue case"],
+           f"prev_key_objects not threaded for step 1: {args}")
+
+
 async def scenario_11b_after_frame_returns_paired_path_and_caption() -> None:
     """A1: _after_frame_for_step returns the same RecordedFrame for path AND
     caption — guards against the prior timestamp-drift bug where path came
@@ -2384,6 +2420,7 @@ SCENARIOS = [
     scenario_9_pending_state_cancel_escape,
     scenario_10_pending_attempt_limit,
     scenario_11_expected_requirements_threaded_through_monitor,
+    scenario_11i_prev_key_objects_threaded_for_later_steps,
     scenario_11b_after_frame_returns_paired_path_and_caption,
     scenario_11c_fallback_requirements_from_instruction,
     scenario_11d_empty_requirements_still_checked_with_teacher_frame,

@@ -102,3 +102,56 @@ async def test_both_objects_present_completes():
         ' }, "issue": ""}'
     )
     assert out.completed is True, out
+
+
+# ── distinguishing-object guard (stale/drifted key objects) ───────────────────
+# Regression for the "step 2 passed though the student did it wrong" trace: a
+# step's derived key objects drifted onto the PREVIOUS step's object (the teacher
+# frame chosen for "put a mouse next to the AirPod case" still showed the case),
+# so the still-in-view case satisfied the check without the student doing step 2.
+
+
+async def _check_step2(json_response: str, *, prev_key_objects, key_objects):
+    return await check_guidance_step_complete(
+        participant_id="p1",
+        instruction="put a mouse next to the AirPod case",
+        expected_requirements=["AirPod case on desk", "AirPod case has red strap"],
+        key_objects=key_objects,
+        prev_key_objects=prev_key_objects,
+        key_action="place next to",
+        vlm=_FakeVLM(json_response),
+        get_latest_frame=_fake_frame,
+    )
+
+
+async def test_drifted_key_objects_do_not_complete_on_carryover_object():
+    """Step 2's key objects drifted to the prior step's AirPod case; the live
+    frame shows a brown pouch + the carried-over AirPod case. Because the step
+    adds no NEW object beyond the prior step's, completion must be blocked even
+    though the (stale) AirPod-case requirements are grounded."""
+    out = await _check_step2(
+        '{"observation": "A bright blue AirPod case with a red strap sits on the desk '
+        'next to a brown leather pouch.",'
+        ' "requirements": {'
+        '   "AirPod case on desk": {"visible": true, "evidence": "blue AirPod case on desk"},'
+        '   "AirPod case has red strap": {"visible": true, "evidence": "red strap visible"}'
+        ' }, "issue": ""}',
+        prev_key_objects=["blue case"],
+        key_objects=["AirPod case (bright blue with red strap)"],
+    )
+    assert out.completed is False, out
+
+
+async def test_new_object_present_still_completes():
+    """When the step's key objects DO introduce a new object vs. the previous
+    step and that object is named in the observation, completion still works —
+    the guard does not regress the happy path."""
+    out = await _check_step2(
+        '{"observation": "A black wireless mouse sits on the desk beside the blue case.",'
+        ' "requirements": {'
+        '   "wireless mouse on desk": {"visible": true, "evidence": "black wireless mouse on desk"}'
+        ' }, "issue": ""}',
+        prev_key_objects=["blue case"],
+        key_objects=["black wireless mouse"],
+    )
+    assert out.completed is True, out

@@ -382,6 +382,7 @@ async def check_guidance_step_complete_impl(
     teacher_caption: str = "",
     min_live_timestamp_us: int = 0,
     key_objects: list[str] | None = None,
+    prev_key_objects: list[str] | None = None,
     key_action: str = "",
     key_position: str = "",
     key_target_state: str = "",
@@ -403,7 +404,8 @@ async def check_guidance_step_complete_impl(
         participant_id=participant_id, instruction=instruction,
         expected_requirements=expected_requirements, teacher_image_path=teacher_image_path,
         teacher_caption=teacher_caption, min_live_timestamp_us=min_live_timestamp_us,
-        key_objects=key_objects, key_action=key_action, key_position=key_position,
+        key_objects=key_objects, prev_key_objects=prev_key_objects,
+        key_action=key_action, key_position=key_position,
         key_target_state=key_target_state, key_ignore=key_ignore,
         vlm=_NatVLMService(ask_image, ask_frames), get_latest_frame=_fetch,
     )

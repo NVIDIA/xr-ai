@@ -192,6 +192,82 @@ def _sentence_to_instruction(sentence: str) -> str:
     return text[:1].upper() + text[1:] + "."
 
 
+# Verbs whose direct object is the thing the student must PLACE/manipulate this
+# step (good="put a mouse next to the case" → object is "a mouse"). The noun
+# phrase AFTER the relational preposition is the anchor/reference, already in
+# view from an earlier step — it must become position, not the object to verify.
+_PLACEMENT_VERBS = (
+    "put", "place", "set", "lay", "position", "move", "drop", "rest",
+    "insert", "attach", "mount", "hang", "stack", "add", "connect", "plug",
+)
+# Relational prepositions that introduce the anchor object in a placement step.
+_ANCHOR_PREPOSITIONS = (
+    "next to", "beside", "near", "on top of", "on", "onto", "in", "into",
+    "inside", "under", "underneath", "behind", "in front of", "to the left of",
+    "to the right of", "above", "below", "against",
+)
+
+
+@dataclass
+class _RelationalStep:
+    """A parsed "put X <prep> Y" instruction: the placed object and the anchor."""
+    placed_object: str = ""
+    anchor_phrase: str = ""
+
+
+def _parse_relational_placement(instruction: str) -> _RelationalStep:
+    """Split a placement instruction into the PLACED object and the anchor.
+
+    For "put a mouse next to the AirPod case" the placed object is the verb's
+    direct object ("mouse") and the anchor is "next to the AirPod case". The
+    anchor object is already present from an earlier step, so keying step
+    completion on it auto-passes without the student doing anything; this parse
+    lets downstream derivation make the PLACED object primary and demote the
+    anchor to position. Returns empty fields when the instruction is not a
+    recognizable relational placement.
+    """
+    text = instruction.strip().rstrip(".").strip()
+    if not text:
+        return _RelationalStep()
+    lower = text.lower()
+    tokens = lower.split()
+    if not tokens or tokens[0] not in _PLACEMENT_VERBS:
+        return _RelationalStep()
+    # Find the earliest relational preposition; everything before it (after the
+    # verb) is the placed object, everything from it on is the anchor phrase.
+    best_at = len(text)
+    best_prep = ""
+    for prep in _ANCHOR_PREPOSITIONS:
+        m = re.search(rf"\b{re.escape(prep)}\b", lower)
+        if m and m.start() < best_at:
+            best_at, best_prep = m.start(), prep
+    if not best_prep:
+        return _RelationalStep()
+    verb_end = len(tokens[0])
+    placed = text[verb_end:best_at].strip()
+    anchor = text[best_at:].strip()
+    placed = re.sub(r"^(a|an|the)\s+", "", placed, flags=re.IGNORECASE).strip()
+    if not placed or not anchor:
+        return _RelationalStep()
+    return _RelationalStep(placed_object=placed, anchor_phrase=anchor)
+
+
+def _object_names_token(objects: list[str], placed: str) -> bool:
+    """True when some entry in *objects* shares an identifying token with the
+    placed object — i.e. the derivation already named the right object."""
+    placed_tokens = {
+        t for t in re.findall(r"[a-z0-9]+", placed.lower())
+        if len(t) > 1 and t not in _EVIDENCE_STOPWORDS
+    }
+    if not placed_tokens:
+        return True
+    for obj in objects:
+        obj_tokens = {t for t in re.findall(r"[a-z0-9]+", obj.lower()) if len(t) > 1}
+        if placed_tokens & obj_tokens:
+            return True
+    return False
+
+
 async def analyze_recording(
     name: str,
     started_at_us: int,
@@ -339,9 +415,15 @@ async def derive_step_requirements(
                 "a human looking at one photo should be able to mark it "
                 "true or false.\n\n"
                 "Rules:\n"
-                "  - The selected teacher frame is the visual authority. "
-                "If the instruction conflicts with the teacher frame caption, "
-                "prefer the teacher frame caption for object/color/state.\n"
+                "  - For a placement step (\"put/place X next to/on Y\"), the "
+                "object the student must PLACE is X (the verb's object); Y is "
+                "the anchor, already present from an earlier step. The checklist "
+                "MUST verify X is now present and placed relative to Y — never "
+                "make the checklist solely about Y.\n"
+                "  - The selected teacher frame refines the appearance of the "
+                "task object. If the instruction conflicts with the teacher "
+                "frame caption, prefer the caption for color/material/state — "
+                "but do NOT let it swap the checklist onto the anchor object.\n"
                 "  - Do NOT enumerate background details; include only the "
                 "task-relevant object and end-state.\n"
                 "  - Prefer concrete object + state phrases: "
@@ -432,7 +514,13 @@ async def derive_step_key_info(
                 '  "ignore": ["irrelevant details a checker must disregard"]\n'
                 "}\n\n"
                 "Rules:\n"
-                "  - Prefer the teacher frame caption for object/color/state when it conflicts with the instruction.\n"
+                "  - For a placement step (\"put/place X next to/on Y\"): the "
+                "FIRST object MUST be X, the thing being placed (the verb's "
+                "direct object). Y is the anchor — already placed earlier — so "
+                "put \"next to Y\" in position, NOT in objects. Never make X the "
+                "anchor.\n"
+                "  - Prefer the teacher frame caption to refine X's "
+                "color/material/state; do NOT let it replace X with the anchor.\n"
                 "  - objects: 1-3 items, only task-relevant ones.\n"
                 "  - target_state describes what is VISIBLE when done, not the action verb.\n"
                 "  - ALWAYS include at least: background, lighting, camera angle, "
@@ -476,10 +564,30 @@ async def derive_step_key_info(
     for default in ("background", "lighting", "camera angle"):
         if default not in [i.lower() for i in ignore]:
             ignore.append(default)
+
+    objects = _strlist(obj.get("objects"), 3)
+    position = str(obj.get("position", "")).strip()
+
+    # Deterministic backstop for relational placement steps. The LLM is told to
+    # make the placed object primary, but it (and the teacher caption it is told
+    # to trust) reliably drifts onto the anchor for "put X next to Y" — yielding
+    # objects=[Y] only, so live monitoring verifies the anchor that is already in
+    # view and auto-passes. Force the placed object X to be the first key object
+    # and keep the anchor as position, so completion grounds on X actually
+    # appearing in the student's frame.
+    rel = _parse_relational_placement(instruction)
+    if rel.placed_object and not _object_names_token(objects, rel.placed_object):
+        anchor_only = [o for o in objects if not _object_names_token([o], rel.placed_object)
+                       and _object_names_token([o], rel.anchor_phrase)]
+        kept = [o for o in objects if o not in anchor_only]
+        objects = [rel.placed_object, *kept][:3]
+        if not position:
+            position = rel.anchor_phrase
+
     return StepKeyInfo(
-        objects=_strlist(obj.get("objects"), 3),
+        objects=objects,
         action=str(obj.get("action", "")).strip(),
-        position=str(obj.get("position", "")).strip(),
+        position=position,
         target_state=str(obj.get("target_state", "")).strip(),
         ignore=ignore,
     )
