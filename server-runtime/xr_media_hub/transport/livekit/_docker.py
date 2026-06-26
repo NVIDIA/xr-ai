@@ -59,6 +59,7 @@ _READY_TIMEOUT = 30.0         # seconds to wait for the LiveKit port to open
 _OUTPUT_CAPTURE_BYTES = 4096  # how much subprocess output to retain for diagnostics
 _BANNER = "━" * 56
 
+_LIVEKIT_IMAGE = "livekit/livekit-server:v1.13.1"
 _CONTAINER_NAME = "xr-ai-livekit-server"
 
 
@@ -95,7 +96,7 @@ class LiveKitDocker:
                 "--name", _CONTAINER_NAME,
                 "--network", "host",
                 "-v", f"{cfg_path}:/etc/livekit.yaml:ro",
-                "livekit/livekit-server:latest",
+                _LIVEKIT_IMAGE,
                 "--config", "/etc/livekit.yaml",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
