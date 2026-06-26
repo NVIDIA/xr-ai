@@ -103,15 +103,38 @@ jobs:
               continue
             fi
 
-            # 2. Each Signed-off-by must have a non-empty name and a valid
-            #    email address in "Name <user@host.tld>" form.
+            # 2. Each Signed-off-by must carry a real name (at least two words)
+            #    and a real email address — not a GitHub no-reply address.
             while IFS= read -r sob; do
               identity="${sob#*Signed-off-by:}"
               identity="${identity#"${identity%%[! ]*}"}"  # ltrim
 
+              # Basic "Name <email>" format check.
               if ! echo "$identity" | grep -qP "^[^<@>]+<[^@\s]+@[^@\s]+\.[^@\s]+>"; then
                 echo "::error::Commit $sha has a malformed Signed-off-by: '$sob'"
-                echo "  Expected:  Signed-off-by: Full Name <email@example.com>"
+                echo "  Expected:  Signed-off-by: First Last <real@email.com>"
+                fail=1
+                continue
+              fi
+
+              # Extract name (everything before the first '<').
+              name="${identity%%<*}"
+              name="${name%"${name##*[! ]}"}"  # rtrim
+
+              # Name must contain at least one space (first + last name required).
+              if ! echo "$name" | grep -qP "\s"; then
+                echo "::error::Commit $sha Signed-off-by name must be a full name (first and last): '$sob'"
+                echo "  Run:  git config --global user.name 'First Last'"
+                fail=1
+              fi
+
+              # Block GitHub no-reply addresses — real email required.
+              email="${identity#*<}"
+              email="${email%%>*}"
+              if echo "$email" | grep -qi "users\.noreply\.github\.com"; then
+                echo "::error::Commit $sha uses a GitHub no-reply address, which is not accepted: '$sob'"
+                echo "  Run:  git config --global user.email 'real@email.com'"
+                echo "  (You may need to disable 'Keep my email address private' in GitHub settings.)"
                 fail=1
               fi
             done < <(echo "$msg" | grep -P "^Signed-off-by:")

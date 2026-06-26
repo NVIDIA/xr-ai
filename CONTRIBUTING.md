@@ -168,6 +168,18 @@ is started there; run them locally against a live hub when relevant.
   Signed-off-by: Your Name <your@email.com>
   ```
 
+* **Requirements for the sign-off identity:**
+  * **Real full name** (first and last name) — GitHub usernames or handles are not accepted.
+  * **Real email address** — GitHub no-reply addresses (`@users.noreply.github.com`) are not accepted.
+
+  Configure git with your real identity before contributing:
+  ```bash
+  git config --global user.name "First Last"
+  git config --global user.email "you@example.com"
+  ```
+
+  If you have "Keep my email address private" enabled in your GitHub account settings, you must disable it (or use a different email) for contributions to this project. This is required so the sign-off record is attributable to a real person.
+
 * Full text of the DCO:
 
   ```
