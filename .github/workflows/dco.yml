@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Developer Certificate of Origin (DCO) check.
+#
+# Every commit in a pull request must carry a "Signed-off-by:" trailer
+# certifying the contributor's agreement with the DCO v1.1
+# (https://developercertificate.org/).  This mirrors the check used by the
+# Linux kernel and many other open-source projects.
+#
+# The check validates:
+#   1. A "Signed-off-by:" line is present in every commit message.
+#   2. The line carries a non-empty name and a syntactically valid e-mail
+#      address in "Name <email>" form.
+#
+# To sign off: git commit -s  (or --signoff)
+# To fix a past commit: git commit --amend -s
+
+name: DCO
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Read-only token is sufficient — we only inspect commit metadata.
+permissions:
+  contents: read
+
+concurrency:
+  group: dco-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Fetch enough history to read every commit in the PR.
+          fetch-depth: 0
+
+      - name: Check Signed-off-by on every commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          fail=0
+
+          # Iterate over every commit introduced by this PR.
+          while IFS= read -r sha; do
+            msg=$(git log -1 --format="%B" "$sha")
+            author=$(git log -1 --format="%an <%ae>" "$sha")
+
+            # 1. Must have at least one Signed-off-by line.
+            if ! echo "$msg" | grep -qP "^Signed-off-by:\s+\S"; then
+              echo "::error::Commit $sha by $author is missing a Signed-off-by trailer."
+              echo "  Add it with:  git commit --amend -s"
+              fail=1
+              continue
+            fi
+
+            # 2. Each Signed-off-by must have a non-empty name and a valid
+            #    email address in "Name <user@host.tld>" form.
+            while IFS= read -r sob; do
+              identity="${sob#*Signed-off-by:}"
+              identity="${identity#"${identity%%[! ]*}"}"  # ltrim
+
+              # Match: one or more non-< chars (name), then <email>
+              if ! echo "$identity" | grep -qP "^[^<@>]+<[^@\s]+@[^@\s]+\.[^@\s]+>"; then
+                echo "::error::Commit $sha has a malformed Signed-off-by: '$sob'"
+                echo "  Expected format:  Signed-off-by: Full Name <email@example.com>"
+                fail=1
+              fi
+            done < <(echo "$msg" | grep -P "^Signed-off-by:")
+
+          done < <(git rev-list "$BASE_SHA..$HEAD_SHA")
+
+          if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "One or more commits are missing a valid DCO sign-off."
+            echo "See https://developercertificate.org/ and CONTRIBUTING.md."
+            exit 1
+          fi
+
+          count=$(git rev-list --count "$BASE_SHA..$HEAD_SHA")
+          echo "All $count commit(s) carry a valid Signed-off-by. ✓"
