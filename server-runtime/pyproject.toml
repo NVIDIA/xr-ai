@@ -17,8 +17,8 @@ dependencies = [
     # IPC layer — server side uses ZMQ directly (connector + hub)
     "pyzmq>=27.0",
     # LiveKit transport
-    "livekit>=0.17",
-    "livekit-api>=0.7",
+    "livekit>=1.0",
+    "livekit-api>=1.0",
     # Token server
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",

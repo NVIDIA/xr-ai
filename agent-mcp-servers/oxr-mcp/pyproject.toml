@@ -14,7 +14,7 @@ dependencies = [
     "xr-ai-logging",
     "pyyaml>=6.0",
     "uvicorn[standard]>=0.29",
-    "fastmcp>=0.4",
+    "fastmcp>=2.0",
     # Headless OpenXR session + HeadTracker. Lives in the same wheel as the
     # cloudxr-runtime launcher; we pin it explicitly here so this package
     # builds standalone.

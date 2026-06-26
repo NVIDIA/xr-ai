@@ -20,6 +20,38 @@ Before making any change, read the authoritative working docs at the repo root:
 Sub-projects may have their own `README.md` with module-specific context — read
 those before working inside them.
 
+## External Contributors
+
+If you are not an NVIDIA employee, please follow this workflow before opening a
+pull request:
+
+1. **Open an issue first.** File a Bug or Enhancement issue describing your
+   intended change. NVIDIA maintainers will triage it and confirm whether a PR
+   would be accepted before you invest time writing code. Any contribution that
+   has not been pre-approved via an issue may be closed without review.
+
+2. **Fork the repository.** Work on a feature branch in your personal fork; do
+   not request direct branch access to this repository.
+
+3. **Open a PR from your fork** targeting `main`. In the PR sidebar, add the
+   **`contribution`** label — this flags the PR as an external contribution so
+   maintainers can route it correctly.
+
+4. **CI requires a maintainer trigger.** GitHub Actions will not run
+   automatically on PRs from forks. An NVIDIA team member must comment
+   `/build-ci` (or equivalent) to start the test suite. Do not open a PR until
+   your changes pass locally (see [CI](#ci) below).
+
+5. **Follow all rules of engagement** — code style, license headers, DCO
+   sign-off (see [Signing Your Work](#signing-your-work)), and the
+   [Code of Conduct](CODE_OF_CONDUCT.md). Contributions that violate these
+   rules, or which are submitted without a signed-off issue approval, will be
+   closed.
+
+> **Response SLA.** Maintainers aim to give an initial response within 5
+> business days. Review cycles for external PRs may be longer than for internal
+> work; please be patient and respond promptly to any requested changes.
+
 ## Code Style
 
 - Use meaningful, descriptive names for variables, functions, and types in all languages.
