@@ -59,34 +59,32 @@ jobs:
 
           # ── Determine the commit range ──────────────────────────────────────
           if [ "$EVENT" = "pull_request" ]; then
+            # GitHub provides the exact base and head SHAs for the PR.
             BASE="$PR_BASE"
             HEAD="$PR_HEAD"
           else
-            # push event
-            ZEROS="0000000000000000000000000000000000000000"
+            # push event — HEAD is always the new tip.
             HEAD="$PUSH_AFTER"
+            CURRENT_BRANCH="${GITHUB_REF_NAME:-}"
 
-            if [ "$PUSH_BEFORE" = "$ZEROS" ]; then
-              # New branch — no previous SHA exists.
-              BEFORE_REACHABLE=false
-            elif git cat-file -e "$PUSH_BEFORE" 2>/dev/null; then
-              BEFORE_REACHABLE=true
-            else
-              # Force push: the old tip was rewritten and is no longer
-              # reachable in this clone. Fall back to merge-base.
-              BEFORE_REACHABLE=false
-            fi
-
-            if [ "$BEFORE_REACHABLE" = "true" ]; then
-              BASE="$PUSH_BEFORE"
-            else
-              # No reachable before SHA — compare against the merge base with
-              # the default branch so we only check commits new to the repo.
-              BASE=$(git merge-base "$HEAD" "origin/$DEFAULT_BRANCH" 2>/dev/null || true)
-              if [ -z "$BASE" ]; then
-                # Orphan branch / no common ancestor — check only the tip.
+            if [ "$CURRENT_BRANCH" = "$DEFAULT_BRANCH" ]; then
+              # Direct push to the default branch: check only the commits
+              # that were just pushed (before..after).  Handle force-push
+              # (before SHA unreachable) by checking only the tip commit.
+              ZEROS="0000000000000000000000000000000000000000"
+              if [ "$PUSH_BEFORE" != "$ZEROS" ] && git cat-file -e "$PUSH_BEFORE" 2>/dev/null; then
+                BASE="$PUSH_BEFORE"
+              else
                 BASE="${HEAD}^"
               fi
+            else
+              # Push to a feature/fix branch: check every commit that is on
+              # this branch but not yet on the default branch.  This is the
+              # correct range regardless of force-pushes or rebases — it
+              # naturally excludes existing main commits (which predate this
+              # requirement) and only checks the contributor's new work.
+              git fetch --quiet origin "$DEFAULT_BRANCH" 2>/dev/null || true
+              BASE="origin/$DEFAULT_BRANCH"
             fi
           fi
 
