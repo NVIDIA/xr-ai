@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable
 
@@ -82,6 +83,51 @@ _NEGATIVE_EVIDENCE_MARKERS = (
     "without", "cannot see", "can't see", "does not show", "doesn't show",
 )
 
+# Generic container / scene / position words that don't identify a specific
+# object. Excluded when grounding a key object in the student's observation so
+# discrimination falls on identifying tokens (color, material, object name) —
+# otherwise two different objects that share a head noun (a "blue silicone case"
+# vs a "brown leather case") would both match on "case".
+_GENERIC_OBJECT_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "of", "on", "in", "to", "with", "at", "by",
+    "is", "are", "it", "its", "this", "that", "these", "those", "there",
+    "next", "near", "beside", "left", "right", "center", "centre", "side",
+    "edge", "top", "bottom", "front", "back", "corner", "middle", "onto",
+    "case", "cases", "object", "objects", "item", "items", "thing", "things",
+    "piece", "pieces", "box", "boxes", "container", "pouch", "pouches", "unit",
+    "device", "small", "large", "round", "rounded",
+    "desk", "table", "surface", "floor", "frame", "image", "scene", "view",
+})
+
+
+def _identity_tokens(text: str) -> set[str]:
+    """Identifying tokens of an object phrase (color / material / name), minus
+    generic container + scene + position words."""
+    return {
+        t for t in re.findall(r"[a-z0-9]+", text.lower())
+        if len(t) > 1 and t not in _GENERIC_OBJECT_WORDS
+    }
+
+
+def _ungrounded_key_object(key_objects: list[str], observation: str) -> str:
+    """Return the first key object whose identifying tokens are entirely absent
+    from *observation*, or '' if every key object is grounded.
+
+    The completion check otherwise trusts the VLM's per-requirement ``visible``
+    flags + ``evidence`` strings, which the model will happily fabricate (mark a
+    requirement visible with invented evidence) even on an off-task frame. The
+    ``observation`` is the model's one honest free-text description of what it
+    actually sees; requiring each key object to surface there — by a
+    distinguishing token, not the shared "case" head noun — catches the frame
+    that shows only one of two required objects, or none at all.
+    """
+    obs_tokens = _identity_tokens(observation)
+    for obj in key_objects:
+        want = _identity_tokens(obj)
+        if want and not (want & obs_tokens):
+            return obj
+    return ""
+
 
 def _check_has_student_evidence(requirement: str, current_obs: str, check: dict) -> bool:
     evidence_text = str(check.get("evidence", ""))
@@ -125,7 +171,11 @@ def _normalize_checks(obj: dict) -> list[dict]:
 
 
 def _parse_grounded_completion(
-    raw: str, expected_requirements: list[str], *, require_expected: bool = True
+    raw: str,
+    expected_requirements: list[str],
+    *,
+    require_expected: bool = True,
+    key_objects: list[str] | None = None,
 ) -> tuple[bool, str, list[dict], list[str], str]:
     """Grounded-completion parser. Accepts both the new flat shape
 
@@ -136,11 +186,11 @@ def _parse_grounded_completion(
         {"current_observation": "...", "checks": [{"requirement": "..", ...}], "completed": ..}
 
     Returns (completed, observation, checks, missing_or_mismatched, reject_reason).
-    ``completed`` is derived: every expected requirement must be covered
-    by a check with visible=True and non-empty evidence. Empty
-    observation, visible-without-evidence, malformed JSON, or any
-    missing requirement collapses to ``(False, ...)`` with a non-empty
-    ``reject_reason`` for the trace log.
+    ``completed`` is derived: a non-empty observation, no VLM-reported issue,
+    every visible check backed by grounded student evidence, no check marked
+    visible=false, and — when ``key_objects`` is supplied — every key object
+    actually named in the observation. Anything else collapses to
+    ``(False, ...)`` with a non-empty ``reject_reason`` for the trace log.
     """
     json_str = extract_json(raw)
     if not json_str:
@@ -179,6 +229,18 @@ def _parse_grounded_completion(
 
     if not any(c["visible"] and c["evidence"] for c in checks):
         return False, current_obs, checks, missing, "no grounded evidence"
+
+    # Object grounding: every key object must actually appear in the student's
+    # honest observation (not just in fabricated per-requirement evidence). This
+    # is what stops a "place glasses case next to the AirPod case" step from
+    # completing on a frame that shows only the AirPod case — or an off-task
+    # frame (e.g. a comb) — where the VLM still returned all-visible.
+    ungrounded = _ungrounded_key_object(
+        [o for o in (key_objects or []) if o and str(o).strip()], current_obs,
+    )
+    if ungrounded:
+        return False, current_obs, checks, missing, f"key object not in view: {ungrounded}"
+
     return True, current_obs, checks, missing, ""
 
 
@@ -391,7 +453,7 @@ async def check_guidance_step_complete(
             "object's type/identity, its placement, or the action.\n\n"
             "Output ONLY this JSON, no prose, no markdown:\n"
             "{\n"
-            '  "observation": "<one sentence naming the object(s) you actually see in Image 2>",\n'
+            '  "observation": "<one sentence naming EACH object you actually see in Image 2, by color/material>",\n'
             '  "requirements": {\n'
             '    "<each key object/placement, named>": {"visible": true|false, "evidence": "<Image 2 cue, or empty>"}\n'
             "  },\n"
@@ -412,7 +474,7 @@ async def check_guidance_step_complete(
             log.warning("ask_frames guidance check failed; using instruction fallback: %s", compare_raw)
         else:
             cmp_completed, cmp_obs, cmp_checks, cmp_missing, cmp_reject = _parse_grounded_completion(
-                compare_raw, expected, require_expected=False,
+                compare_raw, expected, require_expected=False, key_objects=key_objects,
             )
             cmp_issue = _issue_from_failure(compare_raw, cmp_reject, cmp_missing)
             if cmp_completed:
@@ -455,7 +517,7 @@ async def check_guidance_step_complete(
         "placement, or the action.\n\n"
         "Output ONLY this JSON, no prose, no markdown:\n"
         "{\n"
-        '  "observation": "<one sentence naming the object(s) you actually see>",\n'
+        '  "observation": "<one sentence naming EACH object you actually see, by color/material>",\n'
         '  "requirements": {\n'
         '    "<each key object/placement, named>": {"visible": true|false, "evidence": "<live-image cue, or empty>"}\n'
         "  },\n"
@@ -469,7 +531,7 @@ async def check_guidance_step_complete(
     )
     live_raw = (await vlm.ask_image(image_path, live_question)).content or ""
     completed, current_obs, checks, missing, reject_reason = _parse_grounded_completion(
-        live_raw, expected, require_expected=not bool(teacher_path),
+        live_raw, expected, require_expected=not bool(teacher_path), key_objects=key_objects,
     )
     live_issue = _issue_from_failure(live_raw, reject_reason, missing)
     if completed:
