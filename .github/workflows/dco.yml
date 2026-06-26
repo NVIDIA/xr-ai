@@ -3,13 +3,13 @@
 
 # Developer Certificate of Origin (DCO) check.
 #
-# Every commit in a pull request must carry a "Signed-off-by:" trailer
-# certifying the contributor's agreement with the DCO v1.1
-# (https://developercertificate.org/).  This mirrors the check used by the
-# Linux kernel and many other open-source projects.
+# Every commit pushed to the repository or included in a pull request must
+# carry a "Signed-off-by:" trailer certifying the contributor's agreement
+# with DCO v1.1 (https://developercertificate.org/).  This mirrors the
+# check used by the Linux kernel and many other open-source projects.
 #
-# The check validates:
-#   1. A "Signed-off-by:" line is present in every commit message.
+# The check validates per commit:
+#   1. A "Signed-off-by:" line is present in the commit message.
 #   2. The line carries a non-empty name and a syntactically valid e-mail
 #      address in "Name <email>" form.
 #
@@ -19,6 +19,8 @@
 name: DCO
 
 on:
+  push:
+    branches: ["**"]
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -27,7 +29,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dco-${{ github.ref }}
+  group: dco-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -40,19 +42,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Fetch enough history to read every commit in the PR.
           fetch-depth: 0
 
       - name: Check Signed-off-by on every commit
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # pull_request: compare PR base → head.
+          # push: compare before → after (before=zeros on new branches).
+          EVENT:    ${{ github.event_name }}
+          PR_BASE:  ${{ github.event.pull_request.base.sha }}
+          PR_HEAD:  ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER:  ${{ github.event.after }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
 
+          # ── Determine the commit range ──────────────────────────────────────
+          if [ "$EVENT" = "pull_request" ]; then
+            BASE="$PR_BASE"
+            HEAD="$PR_HEAD"
+          else
+            # push event
+            ZEROS="0000000000000000000000000000000000000000"
+            if [ "$PUSH_BEFORE" = "$ZEROS" ]; then
+              # New branch — compare against the default branch so we only
+              # check commits that are genuinely new to the repository.
+              BASE=$(git merge-base "$PUSH_AFTER" "origin/$DEFAULT_BRANCH" 2>/dev/null \
+                     || echo "$ZEROS")
+              if [ "$BASE" = "$ZEROS" ]; then
+                # No common ancestor (e.g. orphan branch) — check only the
+                # single tip commit to avoid scanning all of history.
+                BASE="$PUSH_AFTER^"
+              fi
+            else
+              BASE="$PUSH_BEFORE"
+            fi
+            HEAD="$PUSH_AFTER"
+          fi
+
+          # ── Check each commit ───────────────────────────────────────────────
           fail=0
 
-          # Iterate over every commit introduced by this PR.
           while IFS= read -r sha; do
             msg=$(git log -1 --format="%B" "$sha")
             author=$(git log -1 --format="%an <%ae>" "$sha")
@@ -60,7 +90,7 @@ jobs:
             # 1. Must have at least one Signed-off-by line.
             if ! echo "$msg" | grep -qP "^Signed-off-by:\s+\S"; then
               echo "::error::Commit $sha by $author is missing a Signed-off-by trailer."
-              echo "  Add it with:  git commit --amend -s"
+              echo "  Fix with:  git commit --amend -s  (then force-push)"
               fail=1
               continue
             fi
@@ -71,15 +101,14 @@ jobs:
               identity="${sob#*Signed-off-by:}"
               identity="${identity#"${identity%%[! ]*}"}"  # ltrim
 
-              # Match: one or more non-< chars (name), then <email>
               if ! echo "$identity" | grep -qP "^[^<@>]+<[^@\s]+@[^@\s]+\.[^@\s]+>"; then
                 echo "::error::Commit $sha has a malformed Signed-off-by: '$sob'"
-                echo "  Expected format:  Signed-off-by: Full Name <email@example.com>"
+                echo "  Expected:  Signed-off-by: Full Name <email@example.com>"
                 fail=1
               fi
             done < <(echo "$msg" | grep -P "^Signed-off-by:")
 
-          done < <(git rev-list "$BASE_SHA..$HEAD_SHA")
+          done < <(git rev-list "$BASE..$HEAD")
 
           if [ "$fail" -ne 0 ]; then
             echo ""
@@ -88,5 +117,5 @@ jobs:
             exit 1
           fi
 
-          count=$(git rev-list --count "$BASE_SHA..$HEAD_SHA")
+          count=$(git rev-list --count "$BASE..$HEAD")
           echo "All $count commit(s) carry a valid Signed-off-by. ✓"
