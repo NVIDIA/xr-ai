@@ -13,3 +13,12 @@ Update it in the same commit — not as a follow-up.
 
 Sub-repos may have their own `CLAUDE.md` with module-specific context — read
 those before working inside them.
+
+Before committing any Python changes, run:
+
+```
+uv tool run ruff check --fix <changed_files>
+```
+
+Every commit must have `Signed-off-by: Devdeep Ray <devdeepr@nvidia.com>` — use
+`git commit -s`. See the DCO section in `AGENTS.md`.
