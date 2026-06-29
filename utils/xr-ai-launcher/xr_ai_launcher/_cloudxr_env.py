@@ -23,7 +23,41 @@ _EXPORT_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 # OpenXR runtime selector written by cloudxr-runtime into cloudxr.env.
 XR_RUNTIME_VAR = "XR_RUNTIME_JSON"
 
-__all__ = ["XR_RUNTIME_VAR", "load_cloudxr_env"]
+# Profiles on CloudXR's direct native transport (skip the WSS proxy).
+NATIVE_DEVICE_PROFILES = frozenset({"auto-native", "apple-vision-pro", "ipad-pro"})
+
+_DEVICE_PROFILE_RE = re.compile(
+    r"^\s*NV_DEVICE_PROFILE\s*:\s*[\"']?([\w-]+)[\"']?", re.MULTILINE
+)
+
+__all__ = [
+    "XR_RUNTIME_VAR",
+    "load_cloudxr_env",
+    "NATIVE_DEVICE_PROFILES",
+    "is_native_profile",
+    "read_device_profile",
+]
+
+
+def is_native_profile(profile: str) -> bool:
+    """True if *profile* names a native-transport CloudXR device profile."""
+    return (profile or "").strip().lower() in NATIVE_DEVICE_PROFILES
+
+
+def read_device_profile(yaml_path) -> str:
+    """Return NV_DEVICE_PROFILE from the environment, or from *yaml_path* when unset."""
+    env_val = os.environ.get("NV_DEVICE_PROFILE")
+    if env_val:
+        return env_val
+    if not yaml_path:
+        return ""
+    try:
+        with open(yaml_path) as f:
+            text = f.read()
+    except OSError:
+        return ""
+    m = _DEVICE_PROFILE_RE.search(text)
+    return m.group(1) if m else ""
 
 
 def load_cloudxr_env(path: Path) -> None:
