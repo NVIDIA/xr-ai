@@ -1,11 +1,21 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Run `pre-commit install` once after cloning to enable these hooks.
-# See AGENTS.md § License headers for the exact SPDX text and the
-# language-by-language comment-syntax mapping the hook enforces.
+# One-time setup after cloning:
+#   uv tool install pre-commit        # install pre-commit itself (once per machine)
+#   pre-commit install                 # wire the pre-commit stage hooks
+#   pre-commit install --hook-type commit-msg   # wire the DCO commit-msg hook
+#
+# See AGENTS.md § DCO sign-off and § License headers.
 
 repos:
+  # ── Ruff lint (matches CI: ruff.toml at repo root, version pinned to CI) ──
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff
+        args: [--fix]
+
   - repo: local
     hooks:
       - id: check-spdx-headers
@@ -39,3 +49,14 @@ repos:
             | gradlew(\.bat)?
             | gradle/wrapper/gradle-wrapper\.properties
           )$
+
+      - id: dco-sign-off
+        name: DCO sign-off
+        description: >
+          Every commit must carry a Signed-off-by trailer (DCO v1.1).
+          Fails if the trailer is absent; fix with `git commit --amend -s`.
+        entry: bash .github/scripts/check_dco.sh
+        language: system
+        stages: [commit-msg]
+        always_run: true
+        pass_filenames: false

@@ -122,6 +122,32 @@ Skip files that can't carry comments or aren't ours to license: `LICENSE`,
 Xcode-managed files (`*.pbxproj`, `*.xcworkspacedata`), and third-party Gradle
 wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.properties`).
 
+## Pre-commit hooks
+
+The repo ships a `.pre-commit-config.yaml` that runs the same checks as CI
+locally before each commit. Set it up once after cloning:
+
+```bash
+# Install pre-commit itself (once per machine)
+uv tool install pre-commit
+
+# Wire the hooks (once per clone)
+pre-commit install                          # pre-commit stage (ruff, SPDX)
+pre-commit install --hook-type commit-msg  # commit-msg stage (DCO)
+```
+
+After that:
+
+- **Ruff** auto-fixes import order and lint errors on every `git commit`.
+  If it changes files, re-stage and commit again.
+- **SPDX header** auto-inserts the license header on new files; same
+  re-stage-and-commit flow.
+- **DCO** blocks the commit if `Signed-off-by` is missing.
+  Fix with `git commit --amend -s`.
+
+Always use `git commit -s` (or `--signoff`) so the DCO hook never fires.
+See [Signing Your Work](#signing-your-work) for the full DCO context.
+
 ## CI
 
 GitHub Actions runs the IPC + multi-client / multi-agent suite under `tests/`
