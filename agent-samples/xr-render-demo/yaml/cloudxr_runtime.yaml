@@ -19,7 +19,7 @@ accept_eula: true
 #   auto-native: native iOS / visionOS clients (set this to use the native apps)
 # Device-specific values also accepted: apple-vision-pro | ipad-pro | quest3
 cloudxr_env:
-  NV_DEVICE_PROFILE: auto-native
+  NV_DEVICE_PROFILE: auto-webrtc
 
 # Physical GPU (nvidia-smi index) the CloudXR compositor pins to. Translated
 # to PCI bus selectors for Vulkan, CUDA, and Mesa, set on this process's
