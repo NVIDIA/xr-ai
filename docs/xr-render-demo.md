@@ -38,7 +38,8 @@ Before starting the stack, the orchestrator runs two setup steps:
 
 - **Web vendor bundle** — builds the CloudXR + LiveKit ESM bundle via
   `client-samples/web-xr-build/build.sh` (skipped if already present;
-  requires `npm`).
+  requires `npm`). Built only for WebRTC device profiles; native profiles
+  never serve the web page, so the build (and its npm dependency) is skipped.
 - **LOVR binary** — auto-downloads LOVR v0.18.0 AppImage to `deps/lovr/` if
   not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
   `lovr_bin:` in `render_mcp.yaml` → cached AppImage → fresh download.
@@ -53,6 +54,10 @@ native iOS / visionOS client apps, change it to `auto-native`:
 cloudxr_env:
   NV_DEVICE_PROFILE: auto-native
 ```
+
+For native profiles the hub omits the static web page but keeps `/token`,
+`/cert`, and `/rtc`, so the native AVP app's default token fetch from
+`https://<host>:8080/token` keeps working.
 
 ## GPU pinning for the XR side
 

@@ -10,7 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from xr_ai_launcher._cloudxr_env import XR_RUNTIME_VAR, load_cloudxr_env
+from xr_ai_launcher._cloudxr_env import (
+    NATIVE_DEVICE_PROFILES,
+    XR_RUNTIME_VAR,
+    is_native_profile,
+    load_cloudxr_env,
+    read_device_profile,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +27,7 @@ def _clean_env(monkeypatch):
     monkeypatch.delenv("QUOTED_DOUBLE", raising=False)
     monkeypatch.delenv("QUOTED_SINGLE", raising=False)
     monkeypatch.delenv("NO_EXPORT", raising=False)
+    monkeypatch.delenv("NV_DEVICE_PROFILE", raising=False)
 
 
 def _write_env(tmp_path: Path, content: str) -> Path:
@@ -115,3 +122,56 @@ class TestEdgeCases:
         """)
         load_cloudxr_env(env_file)
         assert os.environ["CLOUDXR_EXTRA"] == "key=value"
+
+
+class TestIsNativeProfile:
+    @pytest.mark.parametrize("profile", sorted(NATIVE_DEVICE_PROFILES))
+    def test_native_profiles(self, profile):
+        assert is_native_profile(profile) is True
+
+    def test_webrtc_profile_is_not_native(self):
+        assert is_native_profile("auto-webrtc") is False
+
+    def test_empty_string_is_not_native(self):
+        assert is_native_profile("") is False
+
+    def test_whitespace_is_stripped(self):
+        assert is_native_profile("  auto-native  ") is True
+
+    def test_case_insensitive(self):
+        assert is_native_profile("Apple-Vision-Pro") is True
+
+
+class TestReadDeviceProfile:
+    def _write_yaml(self, tmp_path: Path, content: str) -> Path:
+        p = tmp_path / "cloudxr_runtime.yaml"
+        p.write_text(textwrap.dedent(content))
+        return p
+
+    def test_env_set_wins_over_yaml(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("NV_DEVICE_PROFILE", "auto-native")
+        yaml_path = self._write_yaml(tmp_path, """\
+            cloudxr_env:
+              NV_DEVICE_PROFILE: auto-webrtc
+        """)
+        assert read_device_profile(yaml_path) == "auto-native"
+
+    def test_env_unset_falls_back_to_yaml(self, tmp_path):
+        yaml_path = self._write_yaml(tmp_path, """\
+            cloudxr_env:
+              NV_DEVICE_PROFILE: "apple-vision-pro"
+        """)
+        assert read_device_profile(yaml_path) == "apple-vision-pro"
+
+    def test_missing_file_returns_empty(self, tmp_path):
+        assert read_device_profile(tmp_path / "nonexistent.yaml") == ""
+
+    def test_no_match_in_yaml_returns_empty(self, tmp_path):
+        yaml_path = self._write_yaml(tmp_path, """\
+            cloudxr_env:
+              SOMETHING_ELSE: value
+        """)
+        assert read_device_profile(yaml_path) == ""
+
+    def test_falsy_path_returns_empty(self):
+        assert read_device_profile(None) == ""

@@ -26,7 +26,13 @@ Typical usage::
         run_stack(PROCESSES, _BASE)
 """
 
-from ._cloudxr_env import XR_RUNTIME_VAR, load_cloudxr_env
+from ._cloudxr_env import (
+    NATIVE_DEVICE_PROFILES,
+    XR_RUNTIME_VAR,
+    is_native_profile,
+    load_cloudxr_env,
+    read_device_profile,
+)
 from ._credentials import ensure_credentials, load_credentials, warn_if_missing
 from ._gpu import detect_gpu_config
 from ._processes import ManagedProcess
@@ -34,6 +40,7 @@ from ._stack import Parallel, Process, run_stack
 
 __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
+    "NATIVE_DEVICE_PROFILES", "is_native_profile", "read_device_profile",
     "ensure_credentials", "load_credentials", "warn_if_missing",
     "detect_gpu_config",
     "ManagedProcess",

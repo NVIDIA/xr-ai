@@ -9,6 +9,24 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-26 — Web client page + vendor build are WebRTC-only
+
+The xr-render-demo serves the static web page and runs the npm web-vendor
+build only for WebRTC device profiles. Native CloudXR profiles (`auto-native`,
+`apple-vision-pro`, `ipad-pro`) skip both: the page's "Launch XR" uses the WSS
+proxy that native already skips, so for native it is a dead WebRTC-only UI that
+native clients (the AVP Swift app) never load. Skipping the build drops
+the npm dependency for native-only users.
+
+The orchestrator reads `NV_DEVICE_PROFILE` from `cloudxr_runtime.yaml` (stdlib
+regex, same as the existing `model_backend`/`lovr_bin` reads), gates
+`_ensure_web_vendor()`, and signals the hub via a generic
+`XR_MEDIA_HUB_NO_WEB_CLIENT` env var. The hub stays free of CloudXR-profile
+knowledge: its config loader honors that transport-agnostic var by clearing
+`web_client_dir` (no static mount) while keeping `/token`, `/cert`, and `/rtc`
+live. The native AVP app still fetches its LiveKit token from
+`https://<host>:8080/token`.
+
 ### 2026-06-25 — CloudXR WSS signaling proxy is WebRTC-only
 
 The WSS proxy (port 48322) is started only for WebRTC device profiles.

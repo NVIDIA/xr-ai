@@ -108,6 +108,11 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
 
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
+    `_cloudxr_env` owns the shared CloudXR env helpers (stdlib-only, os + re):
+    `load_cloudxr_env`, plus the single source of truth for native device
+    profiles: `NATIVE_DEVICE_PROFILES`, `is_native_profile(profile)`, and
+    `read_device_profile(yaml_path)` (env-first NV_DEVICE_PROFILE read, regex
+    YAML fallback).
 
 xr-ai-logging  (utils/xr-ai-logging/)
     └── loguru >=0.7
@@ -189,6 +194,8 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
     └── pyyaml
+    └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher] (is_native_profile + read_device_profile)
+    └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
 
 render-mcp-server  (agent-mcp-servers/render-mcp/)
     └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (ManagedProcess + load_cloudxr_env)
@@ -487,7 +494,7 @@ updated in the same commit**.
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/cloudxr_runtime.yaml`, `AGENTS.md` CloudXR section |
-| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | render-mcp + oxr-mcp `__main__.py` imports, `AGENTS.md` cloudxr-env section |
+| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | render-mcp + oxr-mcp + cloudxr-runtime `__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `AGENTS.md` cloudxr-env section |
 | render-mcp YAML config keys | `agent-mcp-servers/render-mcp/render_mcp.yaml`, sample copies, worker URL constants |
 | oxr-mcp YAML config keys | `agent-mcp-servers/oxr-mcp/oxr_mcp_server.yaml`, sample copies, worker URL constants |
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |

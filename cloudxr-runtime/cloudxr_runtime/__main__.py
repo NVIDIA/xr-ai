@@ -36,12 +36,8 @@ from isaacteleop.cloudxr.runtime import (
 )
 from isaacteleop.cloudxr.wss import run as wss_run
 from loguru import logger
+from xr_ai_launcher import is_native_profile, read_device_profile
 from xr_ai_logging import setup_logging
-
-# NV_DEVICE_PROFILE values that use CloudXR's direct native transport.
-# Profiles not listed here (e.g. quest3 — no native CloudXR Android client)
-# connect over WebRTC and go through the WSS proxy.
-_NATIVE_DEVICE_PROFILES = {"auto-native", "apple-vision-pro", "ipad-pro"}
 
 
 async def _wait_with_progress(
@@ -147,7 +143,11 @@ def _append_env_to_file(path: Path, env: dict[str, str]) -> None:
         f.writelines(lines)
 
 
-async def _run(cfg: dict, ready_file: Path | None = None) -> None:
+async def _run(
+    cfg: dict,
+    ready_file: Path | None = None,
+    config_path: Path | None = None,
+) -> None:
     install_dir = str(Path(cfg.get("cloudxr_install_dir", "~/.cloudxr")).expanduser())
     env_file    = cfg.get("cloudxr_env_config")
 
@@ -233,8 +233,8 @@ async def _run(cfg: dict, ready_file: Path | None = None) -> None:
 
         # Native-transport profiles connect directly; only WebRTC profiles need
         # the WSS signaling proxy.
-        profile = os.environ.get("NV_DEVICE_PROFILE", "")
-        if profile in _NATIVE_DEVICE_PROFILES:
+        profile = read_device_profile(config_path)
+        if is_native_profile(profile):
             logger.info("native device profile {}, skipping WSS proxy", profile)
             await stop
         else:
@@ -271,7 +271,7 @@ def run() -> None:
     if our_ns.config:
         cfg = _load_config(our_ns.config)
 
-    asyncio.run(_run(cfg, ready_file=our_ns.ready_file))
+    asyncio.run(_run(cfg, ready_file=our_ns.ready_file, config_path=our_ns.config))
 
 
 if __name__ == "__main__":

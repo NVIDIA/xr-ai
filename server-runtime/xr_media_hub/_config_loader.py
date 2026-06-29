@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import os
 from pathlib import Path
 
 import yaml
@@ -23,6 +24,13 @@ from loguru import logger
 from xr_media_hub.transport.livekit.config import LiveKitConnectorConfig
 
 DEFAULT_CONFIG_NAME = "xr_media_hub.yaml"
+
+# Clears web_client_dir when set; /token, /cert, /rtc stay up.
+NO_WEB_CLIENT_ENV = "XR_MEDIA_HUB_NO_WEB_CLIENT"
+
+
+def _web_client_disabled() -> bool:
+    return os.environ.get(NO_WEB_CLIENT_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _resolve_path(value: str, base: Path) -> str:
@@ -55,6 +63,9 @@ def load_config() -> LiveKitConnectorConfig:
 
     with config_path.open() as f:
         data: dict = yaml.safe_load(f) or {}
+
+    if _web_client_disabled():
+        data["web_client_dir"] = ""
 
     # Resolve any relative path fields relative to the YAML file's directory.
     for key in ("web_client_dir", "cert_file", "key_file"):
