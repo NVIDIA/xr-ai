@@ -151,8 +151,9 @@ async def _run(
     install_dir = str(Path(cfg.get("cloudxr_install_dir", "~/.cloudxr")).expanduser())
     env_file    = cfg.get("cloudxr_env_config")
 
+    # Environment variables such as NV_DEVICE_PROFILE are respected, with config values used as defaults.
     for key, val in cfg.get("cloudxr_env", {}).items():
-        os.environ[key] = str(val)
+        os.environ.setdefault(key, str(val))
 
     # XR-side GPU pinning. Set on os.environ before EnvConfig.from_args so the
     # multiprocessing.Process that hosts the native CloudXR service inherits

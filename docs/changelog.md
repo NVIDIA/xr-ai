@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-29 — cloudxr_env yaml values default rather than override the environment
+
+cloudxr-runtime applies the `cloudxr_env` block from `cloudxr_runtime.yaml` with
+`os.environ.setdefault`, so the yaml supplies defaults and an explicit
+environment value (e.g. an inlined `NV_DEVICE_PROFILE=auto-native`) overrides it.
+This matches the orchestrator and cloudxr-runtime both resolving the profile
+env-first via `read_device_profile`.
+
 ### 2026-06-26 — Web client page + vendor build are WebRTC-only
 
 The xr-render-demo serves the static web page and runs the npm web-vendor

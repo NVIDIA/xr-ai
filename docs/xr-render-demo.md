@@ -46,14 +46,17 @@ Before starting the stack, the orchestrator runs two setup steps:
 
 ## Selecting the client type (WebRTC vs native)
 
-`NV_DEVICE_PROFILE` in `yaml/cloudxr_runtime.yaml` selects which XR clients can
-connect. The default `auto-webrtc` serves WebRTC / web XR clients. For the
-native iOS / visionOS client apps, change it to `auto-native`:
+`NV_DEVICE_PROFILE` selects which XR clients can connect. For the native iOS /
+visionOS client apps, set it to `auto-native`:
 
-```yaml
-cloudxr_env:
-  NV_DEVICE_PROFILE: auto-native
+```bash
+NV_DEVICE_PROFILE=auto-native uv run ...
 ```
+
+The environment value takes precedence over the yaml, so prefer setting the
+variable. `NV_DEVICE_PROFILE` under `cloudxr_env` in `yaml/cloudxr_runtime.yaml`
+only supplies the default when the variable is unset (currently `auto-webrtc`,
+which serves WebRTC / web XR clients).
 
 For native profiles the hub omits the static web page but keeps `/token`,
 `/cert`, and `/rtc`, so the native AVP app's default token fetch from
