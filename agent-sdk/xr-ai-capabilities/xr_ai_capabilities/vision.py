@@ -24,6 +24,11 @@ The module is framework-agnostic: it talks to the hub through a
 ``ProcessorEndpoint`` (subscribing to ``FrameSignal`` events, fetching frames,
 and setting agent status) and has no dependency on pipecat. A pipecat brain
 passes ``transport.endpoint``; a non-pipecat agent passes its own endpoint.
+
+``VisionModule`` also implements :class:`~xr_ai_capabilities.AgentCapability`
+so it can be registered with a brain's capability list.  It exposes a single
+brain-local tool — :data:`VISION_TOOL_NAME` — that agentic-loop brains can
+include in their LLM tool list.
 """
 from __future__ import annotations
 
@@ -33,9 +38,31 @@ from typing import AsyncIterator
 
 from loguru import logger
 from xr_ai_agent import FrameSignal, ProcessorEndpoint
-from xr_ai_models import VLMService
+from xr_ai_models import ToolDef, VLMService
 
+from .capability import AgentCapability
 from .pixels import encode_image, frame_to_pil
+
+#: Canonical name of the brain-local perception tool exposed by VisionModule.
+VISION_TOOL_NAME = "look_at_current_frame"
+
+_DEFAULT_TOOL_DESCRIPTION = (
+    "Look at the user's LIVE camera feed right now and answer a question "
+    "about the real world — what they are holding, pointing at, or looking "
+    "at; a real-world colour, shape, text, or object. Use this whenever the "
+    "answer requires observing the physical world."
+)
+
+_VISION_TOOL_PARAMETERS: dict = {
+    "type": "object",
+    "properties": {
+        "question": {
+            "type": "string",
+            "description": "The question to answer about what the camera sees.",
+        },
+    },
+    "required": ["question"],
+}
 
 
 def _now_us() -> int:
@@ -48,8 +75,12 @@ class VisionUnavailable(Exception):
     The message is a short, user-facing sentence suitable to speak."""
 
 
-class VisionModule:
+class VisionModule(AgentCapability):
     """Live-camera VLM question answering.
+
+    Implements :class:`~xr_ai_capabilities.AgentCapability` so it can be
+    registered with a brain's capability list.  The exposed tool is
+    :data:`VISION_TOOL_NAME` (``look_at_current_frame``).
 
     Camera streaming is always-on — this module does not send camera control
     messages.  It waits up to ``frame_timeout_s`` for a fresh frame to arrive
@@ -65,6 +96,11 @@ class VisionModule:
         A ``VLMService`` (its ``stream`` is used for token-by-token answers).
     system_prompt:
         Default system prompt for the VLM (overridable per ``ask``).
+    tool_description:
+        Override the LLM-visible description of the ``look_at_current_frame``
+        tool.  Useful when the brain operates in a domain-specific context
+        (e.g. spatial XR) and needs a more tailored hint.  Defaults to
+        :data:`_DEFAULT_TOOL_DESCRIPTION`.
     frame_max_age_s:
         Maximum age of a cached frame signal before it is considered stale.
     frame_timeout_s:
@@ -78,12 +114,14 @@ class VisionModule:
         vlm: VLMService,
         *,
         system_prompt: str = "",
+        tool_description: str = _DEFAULT_TOOL_DESCRIPTION,
         frame_max_age_s: float = 2.0,
         frame_timeout_s: float = 5.0,
     ) -> None:
         self._endpoint = endpoint
         self._vlm = vlm
         self._system_prompt = system_prompt
+        self._tool_description = tool_description
         self._frame_max_age_us = int(frame_max_age_s * 1_000_000)
         self._frame_timeout_s  = frame_timeout_s
 
@@ -100,6 +138,38 @@ class VisionModule:
         """Drop all per-participant state (call from ``on_participant_left``)."""
         self._latest = {k: v for k, v in self._latest.items() if k[0] != pid}
         self._frame_events.pop(pid, None)
+
+    # ── AgentCapability interface ───────────────────────────────────────────────
+
+    def as_tool_defs(self) -> list[ToolDef]:
+        """Return the ``look_at_current_frame`` tool definition."""
+        return [ToolDef(
+            name=VISION_TOOL_NAME,
+            description=self._tool_description,
+            parameters=_VISION_TOOL_PARAMETERS,
+        )]
+
+    async def execute(
+        self,
+        name: str,
+        args: dict,
+        pid: str,
+        *,
+        onset_pts_us: int = 0,
+        end_pts_us: int = 0,
+    ) -> dict:
+        """Execute the ``look_at_current_frame`` tool.
+
+        Returns ``{"answer": <text>}`` on success or ``{"spoken": <message>}``
+        when vision is unavailable (so callers can surface it to the user
+        instead of feeding an error back to the model).
+        """
+        question = str(args.get("question") or "").strip()
+        try:
+            answer = await self.perceive(pid, question)
+            return {"answer": answer}
+        except VisionUnavailable as exc:
+            return {"spoken": str(exc)}
 
     # ── frame tracking ─────────────────────────────────────────────────────────
 

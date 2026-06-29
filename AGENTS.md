@@ -150,11 +150,12 @@ has no pipeline-framework dependency. Keep new reusable agent building blocks in
 `xr-ai-capabilities` — `xr-ai-pipecat` must not become a catch-all.
 Planned structural follow-ups (own PRs):
 
-1. **`MCPToolset`.** `RenderSceneProcessor` still takes one `McpClient` per MCP
-   server and routes via a hardcoded `_execute_tool` switch — adding a server
-   means a new arg + frozenset + branch, reusable by nothing. Replace it with a
-   toolset that pairs a client with the tool names it owns, so a brain accepts a
-   list and auto-routes:
+1. **`MCPToolset` + `AgentCapability`** — shipped in `agent-sdk/xr-ai-capabilities`.
+   `MCPToolset` pairs any MCP client with the tool names it owns (`tools=None` =
+   catch-all); `route_tool` / `collect_tool_defs` replace the per-sample frozenset
+   switch.  `AgentCapability` is the ABC for brain-local tools (no MCP hop);
+   `VisionModule` implements it.  Next: refactor `BrainProcessor` (M2) and
+   `xr-render-demo` (M3) to consume these building blocks.
 
    ```python
    brain = AgentBrain(
@@ -204,6 +205,22 @@ Hard rules (also in `DEPENDENCIES.md`):
 - Agent workers import only from `xr_ai_agent` + `xr_ai_models` (and task-specific libs).
 - Agent workers must never import from `xr_media_hub` or `xr_ai_launcher`.
 - Don't add abstractions until needed by two concrete use-cases.
+
+## DCO sign-off
+
+Every commit must carry a `Signed-off-by` trailer certifying agreement with
+[DCO v1.1](https://developercertificate.org/). CI enforces this on every push
+and PR — commits without it fail the `DCO sign-off` check.
+
+```
+Signed-off-by: Full Name <email@example.com>
+```
+
+Add automatically with `git commit -s` (or `--signoff`).  To fix a commit that
+already landed: `git commit --amend -s` then force-push the branch.
+
+**Agents / automated tooling:** include the committing user's `Signed-off-by`
+in every commit message, in addition to any `Co-Authored-By` lines.
 
 ## License headers
 

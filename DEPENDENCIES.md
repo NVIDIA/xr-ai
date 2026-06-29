@@ -74,11 +74,20 @@ xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
     sample architecture"). A capability talks to the hub through a
     ``ProcessorEndpoint`` and depends only on the core SDK — NOT on pipecat or
     any pipeline framework — so both pipecat and non-pipecat agents can compose
-    it. Hosts ``pixels`` (frame → PIL → JPEG; numpy + Pillow) and ``vision``
-    (VisionModule — live-camera VLM Q&A with camera-on-demand, exposing ``ask``
-    for streaming TTS and ``perceive`` for agentic tool loops), so vision
-    samples no longer copy that code per-worker. A pipecat brain wires it up by
-    passing ``transport.endpoint``.
+    it.
+
+    Building blocks:
+    - ``pixels`` — frame → PIL → JPEG encoding (numpy + Pillow)
+    - ``VisionModule`` (``vision``) — live-camera VLM Q&A with camera-on-demand;
+      exposes ``ask`` (streaming TTS) and ``perceive`` (agentic tool loops);
+      implements ``AgentCapability`` and registers a ``look_at_current_frame``
+      brain-local tool
+    - ``AgentCapability`` (``capability``) — ABC for brain-local tools that run
+      inline (no MCP server hop); exposes ``as_tool_defs()`` and ``execute()``
+    - ``MCPToolset`` (``toolset``) — pairs any MCP client (duck-typed via
+      ``McpClientProtocol``) with the set of tool names it owns; ``tools=None``
+      is the catch-all; ``route_tool`` finds the right toolset for a tool name;
+      ``collect_tool_defs`` queries all clients and returns ``ToolDef`` objects
 
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24
