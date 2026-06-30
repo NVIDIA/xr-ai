@@ -205,9 +205,8 @@ class RenderSceneProcessor(BrainProcessor):
         llm:         LLMService,
         agent_llm:   LLMService,
         vlm_service: VLMService | None = None,
-        frame_max_age_s:     float = 2.0,
-        camera_on_timeout_s: float = 15.0,
-        camera_grace_s:      float = 5.0,
+        frame_max_age_s: float = 2.0,
+        frame_timeout_s: float = 5.0,
     ):
         super().__init__()
         self._transport      = transport
@@ -252,17 +251,16 @@ class RenderSceneProcessor(BrainProcessor):
         self._pending_notices: dict[str, list[str]] = {}
 
         # ── live-frame perception (look_at_current_frame) ────────────────────
-        # The reusable VisionModule owns frame tracking, camera-on-demand, and
-        # the VLM call — shared with simple-vlm-example. Built only when a VLM
-        # service is wired (None in unit tests / no-camera deployments).
+        # VisionModule owns frame tracking and the VLM call — shared with
+        # simple-vlm-example. Built only when a VLM service is wired
+        # (None in unit tests / no-camera deployments).
         self._vision: VisionModule | None = None
         if vlm_service is not None:
             self._vision = VisionModule(
                 transport.endpoint, vlm_service,
-                system_prompt       = _PERCEPTION_SYSTEM_PROMPT,
-                frame_max_age_s     = frame_max_age_s,
-                camera_on_timeout_s = camera_on_timeout_s,
-                camera_grace_s      = camera_grace_s,
+                system_prompt   = _PERCEPTION_SYSTEM_PROMPT,
+                frame_max_age_s = frame_max_age_s,
+                frame_timeout_s = frame_timeout_s,
             )
             # FrameSignal events aren't pipecat frames, so the module subscribes
             # on the endpoint directly. Guard the unit-test transport double.

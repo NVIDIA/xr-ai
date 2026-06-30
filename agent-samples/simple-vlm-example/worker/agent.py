@@ -57,11 +57,10 @@ class SimpleVlmBrain(BrainProcessor):
         *,
         transport: XRMediaHubTransport,
         vlm: VLMService,
-        default_prompt:      str   = "Describe what you see.",
-        system_prompt:       str   = DEFAULT_SYSTEM_PROMPT,
-        frame_max_age_s:     float = 2.0,
-        camera_on_timeout_s: float = 15.0,
-        camera_grace_s:      float = 5.0,
+        default_prompt:  str   = "Describe what you see.",
+        system_prompt:   str   = DEFAULT_SYSTEM_PROMPT,
+        frame_max_age_s: float = 2.0,
+        frame_timeout_s: float = 5.0,
     ) -> None:
         super().__init__()
         self._transport = transport
@@ -70,10 +69,9 @@ class SimpleVlmBrain(BrainProcessor):
         # All the live-camera machinery lives in the shared module.
         self._vision = VisionModule(
             transport.endpoint, vlm,
-            system_prompt       = system_prompt,
-            frame_max_age_s     = frame_max_age_s,
-            camera_on_timeout_s = camera_on_timeout_s,
-            camera_grace_s      = camera_grace_s,
+            system_prompt   = system_prompt,
+            frame_max_age_s = frame_max_age_s,
+            frame_timeout_s = frame_timeout_s,
         )
         self._vision.register()
 
@@ -90,8 +88,7 @@ class SimpleVlmBrain(BrainProcessor):
         return self._vision.ask(pid, text)
 
     async def on_user_started_speaking(self, pid: str) -> None:
-        # Speculative camera warmup at the leading edge of speech.
-        await self._vision.warmup(pid)
+        pass
 
     async def on_query_superseded(self, pid: str) -> None:
         # Vision Q&A turns are short; cut the previous answer's audio so the new

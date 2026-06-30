@@ -31,9 +31,8 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     voice_gate_yaml:       yaml/voice_gate.yaml  # path to voice-gate config
     default_prompt:        "Describe what you see."
     system_prompt:               <multiline string>   # role/style guidance
-    frame_max_age_s:            2.0   # frames older than this trigger startCamera
-    camera_on_timeout_s:       15.0   # wait for a fresh frame after startCamera
-    camera_grace_s:             5.0   # keep camera on after a query
+    frame_max_age_s:            2.0   # frames older than this are considered stale
+    frame_timeout_s:            5.0   # wait for a fresh frame before giving up
     silero_threshold:           0.5   # Silero speech probability gate (0..1)
     silence_duration:           0.4   # seconds of silence ending an utterance
     min_speech:                 0.1   # min seconds of speech before STT fires
@@ -103,9 +102,8 @@ async def main(
         vlm                 = vlm,
         default_prompt      = cfg.get("default_prompt", "Describe what you see."),
         system_prompt       = cfg.get("system_prompt",  DEFAULT_SYSTEM_PROMPT),
-        frame_max_age_s     = float(cfg.get("frame_max_age_s",      2.0)),
-        camera_on_timeout_s = float(cfg.get("camera_on_timeout_s", 15.0)),
-        camera_grace_s      = float(cfg.get("camera_grace_s",       5.0)),
+        frame_max_age_s = float(cfg.get("frame_max_age_s", 2.0)),
+        frame_timeout_s = float(cfg.get("frame_timeout_s", 5.0)),
     )
 
     # make_voice_pipeline returns (pipeline, task); only the task is run.
