@@ -47,6 +47,24 @@ _HF_REPO        = "rhasspy/piper-voices"
 # Callers/tests can treat this as retry-or-skip rather than a hard failure.
 _EXIT_VOICE_UNAVAILABLE = 3
 
+_TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
+_FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
+
+
+def _parse_bool(value: object, key: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_BOOL_STRINGS:
+            return True
+        if normalized in _FALSE_BOOL_STRINGS:
+            return False
+    raise ValueError(
+        f"{key} must be a boolean or one of "
+        f"{sorted(_TRUE_BOOL_STRINGS | _FALSE_BOOL_STRINGS)} (got {value!r})"
+    )
+
 
 def _resolve_model_cache(cfg: dict, yaml_dir: Path) -> Path:
     raw = cfg.get("model_cache", "../models")
@@ -202,7 +220,7 @@ def _build_app(cfg: dict, model_cache: Path):
     from pydantic import BaseModel
 
     voice_name = cfg["voice"]
-    use_cuda   = bool(cfg.get("use_cuda", False))
+    use_cuda   = _parse_bool(cfg.get("use_cuda", False), "use_cuda")
     backend    = _PiperBackend(voice_name, model_cache, use_cuda)
 
     app = FastAPI(title="Piper TTS Server", version="0.1.0")

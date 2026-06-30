@@ -1,14 +1,39 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for xr_ai_vllm._lifecycle pure helpers."""
+"""Unit tests for xr_ai_vllm pure helpers."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from xr_ai_vllm import parse_bool
 from xr_ai_vllm._lifecycle import health_ok, health_url, wait_until_healthy
+
+
+class TestParseBool:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (True, True),
+            (False, False),
+            ("true", True),
+            ("YES", True),
+            ("1", True),
+            ("on", True),
+            ("false", False),
+            ("No", False),
+            ("0", False),
+            (" off ", False),
+        ],
+    )
+    def test_accepts_booleans_and_known_strings(self, value, expected):
+        assert parse_bool(value, "enforce_eager") is expected
+
+    def test_rejects_unknown_string(self):
+        with pytest.raises(ValueError, match="enforce_eager"):
+            parse_bool("sometimes", "enforce_eager")
 
 
 class TestHealthUrl:

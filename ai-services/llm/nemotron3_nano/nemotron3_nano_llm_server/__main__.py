@@ -40,6 +40,7 @@ from xr_ai_vllm import (
     DEFAULT_IMAGE,
     gpu_compute_major,
     load_config,
+    parse_bool,
     resolve_model_cache,
     serve,
     setup_hf_env,
@@ -100,7 +101,7 @@ def run() -> None:
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",   _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
-    enforce_eager = bool(cfg.get("enforce_eager",  _DEFAULT_EAGER))
+    enforce_eager = parse_bool(cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager")
     parser_url    = cfg.get("parser_url",          _PARSER_URL_DEFAULT)
     backend       = cfg.get("vllm_backend",        "pip")
     image         = cfg.get("vllm_image",          DEFAULT_IMAGE)

@@ -38,6 +38,7 @@ from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
     DEFAULT_IMAGE,
     load_config,
+    parse_bool,
     resolve_model_cache,
     serve,
     setup_hf_env,
@@ -74,9 +75,12 @@ def run() -> None:
     tp_size            = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx            = int(cfg.get("max_model_len",    _DEFAULT_CTX))
     gpu_mem            = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
-    enforce_eager      = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
+    enforce_eager      = parse_bool(cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager")
     tool_call_parser   = cfg.get("tool_call_parser",     _DEFAULT_TOOL_CALL_PARSER)
-    enable_tool_choice = bool(cfg.get("enable_tool_choice", _DEFAULT_ENABLE_TOOL_CHOICE))
+    enable_tool_choice = parse_bool(
+        cfg.get("enable_tool_choice", _DEFAULT_ENABLE_TOOL_CHOICE),
+        "enable_tool_choice",
+    )
     backend            = cfg.get("vllm_backend",         "pip")
     image              = cfg.get("vllm_image",           DEFAULT_IMAGE)
 

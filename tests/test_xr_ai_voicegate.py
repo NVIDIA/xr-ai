@@ -799,6 +799,21 @@ def test_load_voice_gate_config_null_phrases_normalizes_to_empty(tmp_path: pathl
     assert cfg.followup_grace_s == 3.0
 
 
+def test_load_voice_gate_config_parses_quoted_listening_chime_false(tmp_path: pathlib.Path):
+    p = tmp_path / "voice_gate.yaml"
+    p.write_text('magic_phrases: agent\nlistening_chime: "false"\n')
+    cfg = load_voice_gate_config(p)
+    assert cfg.magic_phrases == ("agent",)
+    assert cfg.listening_chime is False
+
+
+def test_load_voice_gate_config_rejects_unknown_listening_chime_string(tmp_path: pathlib.Path):
+    p = tmp_path / "voice_gate.yaml"
+    p.write_text("listening_chime: sometimes\n")
+    with pytest.raises(ValueError, match="listening_chime"):
+        load_voice_gate_config(p)
+
+
 def test_load_voice_gate_config_strips_whitespace_and_drops_empty(tmp_path: pathlib.Path):
     """Case 39: phrase entries are stripped, and empty entries (after
     strip) are dropped — same normalization the inline parser ran."""
