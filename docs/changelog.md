@@ -9,6 +9,33 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-06-29 — MCPToolset + AgentCapability in xr-ai-capabilities (M1)
+
+Added two foundation building blocks to `agent-sdk/xr-ai-capabilities`:
+
+**`MCPToolset`** (`toolset.py`) pairs any MCP client with the set of tool names it
+owns.  `tools=None` is the catch-all (owns any tool not claimed by an earlier
+entry).  `route_tool(toolsets, name)` finds the right toolset for a given name;
+`collect_tool_defs(toolsets)` queries all clients via `list_tools()` and
+returns `ToolDef` objects.  The client type is duck-typed via
+`McpClientProtocol` (a `runtime_checkable` Protocol), so `fastmcp.Client`
+satisfies it without importing FastMCP into `xr-ai-capabilities`.
+
+**`AgentCapability`** (`capability.py`) is the ABC for brain-local tools — tools
+that run inline in the brain process rather than calling an external MCP server.
+It exposes `as_tool_defs()` and `execute(name, args, pid, *, onset_pts_us,
+end_pts_us)`.  The timing params are 0-defaulted for forward-compat with the
+timing integration track.
+
+**`VisionModule`** now implements `AgentCapability`.  It exposes the canonical
+`look_at_current_frame` tool (`VISION_TOOL_NAME`) via `as_tool_defs()` and
+executes it via `execute()` (wrapping `perceive()`).  A `tool_description`
+constructor param lets samples override the LLM-visible description.
+
+These replace the per-sample hardcoded frozenset + `if tool in _X_TOOLS` switch.
+Follow-up PRs: M2 (`BrainProcessor` accepts `toolsets`/`capabilities`), M3
+(refactor `xr-render-demo` + wire T4 timing).
+
 ### 2026-06-11 — iOS/visionOS: pre-warm the LiveKit recording engine on mic start
 
 `LiveKitBackend.startAudio` now calls
