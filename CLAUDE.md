@@ -20,5 +20,14 @@ Before committing any Python changes, run:
 uv tool run ruff check --fix <changed_files>
 ```
 
-Every commit must have `Signed-off-by: Devdeep Ray <devdeepr@nvidia.com>` — use
-`git commit -s`. See the DCO section in `AGENTS.md`.
+Every commit must have a `Signed-off-by` trailer — use `git commit -s`.
+See the DCO section in `AGENTS.md`.
+
+After pushing to a PR branch, a PR is not done until CI is green:
+
+```
+gh pr checks <number>
+```
+
+Run this after every push. Fix any failures before reporting the PR as ready.
+Only Python files need ruff. Only commits need DCO. CI catches both.
