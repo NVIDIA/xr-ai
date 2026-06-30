@@ -157,6 +157,75 @@ def _stacked_vertically(muts: list[dict]) -> tuple[bool, str]:
     return True, f"stacked at y={ys}"
 
 
+def _stacked_by_increment(half_edge: float, *, tol: float = 0.05):
+    """Predicate factory for empty-scene stacks where each object's y must
+    be pre-assigned at the +2×half-edge increment (full-edge step) the
+    prompt's "STACKING FROM AN EMPTY SCENE" rule requires.  Tighter than
+    ``_stacked_vertically``: it pins the consecutive-y gap to ~2×half-edge
+    instead of accepting any ≥5 cm separation, and requires every add to
+    carry an explicit y (the "pass the right y on the way in" rule — no
+    add-then-patch-with-update)."""
+    step = 2.0 * half_edge
+
+    def _pred(muts: list[dict]) -> tuple[bool, str]:
+        adds = [tc for tc in muts if tc["function"]["name"] == "add_primitive"]
+        if len(adds) < 2:
+            return False, f"need ≥2 add_primitive calls, got {len(adds)}"
+        if any(tc["function"]["name"] == "update_primitive" for tc in muts):
+            return False, "stack patched with update_primitive — y must be set on the way in"
+        rows = []
+        for tc in adds:
+            a = tc["function"]["arguments"]
+            a = json.loads(a) if isinstance(a, str) else a
+            if a.get("y") is None:
+                return False, f"add_primitive missing explicit y: {a}"
+            rows.append((a.get("x", 0.0), float(a["y"]), a.get("z", 0.0)))
+        xs = {round(r[0], 2) for r in rows}
+        zs = {round(r[2], 2) for r in rows}
+        if len(xs) > 1 or len(zs) > 1:
+            return False, f"x/z not aligned across stack: {rows}"
+        ys = sorted(round(r[1], 2) for r in rows)
+        for lo, hi in zip(ys, ys[1:]):
+            if abs((hi - lo) - step) > tol:
+                return False, f"y gap {hi - lo:.3f} ≠ 2×half-edge ({step:.3f}±{tol}): {ys}"
+        return True, f"stacked at y={ys} (step≈{step:.2f})"
+
+    return _pred
+
+
+def _single_shape_and_color_update(*, b_min: float | None = None,
+                                    g_min: float | None = None,
+                                    r_min: float | None = None):
+    """Predicate factory for "combined shape + colour change" cases: the
+    rule (system.txt "COMBINED SHAPE + COLOUR CHANGE") requires ONE
+    update_primitive carrying BOTH the new ``prim_type`` AND the colour —
+    not a shape update plus a separate colour update, and not a
+    remove+add.  Asserts exactly one mutating call, that it is an
+    update_primitive, and that it sets prim_type plus each requested
+    channel above its lower bound."""
+    channels = {ch: thr for ch, thr in (("r", r_min), ("g", g_min), ("b", b_min))
+                if thr is not None}
+
+    def _pred(muts: list[dict]) -> tuple[bool, str]:
+        if len(muts) != 1:
+            names = [tc["function"]["name"] for tc in muts]
+            return False, f"expected exactly 1 mutating call, got {len(muts)}: {names}"
+        tc = muts[0]
+        if tc["function"]["name"] != "update_primitive":
+            return False, f"expected update_primitive, got {tc['function']['name']}"
+        args = tc["function"]["arguments"]
+        args = json.loads(args) if isinstance(args, str) else args
+        if args.get("prim_type") is None:
+            return False, f"update_primitive missing prim_type (shape dropped): {args}"
+        for ch, thr in channels.items():
+            v = args.get(ch)
+            if v is None or float(v) < float(thr):
+                return False, f"channel {ch}={v} below {thr} (colour dropped): {args}"
+        return True, f"single update with prim_type+colour: {args}"
+
+    return _pred
+
+
 CASES = [
     # ── direct render ops ─────────────────────────────────────────────────────
     {
@@ -1342,6 +1411,152 @@ CASES = [
              "args": {"obj_id": "sphere-0", "y": (0.5, 1.61)}},
         ],
     },
+
+    # ════════════════════════════════════════════════════════════════════════
+    # Coverage for previously-unverified system.txt rules.
+    # ════════════════════════════════════════════════════════════════════════
+
+    # ── REAL-WORLD VISUAL QUERY → get_frame_from_time → ask_image ────────────
+    # "REAL-WORLD VISUAL QUERIES" rule (system.txt): a query about the
+    # real world the scene can't answer MUST go through the camera + VLM
+    # before acting.  The scene is empty and the user names a real object,
+    # so the only way to know its colour is the visual route.  The stubbed
+    # ask_image reports "brown" (uninferable from the scene), so a
+    # brown-ish sphere proves the model captured a frame and asked.
+    {
+        "name":  "real_world_color_routes_through_ask_image",
+        "scene": [],
+        "user":  "Make a sphere the same colour as the mug I'm holding.",
+        "ask_image_answer": "The mug is brown.",
+        "require_tool_calls": ["get_frame_from_time", "ask_image"],
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.3, 0.8), "g": (0.1, 0.5), "b": (0.0, 0.4)}},
+        ],
+    },
+
+    # ── STACK FROM EMPTY SCENE — y pre-assigned at 2×half-edge ───────────────
+    # "STACKING FROM AN EMPTY SCENE" rule: no base object exists, so each
+    # add_primitive must carry its OWN y, spaced 2×half-edge apart (default
+    # size 0.1 → 0.2 step), not added flat then patched with update.  The
+    # predicate pins the increment, which _stacked_vertically does not.
+    {
+        "name":  "stack_three_cubes_increment_2x_half_edge",
+        "scene": [],
+        "user":  "Stack three green cubes.",
+        "result": [
+            {"tool": "add_primitive", "args": {"prim_type": "box", "g": (0.5, 1.0)}},
+            {"tool": "add_primitive", "args": {"prim_type": "box", "g": (0.5, 1.0)}},
+            {"tool": "add_primitive", "args": {"prim_type": "box", "g": (0.5, 1.0)}},
+        ],
+        "predicate": _stacked_by_increment(0.1),
+    },
+
+    # ── COMPOUND TWO-COLOUR — channel isolation between the two adds ─────────
+    # "COMPOUND COLOUR ISOLATION" rule: two objects of different colours in
+    # one utterance must each use ONLY its own colour channels.  Green is
+    # (0,0.8,0): the sphere's b MUST stay 0 even though a blue cube is being
+    # added in the same breath.  The tight b upper bound is the teeth.
+    {
+        "name":  "compound_two_color_channel_isolation",
+        "scene": [],
+        "user":  "Add a green sphere and a blue cube.",
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "g": (0.6, 1.0), "r": (0.0, 0.1), "b": (0.0, 0.05)}},
+            {"tool": "add_primitive",
+             "args": {"prim_type": "box",
+                      "b": (0.6, 1.0), "g": (0.0, 0.5), "r": (0.0, 0.1)}},
+        ],
+    },
+
+    # ── "SWITCH X in Y" routes to swap (verb wins over connective) ───────────
+    # "CONTAINMENT vs. SWAP — verb dominates" rule: an utterance starting
+    # with "switch"/"swap" is a swap even when the connective is a misheard
+    # "in".  Two update_primitive calls exchanging positions, NOT a
+    # containment (place_inside_by_id) co-location.  Companion to the
+    # existing swap_in_means_swap_and (which tests "swap … in"); this tests
+    # the "switch" verb spelling.
+    {
+        "name":  "switch_x_in_y_routes_to_swap",
+        "scene": [
+            {"id": "box-0", "type": "box",
+             "pos": [-0.8, 1.2, -0.1], "color": [0, 0.8, 0], "size": 0.1},
+            {"id": "sphere-0", "type": "sphere",
+             "pos": [0.0, 1.6, -1.5], "color": [1, 1, 0], "size": 0.1},
+        ],
+        "user":  "Switch the cube in the sphere.",
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "box-0",
+                      "x": (-0.05, 0.05),
+                      "y": ( 1.55, 1.65),
+                      "z": (-1.55, -1.45)}},
+            {"tool": "update_primitive",
+             "args": {"obj_id": "sphere-0",
+                      "x": (-0.85, -0.75),
+                      "y": ( 1.15, 1.25),
+                      "z": (-0.15, -0.05)}},
+        ],
+        # A containment route would move only one object — both must move.
+        "ignore_extra": False,
+    },
+
+    # ── "MOVE A FURTHER FROM B" — along_direction with negative distance ─────
+    # "Move A … further from B" rule: route to along_direction(origin=A,
+    # target=B, distance<0).  A sits to B's right (x=+1, B at x=-1), so
+    # moving A away from B grows A.x past +1.  displace_object would use the
+    # user's frame instead — the x growth (toward +x, the line A→away-from-B)
+    # is what distinguishes the correct tool.
+    {
+        "name":  "move_further_from_named_object",
+        "scene": [
+            {"id": "sphere-0", "type": "sphere",
+             "pos": [1.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1},
+            {"id": "box-0", "type": "box",
+             "pos": [-1.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.1},
+        ],
+        "user":  "Move the sphere further from the cube.",
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "sphere-0",
+                      "x": (1.05, 2.6),
+                      "y": (1.55, 1.65),
+                      "z": (-1.55, -1.45)}},
+        ],
+    },
+
+    # ── UNDO with empty [Recent moves] → no tool call + apology ──────────────
+    # "UNDO / PUT IT BACK" rule: if [Recent moves] is absent or empty there
+    # is nothing to undo — the model must say so in one sentence and call NO
+    # tool.  No recent_moves key here, so the block is empty.
+    {
+        "name":  "undo_with_no_recent_moves_apologizes",
+        "scene": [{"id": "sphere-0", "type": "sphere",
+                   "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1}],
+        "user":  "Undo that.",
+        "expect_no_mutation": True,
+        "reply_contains": "undo",
+        "result": [],
+    },
+
+    # ── COMBINED SHAPE + COLOUR — exactly ONE update_primitive ───────────────
+    # "COMBINED SHAPE + COLOUR CHANGE" rule: a single utterance changing
+    # BOTH the shape and the colour of an existing object must be ONE
+    # update_primitive carrying prim_type AND r/g/b — not two updates, not
+    # remove+add, and the colour must not be dropped.  Tighter than the
+    # existing shape_and_color_change (which uses _became and tolerates
+    # split calls / extra mutations).
+    {
+        "name":  "shape_and_color_change_single_update",
+        "scene": [{"id": "box-0", "type": "box",
+                   "pos": [0.0, 1.6, -1.5], "color": [0, 0.4, 1], "size": 0.1}],
+        "user":  "Turn the cube into a yellow sphere.",
+        "result": [],
+        "predicate": _single_shape_and_color_update(r_min=0.6, g_min=0.6),
+    },
 ]
 
 
@@ -1710,6 +1925,10 @@ def _reset_exec_state() -> None:
 _FIXTURE_SCENE: list[dict] = []
 _CASE_HISTORY: list[tuple[str, str]] = []
 _CASE_MOVES: list[tuple] = []
+# Answer the stubbed ask_image returns for visual-query cases; set per
+# case via _set_ask_image_answer. Default is a sentinel so a case that
+# routes to ask_image without declaring an answer is obvious.
+_ASK_IMAGE_ANSWER: str = "(no answer configured for this case)"
 
 
 def _set_fixture_scene(scene: list[dict]) -> None:
@@ -1727,6 +1946,12 @@ def _set_case_moves(moves: list[tuple] | None) -> None:
     _CASE_MOVES.clear()
     if moves:
         _CASE_MOVES.extend(moves)
+
+
+def _set_ask_image_answer(answer: str | None) -> None:
+    global _ASK_IMAGE_ANSWER
+    _ASK_IMAGE_ANSWER = answer if answer is not None else \
+        "(no answer configured for this case)"
 
 
 def _fixture_scene_as_render() -> dict:
@@ -1785,6 +2010,15 @@ async def _exec_tool(name: str, args_json: str, pose: dict) -> dict:
         return {"ok": True}
     if name == "get_scene_state":
         return _fixture_scene_as_render()
+    # Visual path: stub the camera + VLM so the real-world-query route
+    # (get_frame_from_time → ask_image → act) is deterministic offline.
+    # ask_image reports a colour the model CANNOT infer from the scene
+    # block, so any correctly-coloured primitive proves the model went
+    # through the visual tools rather than guessing.
+    if name == "get_frame_from_time":
+        return {"path": "/tmp/eval-stub-frame.jpg", "ok": True}
+    if name == "ask_image":
+        return {"answer": _ASK_IMAGE_ANSWER}
     return {"_eval_skipped": True, "reason": f"{name} not in safe-exec list"}
 
 
@@ -1930,6 +2164,21 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
     tcs = actual["tool_calls"]
     wanted = list(case.get("result") or [])
     muts = [tc for tc in tcs if tc["function"]["name"] in _MUTATING_TOOLS]
+
+    # "no-op + reply" mode: the rule under test is that the model emits
+    # NO tool call and answers in words (e.g. undo with empty
+    # [Recent moves] → apology, no tool). Checked before the
+    # mutating-call requirement below, which would otherwise fail a
+    # legitimately tool-free turn.
+    if case.get("expect_no_mutation"):
+        if tcs:
+            names = [tc["function"]["name"] for tc in tcs]
+            return False, f"expected no tool call, got: {names}"
+        needle = case.get("reply_contains")
+        if needle and needle.lower() not in actual.get("content", "").lower():
+            return False, f"reply {actual.get('content')!r} missing {needle!r}"
+        return True, "no tool call + expected reply"
+
     if not wanted and not muts:
         names = [tc["function"]["name"] for tc in tcs]
         return False, f"no mutating calls: {names}"
@@ -1955,6 +2204,16 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
     if not case.get("ignore_extra", True) and unmatched_actuals:
         extras = [tc["function"]["name"] for tc in unmatched_actuals]
         return False, f"extra mutating calls: {extras}"
+    # Non-mutating tools that MUST appear in the rollout (e.g. the
+    # visual route get_frame_from_time → ask_image). Names not in
+    # _MUTATING_TOOLS, so they're invisible to the result matcher above;
+    # this asserts the model actually took the required path.
+    require = case.get("require_tool_calls")
+    if require:
+        seen = {tc["function"]["name"] for tc in tcs}
+        absent = [n for n in require if n not in seen]
+        if absent:
+            return False, f"required tool(s) not called: {absent} (saw {sorted(seen)})"
     predicate = case.get("predicate")
     if predicate is not None:
         ok, msg = predicate(muts)
@@ -2299,6 +2558,7 @@ async def main() -> None:
             pose_c  = c.get("pose", pose)
             _set_case_history(c.get("history"))
             _set_case_moves(c.get("recent_moves"))
+            _set_ask_image_answer(c.get("ask_image_answer"))
             try:
                 r = await _run_one(http, system_prompt, tools, scene_c, pose_c,
                                    c["user"], thinking=args.thinking,

@@ -143,4 +143,8 @@ when reaching for a fixture word in a worked example.
 
 - The live worker pipeline (VAD, STT, TTS, history bookkeeping).
 - Real render-mcp / LOVR effects (fake-succeeded).
-- Real visual queries (`ask_image`, `get_latest_frame`) — stubbed.
+- Real visual queries — `get_frame_from_time` and `ask_image` are
+  stubbed in `_exec_tool`. A case sets `ask_image_answer` to the
+  string the stubbed VLM should report (a colour the scene can't
+  reveal), and `require_tool_calls` asserts the model actually took
+  the capture → ask route before acting.
