@@ -758,8 +758,8 @@ async def test_perception_no_frame_yields_graceful_message() -> None:
 
     # Graceful spoken message, not a hang or a generic "Done." fallback.
     assert answer == _proc._NO_FRAME_MSG
-    # The camera WAS turned on (startCamera sent) before giving up.
+    # Camera is always-on streaming — no startCamera/stopCamera messages sent.
     controls = [m for m in transport.sent if m.topic == "clientControl"]
-    assert any(b'"startCamera"' in m.data for m in controls)
+    assert not any(b'"startCamera"' in m.data for m in controls)
     # VLM was never reached — there was no frame to ask about.
     assert vlm.calls == []
