@@ -95,13 +95,26 @@ class BrainProcessor(FrameProcessor):
         raise NotImplementedError
 
     async def on_user_started_speaking(self, pid: str) -> None:
-        """Override for sample-specific behavior on speech start.
+        """Override to react at the leading edge of a speech burst.
 
-        Useful for speculative warmup (e.g. camera, image fetch) so the
-        next query starts with a hot cache. Does NOT cancel the
-        in-flight query — cancellation happens on the next
-        ``GatedQueryFrame`` or explicit ``InterruptionFrame``. Default:
-        no-op.
+        Fires when VAD accumulates enough speech to cross ``min_speech``
+        (default 0.15 s) — before STT has produced a transcript, and before
+        the voice gate has decided whether to pass the utterance through.
+
+        ``pid`` is the participant who started speaking.
+
+        **Wake-word mode:** this hook fires on *every* speech onset,
+        regardless of gate state.  ``VoiceGateProcessor`` forwards
+        ``UserStartedSpeakingFrame`` unconditionally — it does not suppress
+        the frame when the gate is closed.  Do not assume the user is
+        addressing the agent; treat this as a speculative signal only.
+
+        **What to do here:** pre-fetch data that the next query is likely
+        to need (scene state, retrieval cache, model warm-up).
+
+        Does NOT cancel any in-flight brain task — cancellation happens on
+        the next ``GatedQueryFrame`` or an explicit ``InterruptionFrame``.
+        Exceptions from this hook are logged and swallowed.  Default: no-op.
         """
         return
 
@@ -152,11 +165,9 @@ class BrainProcessor(FrameProcessor):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, UserStartedSpeakingFrame):
-            # Hook only — speech onset is NOT a cancel signal. Samples
-            # may override on_user_started_speaking for speculative work
-            # (e.g. camera warmup); cancellation happens on the next
-            # GatedQueryFrame or on an explicit InterruptionFrame.
-            await self._fan_out_user_started_speaking()
+            # Hook only — speech onset is NOT a cancel signal.
+            # transport_source carries the pid when set by VadSttProcessor.
+            await self._dispatch_user_started_speaking(frame.transport_source)
             await self.push_frame(frame, direction)
             return
 
@@ -200,18 +211,16 @@ class BrainProcessor(FrameProcessor):
 
     # ── private ───────────────────────────────────────────────────────────────
 
-    async def _fan_out_user_started_speaking(self) -> None:
-        # The pipecat ``UserStartedSpeakingFrame`` carries no pid, so we
-        # fan the hook out across every pid the brain currently knows
-        # about. Use the joined set, not the in-flight tasks: the cold
-        # path (first utterance, nothing in flight yet) is exactly where
-        # speculative warmup matters most. Single-speaker samples
-        # collapse to one call.
-        for pid in list(self._joined):
+    async def _dispatch_user_started_speaking(self, pid: str | None) -> None:
+        # VadSttProcessor sets frame.transport_source = pid, so we normally
+        # get an exact pid. Fall back to all joined pids only when the frame
+        # arrives without transport_source (e.g. from a third-party processor).
+        targets = [pid] if (pid and pid in self._joined) else list(self._joined)
+        for p in targets:
             try:
-                await self.on_user_started_speaking(pid)
+                await self.on_user_started_speaking(p)
             except Exception:
-                logger.exception("on_user_started_speaking raised pid={!r}", pid)
+                logger.exception("on_user_started_speaking raised pid={!r}", p)
 
     async def _spawn_query(self, frame: GatedQueryFrame) -> None:
         pid = frame.participant_id

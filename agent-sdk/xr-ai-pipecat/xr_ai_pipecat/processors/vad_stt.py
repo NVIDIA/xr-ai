@@ -149,7 +149,9 @@ class VadSttProcessor(FrameProcessor):
                     pid, self._vad_cfg.stop_probe_after_s,
                 )
             logger.info("speech start pid={!r}", pid)
-            await self.push_frame(UserStartedSpeakingFrame())
+            f = UserStartedSpeakingFrame()
+            f.transport_source = pid
+            await self.push_frame(f)
 
         async def on_utterance(audio_bytes: bytes, sample_rate: int) -> None:
             # Probe ran-or-not, the utterance has finalized. Close the
@@ -183,7 +185,9 @@ class VadSttProcessor(FrameProcessor):
 
             # Order matters: pipecat consumers expect "user stopped speaking"
             # before the transcript so they can finalize turn state.
-            await self.push_frame(UserStoppedSpeakingFrame())
+            f = UserStoppedSpeakingFrame()
+            f.transport_source = pid
+            await self.push_frame(f)
             try:
                 text = await self._stt.transcribe(audio_bytes, sample_rate=sample_rate)
             except Exception:
@@ -327,7 +331,9 @@ class VadSttProcessor(FrameProcessor):
         )
         tf.transport_source = pid
         await self.push_frame(tf)
-        await self.push_frame(UserStoppedSpeakingFrame())
+        ssf = UserStoppedSpeakingFrame()
+        ssf.transport_source = pid
+        await self.push_frame(ssf)
 
     async def _evict_participant(self, pid: str) -> None:
         """Drop all per-pid state when a participant leaves.
