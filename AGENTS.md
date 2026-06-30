@@ -278,6 +278,7 @@ Read these on demand when the topic comes up:
 
 | File | When to read |
 |---|---|
+| `docs/agent-pipeline.md` | The pipecat voice pipeline internals — processor chain, frame types, `BrainProcessor` hooks, `AgentCapability` vs `MCPToolset`, `VisionModule` |
 | `docs/architecture.md` | Working across module boundaries; understanding hub ↔ transport ↔ agent boundaries; the same-origin wss:// signaling proxy in front of LiveKit |
 | `docs/process-model.md` | Touching `utils/xr-ai-launcher/`, orchestrators, ready-files, or adding a managed process type |
 | `docs/credentials.md` | Code that needs `HF_TOKEN` / `NGC_API_KEY` |
