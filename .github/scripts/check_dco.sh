@@ -7,7 +7,12 @@
 
 set -euo pipefail
 
-msg_file="${1:?commit message file path required}"
+if [ -n "${1:-}" ]; then
+    msg_file="$1"
+else
+    git_dir=$(git rev-parse --git-dir 2>/dev/null) || git_dir=".git"
+    msg_file="${git_dir}/COMMIT_EDITMSG"
+fi
 
 if grep -qP "^Signed-off-by:\s+\S+.*<[^@\s]+@[^@\s]+>" "$msg_file"; then
     exit 0
