@@ -323,7 +323,9 @@ class VadSttProcessor(FrameProcessor):
         # canned ack. UserStoppedSpeakingFrame tails as a hint to
         # downstream turn-state consumers that the partial-audio turn
         # has ended.
-        await self.push_frame(InterruptionFrame())
+        f = InterruptionFrame()
+        f.transport_source = pid
+        await self.push_frame(f)
         tf = TranscriptionFrame(
             text      = text,
             user_id   = pid,

@@ -140,7 +140,9 @@ class VoiceGateProcessor(FrameProcessor):
 
     async def _on_gate_stop(self, pid: str) -> None:
         logger.info("stop ack emit pid={!r}", pid)
-        await self.push_frame(InterruptionFrame())
+        f = InterruptionFrame()
+        f.transport_source = pid
+        await self.push_frame(f)
         ack = TextFrame(text=_STOP_ACK_TEXT)
         ack.transport_destination = pid
         await self.push_frame(ack)

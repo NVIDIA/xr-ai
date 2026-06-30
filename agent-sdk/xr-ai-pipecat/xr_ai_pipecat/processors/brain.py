@@ -172,10 +172,17 @@ class BrainProcessor(FrameProcessor):
             return
 
         if isinstance(frame, InterruptionFrame):
-            if self._inflight:
-                for pid in list(self._inflight):
-                    logger.info("brain cancel pid={!r} reason=interruption", pid)
-            self._cancel_all_inflight()
+            pid = frame.transport_source
+            if pid:
+                # Cancel only the participant who triggered the interruption.
+                logger.info("brain cancel pid={!r} reason=interruption", pid)
+                self._cancel_pid(pid)
+            else:
+                # No pid on frame — global interrupt (legacy / unknown source).
+                if self._inflight:
+                    for p in list(self._inflight):
+                        logger.info("brain cancel pid={!r} reason=interruption", p)
+                self._cancel_all_inflight()
             await self.push_frame(frame, direction)
             return
 
