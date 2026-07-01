@@ -57,6 +57,19 @@ _STATE_READY   = 2
 _STATE_OFFSET = 4
 
 
+def _frame_nbytes(data: bytes | memoryview) -> int:
+    return data.nbytes if isinstance(data, memoryview) else len(data)
+
+
+def _frame_size_error(width: int, height: int, fmt: PixelFormat, n: int, max_frame_bytes: int) -> str:
+    fmt_name = getattr(fmt, "name", str(fmt))
+    return (
+        "frame exceeds shared-memory slot capacity "
+        f"(width={width}, height={height}, format={fmt_name}, "
+        f"bytes={n}, max_frame_bytes={max_frame_bytes})"
+    )
+
+
 class SlotView(NamedTuple):
     """Zero-copy view into one ring-buffer slot's pixel data."""
     data:   memoryview
@@ -113,15 +126,20 @@ class ShmRingBuffer:
         """
         Write frame into the next free slot. Returns slot index.
         Raises RuntimeError if all slots are occupied (back-pressure signal).
+        Raises ValueError if the frame is larger than max_frame_bytes.
         """
+        n       = _frame_nbytes(data)
+        if n > self._max_frame_bytes:
+            raise ValueError(_frame_size_error(width, height, fmt, n, self._max_frame_bytes))
+
+        payload = data.cast("B") if isinstance(data, memoryview) else data
         slot    = self._claim_slot()
         hdr_off = _GH_SIZE + slot * self._slot_stride
         dat_off = hdr_off + _SH_SIZE
-        n       = len(data)
 
         # Mark WRITING so consumer won't touch this slot.
         _SH.pack_into(self._buf, hdr_off, _MAGIC_SLOT, _STATE_WRITING, int(fmt), 0, seq, pts_us, width, height, 0)
-        self._buf[dat_off : dat_off + n] = data
+        self._buf[dat_off : dat_off + n] = payload
         # Mark READY — consumer may read after receiving the ZMQ signal.
         _SH.pack_into(self._buf, hdr_off, _MAGIC_SLOT, _STATE_READY,   int(fmt), 0, seq, pts_us, width, height, n)
 
@@ -138,6 +156,10 @@ class ShmRingBuffer:
         hdr     = _SH.unpack_from(self._buf, hdr_off)
         if hdr[1] != _STATE_READY:
             raise RuntimeError(f"slot {signal.slot} not READY (state={hdr[1]})")
+        if signal.data_sz > self._max_frame_bytes:
+            raise ValueError(
+                _frame_size_error(signal.width, signal.height, signal.fmt, signal.data_sz, self._max_frame_bytes)
+            )
         dat_off = hdr_off + _SH_SIZE
         return SlotView(
             data=self._buf[dat_off : dat_off + signal.data_sz],
