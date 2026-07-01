@@ -33,8 +33,10 @@ cloudxr_install_dir: ~/.cloudxr
 # Written once to <cloudxr_install_dir>/run/eula_accepted; ignored on subsequent runs.
 accept_eula: true
 
-# Device profile — controls transport and XR device defaults.
-# Valid: auto-native | auto-webrtc | apple-vision-pro | ipad-pro | quest3
+# Device profile: selects the client type and XR device defaults.
+#   auto-webrtc: WebRTC / web XR clients (default)
+#   auto-native: native iOS / visionOS clients
+# Device-specific values also accepted: apple-vision-pro | ipad-pro | quest3
 cloudxr_env:
   NV_DEVICE_PROFILE: auto-webrtc
 

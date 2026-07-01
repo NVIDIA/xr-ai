@@ -323,7 +323,7 @@ uv sync
 uv run xr_render_demo
 ```
 
-On first run the orchestrator automatically downloads LOVR v0.18.0 to
+On first run the orchestrator automatically downloads the pinned LOVR version to
 `deps/lovr/` inside the repo and builds the web vendor bundle (requires npm
 and network access). Both steps are skipped on subsequent runs.
 

@@ -14,7 +14,10 @@ cloudxr_install_dir: ~/.cloudxr
 accept_eula: true
 
 # CloudXR env overrides applied before the native service starts.
-# Valid NV_DEVICE_PROFILE values: auto-native | auto-webrtc | apple-vision-pro | ipad-pro | quest3
+# NV_DEVICE_PROFILE selects the client type:
+#   auto-webrtc: WebRTC / web XR clients (default)
+#   auto-native: native iOS / visionOS clients (set this to use the native apps)
+# Device-specific values also accepted: apple-vision-pro | ipad-pro | quest3
 cloudxr_env:
   NV_DEVICE_PROFILE: auto-webrtc
 

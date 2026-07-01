@@ -25,8 +25,10 @@ How to run (from the repo root or any directory):
     uv run --project agent-samples/xr-render-demo xr_render_demo
 
 On first run the orchestrator auto-downloads LOVR v0.18.0 to deps/lovr/ inside
-the repo and builds the web vendor bundle (requires npm + network). Both steps
-are skipped once the outputs exist.
+the repo and, for WebRTC device profiles, builds the web vendor bundle
+(requires npm + network). Native CloudXR profiles never load the web page, so
+the vendor build is skipped and the hub serves only its signaling endpoints.
+Both steps are skipped once their outputs exist.
 
 To use a custom LOVR build instead of the auto-downloaded one:
     export LOVR_BIN=/path/to/your/lovr      # or set lovr_bin: in render_mcp.yaml
@@ -46,16 +48,26 @@ import urllib.request
 from pathlib import Path
 
 from loguru import logger
-from xr_ai_launcher import Process, ensure_credentials, run_stack
+from xr_ai_launcher import (
+    Process,
+    ensure_credentials,
+    is_native_profile,
+    read_device_profile,
+    run_stack,
+)
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
 _WORKER_CONFIG = "yaml/xr_render_demo_worker.yaml"
+_CLOUDXR_CONFIG = "yaml/cloudxr_runtime.yaml"
 
 # Read the model_backend scalar from the worker YAML without pyyaml — the
 # orchestrator is stdlib-only (mirrors the lovr_bin regex read below).
 _BACKEND_RE = re.compile(r"^\s*model_backend\s*:\s*[\"']?(\w+)[\"']?", re.MULTILINE)
+
+# Must match _config_loader.NO_WEB_CLIENT_ENV.
+_NO_WEB_CLIENT_ENV = "XR_MEDIA_HUB_NO_WEB_CLIENT"
 
 
 def _model_backend() -> str:
@@ -239,7 +251,11 @@ def _ensure_web_vendor() -> None:
 
 def run() -> None:
     setup_logging("orchestrator", namespace="xr-render-demo")
-    _ensure_web_vendor()
+    if is_native_profile(read_device_profile(_BASE / _CLOUDXR_CONFIG)):
+        os.environ[_NO_WEB_CLIENT_ENV] = "1"
+        logger.info("native device profile: web client page disabled, skipping vendor build")
+    else:
+        _ensure_web_vendor()
     _ensure_lovr_bin()
     backend = _model_backend()
     if backend == "nim":
