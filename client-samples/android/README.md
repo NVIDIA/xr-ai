@@ -61,7 +61,7 @@ participant publishes an audio track — no explicit attachment step is needed.
 | Android Studio | Hedgehog (2023.1.1) or later |
 | JDK | 17 |
 | Android Gradle Plugin | 8.5 |
-| Kotlin | 2.0 |
+| Kotlin | 2.4 |
 | Min Android SDK | API 24 (Android 7.0) |
 | Target Android SDK | API 34 (Android 14) |
 

@@ -16,21 +16,29 @@ import io.livekit.android.ConnectOptions
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
+import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.participant.VideoTrackPublishOptions
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.DataPublishReliability
+import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.LocalVideoTrackOptions
+import io.livekit.android.room.track.Track
+import io.livekit.android.room.track.VideoCaptureParameter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URL
 import java.net.URLEncoder
+import java.nio.ByteBuffer
 
 /**
  * [StreamingBackend] implementation using the LiveKit Android SDK.
@@ -61,6 +69,24 @@ internal class LiveKitBackend(
     override var onDataReceived: ((topic: String, data: ByteArray) -> Unit)? = null
     override var onAgentStatus: ((status: String) -> Unit)? = null
 
+    // ── Public local preview accessor ─────────────────────────────────────────
+
+    /**
+     * Currently published local camera track, or null when stopped.  Used by
+     * `CameraPreviewView` to render the outgoing stream locally; app code
+     * goes through that composable rather than touching this directly.
+     */
+    val localCameraTrack: LocalVideoTrack?
+        get() = room?.localParticipant
+            ?.getTrackPublication(Track.Source.CAMERA)?.track as? LocalVideoTrack
+
+    /** Initialises a [TextureViewRenderer] with the connected room's EGL
+     *  context so it can sink frames from the local camera track. No-op when
+     *  the room is not connected. */
+    fun initVideoRenderer(view: TextureViewRenderer) {
+        room?.initVideoRenderer(view)
+    }
+
     // ── Private state ──────────────────────────────────────────────────────────
 
     private var room: Room? = null
@@ -68,6 +94,13 @@ internal class LiveKitBackend(
 
     /** Coroutine scope active for the lifetime of one connection. */
     private var connectionScope: CoroutineScope? = null
+
+    // ── Injected video state (external frame source) ───────────────────────────
+
+    /** Custom capturer that lets us push externally-sourced frames into LiveKit. */
+    @Volatile private var injectedCapturer: InjectedVideoCapturer? = null
+    private var injectedVideoTrack: LocalVideoTrack? = null
+    private val injectedVideoMutex = Mutex()
 
     // ── StreamingBackend: connect / disconnect ─────────────────────────────────
 
@@ -168,7 +201,66 @@ internal class LiveKitBackend(
     }
 
     override suspend fun stopCamera() {
+        injectedVideoMutex.withLock {
+            val track = injectedVideoTrack
+            if (track != null) {
+                // unpublishTrack with default stopOnUnpublish=true already
+                // calls track.stop() + track.dispose() — calling them again
+                // races MediaCodec's event handler against its torn-down
+                // thread ("Handler on a dead thread" IllegalStateException).
+                room?.localParticipant?.unpublishTrack(track)
+                injectedVideoTrack = null
+                injectedCapturer = null
+                return
+            }
+        }
         room?.localParticipant?.setCameraEnabled(false)
+    }
+
+    // ── StreamingBackend: injected video frames ───────────────────────────────
+
+    override suspend fun injectVideoFrame(
+        i420: ByteBuffer,
+        width: Int,
+        height: Int,
+        timestampUs: Long,
+    ) {
+        if (!isConnected) throw StreamError.NotConnected
+
+        // Fast path — track already exists. Take the same mutex that
+        // stopCamera()/tearDown() use when they clear and dispose the
+        // capturer, so a concurrent teardown cannot dispose the native
+        // capturer between the null-check and pushI420Frame (use-after-dispose).
+        injectedVideoMutex.withLock {
+            injectedCapturer?.let {
+                it.pushI420Frame(i420, width, height, timestampUs)
+                return
+            }
+        }
+        // Slow path — first frame: create + publish track under the mutex.
+        val capturer = injectedVideoMutex.withLock {
+            injectedCapturer?.let { return@withLock it }
+
+            val lp = room?.localParticipant ?: throw StreamError.NotConnected
+            val newCapturer = InjectedVideoCapturer()
+            val track = lp.createVideoTrack(
+                name = "injected-video",
+                capturer = newCapturer,
+                options = LocalVideoTrackOptions(
+                    isScreencast = false,
+                    captureParams = VideoCaptureParameter(width, height, 30),
+                ),
+            )
+            track.startCapture()
+            // Publish as the CAMERA source so it appears in the local preview
+            // (CameraPreviewView reads getTrackPublication(Track.Source.CAMERA))
+            // and is treated as the participant's camera feed by the hub.
+            lp.publishVideoTrack(track, VideoTrackPublishOptions(source = Track.Source.CAMERA))
+            injectedVideoTrack = track
+            injectedCapturer = newCapturer
+            newCapturer
+        }
+        capturer.pushI420Frame(i420, width, height, timestampUs)
     }
 
     // ── StreamingBackend: data channel ─────────────────────────────────────────
@@ -245,6 +337,18 @@ internal class LiveKitBackend(
         isConnected = false
         connectionScope?.cancel()
         connectionScope = null
+        // Drop any injected video track before disconnecting the room. The
+        // room teardown itself unpublishes tracks (which stops + disposes
+        // them); avoid a manual stop()/dispose() here so we don't race the
+        // MediaCodec event handler against its own torn-down thread.
+        injectedVideoMutex.withLock {
+            val track = injectedVideoTrack
+            if (track != null) {
+                runCatching { room?.localParticipant?.unpublishTrack(track) }
+            }
+            injectedVideoTrack = null
+            injectedCapturer = null
+        }
         room?.disconnect()
         room = null
         // connectionScope.cancel() above stops the RoomEvent collector, so this
