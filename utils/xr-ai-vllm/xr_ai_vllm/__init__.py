@@ -50,6 +50,7 @@ from . import _docker, _pip
 from ._config import (
     gpu_compute_major,
     load_config,
+    parse_bool,
     resolve_model_cache,
     setup_hf_env,
 )
@@ -237,6 +238,7 @@ __all__ = [
     "DEFAULT_IMAGE",
     "resolve_model_cache",
     "load_config",
+    "parse_bool",
     "setup_hf_env",
     "gpu_compute_major",
 ]

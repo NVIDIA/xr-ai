@@ -20,6 +20,7 @@ captured output so the cause is visible in CI.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import os
 import shutil
@@ -48,6 +49,27 @@ _DEFAULT_PORT  = 8105
 # environmental reasons (offline empty cache / transient HF download failure),
 # which the smoke test treats as skip rather than fail.
 _EXIT_VOICE_UNAVAILABLE = 3
+
+
+def _load_piper_main_module():
+    spec = importlib.util.spec_from_file_location(
+        "piper_tts_server_main",
+        _PIPER_PROJECT / "piper_tts_server" / "__main__.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+async def test_piper_config_parses_quoted_use_cuda_false() -> None:
+    mod = _load_piper_main_module()
+    assert mod._parse_bool("false", "use_cuda") is False
+
+
+async def test_piper_config_rejects_unknown_use_cuda_string() -> None:
+    mod = _load_piper_main_module()
+    with pytest.raises(ValueError, match="use_cuda"):
+        mod._parse_bool("sometimes", "use_cuda")
 
 
 class _ServerExited(Exception):

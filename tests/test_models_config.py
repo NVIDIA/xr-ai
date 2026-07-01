@@ -128,6 +128,30 @@ nim_llm:
     assert nim.base_url == "https://integrate.api.nvidia.com"
 
 
+def test_health_check_parses_quoted_false(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+remote_llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    https://integrate.api.nvidia.com
+  model_name:  meta/llama-3.1-8b-instruct
+  health_check: "false"
+"""))
+    assert cfg.llm("remote_llm").health_check is False
+
+
+def test_health_check_rejects_unknown_string(tmp_path) -> None:
+    with pytest.raises(ValueError, match="health_check"):
+        load_models_config(_write(tmp_path, """
+remote_llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    https://integrate.api.nvidia.com
+  model_name:  meta/llama-3.1-8b-instruct
+  health_check: maybe
+"""))
+
+
 def test_vlm_preset(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
 vlm:

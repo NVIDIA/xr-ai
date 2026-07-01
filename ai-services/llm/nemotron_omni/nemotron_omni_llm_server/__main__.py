@@ -47,6 +47,7 @@ from xr_ai_vllm import (
     DEFAULT_IMAGE,
     gpu_compute_major,
     load_config,
+    parse_bool,
     resolve_model_cache,
     serve,
     setup_hf_env,
@@ -81,7 +82,8 @@ def run() -> None:
     # nvidia-smi queries the right device.
     cuda_devices = setup_hf_env(cfg, model_cache)
 
-    if cfg.get("use_bf16", False):
+    use_bf16 = parse_bool(cfg.get("use_bf16", False), "use_bf16")
+    if use_bf16:
         model = cfg.get("model_bf16", _MODEL_BF16)
         use_kv_fp8 = False
         logger.info("use_bf16=true → {}", model)
@@ -104,7 +106,7 @@ def run() -> None:
     tp_size       = int(cfg.get("tensor_parallel_size", _DEFAULT_TP))
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
-    enforce_eager = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
+    enforce_eager = parse_bool(cfg.get("enforce_eager", _DEFAULT_EAGER), "enforce_eager")
     prune_rate    = float(cfg.get("video_pruning_rate", _DEFAULT_PRUNE))
     video_fps     = int(cfg.get("video_fps",        _DEFAULT_FPS))
     video_frames  = int(cfg.get("video_num_frames", _DEFAULT_FRAMES))

@@ -19,6 +19,25 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+_TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
+_FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
+
+
+def parse_bool(value: object, key: str) -> bool:
+    """Parse a config boolean without treating every non-empty string as true."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_BOOL_STRINGS:
+            return True
+        if normalized in _FALSE_BOOL_STRINGS:
+            return False
+    raise ValueError(
+        f"{key} must be a boolean or one of "
+        f"{sorted(_TRUE_BOOL_STRINGS | _FALSE_BOOL_STRINGS)} (got {value!r})"
+    )
+
 
 def resolve_model_cache(cfg: dict, yaml_dir: Path, *, default: str) -> Path:
     """Resolve ``model_cache`` (relative to the YAML dir) and ensure it exists."""

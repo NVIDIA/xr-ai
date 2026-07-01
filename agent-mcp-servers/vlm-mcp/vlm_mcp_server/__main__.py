@@ -70,7 +70,7 @@ from xr_ai_models import (
     load_models_config_from_dict,
     make_vlm,
 )
-from xr_ai_models.config import KIND_OPENAI_COMPAT
+from xr_ai_models.config import KIND_OPENAI_COMPAT, parse_bool
 from xr_ai_models.protocols import VLMService
 
 
@@ -89,7 +89,7 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
     models_block: dict[str, Any] | None = cfg.get("models")
     vlm_server: str | None = cfg.get("vlm_server")
     vlm_request_timeout_s = float(cfg.get("vlm_request_timeout_s", 60.0))
-    enable_thinking = bool(cfg.get("enable_thinking", False))
+    enable_thinking = parse_bool(cfg.get("enable_thinking", False), "enable_thinking")
 
     if models_block:
         vlm_entry = dict(models_block.get("vlm") or {})

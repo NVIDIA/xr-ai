@@ -11,6 +11,24 @@ from typing import Protocol
 
 import yaml
 
+_TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
+_FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
+
+
+def _parse_bool(value: object, key: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_BOOL_STRINGS:
+            return True
+        if normalized in _FALSE_BOOL_STRINGS:
+            return False
+    raise ValueError(
+        f"{key} must be a boolean or one of "
+        f"{sorted(_TRUE_BOOL_STRINGS | _FALSE_BOOL_STRINGS)} (got {value!r})"
+    )
+
 
 @dataclass(frozen=True)
 class VoiceGateConfig:
@@ -57,7 +75,7 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     return VoiceGateConfig(
         magic_phrases    = phrases,
         followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
-        listening_chime  = bool(raw.get("listening_chime", True)),
+        listening_chime  = _parse_bool(raw.get("listening_chime", True), "listening_chime"),
     )
 
 

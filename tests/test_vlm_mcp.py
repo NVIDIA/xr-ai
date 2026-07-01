@@ -282,6 +282,41 @@ async def test_make_vlm_from_cfg_new_models_block(mock_vlm, png_path: Path):
     assert payload["chat_template_kwargs"] == {"enable_thinking": False}
 
 
+async def test_make_vlm_from_cfg_parses_quoted_enable_thinking_false(mock_vlm, png_path: Path):
+    server, base_url = mock_vlm
+    server.answer = "quoted false"
+
+    vlm, _ = _make_vlm_from_cfg({
+        "models": {
+            "vlm": {
+                "kind":     "preset:cosmos_vlm",
+                "base_url": base_url,
+            },
+        },
+        "enable_thinking": "false",
+    })
+    mcp = build_mcp(vlm)
+    try:
+        result = await mcp.call_tool(
+            "ask_image",
+            {"question": "cosmos q", "image_path": str(png_path)},
+        )
+    finally:
+        await vlm.close()
+
+    assert result.structured_content["result"] == "quoted false"
+    payload = server.requests[0]
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+async def test_make_vlm_from_cfg_rejects_unknown_enable_thinking_string():
+    with pytest.raises(ValueError, match="enable_thinking"):
+        _make_vlm_from_cfg({
+            "vlm_server":      "http://localhost:8100",
+            "enable_thinking": "sometimes",
+        })
+
+
 async def test_make_vlm_from_cfg_missing_required_keys_raises():
     """Neither models: nor vlm_server: present → ValueError."""
     with pytest.raises(ValueError, match="must specify either"):

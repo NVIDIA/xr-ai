@@ -25,6 +25,25 @@ ModelKind = Literal["openai_compat"]
 
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
 
+_TRUE_BOOL_STRINGS = {"1", "true", "yes", "on"}
+_FALSE_BOOL_STRINGS = {"0", "false", "no", "off"}
+
+
+def parse_bool(value: object, key: str) -> bool:
+    """Parse a config boolean without treating every non-empty string as true."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_BOOL_STRINGS:
+            return True
+        if normalized in _FALSE_BOOL_STRINGS:
+            return False
+    raise ValueError(
+        f"{key} must be a boolean or one of "
+        f"{sorted(_TRUE_BOOL_STRINGS | _FALSE_BOOL_STRINGS)} (got {value!r})"
+    )
+
 
 @dataclass(frozen=True)
 class LLMSpec:
@@ -171,7 +190,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         "base_url": _require_str(body, "base_url"),
         # Remote endpoints (e.g. hosted NIM) have no local /health route; set
         # ``health_check: false`` so the worker readiness gate doesn't block.
-        "health_check": bool(body.get("health_check", True)),
+        "health_check": parse_bool(body.get("health_check", True), "health_check"),
     }
     if "api_key_env" in body:
         common["api_key_env"] = body["api_key_env"]
