@@ -155,13 +155,19 @@ public final class StreamSession: ObservableObject {
 
     // MARK: - Data channel
 
-    /// Sends binary data to all participants.
+    /// Sends binary data to all participants, optionally on a named topic.
+    ///
+    /// Topics are how the web client and the server-side worker route
+    /// out-of-band signals (e.g. `xr.session.started`). Pass `nil` for the
+    /// transport's default topic.
     ///
     /// - Parameters:
     ///   - data: Payload. Keep individual messages ≤ 15 KB on most transports.
     ///   - reliable: Ordered + guaranteed delivery when `true` (default).
-    public func send(_ data: Data, reliable: Bool = true) async throws {
-        try await backend.send(data, reliable: reliable)
+    ///   - topic: Optional topic name. Backends that don't support topics
+    ///     ignore this.
+    public func send(_ data: Data, reliable: Bool = true, topic: String? = nil) async throws {
+        try await backend.send(data, reliable: reliable, topic: topic)
     }
 
     // MARK: - Private

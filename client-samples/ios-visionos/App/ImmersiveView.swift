@@ -4,28 +4,47 @@
 #if os(visionOS)
 import RealityKit
 import SwiftUI
-import StreamKit
+import CloudXRKit
 
 // MARK: - ImmersiveView
 
 /// The visionOS immersive space scene.
 ///
-/// This view owns the immersive space that ARKit's `CameraFrameProvider` requires.
-/// The SDK's `startCamera()` runs the ARKit session internally once this space is open;
-/// you can add your own `RealityView` content here alongside the camera stream.
+/// Owns two things:
+/// 1. The immersive space that ARKit's `CameraFrameProvider` requires for the
+///    StreamKit camera path.
+/// 2. The `RealityKit` entity that hosts the active `CloudXRSessionComponent`
+///    when CloudXR is streaming. The component pairing must exist inside the
+///    immersive space for CloudXRKit to render frames.
 struct ImmersiveView: View {
 
     @Environment(AppModel.self) private var model
 
+    @State private var sessionEntity = Entity()
+
     var body: some View {
         RealityView { content in
-            // Add your own RealityKit entities here.
-            // Example: a simple sphere anchored in front of the user.
+            sessionEntity.name = "Session"
+            content.add(sessionEntity)
+
             let mesh   = MeshResource.generateSphere(radius: 0.05)
             let material = SimpleMaterial(color: .systemBlue.withAlphaComponent(0.6), isMetallic: false)
-            let entity = ModelEntity(mesh: mesh, materials: [material])
-            entity.position = [0, 1.5, -0.5]
-            content.add(entity)
+            let placeholder = ModelEntity(mesh: mesh, materials: [material])
+            placeholder.position = [0, 1.5, -0.5]
+            placeholder.name = "Placeholder"
+            content.add(placeholder)
+        } update: { content in
+            if model.xrState == .streaming, let s = model.cloudxrSession {
+                sessionEntity.components[CloudXRSessionComponent.self] = .init(session: s)
+            } else {
+                sessionEntity.components.remove(CloudXRSessionComponent.self)
+                // CloudXRKit parents the streaming mesh under this entity; clear it so the stale geometry doesn't linger after Stop.
+                sessionEntity.children.removeAll()
+            }
+
+            if let placeholder = content.entities.first(where: { $0.name == "Placeholder" }) {
+                placeholder.isEnabled = (model.xrState != .streaming)
+            }
         }
     }
 }

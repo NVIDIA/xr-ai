@@ -68,6 +68,40 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         self.config = config
     }
 
+    // MARK: - Audio preparation
+
+    /// Configures `AVAudioSession` for voice capture and pre-requests microphone
+    /// permission. Idempotent. Call once at app launch before any
+    /// `StreamSession.connect(...)`. Without this the first `startAudio()` on
+    /// a fresh process races the system permission prompt against an
+    /// `AVAudioSession` still at the default `.soloAmbient` category; the
+    /// LiveKit SDK publishes a silent audio track and silently retries every 5 s.
+    public static func prepareAudio() {
+        #if !targetEnvironment(simulator) && (os(iOS) || os(visionOS))
+        let session = AVAudioSession.sharedInstance()
+        #if os(iOS)
+        let options: AVAudioSession.CategoryOptions = [
+            .allowBluetooth,
+            .allowBluetoothA2DP,
+            .defaultToSpeaker,
+            .mixWithOthers,
+        ]
+        #else
+        let options: AVAudioSession.CategoryOptions = [.mixWithOthers]
+        #endif
+        // Set the category only; LiveKit's AudioManager owns session activation,
+        // so calling setActive(true) here would race its management. A rejected
+        // category must be logged, not swallowed: otherwise the first publish
+        // falls back to a silent track and retries every 5 s with no visible cause.
+        do {
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: options)
+        } catch {
+            mediaLog.error("prepareAudio: setCategory(.playAndRecord, .voiceChat) failed: \(error.localizedDescription, privacy: .public)")
+        }
+        AVAudioApplication.requestRecordPermission { _ in }
+        #endif
+    }
+
     // MARK: - StreamingBackend: connect / disconnect
 
     /// Establishes the WebRTC peer connection and data channel only.
@@ -305,6 +339,10 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
     // MARK: - StreamingBackend: data
 
     public func send(_ data: Data, reliable: Bool) async throws {
+        try await send(data, reliable: reliable, topic: nil)
+    }
+
+    public func send(_ data: Data, reliable: Bool, topic: String?) async throws {
         guard let room, room.connectionState == .connected else {
             throw StreamError.notConnected
         }
@@ -312,7 +350,7 @@ public final class LiveKitBackend: NSObject, StreamingBackend, FrameInjectable, 
         // broadcast to — and surfaced by — other participants sharing the room.
         // Clients only ever talk to the hub. nil hubIdentity → whole-room broadcast.
         let destinations = config.hubIdentity.map { [Participant.Identity(from: $0)] } ?? []
-        let options = DataPublishOptions(destinationIdentities: destinations, reliable: reliable)
+        let options = DataPublishOptions(destinationIdentities: destinations, topic: topic, reliable: reliable)
         try await room.localParticipant.publish(data: data, options: options)
     }
 
@@ -619,6 +657,43 @@ extension LiveKitBackend: RoomDelegate {
         guard let hub = config.hubIdentity,
               participant.identity == Participant.Identity(from: hub) else { return }
         Task { try? await publication.set(subscribed: true) }
+    }
+
+    // Diagnostic (DEBUG only): LiveKit's own view of our local mic/camera. These
+    // reflect the SDK's model (explicit publish/mute), not OS interruptions, and
+    // are gated so StreamKit adopters aren't spammed in release. See
+    // MediaSessionDiagnostics for the AVAudioSession/AVCaptureSession truth.
+
+    public func room(
+        _ room: Room,
+        participant: LocalParticipant,
+        didPublishTrack publication: LocalTrackPublication
+    ) {
+        #if DEBUG
+        mediaLog.info("livekit local didPublishTrack: source=\(String(describing: publication.source), privacy: .public) muted=\(publication.isMuted, privacy: .public)")
+        #endif
+    }
+
+    public func room(
+        _ room: Room,
+        participant: LocalParticipant,
+        didUnpublishTrack publication: LocalTrackPublication
+    ) {
+        #if DEBUG
+        mediaLog.error("livekit local didUnpublishTrack: source=\(String(describing: publication.source), privacy: .public)")
+        #endif
+    }
+
+    public func room(
+        _ room: Room,
+        participant: Participant,
+        trackPublication: TrackPublication,
+        didUpdateIsMuted isMuted: Bool
+    ) {
+        #if DEBUG
+        guard participant is LocalParticipant else { return }
+        mediaLog.info("livekit local didUpdateIsMuted: source=\(String(describing: trackPublication.source), privacy: .public) muted=\(isMuted, privacy: .public)")
+        #endif
     }
 }
 

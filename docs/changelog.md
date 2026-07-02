@@ -9,6 +9,123 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-02 — Apple client: CloudXR streaming (visionOS-only)
+
+`client-samples/ios-visionos/` runs CloudXR as a second transport alongside its
+LiveKit (StreamKit) agent channel — the same dual-plane pattern as the web-xr
+client. XR support is currently limited to Apple Vision Pro: the CloudXR
+surface on `AppModel` and its `ContentView` controls are `#if os(visionOS)`, so
+iOS/iPadOS builds run every non-XR feature (agent, mic, camera, data) with no XR
+code compiled in.
+
+- **One CloudXR session, reused across connects.** `AppModel` creates a single
+  `CloudXRKit.Session` and reuses it across connect/disconnect cycles (avoiding
+  re-`configure()` churn); it is never nilled. `startXR()` pins
+  `resolutionPreset = .standardPreset` — the framework default fallback is 4096²
+  per eye and OOMs the server compositor. CloudXR connects to the same host as the
+  LiveKit hub (`cloudxr_runtime` always runs on that machine in this stack).
+- **State is observed in the model, not a view.** `beginObservingXRState()` tracks
+  `Session.state` with `withObservationTracking`, re-arming after each change, and
+  the UI's computed `xrState` is derived from that, so transitions are caught even
+  on the reused session (a view `.onChange` can miss the flip).
+- **The render target is the `ImmersiveSpace`.** The `CloudXRSessionComponent`
+  lives in `ImmersiveView`'s `RealityView`; if that view disappears while the
+  session is connected the SDK has nowhere to deliver frames and never re-binds.
+  So the ImmersiveSpace `.onDisappear` stops XR when live, `disconnect()` stops XR
+  before tearing down LiveKit, and Stop clears `sessionEntity.children` so the
+  framework-parented streaming mesh doesn't linger in the still-open space.
+- **`xr.session.started` gates the worker.** Once CloudXR reaches `.connected`,
+  `AppModel` publishes on the `xr.session.started` LiveKit topic so `render-mcp`
+  launches LOVR exactly as it does for the web client.
+- **Entitlement.** `CloudXRKit` wraps NVIDIA's
+  [`cloudxr-framework`](https://github.com/NVIDIA/cloudxr-framework) SPM package.
+  The visionOS `com.apple.developer.low-latency-streaming` entitlement is required
+  for the low-latency path and signs cleanly only under Apple Developer Program
+  enrollment; non-ADP teams can strip it locally for higher latency.
+- **Server side is untouched.** `auto-webrtc` stays the committed default (web-xr
+  is the out-of-box client); Apple-client users flip `NV_DEVICE_PROFILE:
+  auto-native` for their run. The two profiles are mutually exclusive per run (a
+  CloudXR-side constraint).
+
+### 2026-07-02 — Apple client: CloudXR/LiveKit lifecycle invariants
+
+The XR/LiveKit lifecycle stays correct across an intentional disconnect, a
+transient LiveKit reconnect, a coalesced CloudXR state observation, and double
+taps. The load-bearing invariants in `AppModel`:
+
+- **Teardown gate.** `disconnect()` sets `isTearingDown` for the whole teardown,
+  cancels the mic-recovery task, and `await`s `stopXR()` before closing the
+  LiveKit session; `handleCloudxrStateChange` skips mic recovery while
+  `isTearingDown` is set, so the asynchronous CloudXR `.disconnected` can't
+  republish against a session being nilled. The XR-only stop path leaves the flag
+  false and still recovers the mic.
+- **`stopXR()` awaits teardown.** It issues `Session.disconnect()` and suspends
+  until the CloudXR `.disconnected` transition (via a continuation resumed in
+  `handleCloudxrStateChange`), so `disconnect()`'s "release the render target
+  before closing the agent channel" ordering actually holds. An already-idle or
+  `.error` session returns immediately.
+- **`startXR()` is single-flight.** `xrState` stays `.idle` until CloudXRKit flips
+  state, so an `isStartingXR` guard stops a double **Launch XR** tap (or a retry
+  while `connect()` is suspended) from re-running `configure`/`connect` on the
+  reused session.
+- **The two transports can't orphan each other.** An unexpected LiveKit
+  `.disconnected` (not an intentional `disconnect()`) also tears XR down, so XR
+  can't keep streaming with an orphaned CloudXR session and a stale started latch.
+- **`xr.session.started` is published robustly.** The latch
+  (`hasPublishedXRStarted`) is set only after a `send` succeeds; an
+  `isPublishingXRStarted` guard stops overlapping observation ticks from launching
+  concurrent publishers. Because `.connected` won't re-fire while the session
+  stays up, a bounded retry loop republishes `xr.session.started` until
+  `hasPublishedXRStarted` is set. The latch resets on `.disconnected` so a second
+  XR session republishes. Duplicates are safe (the worker and `render-mcp` treat
+  the signal idempotently); a missed signal is the real failure.
+
+### 2026-07-02 — Apple client: agent microphone and camera reliability
+
+The agent microphone has to survive two Apple-client hazards: an unconfigured
+audio session at first connect, and an interruption (OS or CloudXR) that leaves
+capture dead while the UI still shows the mic "on". The camera track has to
+survive a transient LiveKit reconnect.
+
+- **Pre-configure the session at launch.** `LiveKitBackend.prepareAudio()` (a new
+  public static, called early from `StreamKitSampleApp.init()`) sets
+  `AVAudioSession` to `.playAndRecord` / `.voiceChat` and requests mic permission,
+  so the first `StreamSession.connect(...)` doesn't publish a silent track against
+  `.soloAmbient`.
+- **`recoverMic()` is the single recovery entry point.** It runs whenever mic
+  intent (`micEnabledByUser`) is on, triggered by an `AVAudioSession` `.ended`
+  interruption, a `mediaServicesWereReset` notification, and (on visionOS) the
+  CloudXR `.disconnected` transition. The XR-exit case is the hard one: CloudXR's
+  NSK layer owns the shared `AVAudioSession` while streaming and tears it (and
+  LiveKit's recording engine) down on exit, posting an `AVAudioSession` `.began`
+  interruption with NO matching `.ended`, so recovery can't be driven off
+  `.ended`.
+- **Toggle-only.** Recovery cycles the mic through LiveKit's `AudioManager`
+  (`stopAudio()` → `startAudio()`) and never calls `AVAudioSession.setActive`: NSK
+  kills LiveKit's recording engine, not just the category, so only a real
+  republish rebinds the published track to a live engine. Single-flight via
+  `micRecoveryTask`.
+- **Bounded settle → stop → start → verify retry loop.** A single fixed
+  stop/start can land just as a `.began` arrives and report success while the OS
+  still holds capture suspended, so the loop retries past each `.began` until
+  teardown finishes.
+- **`.began` is a suspension signal only.** It bumps `interruptionBeganGeneration`
+  and never triggers recovery (recovering on `.began` would cycle the mic
+  mid-interruption). Genuine OS interruptions also post `.ended`; the `.ended`
+  path is gated to `micEnabledByUser && xrState == .idle`.
+- **An attempt succeeds only when `isAudioActive` is true AND
+  `interruptionBeganGeneration` is unchanged across the verify window.** LiveKit
+  reports the track unmuted (`didUpdateIsMuted`) even when capture is dead, so the
+  interruption generation is the only honest "capture suspended" cue. A changed
+  generation means NSK re-suspended capture and the loop retries; an exhausted
+  budget marks the mic off rather than claiming a live mic.
+- **Intent is split from live state.** `micEnabledByUser` (intent) is separate
+  from `isAudioActive` (live) so the UI stays honest when recovery is exhausted.
+- **Camera intent survives a reconnect.** A transient LiveKit `.reconnecting`
+  drops the camera track to a known-off state but records intent; the track is
+  restored when the room reconnects, mirroring how mic intent survives an
+  interruption.
+
 ### 2026-06-29 — cloudxr_env yaml values default rather than override the environment
 
 cloudxr-runtime applies the `cloudxr_env` block from `cloudxr_runtime.yaml` with

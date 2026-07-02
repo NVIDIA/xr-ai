@@ -1,5 +1,5 @@
 {
-  "originHash" : "c603ff8e74756595b6bdbf95b011a031feaa3a11e1e305cdfda32ecd7e35bda0",
+  "originHash" : "67994f9c79cfed6198a054f31c1d3a9c0803f7d7e56d0df69e0a3556cbc86343",
   "pins" : [
     {
       "identity" : "client-sdk-swift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "f70911172031fe40042266ed3bc35171224c2ef0",
         "version" : "2.13.0"
+      }
+    },
+    {
+      "identity" : "cloudxr-framework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/NVIDIA/cloudxr-framework",
+      "state" : {
+        "revision" : "0a14752fa95cf10fb7a8d0a0d52f6388f5e6b359",
+        "version" : "6.1.0"
       }
     },
     {

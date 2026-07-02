@@ -14,5 +14,12 @@
          All other features (audio, data channel) work without this entitlement. -->
     <key>com.apple.developer.arkit.main-camera-access.allow</key>
     <true/>
+
+    <!-- CloudXRKit on visionOS requires the low-latency-streaming entitlement.
+         Requires Apple Developer Program enrollment. Without it the CloudXR
+         video pipeline is high-latency / falls back; mic / camera / data
+         channel keep working. -->
+    <key>com.apple.developer.low-latency-streaming</key>
+    <true/>
 </dict>
 </plist>

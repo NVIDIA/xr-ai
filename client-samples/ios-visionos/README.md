@@ -22,21 +22,23 @@ ai-sdk-sample/
 │       │   ├── SessionConfig.swift      # Room name, identity, audio + camera settings
 │       │   ├── AudioConfig.swift        # Voice processing / software DSP / raw / disabled
 │       │   └── CameraConfig.swift       # Resolution, fps, camera position (iOS only)
+│       ├── MediaSessionDiagnostics.swift # Media route / capture diagnostics
 │       └── Backends/
-│           ├── StreamingBackend.swift   # Protocol — implement to plug in any transport
+│           ├── StreamingBackend.swift   # Protocol (send(_:reliable:topic:) is topic-aware)
 │           ├── BackendConfiguration.swift  # enum { .liveKit(LiveKitConfig) }
 │           └── LiveKit/
-│               └── LiveKitBackend.swift # Built-in LiveKit WebRTC implementation
+│               └── LiveKitBackend.swift # LiveKit WebRTC backend; prepareAudio() launch hook
 └── App/                # Sample app source files — add to your Xcode project
     ├── StreamKitSampleApp.swift
     ├── AppModel.swift
     ├── ContentView.swift
-    └── ImmersiveView.swift   # visionOS only
+    └── ImmersiveView.swift   # visionOS only: also hosts the CloudXR render surface
 ```
 
 The `StreamKit` library depends on an unmodified upstream
-[livekit-client-sdk-swift](https://github.com/livekit/client-sdk-swift) checked out at
-`../livekit-client-sdk-swift` (one level above this folder).
+[livekit-client-sdk-swift](https://github.com/livekit/client-sdk-swift), pinned to
+`2.13.0` and resolved directly from GitHub by Swift Package Manager (see
+`StreamKit/Package.swift`). No local checkout is required.
 
 ---
 
@@ -283,6 +285,121 @@ as the mic still being in use. `LiveKitBackend.stopAudio` now drops prepared
 mode and disables engine *input* while leaving *output* up (so the agent can
 still be heard); the dot clears while you stay connected, and is fully released
 on disconnect.
+
+### Mic / camera go dead while the UI still says "on"
+
+The OS can interrupt the microphone or camera for many reasons (phone call,
+Siri, another app, route change, iPad multitasking), and LiveKit doesn't recover
+on its own. The sample re-arms capture automatically whenever you'd left the mic
+on, so it usually comes back with no action from you.
+
+If it doesn't, filter Console.app with `category:MediaSession` (works untethered)
+to see the interruption and recovery events. On XR exit you'll hear iOS's
+mic-activation sound as capture restarts — that's expected, not a malfunction.
+
+---
+
+## Launching XR (CloudXR)
+
+The sample ships a CloudXR render stream alongside the LiveKit agent
+channel, the same pattern as the web-xr client. The **XR Stream** row in
+the Media section (under the mic and camera buttons) connects directly
+to the CloudXR runtime on the same host as the LiveKit hub (the
+Connection section's **Host / IP**). `cloudxr_runtime` always runs
+alongside the hub in this repo's stack.
+
+XR support is currently limited to Apple Vision Pro, so the **XR Stream** row
+(the Start XR control) ships on **visionOS**. iOS / iPadOS builds run every
+other feature (agent, mic, camera, data) without an XR path.
+
+### Two parallel transports
+
+| Channel | Goes through | Port |
+|---|---|---|
+| Agent (mic, data, camera) | LiveKit via the hub's wss proxy | `8080` |
+| CloudXR (XR render frames) | CloudXRKit native transport | CloudXR-managed |
+
+The two are independent: connecting/disconnecting CloudXR never drops
+the LiveKit room. When the CloudXR session reaches `.connected` the app
+publishes an empty data message on the `xr.session.started` LiveKit
+topic. `render-mcp` gates the LOVR launch on that signal exactly the
+same way it does for the web client.
+
+### Server prerequisite: change `NV_DEVICE_PROFILE` to `auto-native`
+
+The committed `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`
+defaults to `auto-webrtc` so the web-xr client works out of the box.
+Native Apple clients need the proprietary CloudXR transport, which is
+**mutually exclusive** with the WebRTC path per run.
+
+To run this app against `xr-render-demo`:
+
+1. Edit `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml` on the
+   server checkout, change one line:
+   ```yaml
+   cloudxr_env:
+     NV_DEVICE_PROFILE: auto-native
+   ```
+2. Restart the stack: `uv run xr_render_demo`.
+3. Revert that line when you go back to web-xr.
+
+No code changes anywhere else on the server.
+
+### CloudXRKit SPM dependency
+
+The Xcode project already pins
+[`NVIDIA/cloudxr-framework`](https://github.com/NVIDIA/cloudxr-framework)
+(`CloudXRKit` product) in `StreamKitSample.xcodeproj/project.pbxproj`
+and `Package.resolved`. Opening the workspace resolves the binary
+xcframeworks on first launch. No manual **File → Add Package
+Dependencies…** step.
+
+### Apple Developer Program
+
+The Vision Pro low-latency CloudXR path requires the
+`com.apple.developer.low-latency-streaming` entitlement, which only
+provisions when the build is signed by a team enrolled in the Apple
+Developer Program. The entitlement is committed in
+`App/StreamKitSample.entitlements`; non-ADP teams can clear it locally
+(higher latency, otherwise works).
+
+### On-device flow
+
+1. Connect to the hub (Connection section → **Connect**). Mic / data /
+   camera work as before.
+2. Tap **Launch XR**. The CloudXR session connects directly to the
+   Connection host; once it reaches `Streaming` the agent worker
+   receives the `xr.session.started` signal and `render-mcp` launches
+   LOVR.
+3. Tap **Stop** to disconnect CloudXR while leaving the LiveKit room
+   running.
+
+On visionOS, **Launch XR** auto-opens the immersive space if it isn't
+already open. No manual **Open Space** step required.
+
+The session is also torn down automatically when its render target
+disappears:
+
+Closing the immersive space (**Close Space**, or the system home
+gesture) calls `stopXR()`. The `CloudXRSessionComponent` would
+otherwise be orphaned.
+
+`disconnect()` from the LiveKit section also stops XR first, so leaving
+the hub never leaves a dangling CloudXR session behind.
+
+### Cert / trust notes
+
+- The hub cert install on `:8080` (see the section above) is still
+  required for the LiveKit channel.
+- The `:48322` WSS proxy that the web-xr client uses is **unused** in
+  `auto-native` mode. No extra cert install is needed for CloudXR.
+- CloudXR has its own transport encryption; the SDK handles it without
+  user-facing trust prompts on the LAN.
+
+### Render target
+
+The open `ImmersiveSpace` hosts the `CloudXRSessionComponent`. The
+placeholder demo sphere hides itself while streaming.
 
 ---
 
