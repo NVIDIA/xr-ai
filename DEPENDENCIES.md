@@ -64,7 +64,7 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     readiness checks.
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
 
-xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
+xr-ai-skills  (agent-sdk/xr-ai-skills/)
     └── xr-ai-agent   [editable: ..]
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models  [editable: ../xr-ai-models]
@@ -180,16 +180,20 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=2.0
     └── pyyaml >=6.0
-    └── xr-ai-agent  [editable: ../../agent-sdk]
+    └── xr-ai-agent   [editable: ../../agent-sdk]
+    └── xr-ai-skills  [editable: ../../agent-sdk/xr-ai-skills]
     └── PyNvVideoCodec >=1.0
     └── Pillow >=10.0
     └── numpy >=1.24
     Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
     Reads NVENC H.264 chunks written by the hub from disk for historical
-    queries; connects to the hub as a ProcessorEndpoint to fetch live
-    frames for `get_frame_from_time` (the live-only path; `get_latest_frame`
-    remains as a deprecated alias). Decodes chunks via NVDEC and
-    re-encodes selected frames as PNG via Pillow.
+    queries; connects to the hub as a ProcessorEndpoint and uses
+    xr-ai-skills' LiveFrameSource (shared with VisionModule — one frame-
+    tracking + freshness/wait implementation, not two) to fetch live frames
+    for `get_frame_from_time` (the live-only path; `get_latest_frame`
+    remains as a deprecated alias). Decodes historical chunks via NVDEC
+    (numpy arrays, not FrameData, so that path keeps its own NV12→RGB
+    conversion) and re-encodes selected frames as PNG via Pillow.
 
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
@@ -230,7 +234,7 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
-    └── xr-ai-capabilities      [editable: ../agent-sdk/xr-ai-capabilities]
+    └── xr-ai-skills      [editable: ../agent-sdk/xr-ai-skills]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
@@ -419,7 +423,7 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-capabilities [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (VisionModule + pixels now come from xr-ai-capabilities, which pulls numpy + Pillow; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-skills [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (VisionModule + pixels now come from xr-ai-skills, which pulls numpy + Pillow; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
 
 Worker runs on the unified pipecat voice pipeline assembled by
 `xr_ai_pipecat.make_voice_pipeline`. `SimpleVlmBrain` (a
@@ -461,7 +465,7 @@ forwarding.
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-capabilities` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.3 (numpy + Pillow pulled in via xr-ai-capabilities; silero-vad via xr-ai-pipecat → xr-ai-vad). The `look_at_current_frame` perception tool reuses `xr_ai_capabilities.VisionModule` (live-frame VLM Q&A); the worker-local `pixels.py` and its frame/camera helpers were removed. |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-skills` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.3 (numpy + Pillow pulled in via xr-ai-skills; silero-vad via xr-ai-pipecat → xr-ai-vad). The `look_at_current_frame` perception tool reuses `xr_ai_skills.VisionModule` (live-frame VLM Q&A); the worker-local `pixels.py` and its frame/camera helpers were removed. |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /

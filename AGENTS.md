@@ -16,7 +16,7 @@ server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # Four packages:
                     #   xr-ai-agent        — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
-                    #   xr-ai-capabilities — framework-agnostic reusable agent features (VisionModule)
+                    #   xr-ai-skills       — framework-agnostic reusable agent features (VisionModule)
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
@@ -127,7 +127,7 @@ The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
   `yaml/voice_gate.yaml` (`magic_phrases: ["hey agent"]`, or `[]` for
   always-on). No sample code — config only.
 
-**Reusable capabilities** live in `xr-ai-capabilities` — framework-agnostic
+**Reusable capabilities** live in `xr-ai-skills` — framework-agnostic
 features that talk to the hub through a `ProcessorEndpoint` and depend only on
 the core SDK (no pipecat), so both pipecat and non-pipecat agents can compose
 them:
@@ -145,9 +145,9 @@ a voice sample gets the wake word from config alone.
 ### Scope decision and named follow-ups
 
 The capabilities/pipeline boundary is now explicit: `xr-ai-pipecat` stays "voice
-pipeline plumbing" and reusable capabilities live in `xr-ai-capabilities`, which
+pipeline plumbing" and reusable capabilities live in `xr-ai-skills`, which
 has no pipeline-framework dependency. Keep new reusable agent building blocks in
-`xr-ai-capabilities` — `xr-ai-pipecat` must not become a catch-all.
+`xr-ai-skills` — `xr-ai-pipecat` must not become a catch-all.
 Planned structural follow-ups (own PRs):
 
 1. **`MCPToolset`.** `RenderSceneProcessor` still takes one `McpClient` per MCP

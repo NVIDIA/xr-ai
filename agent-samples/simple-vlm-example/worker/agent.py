@@ -7,7 +7,7 @@ SimpleVlmBrain — vision Q&A on the unified pipecat pipeline.
 Behaviour is identical to the original sample; the difference is that the
 live-camera machinery (frame tracking, camera-on-demand, the VLM call) is no
 longer re-implemented here — it lives in the shared, reusable
-:class:`xr_ai_capabilities.VisionModule`. This brain is thin glue: it routes a query
+:class:`xr_ai_skills.VisionModule`. This brain is thin glue: it routes a query
 to the module, owns the data-channel side path, and interrupts on supersede.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from loguru import logger
 from pipecat.frames.frames import InterruptionFrame
 from xr_ai_agent import DataMessage
 from xr_ai_models import VLMService
-from xr_ai_capabilities import VisionModule, VisionUnavailable
+from xr_ai_skills import VisionModule, VisionUnavailable
 from xr_ai_pipecat import BrainProcessor, GatedQueryFrame
 from xr_ai_pipecat.transport import XRMediaHubTransport
 

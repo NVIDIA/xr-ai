@@ -11,7 +11,7 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
-    "xr-ai-capabilities",
+    "xr-ai-skills",
     "xr-ai-logging",
     "xr-ai-models",
     "xr-ai-pipecat",
@@ -20,7 +20,7 @@ dependencies = [
 
 [tool.uv.sources]
 xr-ai-agent        = { path = "../../../agent-sdk", editable = true }
-xr-ai-capabilities = { path = "../../../agent-sdk/xr-ai-capabilities", editable = true }
+xr-ai-skills       = { path = "../../../agent-sdk/xr-ai-skills", editable = true }
 xr-ai-logging      = { path = "../../../utils/xr-ai-logging", editable = true }
 xr-ai-models       = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 xr-ai-pipecat      = { path = "../../../agent-sdk/xr-ai-pipecat", editable = true }

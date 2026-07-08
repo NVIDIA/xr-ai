@@ -37,7 +37,7 @@ from loguru import logger
 from xr_ai_agent import DataMessage
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef, VLMService
-from xr_ai_capabilities import VisionModule, VisionUnavailable
+from xr_ai_skills import VisionModule, VisionUnavailable
 from xr_ai_pipecat import BrainProcessor
 from xr_ai_pipecat.transport import XRMediaHubTransport
 

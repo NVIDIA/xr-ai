@@ -7,7 +7,7 @@ Top-level entry point is :func:`make_voice_pipeline`. Sample workers
 subclass :class:`BrainProcessor` and hand the instance to the factory;
 everything else (VAD/STT, voice gate, streaming TTS) is provided.
 
-Live-camera VLM Q&A lives in the framework-agnostic ``xr-ai-capabilities``
+Live-camera VLM Q&A lives in the framework-agnostic ``xr-ai-skills``
 package (``VisionModule``); a pipecat brain wires it up by passing
 ``transport.endpoint``.
 """

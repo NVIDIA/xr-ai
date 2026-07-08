@@ -14,11 +14,11 @@ Two data paths:
   ``get_video_stats``, ``list_recorded_participants``, and
   ``get_frame_from_time`` when ``second_ago > 0``.
 
-* **Live frames** — connects to the hub as a ``ProcessorEndpoint``,
-  tracks the most recent ``FrameSignal`` per participant, and pulls
-  pixels on demand via ``request_frame``. Used by
-  ``list_live_participants`` and ``get_frame_from_time`` when
-  ``second_ago == 0``.
+* **Live frames** — connects to the hub as a ``ProcessorEndpoint`` and uses
+  ``xr_ai_skills.LiveFrameSource`` (shared with ``VisionModule``) to track
+  the most recent frame per participant, wait briefly for a fresh one if
+  needed, and pull pixels on demand. Used by ``list_live_participants`` and
+  ``get_frame_from_time`` when ``second_ago == 0``.
 
 All tools accept and return raw LiveKit identities; sanitization happens
 internally for filesystem paths and is recovered via ``.identity``
@@ -51,12 +51,14 @@ Tools (FastMCP, mounted at /mcp)
 
 Config (video_mcp_server.yaml)
 ───────────────────────────────
-    recordings_dir: /dev/shm/xr-ai/recordings   # must match hub video_recording.out_dir
-    out_dir:        /tmp/xr_video_queries
-    hub_pub:        ipc:///tmp/xr_hub_pub        # hub PUB socket (live frames)
-    hub_push:       ipc:///tmp/xr_hub_in         # hub PUSH socket (frame requests)
-    host:           0.0.0.0
-    port:           8210
+    recordings_dir:   /dev/shm/xr-ai/recordings   # must match hub video_recording.out_dir
+    out_dir:          /tmp/xr_video_queries
+    hub_pub:          ipc:///tmp/xr_hub_pub        # hub PUB socket (live frames)
+    hub_push:         ipc:///tmp/xr_hub_in         # hub PUSH socket (frame requests)
+    host:             0.0.0.0
+    port:             8210
+    frame_max_age_s:  2.0   # live-frame freshness window (default shown)
+    frame_timeout_s:  5.0   # how long to wait for a fresh live frame (default shown)
 """
 from __future__ import annotations
 
@@ -76,9 +78,9 @@ from fastmcp import FastMCP
 from loguru import logger
 from PIL import Image
 
-from xr_ai_agent import (FrameData, FrameSignal, PixelFormat,
-                         ProcessorEndpoint, Subscribe)
+from xr_ai_agent import ProcessorEndpoint, Subscribe
 from xr_ai_logging import setup_logging
+from xr_ai_skills import LiveFrameSource, LiveFrameUnavailable, frame_to_pil
 
 _DEFAULT_HUB_PUB  = "ipc:///tmp/xr_hub_pub"
 _DEFAULT_HUB_PUSH = "ipc:///tmp/xr_hub_in"
@@ -225,70 +227,12 @@ class ChunkStore:
         return self._check(best[0]), best[1]
 
 
-# ── live frame provider (ProcessorEndpoint) ───────────────────────────────────
-
-class FrameProvider:
-    """Tracks the most recent ``FrameSignal`` per participant via IPC.
-
-    The hub publishes frame metadata on every frame; we keep the latest
-    signal for each pid. ``fetch_latest`` issues a ``FRAME_REQUEST`` to
-    pull the actual pixel bytes on demand — the hub copies from the SHM
-    slot only when asked.
-
-    Subscribed with ``filter=Subscribe.VIDEO`` so we don't pay the SUB-
-    side decode cost for audio / data we don't care about.
-    """
-
-    def __init__(self, ep: ProcessorEndpoint) -> None:
-        self._ep = ep
-        self._latest: dict[str, FrameSignal] = {}
-        ep.on_frame(self._on_frame)
-
-    async def _on_frame(self, sig: FrameSignal) -> None:
-        # Take the most recent signal across all of the pid's tracks.
-        prev = self._latest.get(sig.participant_id)
-        if prev is None or sig.pts_us >= prev.pts_us:
-            self._latest[sig.participant_id] = sig
-
-    def latest_signal(self, pid: str) -> FrameSignal | None:
-        return self._latest.get(pid)
-
-    def connected_participants(self) -> frozenset[str]:
-        """Raw identities currently connected to the hub (live IPC roster)."""
-        return self._ep.connected_participants
-
-    async def fetch_latest(self, pid: str) -> FrameData | None:
-        sig = self._latest.get(pid)
-        if sig is None:
-            return None
-        return await self._ep.request_frame(sig)
-
-
 # ── pixel format conversion ───────────────────────────────────────────────────
-
-def _frame_to_rgb(data: bytes, width: int, height: int, fmt: PixelFormat) -> np.ndarray:
-    """Convert a hub ``FrameData`` payload into an HxWx3 uint8 RGB array."""
-    arr = np.frombuffer(data, dtype=np.uint8)
-
-    if fmt == PixelFormat.RGB24:
-        return arr.reshape(height, width, 3).copy()
-    if fmt == PixelFormat.RGBA:
-        return arr.reshape(height, width, 4)[:, :, :3].copy()
-    if fmt == PixelFormat.BGRA:
-        bgra = arr.reshape(height, width, 4)
-        return bgra[:, :, [2, 1, 0]].copy()
-    if fmt == PixelFormat.NV12:
-        return _nv12_to_rgb(arr.reshape(height * 3 // 2, width), width, height)
-    if fmt == PixelFormat.I420:
-        y_size  = width * height
-        uv_size = (width // 2) * (height // 2)
-        Y = arr[:y_size].reshape(height, width)
-        U = arr[y_size : y_size + uv_size].reshape(height // 2, width // 2)
-        V = arr[y_size + uv_size :].reshape(height // 2, width // 2)
-        return _yuv_to_rgb(Y, U, V, width, height)
-
-    raise ValueError(f"Unsupported PixelFormat for PNG export: {fmt!r}")
-
+#
+# Live-camera FrameData → RGB is handled by xr_ai_skills.frame_to_pil (shared
+# with VisionModule, one implementation). The functions below are only for
+# the NVDEC-decoded recorded-chunk path, which produces raw NV12 numpy
+# arrays directly (never a FrameData), so they can't reuse that helper.
 
 def _nv12_to_rgb(nv12: np.ndarray, width: int, height: int) -> np.ndarray:
     """NV12 (Y plane + interleaved Cb/Cr at half resolution) → RGB."""
@@ -297,14 +241,6 @@ def _nv12_to_rgb(nv12: np.ndarray, width: int, height: int) -> np.ndarray:
     Cb = np.repeat(np.repeat(UV[:, :, 0], 2, axis=0), 2, axis=1).astype(np.float32)
     Cr = np.repeat(np.repeat(UV[:, :, 1], 2, axis=0), 2, axis=1).astype(np.float32)
     return _yuv_arr_to_rgb(Y, Cb, Cr)
-
-
-def _yuv_to_rgb(Y: np.ndarray, U: np.ndarray, V: np.ndarray,
-                width: int, height: int) -> np.ndarray:
-    Y_f  = Y.astype(np.float32)
-    Cb_f = np.repeat(np.repeat(U, 2, axis=0), 2, axis=1).astype(np.float32)
-    Cr_f = np.repeat(np.repeat(V, 2, axis=0), 2, axis=1).astype(np.float32)
-    return _yuv_arr_to_rgb(Y_f, Cb_f, Cr_f)
 
 
 def _yuv_arr_to_rgb(Y: np.ndarray, Cb: np.ndarray, Cr: np.ndarray) -> np.ndarray:
@@ -324,25 +260,23 @@ def _save_png(rgb: np.ndarray, out_path: pathlib.Path) -> None:
 
 
 async def _live_frame_result(
-    provider: "FrameProvider",
+    frame_source: LiveFrameSource,
     participant_id: str,
     out_dir: pathlib.Path,
     now_us: int,
 ) -> dict:
-    """Fetch the latest live IPC frame for *participant_id*, encode it to PNG,
-    and return the ``get_frame_from_time(second_ago=0)`` result dict (or an
-    error dict). Shared by the live-only and full tool surfaces so the two
-    registrations can't drift."""
-    frame = await provider.fetch_latest(participant_id)
-    if frame is None:
-        return {"error": f"No live frame available for {participant_id!r}"}
+    """Fetch the latest live IPC frame for *participant_id* (waiting briefly
+    for a fresh one if needed), encode it to PNG, and return the
+    ``get_frame_from_time(second_ago=0)`` result dict (or an error dict).
+    Shared by the live-only and full tool surfaces so the two registrations
+    can't drift."""
     try:
-        rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
-    except ValueError as exc:
+        frame = await frame_source.get_frame(participant_id)
+    except LiveFrameUnavailable as exc:
         return {"error": str(exc)}
     safe     = _safe_name(participant_id)
     out_path = out_dir / f"{safe}_ago0_{frame.pts_us}.png"
-    _save_png(rgb, out_path)
+    frame_to_pil(frame).save(out_path, "PNG")
     actual = (now_us - frame.pts_us) / 1_000_000
     logger.debug(
         "get_frame_from_time(0)  pid={!r}  {}x{}  ts={} (~{:.2f}s ago, live) → {}",
@@ -420,7 +354,7 @@ def _decode_chunk_to_nv12_frames(annex_b: bytes, gpu_id: int = 0) -> list[np.nda
 def build_mcp(
     store:    "ChunkStore | None",
     out_dir:  pathlib.Path,
-    provider: FrameProvider,
+    provider: LiveFrameSource,
     gpu_id:   int = 0,
 ) -> "FastMCP":
     """Return a composed FastMCP server with video tools bound.
@@ -441,7 +375,7 @@ def build_mcp(
         hub. Drawn from the live IPC roster — these are the only pids
         for which ``get_frame_from_time(..., second_ago=0)`` will return
         a live frame."""
-        return sorted(provider.connected_participants())
+        return sorted(provider.connected_participants)
 
     # ── recording disabled: live-only tools ──────────────────────────────────
     if store is None:
@@ -476,26 +410,13 @@ def build_mcp(
             Keys: path, width, height, timestamp_us.
             Returns ``{"error": "..."}`` if the participant has no live frame.
             """
-            frame = await provider.fetch_latest(participant_id)
-            if frame is None:
-                return {"error": f"No live frame available for {participant_id!r}"}
-            try:
-                rgb = _frame_to_rgb(frame.data, frame.width, frame.height, frame.fmt)
-            except ValueError as exc:
-                return {"error": str(exc)}
-            safe     = _safe_name(participant_id)
-            out_path = out_dir / f"{safe}_latest_{frame.pts_us}.png"
-            _save_png(rgb, out_path)
-            logger.debug(
-                "get_latest_frame  pid={!r}  {}x{}  ts={} → {}",
-                participant_id, frame.width, frame.height, frame.pts_us, out_path,
-            )
-            return {
-                "path":         str(out_path),
-                "width":        frame.width,
-                "height":       frame.height,
-                "timestamp_us": frame.pts_us,
-            }
+            now_us = int(time.time() * 1_000_000)
+            result = await _live_frame_result(provider, participant_id, out_dir, now_us)
+            if "error" in result:
+                return result
+            result.pop("second_ago", None)
+            result.pop("actual_second_ago", None)
+            return result
         return mcp
 
     # ── recording enabled: full historical tool set ───────────────────────────
@@ -676,7 +597,7 @@ def build_mcp(
 def build_app(
     store:    "ChunkStore | None",
     out_dir:  pathlib.Path,
-    provider: FrameProvider,
+    provider: LiveFrameSource,
     gpu_id:   int = 0,
 ):
     """Return the ASGI app serving the FastMCP HTTP transport at /mcp."""
@@ -695,6 +616,8 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     host               = cfg.get("host", "0.0.0.0")
     port               = int(cfg.get("port", 8210))
     gpu_id             = int(cfg.get("gpu_id", 0))
+    frame_max_age_s    = float(cfg.get("frame_max_age_s", 2.0))
+    frame_timeout_s    = float(cfg.get("frame_timeout_s", 5.0))
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -709,7 +632,10 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
         sub_addr=hub_pub, push_addr=hub_push,
         filter=Subscribe.VIDEO,
     )
-    provider = FrameProvider(ep)
+    provider = LiveFrameSource(
+        ep, frame_max_age_s=frame_max_age_s, frame_timeout_s=frame_timeout_s,
+    )
+    provider.register()
     app      = build_app(store, out_dir, provider, gpu_id=gpu_id)
 
     config = uvicorn.Config(app, host=host, port=port, log_level="warning",
