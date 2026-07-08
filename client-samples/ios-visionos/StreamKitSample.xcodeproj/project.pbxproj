@@ -13,6 +13,7 @@
 		AA000100000000000000DD04 /* ImmersiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000100000000000000CC04 /* ImmersiveView.swift */; };
 		AA000100000000000000DD05 /* StreamKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA000100000000000002CC02 /* StreamKit */; };
 		AA000100000000000000DD06 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA000100000000000000CC08 /* Assets.xcassets */; };
+		AA000100000000000000DD07 /* CloudXRKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA000100000000000002CC04 /* CloudXRKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000100000000000000DD05 /* StreamKit in Frameworks */,
+				AA000100000000000000DD07 /* CloudXRKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -95,6 +97,7 @@
 			name = StreamKitSample;
 			packageProductDependencies = (
 				AA000100000000000002CC02 /* StreamKit */,
+				AA000100000000000002CC04 /* CloudXRKit */,
 			);
 			productName = StreamKitSample;
 			productReference = AA000100000000000000CC05 /* StreamKitSample.app */;
@@ -126,6 +129,7 @@
 			mainGroup = AA000100000000000000BB01;
 			packageReferences = (
 				AA000100000000000002CC01 /* XCLocalSwiftPackageReference "StreamKit" */,
+				AA000100000000000002CC03 /* XCRemoteSwiftPackageReference "cloudxr-framework" */,
 			);
 			productRefGroup = AA000100000000000000BB03 /* Products */;
 			projectDirPath = "";
@@ -167,7 +171,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "# Bundle App/Enterprise.license into the .app for the\n# com.apple.developer.arkit.main-camera-access.allow entitlement. The file is\n# per-team and gitignored. See client-samples/ios-visionos/README.md.\n\nset -e\n\nLICENSE_PATH=\"$SRCROOT/App/Enterprise.license\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Enterprise.license\"\n\nif [ -f \"$LICENSE_PATH\" ]; then\n    mkdir -p \"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\n    cp -f \"$LICENSE_PATH\" \"$DEST\"\nelse\n    rm -f \"$DEST\"\n    echo \"warning: Enterprise.license not found at $LICENSE_PATH \u2014 main camera access will be a no-op at runtime. See README.\"\nfi\n";
+			shellScript = "# Bundle App/Enterprise.license into the .app for the\n# com.apple.developer.arkit.main-camera-access.allow entitlement. The file is\n# per-team and gitignored. See client-samples/ios-visionos/README.md.\n\nset -e\n\nLICENSE_PATH=\"$SRCROOT/App/Enterprise.license\"\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Enterprise.license\"\n\nif [ -f \"$LICENSE_PATH\" ]; then\n    mkdir -p \"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\n    cp -f \"$LICENSE_PATH\" \"$DEST\"\nelse\n    rm -f \"$DEST\"\n    echo \"warning: Enterprise.license not found at $LICENSE_PATH. Main camera access will be a no-op at runtime. See README.\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -391,11 +395,27 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		AA000100000000000002CC03 /* XCRemoteSwiftPackageReference "cloudxr-framework" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/NVIDIA/cloudxr-framework";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		AA000100000000000002CC02 /* StreamKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA000100000000000002CC01 /* XCLocalSwiftPackageReference "StreamKit" */;
 			productName = StreamKit;
+		};
+		AA000100000000000002CC04 /* CloudXRKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA000100000000000002CC03 /* XCRemoteSwiftPackageReference "cloudxr-framework" */;
+			productName = CloudXRKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

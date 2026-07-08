@@ -35,6 +35,14 @@
 	<string>Used to stream the main passthrough camera via ARKit.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Used to stream microphone audio.</string>
+	<key>NSHandsTrackingUsageDescription</key>
+	<string>Used by CloudXR to deliver hand input to the streamed XR app.</string>
+	<key>NSWorldSensingUsageDescription</key>
+	<string>Used by CloudXR to anchor the streamed scene in your space.</string>
+	<key>NSAccessoryTrackingUsageDescription</key>
+	<string>Used by CloudXR to track game controllers and accessories.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Used to discover and stream from the CloudXR server on your local network.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

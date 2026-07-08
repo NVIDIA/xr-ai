@@ -25,7 +25,7 @@ import Foundation
 /// connect()            → WebRTC peer connection + data channel only
 /// startAudio(config:)  → microphone capture + publish  (independent, throws on failure)
 /// startCamera(config:) → camera capture + publish      (independent, throws on failure)
-/// send(_:reliable:)    → data channel message
+/// send(_:reliable:topic:) → data channel message
 /// stopAudio()          → stop microphone
 /// stopCamera()         → stop camera
 /// disconnect()         → tear down everything
@@ -112,4 +112,25 @@ public protocol StreamingBackend: AnyObject, Sendable {
     ///   - data: Payload bytes.
     ///   - reliable: `true` for ordered, guaranteed delivery (default).
     func send(_ data: Data, reliable: Bool) async throws
+
+    /// Send binary data to remote participants on a named topic.
+    ///
+    /// Used by samples that need to publish on a specific LiveKit data-channel
+    /// topic (e.g. `xr.session.started` to gate server-side rendering). The
+    /// default implementation in ``StreamingBackend/send(_:reliable:topic:)-extension``
+    /// drops the topic and forwards to ``send(_:reliable:)``, so existing
+    /// backends keep working unchanged. Backends that natively support topics
+    /// (LiveKit) override this directly.
+    ///
+    /// - Parameters:
+    ///   - data: Payload bytes.
+    ///   - reliable: `true` for ordered, guaranteed delivery (default).
+    ///   - topic: Optional topic name; nil means the transport-default topic.
+    func send(_ data: Data, reliable: Bool, topic: String?) async throws
+}
+
+public extension StreamingBackend {
+    func send(_ data: Data, reliable: Bool, topic: String?) async throws {
+        try await send(data, reliable: reliable)
+    }
 }

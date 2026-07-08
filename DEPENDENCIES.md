@@ -394,6 +394,13 @@ The `gradle-wrapper.jar` is not checked in (binary artifact); Android Studio gen
 
 Swift / SwiftUI + Swift Package Manager.  See `client-samples/ios-visionos/README.md`.
 
+| Layer | Language | External deps |
+|---|---|---|
+| `StreamKit` library | Swift | `livekit/client-sdk-swift` 2.13.0 (LiveKit WebRTC) |
+| App target | Swift / SwiftUI | `livekit/client-sdk-swift` 2.13.0 (transitively via StreamKit), `NVIDIA/cloudxr-framework` 6.1.0 (CloudXRKit + NVIDIAStreamKit + NVTelemetry xcframeworks) |
+
+Required entitlement on visionOS: `com.apple.developer.low-latency-streaming` (Apple Developer Program).
+
 ### Web  (client-samples/web/)
 
 Vanilla JS. The page's import map loads `livekit-client` and
