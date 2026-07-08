@@ -5,14 +5,10 @@
 
 ``VisionModule`` is the "answer a question about what the camera sees" feature,
 factored out of the individual samples (simple-vlm-example, xr-render-demo, …)
-that each used to re-implement it. It owns:
-
-  * frame tracking — the latest ``FrameSignal`` per participant, with a
-    wall-clock freshness check;
-  * the VLM call — fetch the freshest frame, encode it, and stream the answer.
-
-Callers that need a completed value use ``perceive()``, which collects that
-same stream into a string.
+that each used to re-implement it. It owns the VLM call — fetch the freshest
+frame (via :class:`~xr_ai_skills.frame_source.LiveFrameSource`), encode it,
+and stream the answer. Callers that need a completed value use ``perceive()``,
+which collects that same stream into a string.
 
 Camera streaming is always-on (the client streams continuously); this module
 never sends ``startCamera`` / ``stopCamera`` control messages.
@@ -33,14 +29,11 @@ import time
 from typing import AsyncIterator
 
 from loguru import logger
-from xr_ai_agent import FrameSignal, ProcessorEndpoint
+from xr_ai_agent import ProcessorEndpoint
 from xr_ai_models import VLMService
 
+from .frame_source import LiveFrameSource, LiveFrameUnavailable
 from .pixels import encode_image, frame_to_pil
-
-
-def _now_us() -> int:
-    return time.time_ns() // 1_000
 
 
 class VisionUnavailable(Exception):
@@ -82,92 +75,35 @@ class VisionModule:
         frame_max_age_s: float = 2.0,
         frame_timeout_s: float = 5.0,
     ) -> None:
-        self._endpoint = endpoint
+        self._frames = LiveFrameSource(
+            endpoint, frame_max_age_s=frame_max_age_s, frame_timeout_s=frame_timeout_s,
+        )
         self._vlm = vlm
         self._system_prompt = system_prompt
-        self._frame_max_age_us = int(frame_max_age_s * 1_000_000)
-        self._frame_timeout_s  = frame_timeout_s
-
-        self._latest: dict[tuple[str, str], FrameSignal] = {}
-        self._frame_events: dict[str, asyncio.Event] = {}
 
     # ── lifecycle ──────────────────────────────────────────────────────────────
 
     def register(self) -> None:
         """Subscribe to the endpoint's frame signals. Call once at setup."""
-        self._endpoint.on_frame(self._on_frame)
+        self._frames.register()
 
     def release(self, pid: str) -> None:
         """Drop all per-participant state (call from ``on_participant_left``)."""
-        self._latest = {k: v for k, v in self._latest.items() if k[0] != pid}
-        self._frame_events.pop(pid, None)
-
-    # ── frame tracking ─────────────────────────────────────────────────────────
-
-    async def _on_frame(self, sig: FrameSignal) -> None:
-        prev = self._latest.get((sig.participant_id, sig.track_id))
-        self._latest[(sig.participant_id, sig.track_id)] = sig
-        if prev is None:
-            logger.info(
-                "first frame signal  pid={!r}  track={}  age_ms={:.0f}",
-                sig.participant_id, sig.track_id,
-                (_now_us() - sig.pts_us) / 1_000,
-            )
-        ev = self._frame_events.get(sig.participant_id)
-        if ev is not None:
-            ev.set()
-
-    def _latest_signal(self, pid: str) -> FrameSignal | None:
-        # pts_us is wall-clock; seq restarts on each camera restart so it would
-        # pick a stale track's last entry.
-        candidates = [v for k, v in self._latest.items() if k[0] == pid]
-        return max(candidates, key=lambda s: s.pts_us) if candidates else None
-
-    def _is_fresh(self, sig: FrameSignal) -> bool:
-        return _now_us() - sig.pts_us < self._frame_max_age_us
-
-    async def _wait_for_frame(self, pid: str) -> FrameSignal | None:
-        """Wait up to ``frame_timeout_s`` for a fresh ``FrameSignal``."""
-        ev = self._frame_events.setdefault(pid, asyncio.Event())
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + self._frame_timeout_s
-        ev.clear()
-        sig = self._latest_signal(pid)
-        if sig is not None and self._is_fresh(sig):
-            return sig
-        while True:
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                return None
-            try:
-                await asyncio.wait_for(ev.wait(), timeout=min(remaining, 5.0))
-            except asyncio.TimeoutError:
-                ev.clear()
-                continue
-            sig = self._latest_signal(pid)
-            if sig is not None and self._is_fresh(sig):
-                return sig
-            ev.clear()
+        self._frames.release(pid)
 
     # ── frame acquisition ──────────────────────────────────────────────────────
 
     async def _acquire_image_url(self, pid: str) -> str:
         """Wait for a fresh frame, fetch and encode it to a JPEG data URL.
         Raises :class:`VisionUnavailable` if no usable frame arrives in time."""
-        sig = self._latest_signal(pid)
-        if not (sig and self._is_fresh(sig)):
-            sig = await self._wait_for_frame(pid)
-            if sig is None:
-                raise VisionUnavailable("No camera frame available — please try again.")
-        frame = await self._endpoint.request_frame(sig)
-        if frame is None:
-            raise VisionUnavailable("Frame data unavailable — please retry.")
+        try:
+            frame = await self._frames.get_frame(pid)
+        except LiveFrameUnavailable as exc:
+            raise VisionUnavailable(str(exc)) from exc
         loop = asyncio.get_running_loop()
-        image_url = await loop.run_in_executor(
+        return await loop.run_in_executor(
             None, lambda: encode_image(frame_to_pil(frame)),
         )
-        logger.info("vision  pid={!r}  {}x{}", pid, frame.width, frame.height)
-        return image_url
 
     # ── the VLM call ────────────────────────────────────────────────────────────
 

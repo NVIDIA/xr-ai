@@ -7,8 +7,7 @@ The hub may deliver frames in any of several pixel formats depending on the
 client and codec. We convert them all to RGB PIL Images for the VLM API.
 
 This was previously copy-pasted into every vision sample's worker; it now lives
-in the shared ``xr-ai-capabilities`` package alongside :class:`VisionModule`,
-its only consumer.
+in the shared ``xr-ai-skills`` package alongside :class:`VisionModule`.
 """
 from __future__ import annotations
 
