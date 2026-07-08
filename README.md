@@ -323,6 +323,10 @@ uv sync
 uv run xr_render_demo
 ```
 
+By default this serves the web / WebRTC client (`NV_DEVICE_PROFILE=auto-webrtc`).
+For a native Apple Vision Pro client, start it with `NV_DEVICE_PROFILE=auto-native`
+instead — see [`docs/xr-render-demo.md`](docs/xr-render-demo.md#selecting-the-client-type-webrtc-vs-native).
+
 On first run the orchestrator automatically downloads the pinned LOVR version to
 `deps/lovr/` inside the repo and builds the web vendor bundle (requires npm
 and network access). Both steps are skipped on subsequent runs.
