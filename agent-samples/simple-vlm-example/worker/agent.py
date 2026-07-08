@@ -5,20 +5,18 @@
 SimpleVlmBrain — vision Q&A on the unified pipecat pipeline.
 
 Behaviour is identical to the original sample; the difference is that the
-live-camera machinery (frame tracking, camera-on-demand, the streaming VLM
-call) is no longer re-implemented here — it lives in the shared, reusable
+live-camera machinery (frame tracking, camera-on-demand, the VLM call) is no
+longer re-implemented here — it lives in the shared, reusable
 :class:`xr_ai_capabilities.VisionModule`. This brain is thin glue: it routes a query
 to the module, owns the data-channel side path, and interrupts on supersede.
 """
 from __future__ import annotations
 
-from typing import AsyncIterator
-
 from loguru import logger
 from pipecat.frames.frames import InterruptionFrame
 from xr_ai_agent import DataMessage
 from xr_ai_models import VLMService
-from xr_ai_capabilities import VisionModule
+from xr_ai_capabilities import VisionModule, VisionUnavailable
 from xr_ai_pipecat import BrainProcessor, GatedQueryFrame
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
@@ -83,9 +81,15 @@ class SimpleVlmBrain(BrainProcessor):
 
     async def handle_query(
         self, pid: str, text: str, fresh_match: bool,
-    ) -> AsyncIterator[str]:
-        # Return (not yield) the async iterator — the base awaits then iterates.
-        return self._vision.ask(pid, text)
+    ) -> str:
+        # Status badge is this brain's responsibility — perceive() stays out of it.
+        await self._transport.endpoint.set_status("processing", pid)
+        try:
+            return await self._vision.perceive(pid, text)
+        except VisionUnavailable as exc:
+            return str(exc)
+        finally:
+            await self._transport.endpoint.set_status("idle", pid)
 
     async def on_user_started_speaking(self, pid: str) -> None:
         pass

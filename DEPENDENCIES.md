@@ -75,10 +75,10 @@ xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
     ``ProcessorEndpoint`` and depends only on the core SDK — NOT on pipecat or
     any pipeline framework — so both pipecat and non-pipecat agents can compose
     it. Hosts ``pixels`` (frame → PIL → JPEG; numpy + Pillow) and ``vision``
-    (VisionModule — live-camera VLM Q&A with camera-on-demand, exposing ``ask``
-    for streaming TTS and ``perceive`` for agentic tool loops), so vision
-    samples no longer copy that code per-worker. A pipecat brain wires it up by
-    passing ``transport.endpoint``.
+    (VisionModule — live-camera VLM Q&A with camera-on-demand, exposing
+    ``perceive`` for a string answer), so vision samples no longer copy that
+    code per-worker. A pipecat brain wires it up by passing
+    ``transport.endpoint``.
 
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24

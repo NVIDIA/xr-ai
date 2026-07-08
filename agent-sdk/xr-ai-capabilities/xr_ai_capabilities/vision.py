@@ -9,27 +9,24 @@ that each used to re-implement it. It owns:
 
   * frame tracking — the latest ``FrameSignal`` per participant, with a
     wall-clock freshness check;
-  * the VLM call — fetch the freshest frame, encode it, and stream answer
-    tokens for downstream sentence-batched TTS (or text output).
+  * the VLM call — fetch the freshest frame, encode it, and return the answer
+    as a string.
 
 Camera streaming is always-on (the client streams continuously); this module
 never sends ``startCamera`` / ``stopCamera`` control messages.
 
-A brain builds a ``VisionModule`` when it has a VLM service to back it, and uses
-it for any "what do you see"-style query. It exposes two call styles: ``ask``
-(streams tokens, for TTS) and ``perceive`` (returns a string, for agentic tool
-loops); both share one frame-acquisition path.
+A brain builds a ``VisionModule`` when it has a VLM service to back it, and calls
+``perceive`` for any "what do you see"-style query, getting back a string answer.
 
 The module is framework-agnostic: it talks to the hub through a
-``ProcessorEndpoint`` (subscribing to ``FrameSignal`` events, fetching frames,
-and setting agent status) and has no dependency on pipecat. A pipecat brain
-passes ``transport.endpoint``; a non-pipecat agent passes its own endpoint.
+``ProcessorEndpoint`` (subscribing to ``FrameSignal`` events and fetching frames)
+and has no dependency on pipecat. A pipecat brain passes ``transport.endpoint``;
+a non-pipecat agent passes its own endpoint.
 """
 from __future__ import annotations
 
 import asyncio
 import time
-from typing import AsyncIterator
 
 from loguru import logger
 from xr_ai_agent import FrameSignal, ProcessorEndpoint
@@ -59,12 +56,12 @@ class VisionModule:
     ----------
     endpoint:
         The ``ProcessorEndpoint`` to talk to the hub through; the module
-        subscribes to frame signals, fetches frames, and sets agent status.
+        subscribes to frame signals and fetches frames on demand.
         A pipecat brain passes ``transport.endpoint``.
     vlm:
-        A ``VLMService`` (its ``stream`` is used for token-by-token answers).
+        A ``VLMService`` (its ``ask_image`` is used to answer).
     system_prompt:
-        Default system prompt for the VLM (overridable per ``ask``).
+        Default system prompt for the VLM (overridable per call).
     frame_max_age_s:
         Maximum age of a cached frame signal before it is considered stale.
     frame_timeout_s:
@@ -168,53 +165,19 @@ class VisionModule:
         logger.info("vision  pid={!r}  {}x{}", pid, frame.width, frame.height)
         return image_url
 
-    # ── the VLM call: streaming (ask) and one-shot (perceive) ──────────────────
-
-    async def ask(
-        self, pid: str, query: str, *, system_prompt: str | None = None,
-    ) -> AsyncIterator[str]:
-        """Acquire a fresh frame and **stream** VLM answer tokens (for TTS).
-
-        On a failure the user should hear, yields a single canned line and
-        returns — downstream TTS / text output handles it like any answer.
-
-        Status contract: ``ask`` drives the agent-status badge — it sets
-        ``"processing"`` for the duration of the VLM stream and ``"idle"``
-        after. (``perceive`` deliberately does *not*; see its note.)
-        """
-        t0 = time.monotonic()
-        try:
-            image_url = await self._acquire_image_url(pid)
-        except VisionUnavailable as exc:
-            yield str(exc)
-            return
-        await self._endpoint.set_status("processing", pid)
-        try:
-            async for token in self._vlm.stream(
-                image_url, query, system_prompt=system_prompt or self._system_prompt,
-            ):
-                yield token
-        except Exception as exc:
-            logger.error("vlm-server error: {}", exc)
-            yield "VLM server unavailable — please retry."
-            return
-        finally:
-            await self._endpoint.set_status("idle", pid)
-            logger.info("vision call pid={!r} elapsed={:.2f}s", pid, time.monotonic() - t0)
+    # ── the VLM call ────────────────────────────────────────────────────────────
 
     async def perceive(
         self, pid: str, query: str, *, system_prompt: str | None = None,
     ) -> str:
-        """Acquire a fresh frame and return the VLM answer as a **string**
-        (one-shot). Use this from an agentic tool loop that needs a value to feed
-        back to the LLM rather than a token stream for TTS.
+        """Acquire a fresh frame and return the VLM answer as a **string**.
 
         Raises :class:`VisionUnavailable` (with a speakable message) on no
         frame, VLM error, or an empty answer.
 
-        Status contract: unlike ``ask``, ``perceive`` does **not** touch the
-        agent-status badge — the calling agentic loop owns its own status (it
-        is typically mid-turn doing other work), so this method stays out of it.
+        Does not touch the agent-status badge — the caller owns its own status
+        (it is typically mid-turn doing other work), so this method stays out
+        of it.
         """
         t0 = time.monotonic()
         image_url = await self._acquire_image_url(pid)   # raises VisionUnavailable

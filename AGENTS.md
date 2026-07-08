@@ -133,11 +133,11 @@ the core SDK (no pipecat), so both pipecat and non-pipecat agents can compose
 them:
 
 - **Live-camera vision Q&A** — `VisionModule` (frame tracking,
-  camera-on-demand, the VLM call). Two call styles over one
-  frame-acquisition path: `ask(pid, q)` **streams** tokens (for TTS) and
-  `perceive(pid, q)` returns a **string** (for agentic tool loops, raising
-  `VisionUnavailable`). `pixels` is its frame → JPEG codec. A pipecat brain
-  constructs it with `VisionModule(transport.endpoint, vlm)`.
+  camera-on-demand, the VLM call). `perceive(pid, q)` returns a **string**
+  answer (raising `VisionUnavailable` on failure) over one frame-acquisition
+  path; the caller owns status-badge and streaming concerns. `pixels` is its
+  frame → JPEG codec. A pipecat brain constructs it with
+  `VisionModule(transport.endpoint, vlm)`.
 
 A new vision sample's brain therefore reduces to thin glue over `VisionModule`;
 a voice sample gets the wake word from config alone.
