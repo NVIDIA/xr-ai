@@ -608,20 +608,18 @@ class _CaptureTransportWithEndpoint(_CaptureTransport):
 
 
 class _FakeVLM:
-    """VLMService double — records the ask_image call and returns a canned
-    ChatResponse so we can assert the perception path reached the VLM."""
+    """VLMService double that records the canonical streaming call."""
 
     def __init__(self, answer: str = "It's a red mug.") -> None:
         self.answer = answer
         self.calls: list[tuple[str, str]] = []
 
-    async def ask_image(self, image, question, *, system_prompt: str = "",
-                        **_kw) -> ChatResponse:
+    async def stream(self, image, question, *, system_prompt: str = "", **_kw):
         self.calls.append((image, question))
-        return ChatResponse(
-            content=self.answer, reasoning=None, tool_calls=None,
-            finish_reason="stop", raw={},
-        )
+        yield self.answer
+
+    async def ask_image(self, *args, **kwargs) -> ChatResponse:
+        raise AssertionError("VisionModule must materialize the canonical stream")
 
     async def close(self) -> None:
         pass

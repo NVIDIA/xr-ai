@@ -9,14 +9,17 @@ that each used to re-implement it. It owns:
 
   * frame tracking — the latest ``FrameSignal`` per participant, with a
     wall-clock freshness check;
-  * the VLM call — fetch the freshest frame, encode it, and return the answer
-    as a string.
+  * the VLM call — fetch the freshest frame, encode it, and stream the answer.
+
+Callers that need a completed value use ``perceive()``, which collects that
+same stream into a string.
 
 Camera streaming is always-on (the client streams continuously); this module
 never sends ``startCamera`` / ``stopCamera`` control messages.
 
-A brain builds a ``VisionModule`` when it has a VLM service to back it, and calls
-``perceive`` for any "what do you see"-style query, getting back a string answer.
+A brain builds a ``VisionModule`` when it has a VLM service to back it. Voice
+pipelines use ``stream`` so sentence-batched TTS can start before generation
+finishes; tool loops use ``perceive`` when they need a completed string.
 
 The module is framework-agnostic: it talks to the hub through a
 ``ProcessorEndpoint`` (subscribing to ``FrameSignal`` events and fetching frames)
@@ -27,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import AsyncIterator
 
 from loguru import logger
 from xr_ai_agent import FrameSignal, ProcessorEndpoint
@@ -59,7 +63,7 @@ class VisionModule:
         subscribes to frame signals and fetches frames on demand.
         A pipecat brain passes ``transport.endpoint``.
     vlm:
-        A ``VLMService`` (its ``ask_image`` is used to answer).
+        A ``VLMService`` (its token stream is used to answer).
     system_prompt:
         Default system prompt for the VLM (overridable per call).
     frame_max_age_s:
@@ -167,10 +171,10 @@ class VisionModule:
 
     # ── the VLM call ────────────────────────────────────────────────────────────
 
-    async def perceive(
+    async def stream(
         self, pid: str, query: str, *, system_prompt: str | None = None,
-    ) -> str:
-        """Acquire a fresh frame and return the VLM answer as a **string**.
+    ) -> AsyncIterator[str]:
+        """Acquire a fresh frame and stream VLM answer chunks.
 
         Raises :class:`VisionUnavailable` (with a speakable message) on no
         frame, VLM error, or an empty answer.
@@ -181,16 +185,30 @@ class VisionModule:
         """
         t0 = time.monotonic()
         image_url = await self._acquire_image_url(pid)   # raises VisionUnavailable
+        has_content = False
         try:
-            resp = await self._vlm.ask_image(
+            async for chunk in self._vlm.stream(
                 image_url, query, system_prompt=system_prompt or self._system_prompt,
-            )
+            ):
+                if chunk.strip():
+                    has_content = True
+                yield chunk
         except Exception as exc:
             logger.error("vlm-server error: {}", exc)
             raise VisionUnavailable("VLM server unavailable — please retry.") from exc
         finally:
             logger.info("vision call pid={!r} elapsed={:.2f}s", pid, time.monotonic() - t0)
-        answer = (resp.content or "").strip()
-        if not answer:
+        if not has_content:
             raise VisionUnavailable("I couldn't make out anything in the view.")
-        return answer
+
+    async def perceive(
+        self, pid: str, query: str, *, system_prompt: str | None = None,
+    ) -> str:
+        """Collect the canonical VLM stream and return a completed string."""
+        chunks = [
+            chunk
+            async for chunk in self.stream(
+                pid, query, system_prompt=system_prompt,
+            )
+        ]
+        return "".join(chunks).strip()

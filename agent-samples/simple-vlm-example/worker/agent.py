@@ -12,6 +12,8 @@ to the module, owns the data-channel side path, and interrupts on supersede.
 """
 from __future__ import annotations
 
+from typing import AsyncIterator
+
 from loguru import logger
 from pipecat.frames.frames import InterruptionFrame
 from xr_ai_agent import DataMessage
@@ -81,13 +83,17 @@ class SimpleVlmBrain(BrainProcessor):
 
     async def handle_query(
         self, pid: str, text: str, fresh_match: bool,
-    ) -> str:
-        # Status badge is this brain's responsibility — perceive() stays out of it.
+    ) -> AsyncIterator[str]:
+        return self._stream_answer(pid, text)
+
+    async def _stream_answer(self, pid: str, text: str) -> AsyncIterator[str]:
+        # Status spans iteration because VLM failures can arrive after some chunks.
         await self._transport.endpoint.set_status("processing", pid)
         try:
-            return await self._vision.perceive(pid, text)
+            async for chunk in self._vision.stream(pid, text):
+                yield chunk
         except VisionUnavailable as exc:
-            return str(exc)
+            yield str(exc)
         finally:
             await self._transport.endpoint.set_status("idle", pid)
 
