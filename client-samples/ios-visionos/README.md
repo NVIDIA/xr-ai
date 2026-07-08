@@ -309,7 +309,7 @@ Connection section's **Host / IP**). `cloudxr_runtime` always runs
 alongside the hub in this repo's stack.
 
 XR support is currently limited to Apple Vision Pro, so the **XR Stream** row
-(the Start XR control) ships on **visionOS**. iOS / iPadOS builds run every
+(the Launch XR control) ships on **visionOS**. iOS / iPadOS builds run every
 other feature (agent, mic, camera, data) without an XR path.
 
 ### Two parallel transports

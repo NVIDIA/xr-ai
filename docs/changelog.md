@@ -76,9 +76,11 @@ taps. The load-bearing invariants in `AppModel`:
   `isPublishingXRStarted` guard stops overlapping observation ticks from launching
   concurrent publishers. Because `.connected` won't re-fire while the session
   stays up, a bounded retry loop republishes `xr.session.started` until
-  `hasPublishedXRStarted` is set. The latch resets on `.disconnected` so a second
-  XR session republishes. Duplicates are safe (the worker and `render-mcp` treat
-  the signal idempotently); a missed signal is the real failure.
+  `hasPublishedXRStarted` is set. A LiveKit return to `.connected` also re-arms
+  the publish, so a transient LiveKit reconnect overlapping XR connect can't
+  strand the signal. The latch resets on `.disconnected` so a second XR session
+  republishes. Duplicates are safe (the worker and `render-mcp` treat the signal
+  idempotently); a missed signal is the real failure.
 
 ### 2026-07-02 — Apple client: agent microphone and camera reliability
 

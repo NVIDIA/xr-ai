@@ -254,6 +254,14 @@ final class AppModel {
                     self.cameraIntendedOn = false
                     Task { await self.startCamera() }
                 }
+                #if os(visionOS)
+                // Re-arm the started-signal publish: a LiveKit reconnect that
+                // overlapped XR connect would have aborted the publish loop, and
+                // CloudXR won't re-emit `.connected` to retrigger it.
+                if self.xrState == .streaming {
+                    self.publishXRStartedWhenConnected()
+                }
+                #endif
             case .connecting:
                 break
             }
