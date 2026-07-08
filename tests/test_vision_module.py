@@ -9,7 +9,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
-from xr_ai_capabilities import VisionModule, VisionUnavailable
+from xr_ai_skills import VisionModule, VisionUnavailable
 
 _AGENT_PATH = (
     Path(__file__).resolve().parents[1]
