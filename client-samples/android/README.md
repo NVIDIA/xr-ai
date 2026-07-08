@@ -72,13 +72,11 @@ participant publishes an audio track — no explicit attachment step is needed.
 3. Let Gradle sync finish (downloads ~300 MB of dependencies on first run).
 4. Select a device or emulator running API 24+, then **Run ▶**.
 
-> **Note:** The Gradle wrapper binary (`gradle/wrapper/gradle-wrapper.jar`) is not
-> checked in because it is a binary artifact. Android Studio generates it automatically
-> during the first sync. For command-line builds, run:
-> ```bash
-> gradle wrapper --gradle-version 8.9
-> ./gradlew assembleDebug
-> ```
+For command-line builds, run:
+
+```bash
+./gradlew assembleDebug
+```
 
 ### Connecting to the server
 
