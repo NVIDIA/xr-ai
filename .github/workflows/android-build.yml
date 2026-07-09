@@ -9,9 +9,13 @@ name: android-build
 on:
   push:
     branches: [main]
-    paths: ['client-samples/android/**']
+    paths:
+      - 'client-samples/android/**'
+      - '.github/workflows/android-build.yml'
   pull_request:
-    paths: ['client-samples/android/**']
+    paths:
+      - 'client-samples/android/**'
+      - '.github/workflows/android-build.yml'
 
 concurrency:
   group: android-build-${{ github.ref }}
