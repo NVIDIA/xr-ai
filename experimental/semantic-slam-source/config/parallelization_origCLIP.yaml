@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Default configuration for Semantic SLAM Server
+
+server:
+  host: "localhost"
+  port: 50051
+  max_workers: 4
+  target_fps: 3.0  # Fixed to match current usage (processing FPS, not video FPS)
+  gpu_id: 0
+
+model:
+  device: "cuda:0"  # Default device for all models
+  
+  detection:
+    device: "cuda:0"  # Device for detection model (can be different from default)
+    detector: "dino"
+    box_threshold: 0.2
+    text_threshold: 0.2
+    nms_threshold: 0.5
+    precision: "float16"  # Model precision: "float16" or "float32"
+    
+  segmentation:
+    device: "cuda:0"  # Device for segmentation model
+    sam_variant: "mobilesam"  # Options: sam, mobilesam, lighthqsam
+    batched_sam: true
+    trt_sam: false
+    
+  clip:
+    device: "cuda:0"  # Device for CLIP model
+    model_name: "ViT-H-14"
+    pretrained: "laion2b_s32b_b79k"
+    precision: "fp16"
+    batch_size: 8
+    batched_clip: true
+    trt_clip: false
+    
+  captioning:
+    device: "cuda:0"  # Device for captioning model
+    class_set: "ram"
+    tagging_threshold: 0.64
+    add_bg_classes: true
+    accumu_classes: true
+    precision: "float16"
+    
+  visualization:
+    device: "cuda:1"  # Device for visualization
+    similarity_threshold: 0.86
+    clip_model: "ViT-H-14"
+    precision: "fp16"
+    batch_size: 1
+    use_trt: false
+    
+  mapping:
+    device: "cuda:0"  # Device for mapping operations
+    mask_conf_threshold: 0.25
+    sim_threshold: 0.5
+    skip_bg: false
+    object_based_downsampling: false
+
+paths:
+  # GSA path will be loaded from environment variable GSA_PATH
+  # If not set, defaults to ./external/Grounded-Segment-Anything
+  gsa_path: null
+  model_weights_dir: null  # defaults to ./model_weights
+  temp_output_dir: null    # defaults to ./main_server/temp_output_dir
+
+# Example multi-GPU configuration:
+# To use different devices for different models, set environment variables:
+# export DETECTION_DEVICE="cuda:0"
+# export SEGMENTATION_DEVICE="cuda:1" 
+# export CLIP_DEVICE="cuda:2"
+# export VISUALIZATION_DEVICE="cpu"

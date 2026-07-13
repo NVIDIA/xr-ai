@@ -29,6 +29,22 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `livekit-api`  | 0.7.0    | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
+| `fastmcp`      | >=2.0    | Apache-2.0    | https://github.com/jlowin/fastmcp |
+| `loguru`       | >=0.7    | MIT           | https://github.com/Delgan/loguru |
+
+## Python — `experimental/semantic-slam-source`
+
+This branch carries a legacy semantic-SLAM source snapshot for evaluation and
+migration reference. It is not the MCP integration on
+`feat/semantic-slam-module`, and it does not distribute third-party model
+repositories, model checkpoints, CUDA, TensorRT, or a Python environment.
+
+The snapshot's direct dependency, legacy model-component, binary-runtime, and
+source-attribution inventory is maintained with the snapshot at
+[`experimental/semantic-slam-source/THIRD_PARTY_NOTICES.md`](experimental/semantic-slam-source/THIRD_PARTY_NOTICES.md).
+That inventory reconciles shared components with `feat/semantic-slam-module`
+and records the additional GroundingDINO, RAM, gRPC, and video-codec surface
+required by the legacy code.
 
 ## Swift (iOS / visionOS client)
 
@@ -47,8 +63,12 @@ The full text of each SPDX license identifier referenced above is available at:
 
 - **Apache-2.0**: https://www.apache.org/licenses/LICENSE-2.0 — also bundled
   with this repository as [`LICENSE`](LICENSE).
+- **BSD-2-Clause**: https://opensource.org/license/bsd-2-clause
 - **BSD-3-Clause**: https://opensource.org/license/bsd-3-clause
+- **HPND**: https://opensource.org/license/historical-permission-notice-and-disclaimer (Pillow / PIL)
 - **MIT**: https://opensource.org/license/mit
+- **MPL-2.0**: https://www.mozilla.org/en-US/MPL/2.0/ (tqdm dual-license)
+- **PSF**: https://docs.python.org/3/license.html (matplotlib)
 
 Each upstream project repository linked above includes its own canonical
 license file (typically `LICENSE`, `LICENSE.txt`, or `COPYING`).

@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Dataset
+dataset_config: ./IPAD.yaml
+scene_id: train_3_interact
+start: 0
+end: -1
+stride: 1
+image_height: null # if null, it will be determined by dataconfig
+image_width: null # if null, it will be determined by dataconfig
+desired_height: 720
+desired_width:  1280
+# Input detections
+# gsa_variant: ram
+gsa_variant: none
+detection_folder_name: gsa_detections_${gsa_variant}
+det_vis_folder_name: gsa_vis_${gsa_variant}
+color_file_name: gsa_classes_${gsa_variant}
+
+device: cuda:0
+
+use_iou: !!bool True
+spatial_sim_type: overlap # "iou", "giou", "overlap"
+phys_bias: 0.0
+match_method: "sim_sum" # "sep_thresh", "sim_sum"
+# Only when match_method=="sep_thresh"
+semantic_threshold: 0.5
+physical_threshold: 0.5
+# Only when match_method=="sim_sum"
+# sim_threshold: 1.2
+
+# For contain_number
+use_contain_number: !!bool False
+contain_area_thresh: 0.95
+contain_mismatch_penalty: 0.5
+
+# Selection criteria on the 2D masks
+mask_area_threshold: 25 # mask with pixel area less than this will be skipped
+mask_conf_threshold: 0.95 # mask with lower confidence score will be skipped
+max_bbox_area_ratio: 0.5 # boxes with larger areas than this will be skipped
+skip_bg: !!bool True
+min_points_threshold: 16 # projected and sampled pcd with less points will be skipped
+
+# point cloud processing
+downsample_voxel_size: 0.03
+dbscan_remove_noise: !!bool True
+dbscan_eps: 0.1
+dbscan_min_points: 10
+
+# Selection criteria of the fused object point cloud
+obj_min_points: 10
+obj_min_detections: 2
+
+# For merge_overlap_objects() function
+merge_overlap_thresh: 0.7      # -1 means do not perform the merge_overlap_objects()   TODO: Consider removing this, perhaps this causes random objects to merge, when they actually shouldn't
+merge_visual_sim_thresh: 0.8   # Merge only if the visual similarity is larger
+merge_text_sim_thresh: 0.8     # Merge only if the text cosine sim is larger
+
+# Periodically perform post-process operations every k frame
+# -1 means not perform them during the run. They are performed at the end anyway. 
+denoise_interval: 1           # Run DBSCAN every k frame. This operation is heavy
+filter_interval: 5            # Filter objects that have too few associations or are too small
+merge_interval: 5             # Merge objects based on geometric and semantic similarity
+
+# Output point cloud
+save_pcd: !!bool True
+THRESHOLD: 1.2
+save_suffix: overlap_maskconf0.95_simsum${THRESHOLD}_dbscan.1_merge20_masksub
+
+# Visualization
+vis_render: !!bool False           # If True, the objects will be rendered to a video. 
+debug_render: !!bool False     # If True, the vis.run() will be called and used for debugging
+class_agnostic: !!bool True   # If set, the color will be set by instance, rather than most common class
+
+save_objects_all_frames: !!bool False   # If True, the objects at all timesteps will be saved for future animation
+render_camera_path: "replica_room0.json"
+save_interval: 2

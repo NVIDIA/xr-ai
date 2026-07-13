@@ -17,6 +17,19 @@ Features, APIs, documentation, and behavior may change as the project evolves.
 Expect bugs, incomplete functionality, and breaking changes. Use at your own
 discretion, and please report issues or feedback to help improve the project.
 
+## Experimental semantic-SLAM source snapshot
+
+`experimental/semantic-slam-source/` preserves the legacy semantic-SLAM source
+tree for evaluation and migration reference. It is not an XR AI service or MCP
+server: it retains its legacy gRPC server, bootstrap script, and external model
+requirements. The production-oriented experimental integration is maintained
+separately on `feat/semantic-slam-module`.
+
+The snapshot contains no model weights or third-party model repositories. Its
+dependency and attribution inventory is in
+[`experimental/semantic-slam-source/THIRD_PARTY_NOTICES.md`](experimental/semantic-slam-source/THIRD_PARTY_NOTICES.md);
+model checkpoint terms require separate review before use.
+
 ## What is XR AI?
 
 XR AI is a developer stack for building powerful XR and AI systems across devices, platforms, and deployment environments. It connects web, iOS/visionOS, AR glasses, and XR headset clients to GPU-accelerated AI services, tool-using agents, and the CloudXR stack for remote rendering.

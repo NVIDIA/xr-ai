@@ -1,0 +1,56 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package xrVis;
+
+// message MapFile {
+//     bool fileName = 1;    
+// }
+
+message PointCloud {
+    repeated float points = 1;  
+    int32 num_points = 3;
+    repeated float centroid = 4;
+}
+
+message allPointClouds {
+    repeated PointCloud pointClouds = 1;
+    repeated float colors = 2;
+    int32 numPointClouds = 3;
+    float serverQueryProcessing = 4;
+}
+
+message Objects {
+    repeated float pointCloud = 1;          // Array of floats. 3 floats per point
+    repeated float BBox = 2;        // must be another array of Points. 8 points, or 2 or 3 points? Each point is 3 floats
+    repeated float clip_embeddings = 3; // 1024 floats
+    int32 num_points = 4;               // number of points in the pointCloud. each point is 3 floats
+    repeated float centroid = 5;        // 3 floats
+    int32 index = 6;          // index of the object
+}
+
+message objectUpdate {
+    repeated Objects objects = 1;
+    int32 num_objects = 2;
+    repeated int32 remove_indices = 3;
+    float serverProcessLatency = 4;
+    repeated int32 frameNumber = 5;
+    int64 clientTimeStamp = 6;
+}
+
+message Status {
+    bool message = 1;
+}
+
+message AudioFile{
+    bytes chunk_data = 1;
+    string textQuery = 2;
+}
+
+service VisualizerServer {
+    rpc clientTextQuery(stream AudioFile) returns (allPointClouds);
+    rpc updateMap(Status) returns (Status);
+    rpc updateDeviceMap(stream objectUpdate) returns (Status);   
+}

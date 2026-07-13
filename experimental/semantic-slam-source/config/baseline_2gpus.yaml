@@ -1,0 +1,139 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Default configuration for Semantic SLAM Server
+
+server:
+  host: "localhost"
+  port: 50051
+  max_workers: 4
+  target_fps: 3.0  # Fixed to match current usage (processing FPS, not video FPS)
+  gpu_id: 0
+  
+  # Queue sizes for pipeline stages
+  inference_queue_size: 1     # GRPC → Inference
+  mapping_queue_size: 5       # Inference → Mapping
+  visualization_queue_size: 2 # Mapping → Visualization
+
+video:
+  # Image dimensions
+  image_width: 1280
+  image_height: 720
+  
+  # Depth dimensions  
+  depth_width: 256
+  depth_height: 144
+  
+  # Dataset-specific dimensions
+  dataset_depth_width: 1200
+  dataset_depth_height: 680
+  
+  # Processing parameters
+  sharpness_threshold: 100.0
+  temp_output_dir: "./main_server/temp_output_dir"
+
+dataset:
+  enabled: false  # Disable dataset saving by default
+  output_directory: "./datasets"
+  auto_increment_dirs: true
+  
+  # What to save
+  save_images: true
+  save_depth: true
+  save_poses: true
+  
+  # Directory structure
+  results_subdir: "results"
+
+frame_processing:
+  default_client_fps: 30
+  initial_frame_index: -1000
+  frame_skip_logic: "fps_based"
+
+grpc:
+  max_send_message_length: 104857600  # 100MB in bytes
+  max_receive_message_length: 104857600  # 100MB in bytes
+  keepalive_time_ms: 30000
+  keepalive_timeout_ms: 5000
+  keepalive_permit_without_calls: true
+  max_connection_idle_ms: 60000
+
+logging:
+  enabled: true
+  log_directory: "logs_performance"
+  console_log_interval: 20
+  csv_logging: true
+  json_summary: true
+  keep_recent_frames: 100
+
+model:
+  device: "cuda:0"  # Default device for all models
+  
+  detection:
+    enabled: true  # Enable detection system by default
+    device: "cuda:0"  # Device for detection model (can be different from default)
+    detector: "dino"
+    box_threshold: 0.2
+    text_threshold: 0.2
+    nms_threshold: 0.5
+    precision: "float16"  # Model precision: "float16" or "float32"
+    
+  segmentation:
+    device: "cuda:0"  # Device for segmentation model
+    sam_variant: "mobilesam"  # Options: sam, mobilesam, lighthqsam
+    batched_sam: false
+    trt_sam: false
+    
+  clip:
+    device: "cuda:0"  # Device for CLIP model
+    model_name: "MobileCLIP-B"
+    pretrained: "datacompdr_lt"
+    precision: "fp16"
+    batch_size: 8
+    batched_clip: false
+    trt_clip: false
+    
+  captioning:
+    device: "cuda:0"  # Device for captioning model
+    class_set: "ram"
+    tagging_threshold: 0.64
+    add_bg_classes: true
+    accumu_classes: true
+    precision: "float16"
+    
+  visualization:
+    device: "cuda:1"  # Device for visualization
+    similarity_threshold: 0.86
+    clip_model: "MobileCLIP-B"
+    pretrained: "datacompdr_lt"
+    precision: "fp16"
+    batch_size: 1
+    use_trt: false
+    
+  mapping:
+    device: "cuda:0"  # Device for mapping operations
+    mask_conf_threshold: 0.25
+    sim_threshold: 0.5
+    skip_bg: false
+    object_based_downsampling: false
+
+paths:
+  # GSA path will be loaded from environment variable GSA_PATH
+  # If not set, defaults to ./external/Grounded-Segment-Anything
+  gsa_path: null
+  model_weights_dir: null  # defaults to ./model_weights
+  temp_output_dir: null    # defaults to ./main_server/temp_output_dir
+
+debug:
+  # Inference results dumping for reproducibility debugging
+  dump_inference: false           # Enable dumping of inference results (detections, CLIP features)
+  dump_dir: "./debug_dumps"       # Directory to save debug dumps
+  current_scene: null             # Scene name for organized dumps (auto-detected if null)
+  config_name: null               # Config name for organized dumps (auto-detected if null)
+
+# Example multi-GPU configuration:
+# To use different devices for different models, set environment variables:
+# export DETECTION_DEVICE="cuda:0"
+# export SEGMENTATION_DEVICE="cuda:1" 
+# export CLIP_DEVICE="cuda:2"
+# export VISUALIZATION_DEVICE="cpu"

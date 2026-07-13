@@ -156,6 +156,22 @@ xr-media-hub  (server-runtime/)
     └── cryptography >=42.0
     PyNvVideoCodec >=1.0 (NVENC H.264 encoder; used when video_recording.enabled: true)
 
+semantic-slam-source  (experimental/semantic-slam-source/)
+    └── Legacy source snapshot only; it is not an XR AI service or MCP server.
+    └── torch ==2.0.1, torchvision ==0.15.2, numpy >=1.24.3,<2
+    └── opencv-python, Pillow, supervision, open-clip-torch, omegaconf,
+        matplotlib, scipy, natsort, open3d, faiss-cpu, pyyaml
+    └── grpcio, grpcio-tools, PyNvVideoCodec, transformers, openai,
+        hydra-core, wandb, h5py, tyro, tqdm, scikit-learn, imageio, kornia,
+        ftfy, fairscale, addict, fvcore, iopath, timm, yapf, pycocotools
+    └── Optional externally provisioned model components: chamferdist,
+        PyTorch3D, gradSLAM, Segment Anything, GroundingDINO,
+        Recognize Anything Model (RAM), MobileSAM, and SAM-HQ.
+    The retained legacy gRPC server, auto-bootstrap script, model downloads,
+    and checkpoint requirements are not integrated with XR AI. See
+    experimental/semantic-slam-source/THIRD_PARTY_NOTICES.md for licenses,
+    provenance, and binary/runtime caveats.
+
 transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=2.0

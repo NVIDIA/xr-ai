@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Lightweight config for the SemanticSLAM end-to-end test (tests/test_replica_e2e.py).
+# SAM-only (no open-vocab detector), no TensorRT, small CLIP backbone -- the
+# minimal real pipeline that runs without GroundingDINO/captioning or prebuilt
+# TRT engines.
+
+server:
+  host: "localhost"
+  port: 50051
+  max_workers: 2
+  target_fps: 5.0
+  gpu_id: 0
+  inference_queue_size: 1
+  mapping_queue_size: 5
+  visualization_queue_size: 2
+
+model:
+  device: "cuda:0"
+
+  detection:
+    enabled: false          # SAM-only mode (no GroundingDINO / captioning)
+    device: "cuda:0"
+    detector: "dino"
+    box_threshold: 0.2
+    text_threshold: 0.2
+    nms_threshold: 0.5
+    precision: "float16"
+
+  segmentation:
+    device: "cuda:0"
+    sam_variant: "sam"      # required when detection is disabled
+    batched_sam: false
+    trt_sam: false          # no TensorRT
+
+  clip:
+    device: "cuda:0"
+    model_name: "ViT-B-32"  # small backbone; ~600MB vs ViT-H ~3.9GB
+    pretrained: "laion2b_s34b_b79k"
+    precision: "fp16"
+    batch_size: 8
+    batched_clip: false
+    trt_clip: false         # no TensorRT
+
+  mapping:
+    device: "cuda:0"
+    mask_conf_threshold: 0.25
+    sim_threshold: 0.5
+    skip_bg: false
+    object_based_downsampling: false
+
+paths:
+  gsa_path: null            # defaults to ./external/Grounded-Segment-Anything
+
+debug:
+  dump_inference: false

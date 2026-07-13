@@ -1,0 +1,103 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "semantic-slam"
+version = "0.1.0"
+description = "Semantic SLAM: real-time object detection + mapping with a clean push/query Python API"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "NVIDIA XR-AI" }]
+
+# Core runtime that resolves cleanly from PyPI / the pinned PyTorch index.
+# The heavy, source-built model stack (GroundingDINO, SAM, pytorch3d) lives in
+# the `models` extra + scripts/install_models.sh, because it cannot be locked
+# reproducibly across CUDA/torch builds.
+dependencies = [
+    "torch==2.0.1",
+    "torchvision==0.15.2",
+    "numpy>=1.24.3,<2",
+    "opencv-python>=4.9.0,<4.11.0",
+    "Pillow>=9.5.0",
+    "grpcio>=1.65.0",
+    "grpcio-tools>=1.65.0",
+    "supervision>=0.14.0",
+    "pynvvideocodec>=1.0.0",
+    "distinctipy>=1.3.0",
+    "open-clip-torch>=2.26.0",
+    "transformers>=4.25.1,<4.26.0",
+    "openai>=1.37.0",
+    "hydra-core>=1.3.0",
+    "omegaconf>=2.3.0",
+    "wandb>=0.17.0",
+    "h5py>=3.11.0",
+    "tyro>=0.8.0",
+    "tqdm>=4.65.0",
+    "matplotlib>=3.9.0",
+    "scikit-learn>=1.5.0",
+    "scipy>=1.10.0,<1.15.0",
+    "imageio>=2.34.0",
+    "kornia==0.7.3",  # newer kornia JIT-scripts fail to compile under torch 2.0.1 (via gradslam)
+    "natsort>=8.4.0",
+    "open3d>=0.18.0",
+    "faiss-cpu>=1.7.4",
+    "ftfy>=6.2.0",
+    "fairscale>=0.4.4",
+    "addict>=2.4.0",
+    "pyyaml>=6.0",
+    # Runtime deps of the git-installed model stack (installed with --no-deps by
+    # scripts/setup_env.sh), kept here so they are locked + present up front.
+    "fvcore>=0.1.5",
+    "iopath>=0.1.9",
+    "timm",            # GroundingDINO + RAM backbone
+    "yapf",            # GroundingDINO SLConfig
+    "pycocotools",     # GroundingDINO visualizer / RAM
+]
+
+# NOTE: the model stack (chamferdist, pytorch3d, gradslam, segment-anything) is
+# deliberately NOT listed here. It builds CUDA extensions from source and is
+# fetched from git; PyPI gradslam also pins an ancient open3d that conflicts
+# with ours. Listing it would break `uv sync` cross-platform resolution.
+# scripts/setup_env.sh installs that stack into the venv on first launch.
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+semantic-slam-server = "server.main:main"
+
+# Clean, importable Python API. See semantic_slam/__init__.py.
+[project.urls]
+Homepage = "https://github.com/nvidia/xr-ai"
+
+[tool.uv]
+# These build CUDA extensions against the already-installed torch in the venv,
+# so they must NOT be built in an isolated env (which lacks torch).
+# scripts/setup_env.sh sets CUDA_HOME / TORCH_CUDA_ARCH_LIST / CC / CXX before
+# installing them.
+no-build-isolation-package = ["pytorch3d", "chamferdist", "gradslam"]
+
+# Pin torch/torchvision to the CUDA 11.8 wheels that pytorch3d 0.7.7 is built
+# against. uv selects this index only for the packages mapped below.
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu118" }
+torchvision = { index = "pytorch-cu118" }
+# NOTE: the `models` extra (pytorch3d/gradslam/segment-anything/chamferdist) is
+# intentionally NOT given git sources here -- doing so makes even a core
+# `uv sync` fetch git refs and build CUDA extensions. scripts/setup_env.sh
+# installs them explicitly (with the CUDA build env) via `uv pip install
+# git+...`, keeping the default sync fast and git-independent.
+
+[tool.hatch.build.targets.wheel]
+packages = ["semantic_slam", "slam", "server", "config"]

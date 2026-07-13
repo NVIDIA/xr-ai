@@ -1,0 +1,67 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package xr;
+
+message VideoFrame {
+  // Encoded frame data.
+  oneof data {
+    bytes data_h265 = 1;
+  }
+
+  // Starts at zero and increases by one for each frame.
+  int32 frame_number = 2;
+
+  // The instant when the frame was captured.
+  int64 timestamp_us = 3;
+}
+
+message VideoStatus {
+  bool success = 1;
+}
+
+message PoseData{
+  float pose0_0 = 1;
+  float pose0_1 = 2;
+  float pose0_2 = 3;
+  float pose0_3 = 4;
+
+  float pose1_0 = 5;
+  float pose1_1 = 6;
+  float pose1_2 = 7;
+  float pose1_3 = 8;
+
+  float pose2_0 = 9;
+  float pose2_1 = 10;
+  float pose2_2 = 11;
+  float pose2_3 = 12;
+
+  float pose3_0 = 13;
+  float pose3_1 = 14;
+  float pose3_2 = 15;
+  float pose3_3 = 16;
+}
+
+message UpstreamSyncMessage {
+  VideoFrame image = 1;
+  repeated float depthArr = 2 [packed=true];
+  PoseData pose = 3;
+  int32 fps = 4;
+}
+
+message UpstreamSyncMessage_dataset {
+  VideoFrame image = 1;
+  // repeated float depth = 2 [packed=true];
+  bytes depth = 2 ;
+  repeated float pose = 3 [packed=true];
+  int32 fps = 4;
+  int32 scaling_factor = 5;
+  int64 timestamp_ns = 6;
+}
+
+service XrService {
+  rpc UploadSyncMessage_dataset(stream UpstreamSyncMessage_dataset) returns (VideoStatus) {}
+  rpc UploadSyncMessage(stream UpstreamSyncMessage) returns (VideoStatus) {}
+}
