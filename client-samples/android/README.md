@@ -61,7 +61,7 @@ participant publishes an audio track — no explicit attachment step is needed.
 | Android Studio | Hedgehog (2023.1.1) or later |
 | JDK | 17 |
 | Android Gradle Plugin | 8.5 |
-| Kotlin | 2.0 |
+| Kotlin | 2.4 |
 | Min Android SDK | API 24 (Android 7.0) |
 | Target Android SDK | API 34 (Android 14) |
 
@@ -72,13 +72,11 @@ participant publishes an audio track — no explicit attachment step is needed.
 3. Let Gradle sync finish (downloads ~300 MB of dependencies on first run).
 4. Select a device or emulator running API 24+, then **Run ▶**.
 
-> **Note:** The Gradle wrapper binary (`gradle/wrapper/gradle-wrapper.jar`) is not
-> checked in because it is a binary artifact. Android Studio generates it automatically
-> during the first sync. For command-line builds, run:
-> ```bash
-> gradle wrapper --gradle-version 8.9
-> ./gradlew assembleDebug
-> ```
+For command-line builds, run:
+
+```bash
+./gradlew assembleDebug
+```
 
 ### Connecting to the server
 

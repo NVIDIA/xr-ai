@@ -11,6 +11,15 @@
       }
     },
     {
+      "identity" : "cloudxr-framework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/NVIDIA/cloudxr-framework",
+      "state" : {
+        "revision" : "0a14752fa95cf10fb7a8d0a0d52f6388f5e6b359",
+        "version" : "6.1.0"
+      }
+    },
+    {
       "identity" : "livekit-uniffi-xcframework",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/livekit/livekit-uniffi-xcframework.git",

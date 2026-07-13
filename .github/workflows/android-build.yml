@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: android-build
+
+# Build-only smoke test for the Android sample client. Catches wrapper
+# breakage and AGP/Kotlin/Gradle incompatibilities; no emulator, no tests.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client-samples/android/**'
+      - '.github/workflows/android-build.yml'
+  pull_request:
+    paths:
+      - 'client-samples/android/**'
+      - '.github/workflows/android-build.yml'
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assemble:
+    name: assembleDebug
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: client-samples/android
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
