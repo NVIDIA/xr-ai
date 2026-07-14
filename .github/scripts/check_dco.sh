@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-if [ -n "${1:-}" ]; then
+if [[ -n "${1:-}" ]]; then
     msg_file="$1"
 else
     git_dir=$(git rev-parse --git-dir 2>/dev/null) || git_dir=".git"
@@ -18,14 +18,14 @@ if grep -qP "^Signed-off-by:\s+\S+.*<[^@\s]+@[^@\s]+>" "$msg_file"; then
     exit 0
 fi
 
-echo ""
-echo "ERROR: Commit is missing a DCO Signed-off-by trailer."
-echo ""
-echo "  Fix: git commit --amend -s"
-echo ""
-echo "  Or add to your git config so every commit signs off automatically:"
-echo "    git config --global alias.c 'commit -s'"
-echo ""
-echo "  See https://developercertificate.org/ and AGENTS.md § DCO sign-off."
-echo ""
+echo "" >&2
+echo "ERROR: Commit is missing a DCO Signed-off-by trailer." >&2
+echo "" >&2
+echo "  Fix: git commit --amend -s" >&2
+echo "" >&2
+echo "  Or add to your git config so every commit signs off automatically:" >&2
+echo "    git config --global alias.c 'commit -s'" >&2
+echo "" >&2
+echo "  See https://developercertificate.org/ and AGENTS.md § DCO sign-off." >&2
+echo "" >&2
 exit 1

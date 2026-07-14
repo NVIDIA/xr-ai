@@ -42,7 +42,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
 
       - name: Build debug APK
         run: ./gradlew assembleDebug
