@@ -18,7 +18,6 @@ build-sonar:
   tags:
     - linux
     - x86_64
-    - gpu
 
   cache:
     policy: pull-push
@@ -40,7 +39,6 @@ sonarqube-vulnerability-report:
   tags:
     - linux
     - x86_64
-    - gpu
 
   script:
     - 'curl -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/issues/gitlab_sast_export?projectKey=SW-Cloud_XR_XR-AI_xr-ai&branch=${CI_COMMIT_BRANCH}&pullRequest=${CI_MERGE_REQUEST_IID}" -o gl-sast-sonar-report.json'
