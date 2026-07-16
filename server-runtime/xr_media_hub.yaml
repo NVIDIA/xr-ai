@@ -41,6 +41,11 @@ web_client_dir:    ../client-samples/web
 # ── Optional: token server (legacy plain-HTTP entry point) ────────────────────
 enable_token_server: true
 
+# ── Return audio pacing ───────────────────────────────────────────────────────
+# Maximum queued TTS audio per participant before oldest queued frames are
+# dropped to keep latency and memory bounded.
+return_audio_max_buffer_s: 3.0
+
 # ── Video recording (NVENC, optional) ─────────────────────────────────────────
 # Requires pynvvideocodec.  Frames are encoded via NVENC and written as
 # H.264 Annex B chunks.  Each chunk starts with an IDR frame and is
