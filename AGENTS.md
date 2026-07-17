@@ -13,11 +13,12 @@ historical decisions in `docs/changelog.md`.
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
-agent-sdk/          # Four packages:
+agent-sdk/          # Five packages:
                     #   xr-ai-agent        — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-capabilities — framework-agnostic reusable agent features (VisionModule)
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
+                    #   xr-ai-nat          — typed, in-process NAT functions for XR capabilities
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
 ai-services/        # OpenAI-compatible inference servers (VLM, STT, TTS, LLM)
@@ -51,7 +52,9 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   OpenAI-compatible HTTP.
 - **Workers never import from `server-runtime` or `xr_ai_launcher`.** Only
   `xr_ai_agent` + `xr_ai_models` + task-specific libs (numpy, torch, …).
-- **MCP servers are the agent's only interface to XR data and rendering.**
+- **Agentic functions are NAT-first and in-process.** Reusable deterministic
+  functions live in `xr-ai-nat` as typed NAT function groups. Existing MCP
+  servers remain compatibility surfaces while their capabilities migrate.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml`. See `docs/credentials.md`.
 
@@ -86,7 +89,8 @@ mechanically:
 
 **Worker code rules** (apply to every sample worker):
 
-- Only import from `xr_ai_agent` for IPC types.
+- Import IPC types from `xr_ai_agent`; native agent functions come from
+  `xr_ai_nat`.
 - `_HUB_PUB` / `_HUB_PUSH` are module-level constants, not magic strings.
 - Wire `SIGINT` and `SIGTERM` to `agent.shutdown()`; wrap `await agent.run()`
   in `try/finally` calling `shutdown()`.
@@ -115,7 +119,11 @@ Reference implementation: `agent-samples/simple-vlm-example/`.
 ## Agent sample architecture: reusable modules
 
 Samples must **reuse** the shared building blocks rather than re-implement
-them. They split across two SDK packages by what they depend on:
+them. They split across SDK packages by what they depend on:
+
+Typed agent functions live in `xr-ai-nat`. `SpatialMathFunctionsConfig`
+registers deterministic coordinate operations that receive an explicit spatial
+frame; tracking and process boundaries remain outside the math functions.
 
 The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 

@@ -77,6 +77,8 @@ import isaacteleop.oxr as oxr
 
 from xr_ai_launcher import load_cloudxr_env
 from xr_ai_logging import setup_logging
+from xr_ai_nat.functions.spatial_math import SpatialFrame, Vector3
+from xr_ai_nat.functions.spatial_math import _math as spatial_math
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "oxr_mcp_server.yaml"
 
@@ -278,6 +280,14 @@ class PoseSource:
 
 # ── MCP tool surface ──────────────────────────────────────────────────────────
 
+def _spatial_frame(pose: dict) -> SpatialFrame:
+    return SpatialFrame(
+        origin=Vector3.model_validate(pose["position"]),
+        forward=Vector3.model_validate(pose["forward"]),
+        right=Vector3.model_validate(pose["right"]),
+        up=Vector3.model_validate(pose["up"]),
+    )
+
 def build_mcp(source: PoseSource) -> FastMCP:
     mcp = FastMCP("oxr-mcp")
 
@@ -312,31 +322,7 @@ def build_mcp(source: PoseSource) -> FastMCP:
         pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
         if not pose.get("is_valid"):
             return {"error": "pose unavailable"}
-        p = pose["position"]
-        f = pose["forward"]
-        return {
-            "x": round(p["x"] + f["x"] * distance, 3),
-            "y": round(p["y"] + f["y"] * distance, 3),
-            "z": round(p["z"] + f["z"] * distance, 3),
-        }
-
-    def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
-        """Return ((fx, fz), (rx, rz)): pose.forward / pose.right projected onto
-        the y=0 plane and renormalised."""
-        f, r = pose["forward"], pose["right"]
-        fx, fz = f["x"], f["z"]
-        mag = math.sqrt(fx * fx + fz * fz)
-        if mag < 1e-6:
-            rx0, rz0 = r["x"], r["z"]
-            mag2 = math.sqrt(rx0 * rx0 + rz0 * rz0)
-            if mag2 < 1e-6:
-                fx, fz = 0.0, -1.0
-            else:
-                rx0, rz0 = rx0 / mag2, rz0 / mag2
-                fx, fz = rz0, -rx0
-        else:
-            fx, fz = fx / mag, fz / mag
-        return (fx, fz), (-fz, fx)
+        return spatial_math.position_in_gaze(_spatial_frame(pose), distance)
 
     @mcp.tool()
     async def position_relative(
@@ -385,15 +371,18 @@ def build_mcp(source: PoseSource) -> FastMCP:
         if not pose.get("is_valid"):
             return {"error": "pose unavailable"}
         p = pose["position"]
-        ox = p["x"] if origin_x is None else origin_x
-        oy = p["y"] if origin_y is None else origin_y
-        oz = p["z"] if origin_z is None else origin_z
-        (fx, fz), (rx, rz) = _ground_basis(pose)
-        return {
-            "x": round(ox + fx*forward + rx*right,        3),
-            "y": round(oy + up,                            3),
-            "z": round(oz + fz*forward + rz*right,        3),
-        }
+        origin = Vector3(
+            x=p["x"] if origin_x is None else origin_x,
+            y=p["y"] if origin_y is None else origin_y,
+            z=p["z"] if origin_z is None else origin_z,
+        )
+        return spatial_math.displace_object(
+            _spatial_frame(pose),
+            position=origin,
+            forward=forward,
+            right=right,
+            up=up,
+        )
 
     @mcp.tool()
     async def place_user_relative(
@@ -431,26 +420,11 @@ def build_mcp(source: PoseSource) -> FastMCP:
         pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
         if not pose.get("is_valid"):
             return {"error": "pose unavailable"}
-        p = pose["position"]
-        (fx, fz), (rx, rz) = _ground_basis(pose)
-        dx = dy = dz = 0.0
-        if direction == "front":
-            dx, dz = fx * distance, fz * distance
-        elif direction == "back":
-            dx, dz = -fx * distance, -fz * distance
-        elif direction == "right":
-            dx, dz = rx * distance, rz * distance
-        elif direction == "left":
-            dx, dz = -rx * distance, -rz * distance
-        elif direction == "above":
-            dy = distance
-        elif direction == "below":
-            dy = -distance
-        return {
-            "x": round(p["x"] + dx, 3),
-            "y": round(p["y"] + dy, 3),
-            "z": round(p["z"] + dz, 3),
-        }
+        return spatial_math.place_user_relative(
+            _spatial_frame(pose),
+            direction=direction,
+            distance=distance,
+        )
 
     @mcp.tool()
     async def place_object_relative(
@@ -508,29 +482,19 @@ def build_mcp(source: PoseSource) -> FastMCP:
             pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
             if not pose.get("is_valid"):
                 return {"error": "pose unavailable"}
-            (fx, fz), (rx, rz) = _ground_basis(pose)
         else:
-            fx = fz = rx = rz = 0.0
-        dx = dy = dz = 0.0
-        if direction == "front":
-            dx, dz = -fx * distance, -fz * distance
-        elif direction == "back":
-            dx, dz = fx * distance, fz * distance
-        elif direction == "right":
-            dx, dz = rx * distance, rz * distance
-        elif direction == "left":
-            dx, dz = -rx * distance, -rz * distance
-        elif direction == "next_to":
-            dx, dz = rx * distance, rz * distance
-        elif direction == "above":
-            dy = distance
-        elif direction == "below":
-            dy = -distance
-        return {
-            "x": round(origin_x + dx, 3),
-            "y": round(origin_y + dy, 3),
-            "z": round(origin_z + dz, 3),
-        }
+            pose = {
+                "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "forward": {"x": 0.0, "y": 0.0, "z": -1.0},
+                "right": {"x": 1.0, "y": 0.0, "z": 0.0},
+                "up": {"x": 0.0, "y": 1.0, "z": 0.0},
+            }
+        return spatial_math.place_object_relative(
+            _spatial_frame(pose),
+            anchor=Vector3(x=origin_x, y=origin_y, z=origin_z),
+            direction="right" if direction == "next_to" else direction,
+            distance=distance,
+        )
 
     @mcp.tool()
     async def displace_object(
@@ -571,12 +535,13 @@ def build_mcp(source: PoseSource) -> FastMCP:
         pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
         if not pose.get("is_valid"):
             return {"error": "pose unavailable"}
-        (fx, fz), (rx, rz) = _ground_basis(pose)
-        return {
-            "x": round(current_x + fx * forward + rx * right, 3),
-            "y": round(current_y + up,                        3),
-            "z": round(current_z + fz * forward + rz * right, 3),
-        }
+        return spatial_math.displace_object(
+            _spatial_frame(pose),
+            position=Vector3(x=current_x, y=current_y, z=current_z),
+            forward=forward,
+            right=right,
+            up=up,
+        )
 
     @mcp.tool()
     async def place_inside_by_id(
@@ -596,12 +561,10 @@ def build_mcp(source: PoseSource) -> FastMCP:
         verbatim:
             update_primitive(obj_id=ret.obj_id, x=ret.x, y=ret.y, z=ret.z)
         """
-        return {
-            "obj_id": movee_id,
-            "x":      round(container_x, 3),
-            "y":      round(container_y, 3),
-            "z":      round(container_z, 3),
-        }
+        return spatial_math.place_in_container(
+            movee_id,
+            Vector3(x=container_x, y=container_y, z=container_z),
+        )
 
     @mcp.tool()
     async def displace_objects(
@@ -636,16 +599,17 @@ def build_mcp(source: PoseSource) -> FastMCP:
         pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
         if not pose.get("is_valid"):
             return {"error": "pose unavailable"}
-        (fx, fz), (rx, rz) = _ground_basis(pose)
+        frame = _spatial_frame(pose)
         items = []
         for i in range(n):
-            cx, cy, cz = current_xs[i], current_ys[i], current_zs[i]
-            items.append({
-                "obj_id": object_ids[i],
-                "x": round(cx + fx * forward + rx * right, 3),
-                "y": round(cy + up,                         3),
-                "z": round(cz + fz * forward + rz * right, 3),
-            })
+            position = spatial_math.displace_object(
+                frame,
+                position=Vector3(x=current_xs[i], y=current_ys[i], z=current_zs[i]),
+                forward=forward,
+                right=right,
+                up=up,
+            )
+            items.append({"obj_id": object_ids[i], **position})
         return {"items": items}
 
     @mcp.tool()

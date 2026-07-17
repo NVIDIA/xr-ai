@@ -9,6 +9,15 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-17 — Spatial calculations become native NAT functions
+
+`agent-sdk/xr-ai-nat` introduces an `xr_spatial_math` NAT function group whose
+inputs include an explicit spatial frame. This keeps deterministic coordinate
+math in-process and independent of tracking or transport. Vec MCP and the
+spatial tools in OpenXR MCP retain their existing commands and schemas, but now
+delegate to the same pure math core; they are compatibility boundaries rather
+than owners of the capability.
+
 ### 2026-07-02 — Apple client: CloudXR streaming (visionOS-only)
 
 `client-samples/ios-visionos/` runs CloudXR as a second transport alongside its
