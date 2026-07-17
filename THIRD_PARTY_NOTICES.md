@@ -25,6 +25,7 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `uvicorn`      | 0.29.0   | BSD-3-Clause  | https://github.com/encode/uvicorn |
 | `fastapi`      | 0.111.0  | MIT           | https://github.com/fastapi/fastapi |
 | `httpx`        | 0.27.0   | BSD-3-Clause  | https://github.com/encode/httpx |
+| `fastmcp`      | 3.4.0    | Apache-2.0    | https://github.com/PrefectHQ/fastmcp |
 | `livekit`      | 0.17.0   | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `livekit-api`  | 0.7.0    | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |

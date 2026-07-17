@@ -1,335 +1,102 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""
-Transcript MCP server.
+"""MCP compatibility process for the native text-memory functions."""
 
-Pure FastMCP — every operation is an MCP tool at /mcp. There are no REST
-endpoints. Workers use ``fastmcp.Client`` (or any MCP client) to ingest
-transcripts and query stats.
-
-Source IDs
-──────────
-Every record is keyed by a free-form ``source_id`` string. Sources can be
-real LiveKit participant identities (e.g. ``"alice@home"``,
-``"ipad-pro-1"``), or internal/synthetic names (e.g. ``"agent-vlm"``,
-``"tts"``) — the store doesn't interpret the value, it just keys storage
-by it. Filesystem paths are sanitized internally; the original ``source_id``
-is recovered from a ``.identity`` sidecar so list/query round-trip cleanly.
-
-Tools (FastMCP, mounted at /mcp)
-────────────────────────────────
-  query_transcripts(source_id, start_us, end_us) → list[dict]
-      Return all stored transcript segments for *source_id* whose
-      timestamp falls within [start_us, end_us] (Unix microseconds).
-
-  add_transcript(source_id, timestamp_us, text) → dict
-      Append a transcript segment for *source_id*. Returns
-      ``{"ok": true}`` or ``{"error": ...}`` if *text* is empty.
-
-  list_sources() → list[str]
-      All source IDs that have at least one stored transcript.
-
-  get_transcript_stats(source_id) → dict
-      Summary statistics (count, total_chars, earliest_us, latest_us).
-
-Storage
-───────
-Per-source JSONL alongside a ``.identity`` sidecar holding the raw name:
-
-    <transcripts_dir>/<safe>.jsonl
-    <transcripts_dir>/<safe>.identity
-
-Each JSONL line is ``{"timestamp_us": int, "text": str}``. Files persist
-across server restarts. Distinct ``source_id`` values that map to the
-same ``_safe_name`` get a counter suffix (``alice_home``, ``alice_home_2``…)
-so they don't share storage.
-
-Config (transcript_mcp_server.yaml)
-────────────────────────────────────
-    transcripts_dir: /tmp/xr_transcripts
-    host:            0.0.0.0
-    port:            8200
-"""
 from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
-import pathlib
 import sys
+from pathlib import Path
 
 import uvicorn
 import yaml
-from fastmcp import FastMCP
 from loguru import logger
+from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
+from xr_ai_nat.adapters.mcp import create_mcp_server
+from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
+from xr_ai_nat.functions.text_memory._store import TextMemoryStore as TranscriptStore
 
 
-def _safe_name(s: str) -> str:
-    """Filesystem-safe version of *s*."""
-    return "".join(c if c.isalnum() or c in "-_." else "_" for c in s)
+async def build_mcp(store: TranscriptStore):
+    """Republish the four native text-memory functions under legacy MCP names."""
 
-
-# ── storage ───────────────────────────────────────────────────────────────────
-
-class TranscriptStore:
-    """Append-only JSONL storage for timestamped transcript segments.
-
-    Records are keyed by ``source_id`` — any string the caller chooses.
-    Sanitization for filesystem paths is internal; the raw ``source_id``
-    is preserved in a ``.identity`` sidecar.
-    """
-
-    def __init__(self, transcripts_dir: str) -> None:
-        self._dir = pathlib.Path(transcripts_dir)
-        self._dir.mkdir(parents=True, exist_ok=True)
-        # Resolve once at construction so the safe root can't be swapped
-        # for a symlink (TOCTOU) between subsequent _check calls.
-        self._root = self._dir.resolve()
-
-    # ── path resolution ──────────────────────────────────────────────
-
-    def _check(self, path: pathlib.Path) -> pathlib.Path:
-        if not path.resolve().is_relative_to(self._root):
-            raise ValueError(f"Path escapes transcript directory: {path}")
-        return path
-
-    def _resolve_or_create(self, source_id: str) -> pathlib.Path:
-        """Resolve *source_id* to ``<dir>/<stem>.jsonl``, creating the
-        ``.identity`` sidecar on first use. Disambiguates collisions
-        with a counter suffix."""
-        safe   = _safe_name(source_id)
-        suffix = 1
-        while True:
-            stem  = safe if suffix == 1 else f"{safe}_{suffix}"
-            ident = self._dir / f"{stem}.identity"
-            jsonl = self._dir / f"{stem}.jsonl"
-            if not ident.exists() and not jsonl.exists():
-                ident.write_text(source_id, encoding="utf-8")
-                return self._check(jsonl)
-            if ident.exists() and ident.read_text(encoding="utf-8") == source_id:
-                return self._check(jsonl)
-            # Legacy pre-sidecar: jsonl exists, no sidecar, raw == safe.
-            if (
-                not ident.exists() and jsonl.exists()
-                and source_id == safe and suffix == 1
-            ):
-                ident.write_text(source_id, encoding="utf-8")
-                return self._check(jsonl)
-            suffix += 1
-
-    def _resolve_existing(self, source_id: str) -> pathlib.Path | None:
-        """Return the JSONL path for *source_id* if any record has been
-        written for it, else ``None`` — never creates anything."""
-        if not self._dir.exists():
-            return None
-        safe = _safe_name(source_id)
-        # Fast path: canonical name.
-        canonical_jsonl = self._dir / f"{safe}.jsonl"
-        canonical_ident = self._dir / f"{safe}.identity"
-        if canonical_jsonl.exists():
-            if canonical_ident.exists():
-                if canonical_ident.read_text(encoding="utf-8").strip() == source_id.strip():
-                    jsonl = self._check(canonical_jsonl)
-                    return jsonl
-            elif source_id == safe:
-                jsonl = self._check(canonical_jsonl)
-                return jsonl
-        # Slow path: scan sidecars.
-        for ident in sorted(self._dir.glob("*.identity")):
-            if ident.read_text(encoding="utf-8").strip() == source_id.strip():
-                jsonl = self._check(ident.with_suffix(".jsonl"))
-                return jsonl if jsonl.exists() else None
-        return None
-
-    # ── operations ───────────────────────────────────────────────────
-
-    def append(self, source_id: str, timestamp_us: int, text: str) -> None:
-        record = json.dumps({"timestamp_us": timestamp_us, "text": text})
-        with self._resolve_or_create(source_id).open("a") as f:
-            f.write(record + "\n")
-
-    def query(self, source_id: str, start_us: int, end_us: int) -> list[dict]:
-        path = self._resolve_existing(source_id)
-        if path is None:
-            return []
-        results = []
-        skipped = 0
-        with path.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                    if start_us <= rec["timestamp_us"] <= end_us:
-                        results.append(rec)
-                except (json.JSONDecodeError, KeyError):
-                    skipped += 1
-        if skipped:
-            logger.warning(
-                "transcript-mcp: query  source={!r}  skipped {} corrupt line(s) in {}",
-                source_id, skipped, path,
-            )
-        return results
-
-    def list_sources(self) -> list[str]:
-        """Return raw source IDs (read from ``.identity`` sidecars; falls
-        back to file stem for legacy pre-sidecar files)."""
-        if not self._dir.exists():
-            return []
-        out: list[str] = []
-        seen_stems: set[str] = set()
-        for ident in sorted(self._dir.glob("*.identity")):
-            out.append(ident.read_text(encoding="utf-8"))
-            seen_stems.add(ident.stem)
-        for jsonl in sorted(self._dir.glob("*.jsonl")):
-            if jsonl.stem not in seen_stems:
-                out.append(jsonl.stem)
-        return out
-
-    def stats(self, source_id: str) -> dict | None:
-        path = self._resolve_existing(source_id)
-        if path is None:
-            return None
-        count = earliest = latest = total_chars = 0
-        skipped = 0
-        with path.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                    ts  = rec["timestamp_us"]
-                    count += 1
-                    total_chars += len(rec.get("text", ""))
-                    if earliest == 0 or ts < earliest:
-                        earliest = ts
-                    if ts > latest:
-                        latest = ts
-                except (json.JSONDecodeError, KeyError):
-                    skipped += 1
-        if skipped:
-            logger.warning(
-                "transcript-mcp: stats  source={!r}  skipped {} corrupt line(s) in {}",
-                source_id, skipped, path,
-            )
-        return {
-            "source_id":   source_id,
-            "count":       count,
-            "total_chars": total_chars,
-            "earliest_us": earliest,
-            "latest_us":   latest,
-        }
-
-
-# ── server ────────────────────────────────────────────────────────────────────
-
-def build_mcp(store: TranscriptStore) -> "FastMCP":
-    """Return a composed FastMCP server with all transcript tools bound to *store*."""
-    mcp = FastMCP("transcript-mcp")
-
-    @mcp.tool()
-    def query_transcripts(
-        source_id: str,
-        start_us:  int,
-        end_us:    int,
-    ) -> list[dict]:
-        """
-        Return transcript segments for *source_id* in the time window
-        [start_us, end_us] (Unix microseconds).
-
-        Each result has keys: timestamp_us (int), text (str).
-        Results are ordered by timestamp_us ascending.
-        """
-        results = store.query(source_id, start_us, end_us)
-        results.sort(key=lambda r: r["timestamp_us"])
-        return results
-
-    @mcp.tool()
-    def add_transcript(source_id: str, timestamp_us: int, text: str) -> dict:
-        """
-        Append a transcript segment for *source_id* at *timestamp_us*
-        (Unix microseconds). ``source_id`` is any string — a real
-        participant identity or an internal source name (e.g. ``"agent-vlm"``).
-
-        Returns ``{"ok": true}`` on success, or an error dict if *text* is empty.
-        """
-        if not text.strip():
-            return {"error": "text must not be empty"}
-        store.append(source_id, timestamp_us, text)
-        logger.debug(
-            "add_transcript  source={!r}  ts={}  {!r}",
-            source_id, timestamp_us, text[:80],
+    async with WorkflowBuilder() as builder:
+        await builder.add_function_group(
+            "text_memory",
+            TextMemoryFunctionsConfig(directory=store.directory),
         )
-        return {"ok": True}
+        group = await builder.get_function_group("text_memory")
+        functions = await group.get_all_functions()
 
-    @mcp.tool()
-    def list_sources() -> list[str]:
-        """Return all source IDs that have at least one stored transcript."""
-        return store.list_sources()
+    exports = [
+        functions["text_memory__query_transcripts"],
+        functions["text_memory__add_transcript"],
+        functions["text_memory__list_sources"],
+        functions["text_memory__get_transcript_stats"],
+    ]
+    aliases = {
+        function.instance_name: function.instance_name.removeprefix("text_memory__")
+        for function in exports
+    }
+    return create_mcp_server(
+        "transcript-mcp",
+        exports,
+        tool_names=aliases,
+        untyped_outputs={
+            "text_memory__add_transcript",
+            "text_memory__query_transcripts",
+            "text_memory__get_transcript_stats",
+        },
+    )
 
-    @mcp.tool()
-    def get_transcript_stats(source_id: str) -> dict:
-        """
-        Return summary statistics for *source_id*'s stored transcripts.
 
-        Keys: source_id, count (utterances), total_chars,
-              earliest_us (Unix µs), latest_us (Unix µs).
-        Returns an error dict if no transcripts exist.
-        """
-        result = store.stats(source_id)
-        if result is None:
-            return {"error": f"No transcripts for {source_id!r}"}
-        return result
+async def build_app(store: TranscriptStore):
+    """Return the ASGI app serving the compatibility transport at `/mcp`."""
 
-    return mcp
-
-
-def build_app(store: TranscriptStore):
-    """Return the ASGI app serving the FastMCP HTTP transport at /mcp."""
-    return build_mcp(store).http_app(path="/mcp")
+    return (await build_mcp(store)).http_app(path="/mcp")
 
 
 def run() -> None:
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config",     type=pathlib.Path, default=None)
-    p.add_argument("--ready-file", type=pathlib.Path, default=None)
-    ns, _ = p.parse_known_args()
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--config", type=Path, default=None)
+    parser.add_argument("--ready-file", type=Path, default=None)
+    args, _ = parser.parse_known_args()
 
-    cfg: dict = {}
-    if ns.config and ns.config.exists():
-        with open(ns.config) as f:
-            cfg = yaml.safe_load(f) or {}
+    config: dict = {}
+    if args.config and args.config.exists():
+        with args.config.open() as config_file:
+            config = yaml.safe_load(config_file) or {}
 
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
     setup_logging("transcript-mcp")
 
-    _run_dir = os.environ.get("XR_RUN_DIR")
-    _default_transcripts = (
-        str(pathlib.Path(_run_dir) / "transcripts") if _run_dir else "/tmp/xr_transcripts"
-    )
-    transcripts_dir = cfg.get("transcripts_dir") or _default_transcripts
-    host            = cfg.get("host", "0.0.0.0")
-    port            = int(cfg.get("port", 8200))
+    run_dir = os.environ.get("XR_RUN_DIR")
+    default_directory = str(Path(run_dir) / "transcripts") if run_dir else "/tmp/xr_transcripts"
+    directory = config.get("transcripts_dir") or default_directory
+    host = config.get("host", "0.0.0.0")
+    port = int(config.get("port", 8200))
 
-    store = TranscriptStore(transcripts_dir)
-    app   = build_app(store)
-
-    async def _serve() -> None:
-        config = uvicorn.Config(app, host=host, port=port, log_level="warning",
-                                log_config=None)
-        server = uvicorn.Server(config)
-        logger.info("transcript-mcp-server  mcp=/mcp  port={}  dir={}", port, transcripts_dir)
-        if ns.ready_file:
-            ns.ready_file.touch()
+    async def serve() -> None:
+        app = await build_app(TranscriptStore(directory))
+        uvicorn_config = uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_level="warning",
+            log_config=None,
+        )
+        server = uvicorn.Server(uvicorn_config)
+        logger.info("transcript-mcp-server  mcp=/mcp  port={}  dir={}", port, directory)
+        if args.ready_file:
+            args.ready_file.touch()
         await server.serve()
 
-    asyncio.run(_serve())
+    asyncio.run(serve())
 
 
 if __name__ == "__main__":
