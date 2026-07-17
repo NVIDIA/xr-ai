@@ -4,12 +4,12 @@
 """
 VLM MCP server.
 
-Pure FastMCP — one tool at /mcp on port 8240. There are no REST endpoints,
-no hub IPC subscription, and no `xr-ai-agent` runtime dependency.
+Thin MCP compatibility process — one tool at /mcp on port 8240. There are no
+REST endpoints, hub IPC subscriptions, or `xr-ai-agent` runtime dependencies.
 
 The single tool ``ask_image(question, image_path)`` reads a local PNG path,
-encodes it as a JPEG data URL, and calls the VLM via ``xr-ai-models``
-``OpenAICompatVLM``. The model's answer is returned verbatim.
+republishes the native ``xr_vision`` image-question function. Image
+normalization and the VLM call stay in the native function.
 
 Typical two-step agent flow
 ───────────────────────────
@@ -48,22 +48,20 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
-import io
 import pathlib
-import re
 import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
-import httpx
 import uvicorn
 import yaml
-from fastmcp import FastMCP
 from loguru import logger
-from PIL import Image
+from nat.builder.workflow_builder import WorkflowBuilder
 
 from xr_ai_logging import setup_logging
+from xr_ai_nat.adapters.mcp import create_mcp_server
+from xr_ai_nat.functions.vision import VisionFunctionsConfig
+from xr_ai_nat.functions.vision._images import load_jpeg_data_url as _load_jpeg_data_url  # noqa: F401
 from xr_ai_models import (
     ModelsConfig,
     VLMSpec,
@@ -137,129 +135,22 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
     return make_vlm(config, "vlm"), vlm_request_timeout_s
 
 
-# ── image helpers ─────────────────────────────────────────────────────────────
-
-def _load_jpeg_data_url(image_path: str, quality: int = 85) -> str:
-    """Open *image_path*, convert to RGB, encode as a JPEG data URL.
-
-    Runs synchronously — caller is expected to invoke via
-    ``loop.run_in_executor`` to keep the asyncio loop responsive.
-    """
-    with Image.open(image_path) as img:
-        img = img.convert("RGB")
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=quality)
-    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-    return f"data:image/jpeg;base64,{b64}"
-
-
 # ── FastMCP build ─────────────────────────────────────────────────────────────
 
-def build_mcp(vlm: VLMService) -> FastMCP:
-    """Return a FastMCP server with the single ``ask_image`` tool bound."""
-    mcp = FastMCP("vlm-mcp")
+async def build_mcp(vlm: VLMService):
+    """Republish the native vision function under the existing MCP tool name."""
 
-    @mcp.tool()
-    async def ask_image(question: str, image_path: str) -> str:
-        """
-        Ask the vision-language model a question about a local image file.
+    async with WorkflowBuilder() as builder:
+        await builder.add_function_group("vision", VisionFunctionsConfig(vlm=vlm))
+        group = await builder.get_function_group("vision")
+        functions = await group.get_all_functions()
 
-        This is the primary tool for any task that requires visual understanding
-        of the XR scene: describing what the user sees, reading text on screen,
-        identifying objects, checking UI state, answering user questions about
-        their environment, and so on.
-
-        Typical usage pattern
-        ---------------------
-        Step 1 — acquire a frame::
-
-            frame = video_mcp.get_frame_from_time(
-                participant_id="alice",
-                second_ago=0,            # live frame (what the user sees right now)
-                # second_ago=3,          # frame from 3 seconds ago
-                # reference_time_us=..., # pass the user's speech timestamp to avoid
-                #                        # LLM-thinking delay shifting the frame
-            )
-            # frame["path"] is an absolute path to a PNG on the local filesystem
-
-        Step 2 — ask the VLM::
-
-            answer = vlm_mcp.ask_image(
-                question="What objects are on the table?",
-                image_path=frame["path"],
-            )
-
-        Good ``question`` values
-        -------------------------
-        - The user's exact words:  "what is that?"
-        - A rephrasing:            "Describe what the user is looking at."
-        - A specific sub-question: "What text appears on the whiteboard?"
-        - A follow-up:             "List every distinct color visible in the scene."
-        - Counting:                "How many people are in the frame?"
-        - Spatial:                 "Is there anything in the top-left corner?"
-
-        Parameters
-        ----------
-        question
-            Free-form natural-language question or instruction for the VLM.
-            The model receives both the image and this text in the same turn.
-        image_path
-            Absolute path to a local image file (PNG or JPEG). Typically the
-            ``path`` value returned by ``video_mcp.get_frame_from_time``.
-            The file is read from disk and sent to vlm-server as a
-            base64-encoded JPEG (quality 85).
-
-        Returns
-        -------
-        str
-            The VLM's answer, trimmed of leading/trailing whitespace.
-            On error (file not found, server unreachable, etc.) returns a
-            human-readable error string starting with ``"ask_image: ..."``.
-
-        Notes
-        -----
-        - ``image_path`` MUST be the ``path`` value returned by a prior call to
-          ``get_frame_from_time`` or ``get_latest_frame``.  Never invent or guess
-          a path — the tool will return an error and the task will fail.
-        - Image I/O runs in a thread pool so the asyncio event loop is never
-          blocked even for large frames.
-        - The tool does NOT maintain conversation history. Each call is
-          independent; pass relevant context in ``question`` if needed.
-        - vlm-server must be running at the ``base_url`` configured under
-          ``models.vlm`` in ``vlm_mcp_server.yaml`` (default: http://localhost:8100).
-        """
-        if not image_path:
-            return "ask_image: image_path is empty — call video_mcp.get_frame_from_time first."
-        path = pathlib.Path(image_path)
-        if not path.exists():
-            return f"ask_image: file not found at {image_path!r}."
-
-        loop = asyncio.get_running_loop()
-        try:
-            data_url = await loop.run_in_executor(None, _load_jpeg_data_url, str(path))
-        except Exception as exc:
-            logger.exception("ask_image: failed to load {}", image_path)
-            return f"ask_image: failed to read image at {image_path!r}: {exc}"
-
-        try:
-            response = await vlm.ask_image(data_url, question)
-            content = response.content
-        except httpx.HTTPError as exc:
-            logger.exception("ask_image: vlm-server HTTP error")
-            return f"ask_image: vlm-server request failed: {exc}"
-
-        # Belt-and-suspenders: strip any <think> that leaked through despite
-        # enable_thinking=False — cosmos_vlm preset sets this to False but
-        # some model revisions may still emit reasoning tokens.
-        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
-
-        logger.debug(
-            "ask_image  q={!r}  image={}  -> {} chars",
-            question[:80], path.name, len(content),
-        )
-        return content
-
-    return mcp
+    function = functions["vision__ask_image"]
+    return create_mcp_server(
+        "vlm-mcp",
+        [function],
+        tool_names={function.instance_name: "ask_image"},
+    )
 
 
 # ── server ────────────────────────────────────────────────────────────────────
@@ -269,7 +160,7 @@ async def _serve(cfg: dict, ready_file: pathlib.Path | None = None) -> None:
     port = int(cfg.get("port", 8240))
 
     vlm, vlm_request_timeout_s = _make_vlm_from_cfg(cfg)
-    mcp = build_mcp(vlm)
+    mcp = await build_mcp(vlm)
     app = mcp.http_app(path="/mcp")
 
     @asynccontextmanager

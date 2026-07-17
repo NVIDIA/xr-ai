@@ -30,6 +30,7 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `livekit-api`  | 0.7.0    | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
 | `nvidia-nat-core` | 1.8.0 | Apache-2.0    | https://github.com/NVIDIA/NeMo-Agent-Toolkit |
+| `Pillow`       | 10.0.0   | HPND          | https://github.com/python-pillow/Pillow |
 | `pydantic`     | 2.10.0   | MIT           | https://github.com/pydantic/pydantic |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
 
@@ -51,6 +52,7 @@ The full text of each SPDX license identifier referenced above is available at:
 - **Apache-2.0**: https://www.apache.org/licenses/LICENSE-2.0 — also bundled
   with this repository as [`LICENSE`](LICENSE).
 - **BSD-3-Clause**: https://opensource.org/license/bsd-3-clause
+- **HPND**: https://opensource.org/license/historical-ntu-disclaimer
 - **MIT**: https://opensource.org/license/mit
 
 Each upstream project repository linked above includes its own canonical

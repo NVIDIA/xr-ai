@@ -110,6 +110,7 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── nvidia-nat-core ==1.8.0
     └── pydantic >=2.10
     └── [mcp] fastmcp >=3.4,<4
+    └── [vision] httpx >=0.27, Pillow >=10.0, xr-ai-models [editable: ../xr-ai-models]
     Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
     performs deterministic spatial calculations without OpenXR, model, or MCP
@@ -119,6 +120,8 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     capability module is its own ``nat.plugins`` discovery entry point; there
     is no package-wide registration aggregator. The spatial pure math core is
     also used by the transitional Vec and OpenXR MCP compatibility surfaces.
+    ``xr_vision`` normalizes an acquired local image and calls an injected
+    xr-ai-models VLM; it does not acquire frames itself.
 
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
@@ -181,16 +184,14 @@ transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
 
 vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
     └── uvicorn[standard] >=0.29
-    └── fastmcp >=2.0
     └── pyyaml >=6.0
-    └── Pillow >=10.0
-    └── httpx >=0.27   (imported directly to catch httpx.HTTPError from xr-ai-models)
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
-    Pure FastMCP — one tool at /mcp (no REST). Reads a local image file,
-    encodes it as a JPEG data URL, and calls vlm-server via xr-ai-models
-    ``OpenAICompatVLM``. Back-compat: legacy ``vlm_server:`` URL key is
-    still accepted with a deprecation warning.
+    └── xr-ai-nat[mcp,vision] [editable: ../../agent-sdk/xr-ai-nat]
+    Thin MCP compatibility process with one tool at /mcp (no REST). It
+    republishes ``vision__ask_image`` under the existing ``ask_image`` name.
+    Image normalization and the VLM call live in the native vision function;
+    the legacy ``vlm_server:`` URL key remains accepted with a warning.
 
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
@@ -279,7 +280,8 @@ xr-ai-tests  (tests/)
     (launcher, logging, vllm), a CI-viable subprocess test for
     CPU-viable subprocess smoke tests for transcript-mcp-server and
     vec-mcp-server (fastmcp pulled in transitively), native spatial-math and
-    text-memory function-group tests, generic NAT-to-MCP adapter tests, and the vlm-mcp /
+    text-memory and vision function-group tests, generic NAT-to-MCP adapter
+    tests, and the vlm-mcp /
     render-mcp adapter surfaces (mocked upstreams). oxr-mcp is not
     included: it needs native isaacteleop + a CloudXR runtime, so its
     smoke test self-skips on CPU (see tests/README.md).

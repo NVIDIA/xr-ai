@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-17 — Image question answering becomes a native vision function
+
+The `xr_vision` NAT function group owns local-image normalization and the
+`xr-ai-models` VLM call. It accepts an already acquired image path so live and
+recorded frame sources remain independently composable. VLM MCP keeps its
+existing `ask_image` tool and configuration, but now republishes the native
+function through the generic MCP adapter.
+
 ### 2026-07-17 — Text history becomes native with optional MCP export
 
 The `xr_text_memory` NAT function group now owns persistent transcript JSONL
