@@ -59,6 +59,10 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   application's explicit native-function list to MCP-only agents, but native
   applications invoke the functions directly. Text-memory owns transcript
   JSONL storage; transcript MCP only republishes that capability.
+- **Image acquisition and vision reasoning stay separate.** The native vision
+  function accepts an acquired image path and calls a `VLMService` from
+  `xr-ai-models`; it does not own hub, participant, recording, or MCP state.
+  VLM MCP republishes this function only for MCP clients.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml`. See `docs/credentials.md`.
 
@@ -129,7 +133,9 @@ Typed agent functions live in `xr-ai-nat`. `SpatialMathFunctionsConfig`
 registers deterministic coordinate operations that receive an explicit spatial
 frame; tracking and process boundaries remain outside the math functions.
 `TextMemoryFunctionsConfig` provides persistent timestamped text without a
-network boundary.
+network boundary. `VisionFunctionsConfig` adds image-question answering over an
+injected `xr-ai-models` VLM while leaving frame acquisition to its own
+capability.
 
 The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 
