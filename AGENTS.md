@@ -55,6 +55,10 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **Agentic functions are NAT-first and in-process.** Reusable deterministic
   functions live in `xr-ai-nat` as typed NAT function groups. Existing MCP
   servers remain compatibility surfaces while their capabilities migrate.
+- **A process boundary does not imply MCP.** `xr-ai-nat[mcp]` may expose an
+  application's explicit native-function list to MCP-only agents, but native
+  applications invoke the functions directly. Text-memory owns transcript
+  JSONL storage; transcript MCP only republishes that capability.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml`. See `docs/credentials.md`.
 
@@ -124,6 +128,8 @@ them. They split across SDK packages by what they depend on:
 Typed agent functions live in `xr-ai-nat`. `SpatialMathFunctionsConfig`
 registers deterministic coordinate operations that receive an explicit spatial
 frame; tracking and process boundaries remain outside the math functions.
+`TextMemoryFunctionsConfig` provides persistent timestamped text without a
+network boundary.
 
 The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 
