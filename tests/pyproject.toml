@@ -15,6 +15,7 @@ dependencies = [
     "xr-ai-agent",
     "xr-ai-capabilities",
     "xr-ai-models",
+    "xr-ai-nat",
     "xr-ai-pipecat",
     "xr-media-hub",
     "xr-ai-launcher",
@@ -42,6 +43,7 @@ dependencies = [
 xr-ai-agent           = { path = "../agent-sdk",                        editable = true }
 xr-ai-capabilities    = { path = "../agent-sdk/xr-ai-capabilities",     editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
+xr-ai-nat             = { path = "../agent-sdk/xr-ai-nat",              editable = true }
 xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable = true }
 xr-media-hub          = { path = "../server-runtime",                   editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }

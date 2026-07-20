@@ -23,7 +23,27 @@ pytest.importorskip(
            "not CPU-viable. See tests/README.md.",
 )
 
+build_mcp = pytest.importorskip(
+    "oxr_mcp_server.__main__",
+    reason="oxr-mcp is exercised only on a GPU host with its native dependencies installed",
+).build_mcp
+
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
+
+
+class _NeverCalledPoseSource:
+    def get_pose(self) -> dict:
+        raise AssertionError("negative distances must be rejected before reading a pose")
+
+
+async def test_position_ahead_rejects_negative_distance() -> None:
+    result = await build_mcp(_NeverCalledPoseSource()).call_tool(
+        "position_ahead", {"distance": -1.0}
+    )
+
+    assert result.structured_content == {
+        "error": "distance must be non-negative; flip the direction instead"
+    }
 
 
 @pytest.mark.skip(reason="oxr-mcp smoke test requires a GPU host with CloudXR — see tests/README.md")

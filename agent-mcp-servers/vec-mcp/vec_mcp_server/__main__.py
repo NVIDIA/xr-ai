@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +39,8 @@ import yaml
 from fastmcp import FastMCP
 from loguru import logger
 from xr_ai_logging import setup_logging
+from xr_ai_nat.functions.spatial_math import Vector3
+from xr_ai_nat.functions.spatial_math import _math as spatial_math
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "vec_mcp_server.yaml"
 
@@ -66,9 +67,6 @@ def _build_config(raw: dict) -> Config:
 
 # ── Tool surface ──────────────────────────────────────────────────────────────
 
-def _round3(x: float, y: float, z: float) -> dict:
-    return {"x": round(x, 3), "y": round(y, 3), "z": round(z, 3)}
-
 
 def build_mcp() -> FastMCP:
     mcp = FastMCP("vec-mcp")
@@ -90,7 +88,10 @@ def build_mcp() -> FastMCP:
         Returns {x, y, z} — the midpoint. Feed straight into
         add_primitive or update_primitive.
         """
-        return _round3((a_x + b_x) / 2, (a_y + b_y) / 2, (a_z + b_z) / 2)
+        return spatial_math.compute_midpoint(
+            Vector3(x=a_x, y=a_y, z=a_z),
+            Vector3(x=b_x, y=b_y, z=b_z),
+        )
 
     @mcp.tool()
     async def world_offset(
@@ -108,7 +109,12 @@ def build_mcp() -> FastMCP:
         Example: sphere at (0, 1.5, -1.5), "30 cm above" →
             world_offset(0, 1.5, -1.5, dy=0.3) → (0, 1.8, -1.5).
         """
-        return _round3(origin_x + dx, origin_y + dy, origin_z + dz)
+        return spatial_math.world_offset(
+            Vector3(x=origin_x, y=origin_y, z=origin_z),
+            x_meters=dx,
+            y_meters=dy,
+            z_meters=dz,
+        )
 
     @mcp.tool()
     async def along_direction(
@@ -124,16 +130,15 @@ def build_mcp() -> FastMCP:
 
         Returns {x, y, z}, or {error} if origin and target coincide.
         """
-        vx, vy, vz = target_x - origin_x, target_y - origin_y, target_z - origin_z
-        mag = math.sqrt(vx * vx + vy * vy + vz * vz)
-        if mag < 1e-9:
+        try:
+            return spatial_math.compute_position_toward_or_away_from_reference(
+                Vector3(x=origin_x, y=origin_y, z=origin_z),
+                Vector3(x=target_x, y=target_y, z=target_z),
+                movement_direction="toward" if distance >= 0 else "away",
+                distance_meters=abs(distance),
+            )
+        except ValueError:
             return {"error": "origin and target coincide"}
-        ux, uy, uz = vx / mag, vy / mag, vz / mag
-        return _round3(
-            origin_x + ux * distance,
-            origin_y + uy * distance,
-            origin_z + uz * distance,
-        )
 
     @mcp.tool()
     async def scale_value(current: float, factor: float) -> dict:

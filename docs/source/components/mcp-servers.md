@@ -140,8 +140,8 @@ the LLM never has to apply signs to user-frame axes:
 - `get_head_pose()` — LLM-friendly pose with derived spatial vectors (no raw
   quaternions): `is_valid`, `position`, `forward`, `right`, `up`, `yaw_deg`,
   `pitch_deg`, `ts`.
-- `position_ahead(distance)` — world position `distance` metres along the user's
-  gaze.
+- `position_ahead(distance)` — world position a non-negative `distance` metres
+  along the user's gaze; invalid negative distances return an error.
 - `position_relative(forward, right, up, origin_x?, origin_y?, origin_z?)` —
   convert user-frame offsets to a world-space position (origin defaults to the
   head).

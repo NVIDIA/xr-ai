@@ -106,6 +106,17 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     protocols or callers.  Workers depend on this instead of rolling their
     own httpx wrappers.
 
+xr-ai-nat  (agent-sdk/xr-ai-nat/)
+    └── nvidia-nat-core ==1.8.0
+    └── pydantic >=2.10
+    Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
+    ``xr_spatial_math`` function group accepts explicit coordinate frames and
+    performs deterministic spatial calculations without OpenXR, model, or MCP
+    dependencies. Each capability module is its own ``nat.plugins`` discovery
+    entry point; there is no package-wide registration aggregator. The pure
+    math core is also used by the transitional Vec and OpenXR MCP compatibility
+    surfaces.
+
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
     `_cloudxr_env` owns the shared CloudXR env helpers (stdlib-only, os + re):
@@ -215,8 +226,11 @@ oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     └── pyyaml >=6.0
     └── uvicorn[standard] >=0.29
     └── fastmcp >=2.0
+    └── xr-ai-nat [editable: ../../agent-sdk/xr-ai-nat]
     Pure FastMCP at /mcp. Reads pose from CloudXR via a second (headless)
     OpenXR session; runs alongside LOVR's rendering session.
+    Pose acquisition remains here while coordinate calculations delegate to
+    the shared native spatial-math core.
     cloudxr-runtime must start before oxr-mcp (serial launch order).
 
 vec-mcp-server  (agent-mcp-servers/vec-mcp/)
@@ -224,14 +238,18 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
     └── fastmcp >=2.0
     └── pyyaml >=6.0
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-nat      [editable: ../../agent-sdk/xr-ai-nat]
     Pure FastMCP at /mcp. Deterministic spatial-math primitives
     (between_anchors, world_offset, along_direction, scale_value).
-    Offloads vector arithmetic from the LLM.
+    Preserves the existing MCP tool names while delegating coordinate
+    calculations to the shared native spatial-math core. ``scale_value``
+    remains compatibility-only and is not part of the native function group.
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent             [editable: ../agent-sdk]
     └── xr-ai-capabilities      [editable: ../agent-sdk/xr-ai-capabilities]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
+    └── xr-ai-nat               [editable: ../agent-sdk/xr-ai-nat]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
@@ -255,7 +273,8 @@ xr-ai-tests  (tests/)
     NVENC required. Also covers unit tests for the leaf util packages
     (launcher, logging, vllm), a CI-viable subprocess test for
     CPU-viable subprocess smoke tests for transcript-mcp-server and
-    vec-mcp-server (fastmcp pulled in transitively), and the vlm-mcp /
+    vec-mcp-server (fastmcp pulled in transitively), native spatial-math
+    function-group tests, and the vlm-mcp /
     render-mcp adapter surfaces (mocked upstreams). oxr-mcp is not
     included: it needs native isaacteleop + a CloudXR runtime, so its
     smoke test self-skips on CPU (see tests/README.md).
@@ -524,6 +543,9 @@ updated in the same commit**.
   vendor SDKs (no `openai`, no `anthropic`, no `litellm`). All in-tree
   backends speak OpenAI-compatible HTTP; vendor adapters arrive as new
   `kind`s in Phase B if/when needed.
+- `agent-sdk/xr-ai-nat/` — NAT framework dependencies plus only the smallest
+  capability-specific dependencies. Spatial math remains CPU-only and has no
+  tracking, service, model, or MCP dependency.
 - Agent workers — `xr-ai-agent` + `xr-ai-models` + task-specific libs (numpy,
   torch, etc.). Must never import from `xr-media-hub` or `xr-ai-launcher`.
 - New external deps require a note here explaining why they were added.

@@ -1,0 +1,37 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+# XR AI functions for NeMo Agent Toolkit
+
+`xr-ai-nat` provides typed, in-process XR functions for NVIDIA NeMo Agent
+Toolkit (NAT). Applications compose these functions directly; process-backed
+or MCP compatibility adapters remain separate boundaries.
+
+## Spatial math
+
+The `xr_spatial_math` function group contains deterministic coordinate
+operations. Callers supply an explicit `SpatialFrame`, so the functions do not
+depend on OpenXR, a tracking service, or an MCP server.
+
+```yaml
+functions:
+  spatial_math:
+    _type: xr_spatial_math
+```
+
+The group exposes:
+
+- `spatial_math__compute_gaze_target(user_frame, distance_meters)`
+- `spatial_math__compute_user_relative_position(user_frame, direction_from_user, distance_meters)`
+- `spatial_math__compute_position_relative_to_anchor(user_frame, anchor_position, relation_to_anchor, distance_meters)`
+- `spatial_math__offset_position_in_user_frame(user_frame, start_position, forward_meters, right_meters, up_meters)`
+- `spatial_math__compute_position_toward_or_away_from_reference(start_position, reference_position, movement_direction, distance_meters)`
+- `spatial_math__compute_midpoint(first_position, second_position)`
+
+Every operation returns a `Vector3` and only calculates coordinates. Creating,
+moving, or associating a scene object remains the caller's responsibility.
+
+Install the package in the NAT environment so NAT discovers the spatial-math
+registration directly through its capability-specific `nat.plugins` entry point.
