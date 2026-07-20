@@ -18,6 +18,7 @@ agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in per sample)
 ai-services/        # OpenAI-compatible AI inference servers (VLM, STT, TTS, LLM)
+services/           # Long-running typed XR capability services
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, video, vlm
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests

@@ -1,0 +1,5 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+endpoint: tcp://0.0.0.0:8330
+cloudxr_env_file: ~/.cloudxr/run/cloudxr.env

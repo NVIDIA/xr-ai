@@ -17,12 +17,14 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["fastmcp>=3.4,<4"]
+services = ["msgpack>=1.0", "pyzmq>=27.0"]
 vision = ["httpx>=0.27", "Pillow>=10.0", "xr-ai-models"]
 
 [project.entry-points."nat.plugins"]
 xr_ai_nat_spatial_math = "xr_ai_nat.functions.spatial_math.functions"
 xr_ai_nat_text_memory = "xr_ai_nat.functions.text_memory.functions"
 xr_ai_nat_vision = "xr_ai_nat.functions.vision.functions"
+xr_ai_nat_xr_tracking = "xr_ai_nat.functions.xr_tracking.functions"
 
 [tool.uv.sources]
 xr-ai-models = { path = "../xr-ai-models", editable = true }

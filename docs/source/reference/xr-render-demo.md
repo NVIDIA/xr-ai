@@ -242,10 +242,9 @@ On each `TranscriptionFrame`:
 | `video-mcp` | 8210 | `list_live_participants`, `get_frame_from_time` (always); `list_recorded_participants`, `get_video_stats`, `query_video` (recording enabled only); `get_latest_frame` (deprecated) |
 
 `render-mcp` owns the LOVR child process and is the only thing that pushes
-ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `oxr-mcp` opens a
-second headless OpenXR session (`XR_MND_HEADLESS`) separate from LOVR's
-rendering session — both coexist without contention; the session opens
-lazily on first tool call.
+ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `openxr-service` owns
+the second headless OpenXR session (`XR_MND_HEADLESS`); `oxr-mcp` forwards
+tracking requests to it and preserves the existing MCP tool surface.
 
 ### Spatial tool surface
 

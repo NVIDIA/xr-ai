@@ -18,7 +18,4 @@
 host: 0.0.0.0
 port: 8230
 
-# CloudXR environment file. Values from this file are sourced into oxr-mcp's
-# environment so it picks up XR_RUNTIME_JSON before opening the OpenXR session.
-# Same convention as render_mcp.yaml.
-cloudxr_env_file: ~/.cloudxr/run/cloudxr.env
+service_endpoint: tcp://127.0.0.1:8330

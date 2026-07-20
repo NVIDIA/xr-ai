@@ -22,6 +22,7 @@ agent-sdk/          # Five packages:
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
 ai-services/        # OpenAI-compatible inference servers (VLM, STT, TTS, LLM)
+services/           # Long-running typed capability services
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, vec, video, vlm
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
@@ -57,8 +58,10 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   servers remain compatibility surfaces while their capabilities migrate.
 - **A process boundary does not imply MCP.** `xr-ai-nat[mcp]` may expose an
   application's explicit native-function list to MCP-only agents, but native
-  applications invoke the functions directly. Text-memory owns transcript
-  JSONL storage; transcript MCP only republishes that capability.
+  applications invoke the functions directly. XR tracking calls the typed
+  OpenXR service; OXR MCP only republishes the tracking and spatial functions.
+  Text-memory owns transcript JSONL storage; transcript MCP only republishes
+  that capability.
 - **Image acquisition and vision reasoning stay separate.** The native vision
   function accepts an acquired image path and calls a `VLMService` from
   `xr-ai-models`; it does not own hub, participant, recording, or MCP state.
@@ -135,7 +138,8 @@ frame; tracking and process boundaries remain outside the math functions.
 `TextMemoryFunctionsConfig` provides persistent timestamped text without a
 network boundary. `VisionFunctionsConfig` adds image-question answering over an
 injected `xr-ai-models` VLM while leaving frame acquisition to its own
-capability.
+capability. `XRTrackingFunctionsConfig` exposes the current user frame through
+the typed OpenXR service without routing native agents through MCP.
 
 The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 
