@@ -25,6 +25,7 @@ xr_ai_nat_spatial_math = "xr_ai_nat.functions.spatial_math.functions"
 xr_ai_nat_text_memory = "xr_ai_nat.functions.text_memory.functions"
 xr_ai_nat_vision = "xr_ai_nat.functions.vision.functions"
 xr_ai_nat_xr_tracking = "xr_ai_nat.functions.xr_tracking.functions"
+xr_ai_nat_video_memory = "xr_ai_nat.functions.video_memory.functions"
 
 [tool.uv.sources]
 xr-ai-models = { path = "../xr-ai-models", editable = true }

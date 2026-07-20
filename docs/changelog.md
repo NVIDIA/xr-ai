@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-20 — Live and recorded video become native video-memory functions
+
+`xr_video_memory` exposes live-participant discovery, recorded-video queries,
+and timestamp-anchored frame extraction through `services/video-memory-service`.
+The service owns hub IPC, filesystem access, and NVDEC. Video MCP keeps port
+8210 and its conditional legacy tool list as an adapter to the typed service at
+port 8310.
+
 ### 2026-07-20 — XR tracking becomes a native function backed by one OpenXR service
 
 `xr_tracking` returns the current user coordinate frame through a private,

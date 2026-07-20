@@ -201,12 +201,14 @@ port: 8250
 
 ## video-mcp
 
-`video-mcp` serves camera frames and recordings from two data paths:
+`video-mcp` preserves the MCP surface for camera frames and recordings. Both
+it and native `xr_video_memory` functions call `video-memory-service`, which
+owns two data paths:
 
 - **Historical chunks** — reads the H.264 Annex B chunks the XR-Media-Hub's recorder
   writes to disk (tmpfs by default). `recordings_dir` must match the hub's
   `video_recording.out_dir`.
-- **Live frames** — connects to the hub as a processor endpoint, tracks the most
+- **Live frames** — the service connects to the hub as a processor endpoint, tracks the most
   recent frame per participant, and pulls pixels on demand over the hub IPC
   sockets (`hub_pub` and `hub_push`).
 
@@ -241,18 +243,25 @@ enabled (a chunk store on disk):
 - `get_latest_frame(participant_id)` — deprecated alias for the `second_ago=0`
   case; prefer `get_frame_from_time`.
 
-### video-mcp configuration
+### video-memory and MCP configuration
 
-`video_mcp_server.yaml`:
+`video_memory_service.yaml` owns the capability settings:
 
 ```yaml
+endpoint:       tcp://0.0.0.0:8310
 recordings_dir: /dev/shm/xr-ai/recordings   # must match hub video_recording.out_dir
 out_dir:        /tmp/xr_video_queries        # where query/frame outputs are written
 hub_pub:        ipc:///tmp/xr_hub_pub        # hub PUB socket (live frames)
 hub_push:       ipc:///tmp/xr_hub_in         # hub PUSH socket (frame requests)
+gpu_id:         0
+```
+
+`video_mcp_server.yaml` contains only the compatibility boundary:
+
+```yaml
 host:           0.0.0.0
 port:           8210
-gpu_id:         0
+service_endpoint: tcp://127.0.0.1:8310
 ```
 
 ## vlm-mcp
