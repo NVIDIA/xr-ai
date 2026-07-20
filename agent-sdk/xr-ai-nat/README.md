@@ -9,6 +9,26 @@
 Toolkit (NAT). Applications compose these functions directly; process-backed
 or MCP compatibility adapters remain separate boundaries.
 
+## Model-backed agents
+
+Install `xr-ai-nat[agents]` to make an `xr-ai-models` `LLMService` available
+to NAT's built-in LangChain-backed agent types without bypassing the repository
+model-service boundary:
+
+```python
+from nat.plugin_api import LLMRef
+from xr_ai_nat.llm import ModelsLLMConfig
+
+llm_ref = LLMRef("scene_llm")
+await builder.add_llm(llm_ref, ModelsLLMConfig(service=llm))
+```
+
+`ModelsLLMConfig` accepts either an already-created `LLMService` for
+programmatic applications or a deployment-profile path and role. NAT owns the
+agent graph, function registry, schemas, and tracing; the adapter translates
+messages and tools while every model request still goes through
+`xr-ai-models`.
+
 ## Spatial math
 
 The `xr_spatial_math` function group contains deterministic coordinate

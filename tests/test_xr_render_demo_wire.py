@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Wire-trace golden tests for the xr-render-demo worker LLM call sites.
+"""Wire-trace golden tests for the xr-render-demo model-service contracts.
 
-Exercises the four LLM call sites in ``RenderSceneProcessor`` against
-``StubOpenAI`` without a real server or GPU.  Asserts that the JSON bodies
-sent over the wire match pre-migration goldens (byte-for-byte field presence,
-not ordering) and that ``ChatResponse`` fields are correctly extracted.
+Exercises the direct calls and the payload expected by the NAT-backed
+validator against ``StubOpenAI`` without a real server or GPU. Asserts that
+the JSON bodies sent over the wire retain the required fields and that
+``ChatResponse`` fields are correctly extracted.
 
 GPU verification skipped — stub-server tests only.
 """
@@ -440,6 +440,11 @@ class _UnusedVision:
         raise AssertionError(f"unexpected live-vision invocation: {request}")
 
 
+class _UnusedValidator:
+    async def ainvoke(self, request, *, to_type=None):
+        raise AssertionError(f"unexpected validator invocation: {request} {to_type}")
+
+
 def _make_brain(transport: _CaptureTransport):
     """Build a real RenderSceneProcessor whose service clients are unused.
 
@@ -454,6 +459,7 @@ def _make_brain(transport: _CaptureTransport):
         live_vision = _UnusedVision(),
         release_vision = lambda _pid: None,
         text_memory = None,
+        validator   = _UnusedValidator(),
         prompt_path = _SYSTEM_PROMPT,
         tools       = [],
         llm         = None,
@@ -758,6 +764,7 @@ async def _perception_brain(transport, vlm: _FakeVLM):
             live_vision=live_vision,
             release_vision=config.release,
             text_memory=None,
+            validator=_UnusedValidator(),
             prompt_path=_SYSTEM_PROMPT,
             tools=[_proc._PERCEPTION_TOOL_DEF],
             llm=None,
