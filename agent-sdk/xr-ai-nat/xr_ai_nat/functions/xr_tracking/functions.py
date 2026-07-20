@@ -7,8 +7,7 @@ from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, regi
 from pydantic import Field
 
 from ..spatial_math import SpatialFrame
-from ._client import OpenXRClient
-from .schemas import EmptyRequest
+from ._client import HeadPoseRequest, OpenXRClient
 
 
 class XRTrackingFunctionsConfig(FunctionGroupBaseConfig, name="xr_tracking"):
@@ -23,12 +22,16 @@ async def xr_tracking_functions(config: XRTrackingFunctionsConfig, _builder: Bui
     client = OpenXRClient(config.endpoint, timeout_s=config.timeout_s)
     group = FunctionGroup(config=config)
 
-    async def get_user_frame(request: EmptyRequest) -> SpatialFrame:
-        del request
-        pose = await client.get_head_pose()
+    async def get_user_frame(request: HeadPoseRequest) -> SpatialFrame:
+        pose = await client.get_head_pose(request)
         if not pose.is_valid:
             raise RuntimeError(pose.error or "XR tracking is unavailable")
-        return pose.user_frame()
+        return SpatialFrame(
+            origin=pose.position,
+            forward=pose.forward,
+            right=pose.right,
+            up=pose.up,
+        )
 
     group.add_function(
         "get_user_frame",

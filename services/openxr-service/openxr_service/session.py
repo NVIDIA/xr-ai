@@ -7,7 +7,6 @@ import threading
 from typing import Any
 
 from loguru import logger
-from xr_ai_nat.functions.xr_tracking import HeadPose, OpenXRHealth
 
 from .pose import from_native_pose, unavailable_pose
 
@@ -77,7 +76,7 @@ class HardwarePoseSource:
                 error,
             )
 
-    def get_pose(self) -> HeadPose:
+    def get_pose(self) -> dict[str, Any]:
         with self._lock:
             if self._device_session is None:
                 error = self._try_open()
@@ -87,12 +86,14 @@ class HardwarePoseSource:
             data = self._tracker.get_head(self._device_session).data
         return from_native_pose(data)
 
-    def health(self) -> OpenXRHealth:
-        return OpenXRHealth(
-            session_open=self._oxr_session is not None,
-            open_attempts=self._open_attempts,
-            last_open_error=self._last_open_error,
-        )
+    def health(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "status": "ok",
+                "session_open": self._oxr_session is not None,
+                "open_attempts": self._open_attempts,
+                "last_open_error": self._last_open_error,
+            }
 
     def close(self) -> None:
         with self._lock:

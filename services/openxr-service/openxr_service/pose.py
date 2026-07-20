@@ -1,13 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Convert native OpenXR poses into the service contract."""
+"""Convert native OpenXR poses into plain service-wire dictionaries."""
 
 import math
 import time
 from typing import Any
-
-from xr_ai_nat.functions.xr_tracking import HeadPose
 
 
 def rotate_vector(
@@ -28,21 +26,21 @@ def rotate_vector(
     )
 
 
-def unavailable_pose(error: str) -> HeadPose:
-    return HeadPose(
-        is_valid=False,
-        position={"x": 0.0, "y": 1.6, "z": 0.0},
-        forward={"x": 0.0, "y": 0.0, "z": -1.0},
-        right={"x": 1.0, "y": 0.0, "z": 0.0},
-        up={"x": 0.0, "y": 1.0, "z": 0.0},
-        yaw_deg=0.0,
-        pitch_deg=0.0,
-        timestamp_ms=int(time.time() * 1000),
-        error=f"session_not_ready: {error}",
-    )
+def unavailable_pose(error: str) -> dict[str, Any]:
+    return {
+        "is_valid": False,
+        "position": {"x": 0.0, "y": 1.6, "z": 0.0},
+        "forward": {"x": 0.0, "y": 0.0, "z": -1.0},
+        "right": {"x": 1.0, "y": 0.0, "z": 0.0},
+        "up": {"x": 0.0, "y": 1.0, "z": 0.0},
+        "yaw_deg": 0.0,
+        "pitch_deg": 0.0,
+        "ts": int(time.time() * 1000),
+        "error": f"session_not_ready: {error}",
+    }
 
 
-def from_native_pose(data: Any) -> HeadPose:
+def from_native_pose(data: Any) -> dict[str, Any]:
     pose = data.pose
     quaternion = (
         float(pose.orientation.x),
@@ -63,17 +61,17 @@ def from_native_pose(data: Any) -> HeadPose:
     pitch = math.degrees(
         math.asin(max(-1.0, min(1.0, 2.0 * (qw * qx - qy * qz))))
     )
-    return HeadPose(
-        is_valid=bool(data.is_valid),
-        position={
+    return {
+        "is_valid": bool(data.is_valid),
+        "position": {
             "x": round(float(pose.position.x), 3),
             "y": round(float(pose.position.y), 3),
             "z": round(float(pose.position.z), 3),
         },
-        forward=dict(zip(("x", "y", "z"), (round(value, 3) for value in forward), strict=True)),
-        right=dict(zip(("x", "y", "z"), (round(value, 3) for value in right), strict=True)),
-        up=dict(zip(("x", "y", "z"), (round(value, 3) for value in up), strict=True)),
-        yaw_deg=round(yaw, 1),
-        pitch_deg=round(pitch, 1),
-        timestamp_ms=int(time.time() * 1000),
-    )
+        "forward": dict(zip(("x", "y", "z"), (round(value, 3) for value in forward), strict=True)),
+        "right": dict(zip(("x", "y", "z"), (round(value, 3) for value in right), strict=True)),
+        "up": dict(zip(("x", "y", "z"), (round(value, 3) for value in up), strict=True)),
+        "yaw_deg": round(yaw, 1),
+        "pitch_deg": round(pitch, 1),
+        "ts": int(time.time() * 1000),
+    }

@@ -11,12 +11,14 @@ preserved and not re-litigated.
 
 ### 2026-07-20 — XR tracking becomes a native function backed by one OpenXR service
 
-`xr_tracking` returns the current user coordinate frame through a private,
-typed msgpack/ZMQ service boundary. The long-running OpenXR session lives in
+`xr_tracking` returns the current user coordinate frame through a private
+msgpack/ZMQ service boundary. The service speaks plain dictionaries and the
+native client owns typed request and result contracts, keeping hardware code
+independent of NAT result models. The long-running OpenXR session lives in
 `services/openxr-service`; native agents call the NAT function directly and
 the existing OXR MCP server preserves its port and tool schemas as a
-compatibility adapter. Port 8330 is reserved for the typed service while port
-8230 remains the external MCP endpoint.
+compatibility adapter. Port 8330 is reserved for the private service while
+port 8230 remains the external MCP endpoint.
 
 ### 2026-07-17 — Image question answering becomes a native vision function
 

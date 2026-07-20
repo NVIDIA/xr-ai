@@ -4,17 +4,19 @@
 """Typed OpenXR RPC surface independent of the hardware implementation."""
 
 import asyncio
-from typing import Protocol
+from typing import Any, Protocol
 
+from pydantic import ValidationError
 from xr_ai_nat.functions._rpc import RPCError
-from xr_ai_nat.functions.xr_tracking import HeadPose, OpenXRHealth
-from xr_ai_nat.functions.xr_tracking.schemas import EmptyRequest
+from xr_ai_nat.functions.xr_tracking._client import HeadPoseRequest, OpenXRHealthRequest
 
 
 class PoseSource(Protocol):
-    def get_pose(self) -> HeadPose: ...
+    def get_pose(self) -> dict[str, Any]:
+        pass
 
-    def health(self) -> OpenXRHealth: ...
+    def health(self) -> dict[str, Any]:
+        pass
 
 
 class OpenXRService:
@@ -23,11 +25,18 @@ class OpenXRService:
     def __init__(self, source: PoseSource) -> None:
         self._source = source
 
-    async def dispatch(self, operation: str, arguments: dict) -> dict:
-        EmptyRequest.model_validate(arguments)
+    async def dispatch(self, operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if operation == "get_head_pose":
-            pose = await asyncio.to_thread(self._source.get_pose)
-            return pose.model_dump(mode="python")
+            self._validate(HeadPoseRequest, arguments)
+            return await asyncio.to_thread(self._source.get_pose)
         if operation == "get_health":
-            return self._source.health().model_dump(mode="python")
+            self._validate(OpenXRHealthRequest, arguments)
+            return self._source.health()
         raise RPCError(f"unknown operation: {operation}", code="unknown_operation")
+
+    @staticmethod
+    def _validate(request_type: type[HeadPoseRequest] | type[OpenXRHealthRequest], arguments: dict[str, Any]) -> None:
+        try:
+            request_type.model_validate(arguments)
+        except ValidationError as exc:
+            raise RPCError("unexpected OpenXR service arguments", code="invalid_request") from exc

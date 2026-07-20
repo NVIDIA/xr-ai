@@ -20,7 +20,11 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_nat.functions.spatial_math import SpatialFrame, Vector3
 from xr_ai_nat.functions.spatial_math import _math as spatial_math
-from xr_ai_nat.functions.xr_tracking._client import OpenXRClient
+from xr_ai_nat.functions.xr_tracking._client import (
+    HeadPoseRequest,
+    OpenXRClient,
+    OpenXRHealthRequest,
+)
 
 _DEFAULT_YAML = Path(__file__).resolve().parent.parent / "oxr_mcp_server.yaml"
 
@@ -48,12 +52,14 @@ class PoseSource:
         self._client = OpenXRClient(endpoint)
 
     async def get_pose(self) -> dict:
-        value = (await self._client.get_head_pose()).model_dump(mode="python")
-        value["ts"] = value.pop("timestamp_ms")
-        return value
+        return (await self._client.get_head_pose(HeadPoseRequest())).model_dump(
+            mode="python", exclude_none=True
+        )
 
     async def health_snapshot(self) -> dict:
-        return (await self._client.get_health()).model_dump(mode="python")
+        return (await self._client.get_health(OpenXRHealthRequest())).model_dump(
+            mode="python", exclude_none=True
+        )
 
     async def close(self) -> None:
         await self._client.close()

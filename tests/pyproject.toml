@@ -63,6 +63,7 @@ packages = ["xr_ai_tests"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["."]
+pythonpath   = ["../services/openxr-service"]
 markers = [
     "gpu: requires local GPU / Docker / NVENC; skipped in CI",
     "integration: spawns a real server subprocess (CPU-only); runs in CI",

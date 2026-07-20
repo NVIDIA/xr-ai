@@ -5,7 +5,6 @@
 
 import asyncio
 import uuid
-from contextlib import suppress
 from typing import Any
 
 import zmq
@@ -24,6 +23,13 @@ class RPCClient:
         self._receiver: asyncio.Task[None] | None = None
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._send_lock = asyncio.Lock()
+
+    async def __aenter__(self) -> "RPCClient":
+        self._ensure_started()
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.close()
 
     def _ensure_started(self) -> None:
         if self._socket is not None:
@@ -106,8 +112,7 @@ class RPCClient:
         receiver, self._receiver = self._receiver, None
         if receiver is not None:
             receiver.cancel()
-            with suppress(asyncio.CancelledError):
-                await receiver
+            await asyncio.gather(receiver, return_exceptions=True)
         for future in tuple(self._pending.values()):
             if not future.done():
                 future.set_exception(RPCError("RPC client closed", code="closed"))

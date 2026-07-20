@@ -131,8 +131,11 @@ xr-openxr-service  (services/openxr-service/)
     └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
     └── pyyaml >=6.0
     └── isaacteleop
-    Owns the long-running headless OpenXR and DeviceIO sessions. Exposes typed
-    head-pose and health operations over private msgpack/ZMQ at port 8330.
+    Owns the long-running headless OpenXR and DeviceIO sessions. Exposes plain
+    dict head-pose and health messages over private msgpack/ZMQ at port 8330;
+    xr-ai-nat owns the typed client contracts. Root pytest adds this source tree
+    to its Python path only for CPU-only pose-math regression tests, avoiding a
+    test-time isaacteleop installation.
 
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
