@@ -114,6 +114,8 @@ def _build_processes(backend: str) -> list[Process]:
                 config="yaml/piper_tts_server.yaml"),
         Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",     "vlm_mcp_server",
                 config=vlm_mcp_config),
+        Process("video-memory", "../../services/video-memory-service", "video_memory_service",
+                config="yaml/video_memory_service.yaml"),
         Process("video-mcp",  "../../agent-mcp-servers/video-mcp",   "video_mcp_server",
                 config="yaml/video_mcp_server.yaml"),
         Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),

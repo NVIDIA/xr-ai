@@ -86,6 +86,23 @@ user's current origin and basis vectors. Pass that value directly to the
 spatial-math functions; tracking owns pose acquisition while spatial math
 remains deterministic and service-independent.
 
+## Video memory
+
+Install `xr-ai-nat[services]` and configure `xr_video_memory` with the private
+endpoint of `services/video-memory-service`:
+
+```yaml
+functions:
+  video_memory:
+    _type: xr_video_memory
+    endpoint: tcp://127.0.0.1:8310
+```
+
+The group exposes live-participant discovery, recorded-participant discovery,
+recording statistics, H.264 clip queries, and timestamp-anchored PNG frame
+lookup. The service owns hub IPC, chunk storage, and NVDEC; native agents see
+only typed functions.
+
 ## MCP compatibility
 
 Install `xr-ai-nat[mcp]` and pass an explicit list of native functions to
