@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 import pytest
 from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
+from transcript_mcp_server.__main__ import build_mcp
 from xr_ai_nat.adapters.mcp import create_mcp_server
 from xr_ai_nat.functions.text_memory import TextMemoryError, TextMemoryFunctionsConfig
 
@@ -92,6 +93,25 @@ async def test_generic_mcp_adapter_preserves_list_and_object_results(tmp_path) -
         "text",
     }
     assert added.structured_content == {"result": {"ok": True}}
+    assert queried.structured_content == {
+        "result": [{"timestamp_us": 100, "text": "remember this"}]
+    }
+
+
+async def test_transcript_mcp_functions_survive_builder_teardown(tmp_path) -> None:
+    server = await build_mcp(tmp_path)
+
+    async with McpClient(server) as client:
+        added = await client.call_tool(
+            "add_transcript",
+            {"source_id": "agent", "timestamp_us": 100, "text": "remember this"},
+        )
+        queried = await client.call_tool(
+            "query_transcripts",
+            {"source_id": "agent", "start_us": 0, "end_us": 200},
+        )
+
+    assert added.structured_content == {"ok": True}
     assert queried.structured_content == {
         "result": [{"timestamp_us": 100, "text": "remember this"}]
     }

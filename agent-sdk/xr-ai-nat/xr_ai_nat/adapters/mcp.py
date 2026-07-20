@@ -10,10 +10,9 @@ from typing import Any, get_args, get_origin
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ValidationError as FastMCPValidationError
-from fastmcp.tools import Tool
-from fastmcp.tools.base import ToolResult
+from fastmcp.tools import FunctionTool
 from nat.plugin_api import Function
-from pydantic import PrivateAttr, TypeAdapter, ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 
 def _wrapped_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -46,37 +45,34 @@ def _output_schema(function: Function, *, untyped: bool) -> dict[str, Any]:
     return _wrapped_schema(schema)
 
 
-class _NatFunctionTool(Tool):
-    _function: Function = PrivateAttr()
+def _function_tool(
+    function: Function,
+    *,
+    name: str | None = None,
+    untyped_output: bool = False,
+) -> FunctionTool:
+    if not function.has_single_output:
+        raise TypeError("MCP exports require a NAT function with a single-response path")
 
-    def __init__(
-        self,
-        function: Function,
-        *,
-        name: str | None = None,
-        untyped_output: bool = False,
-    ) -> None:
-        if not function.has_single_output:
-            raise TypeError("MCP exports require a NAT function with a single-response path")
-        super().__init__(
-            name=name or function.instance_name,
-            description=function.description or "",
-            parameters=function.input_schema.model_json_schema(mode="validation"),
-            output_schema=_output_schema(function, untyped=untyped_output),
-        )
-        self._function = function
-
-    async def run(self, arguments: dict[str, Any]) -> ToolResult:
+    async def invoke(**arguments: Any) -> Any:
         try:
-            request = self._function.input_schema.model_validate(arguments)
+            request = function.input_schema.model_validate(arguments)
         except ValidationError as exc:
             raise FastMCPValidationError(str(exc)) from exc
-        result = await self._function.ainvoke(request)
-        serialized = TypeAdapter(self._function.single_output_type).dump_python(
+        result = await function.ainvoke(request)
+        return TypeAdapter(function.single_output_type).dump_python(
             result,
             mode="json",
         )
-        return self.convert_result(serialized)
+
+    return FunctionTool(
+        name=name or function.instance_name,
+        description=function.description or "",
+        parameters=function.input_schema.model_json_schema(mode="validation"),
+        output_schema=_output_schema(function, untyped=untyped_output),
+        fn=invoke,
+        run_in_thread=False,
+    )
 
 
 def create_mcp_server(
@@ -102,7 +98,7 @@ def create_mcp_server(
     server = FastMCP(name, strict_input_validation=True, mask_error_details=True)
     for function, tool_name in zip(functions, names, strict=True):
         server.add_tool(
-            _NatFunctionTool(
+            _function_tool(
                 function,
                 name=tool_name,
                 untyped_output=function.instance_name in untyped,

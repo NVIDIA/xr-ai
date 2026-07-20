@@ -18,16 +18,15 @@ from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
 from xr_ai_nat.adapters.mcp import create_mcp_server
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
-from xr_ai_nat.functions.text_memory._store import TextMemoryStore as TranscriptStore
 
 
-async def build_mcp(store: TranscriptStore):
+async def build_mcp(directory: str | Path):
     """Republish the four native text-memory functions under legacy MCP names."""
 
     async with WorkflowBuilder() as builder:
         await builder.add_function_group(
             "text_memory",
-            TextMemoryFunctionsConfig(directory=store.directory),
+            TextMemoryFunctionsConfig(directory=directory),
         )
         group = await builder.get_function_group("text_memory")
         functions = await group.get_all_functions()
@@ -54,10 +53,10 @@ async def build_mcp(store: TranscriptStore):
     )
 
 
-async def build_app(store: TranscriptStore):
+async def build_app(directory: str | Path):
     """Return the ASGI app serving the compatibility transport at `/mcp`."""
 
-    return (await build_mcp(store)).http_app(path="/mcp")
+    return (await build_mcp(directory)).http_app(path="/mcp")
 
 
 def run() -> None:
@@ -82,7 +81,7 @@ def run() -> None:
     port = int(config.get("port", 8200))
 
     async def serve() -> None:
-        app = await build_app(TranscriptStore(directory))
+        app = await build_app(directory)
         uvicorn_config = uvicorn.Config(
             app,
             host=host,

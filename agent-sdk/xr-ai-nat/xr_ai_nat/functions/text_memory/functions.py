@@ -15,6 +15,8 @@ from .schemas import OperationResult, TextMemoryError, TranscriptSegment, Transc
 
 
 class _EmptyInput(BaseModel):
+    """Explicit empty request keeps the zero-argument function's schema object-shaped."""
+
     pass
 
 
