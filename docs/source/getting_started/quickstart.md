@@ -156,10 +156,11 @@ Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, MCP compatibility adapters, and the
-worker. The Pipecat pipeline pairs a fast Llama-8B for
-quick-acks with a Nemotron-30B agentic tool-calling loop over `render-mcp`,
-`oxr-mcp`, `vlm-mcp`, and `video-mcp`. Refer to the xr-render-demo guide for the
+endpoints, typed capability processes, and the worker. Native NAT Functions
+connect the worker to those capabilities; MCP adapters remain optional outward
+compatibility surfaces. The Pipecat pipeline pairs a fast Llama-8B for
+quick-acks with a Nemotron-30B agentic tool-calling loop over scene, tracking,
+spatial-math, vision, and video-memory Functions. Refer to the xr-render-demo guide for the
 full process map, agentic-loop details, and the XR session lifecycle.
 
 **Requires `model-servers` to be running first** — the demo does not start its
@@ -229,8 +230,8 @@ stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
 model_backend: nim     # default is "local"
 ```
 
-The worker loads `yaml/models.nim.yaml` and the orchestrator points `vlm-mcp` at
-`yaml/vlm_mcp_server.nim.yaml` automatically. Provide an
+The worker loads `yaml/models.nim.yaml` for native model-backed Functions.
+Provide an
 `NGC_API_KEY` as an **environment variable** (or via the launcher credential
 prompt — not in YAML) and just don't start the local `llm` / `agent-llm` / `vlm`
 model-servers. Refer to the AI-services guide.

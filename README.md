@@ -289,10 +289,11 @@ Quest 3 / Vision Pro on the same LAN, or the IWER emulator built into the
 web client for desktop dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, MCP compatibility adapters, and the
-worker. The Pipecat pipeline pairs a fast
+endpoints, typed capability processes, and the worker. The worker calls those
+processes through native NAT functions; MCP adapters remain optional outward
+compatibility surfaces and are not in the sample's execution path. The Pipecat pipeline pairs a fast
 Llama-8B for quick-acks with a Nemotron-30B agentic tool-calling loop over
-`render-mcp` / `oxr-mcp` / `vlm-mcp` / `video-mcp`. Full process map,
+scene, XR tracking, spatial math, vision, and video-memory functions. Full process map,
 agentic-loop details, and the XR session lifecycle:
 [`docs/xr-render-demo.md`](docs/xr-render-demo.md).
 
@@ -367,8 +368,8 @@ uv run model_servers --stop
 model_backend: nim     # default is "local"
 ```
 
-The worker loads `yaml/models.nim.yaml` and the orchestrator points `vlm-mcp`
-at `yaml/vlm_mcp_server.nim.yaml` automatically — no `main.py` edits. Provide
+The worker loads `yaml/models.nim.yaml` for the native model-backed functions —
+no `main.py` edits. Provide
 an `NGC_API_KEY` as an **environment variable** (or via the launcher
 credential prompt — not in YAML) and just don't start the local `llm` /
 `agent-llm` / `vlm` model-servers. See

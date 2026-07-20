@@ -27,14 +27,9 @@ exit terminates the whole stack.
 | vlm | `ai-services/vlm-server/` | `vlm_server` | 8100 |
 | llm | `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 |
 | agent-llm | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 |
-| vlm-mcp | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 |
 | video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (typed RPC) |
-| video-mcp | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 |
 | scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
-| render-mcp | `agent-mcp-servers/render-mcp/` | `render_mcp` | 8220 |
 | openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
-| oxr-mcp | `agent-mcp-servers/oxr-mcp/` | `oxr_mcp_server` | 8230 |
-| vec-mcp | `agent-mcp-servers/vec-mcp/` | `vec_mcp_server` | 8250 |
 | worker | `agent-samples/xr-render-demo/worker/` | `xr_render_demo_worker` | — |
 
 Before starting the stack, the orchestrator runs two setup steps:
@@ -60,7 +55,7 @@ physical GPUs.
 
 The same three selectors are appended to `cloudxr.env` (under
 `~/.cloudxr/run/`). The scene process sources that file when it spawns LOVR, so
-LOVR inherits the pin; `oxr-mcp` picks it up the same way.
+LOVR inherits the pin; `openxr-service` picks it up the same way.
 
 If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
 requested index, the wrapper logs a warning and skips pinning rather than
@@ -74,7 +69,7 @@ the XR compositor and the agentic LLM do not share a card.
 
 The worker reads two YAML files:
 
-- `yaml/xr_render_demo_worker.yaml` — MCP base URLs and VAD tunables.
+- `yaml/xr_render_demo_worker.yaml` — native capability endpoints, text-memory directory, and VAD tunables.
 - `yaml/models.yaml` (path set by `models_yaml:` in the worker YAML) — model
   endpoint declarations consumed by `xr-ai-models`.  Each entry maps a logical
   name (`llm`, `agent_llm`, `stt`, `tts`, `vlm`) to a `kind: preset:<name>`
@@ -99,9 +94,8 @@ calls — none of which actually use tool calling:
   spoken acknowledgment. Also classifies whether the request needs spatial
   reasoning (`think: true/false`), so the 30B model knows before it starts
   whether to engage its thinking budget. Max 40 tokens, 8s timeout. The ack
-  is always sent on the data channel (`agent.progress` topic); it is only
-  also spoken via TTS when `think=true`, since that is when the user will
-  actually be waiting 5–10s and needs to know they were heard.
+  is sent on the data channel (`agent.progress` topic) and spoken on every
+  turn so the user immediately knows they were heard.
 - **Still-working messages** — if the agentic loop exceeds 5s, this model
   generates a short contextual phrase like *"Still finding the right
   position"* on a 7s repeat. Sent to the data channel only — never spoken,
@@ -120,17 +114,13 @@ This is the model that runs the multi-step tool-calling loop.
 
 ## VLM — Cosmos-Reason1-7B
 
-Port 8100 (`vlm-server`) and port 8240 (`vlm-mcp`).
+Port 8100 (`vlm-server`).
 
 Loaded in-process by `vlm-server` via HuggingFace transformers
 (Qwen2.5-VL architecture). `<think>…</think>` blocks are stripped before
-returning. The `vlm-mcp` is a thin FastMCP wrapper exposing a single
-`ask_image(question, image_path)` tool: it reads the PNG at that path,
-base64-encodes it, and POSTs it to `vlm-server` as an `image_url` message.
-Visual queries from the user are handled by the brain-local
-`look_at_current_frame(question)` tool (see tool routing below), which turns
-the camera on automatically, grabs the live frame, and calls `vlm-server`
-directly — bypassing `vlm-mcp` entirely for the default perception path.
+returning. Native vision functions read recorded images or acquire a current
+participant frame, encode it as an image URL, and invoke the shared
+`xr-ai-models` VLM service.
 
 There is a deliberate startup ordering constraint: the worker's
 `wait_for_services` probe blocks on the VLM's `/health` endpoint, which
@@ -168,7 +158,7 @@ Port 8105. `rhasspy/piper-voices` ONNX. Runs on CPU, ~100 ms per sentence. All
 synthesis runs in a thread pool so the asyncio loop is never blocked.
 
 ```
-TextFrame (from agentic loop final response, or quick-ack when think=true)
+TextFrame (from agentic loop final response or quick-ack)
   → TtsProcessor
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
@@ -192,11 +182,10 @@ XRMediaHubTransport.input()
 
 ## Agentic loop
 
-At worker startup, `list_tools()` is called on all MCP clients
-(`render-mcp`, `oxr-mcp`, `vlm-mcp`, `video-mcp`, `vec-mcp`). Results are
-converted to OpenAI tool format and held in memory. `start_xr` and
-`get_health` are excluded from the tool list — the worker calls those
-directly, not the LLM.
+At worker startup, a NAT `WorkflowBuilder` constructs sample-local scene,
+XR-tracking, spatial-math, vision, video-memory, and text-memory functions.
+The LLM tool schemas are derived from those Functions. `start_xr` and
+`get_health` remain worker-managed lifecycle operations.
 
 On each `TranscriptionFrame`:
 
@@ -207,16 +196,11 @@ On each `TranscriptionFrame`:
    `position_ahead(1.5)` — results injected into the user message so the
    model skips those tool calls and goes straight to the operation.
 4. **Nemotron-30B :8107** runs with `tools=[…]`, up to 10 iterations:
-   - Model emits `tool_calls` → worker routes and executes → result appended
+   - Model emits `tool_calls` → worker invokes the matching NAT Function → result appended
      to conversation → next iteration.
-   - Tool routing: `look_at_current_frame` → **brain-local** (intercepts before
-     MCP routing: turns camera on, grabs live frame, calls `vlm-server` directly);
-     oxr-mcp tools (`get_head_pose`, `position_ahead`, `position_relative`,
-     `place_user_relative`, `place_object_relative`, `place_inside_by_id`,
-     `displace_object`, `displace_objects`) → `oxr-mcp`; vec-mcp tools
-     (`between_anchors`, `world_offset`, `along_direction`, `scale_value`) →
-     `vec-mcp`; `ask_image` → `vlm-mcp` (with path existence guard); video
-     tools → `video-mcp`; everything else → `render-mcp`.
+   - Runtime-backed Functions call scene, OpenXR, and video-memory typed
+     services. Spatial math and text memory execute in process, and vision
+     calls the configured `xr-ai-models` VLM service.
    - Progress message sent on `agent.progress` topic before each tool
      executes (data channel).
    - If `think=true`: reasoning preamble injected into system prompt
@@ -232,33 +216,24 @@ On each `TranscriptionFrame`:
    downstream to TTS.
 6. **Turn appended** to a rolling 4-turn history buffer — injected as
    context in future turns so the model understands "fix that", "undo",
-   "the one I just added".
+   "the one I just added". Final messages are also persisted through native
+   text memory without model scratch output or tool traces.
 
-## MCP servers
+## Native capability composition
 
-| Server | Port | Tools |
-|---|---|---|
-| `render-mcp` | 8220 | `start_xr`, `get_health`, `add_primitive`, `update_primitive`, `remove_primitive`, `get_scene_state` |
-| `oxr-mcp` | 8230 | `get_head_pose`, `position_ahead`, `position_relative`, `place_user_relative`, `place_object_relative`, `place_inside_by_id`, `displace_object`, `displace_objects`, `get_health` |
-| `vec-mcp` | 8250 | `between_anchors`, `world_offset`, `along_direction`, `scale_value` |
-| `vlm-mcp` | 8240 | `ask_image` |
-| `video-mcp` | 8210 | `list_live_participants`, `get_frame_from_time` (always); `list_recorded_participants`, `get_video_stats`, `query_video` (recording enabled only); `get_latest_frame` (deprecated) |
-
-The sample-local scene process owns scene state and LOVR and is the only thing
-that pushes ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `render-mcp`
-is a compatibility adapter over its typed API. `openxr-service` owns
-the second headless OpenXR session (`XR_MND_HEADLESS`); `oxr-mcp` forwards
-tracking requests to it and preserves the existing MCP tool surface.
-`video-memory-service` owns live hub IPC and recorded-video decoding;
-`video-mcp` only republishes that typed capability for MCP consumers.
+The sample-local scene process owns scene state and LOVR. `openxr-service`
+owns the headless tracking session, and `video-memory-service` owns live hub
+IPC and recorded-video decoding. NAT Functions provide the typed tool surface
+over those services. Generic MCP adapters can republish selected Functions for
+non-NAT consumers, but the demo does not launch or call them.
 
 ### Spatial tool surface
 
-The tool surface is split across `oxr-mcp` (pose-aware named-direction
-helpers) and `vec-mcp` (pure-math primitives). The split offloads vector
-arithmetic the LLM is bad at while keeping pose-dependent math in one place:
+The worker composes XR tracking with shared spatial-math Functions. This
+offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
+in one place:
 
-- **oxr-mcp named-direction helpers** take a `direction` enum (`front`,
+- **Pose-aware named-direction helpers** take a `direction` enum (`front`,
   `back`, `left`, `right`, `above`, `below`, plus `next_to` on
   `place_object_relative`) and always-positive `distance`. The LLM never
   applies signs to user-frame axes.
@@ -278,7 +253,7 @@ arithmetic the LLM is bad at while keeping pose-dependent math in one place:
     containment for "put X in Y". Argument names (`movee_id` paired
     with `container_*`) force the model to pick the right noun's coords;
     the return shape feeds straight into `update_primitive`.
-- **vec-mcp pure-math primitives** are pose-independent:
+- **Pure-math primitives** are pose-independent:
   - `between_anchors(a_x, a_y, a_z, b_x, b_y, b_z)`: component-wise midpoint.
   - `world_offset(origin_x, origin_y, origin_z, dx, dy, dz)`:
     axis-aligned world-Y-up shift.
@@ -320,7 +295,7 @@ a streaming client connects. LOVR cannot start before then.
 1. User opens https://<host>:8080, grants mic + XR permissions
 2. User clicks "Launch XR"
 3. Client sends `xr.session.started` data message → hub IPC → worker
-4. Worker calls render-mcp `start_xr`
+4. Worker invokes native `start_xr`
    → scene process spawns LOVR + waits for CloudXR in a background task
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked

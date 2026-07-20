@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # Add the worker directory to sys.path so we can import its modules.
@@ -39,6 +40,8 @@ from xr_ai_models import (
     ToolDef,
 )
 from xr_ai_models.config import load_models_config
+from nat.builder.workflow_builder import WorkflowBuilder
+from xr_ai_nat.functions.vision import LiveVisionFunctionConfig
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -427,8 +430,18 @@ class _CaptureTransport:
         self.sent.append(msg)
 
 
+class _UnusedToolbox:
+    async def invoke(self, name: str, arguments: dict):
+        raise AssertionError(f"unexpected native tool invocation: {name} {arguments}")
+
+
+class _UnusedVision:
+    async def ainvoke(self, request):
+        raise AssertionError(f"unexpected live-vision invocation: {request}")
+
+
 def _make_brain(transport: _CaptureTransport):
-    """Build a real RenderSceneProcessor whose LLM/MCP clients are None.
+    """Build a real RenderSceneProcessor whose service clients are unused.
 
     The notice path (enqueue_notice → handle_query short-circuit →
     _emit_notice) never dereferences them. The constructor eagerly reads
@@ -437,11 +450,10 @@ def _make_brain(transport: _CaptureTransport):
     return _proc.RenderSceneProcessor(
         transport   = transport,
         cfg         = None,
-        render      = None,
-        oxr         = None,
-        vlm         = None,
-        video       = None,
-        vec         = None,
+        toolbox     = _UnusedToolbox(),
+        live_vision = _UnusedVision(),
+        release_vision = lambda _pid: None,
+        text_memory = None,
         prompt_path = _SYSTEM_PROMPT,
         tools       = [],
         llm         = None,
@@ -568,6 +580,47 @@ from xr_ai_agent import FrameData, FrameSignal, PixelFormat  # noqa: E402
 from xr_ai_models import ChatResponse, ToolCall  # noqa: E402
 
 import processors as _proc  # noqa: E402
+import capabilities as _caps  # noqa: E402
+from xr_ai_nat.functions.spatial_math import SpatialMathFunctionsConfig  # noqa: E402
+from xr_ai_nat.functions.xr_tracking import XRTrackingFunctionsConfig  # noqa: E402
+
+
+async def test_render_spatial_native_toolbox_builds() -> None:
+    """The sample's prompt-compatible spatial surface derives from NAT Functions."""
+    async with WorkflowBuilder() as builder:
+        await builder.add_function_group(
+            "tracking",
+            XRTrackingFunctionsConfig(endpoint="tcp://127.0.0.1:65530", timeout_s=0.1),
+        )
+        await builder.add_function_group("spatial_math", SpatialMathFunctionsConfig())
+        await builder.add_function_group("render_spatial", _caps.RenderSpatialToolsConfig())
+        group = await builder.get_function_group("render_spatial")
+        toolbox = _caps.NativeToolbox(await group.get_all_functions())
+
+        definitions = {tool.name: tool for tool in toolbox.definitions()}
+        expected_parameters = {
+            "along_direction": {
+                "origin_x", "origin_y", "origin_z", "target_x", "target_y", "target_z", "distance",
+            },
+            "between_anchors": {"a_x", "a_y", "a_z", "b_x", "b_y", "b_z"},
+            "displace_object": {"current_x", "current_y", "current_z", "right", "up", "forward"},
+            "displace_objects": {
+                "object_ids", "current_xs", "current_ys", "current_zs", "right", "up", "forward",
+            },
+            "get_head_pose": set(),
+            "place_inside_by_id": {"movee_id", "container_x", "container_y", "container_z"},
+            "place_object_relative": {"origin_x", "origin_y", "origin_z", "direction", "distance"},
+            "place_user_relative": {"direction", "distance"},
+            "position_ahead": {"distance"},
+            "position_relative": {
+                "forward", "right", "up", "origin_x", "origin_y", "origin_z",
+            },
+            "scale_value": {"current", "factor"},
+            "world_offset": {"origin_x", "origin_y", "origin_z", "dx", "dy", "dz"},
+        }
+        assert set(definitions) == set(expected_parameters)
+        for name, parameters in expected_parameters.items():
+            assert set(definitions[name].parameters["properties"]) == parameters
 
 
 class _FakeEndpoint:
@@ -647,23 +700,29 @@ def _now_us_test() -> int:
     return _t.time_ns() // 1_000
 
 
-def _make_perception_brain(transport, vlm: _FakeVLM):
-    return _proc.RenderSceneProcessor(
-        transport   = transport,
-        cfg         = None,
-        render      = None,
-        oxr         = None,
-        vlm         = None,
-        video       = None,
-        vec         = None,
-        prompt_path = _SYSTEM_PROMPT,
-        tools       = [_proc._PERCEPTION_TOOL_DEF],
-        llm         = None,
-        agent_llm   = None,
-        vlm_service = vlm,
-        frame_max_age_s = 60.0,   # generous so the seeded frame stays fresh
-        frame_timeout_s = 0.2,    # short — the no-frame test must not hang
+@asynccontextmanager
+async def _perception_brain(transport, vlm: _FakeVLM):
+    config = LiveVisionFunctionConfig(
+        endpoint=transport.endpoint,
+        vlm=vlm,
+        system_prompt=_proc._PERCEPTION_SYSTEM_PROMPT,
+        frame_max_age_s=60.0,
+        frame_timeout_s=0.2,
     )
+    async with WorkflowBuilder() as builder:
+        live_vision = await builder.add_function("live_vision_test", config)
+        yield _proc.RenderSceneProcessor(
+            transport=transport,
+            cfg=None,
+            toolbox=_UnusedToolbox(),
+            live_vision=live_vision,
+            release_vision=config.release,
+            text_memory=None,
+            prompt_path=_SYSTEM_PROMPT,
+            tools=[_proc._PERCEPTION_TOOL_DEF],
+            llm=None,
+            agent_llm=None,
+        )
 
 
 def test_perception_tool_def_in_prompt_and_classifier() -> None:
@@ -684,21 +743,17 @@ async def test_perception_query_reaches_vlm_frame_path() -> None:
     transport = _CaptureTransportWithEndpoint()
     transport.set_target_participant("pid-1")
     vlm = _FakeVLM(answer="It's a red mug.")
-    brain = _make_perception_brain(transport, vlm)
+    async with _perception_brain(transport, vlm) as brain:
+        sig, fd = _rgb_frame("pid-1")
+        for cb in transport.endpoint.frame_cbs:
+            await cb(sig)
+        transport.endpoint.frame = fd
 
-    # Seed a fresh live frame for the participant (as if the hub delivered one).
-    # The VisionModule owns the frame cache now, so deliver via the registered
-    # frame callback rather than poking brain internals.
-    sig, fd = _rgb_frame("pid-1")
-    for cb in transport.endpoint.frame_cbs:
-        await cb(sig)
-    transport.endpoint.frame = fd
-
-    result = await brain._execute_tool(  # noqa: SLF001
-        "look_at_current_frame",
-        {"question": "What colour is this thing I'm holding?"},
-        pid="pid-1",
-    )
+        result = await brain._execute_tool(  # noqa: SLF001
+            "look_at_current_frame",
+            {"question": "What colour is this thing I'm holding?"},
+            pid="pid-1",
+        )
 
     # Reached the VLM with the encoded frame + the question.
     assert len(vlm.calls) == 1
@@ -721,13 +776,8 @@ async def test_perception_no_frame_yields_graceful_message() -> None:
     transport = _CaptureTransportWithEndpoint()
     transport.set_target_participant("pid-1")
     vlm = _FakeVLM()
-    brain = _make_perception_brain(transport, vlm)
-
-    # No frame seeded → _wait_for_frame times out (frame_timeout=0.2s).
-    # Stub the MCP prefetch (None clients) and script the agent LLM to emit a
-    # single look_at_current_frame tool call.
-    async def _fake_call_mcp(_client, tool, _args, *, silent=False):
-        return {}  # empty scene / pose
+    async def _fake_call_tool(_tool, _args, *, silent=False):
+        return {}
 
     call_count = {"n": 0}
 
@@ -745,16 +795,17 @@ async def test_perception_no_frame_yields_graceful_message() -> None:
             raw={},
         )
 
-    brain._call_mcp = _fake_call_mcp        # noqa: SLF001
     class _LLM:
         async def chat(self, messages, **kw):
             return await _fake_chat(messages, **kw)
-    brain._agent_llm = _LLM()               # noqa: SLF001
 
-    answer = await brain._agentic_loop(     # noqa: SLF001
-        "what colour is this thing I'm holding?", "pid-1",
-        ref_us=_now_us_test(), needs_thinking=True, thinking_ctx=[""],
-    )
+    async with _perception_brain(transport, vlm) as brain:
+        brain._call_tool = _fake_call_tool  # noqa: SLF001
+        brain._agent_llm = _LLM()  # noqa: SLF001
+        answer = await brain._agentic_loop(  # noqa: SLF001
+            "what colour is this thing I'm holding?", "pid-1",
+            ref_us=_now_us_test(), needs_thinking=True, thinking_ctx=[""],
+        )
 
     # Graceful spoken message, not a hang or a generic "Done." fallback.
     assert answer == _proc._NO_FRAME_MSG

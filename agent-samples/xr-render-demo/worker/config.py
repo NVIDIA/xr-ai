@@ -19,12 +19,10 @@ class WorkerConfig:
     # bare basenames sit next to this worker's config YAML.
     voice_gate_yaml: str
 
-    # MCP server base URLs — not in scope for xr-ai-models.
-    render_mcp: str   # base URL, e.g. http://localhost:8220
-    oxr_mcp:    str   # base URL, e.g. http://localhost:8230
-    vlm_mcp:    str   # base URL, e.g. http://localhost:8240
-    video_mcp:  str   # base URL, e.g. http://localhost:8210
-    vec_mcp:    str   # base URL, e.g. http://localhost:8250
+    scene_endpoint: str
+    openxr_endpoint: str
+    video_memory_endpoint: str
+    text_memory_dir: str
 
     # VAD (Silero, ONNX).
     silence_duration:  float
@@ -49,8 +47,7 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
     # launcher passes `--config`, `path.parent` is that yaml dir; when run
     # bare without `--config`, the relative path falls back to CWD.
     #
-    # `model_backend: nim` selects the NIM overlay (hosted LLM/VLM); the
-    # orchestrator reads the same key to point vlm-mcp at its NIM config.
+    # `model_backend: nim` selects the NIM overlay for hosted LLM/VLM services.
     backend = str(data.get("model_backend", "local")).lower()
     models_yaml_raw = (
         "models.nim.yaml" if backend == "nim"
@@ -64,11 +61,10 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
     return WorkerConfig(
         models_yaml = models_yaml,
         voice_gate_yaml = voice_gate_yaml,
-        render_mcp  = data.get("render_mcp_url",  "http://localhost:8220"),
-        oxr_mcp     = data.get("oxr_mcp_url",     "http://localhost:8230"),
-        vlm_mcp     = data.get("vlm_mcp_url",     "http://localhost:8240"),
-        video_mcp   = data.get("video_mcp_url",   "http://localhost:8210"),
-        vec_mcp     = data.get("vec_mcp_url",     "http://localhost:8250"),
+        scene_endpoint = data.get("scene_endpoint", "tcp://127.0.0.1:8320"),
+        openxr_endpoint = data.get("openxr_endpoint", "tcp://127.0.0.1:8330"),
+        video_memory_endpoint = data.get("video_memory_endpoint", "tcp://127.0.0.1:8310"),
+        text_memory_dir = data.get("text_memory_dir", "/dev/shm/xr-ai/text-memory"),
         silence_duration  = float(data.get("silence_duration",  0.8)),
         min_speech        = float(data.get("min_speech",        0.15)),
         silero_threshold  = float(data.get("silero_threshold",  0.5)),

@@ -6,9 +6,8 @@
 #
 # To activate, set ONE key in xr_render_demo_worker.yaml:
 #   model_backend: nim
-# The worker then loads this file and the orchestrator points vlm-mcp at
-# yaml/vlm_mcp_server.nim.yaml automatically (the worker reaches the VLM via
-# vlm-mcp, so both must use NIM). Provide an NGC API key (env NGC_API_KEY, or
+# The worker loads this file for its native model-backed functions. Provide an
+# NGC API key (env NGC_API_KEY, or
 # the launcher credential prompt) — see docs/credentials.md. Then run the
 # demo without the local llm / agent-llm / vlm model-servers. STT/TTS stay
 # local. Full guide: docs/ai-services.md "Hosting models on NVIDIA NIM".
@@ -39,7 +38,7 @@ agent_llm:
     tool_calls: true
     reasoning:  true
 
-# Visual question answering (served to the agent via vlm-mcp).
+# Visual question answering used by native vision functions.
 # nvidia/cosmos-reason1-7b mirrors the local default (ai-services/vlm-server
 # also runs Cosmos-Reason1-7B), so the render-demo's ask_image prompts behave
 # the same on NIM as locally. Swap to any hosted vision model on
