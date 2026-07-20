@@ -33,5 +33,5 @@ The group exposes:
 Every operation returns a `Vector3` and only calculates coordinates. Creating,
 moving, or associating a scene object remains the caller's responsibility.
 
-Install the package in the NAT environment so its `nat.plugins` entry point is
-discovered automatically.
+Install the package in the NAT environment so NAT discovers the spatial-math
+registration directly through its capability-specific `nat.plugins` entry point.

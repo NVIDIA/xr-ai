@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.entry-points."nat.plugins"]
-xr_ai_nat = "xr_ai_nat.plugin"
+xr_ai_nat_spatial_math = "xr_ai_nat.functions.spatial_math.functions"
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_nat"]

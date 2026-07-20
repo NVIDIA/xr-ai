@@ -112,8 +112,10 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
     performs deterministic spatial calculations without OpenXR, model, or MCP
-    dependencies. Its pure math core is also used by the transitional Vec and
-    OpenXR MCP compatibility surfaces.
+    dependencies. Each capability module is its own ``nat.plugins`` discovery
+    entry point; there is no package-wide registration aggregator. The pure
+    math core is also used by the transitional Vec and OpenXR MCP compatibility
+    surfaces.
 
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)

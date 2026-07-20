@@ -20,6 +20,8 @@ than owners of the capability. Native function names use calculation verbs,
 identify anchors and reference frames explicitly, and include `_meters` on
 distance arguments. The six operations all return `Vector3`; containment and
 scene mutation remain application responsibilities rather than spatial math.
+Each capability module is also its own NAT plugin entry point, avoiding a
+package-wide import aggregator as more native capabilities are added.
 
 ### 2026-07-02 — Apple client: CloudXR streaming (visionOS-only)
 
