@@ -14,7 +14,6 @@ the unreachable-server error path).
 """
 from __future__ import annotations
 
-import base64
 import socket
 import struct
 import zlib
@@ -23,11 +22,11 @@ from typing import Any
 
 import pytest
 from aiohttp import web
+from fastmcp import Client as McpClient
 
 from xr_ai_models.openai_compat import OpenAICompatVLM
 
 from vlm_mcp_server.__main__ import (
-    _load_jpeg_data_url,
     _make_vlm_from_cfg,
     build_mcp,
 )
@@ -119,21 +118,20 @@ def _stub_vlm(stub: StubOpenAI, *, enable_thinking: bool = False) -> OpenAICompa
     )
 
 
-# ── image helper tests ─────────────────────────────────────────────────────────
-
-async def test_load_jpeg_data_url_emits_data_url(png_path: Path):
-    url = _load_jpeg_data_url(str(png_path))
-    assert url.startswith("data:image/jpeg;base64,")
-    # The payload must round-trip through base64 cleanly.
-    head, _, payload = url.partition(",")
-    assert head == "data:image/jpeg;base64"
-    raw = base64.b64decode(payload)
-    # JPEG SOI / EOI markers — proves PIL re-encoded as JPEG, not just relayed PNG.
-    assert raw[:2] == b"\xff\xd8"
-    assert raw[-2:] == b"\xff\xd9"
-
-
 # ── wire-shape golden tests (StubOpenAI) ──────────────────────────────────────
+
+async def test_mcp_tool_description_requires_an_acquired_image_path() -> None:
+    stub = StubOpenAI()
+    async with _stub_vlm(stub) as vlm:
+        mcp = await build_mcp(vlm)
+        async with McpClient(mcp) as client:
+            tools = await client.list_tools()
+
+    assert len(tools) == 1
+    assert "Never invent or guess an image path." in tools[0].description
+    assert tools[0].inputSchema["properties"]["image_path"]["description"] == (
+        "Absolute local PNG or JPEG path returned by image acquisition. Never invent or guess a path."
+    )
 
 async def test_ask_image_relays_response_and_request_shape(png_path: Path):
     """Wire shape with enable_thinking=False (default / cosmos_vlm preset default)."""

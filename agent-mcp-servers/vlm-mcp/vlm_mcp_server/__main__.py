@@ -61,7 +61,6 @@ from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
 from xr_ai_nat.adapters.mcp import create_mcp_server
 from xr_ai_nat.functions.vision import VisionFunctionsConfig
-from xr_ai_nat.functions.vision._images import load_jpeg_data_url as _load_jpeg_data_url  # noqa: F401
 from xr_ai_models import (
     ModelsConfig,
     VLMSpec,

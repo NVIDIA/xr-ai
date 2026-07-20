@@ -29,8 +29,16 @@ async def vision_functions(config: VisionFunctionsConfig, _builder: Builder):
     group = FunctionGroup(config=config)
 
     async def ask_image(
-        question: Annotated[str, Field(description="Question to answer from the image.")],
-        image_path: Annotated[str, Field(description="Absolute path to a local PNG or JPEG image.")],
+        question: Annotated[str, Field(description="Question to answer from the acquired image.")],
+        image_path: Annotated[
+            str,
+            Field(
+                description=(
+                    "Absolute local PNG or JPEG path returned by image acquisition. "
+                    "Never invent or guess a path."
+                )
+            ),
+        ],
     ) -> str:
         if not image_path:
             return "ask_image: image_path is empty — acquire an image first."
@@ -46,17 +54,15 @@ async def vision_functions(config: VisionFunctionsConfig, _builder: Builder):
             _LOGGER.exception("Failed to load image at %s", image_path)
             return f"ask_image: failed to read image at {image_path!r}: {exc}"
 
+        import httpx
+
         try:
             response = await config.vlm.ask_image(
                 data_url,
                 question,
                 system_prompt=config.system_prompt,
             )
-        except Exception as exc:
-            import httpx
-
-            if not isinstance(exc, httpx.HTTPError):
-                raise
+        except httpx.HTTPError as exc:
             _LOGGER.exception("VLM request failed")
             return f"ask_image: vlm-server request failed: {exc}"
 
@@ -72,8 +78,9 @@ async def vision_functions(config: VisionFunctionsConfig, _builder: Builder):
         "ask_image",
         ask_image,
         description=(
-            "Ask a vision-language model a question about a local image file. "
-            "Acquire the image through the appropriate live or recorded-frame capability first."
+            "Ask a vision-language model a question about an acquired local image file. "
+            "First acquire an image through the appropriate live or recorded-frame capability, "
+            "then pass its exact returned path. Never invent or guess an image path."
         ),
     )
 

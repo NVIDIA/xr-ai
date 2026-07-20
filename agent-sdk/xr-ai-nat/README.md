@@ -64,9 +64,10 @@ await builder.add_function_group("vision", config)
 ```
 
 Image acquisition is intentionally separate. A live-frame or video-memory
-function obtains the image first, then passes its path to `vision__ask_image`.
-The vision function performs image I/O off the event loop, normalizes the input
-to JPEG, and makes the model request through `xr-ai-models`.
+function obtains the image first, then passes its exact returned path to
+`vision__ask_image`; callers must never invent or guess a path. The vision
+function performs image I/O off the event loop, normalizes the input to JPEG,
+and makes the model request through `xr-ai-models`.
 
 ## MCP compatibility
 
