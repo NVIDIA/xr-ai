@@ -18,6 +18,15 @@ until the compatibility adapter is retired. Recorded-frame requests use an
 absolute Unix-microsecond reference timestamp plus a whole-second offset so an
 agent can reason coarsely while receiving the precise selected timestamp.
 
+### 2026-07-20 — XR render composes native capabilities directly
+
+The XR render worker builds scene, tracking, spatial-math, vision,
+video-memory, and text-memory Functions in one NAT workflow. Runtime-backed
+Functions retain typed process boundaries, but the sample no longer launches
+or calls MCP adapters. Its existing model tool names and prompt remain stable
+while schemas are derived from Functions, keeping this transport migration
+independent from the later agent-loop migration.
+
 ### 2026-07-20 — Simple VLM invokes native live vision
 
 `simple-vlm-example` now builds `StreamingVisionConfig` with a NAT

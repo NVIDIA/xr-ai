@@ -17,12 +17,11 @@ from __future__ import annotations
 import asyncio
 import time
 
-from fastmcp import Client as McpClient
 from loguru import logger
 from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent
 
 from processors import RenderSceneProcessor
-from tooling import tool_payload
+from capabilities import NativeToolbox
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 _XR_SESSION_STARTED_TOPIC = "xr.session.started"
@@ -48,11 +47,11 @@ class RenderDemoAgent:
         *,
         transport: XRMediaHubTransport,
         brain:     RenderSceneProcessor,
-        render:    McpClient,
+        tools:     NativeToolbox,
     ) -> None:
         self._transport = transport
         self._brain     = brain
-        self._render    = render
+        self._tools     = tools
 
         self._xr_started = False
 
@@ -167,18 +166,17 @@ class RenderDemoAgent:
         else:
             self._transport.cleanup_participant(event.participant_id)
 
-    # ── render-mcp helper ─────────────────────────────────────────────────────
+    # ── native scene helper ───────────────────────────────────────────────────
 
     async def _call_render(self, tool: str, args: dict, *, silent: bool = False) -> dict | None:
         try:
-            res  = await self._render.call_tool(tool, args)
-            data = tool_payload(res)
+            data = await self._tools.invoke(tool, args)
             if not isinstance(data, dict):
                 if not silent:
-                    logger.error("render-mcp {} non-dict: {!r}", tool, data)
+                    logger.error("scene tool {} returned non-dict: {!r}", tool, data)
                 return None
             return data
         except Exception as exc:
             if not silent:
-                logger.error("render-mcp {}: {}", tool, exc)
+                logger.error("scene tool {}: {}", tool, exc)
             return None

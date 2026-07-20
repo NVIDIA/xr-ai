@@ -59,11 +59,13 @@ def _agent_llm_base_url() -> str:
 AGENT_LLM   = f"{_agent_llm_base_url()}/v1/chat/completions"  # overridable via --agent-llm
 AGENT_MODEL = "llm"                                                   # overridable via --agent-model
 AGENT_KEY   = ""                                                      # overridable via --agent-api-key / NGC_API_KEY
-RENDER_MCP  = f"{_WORKER_CFG.render_mcp}/mcp"
-OXR_MCP     = f"{_WORKER_CFG.oxr_mcp}/mcp"
-VLM_MCP     = f"{_WORKER_CFG.vlm_mcp}/mcp"
-VIDEO_MCP   = f"{_WORKER_CFG.video_mcp}/mcp"
-VEC_MCP     = f"{_WORKER_CFG.vec_mcp}/mcp"
+# The eval can still exercise the outward MCP compatibility adapters, but the
+# live worker composes the equivalent NAT functions directly.
+RENDER_MCP  = "http://localhost:8220/mcp"
+OXR_MCP     = "http://localhost:8230/mcp"
+VLM_MCP     = "http://localhost:8240/mcp"
+VIDEO_MCP   = "http://localhost:8210/mcp"
+VEC_MCP     = "http://localhost:8250/mcp"
 
 # Tools the worker manages internally; hidden from the agent LLM so
 # the eval and the live worker advertise the same tool surface.
