@@ -5,7 +5,7 @@
 
 # Agent SDK
 
-The `agent-sdk/` workspace holds the three libraries an xr-ai agent is built
+The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
@@ -19,6 +19,9 @@ from:
 - **`xr-ai-agent`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
+- **`xr-ai-nat`** — typed in-process XR functions and the model bridge used by
+  NAT's built-in agents. NAT composition stays in process while all model I/O
+  continues through `xr-ai-models`.
 
 ---
 
@@ -167,6 +170,27 @@ protocols or callers.
 ### Tests
 
 The clients can be exercised without a GPU.
+
+---
+
+## xr-ai-nat model bridge
+
+Install `xr-ai-nat[agents]` when a workflow uses NAT's built-in agent graphs.
+`ModelsLLMConfig` adapts an `xr-ai-models` `LLMService` to NAT's LangChain
+client contract:
+
+```python
+from nat.plugin_api import LLMRef
+from xr_ai_nat.llm import ModelsLLMConfig
+
+llm_ref = LLMRef("agent_llm")
+await builder.add_llm(llm_ref, ModelsLLMConfig(service=llm))
+```
+
+Applications may instead set `profile_path` and `role` for configuration-led
+construction. Exactly one source is required. The provider closes clients it
+constructs from a profile and leaves injected services under the caller's
+lifecycle ownership.
 
 ---
 

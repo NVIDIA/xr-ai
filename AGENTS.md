@@ -150,7 +150,9 @@ the typed OpenXR service without routing native agents through MCP.
 `VideoMemoryFunctionsConfig` exposes live frames and recorded video through a
 typed service while keeping MCP optional. `LiveVisionFunctionConfig` composes
 raw frame acquisition with VLM streaming behind one native function for voice
-workflows.
+workflows. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
+NAT's built-in LangChain-backed agent types; applications install
+`xr-ai-nat[agents]` rather than calling LangChain model clients directly.
 
 The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 

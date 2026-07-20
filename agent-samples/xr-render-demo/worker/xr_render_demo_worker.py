@@ -22,11 +22,14 @@ from pathlib import Path
 from loguru import logger
 from nat.builder.function import Function
 from nat.builder.workflow_builder import WorkflowBuilder
+from nat.plugin_api import FunctionGroupRef, LLMRef
+from nat.plugins.langchain.agent.tool_calling_agent.register import ToolCallAgentWorkflowConfig
 from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
 from xr_ai_nat.functions.vision import LiveVisionFunctionConfig
+from xr_ai_nat.llm import ModelsLLMConfig
 from xr_ai_pipecat import VadConfig, make_voice_pipeline
 from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
@@ -55,6 +58,7 @@ async def _group_functions(builder: WorkflowBuilder, *names: str) -> dict[str, F
 
 
 _PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
+_VALIDATOR_PROMPT_FILE = _PROMPT_FILE.parent / "validate.txt"
 
 
 async def main(
@@ -120,6 +124,26 @@ async def main(
         live_vision = await builder.add_function("live_vision", live_vision_config)
         text_memory_functions = await _group_functions(builder, "text_memory")
         text_memory = text_memory_functions["text_memory__add_transcript"]
+        validator_llm = LLMRef("scene_validator_llm")
+        await builder.add_llm(
+            validator_llm,
+            ModelsLLMConfig(
+                service=llm,
+                model_name="xr-scene-validator",
+                max_tokens=60,
+                temperature=0.0,
+            ),
+        )
+        validator = await builder.add_function(
+            "scene_validator",
+            ToolCallAgentWorkflowConfig(
+                llm_name=validator_llm,
+                tool_names=[FunctionGroupRef("scene_state")],
+                system_prompt=_VALIDATOR_PROMPT_FILE.read_text(encoding="utf-8").strip(),
+                description="Check whether an XR scene request was completed.",
+                max_iterations=1,
+            ),
+        )
         tools = toolbox.definitions(exclude=_WORKER_MANAGED_TOOLS)
         tools.append(_PERCEPTION_TOOL_DEF)
         logger.info("native tool-calling functions: {}", [tool.name for tool in tools])
@@ -131,6 +155,7 @@ async def main(
             live_vision=live_vision,
             release_vision=live_vision_config.release,
             text_memory=text_memory,
+            validator=validator,
             prompt_path=_PROMPT_FILE,
             tools=tools,
             llm=llm,
