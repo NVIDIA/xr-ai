@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Local-only tests for render-mcp's ZMQ scene-socket wire format and lifecycle.
+"""Local-only tests for the sample scene and render MCP compatibility adapter.
 
-LOVR (the OpenXR rendering app) is stubbed — the goal is to verify render-mcp's
-ZMQ PUSH wire format, the in-memory scene state, the FastMCP tool surface,
+LOVR (the OpenXR rendering app) is stubbed — the goal is to verify the scene
+process's ZMQ PUSH wire format, in-memory state, the FastMCP adapter surface,
 config validation, and the lifecycle bookkeeping that keeps the LOVR watch
 task from leaking. No real OpenXR / Vulkan is exercised.
 
@@ -22,15 +22,19 @@ import msgpack
 import pytest
 import zmq
 import zmq.asyncio
+from fastmcp import Client as McpClient
 
-import render_mcp.__main__ as render_main
-from render_mcp.__main__ import (
+import xr_render_scene.engine as scene_engine
+from render_mcp.__main__ import build_mcp
+from xr_ai_nat.functions._rpc import RPCServer
+from xr_render_scene import SceneClient
+from xr_render_scene.engine import (
     Config,
     SceneDispatcher,
     _build_config,
     _validate_scene_socket,
-    build_mcp,
 )
+from xr_render_scene.service import SceneService
 
 pytestmark = pytest.mark.gpu
 
@@ -62,8 +66,7 @@ async def dispatcher(tmp_path: Path):
         xr_app_dir       = tmp_path,
         scene_socket     = sock_path,
         cloudxr_env_file = None,
-        host             = "127.0.0.1",
-        port             = 0,
+        endpoint         = f"ipc://{tmp_path}/rpc_{uuid.uuid4().hex[:8]}",
     )
     stack = contextlib.AsyncExitStack()
     await stack.__aenter__()
@@ -78,9 +81,18 @@ async def dispatcher(tmp_path: Path):
     # before the first send so messages aren't queued before the peer attaches.
     await asyncio.sleep(0.05)
 
+    server = RPCServer(cfg.endpoint, SceneService(disp).dispatch)
+    server_task = asyncio.create_task(server.serve())
+    await asyncio.sleep(0.02)
+    client = SceneClient(cfg.endpoint)
+
     try:
-        yield disp, pull
+        yield disp, pull, client
     finally:
+        await client.close()
+        server_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await server_task
         pull.close(linger=0)
         disp.close()
         await stack.__aexit__(None, None, None)
@@ -136,7 +148,7 @@ class TestBuildConfigRejectsBadSceneSocket:
         xr_app_dir = tmp_path / "xr_app"
         xr_app_dir.mkdir()
 
-        yaml_path = tmp_path / "render_mcp.yaml"
+        yaml_path = tmp_path / "scene_service.yaml"
         yaml_path.write_text("")  # _build_config takes raw dict directly
 
         raw = {
@@ -158,7 +170,7 @@ class TestSceneState:
         cfg = Config(
             lovr_bin=Path("/nonexistent"), xr_app_dir=tmp_path,
             scene_socket=_unique_ipc(tmp_path),
-            cloudxr_env_file=None, host="127.0.0.1", port=0,
+            cloudxr_env_file=None, endpoint=f"ipc://{tmp_path}/unused",
         )
         return SceneDispatcher(cfg, contextlib.AsyncExitStack())
 
@@ -213,7 +225,7 @@ class TestSceneState:
 @_asyncio
 class TestForwardWireFormat:
     async def test_forward_emits_msgpack_op_value_frame(self, dispatcher):
-        disp, pull = dispatcher
+        disp, pull, _client = dispatcher
         result = await disp.forward("scene.add", {"id": "sphere-0", "type": "sphere"})
         assert result == {"ok": True}
         msg = await _recv_op(pull)
@@ -223,7 +235,7 @@ class TestForwardWireFormat:
         cfg = Config(
             lovr_bin=Path("/nonexistent"), xr_app_dir=tmp_path,
             scene_socket=_unique_ipc(tmp_path),
-            cloudxr_env_file=None, host="127.0.0.1", port=0,
+            cloudxr_env_file=None, endpoint=f"ipc://{tmp_path}/unused",
         )
         disp = SceneDispatcher(cfg, contextlib.AsyncExitStack())
         try:
@@ -240,9 +252,22 @@ class TestForwardWireFormat:
 
 @_asyncio
 class TestMcpToolsThroughDispatcher:
+    async def test_legacy_tool_set_is_unchanged(self, dispatcher):
+        _disp, _pull, client = dispatcher
+        async with McpClient(build_mcp(client)) as mcp_client:
+            names = {tool.name for tool in await mcp_client.list_tools()}
+        assert names == {
+            "add_primitive",
+            "get_health",
+            "get_scene_state",
+            "remove_primitive",
+            "start_xr",
+            "update_primitive",
+        }
+
     async def test_add_primitive_pushes_scene_add_op(self, dispatcher):
-        disp, pull = dispatcher
-        mcp = build_mcp(disp)
+        _disp, pull, client = dispatcher
+        mcp = build_mcp(client)
         result = await mcp.call_tool("add_primitive", {
             "prim_type": "sphere",
             "x": 0.0, "y": 1.5, "z": -2.0,
@@ -262,8 +287,8 @@ class TestMcpToolsThroughDispatcher:
         assert v["size"]     == 0.25
 
     async def test_remove_primitive_pushes_scene_remove_op(self, dispatcher):
-        disp, pull = dispatcher
-        mcp = build_mcp(disp)
+        _disp, pull, client = dispatcher
+        mcp = build_mcp(client)
         await mcp.call_tool("add_primitive", {"prim_type": "box"})
         _ = await _recv_op(pull)  # drain add
 
@@ -273,16 +298,16 @@ class TestMcpToolsThroughDispatcher:
         assert msg == {"op": "scene.remove", "value": {"id": "box-0"}}
 
     async def test_remove_unknown_id_does_not_push(self, dispatcher):
-        disp, pull = dispatcher
-        mcp = build_mcp(disp)
+        _disp, pull, client = dispatcher
+        mcp = build_mcp(client)
         result = await mcp.call_tool("remove_primitive", {"obj_id": "ghost"})
         assert result.structured_content == {"ok": False, "reason": "not_found"}
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(pull.recv(), timeout=0.2)
 
     async def test_update_primitive_partial_position_update(self, dispatcher):
-        disp, pull = dispatcher
-        mcp = build_mcp(disp)
+        _disp, pull, client = dispatcher
+        mcp = build_mcp(client)
         await mcp.call_tool("add_primitive", {"prim_type": "sphere", "y": 1.0})
         _ = await _recv_op(pull)
 
@@ -294,8 +319,8 @@ class TestMcpToolsThroughDispatcher:
         assert msg["value"]["position"][1] == 2.5
 
     async def test_get_health_and_scene_state(self, dispatcher):
-        disp, pull = dispatcher
-        mcp = build_mcp(disp)
+        _disp, pull, client = dispatcher
+        mcp = build_mcp(client)
         await mcp.call_tool("add_primitive", {"prim_type": "sphere"})
         _ = await _recv_op(pull)
 
@@ -355,12 +380,11 @@ async def test_close_cancels_lovr_watch_task(tmp_path: Path, monkeypatch):
         xr_app_dir       = xr_app_dir,
         scene_socket     = sock_path,
         cloudxr_env_file = None,
-        host             = "127.0.0.1",
-        port             = 0,
+        endpoint         = f"ipc://{tmp_path}/unused",
     )
 
     # Swap ManagedProcess out before SceneDispatcher.start_lovr_once runs.
-    monkeypatch.setattr(render_main, "ManagedProcess",
+    monkeypatch.setattr(scene_engine, "ManagedProcess",
                         lambda *a, **kw: _FakeManagedProcessCtx())
 
     stack = contextlib.AsyncExitStack()
@@ -404,8 +428,7 @@ async def test_lovr_respawn_closes_previous_launch_context(tmp_path: Path, monke
         xr_app_dir       = xr_app_dir,
         scene_socket     = sock_path,
         cloudxr_env_file = None,
-        host             = "127.0.0.1",
-        port             = 0,
+        endpoint         = f"ipc://{tmp_path}/unused",
     )
 
     created: list[_FakeManagedProcessCtx] = []
@@ -415,7 +438,7 @@ async def test_lovr_respawn_closes_previous_launch_context(tmp_path: Path, monke
         created.append(ctx)
         return ctx
 
-    monkeypatch.setattr(render_main, "ManagedProcess", _make_ctx)
+    monkeypatch.setattr(scene_engine, "ManagedProcess", _make_ctx)
 
     stack = contextlib.AsyncExitStack()
     await stack.__aenter__()
@@ -472,7 +495,7 @@ async def test_resync_delivers_after_late_peer_connect(tmp_path: Path):
     cfg = Config(
         lovr_bin=Path("/nonexistent"), xr_app_dir=tmp_path,
         scene_socket=sock_path, cloudxr_env_file=None,
-        host="127.0.0.1", port=0,
+        endpoint=f"ipc://{tmp_path}/unused",
     )
     stack = contextlib.AsyncExitStack()
     await stack.__aenter__()
@@ -523,9 +546,9 @@ async def test_live_forward_fast_drops_during_resync_window(tmp_path: Path, monk
     xr_app_dir.mkdir()
     cfg = Config(
         lovr_bin=lovr_bin, xr_app_dir=xr_app_dir, scene_socket=sock_path,
-        cloudxr_env_file=None, host="127.0.0.1", port=0,
+        cloudxr_env_file=None, endpoint=f"ipc://{tmp_path}/unused",
     )
-    monkeypatch.setattr(render_main, "ManagedProcess",
+    monkeypatch.setattr(scene_engine, "ManagedProcess",
                         lambda *a, **kw: _FakeManagedProcessCtx())
 
     stack = contextlib.AsyncExitStack()
@@ -567,12 +590,12 @@ async def test_live_forward_fast_drops_during_resync_window(tmp_path: Path, monk
 async def test_resync_is_bounded_when_lovr_never_connects(tmp_path: Path, monkeypatch):
     """A LOVR that never connects must not wedge the spawn — resync returns
     after the deadline instead of blocking forever."""
-    monkeypatch.setattr(render_main, "_RESYNC_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(scene_engine, "_RESYNC_TIMEOUT_S", 0.2)
     sock_path = _unique_ipc(tmp_path)
     cfg = Config(
         lovr_bin=Path("/nonexistent"), xr_app_dir=tmp_path,
         scene_socket=sock_path, cloudxr_env_file=None,
-        host="127.0.0.1", port=0,
+        endpoint=f"ipc://{tmp_path}/unused",
     )
     stack = contextlib.AsyncExitStack()
     await stack.__aenter__()

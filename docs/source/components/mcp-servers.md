@@ -33,7 +33,7 @@ always speaks MCP; the MCP server is free to call REST, gRPC, or anything else
 behind it.
 ```
 
-The servers split cleanly by concern: `render-mcp` owns the LOVR scene,
+The servers split cleanly by concern: the XR render demo owns its LOVR scene,
 `oxr-mcp` reads head pose, `vec-mcp` does pose-free vector math, `video-mcp`
 serves camera frames and recordings, `vlm-mcp` answers visual questions, and
 `transcript-mcp` stores per-source transcript history. Each runs on its own
@@ -80,12 +80,12 @@ file's own directory.
 
 ## render-mcp
 
-`render-mcp` owns the XR scene. It launches and supervises the **LOVR**
-OpenXR/CloudXR rendering app as a child process and is the only thing that
-pushes scene operations onto LOVR's socket. The server binds a ZMQ PUSH socket
-(`scene_socket`, default `ipc:///tmp/xr_render_scene`) and the LOVR Lua app
-(`xr_app/main.lua`) connects PULL and applies each op. LOVR itself is not
-bundled; point `lovr_bin` (or `$LOVR_BIN`) at an existing build.
+`render-mcp` preserves the legacy scene tool surface for MCP consumers. It
+delegates to the XR render demo's sample-local scene process, which owns scene
+state, launches and supervises **LOVR**, and pushes operations onto LOVR's ZMQ
+socket. The native `xr_render_scene_*` NAT groups call that same typed process
+directly. LOVR itself is not bundled; point `lovr_bin` (or `$LOVR_BIN`) at an
+existing build.
 
 ### render-mcp tools
 
@@ -106,17 +106,26 @@ bundled; point `lovr_bin` (or `$LOVR_BIN`) at an existing build.
   `type`, `position`, `color`, and `size`.
 - `get_health()` — server status; use `lovr_started` as the readiness signal.
 
-### render-mcp configuration
+### Scene and render-mcp configuration
 
-`render_mcp.yaml`:
+`agent-samples/xr-render-demo/scene/scene_service.yaml` owns application state
+and LOVR configuration:
 
 ```yaml
-xr_app_dir: ./xr_app                          # LOVR project directory
+xr_app_dir: ./lovr                            # LOVR project directory
 # lovr_bin: /home/you/hub/lovr/build/bin/lovr  # else falls back to $LOVR_BIN
+endpoint: tcp://0.0.0.0:8320
+scene_socket: ipc:///tmp/xr_render_scene       # scene BINDS PUSH; LOVR CONNECTS PULL
+cloudxr_env_file: ~/.cloudxr/run/cloudxr.env   # sourced into the LOVR child env
+```
+
+`agent-mcp-servers/render-mcp/render_mcp.yaml` contains only the compatibility
+boundary:
+
+```yaml
 host: 0.0.0.0
 port: 8220
-scene_socket: ipc:///tmp/xr_render_scene       # render-mcp BINDS PUSH; LOVR CONNECTS PULL
-cloudxr_env_file: ~/.cloudxr/run/cloudxr.env   # sourced into the LOVR child env
+service_endpoint: tcp://127.0.0.1:8320
 ```
 
 The `cloudxr_env_file` is sourced into the LOVR child's environment so LOVR

@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Sample-local scene process reference configuration.
+# lovr_bin may also be supplied through LOVR_BIN.
+# lovr_bin: /home/you/hub/lovr/build/bin/lovr
+
+xr_app_dir: ./lovr
+endpoint: tcp://0.0.0.0:8320
+scene_socket: ipc:///tmp/xr_render_scene
+cloudxr_env_file: ~/.cloudxr/run/cloudxr.env

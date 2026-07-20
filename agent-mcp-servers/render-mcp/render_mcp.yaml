@@ -1,35 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# render-mcp configuration.
-# Paths in this file resolve relative to the file's own directory.
-#
-# Overridable per sample by dropping a render_mcp.yaml next to the sample's
-# orchestrator (the launcher auto-discovers <command>.yaml by convention).
-
-# Path to the LOVR engine binary. render-mcp needs one from either this key or
-# $LOVR_BIN (this key takes precedence); it exits if neither is set. Point it at
-# your LOVR build (e.g. ~/hub/lovr/build/bin/lovr); render-mcp does not build or
-# bundle LOVR.
-# lovr_bin: /home/you/hub/lovr/build/bin/lovr
-
-# Directory passed to LOVR as the project to run. Resolved relative to this
-# YAML file, so the default points at the scene that ships with render-mcp.
-xr_app_dir: ./xr_app
-
-# ── MCP server ────────────────────────────────────────────────────────────────
-# Pure FastMCP at /mcp. Tools: start_xr, set_sphere_radius, set_sphere_color,
-# set_sphere_position, reset_sphere, get_health.
-# Other MCP servers in this repo: transcript-mcp 8200, video-mcp 8210, oxr-mcp 8230.
+# Compatibility MCP endpoint. Scene and LOVR configuration belongs to the
+# XR render demo's scene_service.yaml.
 host: 0.0.0.0
 port: 8220
-
-# ── LOVR-facing socket ────────────────────────────────────────────────────────
-# render-mcp BINDS PUSH; LOVR CONNECTS PULL. msgpack {op, value} frames; the
-# Lua code (xr_app/main.lua) handles each op.
-scene_socket: ipc:///tmp/xr_render_scene
-
-# CloudXR environment file. Values from this file are sourced into the LOVR
-# child's environment so it picks up XR_RUNTIME_JSON etc. Missing file is OK
-# (useful when cloudxr-runtime is off and LOVR should use the system OpenXR).
-cloudxr_env_file: ~/.cloudxr/run/cloudxr.env
+service_endpoint: tcp://127.0.0.1:8320

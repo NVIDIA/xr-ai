@@ -27,6 +27,7 @@ dependencies = [
     "transcript-mcp-server",
     "vlm-mcp-server",
     "render-mcp",
+    "xr-render-scene",
     "video-mcp-server",
     "xr-video-memory-service",
     "vec-mcp-server",
@@ -55,6 +56,7 @@ xr-ai-vllm            = { path = "../utils/xr-ai-vllm",                 editable
 transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable = true }
 vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
 render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }
+xr-render-scene       = { path = "../agent-samples/xr-render-demo/scene", editable = true }
 video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
 xr-video-memory-service = { path = "../services/video-memory-service", editable = true }
 vec-mcp-server        = { path = "../agent-mcp-servers/vec-mcp",        editable = true }

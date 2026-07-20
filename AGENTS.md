@@ -63,6 +63,10 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   Video memory calls its typed service for live and recorded frames; video MCP
   only republishes selected video-memory functions. Text-memory owns transcript
   JSONL storage; transcript MCP only republishes that capability.
+- **Application-specific capabilities stay with their application.** XR render
+  scene state, native scene functions, and the LOVR app live together under
+  `agent-samples/xr-render-demo/scene`; they are not exported from `xr-ai-nat`.
+  Render MCP only republishes that sample-local typed capability.
 - **Image acquisition and vision reasoning stay separate.** The native vision
   function accepts an acquired image path and calls a `VLMService` from
   `xr-ai-models`; it does not own hub, participant, recording, or MCP state.
@@ -72,12 +76,14 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 
 ## Process model essentials
 
-Each sample has two sub-projects:
+Each sample has an orchestrator and worker; application-specific capability
+processes may be nested beside them when they are not reusable SDK services:
 
 | Sub-project | Role | Dependencies |
 |---|---|---|
 | `<sample>/` | Orchestrator — declares `PROCESSES`, calls `run_stack` | `xr-ai-launcher` only |
 | `<sample>/worker/` | Agent worker — connects to hub via IPC | `xr-ai-agent` + task libs |
+| `<sample>/<capability>/` | Optional application-specific native function/service slice | Narrow capability deps |
 
 - Processes start serially in declaration order; each must `Path(--ready-file).touch()`
   when ready.
