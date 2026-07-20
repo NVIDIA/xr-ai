@@ -3,6 +3,18 @@
 
 """Public native vision function group."""
 
-from .functions import VisionFunctionsConfig
+from .functions import (
+    LiveVisionChunk,
+    LiveVisionFunctionConfig,
+    LiveVisionRequest,
+    LiveVisionResult,
+    VisionFunctionsConfig,
+)
 
-__all__ = ["VisionFunctionsConfig"]
+__all__ = [
+    "LiveVisionChunk",
+    "LiveVisionFunctionConfig",
+    "LiveVisionRequest",
+    "LiveVisionResult",
+    "VisionFunctionsConfig",
+]
