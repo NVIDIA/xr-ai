@@ -29,7 +29,7 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `livekit-api`  | 0.7.0    | Apache-2.0    | https://github.com/livekit/python-sdks |
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
 | `nvidia-nat-core` | 1.8.0 | Apache-2.0    | https://github.com/NVIDIA/NeMo-Agent-Toolkit |
-| `pydantic`     | 2.10.0   | MIT           | https://github.com/pydantic/pydantic |
+| `pydantic`     | >=2.10   | MIT           | https://github.com/pydantic/pydantic |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
 
 ## Swift (iOS / visionOS client)

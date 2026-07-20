@@ -315,10 +315,12 @@ def build_mcp(source: PoseSource) -> FastMCP:
 
         Use for: "in front of me", "where I'm looking", "ahead of me".
 
-        Returns {x, y, z} world-space position, or {error: "pose unavailable"} if
-        tracking is not yet established — in that case do not use any position
-        values; retry after a short delay.
+        Returns {x, y, z} world-space position. A negative distance returns an
+        error; unavailable tracking returns {error: "pose unavailable"}. In
+        either case, do not use position values; retry after a short delay.
         """
+        if distance < 0:
+            return {"error": "distance must be non-negative; flip the direction instead"}
         pose = await asyncio.get_running_loop().run_in_executor(None, source.get_pose)
         if not pose.get("is_valid"):
             return {"error": "pose unavailable"}
