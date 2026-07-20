@@ -15,8 +15,12 @@ dependencies = [
     "pydantic>=2.10",
 ]
 
+[project.optional-dependencies]
+mcp = ["fastmcp>=3.4,<4"]
+
 [project.entry-points."nat.plugins"]
 xr_ai_nat_spatial_math = "xr_ai_nat.functions.spatial_math.functions"
+xr_ai_nat_text_memory = "xr_ai_nat.functions.text_memory.functions"
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_nat"]

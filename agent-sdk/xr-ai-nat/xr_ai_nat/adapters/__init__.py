@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from .__main__ import build_app, build_mcp
+"""Optional transport and framework adapters for native XR functions."""
 
-__all__ = ["build_app", "build_mcp"]
+__all__: list[str] = []

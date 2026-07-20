@@ -109,13 +109,16 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
 xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── nvidia-nat-core ==1.8.0
     └── pydantic >=2.10
+    └── [mcp] fastmcp >=3.4,<4
     Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
     performs deterministic spatial calculations without OpenXR, model, or MCP
-    dependencies. Each capability module is its own ``nat.plugins`` discovery
-    entry point; there is no package-wide registration aggregator. The pure
-    math core is also used by the transitional Vec and OpenXR MCP compatibility
-    surfaces.
+    dependencies. ``xr_text_memory`` owns persistent per-source JSONL text
+    history. Its optional MCP adapter exports an application's explicit native
+    function list without routing native composition through MCP. Each
+    capability module is its own ``nat.plugins`` discovery entry point; there
+    is no package-wide registration aggregator. The spatial pure math core is
+    also used by the transitional Vec and OpenXR MCP compatibility surfaces.
 
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
@@ -169,10 +172,12 @@ xr-media-hub  (server-runtime/)
 
 transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     └── uvicorn[standard] >=0.29
-    └── fastmcp >=2.0
     └── pyyaml >=6.0
-    Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
-    Storage: JSONL files per participant in configurable transcripts_dir.
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-nat[mcp] [editable: ../../agent-sdk/xr-ai-nat]
+    Thin MCP compatibility process at /mcp (no REST). It republishes the four
+    native ``xr_text_memory`` functions under their existing MCP tool names;
+    JSONL storage and source identity handling live in xr-ai-nat.
 
 vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
     └── uvicorn[standard] >=0.29
@@ -265,7 +270,7 @@ xr-ai-tests  (tests/)
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
-    └── fastmcp >=2.0   (only used by tests marked `gpu`)
+    └── fastmcp >=3.4,<4 (MCP adapter contracts and tests marked `gpu`)
     └── Pillow >=10.0   (only used by tests marked `gpu`)
     └── pyyaml >=6.0    (only used by tests marked `gpu`)
     The unmarked suite is multi-client / multi-agent integration tests over
@@ -273,8 +278,8 @@ xr-ai-tests  (tests/)
     NVENC required. Also covers unit tests for the leaf util packages
     (launcher, logging, vllm), a CI-viable subprocess test for
     CPU-viable subprocess smoke tests for transcript-mcp-server and
-    vec-mcp-server (fastmcp pulled in transitively), native spatial-math
-    function-group tests, and the vlm-mcp /
+    vec-mcp-server (fastmcp pulled in transitively), native spatial-math and
+    text-memory function-group tests, generic NAT-to-MCP adapter tests, and the vlm-mcp /
     render-mcp adapter surfaces (mocked upstreams). oxr-mcp is not
     included: it needs native isaacteleop + a CloudXR runtime, so its
     smoke test self-skips on CPU (see tests/README.md).

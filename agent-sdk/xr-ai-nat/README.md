@@ -35,3 +35,27 @@ moving, or associating a scene object remains the caller's responsibility.
 
 Install the package in the NAT environment so NAT discovers the spatial-math
 registration directly through its capability-specific `nat.plugins` entry point.
+
+## Text memory
+
+The `xr_text_memory` function group owns persistent, per-source JSONL text
+history:
+
+```yaml
+functions:
+  text_memory:
+    _type: xr_text_memory
+    directory: /tmp/xr-text-memory
+```
+
+It exposes `add_transcript`, `query_transcripts`, `list_sources`, and
+`get_transcript_stats` as native functions. Source identifiers are preserved in
+sidecar files even when their filesystem names require sanitization.
+
+## MCP compatibility
+
+Install `xr-ai-nat[mcp]` and pass an explicit list of native functions to
+`xr_ai_nat.adapters.mcp.create_mcp_server` when an application must serve
+MCP-only agents. The adapter publishes one MCP tool per selected function and
+supports aliases for compatibility names; MCP is not used for in-process NAT
+composition.

@@ -110,7 +110,7 @@ frames are dropped if it is closed.
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
 | Agent functions | `agent-sdk/xr-ai-nat/` | Typed, in-process NAT functions for XR capabilities |
-| Agent interfaces | `agent-mcp-servers/` | MCP adapters for XR data & rendering |
+| Agent interfaces | `agent-mcp-servers/` | MCP compatibility processes for XR data & rendering |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
 

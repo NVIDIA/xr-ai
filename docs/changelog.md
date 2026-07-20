@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-17 — Text history becomes native with optional MCP export
+
+The `xr_text_memory` NAT function group now owns persistent transcript JSONL
+storage. Transcript MCP republishes an explicit selection of those functions
+under its existing tool names through the generic `xr-ai-nat[mcp]` adapter.
+Native agents invoke text memory in-process; the MCP process exists only for
+agents that require that protocol.
+
 ### 2026-07-17 — Spatial calculations become native NAT functions
 
 `agent-sdk/xr-ai-nat` introduces an `xr_spatial_math` NAT function group whose
