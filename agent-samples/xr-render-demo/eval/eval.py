@@ -1,19 +1,15 @@
-#!/usr/bin/env -S uv run --quiet --with httpx --with fastmcp --with pyyaml --script
+#!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["httpx", "fastmcp>=0.4", "pyyaml"]
-# ///
 """
-agent-llm eval harness for xr-render-demo. Talks to the running stack
-(no mocks for the LLMs / MCP servers — render-mcp tools are fake-succeeded
-so the harness never mutates the live LOVR scene).
+Agent-LLM eval harness for xr-render-demo. It uses the live model endpoint,
+derives tool schemas from the worker's native NAT functions, and executes tool
+effects against deterministic fixtures so it never mutates the live scene.
 
 Usage:
-  ./eval.py                  # run all built-in cases against system.txt
-  ./eval.py "Move it down"   # one ad-hoc query, prints raw response
-  ./eval.py --prompt PATH    # try an alternate prompt file
+  uv run --project ../worker python eval.py                 # all cases
+  uv run --project ../worker python eval.py "Move it down"  # one query
+  uv run --project ../worker python eval.py --prompt PATH   # alternate prompt
 
 By default reads ../worker/prompts/system.txt (the live xr-render-demo
 prompt). Edit it and re-run; no stack restart needed.
@@ -32,16 +28,17 @@ from pathlib import Path
 
 import httpx
 import yaml
-from fastmcp import Client as McpClient
+from nat.builder.workflow_builder import WorkflowBuilder
 
 _HERE       = Path(__file__).resolve().parent
 SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
 
-# Borrow the worker's own config loader so eval reads the exact same yaml
-# (with the exact same code-side defaults) the live worker reads. Keeps
-# the eval honest when MCP ports / URLs move.
+# Borrow the worker's config and native-tool assembly so the eval advertises
+# the same model-facing function schemas as the live worker.
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
+from capabilities import build_native_toolbox  # noqa: E402
 from config import load_config  # noqa: E402  — must follow sys.path tweak
+from processors import _PERCEPTION_TOOL_DEF  # noqa: E402
 _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
 
 def _agent_llm_base_url() -> str:
@@ -59,12 +56,6 @@ def _agent_llm_base_url() -> str:
 AGENT_LLM   = f"{_agent_llm_base_url()}/v1/chat/completions"  # overridable via --agent-llm
 AGENT_MODEL = "llm"                                                   # overridable via --agent-model
 AGENT_KEY   = ""                                                      # overridable via --agent-api-key / NGC_API_KEY
-RENDER_MCP  = f"{_WORKER_CFG.render_mcp}/mcp"
-OXR_MCP     = f"{_WORKER_CFG.oxr_mcp}/mcp"
-VLM_MCP     = f"{_WORKER_CFG.vlm_mcp}/mcp"
-VIDEO_MCP   = f"{_WORKER_CFG.video_mcp}/mcp"
-VEC_MCP     = f"{_WORKER_CFG.vec_mcp}/mcp"
-
 # Tools the worker manages internally; hidden from the agent LLM so
 # the eval and the live worker advertise the same tool surface.
 WORKER_MANAGED = {"start_xr", "get_health"}
@@ -1389,22 +1380,17 @@ def _format_pose(pose: dict) -> str:
 
 
 async def _discover_tools() -> list[dict]:
-    tools = []
-    for url in (RENDER_MCP, OXR_MCP, VLM_MCP, VIDEO_MCP, VEC_MCP):
-        try:
-            async with McpClient(url) as c:
-                for t in await c.list_tools():
-                    if t.name in WORKER_MANAGED:
-                        continue
-                    schema = getattr(t, "inputSchema", None) or {"type": "object", "properties": {}}
-                    tools.append({"type": "function", "function": {
-                        "name": t.name,
-                        "description": (t.description or "").strip(),
-                        "parameters": schema,
-                    }})
-        except Exception as exc:
-            print(f"WARN: discovery failed for {url}: {exc}", file=sys.stderr)
-    return tools
+    async with WorkflowBuilder() as builder:
+        toolbox = await build_native_toolbox(
+            builder,
+            scene_endpoint=_WORKER_CFG.scene_endpoint,
+            openxr_endpoint=_WORKER_CFG.openxr_endpoint,
+            video_memory_endpoint=_WORKER_CFG.video_memory_endpoint,
+            vlm=object(),
+        )
+        definitions = toolbox.definitions(exclude=WORKER_MANAGED)
+        definitions.append(_PERCEPTION_TOOL_DEF)
+        return [definition.to_openai() for definition in definitions]
 
 
 def _format_recent_moves(moves: list[tuple] | None) -> str:
@@ -1461,7 +1447,7 @@ def _build_messages(system_prompt: str, scene: list[dict], pose: dict, user: str
 
 
 def _local_position_relative(args: dict, pose: dict) -> dict:
-    """Mirror oxr-mcp.position_relative — gravity-aligned (yaw is honoured;
+    """Mirror native position_relative — gravity-aligned (yaw is honoured;
     pitch and roll are stripped). Up is world +Y."""
     f, r = pose["forward"], pose["right"]
     p = pose["position"]
@@ -1504,7 +1490,7 @@ def _local_position_ahead(args: dict, pose: dict) -> dict:
 
 
 def _ground_basis(pose: dict) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Mirror oxr-mcp._ground_basis."""
+    """Return the gravity-aligned forward and right basis used by native spatial tools."""
     f, r = pose["forward"], pose["right"]
     fx, fz = f["x"], f["z"]
     mag = math.sqrt(fx * fx + fz * fz)
@@ -1549,7 +1535,7 @@ def _local_place_user_relative(args: dict, pose: dict) -> dict:
 
 
 def _local_world_offset(args: dict, _pose: dict) -> dict:
-    """Mirror vec-mcp.world_offset — origin + (dx, dy, dz)."""
+    """Mirror native world_offset — origin + (dx, dy, dz)."""
     ox = float(args.get("origin_x", 0.0))
     oy = float(args.get("origin_y", 0.0))
     oz = float(args.get("origin_z", 0.0))
@@ -1560,7 +1546,7 @@ def _local_world_offset(args: dict, _pose: dict) -> dict:
 
 
 def _local_along_direction(args: dict, _pose: dict) -> dict:
-    """Mirror vec-mcp.along_direction — origin moved `distance` toward target."""
+    """Mirror native along_direction — origin moved `distance` toward target."""
     ox = float(args.get("origin_x", 0.0))
     oy = float(args.get("origin_y", 0.0))
     oz = float(args.get("origin_z", 0.0))
@@ -1580,14 +1566,14 @@ def _local_along_direction(args: dict, _pose: dict) -> dict:
 
 
 def _local_scale_value(args: dict, _pose: dict) -> dict:
-    """Mirror vec-mcp.scale_value — current * factor."""
+    """Mirror native scale_value — current * factor."""
     cur = float(args.get("current", 0.0))
     fac = float(args.get("factor",  1.0))
     return {"value": round(cur * fac, 3)}
 
 
 def _local_place_inside_by_id(args: dict, _pose: dict) -> dict:
-    """Mirror oxr-mcp.place_inside_by_id — container coords echoed back
+    """Mirror native place_inside_by_id — container coords echoed back
     alongside the movee's id so the result feeds straight into
     update_primitive."""
     for field in ("movee_id", "container_x", "container_y", "container_z"):
@@ -1602,7 +1588,7 @@ def _local_place_inside_by_id(args: dict, _pose: dict) -> dict:
 
 
 def _local_between_anchors(args: dict, _pose: dict) -> dict:
-    """Mirror vec-mcp.between_anchors — component-wise midpoint of A and B."""
+    """Mirror native between_anchors — component-wise midpoint of A and B."""
     a_x, a_y, a_z = (float(args.get("a_x", 0.0)),
                      float(args.get("a_y", 0.0)),
                      float(args.get("a_z", 0.0)))
@@ -1617,7 +1603,7 @@ def _local_between_anchors(args: dict, _pose: dict) -> dict:
 
 
 def _local_displace_objects(args: dict, pose: dict) -> dict:
-    """Mirror oxr-mcp.displace_objects — same user-frame delta applied
+    """Mirror native displace_objects — same user-frame delta applied
     to every (id, x, y, z) entry; returns {items: [...]}."""
     for field in ("object_ids", "current_xs", "current_ys", "current_zs"):
         if args.get(field) is None:
@@ -1649,7 +1635,7 @@ def _local_displace_objects(args: dict, pose: dict) -> dict:
 
 
 def _local_displace_object(args: dict, pose: dict) -> dict:
-    """Mirror oxr-mcp.displace_object — current + user-frame delta."""
+    """Mirror native displace_object — current + user-frame delta."""
     for field in ("current_x", "current_y", "current_z"):
         if args.get(field) is None:
             return {"error": f"missing {field}"}
@@ -1730,9 +1716,9 @@ def _set_case_moves(moves: list[tuple] | None) -> None:
 
 
 def _fixture_scene_as_render() -> dict:
-    """Echo the case's fixture scene back in the same shape render-mcp's
-    get_scene_state returns. Prevents Nemotron retry-loops where it asks
-    for the scene, sees nothing, and asks again."""
+    """Echo the case's fixture scene in the native scene-state shape.
+    This prevents retry loops where the model refreshes the scene and receives
+    an empty result instead of the fixture it was given."""
     return {"objects": [
         {"id":       o["id"],
          "type":     o["type"],
@@ -1744,7 +1730,7 @@ def _fixture_scene_as_render() -> dict:
 
 
 async def _exec_tool(name: str, args_json: str, pose: dict) -> dict:
-    """Execute a tool call.  oxr-mcp tools run locally against the
+    """Execute a tool call. Spatial functions run locally against the
     case's fixture pose so rollouts are deterministic.  add_primitive
     returns a fresh per-rollout id (otherwise the model spawns the
     same object N times waiting to "see" it); update / remove return

@@ -513,27 +513,28 @@ GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
-action list (user-frame coords) → render-mcp → typed scene process → LOVR. Pose from oxr-mcp lets
-the worker convert user-frame requests ("to my left") to world-frame before
-forwarding.
+tool calls → native NAT functions → typed scene/OpenXR/video services → LOVR.
+The worker composes tracking and spatial-math functions in process for
+user-relative requests such as "to my left".
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
 | Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-nat` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-capabilities` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.3 (numpy + Pillow pulled in via xr-ai-capabilities; silero-vad via xr-ai-pipecat → xr-ai-vad). The `look_at_current_frame` perception tool reuses `xr_ai_capabilities.VisionModule` (live-frame VLM Q&A); the worker-local `pixels.py` and its frame/camera helpers were removed. |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-nat[services,vision]` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pyyaml >=6.0, pipecat-ai >=1.3 (native scene, tracking, spatial-math, video-memory, vision, and text-memory functions replace capability MCP clients; silero-vad via xr-ai-pipecat → xr-ai-vad). |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
 `make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
-a transitive dep of `xr-ai-pipecat` and `fastmcp`.
+a transitive dep of `xr-ai-pipecat` and `xr-ai-nat[vision]`.
 
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
 is explicit in the process list.
-Starts: hub, cloudxr-runtime, piper-tts (8105), vlm-mcp (8240),
-video-memory (8310), video-mcp (8210), scene (8320), render-mcp (8220),
-openxr-service (8330), oxr-mcp (8230), vec-mcp (8250), worker.
+Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
+scene (8320), openxr-service (8330), and worker. The four model-server
+entries are declared with `launch_mode="reuse"` and must already be healthy.
+No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
 

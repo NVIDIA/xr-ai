@@ -164,9 +164,7 @@ Each sample ships a ready-made `yaml/models.nim.yaml` overlay, selected by a
 
 1. Set `model_backend: nim` in the sample's `*_worker.yaml` (default
    `local`). The worker then loads `models.nim.yaml`, and the orchestrator
-   (which reads the same key) skips the local model server(s) NIM replaces —
-   for xr-render-demo it also points `vlm-mcp` at
-   `yaml/vlm_mcp_server.nim.yaml`.
+   (which reads the same key) skips the local model server(s) NIM replaces.
 2. Provide `NGC_API_KEY` — in NIM mode the orchestrator prompts for it once
    if it isn't already saved or exported.
 3. For xr-render-demo, run the demo without the local `llm`, `agent-llm`, and

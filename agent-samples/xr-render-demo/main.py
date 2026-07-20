@@ -8,10 +8,10 @@ Architecture (per AGENTS.md + the Agentic AI for XR design doc):
 
   Web client ── LiveKit ──► xr-media-hub ──IPC──► worker (this sample's agent)
   Web client ── WebRTC ──► cloudxr-runtime
-                        worker ──MCP──► render-mcp ──RPC──► scene ──► LOVR (OpenXR)
+                        worker ──NAT function──► scene ──► LOVR (OpenXR)
 
 The worker consumes audio from the hub, computes a sphere radius from voice
-loudness, and pushes a render command through render-mcp. The sample-local
+loudness, and invokes sample-local native scene functions. The sample-local
 scene process owns LOVR and scene state. CloudXR runs alongside as
 its own stream — neither stack passes through the other.
 
@@ -86,17 +86,11 @@ def _model_backend() -> str:
 #   uv run --project agent-samples/model-servers model_servers
 #
 # With model_backend: nim (in xr_render_demo_worker.yaml) the worker loads
-# models.nim.yaml and vlm-mcp is pointed at vlm_mcp_server.nim.yaml here
-# automatically — run LLM/VLM on hosted NIM and just don't start the local
+# models.nim.yaml automatically — run LLM/VLM on hosted NIM and just don't start the local
 # llm / agent-llm / vlm model-servers. STT/TTS stay local. See
 # docs/ai-services.md "Hosting models on NVIDIA NIM".
 def _build_processes(backend: str) -> list[Process]:
-    # The worker reaches the VLM through vlm-mcp, so vlm-mcp must use the same
-    # backend as the worker's models config.
-    vlm_mcp_config = (
-        "yaml/vlm_mcp_server.nim.yaml" if backend == "nim"
-        else "yaml/vlm_mcp_server.yaml"
-    )
+    del backend
     return [
         Process("stt",       "../../ai-services/stt-server",         "stt_server",
                 launch_mode="reuse"),
@@ -112,22 +106,13 @@ def _build_processes(backend: str) -> list[Process]:
                 config="yaml/cloudxr_runtime.yaml"),
         Process("tts",        "../../ai-services/tts/piper",         "piper_tts_server",
                 config="yaml/piper_tts_server.yaml"),
-        Process("vlm-mcp",    "../../agent-mcp-servers/vlm-mcp",     "vlm_mcp_server",
-                config=vlm_mcp_config),
         Process("video-memory", "../../services/video-memory-service", "video_memory_service",
                 config="yaml/video_memory_service.yaml"),
-        Process("video-mcp",  "../../agent-mcp-servers/video-mcp",   "video_mcp_server",
-                config="yaml/video_mcp_server.yaml"),
         Process("scene",      "scene",                                "xr_render_scene",
                 config="scene/scene_service.yaml"),
-        Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),
         Process("openxr-service", "../../services/openxr-service",  "openxr_service",
                 config="yaml/openxr_service.yaml",
                 quiet_native_output=True),
-        Process("oxr-mcp",    "../../agent-mcp-servers/oxr-mcp",     "oxr_mcp_server",
-                config="yaml/oxr_mcp_server.yaml",
-                quiet_native_output=True),
-        Process("vec-mcp",    "../../agent-mcp-servers/vec-mcp",     "vec_mcp_server"),
         Process("worker",     "worker",                              "xr_render_demo_worker",
                 config=_WORKER_CONFIG),
     ]
