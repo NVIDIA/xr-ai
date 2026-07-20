@@ -30,6 +30,7 @@ exit terminates the whole stack.
 | vlm-mcp | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 |
 | video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | video-mcp | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 |
+| scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
 | render-mcp | `agent-mcp-servers/render-mcp/` | `render_mcp` | 8220 |
 | openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
 | oxr-mcp | `agent-mcp-servers/oxr-mcp/` | `oxr_mcp_server` | 8230 |
@@ -44,7 +45,7 @@ Before starting the stack, the orchestrator runs two setup steps:
   never serve the web page, so the build (and its npm dependency) is skipped.
 - **LOVR binary** — auto-downloads LOVR v0.18.0 AppImage to `deps/lovr/` if
   not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
-  `lovr_bin:` in `render_mcp.yaml` → cached AppImage → fresh download.
+  `lovr_bin:` in `scene/scene_service.yaml` → cached AppImage → fresh download.
 
 ## Selecting the client type (WebRTC vs native)
 
@@ -76,7 +77,7 @@ so on a multi-GPU host Vulkan and CUDA can otherwise land on different
 physical GPUs.
 
 The same three selectors are appended to `cloudxr.env` (under
-`~/.cloudxr/run/`). `render-mcp` sources that file when it spawns LOVR, so
+`~/.cloudxr/run/`). The scene process sources that file when it spawns LOVR, so
 LOVR inherits the pin; `oxr-mcp` picks it up the same way.
 
 If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
@@ -257,8 +258,9 @@ On each `TranscriptionFrame`:
 | `vlm-mcp` | 8240 | `ask_image` |
 | `video-mcp` | 8210 | `list_live_participants`, `get_frame_from_time` (always); `list_recorded_participants`, `get_video_stats`, `query_video` (recording enabled only); `get_latest_frame` (recording disabled only; deprecated) |
 
-`render-mcp` owns the LOVR child process and is the only thing that pushes
-ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `openxr-service` owns
+The sample-local scene process owns scene state and LOVR and is the only thing
+that pushes ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `render-mcp`
+is a compatibility adapter over its typed API. `openxr-service` owns
 the second headless OpenXR session (`XR_MND_HEADLESS`) and serves the native
 XR-tracking functions. `oxr-mcp` preserves the MCP tool surface by forwarding
 pose requests to that service and running the shared spatial math.
@@ -334,7 +336,7 @@ a streaming client connects. LOVR cannot start before then.
 2. User clicks "Launch XR"
 3. Client sends `xr.session.started` data message → hub IPC → worker
 4. Worker calls render-mcp `start_xr`
-   → render-mcp spawns LOVR + waits for CloudXR in a background task
+   → scene process spawns LOVR + waits for CloudXR in a background task
 5. Worker polls `get_health` every 500 ms (up to 120s)
    lovr_started: true  → send `render.ready` to client → XR session unlocked
    spawn_error: "..."  → log + abort

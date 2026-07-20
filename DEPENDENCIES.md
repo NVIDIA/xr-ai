@@ -240,16 +240,23 @@ cloudxr-runtime  (cloudxr-runtime/)
     └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
 
 render-mcp-server  (agent-mcp-servers/render-mcp/)
-    └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (ManagedProcess + load_cloudxr_env)
-    └── pyzmq >=27.0       (PUSH socket → LOVR; libzmq.so reused by LOVR FFI)
-    └── msgpack >=1.0      (wire format for LOVR ops)
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-render-scene [editable: ../../agent-samples/xr-render-demo/scene]
     └── pyyaml >=6.0
     └── uvicorn[standard] >=0.29
     └── fastmcp >=2.0
-    Pure FastMCP at /mcp → LOVR (msgpack/ZMQ); no REST routes.
-    Spawns LOVR (the OpenXR rendering app) on the first start_xr call.
-    cloudxr-runtime must start before render-mcp (serial launch order);
-    cloudxr.env is read synchronously via load_cloudxr_env at start_xr time.
+    FastMCP compatibility adapter at /mcp. Preserves the legacy render tool
+    surface while delegating to the sample-local typed scene process.
+
+xr-render-scene  (agent-samples/xr-render-demo/scene/)
+    └── xr-ai-launcher [editable: ../../../utils/xr-ai-launcher]
+    └── xr-ai-logging [editable: ../../../utils/xr-ai-logging]
+    └── xr-ai-nat[services] [editable: ../../../agent-sdk/xr-ai-nat]
+    └── pyzmq >=27.0
+    └── msgpack >=1.0
+    └── pyyaml >=6.0
+    Owns scene state, sample-local NAT function groups, LOVR lifecycle, and the
+    LOVR Lua app. Exposes typed msgpack/ZMQ at port 8320.
 
 oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
     └── pyyaml >=6.0
@@ -287,6 +294,7 @@ xr-ai-tests  (tests/)
     └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
     └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
     └── render-mcp              [editable: ../agent-mcp-servers/render-mcp]
+    └── xr-render-scene         [editable: ../agent-samples/xr-render-demo/scene]
     └── video-mcp-server        [editable: ../agent-mcp-servers/video-mcp]
     └── vec-mcp-server          [editable: ../agent-mcp-servers/vec-mcp]
     └── pytest >=8.0
@@ -302,8 +310,8 @@ xr-ai-tests  (tests/)
     CPU-viable subprocess smoke tests for transcript-mcp-server and
     vec-mcp-server (fastmcp pulled in transitively), native spatial-math and
     text-memory and vision function-group tests, generic NAT-to-MCP adapter
-    tests, and the vlm-mcp /
-    render-mcp adapter surfaces (mocked upstreams). oxr-mcp is not
+    tests, the vlm-mcp adapter, and the sample-local scene native groups plus
+    render-mcp adapter surface (LOVR is stubbed). oxr-mcp is not
     included: it needs native isaacteleop + a CloudXR runtime, so its
     smoke test self-skips on CPU (see tests/README.md).
 
@@ -414,7 +422,8 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed msgpack/ZMQ → recorded H.264 queries |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP compatibility adapter → recorded service + live hub IPC |
-| `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | Pure FastMCP → LOVR (msgpack/ZMQ) |
+| `agent-samples/xr-render-demo/scene/` | `xr-render-scene` | `xr_render_scene` | 8320 | — | Sample-local typed scene service → LOVR |
+| `agent-mcp-servers/render-mcp/` | `render-mcp` | `render_mcp` | 8220 | — | FastMCP compatibility adapter → xr-render-scene |
 | `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed msgpack/ZMQ → headless OpenXR / CloudXR |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | FastMCP compatibility adapter → openxr-service |
 | `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
@@ -510,13 +519,14 @@ GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
-action list (user-frame coords) → render-mcp → LOVR. Pose from oxr-mcp lets
+action list (user-frame coords) → render-mcp → typed scene process → LOVR. Pose from oxr-mcp lets
 the worker convert user-frame requests ("to my left") to world-frame before
 forwarding.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
+| Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-nat` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
 | Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-capabilities` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.3 (numpy + Pillow pulled in via xr-ai-capabilities; silero-vad via xr-ai-pipecat → xr-ai-vad). The `look_at_current_frame` perception tool reuses `xr_ai_capabilities.VisionModule` (live-frame VLM Q&A); the worker-local `pixels.py` and its frame/camera helpers were removed. |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
@@ -528,7 +538,8 @@ Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
 is explicit in the process list.
 Starts: hub, cloudxr-runtime, piper-tts (8105), vlm-mcp (8240),
-video-mcp (8210), render-mcp (8220), oxr-mcp (8230), vec-mcp (8250), worker.
+video-memory (8310), video-mcp (8210), scene (8320), render-mcp (8220),
+openxr-service (8330), oxr-mcp (8230), vec-mcp (8250), worker.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
 
@@ -550,8 +561,9 @@ updated in the same commit**.
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, `docs/adding-cloudxr.md` |
-| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | render-mcp + oxr-mcp + cloudxr-runtime `__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `docs/adding-cloudxr.md`, `docs/xr-render-demo.md` (client-type section) |
-| render-mcp YAML config keys | `agent-mcp-servers/render-mcp/render_mcp.yaml`, sample copies, worker URL constants |
+| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | xr-render-scene + oxr-mcp + cloudxr-runtime `__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `docs/adding-cloudxr.md`, `docs/xr-render-demo.md` (client-type section) |
+| scene service YAML config keys | `agent-samples/xr-render-demo/scene/scene_service.yaml`, orchestrator process declaration, `docs/xr-render-demo.md` |
+| render-mcp YAML config keys | `agent-mcp-servers/render-mcp/render_mcp.yaml`, worker URL constants |
 | oxr-mcp YAML config keys | `agent-mcp-servers/oxr-mcp/oxr_mcp_server.yaml`, sample copies, worker URL constants |
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
 | Any new sample added | `DEPENDENCIES.md`, `AGENTS.md`, `README.md` |

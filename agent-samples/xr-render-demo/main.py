@@ -8,11 +8,11 @@ Architecture (per AGENTS.md + the Agentic AI for XR design doc):
 
   Web client ── LiveKit ──► xr-media-hub ──IPC──► worker (this sample's agent)
   Web client ── WebRTC ──► cloudxr-runtime
-                                            worker ──ZMQ──► render-mcp ──► LOVR (OpenXR)
+                        worker ──MCP──► render-mcp ──RPC──► scene ──► LOVR (OpenXR)
 
 The worker consumes audio from the hub, computes a sphere radius from voice
-loudness, and pushes a render command to render-mcp. render-mcp owns the LOVR
-child process and forwards render commands to it. CloudXR runs alongside as
+loudness, and pushes a render command through render-mcp. The sample-local
+scene process owns LOVR and scene state. CloudXR runs alongside as
 its own stream — neither stack passes through the other.
 
 Prerequisites
@@ -31,7 +31,7 @@ the vendor build is skipped and the hub serves only its signaling endpoints.
 Both steps are skipped once their outputs exist.
 
 To use a custom LOVR build instead of the auto-downloaded one:
-    export LOVR_BIN=/path/to/your/lovr      # or set lovr_bin: in render_mcp.yaml
+    export LOVR_BIN=/path/to/your/lovr      # or set lovr_bin: in scene/scene_service.yaml
 
 Then open https://<host>:8080, click "Start Mic", click "Launch XR" (or the
 WebXR DevUI on desktop). Speak; the sphere tracks your voice in the headset.
@@ -118,6 +118,8 @@ def _build_processes(backend: str) -> list[Process]:
                 config="yaml/video_memory_service.yaml"),
         Process("video-mcp",  "../../agent-mcp-servers/video-mcp",   "video_mcp_server",
                 config="yaml/video_mcp_server.yaml"),
+        Process("scene",      "scene",                                "xr_render_scene",
+                config="scene/scene_service.yaml"),
         Process("render-mcp", "../../agent-mcp-servers/render-mcp",  "render_mcp"),
         Process("openxr-service", "../../services/openxr-service",  "openxr_service",
                 config="yaml/openxr_service.yaml",
@@ -165,18 +167,18 @@ def _ensure_lovr_bin() -> None:
 
     Resolution order:
       1. $LOVR_BIN env var (already set by caller or shell)
-      2. lovr_bin: in render_mcp.yaml (render-mcp reads it directly — we just skip)
+      2. lovr_bin: in scene/scene_service.yaml (scene reads it directly)
       3. Cached AppImage under deps/lovr/ inside the repo
       4. Auto-download from GitHub releases into the cache, then chmod +x
     """
     if os.environ.get("LOVR_BIN"):
         return
 
-    yaml_path = (_BASE / "../../agent-mcp-servers/render-mcp/render_mcp.yaml").resolve()
+    yaml_path = (_BASE / "scene/scene_service.yaml").resolve()
     if yaml_path.exists():
         for line in yaml_path.read_text().splitlines():
             if _LOVR_BIN_LINE.match(line):
-                return  # render-mcp will read lovr_bin directly from its YAML
+                return
 
     key = (sys.platform, platform.machine().lower())
     asset = _LOVR_ASSETS.get(key)
@@ -190,7 +192,7 @@ def _ensure_lovr_bin() -> None:
             f"\n"
             f"  Then set one of:\n"
             f"    export LOVR_BIN=/path/to/lovr\n"
-            f"    lovr_bin: /path/to/lovr   (in render_mcp.yaml)\n"
+            f"    lovr_bin: /path/to/lovr   (in scene/scene_service.yaml)\n"
         )
 
     cached = _LOVR_CACHE / asset

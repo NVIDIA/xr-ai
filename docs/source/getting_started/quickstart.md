@@ -155,9 +155,9 @@ red", "put it to my left", "where I'm looking"). Runs against a Quest 3 or Visio
 Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.
 
-Under the hood, the orchestrator launches twelve concurrent processes — hub,
-CloudXR runtime, STT, TTS, VLM, two LLM servers, four MCP servers, and the
-worker — wired together by a Pipecat pipeline that pairs a fast Llama-8B for
+Under the hood, the orchestrator launches the hub, CloudXR runtime, model
+endpoints, typed capability processes, MCP compatibility adapters, and the
+worker. The Pipecat pipeline pairs a fast Llama-8B for
 quick-acks with a Nemotron-30B agentic tool-calling loop over `render-mcp`,
 `oxr-mcp`, `vlm-mcp`, and `video-mcp`. Refer to the xr-render-demo guide for the
 full process map, agentic-loop details, and the XR session lifecycle.
@@ -204,14 +204,14 @@ binary, so the auto-download is not available: build LOVR from source and export
 To use a custom LOVR build:
 
 ```bash
-export LOVR_BIN=/path/to/your/lovr   # or set lovr_bin: in render_mcp.yaml
+export LOVR_BIN=/path/to/your/lovr   # or set lovr_bin: in scene/scene_service.yaml
 uv run xr_render_demo
 ```
 
 **GPU pinning** for the XR side is controlled by `gpu_index` in
 `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`. cloudxr-runtime applies
 the pin to its own process and writes the selectors into `cloudxr.env`;
-render-mcp (and LOVR) inherit from that file. Refer to the xr-render-demo guide
+the scene process and LOVR inherit from that file. Refer to the xr-render-demo guide
 for full details.
 
 To stop the model servers when done:

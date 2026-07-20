@@ -10,20 +10,16 @@ name = "render-mcp"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    # Process management for the LOVR child.
-    "xr-ai-launcher",
     "xr-ai-logging",
+    "xr-render-scene",
     "pyyaml>=6.0",
     "uvicorn[standard]>=0.29",
     "fastmcp>=2.0",
-    # render-mcp → LOVR uses ZMQ PUSH/PULL with msgpack-encoded {op, ...} frames.
-    "pyzmq>=27.0",
-    "msgpack>=1.0",
 ]
 
 [tool.uv.sources]
-xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
-xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+xr-render-scene = { path = "../../agent-samples/xr-render-demo/scene", editable = true }
 
 [project.scripts]
 render_mcp = "render_mcp.__main__:run"

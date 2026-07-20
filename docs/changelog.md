@@ -18,6 +18,14 @@ until the compatibility adapter is retired. Recorded-frame requests use an
 absolute Unix-microsecond reference timestamp plus a whole-second offset so an
 agent can reason coarsely while receiving the precise selected timestamp.
 
+### 2026-07-20 — XR render scene and LOVR stay sample-local
+
+The XR render demo owns its scene state, typed native function groups, LOVR
+lifecycle, and Lua app as one vertical component under `scene/`. The component
+exposes typed msgpack/ZMQ on port 8320. Render MCP retains port 8220 and its
+legacy tool schemas, but is only an adapter; no generic render or scene API is
+added to `xr-ai-nat` or the repository-wide services directory.
+
 ### 2026-07-20 — Live and recorded video become native video-memory functions
 
 `xr_video_memory` introduces recorded-video queries and timestamp-anchored

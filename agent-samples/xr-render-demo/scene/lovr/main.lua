@@ -1,7 +1,7 @@
 -- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
--- render-mcp scene — generic primitive renderer.
+-- XR render demo scene — generic primitive renderer.
 --
 -- Wire ops (msgpack-encoded tables):
 --   { op="scene.add",    value={ id, type, position={x,y,z}, color={r,g,b}, scale } }
@@ -9,7 +9,7 @@
 --   { op="scene.remove", value={ id } }
 
 -- ── lovr.log override ────────────────────────────────────────────────────────
--- Emit a tab-separated marker so render-mcp's Python side (the
+-- Emit a tab-separated marker so the scene process (the
 -- xr_ai_launcher._processes._forward forwarder) can route by authoritative
 -- LOVR severity. Levels follow https://lovr.org/docs/lovr.log: debug, info,
 -- warn, error. Anything calling lovr.log(...) below (or any LOVR engine
