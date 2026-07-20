@@ -12,7 +12,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-agent",
     "xr-ai-models",
-    "xr-ai-nat[services,vision]",
+    "xr-ai-nat[agents,services,vision]",
     "xr-ai-pipecat",
     "xr-ai-voicegate",
     "xr-ai-logging",

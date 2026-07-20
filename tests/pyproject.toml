@@ -15,7 +15,7 @@ dependencies = [
     "xr-ai-agent",
     "xr-ai-capabilities",
     "xr-ai-models",
-    "xr-ai-nat[services]",
+    "xr-ai-nat[agents,services]",
     "xr-ai-pipecat",
     "xr-media-hub",
     "xr-ai-launcher",

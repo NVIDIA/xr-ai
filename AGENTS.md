@@ -152,7 +152,9 @@ the typed OpenXR service without routing native agents through MCP.
 frame extraction through a typed service while keeping MCP optional; callers
 obtain current frames through the hub client. `StreamingVisionConfig` composes
 raw frame acquisition with VLM streaming behind one native function for voice
-workflows.
+workflows. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
+NAT's built-in LangChain-backed agent types; applications install
+`xr-ai-nat[agents]` rather than calling LangChain model clients directly.
 
 The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 

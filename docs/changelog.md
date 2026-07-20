@@ -18,6 +18,15 @@ until the compatibility adapter is retired. Recorded-frame requests use an
 absolute Unix-microsecond reference timestamp plus a whole-second offset so an
 agent can reason coarsely while receiving the precise selected timestamp.
 
+### 2026-07-20 — NAT agents retain the xr-ai-models service boundary
+
+`ModelsLLMConfig` registers an `xr-ai-models` `LLMService` as a NAT LLM
+provider. Its LangChain client translates NAT agent messages and tools but does
+not own model transport, so built-in NAT agents preserve the same deployment
+profiles and OpenAI-compatible service seam as direct callers. XR render's
+read-only post-action validator is the first consumer; the scene-control loop
+is intentionally unchanged in this slice.
+
 ### 2026-07-20 — XR render composes native capabilities directly
 
 The XR render worker builds scene, tracking, spatial-math, vision,

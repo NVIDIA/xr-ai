@@ -172,6 +172,7 @@ class RenderSceneProcessor(BrainProcessor):
         live_vision: Function,
         release_vision: Callable[[str], None],
         text_memory: Function | None,
+        validator: Function,
         prompt_path: Path,
         tools: list[ToolDef],
         llm: LLMService,
@@ -184,15 +185,14 @@ class RenderSceneProcessor(BrainProcessor):
         self._live_vision = live_vision
         self._release_vision = release_vision
         self._text_memory = text_memory
+        self._validator = validator
         self._prompt_path = prompt_path
         self._prompt_cache = prompt_path.read_text(encoding="utf-8").strip()
         _prompts = prompt_path.parent
         self._quick_ack_path = _prompts / "quick_ack.txt"
         self._still_work_path = _prompts / "still_working.txt"
-        self._validate_path = _prompts / "validate.txt"
         self._quick_ack_cache = self._quick_ack_path.read_text(encoding="utf-8").strip()
         self._still_work_cache = self._still_work_path.read_text(encoding="utf-8").strip()
-        self._validate_cache = self._validate_path.read_text(encoding="utf-8").strip()
         self._tools = tools
         self._llm = llm
         self._agent_llm = agent_llm
@@ -573,16 +573,9 @@ class RenderSceneProcessor(BrainProcessor):
         Returns (ok, issue). Defaults to ok=True on any failure so a broken
         validator never blocks the response.
         """
-        messages = [
-            ChatMessage(role="system", content=self._read_prompt(self._validate_path, "_validate_cache")),
-            ChatMessage(role="user", content=(f"Request: {transcript}\nCurrent scene: {json.dumps(post_scene or {})}")),
-        ]
+        request = f"Request: {transcript}\nCurrent scene: {json.dumps(post_scene or {})}"
         try:
-            resp = await asyncio.wait_for(
-                self._llm.chat(messages, max_tokens=60, temperature=0.0),
-                timeout=8.0,
-            )
-            raw = resp.content.strip()
+            raw = (await asyncio.wait_for(self._validator.ainvoke(request, to_type=str), timeout=8.0)).strip()
             obj_text = extract_json(raw)
             if obj_text:
                 obj = json.loads(obj_text)

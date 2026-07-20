@@ -100,6 +100,10 @@ calls — none of which actually use tool calling:
   generates a short contextual phrase like *"Still finding the right
   position"* on a 7s repeat. Sent to the data channel only — never spoken,
   to avoid stacking up in the TTS queue behind the real response.
+- **Post-action validation** — a read-only built-in NAT tool-calling agent
+  checks the final scene against the request. `ModelsLLMConfig` routes that
+  agent through the same `xr-ai-models` service; validator failure remains
+  advisory and never blocks the user response.
 
 ### NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107 — agentic loop
 
@@ -184,8 +188,10 @@ XRMediaHubTransport.input()
 
 At worker startup, a NAT `WorkflowBuilder` constructs sample-local scene,
 XR-tracking, spatial-math, vision, video-memory, and text-memory functions.
-The LLM tool schemas are derived from those Functions. `start_xr` and
-`get_health` remain worker-managed lifecycle operations.
+The LLM tool schemas are derived from those Functions, and the read-only scene
+validator uses NAT's built-in tool-calling agent with the models-backed LLM
+provider. `start_xr` and `get_health` remain worker-managed lifecycle
+operations.
 
 On each `TranscriptionFrame`:
 
