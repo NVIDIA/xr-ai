@@ -30,6 +30,7 @@ exit terminates the whole stack.
 | vlm-mcp | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 |
 | video-mcp | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 |
 | render-mcp | `agent-mcp-servers/render-mcp/` | `render_mcp` | 8220 |
+| openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
 | oxr-mcp | `agent-mcp-servers/oxr-mcp/` | `oxr_mcp_server` | 8230 |
 | vec-mcp | `agent-mcp-servers/vec-mcp/` | `vec_mcp_server` | 8250 |
 | worker | `agent-samples/xr-render-demo/worker/` | `xr_render_demo_worker` | — |
@@ -256,10 +257,10 @@ On each `TranscriptionFrame`:
 | `video-mcp` | 8210 | `list_live_participants`, `list_recorded_participants`, `get_video_stats`, `query_video`, `get_latest_frame`, `get_frame_at_time` |
 
 `render-mcp` owns the LOVR child process and is the only thing that pushes
-ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `oxr-mcp` opens a
-second headless OpenXR session (`XR_MND_HEADLESS`) separate from LOVR's
-rendering session — both coexist without contention; the session opens
-lazily on first tool call.
+ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `openxr-service` owns
+the second headless OpenXR session (`XR_MND_HEADLESS`) and serves the native
+XR-tracking functions. `oxr-mcp` preserves the MCP tool surface by forwarding
+pose requests to that service and running the shared spatial math.
 
 ### Spatial tool surface
 

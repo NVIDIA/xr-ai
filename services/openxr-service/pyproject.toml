@@ -6,23 +6,25 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "oxr-mcp"
+name = "xr-openxr-service"
 version = "0.1.0"
+description = "Long-running OpenXR tracking service for XR AI."
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "xr-ai-launcher",
     "xr-ai-logging",
     "xr-ai-nat[services]",
     "pyyaml>=6.0",
-    "uvicorn[standard]>=0.29",
-    "fastmcp>=2.0",
+    "isaacteleop",
 ]
 
 [tool.uv.sources]
-xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
-xr-ai-nat      = { path = "../../agent-sdk/xr-ai-nat", editable = true }
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-nat = { path = "../../agent-sdk/xr-ai-nat", editable = true }
 
 [project.scripts]
-oxr_mcp_server = "oxr_mcp_server.__main__:run"
+openxr_service = "openxr_service.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["oxr_mcp_server"]
+packages = ["openxr_service"]

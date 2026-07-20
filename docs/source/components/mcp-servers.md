@@ -125,12 +125,12 @@ inherits `XR_RUNTIME_JSON` and the CloudXR pin. A missing file is tolerated
 
 ## oxr-mcp
 
-`oxr-mcp` is the OpenXR tracking adapter. It opens a **second** OpenXR session
-against CloudXR in headless mode (`XR_MND_HEADLESS`) — separate from LOVR's
-rendering session — so the rendering client keeps full ownership of frame
-submission while `oxr-mcp` reads pose. The session opens lazily on the first
-tool call, and pose is fetched fresh per request via `xrLocateSpace` (no
-background polling).
+`oxr-mcp` is the compatibility adapter for XR tracking. The native
+`xr_tracking` function and this MCP surface both call `openxr-service`, which
+owns a **second** OpenXR session against CloudXR in headless mode
+(`XR_MND_HEADLESS`). LOVR keeps full ownership of frame submission while the
+service reads pose. The session opens lazily on the first request, and pose is
+fetched fresh via `xrLocateSpace` (no background polling).
 
 ### oxr-mcp tools
 
