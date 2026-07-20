@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-20 — Simple VLM invokes native live vision
+
+`simple-vlm-example` now builds `LiveVisionFunctionConfig` with a NAT
+`WorkflowBuilder` and adapts that function to its existing Pipecat voice
+pipeline. Live-frame tracking, conversion, and VLM streaming therefore have a
+native invocation boundary while voice behavior and model deployment profiles
+remain unchanged.
+
 ### 2026-07-20 — XR render scene and LOVR stay sample-local
 
 The XR render demo owns its scene state, typed native function groups, LOVR

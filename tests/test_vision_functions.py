@@ -6,11 +6,17 @@
 from __future__ import annotations
 
 import base64
+import time
 from types import SimpleNamespace
 
 from nat.builder.workflow_builder import WorkflowBuilder
 from PIL import Image
-from xr_ai_nat.functions.vision import VisionFunctionsConfig
+from xr_ai_agent import FrameData, FrameSignal, PixelFormat
+from xr_ai_nat.functions.vision import (
+    LiveVisionFunctionConfig,
+    LiveVisionRequest,
+    VisionFunctionsConfig,
+)
 
 
 class _Vlm:
@@ -21,6 +27,35 @@ class _Vlm:
     async def ask_image(self, image: str, question: str, *, system_prompt: str = ""):
         self.calls.append((image, question, system_prompt))
         return SimpleNamespace(content=self.content)
+
+    async def stream(self, image: str, question: str, *, system_prompt: str = ""):
+        self.calls.append((image, question, system_prompt))
+        for token in ("a ", "blue ", "square"):
+            yield token
+
+
+class _Endpoint:
+    def __init__(self) -> None:
+        self.frame_callback = None
+        self.statuses: list[tuple[str, str]] = []
+
+    def on_frame(self, callback) -> None:
+        self.frame_callback = callback
+
+    async def request_frame(self, signal: FrameSignal) -> FrameData:
+        return FrameData(
+            seq=signal.seq,
+            pts_us=signal.pts_us,
+            width=2,
+            height=2,
+            fmt=PixelFormat.RGB24,
+            data=bytes([20, 40, 60] * 4),
+            participant_id=signal.participant_id,
+            track_id=signal.track_id,
+        )
+
+    async def set_status(self, status: str, participant_id: str) -> None:
+        self.statuses.append((status, participant_id))
 
 
 async def test_vision_function_normalizes_image_and_returns_clean_answer(tmp_path) -> None:
@@ -65,3 +100,39 @@ async def test_vision_function_reports_missing_image_without_calling_model(tmp_p
 
     assert "file not found" in answer
     assert vlm.calls == []
+
+
+async def test_live_vision_function_streams_from_current_participant_frame() -> None:
+    endpoint = _Endpoint()
+    vlm = _Vlm("a blue square")
+    config = LiveVisionFunctionConfig(
+        endpoint=endpoint,
+        vlm=vlm,
+        system_prompt="Answer briefly.",
+    )
+
+    async with WorkflowBuilder() as builder:
+        function = await builder.add_function("live_vision", config)
+        assert endpoint.frame_callback is not None
+        await endpoint.frame_callback(
+            FrameSignal(
+                slot=0,
+                seq=1,
+                pts_us=time.time_ns() // 1_000,
+                width=2,
+                height=2,
+                fmt=PixelFormat.RGB24,
+                data_sz=12,
+                participant_id="alice",
+                track_id="camera",
+            )
+        )
+        chunks = [
+            chunk.text
+            async for chunk in function.astream(LiveVisionRequest(participant_id="alice", question="What is shown?"))
+        ]
+
+    assert chunks == ["a ", "blue ", "square"]
+    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
+    assert vlm.calls[0][1:] == ("What is shown?", "Answer briefly.")
+    assert vlm.calls[0][0].startswith("data:image/jpeg;base64,")
