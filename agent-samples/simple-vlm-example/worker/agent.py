@@ -4,23 +4,22 @@
 """
 SimpleVlmBrain — vision Q&A on the unified pipecat pipeline.
 
-Behaviour is identical to the original sample; the difference is that the
-live-camera machinery (frame tracking, camera-on-demand, the streaming VLM
-call) is no longer re-implemented here — it lives in the shared, reusable
-:class:`xr_ai_capabilities.VisionModule`. This brain is thin glue: it routes a query
-to the module, owns the data-channel side path, and interrupts on supersede.
+The brain is only the Pipecat boundary: live-camera acquisition and VLM
+streaming are owned by the injected native NAT function.
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import AsyncIterator
 
 from loguru import logger
 from pipecat.frames.frames import InterruptionFrame
 from xr_ai_agent import DataMessage
-from xr_ai_models import VLMService
-from xr_ai_capabilities import VisionModule
+from nat.builder.function import Function
 from xr_ai_pipecat import BrainProcessor, GatedQueryFrame
 from xr_ai_pipecat.transport import XRMediaHubTransport
+from xr_ai_nat.functions.vision import LiveVisionRequest
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -50,30 +49,21 @@ DEFAULT_SYSTEM_PROMPT = (
 
 
 class SimpleVlmBrain(BrainProcessor):
-    """Camera + VLM brain, built on the shared :class:`VisionModule`."""
+    """Adapt one native streaming vision function to the voice pipeline."""
 
     def __init__(
         self,
         *,
         transport: XRMediaHubTransport,
-        vlm: VLMService,
-        default_prompt:  str   = "Describe what you see.",
-        system_prompt:   str   = DEFAULT_SYSTEM_PROMPT,
-        frame_max_age_s: float = 2.0,
-        frame_timeout_s: float = 5.0,
+        vision: Function,
+        release_vision: Callable[[str], None],
+        default_prompt: str = "Describe what you see.",
     ) -> None:
         super().__init__()
         self._transport = transport
         self._default_prompt = default_prompt
-
-        # All the live-camera machinery lives in the shared module.
-        self._vision = VisionModule(
-            transport.endpoint, vlm,
-            system_prompt   = system_prompt,
-            frame_max_age_s = frame_max_age_s,
-            frame_timeout_s = frame_timeout_s,
-        )
-        self._vision.register()
+        self._vision = vision
+        self._release_vision = release_vision
 
         # Data-channel side path (typed queries). Participant-leave teardown
         # rides the base BrainProcessor frame path → on_participant_left.
@@ -82,10 +72,19 @@ class SimpleVlmBrain(BrainProcessor):
     # ── BrainProcessor overrides ──────────────────────────────────────────────
 
     async def handle_query(
-        self, pid: str, text: str, fresh_match: bool,
+        self,
+        pid: str,
+        text: str,
+        fresh_match: bool,
     ) -> AsyncIterator[str]:
-        # Return (not yield) the async iterator — the base awaits then iterates.
-        return self._vision.ask(pid, text)
+        del fresh_match
+
+        async def tokens() -> AsyncIterator[str]:
+            request = LiveVisionRequest(participant_id=pid, question=text)
+            async for chunk in self._vision.astream(request):
+                yield chunk.text
+
+        return tokens()
 
     async def on_user_started_speaking(self, pid: str) -> None:
         pass
@@ -96,7 +95,7 @@ class SimpleVlmBrain(BrainProcessor):
         await self.push_frame(InterruptionFrame())
 
     async def on_participant_left(self, pid: str) -> None:
-        self._vision.release(pid)
+        self._release_vision(pid)
 
     # ── data-channel side path ────────────────────────────────────────────────
 
@@ -109,9 +108,11 @@ class SimpleVlmBrain(BrainProcessor):
             return
         logger.info("data query  pid={!r}  {!r}", msg.participant_id, text[:80])
         query = self._default_prompt if text.lower() == "ping" else text
-        await self._spawn_query(GatedQueryFrame(
-            participant_id = msg.participant_id,
-            text           = query,
-            fresh_match    = True,
-            pts_us         = msg.pts_us,
-        ))
+        await self._spawn_query(
+            GatedQueryFrame(
+                participant_id=msg.participant_id,
+                text=query,
+                fresh_match=True,
+                pts_us=msg.pts_us,
+            )
+        )

@@ -150,7 +150,9 @@ capability. `XRTrackingFunctionsConfig` exposes the current user frame through
 the typed OpenXR service without routing native agents through MCP.
 `VideoMemoryFunctionsConfig` exposes recorded-video discovery, queries, and
 frame extraction through a typed service while keeping MCP optional; callers
-obtain current frames through the hub client.
+obtain current frames through the hub client. `LiveVisionFunctionConfig` composes
+raw frame acquisition with VLM streaming behind one native function for voice
+workflows.
 
 The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 
@@ -174,8 +176,8 @@ them:
   `VisionUnavailable`). `pixels` is its frame → JPEG codec. A pipecat brain
   constructs it with `VisionModule(transport.endpoint, vlm)`.
 
-A new vision sample's brain therefore reduces to thin glue over `VisionModule`;
-a voice sample gets the wake word from config alone.
+A new vision sample's brain therefore reduces to a Pipecat adapter over a
+native vision function; a voice sample gets the wake word from config alone.
 
 ### Scope decision and named follow-ups
 

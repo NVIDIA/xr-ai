@@ -6,13 +6,120 @@
 import asyncio
 import logging
 import re
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Annotated, Any
 
-from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, register_function_group
-from pydantic import ConfigDict, Field
+from nat.plugin_api import (
+    Builder,
+    FunctionBaseConfig,
+    FunctionGroup,
+    FunctionGroupBaseConfig,
+    FunctionInfo,
+    register_function,
+    register_function_group,
+)
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+
+from ._live import LiveFrameSource, LiveFrameUnavailable
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class LiveVisionRequest(BaseModel):
+    """Request a VLM answer from one participant's current camera frame."""
+
+    participant_id: str = Field(description="Participant whose camera frame should be inspected.")
+    question: str = Field(min_length=1, description="Question to answer from the camera frame.")
+
+
+class LiveVisionResult(BaseModel):
+    """Complete answer from a live-camera vision invocation."""
+
+    text: str
+
+
+class LiveVisionChunk(BaseModel):
+    """One streamed text fragment from a live-camera vision invocation."""
+
+    text: str
+
+
+class LiveVisionFunctionConfig(FunctionBaseConfig, name="xr_live_vision"):
+    """Configure one native streaming function over a live XR camera."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    endpoint: Any = Field(exclude=True, repr=False)
+    vlm: Any = Field(exclude=True, repr=False)
+    system_prompt: str = ""
+    frame_max_age_s: float = Field(default=2.0, gt=0.0)
+    frame_timeout_s: float = Field(default=5.0, gt=0.0)
+    _frames: LiveFrameSource | None = PrivateAttr(default=None)
+
+    def release(self, participant_id: str) -> None:
+        """Forget cached frame state after a participant disconnects."""
+
+        if self._frames is not None:
+            self._frames.release(participant_id)
+
+
+@register_function(config_type=LiveVisionFunctionConfig)
+async def live_vision_function(config: LiveVisionFunctionConfig, _builder: Builder):
+    frames = LiveFrameSource(
+        config.endpoint,
+        max_age_s=config.frame_max_age_s,
+        timeout_s=config.frame_timeout_s,
+    )
+    config._frames = frames
+
+    async def answer(request: LiveVisionRequest) -> LiveVisionResult:
+        try:
+            image_url = await frames.image_url(request.participant_id)
+            response = await config.vlm.ask_image(
+                image_url,
+                request.question,
+                system_prompt=config.system_prompt,
+            )
+            text = (response.content or "").strip()
+            if not text:
+                text = "I couldn't make out anything in the view."
+        except LiveFrameUnavailable as exc:
+            text = str(exc)
+        except Exception:
+            _LOGGER.exception("Live VLM request failed")
+            text = "VLM server unavailable — please retry."
+        return LiveVisionResult(text=text)
+
+    async def stream(request: LiveVisionRequest) -> AsyncGenerator[LiveVisionChunk, None]:
+        try:
+            image_url = await frames.image_url(request.participant_id)
+        except LiveFrameUnavailable as exc:
+            yield LiveVisionChunk(text=str(exc))
+            return
+
+        await config.endpoint.set_status("processing", request.participant_id)
+        try:
+            async for token in config.vlm.stream(
+                image_url,
+                request.question,
+                system_prompt=config.system_prompt,
+            ):
+                yield LiveVisionChunk(text=token)
+        except Exception:
+            _LOGGER.exception("Live VLM stream failed")
+            yield LiveVisionChunk(text="VLM server unavailable — please retry.")
+        finally:
+            await config.endpoint.set_status("idle", request.participant_id)
+
+    try:
+        yield FunctionInfo.create(
+            single_fn=answer,
+            stream_fn=stream,
+            description="Answer a question about a participant's current live camera view.",
+        )
+    finally:
+        config._frames = None
 
 
 class VisionFunctionsConfig(FunctionGroupBaseConfig, name="xr_vision"):
@@ -87,4 +194,10 @@ async def vision_functions(config: VisionFunctionsConfig, _builder: Builder):
     yield group
 
 
-__all__ = ["VisionFunctionsConfig"]
+__all__ = [
+    "LiveVisionChunk",
+    "LiveVisionFunctionConfig",
+    "LiveVisionRequest",
+    "LiveVisionResult",
+    "VisionFunctionsConfig",
+]
