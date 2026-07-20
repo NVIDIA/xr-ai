@@ -14,12 +14,12 @@ design decisions see `docs/changelog.md`.
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
-agent-sdk/          # xr-ai-agent: IPC client library (pyzmq + msgpack only)
+agent-sdk/          # IPC, model, NAT-function, capability, and voice SDK packages
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in per sample)
 ai-services/        # OpenAI-compatible AI inference servers (VLM, STT, TTS, LLM)
 services/           # Long-running typed XR capability services
-agent-mcp-servers/  # MCP adapters: oxr, render, transcript, video, vlm
+agent-mcp-servers/  # Optional MCP compatibility adapters for non-NAT consumers
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
 docs/               # Design docs and topic deep-dives
@@ -37,10 +37,12 @@ docs/               # Design docs and topic deep-dives
   participant (`xr-hub-return-{pid}`) with subscribe permissions restricted to
   that participant; return data uses ``destination_identities`` for the same
   reason. Agents never need to know.
-- **`agent-sdk/`** (`xr-ai-agent`) contains only the agent-facing IPC layer.
-  Its sole runtime dependencies are `pyzmq` and `msgpack` — no LiveKit,
-  FastAPI, or uvicorn.
-- **MCP servers are the agent's only interface to XR data and rendering.**
+- **`agent-sdk/xr-ai-agent`** contains only the agent-facing IPC layer. Its
+  sole runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI,
+  or uvicorn.
+- **Native agents compose typed NAT functions in process.** Runtime-backed
+  functions call typed capability services, while deterministic functions run
+  locally. MCP adapters only republish selected functions for MCP consumers.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml` (see `docs/credentials.md`).
 

@@ -8,6 +8,7 @@ import time
 from typing import Annotated, Any, Literal
 
 from nat.builder.function import Function
+from nat.builder.workflow_builder import WorkflowBuilder
 from nat.plugin_api import (
     Builder,
     FunctionGroup,
@@ -17,6 +18,16 @@ from nat.plugin_api import (
 )
 from pydantic import BaseModel, Field
 from xr_ai_models import ToolDef
+from xr_ai_nat.functions.spatial_math import SpatialMathFunctionsConfig
+from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
+from xr_ai_nat.functions.vision import VisionFunctionsConfig
+from xr_ai_nat.functions.xr_tracking import XRTrackingFunctionsConfig
+from xr_render_scene import (
+    SceneControlFunctionsConfig,
+    SceneObjectFunctionsConfig,
+    SceneStateFunctionsConfig,
+    SceneUpdateFunctionsConfig,
+)
 
 
 class _EmptyRequest(BaseModel):
@@ -347,6 +358,43 @@ class NativeToolbox:
         return _plain(result)
 
 
+async def build_native_toolbox(
+    builder: WorkflowBuilder,
+    *,
+    scene_endpoint: str,
+    openxr_endpoint: str,
+    video_memory_endpoint: str,
+    vlm: Any,
+) -> NativeToolbox:
+    """Build the model-facing toolbox shared by the live worker and eval."""
+    for name, config in (
+        ("scene_state", SceneStateFunctionsConfig(endpoint=scene_endpoint)),
+        ("scene_updates", SceneUpdateFunctionsConfig(endpoint=scene_endpoint)),
+        ("scene_objects", SceneObjectFunctionsConfig(endpoint=scene_endpoint)),
+        ("scene_control", SceneControlFunctionsConfig(endpoint=scene_endpoint)),
+        ("tracking", XRTrackingFunctionsConfig(endpoint=openxr_endpoint)),
+        ("spatial_math", SpatialMathFunctionsConfig()),
+        ("render_spatial", RenderSpatialToolsConfig()),
+        ("video_memory", VideoMemoryFunctionsConfig(endpoint=video_memory_endpoint)),
+        ("vision", VisionFunctionsConfig(vlm=vlm)),
+    ):
+        await builder.add_function_group(name, config)
+
+    functions: dict[str, Function] = {}
+    for name in (
+        "scene_state",
+        "scene_updates",
+        "scene_objects",
+        "scene_control",
+        "render_spatial",
+        "video_memory",
+        "vision",
+    ):
+        group = await builder.get_function_group(name)
+        functions.update(await group.get_all_functions())
+    return NativeToolbox(functions)
+
+
 def _plain(value: Any) -> Any:
     if isinstance(value, BaseModel):
         return value.model_dump(mode="python")
@@ -357,4 +405,4 @@ def _plain(value: Any) -> Any:
     return value
 
 
-__all__ = ["NativeToolbox", "RenderSpatialToolsConfig"]
+__all__ = ["NativeToolbox", "RenderSpatialToolsConfig", "build_native_toolbox"]

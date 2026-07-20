@@ -5,69 +5,63 @@
 
 # xr-render-demo eval harness
 
-End-to-end test of the agent LLM's tool-calling against the live model
-and MCP servers. Each case feeds a synthetic scene + head pose into the
-model with the same system prompt the live worker uses, runs a
-multi-step rollout (executing safe oxr-mcp tools between turns;
-render-mcp tools are fake-succeeded so the live LOVR scene is not
-mutated), then checks the final scene mutations against a per-case
-expectation.
+End-to-end test of the agent LLM's tool-calling against the live model. Each
+case feeds a synthetic scene and head pose into the model with the same system
+prompt and native NAT function schemas as the live worker, executes tool
+effects against deterministic fixtures, then checks the resulting scene
+mutations against a per-case expectation.
 
 ## Prerequisites
 
-The shared model servers and a render-demo stack must be running:
+The agent LLM must be running:
 
 ```bash
 # weights resident in the background — start once, leave alone
 uv run --project ~/hub/xr-ai/agent-samples/model-servers model_servers
 
-# stack
-uv run --project ~/hub/xr-ai/agent-samples/xr-render-demo xr_render_demo
 ```
 
-The harness needs these reachable on default ports:
-- agent LLM: `http://localhost:8107` (nemotron3_nano)
-- oxr-mcp:   `http://localhost:8230`
-- render-mcp: `http://localhost:8220` — must be reachable so the
-  harness can discover its tool schemas (`add/update/remove_primitive`).
-  Its mutating tools are then fake-succeeded so the live LOVR scene
-  isn't actually mutated.
-
-`vlm-mcp` / `video-mcp` may be down — they're only consulted for
-tool-schema discovery and fail open if absent.
+By default the harness calls the agent LLM at `http://localhost:8107`. It does
+not require the render-demo stack, capability services, MCP adapters, or LOVR.
 
 ## Run
 
 ```bash
 # All built-in cases against the current system.txt
-agent-samples/xr-render-demo/eval/eval.py
+uv run --project agent-samples/xr-render-demo/worker \
+  python agent-samples/xr-render-demo/eval/eval.py
 
 # Subset by case name — fast iteration on a single failing cluster.
 # Comma-separated; unknown names error out (mutually exclusive with the
 # positional query arg below).
-agent-samples/xr-render-demo/eval/eval.py --only move_left_one_meter,between_two_spheres
+uv run --project agent-samples/xr-render-demo/worker \
+  python agent-samples/xr-render-demo/eval/eval.py \
+  --only move_left_one_meter,between_two_spheres
 
 # Watcher-friendly equivalent: write case names (newline- or
 # comma-separated; '#' comments OK) to eval/.only. Gitignored.
 # Active subset is echoed at startup.
 
 # One ad-hoc query (prints the raw LLM response)
-agent-samples/xr-render-demo/eval/eval.py "Move the cube up 30 cm"
+uv run --project agent-samples/xr-render-demo/worker \
+  python agent-samples/xr-render-demo/eval/eval.py "Move the cube up 30 cm"
 
 # Score a prompt file other than the live worker's system.txt — e.g.
 # main's version, a draft, or a checkout from another branch.
-agent-samples/xr-render-demo/eval/eval.py --prompt /tmp/alt-system.txt
+uv run --project agent-samples/xr-render-demo/worker \
+  python agent-samples/xr-render-demo/eval/eval.py --prompt /tmp/alt-system.txt
 
 # Score against a hosted model (e.g. nvidia/nemotron-3-super-120b-a12b at
 # build.nvidia.com) instead of the local vLLM on 8107.  Set NVIDIA_API_KEY
 # in the env first (or pass --agent-api-key).
 export NVIDIA_API_KEY=nvapi-...
-agent-samples/xr-render-demo/eval/eval.py \
+uv run --project agent-samples/xr-render-demo/worker \
+  python agent-samples/xr-render-demo/eval/eval.py \
   --agent-llm   https://integrate.api.nvidia.com/v1/chat/completions \
   --agent-model nvidia/nemotron-3-super-120b-a12b
 ```
 
-The script is a self-contained `uv run --script` — no `uv sync` needed.
+Run `uv sync` in `agent-samples/xr-render-demo/worker` before the first eval.
 
 ## Watcher
 
@@ -142,5 +136,5 @@ when reaching for a fixture word in a worked example.
 ## What the harness does not cover
 
 - The live worker pipeline (VAD, STT, TTS, history bookkeeping).
-- Real render-mcp / LOVR effects (fake-succeeded).
+- Real scene-service / LOVR effects (fixture-succeeded).
 - Real visual queries (`ask_image`, `get_latest_frame`) — stubbed.
