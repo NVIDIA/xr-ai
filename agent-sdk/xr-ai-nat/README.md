@@ -23,13 +23,15 @@ functions:
 
 The group exposes:
 
-- `spatial_math__position_in_gaze`
-- `spatial_math__place_user_relative`
-- `spatial_math__place_object_relative`
-- `spatial_math__displace_object`
-- `spatial_math__move_relative_to`
-- `spatial_math__midpoint`
-- `spatial_math__place_in_container`
+- `spatial_math__compute_gaze_target(user_frame, distance_meters)`
+- `spatial_math__compute_user_relative_position(user_frame, direction_from_user, distance_meters)`
+- `spatial_math__compute_position_relative_to_anchor(user_frame, anchor_position, relation_to_anchor, distance_meters)`
+- `spatial_math__offset_position_in_user_frame(user_frame, start_position, forward_meters, right_meters, up_meters)`
+- `spatial_math__compute_position_toward_or_away_from_reference(start_position, reference_position, movement_direction, distance_meters)`
+- `spatial_math__compute_midpoint(first_position, second_position)`
+
+Every operation returns a `Vector3` and only calculates coordinates. Creating,
+moving, or associating a scene object remains the caller's responsibility.
 
 Install the package in the NAT environment so its `nat.plugins` entry point is
 discovered automatically.

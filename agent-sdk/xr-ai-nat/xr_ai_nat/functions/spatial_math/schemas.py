@@ -31,14 +31,4 @@ class SpatialFrame(_StructuredValue):
     up: Vector3
 
 
-class PositionResult(Vector3):
-    """A resolved world-space position."""
-
-
-class ObjectPositionResult(PositionResult):
-    """A resolved position paired with the object that should move."""
-
-    obj_id: str
-
-
-__all__ = ["ObjectPositionResult", "PositionResult", "SpatialFrame", "Vector3"]
+__all__ = ["SpatialFrame", "Vector3"]

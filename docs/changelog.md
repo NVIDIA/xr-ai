@@ -16,7 +16,10 @@ inputs include an explicit spatial frame. This keeps deterministic coordinate
 math in-process and independent of tracking or transport. Vec MCP and the
 spatial tools in OpenXR MCP retain their existing commands and schemas, but now
 delegate to the same pure math core; they are compatibility boundaries rather
-than owners of the capability.
+than owners of the capability. Native function names use calculation verbs,
+identify anchors and reference frames explicitly, and include `_meters` on
+distance arguments. The six operations all return `Vector3`; containment and
+scene mutation remain application responsibilities rather than spatial math.
 
 ### 2026-07-02 — Apple client: CloudXR streaming (visionOS-only)
 

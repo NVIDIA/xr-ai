@@ -88,7 +88,7 @@ def build_mcp() -> FastMCP:
         Returns {x, y, z} — the midpoint. Feed straight into
         add_primitive or update_primitive.
         """
-        return spatial_math.midpoint(
+        return spatial_math.compute_midpoint(
             Vector3(x=a_x, y=a_y, z=a_z),
             Vector3(x=b_x, y=b_y, z=b_z),
         )
@@ -111,9 +111,9 @@ def build_mcp() -> FastMCP:
         """
         return spatial_math.world_offset(
             Vector3(x=origin_x, y=origin_y, z=origin_z),
-            dx=dx,
-            dy=dy,
-            dz=dz,
+            x_meters=dx,
+            y_meters=dy,
+            z_meters=dz,
         )
 
     @mcp.tool()
@@ -131,11 +131,11 @@ def build_mcp() -> FastMCP:
         Returns {x, y, z}, or {error} if origin and target coincide.
         """
         try:
-            return spatial_math.move_relative_to(
+            return spatial_math.compute_position_toward_or_away_from_reference(
                 Vector3(x=origin_x, y=origin_y, z=origin_z),
                 Vector3(x=target_x, y=target_y, z=target_z),
-                direction="toward" if distance >= 0 else "away",
-                distance=abs(distance),
+                movement_direction="toward" if distance >= 0 else "away",
+                distance_meters=abs(distance),
             )
         except ValueError:
             return {"error": "origin and target coincide"}

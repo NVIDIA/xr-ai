@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed NAT functions for deterministic XR spatial calculations."""
+"""Model-facing NAT functions for pure, framework-neutral coordinate calculations."""
 
 import json
 from typing import Annotated, Literal
@@ -9,11 +9,12 @@ from typing import Annotated, Literal
 from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, register_function_group
 from pydantic import BeforeValidator, Field
 
-from . import _math
-from .schemas import ObjectPositionResult, PositionResult, SpatialFrame, Vector3
+from . import _math as spatial_math
+from .schemas import SpatialFrame, Vector3
 
 
 def _decode_json(value: object) -> object:
+    # LangChain may present a typed tool result as text before the model reuses it.
     if isinstance(value, str):
         try:
             return json.loads(value)
@@ -22,141 +23,205 @@ def _decode_json(value: object) -> object:
     return value
 
 
-_Frame = Annotated[
+_UserFrameArgument = Annotated[
     SpatialFrame,
     BeforeValidator(_decode_json),
-    Field(description="Coordinate frame returned by an XR tracking function."),
+    Field(
+        description=("Current user coordinate frame returned by an XR tracking function, copied as one JSON object.")
+    ),
 ]
-_Position = Annotated[
+_WorldPositionArgument = Annotated[
     Vector3,
     BeforeValidator(_decode_json),
-    Field(description="A complete world position represented as one {x, y, z} object."),
+    Field(
+        description=(
+            "Complete world position copied as one {x, y, z} object from scene state or a previous spatial-math result."
+        )
+    ),
 ]
-_Distance = Annotated[float, Field(ge=0, description="Non-negative distance in metres.")]
 
 
 class SpatialMathFunctionsConfig(FunctionGroupBaseConfig, name="xr_spatial_math"):
-    """Configure pure spatial functions over caller-supplied coordinates."""
+    """Configure pure coordinate calculations over caller-supplied positions and frames."""
 
 
 @register_function_group(config_type=SpatialMathFunctionsConfig)
 async def spatial_math_functions(config: SpatialMathFunctionsConfig, _builder: Builder):
+    """Build calculations that return coordinates but never mutate scene objects."""
+
     group = FunctionGroup(config=config)
 
-    async def position_in_gaze(frame: _Frame, distance: _Distance = 1.5) -> PositionResult:
-        return PositionResult.model_validate(_math.position_in_gaze(frame, distance))
+    async def compute_gaze_target(
+        user_frame: _UserFrameArgument,
+        distance_meters: Annotated[
+            float,
+            Field(ge=0, description="Non-negative distance along the full 3D gaze ray, in metres."),
+        ] = 1.5,
+    ) -> Vector3:
+        return Vector3.model_validate(spatial_math.compute_gaze_target(user_frame, distance_meters))
 
     group.add_function(
-        "position_in_gaze",
-        position_in_gaze,
-        description="Return a position along the user's full 3D gaze direction.",
-    )
-
-    async def place_user_relative(
-        frame: _Frame,
-        direction: Literal["front", "back", "left", "right", "above", "below"],
-        distance: _Distance = 1.5,
-    ) -> PositionResult:
-        return PositionResult.model_validate(
-            _math.place_user_relative(frame, direction=direction, distance=distance)
-        )
-
-    group.add_function(
-        "place_user_relative",
-        place_user_relative,
+        "compute_gaze_target",
+        compute_gaze_target,
         description=(
-            "Return a gravity-aligned position in a named direction from the user. "
-            "Use only when the user is the spatial anchor."
+            "Compute a world position along the user's full 3D gaze ray. "
+            "Use only for explicit gaze language such as 'where I am looking'. "
+            "This function calculates coordinates and does not create or move a scene object."
         ),
     )
 
-    async def place_object_relative(
-        frame: _Frame,
-        anchor: _Position,
-        direction: Annotated[
+    async def compute_user_relative_position(
+        user_frame: _UserFrameArgument,
+        direction_from_user: Annotated[
             Literal["front", "back", "left", "right", "above", "below"],
-            Field(description="Direction from the object anchor; front points toward the user."),
+            Field(description="Named direction whose anchor is the user."),
         ],
-        distance: _Distance = 0.3,
-    ) -> PositionResult:
-        return PositionResult.model_validate(
-            _math.place_object_relative(
-                frame,
-                anchor=anchor,
-                direction=direction,
-                distance=distance,
+        distance_meters: Annotated[
+            float,
+            Field(ge=0, description="Non-negative distance from the user, in metres."),
+        ] = 1.5,
+    ) -> Vector3:
+        return Vector3.model_validate(
+            spatial_math.compute_user_relative_position(
+                user_frame,
+                direction_from_user,
+                distance_meters,
             )
         )
 
     group.add_function(
-        "place_object_relative",
-        place_object_relative,
-        description="Return a gravity-aligned position relative to a scene-object anchor.",
+        "compute_user_relative_position",
+        compute_user_relative_position,
+        description=(
+            "Compute a gravity-aligned world position relative to the user, for requests such as "
+            "'in front of me' or 'to my left'. The user is always the anchor. This function "
+            "calculates coordinates and does not create or move a scene object."
+        ),
     )
 
-    async def displace_object(
-        frame: _Frame,
-        position: _Position,
-        forward: Annotated[float, Field(description="Signed user-forward offset in metres.")] = 0.0,
-        right: Annotated[float, Field(description="Signed user-right offset in metres.")] = 0.0,
-        up: Annotated[float, Field(description="Signed world-up offset in metres.")] = 0.0,
-    ) -> PositionResult:
-        return PositionResult.model_validate(
-            _math.displace_object(
-                frame,
-                position=position,
-                forward=forward,
-                right=right,
-                up=up,
+    async def compute_position_relative_to_anchor(
+        user_frame: _UserFrameArgument,
+        anchor_position: _WorldPositionArgument,
+        relation_to_anchor: Annotated[
+            Literal[
+                "toward_user",
+                "away_from_user",
+                "left_of",
+                "right_of",
+                "above",
+                "below",
+            ],
+            Field(
+                description=(
+                    "Requested relation to the anchor. Horizontal relations use the user's view: "
+                    "toward_user, away_from_user, left_of, or right_of."
+                )
+            ),
+        ],
+        distance_meters: Annotated[
+            float,
+            Field(ge=0, description="Non-negative distance from the anchor, in metres."),
+        ] = 0.3,
+    ) -> Vector3:
+        return Vector3.model_validate(
+            spatial_math.compute_position_relative_to_anchor(
+                user_frame,
+                anchor_position=anchor_position,
+                relation_to_anchor=relation_to_anchor,
+                distance_meters=distance_meters,
             )
         )
 
     group.add_function(
-        "displace_object",
-        displace_object,
-        description="Offset an existing world position in the user's gravity-aligned frame.",
+        "compute_position_relative_to_anchor",
+        compute_position_relative_to_anchor,
+        description=(
+            "Compute a world position relative to a named scene-object anchor. Pass the anchor's "
+            "complete position and describe the relation explicitly as toward/away from the user, "
+            "left/right of the anchor, above, or below. This function calculates coordinates and "
+            "does not mutate either object."
+        ),
     )
 
-    async def move_relative_to(
-        position: _Position,
-        reference: _Position,
-        direction: Literal["toward", "away"],
-        distance: _Distance = 0.5,
-    ) -> PositionResult:
-        return PositionResult.model_validate(
-            _math.move_relative_to(
-                position,
-                reference,
-                direction=direction,
-                distance=distance,
+    async def offset_position_in_user_frame(
+        user_frame: _UserFrameArgument,
+        start_position: _WorldPositionArgument,
+        forward_meters: Annotated[
+            float,
+            Field(description="Signed offset along user-forward, in metres; negative means backward."),
+        ] = 0.0,
+        right_meters: Annotated[
+            float,
+            Field(description="Signed offset along user-right, in metres; negative means left."),
+        ] = 0.0,
+        up_meters: Annotated[
+            float,
+            Field(description="Signed world-up offset, in metres; negative means down."),
+        ] = 0.0,
+    ) -> Vector3:
+        return Vector3.model_validate(
+            spatial_math.offset_position_in_user_frame(
+                user_frame,
+                start_position=start_position,
+                forward_meters=forward_meters,
+                right_meters=right_meters,
+                up_meters=up_meters,
             )
         )
 
     group.add_function(
-        "move_relative_to",
-        move_relative_to,
-        description="Move one position toward or away from a reference by an exact distance.",
+        "offset_position_in_user_frame",
+        offset_position_in_user_frame,
+        description=(
+            "Compute a new world position by applying signed forward, right, and up offsets to an "
+            "existing position in the user's coordinate frame. This function only returns the new "
+            "coordinates; update the scene separately."
+        ),
     )
 
-    async def midpoint(first: _Position, second: _Position) -> PositionResult:
-        return PositionResult.model_validate(_math.midpoint(first, second))
+    async def compute_position_toward_or_away_from_reference(
+        start_position: _WorldPositionArgument,
+        reference_position: _WorldPositionArgument,
+        movement_direction: Annotated[
+            Literal["toward", "away"],
+            Field(description="Whether the result moves toward or away from the reference position."),
+        ],
+        distance_meters: Annotated[
+            float,
+            Field(ge=0, description="Non-negative travel distance, in metres."),
+        ] = 0.5,
+    ) -> Vector3:
+        return Vector3.model_validate(
+            spatial_math.compute_position_toward_or_away_from_reference(
+                start_position,
+                reference_position,
+                movement_direction=movement_direction,
+                distance_meters=distance_meters,
+            )
+        )
 
     group.add_function(
-        "midpoint",
-        midpoint,
-        description="Return the world-space midpoint between two positions.",
+        "compute_position_toward_or_away_from_reference",
+        compute_position_toward_or_away_from_reference,
+        description=(
+            "Compute where a starting position ends after moving an exact distance toward or away "
+            "from a named reference position. No user frame is involved and no scene object is mutated."
+        ),
     )
 
-    async def place_in_container(
-        obj_id: Annotated[str, Field(description="ID of the object being placed inside.")],
-        container: _Position,
-    ) -> ObjectPositionResult:
-        return ObjectPositionResult.model_validate(_math.place_in_container(obj_id, container))
+    async def compute_midpoint(
+        first_position: _WorldPositionArgument,
+        second_position: _WorldPositionArgument,
+    ) -> Vector3:
+        return Vector3.model_validate(spatial_math.compute_midpoint(first_position, second_position))
 
     group.add_function(
-        "place_in_container",
-        place_in_container,
-        description="Pair an object ID with the center position of its container.",
+        "compute_midpoint",
+        compute_midpoint,
+        description=(
+            "Compute the world-space midpoint between two complete positions. "
+            "This function only returns coordinates and does not move either object."
+        ),
     )
 
     yield group
