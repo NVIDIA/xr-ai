@@ -307,14 +307,16 @@ a streaming client connects. LOVR cannot start before then.
 
 ## Eval harness
 
-Offline regression suite for the agentic loop, run against the live model
-stack (no LLM/MCP mocks; render-mcp tools are fake-succeeded so the live
-LOVR scene is not mutated). Refer to
+Offline regression suite for the agentic loop, run against the live agent LLM.
+It derives schemas from the worker's native NAT functions and evaluates tool
+effects against deterministic fixtures, so the live LOVR scene is not mutated.
+Refer to
 [`agent-samples/xr-render-demo/eval/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/xr-render-demo/eval/README.md)
 for the case format and the watch-mode loop. Run with:
 
 ```bash
-agent-samples/xr-render-demo/eval/eval.py
+uv run --project agent-samples/xr-render-demo/worker \
+  python agent-samples/xr-render-demo/eval/eval.py
 ```
 
 ### Prompt/eval overlap audit

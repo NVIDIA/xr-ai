@@ -482,7 +482,7 @@ For engineers and agents working in the repo:
 | [`docs/architecture.md`](docs/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
 | [`docs/process-model.md`](docs/process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
 | [`docs/ai-services.md`](docs/ai-services.md) | VLM / STT / TTS / LLM server reference + worker call examples |
-| [`docs/xr-render-demo.md`](docs/xr-render-demo.md) | xr-render-demo architecture: 12-process stack, agentic loop, XR lifecycle |
+| [`docs/xr-render-demo.md`](docs/xr-render-demo.md) | xr-render-demo architecture: native functions, agentic loop, XR lifecycle |
 | [`docs/adding-a-sample.md`](docs/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
 | [`docs/adding-cloudxr.md`](docs/adding-cloudxr.md) | Wiring CloudXR into a sample |
 | [`docs/credentials.md`](docs/credentials.md) | HF / NGC token management |

@@ -623,6 +623,46 @@ async def test_render_spatial_native_toolbox_builds() -> None:
             assert set(definitions[name].parameters["properties"]) == parameters
 
 
+async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
+    """The shared builder exposes the complete runtime tool surface without MCP discovery."""
+    async with WorkflowBuilder() as builder:
+        toolbox = await _caps.build_native_toolbox(
+            builder,
+            scene_endpoint="tcp://127.0.0.1:65527",
+            openxr_endpoint="tcp://127.0.0.1:65528",
+            video_memory_endpoint="tcp://127.0.0.1:65529",
+            vlm=_FakeVLM(),
+        )
+        names = {tool.name for tool in toolbox.definitions()}
+
+    assert names == {
+        "add_primitive",
+        "along_direction",
+        "ask_image",
+        "between_anchors",
+        "displace_object",
+        "displace_objects",
+        "get_frame_from_time",
+        "get_head_pose",
+        "get_health",
+        "get_scene_state",
+        "get_video_stats",
+        "list_live_participants",
+        "list_recorded_participants",
+        "place_inside_by_id",
+        "place_object_relative",
+        "place_user_relative",
+        "position_ahead",
+        "position_relative",
+        "query_video",
+        "remove_primitive",
+        "scale_value",
+        "start_xr",
+        "update_primitive",
+        "world_offset",
+    }
+
+
 class _FakeEndpoint:
     """Hub ProcessorEndpoint double — frame callback, pixel request, status, and
     return-data send. VisionModule now talks to the endpoint directly (the real

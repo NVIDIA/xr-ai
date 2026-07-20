@@ -16,7 +16,9 @@ video-memory, and text-memory Functions in one NAT workflow. Runtime-backed
 Functions retain typed process boundaries, but the sample no longer launches
 or calls MCP adapters. Its existing model tool names and prompt remain stable
 while schemas are derived from Functions, keeping this transport migration
-independent from the later agent-loop migration.
+independent from the later agent-loop migration. The prompt eval derives its
+tool schemas from the same native toolbox assembly and executes effects against
+fixtures, so it no longer requires compatibility MCP processes.
 
 ### 2026-07-20 — Simple VLM invokes native live vision
 

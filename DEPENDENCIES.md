@@ -531,9 +531,10 @@ a transitive dep of `xr-ai-pipecat` and `xr-ai-nat[vision]`.
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
 is explicit in the process list.
-Starts: hub, cloudxr-runtime, piper-tts (8105), vlm-mcp (8240),
-video-memory (8310), video-mcp (8210), scene (8320), render-mcp (8220),
-openxr-service (8330), oxr-mcp (8230), vec-mcp (8250), worker.
+Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
+scene (8320), openxr-service (8330), and worker. The four model-server
+entries are declared with `launch_mode="reuse"` and must already be healthy.
+No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
 

@@ -5,8 +5,9 @@
 
 # MCP servers
 
-The agent's tool surface lives in `agent-mcp-servers/`. Each subdirectory is a
-standalone process that exposes its capabilities to the LLM as
+`agent-mcp-servers/` contains optional compatibility adapters for applications
+whose agents consume MCP rather than native NAT functions. Each subdirectory
+is a standalone process that exposes selected capabilities as
 [Model Context Protocol](https://modelcontextprotocol.io/) tools. Every server
 is built on **FastMCP** and serves a single StreamableHTTP transport mounted at
 `/mcp`. A worker (or any `fastmcp.Client`) reaches a server at
@@ -26,11 +27,9 @@ to speak the MCP protocol on a transport the worker's client connects to
 (StreamableHTTP at `/mcp` here; stdio and SSE are also valid). Any MCP-compliant
 server works — a different language or SDK, or a hand-rolled implementation.
 
-To expose an existing REST service as an agent tool, wrap it in a thin MCP
-server rather than calling it directly: `vlm-mcp` does exactly this, forwarding
-its `ask_image` tool to the OpenAI-compatible (REST) `vlm-server`. The agent
-always speaks MCP; the MCP server is free to call REST, gRPC, or anything else
-behind it.
+Native applications should compose the corresponding NAT functions directly.
+An MCP-only application can use these adapters without moving capability logic
+into the adapter process.
 ```
 
 The servers split cleanly by concern: the XR render demo owns its LOVR scene,
@@ -48,30 +47,12 @@ fixed port so several can coexist on one host.
 | `vlm-mcp` | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 |
 | `vec-mcp` | `agent-mcp-servers/vec-mcp/` | `vec_mcp_server` | 8250 |
 
-## How the agent reaches the servers
+## How applications use the adapters
 
-The `xr-render-demo` sample wires five of these servers into its worker. The
-base URLs live in `agent-samples/xr-render-demo/yaml/xr_render_demo_worker.yaml`:
-
-```yaml
-render_mcp_url: http://localhost:8220
-oxr_mcp_url:    http://localhost:8230
-vlm_mcp_url:    http://localhost:8240
-video_mcp_url:  http://localhost:8210
-vec_mcp_url:    http://localhost:8250
-```
-
-At worker startup `list_tools()` is called on every MCP client; the results are
-converted to OpenAI tool format and held in memory for the agentic loop. When
-the LLM emits a tool call the worker routes it to the owning server by tool name
-(`oxr-mcp` for pose helpers, `vec-mcp` for the pure-math primitives, `vlm-mcp`
-for `ask_image`, `video-mcp` for the video tools, and `render-mcp` for
-everything else). `start_xr` and `get_health` are excluded from the LLM tool
-list — the worker calls those directly.
-
-`transcript-mcp` is a standalone store: none of the bundled sample agents wire it
-into the agentic loop, so it is reached by any `fastmcp.Client` that connects to
-`http://<host>:8200/mcp`.
+The bundled XR-render worker does not start or call these processes. It builds
+the equivalent scene, tracking, spatial-math, vision, video-memory, and
+text-memory NAT functions directly. An MCP consumer may launch the adapters it
+needs and connect a compatible client to the corresponding `/mcp` endpoint.
 
 Each server auto-discovers its YAML configuration by the launcher's `<command>.yaml`
 convention, and a sample can override it by dropping a copy next to its
@@ -288,11 +269,10 @@ forwards it to the VLM's OpenAI-compatible chat-completions endpoint via the
   model's answer text. The file is read in an executor so the asyncio loop is
   never blocked.
 
-For custom agents the two-step flow is: acquire a frame from `video-mcp`
+For MCP agents the two-step flow is: acquire a frame from `video-mcp`
 (`get_frame_from_time(participant_id, second_ago=0)`) and pass that PNG path
-straight into `ask_image`. The xr-render-demo worker uses a single-step
-brain-local `look_at_current_frame(question)` tool instead, which turns the
-camera on automatically and bypasses the MCP round-trip.
+straight into `ask_image`. The XR-render worker instead composes its native
+live-frame and vision functions behind `look_at_current_frame(question)`.
 
 ### vlm-mcp configuration
 
