@@ -52,6 +52,23 @@ It exposes `add_transcript`, `query_transcripts`, `list_sources`, and
 `get_transcript_stats` as native functions. Source identifiers are preserved in
 sidecar files even when their filesystem names require sanitization.
 
+## Vision
+
+Install `xr-ai-nat[vision]` to use the `xr_vision` function group. The group
+accepts an injected `xr-ai-models` `VLMService` and exposes `ask_image` for a
+local PNG or JPEG path:
+
+```python
+config = VisionFunctionsConfig(vlm=vlm, system_prompt="Answer briefly.")
+await builder.add_function_group("vision", config)
+```
+
+Image acquisition is intentionally separate. A live-frame or video-memory
+function obtains the image first, then passes its exact returned path to
+`vision__ask_image`; callers must never invent or guess a path. The vision
+function performs image I/O off the event loop, normalizes the input to JPEG,
+and makes the model request through `xr-ai-models`.
+
 ## MCP compatibility
 
 Install `xr-ai-nat[mcp]` and pass an explicit list of native functions to

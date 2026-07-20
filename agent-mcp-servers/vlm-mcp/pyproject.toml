@@ -11,13 +11,10 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "uvicorn[standard]>=0.29",
-    "fastmcp>=2.0",
     "pyyaml>=6.0",
-    "Pillow>=10.0",
-    # Imported directly to catch httpx.HTTPError from xr-ai-models' transport.
-    "httpx>=0.27",
     "xr-ai-logging",
     "xr-ai-models",
+    "xr-ai-nat[mcp,vision]",
 ]
 
 [project.scripts]
@@ -26,6 +23,7 @@ vlm_mcp_server = "vlm_mcp_server.__main__:run"
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 xr-ai-models  = { path = "../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-nat     = { path = "../../agent-sdk/xr-ai-nat", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["vlm_mcp_server"]
