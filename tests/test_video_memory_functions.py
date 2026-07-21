@@ -9,6 +9,7 @@ import json
 import time
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastmcp import Client as McpClient
@@ -116,6 +117,30 @@ def test_chunk_store_path_escape_has_a_stable_rpc_error(tmp_path: Path) -> None:
         store._check(tmp_path / "outside")
 
     assert error.value.code == "path_escape"
+
+
+def test_chunk_store_does_not_follow_identity_or_directory_symlinks(tmp_path: Path) -> None:
+    root = tmp_path / "recordings"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / ".identity").write_text("outside-user", encoding="utf-8")
+    (root / "outside-link").symlink_to(outside, target_is_directory=True)
+    store = ChunkStore(root)
+
+    with pytest.raises(RPCError) as directory_error:
+        store.chunks("outside-user")
+
+    assert directory_error.value.code == "path_escape"
+    (root / "outside-link").unlink()
+    participant = root / "recorded-user"
+    participant.mkdir()
+    (participant / ".identity").symlink_to(outside / ".identity")
+
+    with pytest.raises(RPCError) as identity_error:
+        store.participants()
+
+    assert identity_error.value.code == "path_escape"
 
 
 @pytest.mark.asyncio
@@ -236,6 +261,44 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
     assert Path(clip.path).read_bytes() == b"firstsecond"
     with pytest.raises(RPCError, match="unknown operation"):
         await service.dispatch("list_live_participants", {})
+
+
+@pytest.mark.asyncio
+async def test_recorded_frame_reports_frame_export_errors(tmp_path: Path, monkeypatch) -> None:
+    chunk = tmp_path / "chunk.264"
+    chunk.write_bytes(b"h264")
+    store = ChunkStore(tmp_path / "recordings")
+    monkeypatch.setattr(
+        store,
+        "frame_chunk",
+        lambda _participant_id, _target_us: (
+            chunk,
+            {"start_us": 1, "end_us": 1, "num_frames": 1},
+        ),
+    )
+    service = VideoMemoryService(store=store, out_dir=tmp_path / "output", gpu_id=0)
+
+    async def run_sync(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr("video_memory_service.service.asyncio.to_thread", run_sync)
+    monkeypatch.setattr(
+        "video_memory_service.service.decode_h264",
+        lambda _data, _gpu_id: [SimpleNamespace(shape=(3, 2))],
+    )
+
+    def fail_export(*_args) -> None:
+        raise OSError("invalid NV12 frame")
+
+    monkeypatch.setattr("video_memory_service.service.nv12_to_rgb", fail_export)
+
+    with pytest.raises(RPCError) as error:
+        await service.dispatch(
+            "get_frame_from_time",
+            {"participant_id": "user", "reference_time_us": 1},
+        )
+
+    assert error.value.code == "frame_export_error"
 
 
 def test_historical_frame_schema_requires_an_absolute_reference() -> None:

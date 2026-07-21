@@ -123,11 +123,14 @@ class VideoMemoryService:
         )
         width = int(metadata.get("width", frames[index].shape[1]))
         height = int(metadata.get("height", frames[index].shape[0] * 2 // 3))
-        rgb = await asyncio.to_thread(nv12_to_rgb, frames[index], width, height)
         path = self._out_dir / (
             f"{safe_name(request.participant_id)}_ago{request.second_ago}_{target_us}.png"
         )
-        await asyncio.to_thread(save_png, rgb, path)
+        try:
+            rgb = await asyncio.to_thread(nv12_to_rgb, frames[index], width, height)
+            await asyncio.to_thread(save_png, rgb, path)
+        except Exception as error:
+            raise RPCError(f"Frame export failed: {error}", code="frame_export_error") from error
         return {
             "path": str(path),
             "width": width,

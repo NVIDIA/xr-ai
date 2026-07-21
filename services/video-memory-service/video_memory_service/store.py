@@ -30,37 +30,40 @@ class ChunkStore:
     def _participant_dir(self, participant_id: str) -> Path | None:
         if not self.root.exists():
             return None
-        canonical = self.root / safe_name(participant_id)
+        canonical = self._check(self.root / safe_name(participant_id))
         if canonical.is_dir() and self._matches(canonical, participant_id):
-            return self._check(canonical)
-        for directory in sorted(self.root.iterdir()):
+            return canonical
+        for path in sorted(self.root.iterdir()):
+            directory = self._check(path)
             if directory.is_dir() and self._matches(directory, participant_id):
-                return self._check(directory)
+                return directory
         return None
 
-    @staticmethod
-    def _matches(directory: Path, participant_id: str) -> bool:
-        identity = directory / ".identity"
+    def _identity(self, directory: Path) -> str | None:
+        identity = self._check(directory / ".identity")
         if identity.exists():
-            return identity.read_text(encoding="utf-8") == participant_id
+            return identity.read_text(encoding="utf-8")
+        return None
+
+    def _matches(self, directory: Path, participant_id: str) -> bool:
+        identity = self._identity(directory)
+        if identity is not None:
+            return identity == participant_id
         return directory.name == participant_id
 
     def participants(self) -> list[str]:
         if not self.root.exists():
             return []
         participants = []
-        for directory in sorted(self.root.iterdir()):
+        for path in sorted(self.root.iterdir()):
+            directory = self._check(path)
             if not directory.is_dir():
                 continue
-            identity = directory / ".identity"
-            participants.append(
-                identity.read_text(encoding="utf-8") if identity.exists() else directory.name
-            )
+            participants.append(self._identity(directory) or directory.name)
         return participants
 
-    @staticmethod
-    def _metadata(chunk: Path) -> dict:
-        sidecar = chunk.with_suffix(".json")
+    def _metadata(self, chunk: Path) -> dict:
+        sidecar = self._check(chunk.with_suffix(".json"))
         if sidecar.exists():
             try:
                 return json.loads(sidecar.read_text(encoding="utf-8"))

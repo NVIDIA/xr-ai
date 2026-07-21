@@ -24,7 +24,8 @@ agent can reason coarsely while receiving the precise selected timestamp.
 frame extraction through `services/video-memory-service`. The service owns
 filesystem access and NVDEC; the later 2026-07-21 entry separates live hub
 frames into the caller-owned `LiveFrameSource`. Video MCP keeps port 8210 and
-its conditional legacy tool list as a compatibility adapter at port 8310.
+its conditional legacy tool list as a compatibility adapter over the private
+service at port 8310.
 
 ### 2026-07-20 — XR tracking becomes a native function backed by one OpenXR service
 
