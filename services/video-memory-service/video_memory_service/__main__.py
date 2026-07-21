@@ -40,6 +40,15 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
     await server.serve(ready=ready_file.touch if ready_file else None)
 
 
+def _load_config(config_path: Path | None) -> dict:
+    path = config_path or _DEFAULT_CONFIG
+    if not path.exists():
+        if config_path is not None:
+            sys.exit(f"video-memory-service: config file not found: {path}")
+        return {}
+    return yaml.safe_load(path.read_text()) or {}
+
+
 def run() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", type=Path, default=None)
@@ -47,10 +56,7 @@ def run() -> None:
     args, _ = parser.parse_known_args()
 
     setup_logging("video-memory-service")
-    config_path = args.config or _DEFAULT_CONFIG
-    if not config_path.exists():
-        sys.exit(f"video-memory-service: config file not found: {config_path}")
-    config = yaml.safe_load(config_path.read_text()) or {}
+    config = _load_config(args.config)
     asyncio.run(_serve(config, args.ready_file))
 
 

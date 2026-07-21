@@ -269,6 +269,11 @@ hub_push:       ipc:///tmp/xr_hub_in
 out_dir:        /tmp/xr_video_queries  # live PNG exports only; the service owns recorded outputs
 ```
 
+Both entry points accept `--config <path>`. From a source checkout they load
+their reference YAML by default; installed wheels do not include that YAML, so
+they use built-in defaults when no config is supplied. An explicit config path
+must exist.
+
 ## vlm-mcp
 
 `vlm-mcp` is a thin FastMCP wrapper around the vision-language model in

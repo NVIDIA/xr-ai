@@ -12,6 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import video_mcp_server.__main__ as video_mcp_main
+import video_memory_service.__main__ as video_memory_main
 from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
 from video_mcp_server.__main__ import _recording_enabled, build_mcp
@@ -41,6 +43,14 @@ class _LiveFrames:
             "height": 1,
             "timestamp_us": 1,
         }
+
+
+class _BrokenLiveFrames:
+    def participants(self) -> list[str]:
+        return []
+
+    async def get_latest(self, _participant_id: str) -> dict:
+        raise OSError("cannot write live PNG")
 
 
 class _UnusedClient:
@@ -199,6 +209,32 @@ async def test_video_mcp_recorded_discovery_reports_service_failures() -> None:
 @pytest.mark.asyncio
 async def test_video_mcp_starts_live_only_when_recorded_service_is_unavailable() -> None:
     assert await _recording_enabled(_UnavailableStartupClient()) is False
+
+
+@pytest.mark.asyncio
+async def test_video_mcp_returns_live_export_failures_as_data() -> None:
+    mcp = build_mcp(_UnusedClient(), _BrokenLiveFrames(), recording_enabled=False)
+
+    async with McpClient(mcp) as client:
+        frame_from_time = await client.call_tool(
+            "get_frame_from_time", {"participant_id": "live-user"}
+        )
+        latest = await client.call_tool("get_latest_frame", {"participant_id": "live-user"})
+
+    assert frame_from_time.data == {"error": "cannot write live PNG"}
+    assert latest.data == {"error": "cannot write live PNG"}
+
+
+@pytest.mark.parametrize("entrypoint", [video_mcp_main, video_memory_main])
+def test_video_entrypoints_use_defaults_when_packaged_config_is_absent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entrypoint
+) -> None:
+    missing = tmp_path / "missing.yaml"
+    monkeypatch.setattr(entrypoint, "_DEFAULT_CONFIG", missing)
+
+    assert entrypoint._load_config(None) == {}
+    with pytest.raises(SystemExit, match="config file not found"):
+        entrypoint._load_config(missing)
 
 
 @pytest.mark.asyncio

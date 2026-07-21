@@ -36,6 +36,13 @@ def _error(error: Exception) -> dict:
     return {"error": str(error)}
 
 
+async def _get_live_frame(live_frames: LiveFrameExporter, participant_id: str) -> dict:
+    try:
+        return await live_frames.get_latest(participant_id)
+    except (FrameUnavailable, OSError, ValueError) as error:
+        return _error(error)
+
+
 async def _recording_enabled(client: VideoMemoryClient) -> bool:
     try:
         return (await client.get_health()).recording_enabled
@@ -76,10 +83,7 @@ def build_mcp(
         microsecond timestamp and use whole seconds before that reference.
         """
         if reference_time_us == 0 and second_ago == 0:
-            try:
-                return await live_frames.get_latest(participant_id)
-            except (FrameUnavailable, ValueError) as error:
-                return _error(error)
+            return await _get_live_frame(live_frames, participant_id)
         if reference_time_us <= 0:
             return _error(ValueError("reference_time_us is required for recorded video"))
         try:
@@ -99,10 +103,7 @@ def build_mcp(
         @mcp.tool()
         async def get_latest_frame(participant_id: str) -> dict:
             """Return the current live frame. Deprecated; use get_frame_from_time."""
-            try:
-                return await live_frames.get_latest(participant_id)
-            except (FrameUnavailable, ValueError) as error:
-                return _error(error)
+            return await _get_live_frame(live_frames, participant_id)
 
         return mcp
 
@@ -193,6 +194,15 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
         await client.close()
 
 
+def _load_config(config_path: Path | None) -> dict:
+    path = config_path or _DEFAULT_CONFIG
+    if not path.exists():
+        if config_path is not None:
+            sys.exit(f"video-mcp: config file not found: {path}")
+        return {}
+    return yaml.safe_load(path.read_text()) or {}
+
+
 def run() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", type=Path, default=None)
@@ -200,10 +210,7 @@ def run() -> None:
     args, _ = parser.parse_known_args()
 
     setup_logging("video-mcp")
-    config_path = args.config or _DEFAULT_CONFIG
-    if not config_path.exists():
-        sys.exit(f"video-mcp: config file not found: {config_path}")
-    config = yaml.safe_load(config_path.read_text()) or {}
+    config = _load_config(args.config)
     asyncio.run(_serve(config, args.ready_file))
 
 
