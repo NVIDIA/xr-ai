@@ -60,8 +60,9 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   application's explicit native-function list to MCP-only agents, but native
   applications invoke the functions directly. XR tracking calls the typed
   OpenXR service; OXR MCP only republishes the tracking and spatial functions.
-  Video memory calls its typed service for live and recorded frames; video MCP
-  only republishes selected video-memory functions. Text-memory owns transcript
+  Video memory calls its typed service for recorded history; live frames stay
+  with the caller's hub client and Video MCP keeps its temporary live adapter.
+  Text-memory owns transcript
   JSONL storage; transcript MCP only republishes that capability.
 - **Image acquisition and vision reasoning stay separate.** The native vision
   function accepts an acquired image path and calls a `VLMService` from
@@ -141,8 +142,9 @@ network boundary. `VisionFunctionsConfig` adds image-question answering over an
 injected `xr-ai-models` VLM while leaving frame acquisition to its own
 capability. `XRTrackingFunctionsConfig` exposes the current user frame through
 the typed OpenXR service without routing native agents through MCP.
-`VideoMemoryFunctionsConfig` exposes live frames and recorded video through a
-typed service while keeping MCP optional.
+`VideoMemoryFunctionsConfig` exposes recorded-video discovery, queries, and
+frame extraction through a typed service while keeping MCP optional; callers
+obtain current frames through the hub client.
 
 The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 

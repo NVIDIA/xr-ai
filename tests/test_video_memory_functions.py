@@ -40,6 +40,11 @@ class _UnusedClient:
     pass
 
 
+class _UnavailableRecordedClient:
+    async def list_recorded_participants(self):
+        raise RPCError("video service unavailable", code="connection_error")
+
+
 class _FrameEndpoint:
     def __init__(self, frame: FrameData) -> None:
         self._frame = frame
@@ -99,6 +104,15 @@ def test_chunk_store_preserves_identities_and_windows(tmp_path: Path) -> None:
     assert store.frame_chunk("user/name", 2_200_000)[0].name == "2000000.264"
 
 
+def test_chunk_store_path_escape_has_a_stable_rpc_error(tmp_path: Path) -> None:
+    store = ChunkStore(tmp_path / "recordings")
+
+    with pytest.raises(RPCError) as error:
+        store._check(tmp_path / "outside")
+
+    assert error.value.code == "path_escape"
+
+
 @pytest.mark.asyncio
 async def test_video_mcp_preserves_conditional_tool_sets() -> None:
     live_only = build_mcp(_UnusedClient(), _LiveFrames(), recording_enabled=False)
@@ -121,6 +135,16 @@ async def test_video_mcp_preserves_conditional_tool_sets() -> None:
         "list_recorded_participants",
         "query_video",
     }
+
+
+@pytest.mark.asyncio
+async def test_video_mcp_recorded_discovery_stays_a_list_when_service_fails() -> None:
+    mcp = build_mcp(_UnavailableRecordedClient(), _LiveFrames(), recording_enabled=True)
+
+    async with McpClient(mcp) as client:
+        result = await client.call_tool("list_recorded_participants", {})
+
+    assert result.data == []
 
 
 @pytest.mark.asyncio

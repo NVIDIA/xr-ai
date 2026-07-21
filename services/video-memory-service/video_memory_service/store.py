@@ -21,7 +21,10 @@ class ChunkStore:
     def _check(self, path: Path) -> Path:
         resolved = path.resolve()
         if not resolved.is_relative_to(self.root):
-            raise ValueError(f"Path escapes recordings directory: {path}")
+            raise RPCError(
+                f"Path escapes recordings directory: {path}",
+                code="path_escape",
+            )
         return resolved
 
     def _participant_dir(self, participant_id: str) -> Path | None:

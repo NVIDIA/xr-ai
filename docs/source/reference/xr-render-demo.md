@@ -241,7 +241,7 @@ On each `TranscriptionFrame`:
 | `oxr-mcp` | 8230 | `get_head_pose`, `position_ahead`, `position_relative`, `place_user_relative`, `place_object_relative`, `place_inside_by_id`, `displace_object`, `displace_objects`, `get_health` |
 | `vec-mcp` | 8250 | `between_anchors`, `world_offset`, `along_direction`, `scale_value` |
 | `vlm-mcp` | 8240 | `ask_image` |
-| `video-mcp` | 8210 | `list_live_participants`, `get_frame_from_time` (always); `list_recorded_participants`, `get_video_stats`, `query_video` (recording enabled only); `get_latest_frame` (deprecated) |
+| `video-mcp` | 8210 | `list_live_participants`, `get_frame_from_time` (always); `list_recorded_participants`, `get_video_stats`, `query_video` (recording enabled only); `get_latest_frame` (recording disabled only; deprecated) |
 
 `render-mcp` owns the LOVR child process and is the only thing that pushes
 ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `openxr-service` owns

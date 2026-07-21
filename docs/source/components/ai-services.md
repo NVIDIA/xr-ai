@@ -27,8 +27,8 @@ tool-calling, reasoning, and hardware trade-offs documented below.
 | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
-| `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed live/recorded video capability |
-| `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → video-memory-service |
+| `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
+| `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded service + live hub IPC |
 | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 | — | FastMCP → vlm-server (`ask_image` tool) |
 
 All model weights land in `models/` at the repository root (not checked into version control, shared across

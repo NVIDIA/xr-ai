@@ -138,11 +138,19 @@ async def _wait_ready(ready_file: pathlib.Path, proc: subprocess.Popen, timeout:
 
 
 def _stop_process(proc: subprocess.Popen) -> None:
-    proc.terminate()
+    if proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+    except ProcessLookupError:
+        return
     try:
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            return
         proc.wait(timeout=5)
 
 
