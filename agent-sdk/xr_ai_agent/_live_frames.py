@@ -33,14 +33,13 @@ class LiveFrameSource:
         self._max_age_us = int(max_age_s * 1_000_000)
         self._timeout_s = timeout_s
         self._latest: dict[tuple[str, str], FrameSignal] = {}
-        self._events: dict[str, asyncio.Event] = {}
+        self._events: dict[str, set[asyncio.Event]] = {}
         endpoint.on_frame(self._on_frame)
         endpoint.on_participant(self._on_participant)
 
     async def _on_frame(self, signal: FrameSignal) -> None:
         self._latest[(signal.participant_id, signal.track_id)] = signal
-        event = self._events.get(signal.participant_id)
-        if event is not None:
+        for event in self._events.get(signal.participant_id, ()):
             event.set()
 
     async def _on_participant(self, event: ParticipantEvent) -> None:
@@ -72,24 +71,32 @@ class LiveFrameSource:
         """Return fresh pixels for ``participant_id`` or raise ``FrameUnavailable``."""
         signal = self._freshest(participant_id)
         if signal is None or not self._is_fresh(signal):
-            event = self._events.setdefault(participant_id, asyncio.Event())
-            deadline = asyncio.get_running_loop().time() + self._timeout_s
-            while signal is None or not self._is_fresh(signal):
-                remaining = deadline - asyncio.get_running_loop().time()
-                if remaining <= 0:
-                    raise FrameUnavailable("No camera frame available — please try again.")
-                event.clear()
-                # Recheck after clearing so a concurrent frame signal is not missed.
-                signal = self._freshest(participant_id)
-                if signal is not None and self._is_fresh(signal):
-                    break
-                try:
-                    await asyncio.wait_for(event.wait(), timeout=remaining)
-                except asyncio.TimeoutError as exc:
-                    raise FrameUnavailable(
-                        "No camera frame available — please try again."
-                    ) from exc
-                signal = self._freshest(participant_id)
+            event = asyncio.Event()
+            self._events.setdefault(participant_id, set()).add(event)
+            try:
+                deadline = asyncio.get_running_loop().time() + self._timeout_s
+                while signal is None or not self._is_fresh(signal):
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        raise FrameUnavailable("No camera frame available — please try again.")
+                    event.clear()
+                    # Recheck after clearing so a concurrent frame signal is not missed.
+                    signal = self._freshest(participant_id)
+                    if signal is not None and self._is_fresh(signal):
+                        break
+                    try:
+                        await asyncio.wait_for(event.wait(), timeout=remaining)
+                    except asyncio.TimeoutError as exc:
+                        raise FrameUnavailable(
+                            "No camera frame available — please try again."
+                        ) from exc
+                    signal = self._freshest(participant_id)
+            finally:
+                events = self._events.get(participant_id)
+                if events is not None:
+                    events.discard(event)
+                    if not events:
+                        self._events.pop(participant_id, None)
 
         frame = await self._endpoint.request_frame(signal)
         if frame is None:
@@ -97,13 +104,14 @@ class LiveFrameSource:
         return frame
 
     def release(self, participant_id: str) -> None:
-        """Drop cached signal and waiter state for a disconnected participant."""
+        """Drop cached signals and wake pending requests for a disconnected participant."""
         self._latest = {
             key: signal
             for key, signal in self._latest.items()
             if key[0] != participant_id
         }
-        self._events.pop(participant_id, None)
+        for event in self._events.get(participant_id, ()):
+            event.set()
 
 
 __all__ = ["FrameUnavailable", "LiveFrameSource"]

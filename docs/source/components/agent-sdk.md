@@ -372,7 +372,7 @@ configured freshness window, then returns `FrameData` or raises
 `FrameUnavailable`. It deliberately stops at raw pixels: image conversion,
 model calls, and PNG export remain the consumer's responsibility. Participant
 departure events automatically discard that participant's cached frames and
-wait state.
+wake pending requests; wait state is removed when each request completes.
 
 ```python
 from xr_ai_agent import LiveFrameSource

@@ -273,11 +273,23 @@ async def test_live_frame_source_releases_departed_participants() -> None:
     )
 
     assert source._latest == {}
-    assert source._events == {}
 
-    waiter.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await waiter
+    await endpoint.send(
+        FrameSignal(
+            slot=0,
+            seq=2,
+            pts_us=now_us,
+            width=1,
+            height=1,
+            fmt=PixelFormat.RGB24,
+            data_sz=3,
+            participant_id="departed-user",
+            track_id="camera",
+        )
+    )
+
+    assert await waiter == frame
+    assert source._events == {}
 
 
 def test_live_png_export_converts_nv12_planes() -> None:
