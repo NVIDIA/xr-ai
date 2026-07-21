@@ -4,20 +4,16 @@
 # Video MCP server reference configuration.
 # Copy to your agent sample root as video_mcp_server.yaml and edit.
 #
-# recordings_dir must point to the same path as video_recording.out_dir
-# in xr_media_hub.yaml — the server reads chunk files directly from disk.
-#
-# hub_pub / hub_push are the hub IPC sockets used to fetch live frames
-# (the `get_frame_from_time(..., second_ago=0)` tool). They must match
-# the hub's PUB / PULL bindings. Defaults below match xr_media_hub's
-# defaults.
+# Recorded operations delegate to video-memory-service. Live-frame compatibility
+# uses this process's own hub IPC subscription.
+# If the recorded-video service is unavailable at startup, this adapter exposes
+# its live-only legacy tool set until it is restarted.
 #
 # MCP endpoint: http://localhost:8210/mcp  (StreamableHTTP transport)
 
-recordings_dir: /dev/shm/xr-ai/recordings  # must match hub video_recording.out_dir
-out_dir:        /tmp/xr_video_queries
-hub_pub:        ipc:///tmp/xr_hub_pub
-hub_push:       ipc:///tmp/xr_hub_in
-host:           0.0.0.0
-port:           8210
-gpu_id:         0
+host: 0.0.0.0
+port: 8210
+service_endpoint: tcp://127.0.0.1:8310
+hub_pub: ipc:///tmp/xr_hub_pub
+hub_push: ipc:///tmp/xr_hub_in
+out_dir: /tmp/xr_video_queries  # live PNG exports only; the service owns recorded outputs

@@ -28,8 +28,10 @@ exit terminates the whole stack.
 | llm | `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 |
 | agent-llm | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 |
 | vlm-mcp | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 |
+| video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | video-mcp | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 |
 | render-mcp | `agent-mcp-servers/render-mcp/` | `render_mcp` | 8220 |
+| openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
 | oxr-mcp | `agent-mcp-servers/oxr-mcp/` | `oxr_mcp_server` | 8230 |
 | vec-mcp | `agent-mcp-servers/vec-mcp/` | `vec_mcp_server` | 8250 |
 | worker | `agent-samples/xr-render-demo/worker/` | `xr_render_demo_worker` | — |
@@ -239,12 +241,14 @@ On each `TranscriptionFrame`:
 | `oxr-mcp` | 8230 | `get_head_pose`, `position_ahead`, `position_relative`, `place_user_relative`, `place_object_relative`, `place_inside_by_id`, `displace_object`, `displace_objects`, `get_health` |
 | `vec-mcp` | 8250 | `between_anchors`, `world_offset`, `along_direction`, `scale_value` |
 | `vlm-mcp` | 8240 | `ask_image` |
-| `video-mcp` | 8210 | `list_live_participants`, `get_frame_from_time` (always); `list_recorded_participants`, `get_video_stats`, `query_video` (recording enabled only); `get_latest_frame` (deprecated) |
+| `video-mcp` | 8210 | `list_live_participants`, `get_frame_from_time` (always); `list_recorded_participants`, `get_video_stats`, `query_video` (recording enabled only); `get_latest_frame` (recording disabled only; deprecated) |
 
 `render-mcp` owns the LOVR child process and is the only thing that pushes
 ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `openxr-service` owns
 the second headless OpenXR session (`XR_MND_HEADLESS`); `oxr-mcp` forwards
 tracking requests to it and preserves the existing MCP tool surface.
+`video-memory-service` owns recorded-video decoding; `video-mcp` owns the
+temporary live hub IPC compatibility path.
 
 ### Spatial tool surface
 

@@ -16,7 +16,7 @@
 
 Every `pyproject.toml` in this repo pins `requires-python = ">=3.11,<3.13"` by
 convention. The upper bound exists because `PyNvVideoCodec` (used by
-`xr-media-hub` and `video-mcp-server` for NVENC encode / NVDEC decode) does not
+`xr-media-hub` and `video-memory-service` for NVENC encode / NVDEC decode) does not
 yet publish wheels for Python 3.13. With the cap in place, `uv sync` will pick
 3.12 even on a host where 3.13 is also installed. Loosen the upper bound only
 after `PyNvVideoCodec` ships 3.13 wheels.
@@ -124,6 +124,9 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     ``xr_vision`` normalizes an acquired local image and calls an injected
     xr-ai-models VLM; it does not acquire frames itself. ``xr_tracking`` calls
     the typed OpenXR service and returns a complete user coordinate frame.
+    ``xr_video_memory`` calls the typed video-memory service for recorded-video
+    discovery, queries, and frame extraction. Live frames stay with the hub
+    client owned by their caller.
 
 xr-openxr-service  (services/openxr-service/)
     └── xr-ai-launcher [editable: ../../utils/xr-ai-launcher]
@@ -211,16 +214,24 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
     └── fastmcp >=2.0
     └── pyyaml >=6.0
-    └── xr-ai-agent  [editable: ../../agent-sdk]
+    └── numpy >=1.24
+    └── Pillow >=10.0
+    └── xr-ai-agent [editable: ../../agent-sdk]
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
+    Pure FastMCP compatibility adapter at /mcp. Preserves the conditional
+    legacy tool list; recorded operations delegate to video-memory-service and
+    live compatibility operations acquire raw hub frames locally.
+
+xr-video-memory-service  (services/video-memory-service/)
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
     └── PyNvVideoCodec >=1.0
     └── Pillow >=10.0
     └── numpy >=1.24
-    Pure FastMCP — every operation is an MCP tool at /mcp (no REST).
-    Reads NVENC H.264 chunks written by the hub from disk for historical
-    queries; connects to the hub as a ProcessorEndpoint to fetch live
-    frames for `get_frame_from_time` (the live-only path; `get_latest_frame`
-    remains as a deprecated alias). Decodes chunks via NVDEC and
-    re-encodes selected frames as PNG via Pillow.
+    └── pyyaml >=6.0
+    Owns recorded H.264 chunk queries. Exposes typed msgpack/ZMQ at port 8310
+    and performs historical decoding via NVDEC; it does not subscribe to hub IPC.
 
 cloudxr-runtime  (cloudxr-runtime/)
     └── isaacteleop[cloudxr]
@@ -401,7 +412,8 @@ piper-tts-server  (ai-services/tts/piper/)
 | `ai-services/llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (GPU-selected) | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} | vLLM (pip or docker) — multimodal text+video |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
-| `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
+| `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed msgpack/ZMQ → recorded H.264 queries |
+| `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP compatibility adapter → recorded service + live hub IPC |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | Pure FastMCP → LOVR (msgpack/ZMQ) |
 | `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed msgpack/ZMQ → headless OpenXR / CloudXR |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | FastMCP compatibility adapter → openxr-service |

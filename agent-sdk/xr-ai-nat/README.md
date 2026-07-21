@@ -86,6 +86,27 @@ user's current origin and basis vectors. Pass that value directly to the
 spatial-math functions; tracking owns pose acquisition while spatial math
 remains deterministic and service-independent.
 
+## Video memory
+
+Install `xr-ai-nat[services]` and configure `xr_video_memory` with the private
+endpoint of `services/video-memory-service`:
+
+```yaml
+functions:
+  video_memory:
+    _type: xr_video_memory
+    endpoint: tcp://127.0.0.1:8310
+```
+
+The group exposes recorded-participant discovery, recording statistics, H.264
+clip queries, and timestamp-anchored PNG frame lookup. All `*_us` fields are
+Unix-epoch microseconds: use `get_video_stats` to find the available absolute
+range, use absolute `start_us`/`end_us` for a clip, and pass the workflow's
+event timestamp as `reference_time_us` for a frame. `second_ago` is
+intentionally a whole-second offset before that event; the returned
+`timestamp_us` reports the exact frame selected. Current live frames are a
+separate hub capability, not part of `xr_video_memory`.
+
 ## MCP compatibility
 
 Install `xr-ai-nat[mcp]` and pass an explicit list of native functions to

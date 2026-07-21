@@ -6,27 +6,25 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "video-mcp-server"
+name = "xr-video-memory-service"
 version = "0.1.0"
+description = "Recorded-video memory service for XR AI."
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "uvicorn[standard]>=0.29",
-    "fastmcp>=2.0",
-    "pyyaml>=6.0",
-    "numpy>=1.24",
-    "Pillow>=10.0",
-    "xr-ai-agent",
     "xr-ai-logging",
     "xr-ai-nat[services]",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "PyNvVideoCodec>=1.0",
+    "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
-xr-ai-agent = { path = "../../agent-sdk", editable = true }
-xr-ai-nat     = { path = "../../agent-sdk/xr-ai-nat", editable = true }
+xr-ai-nat = { path = "../../agent-sdk/xr-ai-nat", editable = true }
 
 [project.scripts]
-video_mcp_server = "video_mcp_server.__main__:run"
+video_memory_service = "video_memory_service.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["video_mcp_server"]
+packages = ["video_memory_service"]

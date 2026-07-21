@@ -10,9 +10,9 @@ Two complementary scenarios:
 2. ``test_get_latest_frame_via_live_hub`` — realtime path: rounds a
    synthetic NV12 frame through a live hub to ``get_latest_frame``.
 
-IPC mechanics (FRAME_SIGNAL / FRAME_REQUEST / FRAME_DATA) live in
-``video_mcp_server/__main__.py``. Skipped when PyNvVideoCodec or NVENC/
-NVDEC hardware is missing.
+Recorded decoding lives in ``video_memory_service``; ``video_mcp_server`` owns
+the compatibility live-frame IPC path exercised by the realtime scenario.
+Skipped when PyNvVideoCodec or NVENC/NVDEC hardware is missing.
 """
 from __future__ import annotations
 
@@ -137,6 +137,23 @@ async def _wait_ready(ready_file: pathlib.Path, proc: subprocess.Popen, timeout:
     raise TimeoutError(f"video_mcp_server did not become ready within {timeout}s")
 
 
+def _stop_process(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+    except ProcessLookupError:
+        return
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            return
+        proc.wait(timeout=5)
+
+
 # ── test ────────────────────────────────────────────────────────────────────
 
 
@@ -155,27 +172,39 @@ async def test_get_frame_from_time_returns_valid_png(tmp_path: pathlib.Path) -> 
         # task brief; we only care about the path when the GPU is present.
         pytest.skip(f"NVENC unavailable: {exc!r}")
 
-    port      = _free_port()
-    cfg_path  = tmp_path / "video_mcp_server.yaml"
-    ready     = tmp_path / "video_mcp.ready"
-    cfg_path.write_text(yaml.safe_dump({
+    port = _free_port()
+    service_port = _free_port()
+    cfg_path = tmp_path / "video_mcp_server.yaml"
+    service_cfg_path = tmp_path / "video_memory_service.yaml"
+    ready = tmp_path / "video_mcp.ready"
+    service_ready = tmp_path / "video_memory.ready"
+    service_cfg_path.write_text(yaml.safe_dump({
+        "endpoint":       f"tcp://127.0.0.1:{service_port}",
         "recordings_dir": str(rec_dir),
         "out_dir":        str(out_dir),
-        # Unique per-test IPC sockets so the server's ProcessorEndpoint
-        # binds without colliding with a real hub on the dev box.
-        "hub_pub":        f"ipc://{tmp_path}/hub_pub",
-        "hub_push":       f"ipc://{tmp_path}/hub_push",
-        "host":           "127.0.0.1",
-        "port":           port,
         "gpu_id":         0,
     }))
+    cfg_path.write_text(yaml.safe_dump({
+        "host":             "127.0.0.1",
+        "port":             port,
+        "service_endpoint": f"tcp://127.0.0.1:{service_port}",
+        "hub_pub":          f"ipc://{tmp_path}/hub_pub",
+        "hub_push":         f"ipc://{tmp_path}/hub_push",
+    }))
 
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "video_mcp_server",
-         "--config", str(cfg_path), "--ready-file", str(ready)],
+    service_proc = subprocess.Popen(
+        [sys.executable, "-m", "video_memory_service",
+         "--config", str(service_cfg_path), "--ready-file", str(service_ready)],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
+    proc: subprocess.Popen | None = None
     try:
+        await _wait_ready(service_ready, service_proc, timeout=30.0)
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "video_mcp_server",
+             "--config", str(cfg_path), "--ready-file", str(ready)],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
         await _wait_ready(ready, proc, timeout=30.0)
 
         url = f"http://127.0.0.1:{port}/mcp"
@@ -209,12 +238,9 @@ async def test_get_frame_from_time_returns_valid_png(tmp_path: pathlib.Path) -> 
         assert payload["width"]  == _WIDTH
         assert payload["height"] == _HEIGHT
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
+        if proc is not None:
+            _stop_process(proc)
+        _stop_process(service_proc)
 
 
 async def test_get_latest_frame_via_live_hub(
@@ -249,26 +275,40 @@ async def test_get_latest_frame_via_live_hub(
         max_frame_bytes = 2 * 1024 * 1024,
     )
 
-    port     = _free_port()
+    port = _free_port()
+    service_port = _free_port()
     cfg_path = tmp_path / "video_mcp_server.yaml"
-    ready    = tmp_path / "video_mcp.ready"
+    service_cfg_path = tmp_path / "video_memory_service.yaml"
+    ready = tmp_path / "video_mcp.ready"
+    service_ready = tmp_path / "video_memory.ready"
     # recordings_dir intentionally omitted → store=None → get_latest_frame is
     # the only frame-fetching tool registered.
-    cfg_path.write_text(yaml.safe_dump({
+    service_cfg_path.write_text(yaml.safe_dump({
+        "endpoint": f"tcp://127.0.0.1:{service_port}",
         "out_dir":  str(out_dir),
-        "hub_pub":  hub_pub_addr,
-        "hub_push": hub_pull_addr,
-        "host":     "127.0.0.1",
-        "port":     port,
         "gpu_id":   0,
     }))
+    cfg_path.write_text(yaml.safe_dump({
+        "host":     "127.0.0.1",
+        "port":     port,
+        "service_endpoint": f"tcp://127.0.0.1:{service_port}",
+        "hub_pub":  hub_pub_addr,
+        "hub_push": hub_pull_addr,
+    }))
 
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "video_mcp_server",
-         "--config", str(cfg_path), "--ready-file", str(ready)],
+    service_proc = subprocess.Popen(
+        [sys.executable, "-m", "video_memory_service",
+         "--config", str(service_cfg_path), "--ready-file", str(service_ready)],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
+    proc: subprocess.Popen | None = None
     try:
+        await _wait_ready(service_ready, service_proc, timeout=30.0)
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "video_mcp_server",
+             "--config", str(cfg_path), "--ready-file", str(ready)],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
         await _wait_ready(ready, proc, timeout=30.0)
         # ready-file is touched before video-mcp's SUB has finished the ZMQ
         # subscription handshake against the hub PUB; give it one hop.
@@ -293,8 +333,8 @@ async def test_get_latest_frame_via_live_hub(
             track_id       = "cam",
         )
         # Two hops to drain: connector PUSH → hub, then hub PUB → video-mcp
-        # SUB where the ProcessorEndpoint caches the FRAME_SIGNAL so the
-        # subsequent fetch_latest can resolve it.
+        # SUB where LiveFrameSource caches the FRAME_SIGNAL so the subsequent
+        # get_latest call can resolve it.
         await settle()
         await settle()
 
@@ -324,9 +364,6 @@ async def test_get_latest_frame_via_live_hub(
             # Connector teardown can race with the hub closing the shm
             # segment; the OS-level unlink may already be gone.
             pass
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
+        if proc is not None:
+            _stop_process(proc)
+        _stop_process(service_proc)

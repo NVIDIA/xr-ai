@@ -27,7 +27,8 @@ tool-calling / reasoning / hardware trade-offs documented below.
 | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4 / FP8 / BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
-| `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → hub |
+| `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
+| `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded-video service + live hub IPC |
 | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8220 | — | FastMCP → vlm-server (`ask_image` tool) |
 
 All model weights land in `models/` at the repo root (gitignored, shared across
@@ -75,6 +76,7 @@ cp ../../ai-services/tts/piper/piper_tts_server.yaml ./yaml/piper_tts_server.yam
 cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./yaml/magpie_tts_server.yaml
 # MCP servers:
 cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./yaml/transcript_mcp_server.yaml
+cp ../../services/video-memory-service/video_memory_service.yaml ./yaml/video_memory_service.yaml
 cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./yaml/video_mcp_server.yaml
 ```
 
@@ -327,15 +329,13 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   `get_transcript_stats`. Transcripts persist as JSONL alongside a
   `.identity` sidecar so list/query round-trip raw IDs cleanly even
   when sanitized filenames collide.
-- **video-mcp-server** is pure FastMCP at `/mcp` on port 8210.
-  Connects to the hub as a `ProcessorEndpoint` (`Subscribe.VIDEO`) for
-  live frames. Tools exposed depend on whether `recordings_dir` is set
-  in the YAML:
-  - **Always**: `list_live_participants`, `get_latest_frame` (live IPC frame, no recording needed).
-  - **Only when `recordings_dir` is configured**: `list_recorded_participants`,
-    `get_video_stats`, `query_video`, `get_frame_from_time` (historical
-    chunk lookup via NVDEC). Requires `video_recording.enabled: true`
-    in `xr_media_hub.yaml` with a matching `out_dir`.
+- **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
+  behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
+  enable recorded-video operations; the path must match the hub's
+  `video_recording.out_dir`. Current frames stay with the caller's hub client.
+- **video-mcp-server** is the optional FastMCP compatibility adapter at
+  `/mcp` on port 8210. It discovers whether recording is enabled from the
+  service and preserves the existing conditional tool surface.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample root and adjust `model_cache` (`../../models` resolves

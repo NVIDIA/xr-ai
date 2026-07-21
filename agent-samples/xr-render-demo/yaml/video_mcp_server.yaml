@@ -1,13 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# Recorded operations use video-memory-service; an unavailable service starts
+# this compatibility adapter with its live-only legacy tool set.
+
 # Video MCP server configuration for mcp-agent.
 # Auto-discovered by the launcher and passed as --config to video_mcp_server.
 #
 # MCP endpoint: http://localhost:8210/  (StreamableHTTP transport)
 
-# recordings_dir not set — historical tools hidden; only get_latest_frame exposed.
-# Set recordings_dir and enable video_recording in xr_media_hub.yaml to unlock them.
-out_dir:        /tmp/xr_video_queries/xr-render-demo
 host:          0.0.0.0
 port:          8210
+service_endpoint: tcp://127.0.0.1:8310
+hub_pub: ipc:///tmp/xr_hub_pub
+hub_push: ipc:///tmp/xr_hub_in
+out_dir: /tmp/xr_video_queries/xr-render-demo  # live PNG exports only; the service owns recorded outputs

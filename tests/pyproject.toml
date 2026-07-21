@@ -28,6 +28,7 @@ dependencies = [
     "vlm-mcp-server",
     "render-mcp",
     "video-mcp-server",
+    "xr-video-memory-service",
     "vec-mcp-server",
     # Test runner.
     "pytest>=8.0",
@@ -55,6 +56,7 @@ transcript-mcp-server = { path = "../agent-mcp-servers/transcript-mcp", editable
 vlm-mcp-server        = { path = "../agent-mcp-servers/vlm-mcp",        editable = true }
 render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable = true }
 video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
+xr-video-memory-service = { path = "../services/video-memory-service", editable = true }
 vec-mcp-server        = { path = "../agent-mcp-servers/vec-mcp",        editable = true }
 
 [tool.hatch.build.targets.wheel]

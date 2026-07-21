@@ -19,6 +19,7 @@ Typical usage
 """
 
 from ._codec import decode, encode, register_decoder, register_encoder
+from ._live_frames import FrameUnavailable, LiveFrameSource
 from ._processor import AGENT_STATUS_TOPIC, ProcessorEndpoint, Subscribe
 from ._shm import ShmRingBuffer, SlotView
 from ._types import (
@@ -55,8 +56,10 @@ __all__ = [
     "ControlMessage",
     "DataMessage",
     "FrameData",
+    "FrameUnavailable",
     "FrameRequest",
     "FrameSignal",
+    "LiveFrameSource",
     "MsgType",
     "ParticipantEvent",
     "PixelFormat",
