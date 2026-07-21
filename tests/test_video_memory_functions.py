@@ -12,11 +12,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import video_mcp_server.__main__ as video_mcp_main
 import video_memory_service.__main__ as video_memory_main
 from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
-from video_mcp_server.__main__ import _recording_enabled, build_mcp
+from video_mcp_server import __main__ as video_mcp_main
 from video_mcp_server.live import _frame_to_rgb
 from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
@@ -174,8 +173,12 @@ def test_chunk_store_does_not_follow_identity_or_directory_symlinks(tmp_path: Pa
 
 @pytest.mark.asyncio
 async def test_video_mcp_preserves_conditional_tool_sets() -> None:
-    live_only = build_mcp(_UnusedClient(), _LiveFrames(), recording_enabled=False)
-    recorded = build_mcp(_UnusedClient(), _LiveFrames(), recording_enabled=True)
+    live_only = video_mcp_main.build_mcp(
+        _UnusedClient(), _LiveFrames(), recording_enabled=False
+    )
+    recorded = video_mcp_main.build_mcp(
+        _UnusedClient(), _LiveFrames(), recording_enabled=True
+    )
 
     async with McpClient(live_only) as client:
         live_names = {tool.name for tool in await client.list_tools()}
@@ -198,7 +201,9 @@ async def test_video_mcp_preserves_conditional_tool_sets() -> None:
 
 @pytest.mark.asyncio
 async def test_video_mcp_recorded_discovery_reports_service_failures() -> None:
-    mcp = build_mcp(_UnavailableRecordedClient(), _LiveFrames(), recording_enabled=True)
+    mcp = video_mcp_main.build_mcp(
+        _UnavailableRecordedClient(), _LiveFrames(), recording_enabled=True
+    )
 
     async with McpClient(mcp) as client:
         result = await client.call_tool("list_recorded_participants", {})
@@ -208,12 +213,14 @@ async def test_video_mcp_recorded_discovery_reports_service_failures() -> None:
 
 @pytest.mark.asyncio
 async def test_video_mcp_starts_live_only_when_recorded_service_is_unavailable() -> None:
-    assert await _recording_enabled(_UnavailableStartupClient()) is False
+    assert await video_mcp_main._recording_enabled(_UnavailableStartupClient()) is False
 
 
 @pytest.mark.asyncio
 async def test_video_mcp_returns_live_export_failures_as_data() -> None:
-    mcp = build_mcp(_UnusedClient(), _BrokenLiveFrames(), recording_enabled=False)
+    mcp = video_mcp_main.build_mcp(
+        _UnusedClient(), _BrokenLiveFrames(), recording_enabled=False
+    )
 
     async with McpClient(mcp) as client:
         frame_from_time = await client.call_tool(
