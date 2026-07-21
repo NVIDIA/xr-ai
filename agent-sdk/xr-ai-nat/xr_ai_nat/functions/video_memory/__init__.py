@@ -5,8 +5,9 @@
 
 from .functions import VideoMemoryFunctionsConfig
 from .schemas import (
-    FrameAtTimeRequest,
-    FrameResult,
+    HistoricalFrameRequest,
+    HistoricalFrameResult,
+    ParticipantsResult,
     QueryVideoRequest,
     QueryVideoResult,
     VideoStatsRequest,
@@ -14,8 +15,9 @@ from .schemas import (
 )
 
 __all__ = [
-    "FrameAtTimeRequest",
-    "FrameResult",
+    "HistoricalFrameRequest",
+    "HistoricalFrameResult",
+    "ParticipantsResult",
     "QueryVideoRequest",
     "QueryVideoResult",
     "VideoMemoryFunctionsConfig",

@@ -12,24 +12,36 @@ import uvicorn
 import yaml
 from fastmcp import FastMCP
 from loguru import logger
+from xr_ai_agent import FrameUnavailable, LiveFrameSource, ProcessorEndpoint, Subscribe
 
 from xr_ai_logging import setup_logging
 from xr_ai_nat.functions._rpc import RPCError
 from xr_ai_nat.functions.video_memory._client import VideoMemoryClient
 from xr_ai_nat.functions.video_memory.schemas import (
-    FrameAtTimeRequest,
+    HistoricalFrameRequest,
     QueryVideoRequest,
     VideoStatsRequest,
 )
 
+from .live import LiveFrameExporter
+
 _DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "video_mcp_server.yaml"
 
 
-def _error(error: RPCError) -> dict:
+_DEFAULT_HUB_PUB = "ipc:///tmp/xr_hub_pub"
+_DEFAULT_HUB_PUSH = "ipc:///tmp/xr_hub_in"
+
+
+def _error(error: Exception) -> dict:
     return {"error": str(error)}
 
 
-def build_mcp(client: VideoMemoryClient, *, recording_enabled: bool) -> FastMCP:
+def build_mcp(
+    client: VideoMemoryClient,
+    live_frames: LiveFrameExporter,
+    *,
+    recording_enabled: bool,
+) -> FastMCP:
     """Preserve the legacy tool set while delegating capability work."""
 
     mcp = FastMCP("video-mcp")
@@ -37,7 +49,7 @@ def build_mcp(client: VideoMemoryClient, *, recording_enabled: bool) -> FastMCP:
     @mcp.tool()
     async def list_live_participants() -> list[str]:
         """Return participants whose current live camera frame is available."""
-        return (await client.list_live_participants()).participants
+        return live_frames.participants()
 
     @mcp.tool()
     async def get_frame_from_time(
@@ -45,21 +57,29 @@ def build_mcp(client: VideoMemoryClient, *, recording_enabled: bool) -> FastMCP:
         second_ago: int = 0,
         reference_time_us: int = 0,
     ) -> dict:
-        """Return a PNG frame relative to the wall clock or an explicit timestamp.
+        """Return a live PNG or a frame from recorded history.
 
-        An unanchored second_ago=0 request uses the live camera. Anchored or
-        historical requests use recorded video and require recording to be enabled.
+        Use second_ago=0 and reference_time_us=0 only for a current live camera
+        frame. Historical requests require reference_time_us as a Unix-epoch
+        microsecond timestamp and use whole seconds before that reference.
         """
+        if reference_time_us == 0 and second_ago == 0:
+            try:
+                return await live_frames.get_latest(participant_id)
+            except (FrameUnavailable, ValueError) as error:
+                return _error(error)
+        if reference_time_us <= 0:
+            return _error(ValueError("reference_time_us is required for recorded video"))
         try:
             result = await client.get_frame_from_time(
-                FrameAtTimeRequest(
+                HistoricalFrameRequest(
                     participant_id=participant_id,
                     second_ago=second_ago,
                     reference_time_us=reference_time_us,
                 )
             )
         except (RPCError, ValueError) as error:
-            return {"error": str(error)}
+            return _error(error)
         return result.model_dump(mode="python")
 
     if not recording_enabled:
@@ -68,16 +88,9 @@ def build_mcp(client: VideoMemoryClient, *, recording_enabled: bool) -> FastMCP:
         async def get_latest_frame(participant_id: str) -> dict:
             """Return the current live frame. Deprecated; use get_frame_from_time."""
             try:
-                frame = await client.get_frame_from_time(
-                    FrameAtTimeRequest(participant_id=participant_id)
-                )
-            except RPCError as error:
+                return await live_frames.get_latest(participant_id)
+            except (FrameUnavailable, ValueError) as error:
                 return _error(error)
-            result = frame.model_dump(mode="python")
-            return {
-                key: result[key]
-                for key in ("path", "width", "height", "timestamp_us")
-            }
 
         return mcp
 
@@ -109,7 +122,7 @@ def build_mcp(client: VideoMemoryClient, *, recording_enabled: bool) -> FastMCP:
                 )
             )
         except (RPCError, ValueError) as error:
-            return {"error": str(error)}
+            return _error(error)
         return result.model_dump(mode="python")
 
     return mcp
@@ -119,10 +132,18 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
     client = VideoMemoryClient(
         str(config.get("service_endpoint", "tcp://127.0.0.1:8310"))
     )
+    endpoint = ProcessorEndpoint(
+        sub_addr=str(config.get("hub_pub", _DEFAULT_HUB_PUB)),
+        push_addr=str(config.get("hub_push", _DEFAULT_HUB_PUSH)),
+        filter=Subscribe.VIDEO,
+    )
+    run_dir = Path(config.get("out_dir") or "/tmp/xr_video_queries")
+    endpoint_task = asyncio.create_task(endpoint.run(), name="video-mcp-hub-ipc")
     try:
         health = await client.get_health()
         app = build_mcp(
             client,
+            LiveFrameExporter(LiveFrameSource(endpoint), run_dir),
             recording_enabled=health.recording_enabled,
         ).http_app(path="/mcp")
         port = int(config.get("port", 8210))
@@ -136,15 +157,23 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
             )
         )
         logger.info(
-            "video-mcp mcp=/mcp port={} service={} recording_enabled={}",
+            "video-mcp mcp=/mcp port={} service={} recording_enabled={} hub_pub={}",
             port,
             config.get("service_endpoint", "tcp://127.0.0.1:8310"),
             health.recording_enabled,
+            config.get("hub_pub", _DEFAULT_HUB_PUB),
         )
         if ready_file:
             ready_file.touch()
         await server.serve()
     finally:
+        endpoint.stop()
+        endpoint_task.cancel()
+        try:
+            await endpoint_task
+        except asyncio.CancelledError:
+            pass
+        endpoint.close()
         await client.close()
 
 

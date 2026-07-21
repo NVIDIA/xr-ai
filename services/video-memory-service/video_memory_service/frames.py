@@ -1,14 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Decode recorded H.264 and normalize hub pixels for PNG output."""
+"""Decode recorded H.264 and normalize decoded frames for PNG output."""
 
 import ctypes
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from xr_ai_agent import FrameData, PixelFormat
 
 
 def _yuv_to_rgb(y: np.ndarray, cb: np.ndarray, cr: np.ndarray) -> np.ndarray:
@@ -32,32 +31,6 @@ def nv12_to_rgb(frame: np.ndarray, width: int, height: int) -> np.ndarray:
     cb = np.repeat(np.repeat(uv[:, :, 0], 2, axis=0), 2, axis=1)
     cr = np.repeat(np.repeat(uv[:, :, 1], 2, axis=0), 2, axis=1)
     return _yuv_to_rgb(y, cb, cr)
-
-
-def live_frame_to_rgb(frame: FrameData) -> np.ndarray:
-    array = np.frombuffer(frame.data, dtype=np.uint8)
-    if frame.fmt == PixelFormat.RGB24:
-        return array.reshape(frame.height, frame.width, 3).copy()
-    if frame.fmt == PixelFormat.RGBA:
-        return array.reshape(frame.height, frame.width, 4)[:, :, :3].copy()
-    if frame.fmt == PixelFormat.BGRA:
-        return array.reshape(frame.height, frame.width, 4)[:, :, [2, 1, 0]].copy()
-    if frame.fmt == PixelFormat.NV12:
-        return nv12_to_rgb(
-            array.reshape(frame.height * 3 // 2, frame.width),
-            frame.width,
-            frame.height,
-        )
-    if frame.fmt == PixelFormat.I420:
-        y_size = frame.width * frame.height
-        uv_size = (frame.width // 2) * (frame.height // 2)
-        y = array[:y_size].reshape(frame.height, frame.width)
-        u = array[y_size : y_size + uv_size].reshape(frame.height // 2, frame.width // 2)
-        v = array[y_size + uv_size :].reshape(frame.height // 2, frame.width // 2)
-        u = np.repeat(np.repeat(u, 2, axis=0), 2, axis=1)
-        v = np.repeat(np.repeat(v, 2, axis=0), 2, axis=1)
-        return _yuv_to_rgb(y, u, v)
-    raise ValueError(f"Unsupported PixelFormat for PNG export: {frame.fmt!r}")
 
 
 def save_png(rgb: np.ndarray, path: Path) -> None:

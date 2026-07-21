@@ -4,6 +4,4 @@
 endpoint: tcp://0.0.0.0:8310
 recordings_dir: /dev/shm/xr-ai/recordings
 out_dir: /tmp/xr_video_queries
-hub_pub: ipc:///tmp/xr_hub_pub
-hub_push: ipc:///tmp/xr_hub_in
 gpu_id: 0

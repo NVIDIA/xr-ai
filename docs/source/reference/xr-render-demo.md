@@ -28,7 +28,7 @@ exit terminates the whole stack.
 | llm | `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 |
 | agent-llm | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 |
 | vlm-mcp | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 |
-| video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (typed RPC) |
+| video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | video-mcp | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 |
 | render-mcp | `agent-mcp-servers/render-mcp/` | `render_mcp` | 8220 |
 | openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
@@ -247,8 +247,8 @@ On each `TranscriptionFrame`:
 ops onto LOVR's scene socket (msgpack over ZMQ PUSH). `openxr-service` owns
 the second headless OpenXR session (`XR_MND_HEADLESS`); `oxr-mcp` forwards
 tracking requests to it and preserves the existing MCP tool surface.
-`video-memory-service` owns live hub IPC and recorded-video decoding;
-`video-mcp` only republishes that typed capability for MCP consumers.
+`video-memory-service` owns recorded-video decoding; `video-mcp` owns the
+temporary live hub IPC compatibility path.
 
 ### Spatial tool surface
 

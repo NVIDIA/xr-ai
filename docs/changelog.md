@@ -9,6 +9,15 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-21 — Video memory is recorded history, not live capture
+
+`video-memory-service` reads the H.264 chunks written by XR Media Hub and no
+longer subscribes to hub IPC. Callers that need a current frame use
+`LiveFrameSource`; Video MCP keeps its legacy live tools by owning that source
+until the compatibility adapter is retired. Recorded-frame requests use an
+absolute Unix-microsecond reference timestamp plus a whole-second offset so an
+agent can reason coarsely while receiving the precise selected timestamp.
+
 ### 2026-07-20 — Live and recorded video become native video-memory functions
 
 `xr_video_memory` exposes live-participant discovery, recorded-video queries,

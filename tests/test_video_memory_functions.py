@@ -6,6 +6,7 @@
 import asyncio
 import contextlib
 import json
+import time
 import uuid
 from pathlib import Path
 
@@ -13,22 +14,46 @@ import pytest
 from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
 from video_mcp_server.__main__ import build_mcp
-from video_memory_service.service import VideoMemoryService
+from video_mcp_server.live import _frame_to_rgb
+from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
-from xr_ai_nat.functions._rpc import RPCServer
+from xr_ai_agent import FrameData, FrameSignal, LiveFrameSource, PixelFormat
+from xr_ai_nat.functions._rpc import RPCError, RPCServer
 from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
+from xr_ai_nat.functions.video_memory.schemas import HistoricalFrameRequest
 
 
-class _NoLiveFrames:
+class _LiveFrames:
     def participants(self) -> list[str]:
         return ["connected-user"]
 
-    async def fetch_latest(self, _participant_id: str):
-        return None
+    async def get_latest(self, participant_id: str) -> dict:
+        return {
+            "path": f"/tmp/{participant_id}.png",
+            "width": 1,
+            "height": 1,
+            "timestamp_us": 1,
+        }
 
 
 class _UnusedClient:
     pass
+
+
+class _FrameEndpoint:
+    def __init__(self, frame: FrameData) -> None:
+        self._frame = frame
+        self._callbacks = []
+
+    def on_frame(self, callback) -> None:
+        self._callbacks.append(callback)
+
+    async def request_frame(self, _signal: FrameSignal) -> FrameData:
+        return self._frame
+
+    async def send(self, signal: FrameSignal) -> None:
+        for callback in self._callbacks:
+            await callback(signal)
 
 
 def _recording(root: Path, participant_id: str) -> None:
@@ -76,8 +101,8 @@ def test_chunk_store_preserves_identities_and_windows(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_video_mcp_preserves_conditional_tool_sets() -> None:
-    live_only = build_mcp(_UnusedClient(), recording_enabled=False)
-    recorded = build_mcp(_UnusedClient(), recording_enabled=True)
+    live_only = build_mcp(_UnusedClient(), _LiveFrames(), recording_enabled=False)
+    recorded = build_mcp(_UnusedClient(), _LiveFrames(), recording_enabled=True)
 
     async with McpClient(live_only) as client:
         live_names = {tool.name for tool in await client.list_tools()}
@@ -99,11 +124,58 @@ async def test_video_mcp_preserves_conditional_tool_sets() -> None:
 
 
 @pytest.mark.asyncio
+async def test_live_frame_source_stays_with_the_calling_process() -> None:
+    now_us = time.time_ns() // 1_000
+    frame = FrameData(
+        seq=1,
+        pts_us=now_us,
+        width=1,
+        height=1,
+        fmt=PixelFormat.RGB24,
+        data=b"\x00\x00\x00",
+        participant_id="live-user",
+        track_id="camera",
+    )
+    endpoint = _FrameEndpoint(frame)
+    source = LiveFrameSource(endpoint)
+    await endpoint.send(
+        FrameSignal(
+            slot=0,
+            seq=1,
+            pts_us=now_us,
+            width=1,
+            height=1,
+            fmt=PixelFormat.RGB24,
+            data_sz=3,
+            participant_id="live-user",
+            track_id="camera",
+        )
+    )
+
+    assert source.participants() == ["live-user"]
+    assert await source.get("live-user") == frame
+
+
+def test_live_png_export_converts_nv12_planes() -> None:
+    frame = FrameData(
+        seq=1,
+        pts_us=1,
+        width=2,
+        height=2,
+        fmt=PixelFormat.NV12,
+        data=bytes([16, 16, 16, 16, 128, 128]),
+    )
+
+    rgb = _frame_to_rgb(frame)
+
+    assert rgb.shape == (2, 2, 3)
+
+
+@pytest.mark.asyncio
 async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None:
     recordings = tmp_path / "recordings"
     _recording(recordings, "user/name")
     service = VideoMemoryService(
-        provider=_NoLiveFrames(),
         store=ChunkStore(recordings),
         out_dir=tmp_path / "output",
         gpu_id=0,
@@ -117,7 +189,6 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
         )
         group = await builder.get_function_group("video")
         functions = await group.get_all_functions()
-        live = await functions["video__list_live_participants"].ainvoke({})
         recorded = await functions["video__list_recorded_participants"].ainvoke({})
         stats = await functions["video__get_video_stats"].ainvoke(
             {"participant_id": "user/name"}
@@ -126,7 +197,41 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
             {"participant_id": "user/name", "start_us": 1_100_000, "end_us": 2_100_000}
         )
 
-    assert live == ["connected-user"]
-    assert recorded == ["user/name"]
+    assert recorded.participants == ["user/name"]
     assert stats.num_chunks == 2
     assert Path(clip.path).read_bytes() == b"firstsecond"
+    with pytest.raises(RPCError, match="unknown operation"):
+        await service.dispatch("list_live_participants", {})
+
+
+def test_historical_frame_schema_requires_an_absolute_reference() -> None:
+    with pytest.raises(ValueError, match="greater than 0"):
+        HistoricalFrameRequest(participant_id="user", reference_time_us=0)
+
+    schema = HistoricalFrameRequest.model_json_schema()
+    assert "Unix-epoch timestamp" in schema["properties"]["reference_time_us"]["description"]
+    assert "Whole seconds" in schema["properties"]["second_ago"]["description"]
+
+
+@pytest.mark.parametrize(
+    ("target_us", "declared_frames", "decoded_frames", "expected"),
+    [
+        (900, 4, 4, (0, 1_000)),
+        (5_000, 4, 4, (3, 4_000)),
+        (2_500, 1, 1, (0, 1_000)),
+        (4_000, 4, 2, (1, 2_000)),
+    ],
+)
+def test_select_decoded_frame_clamps_to_recorded_boundaries(
+    target_us: int,
+    declared_frames: int,
+    decoded_frames: int,
+    expected: tuple[int, int],
+) -> None:
+    assert select_decoded_frame(
+        start_us=1_000,
+        end_us=4_000,
+        declared_frames=declared_frames,
+        decoded_frames=decoded_frames,
+        target_us=target_us,
+    ) == expected

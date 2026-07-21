@@ -98,10 +98,14 @@ functions:
     endpoint: tcp://127.0.0.1:8310
 ```
 
-The group exposes live-participant discovery, recorded-participant discovery,
-recording statistics, H.264 clip queries, and timestamp-anchored PNG frame
-lookup. The service owns hub IPC, chunk storage, and NVDEC; native agents see
-only typed functions.
+The group exposes recorded-participant discovery, recording statistics, H.264
+clip queries, and timestamp-anchored PNG frame lookup. All `*_us` fields are
+Unix-epoch microseconds: use `get_video_stats` to find the available absolute
+range, use absolute `start_us`/`end_us` for a clip, and pass the workflow's
+event timestamp as `reference_time_us` for a frame. `second_ago` is
+intentionally a whole-second offset before that event; the returned
+`timestamp_us` reports the exact frame selected. Current live frames are a
+separate hub capability, not part of `xr_video_memory`.
 
 ## MCP compatibility
 

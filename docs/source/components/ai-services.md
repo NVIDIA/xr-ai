@@ -322,10 +322,10 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   `get_transcript_stats`. Transcripts persist as JSONL alongside a
   `.identity` sidecar so list and query round-trip raw IDs cleanly even
   when sanitized filenames collide.
-- **video-memory-service** owns hub IPC, recorded chunk queries, NVDEC, and
-  PNG output behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in
-  its YAML to enable recorded-video operations; the path must match the
-  hub's `video_recording.out_dir`.
+- **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
+  behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
+  enable recorded-video operations; the path must match the hub's
+  `video_recording.out_dir`. Current frames stay with the caller's hub client.
 - **video-mcp-server** is the optional FastMCP compatibility adapter at
   `/mcp` on port 8210. It discovers whether recording is enabled from the
   service and preserves the existing conditional tool surface.

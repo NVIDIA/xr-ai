@@ -10,9 +10,9 @@ Two complementary scenarios:
 2. ``test_get_latest_frame_via_live_hub`` — realtime path: rounds a
    synthetic NV12 frame through a live hub to ``get_latest_frame``.
 
-IPC and decoding live in ``video_memory_service``; ``video_mcp_server`` is the
-compatibility adapter exercised by both scenarios. Skipped when PyNvVideoCodec
-or NVENC/NVDEC hardware is missing.
+Recorded decoding lives in ``video_memory_service``; ``video_mcp_server`` owns
+the compatibility live-frame IPC path exercised by the realtime scenario.
+Skipped when PyNvVideoCodec or NVENC/NVDEC hardware is missing.
 """
 from __future__ import annotations
 
@@ -174,16 +174,14 @@ async def test_get_frame_from_time_returns_valid_png(tmp_path: pathlib.Path) -> 
         "endpoint":       f"tcp://127.0.0.1:{service_port}",
         "recordings_dir": str(rec_dir),
         "out_dir":        str(out_dir),
-        # Unique per-test IPC sockets so the server's ProcessorEndpoint
-        # binds without colliding with a real hub on the dev box.
-        "hub_pub":        f"ipc://{tmp_path}/hub_pub",
-        "hub_push":       f"ipc://{tmp_path}/hub_push",
         "gpu_id":         0,
     }))
     cfg_path.write_text(yaml.safe_dump({
         "host":             "127.0.0.1",
         "port":             port,
         "service_endpoint": f"tcp://127.0.0.1:{service_port}",
+        "hub_pub":          f"ipc://{tmp_path}/hub_pub",
+        "hub_push":         f"ipc://{tmp_path}/hub_push",
     }))
 
     service_proc = subprocess.Popen(
@@ -246,7 +244,7 @@ async def test_get_latest_frame_via_live_hub(
     """Round-trip a frame through the hub to ``get_latest_frame``.
 
     Exercises the realtime path the historical test bypasses: connector
-    PUSH → hub PUB → video-memory ``ProcessorEndpoint`` SUB → ``FRAME_REQUEST``
+    PUSH → hub PUB → video-mcp ``ProcessorEndpoint`` SUB → ``FRAME_REQUEST``
     → ``FRAME_DATA`` → PNG. ``recordings_dir`` is omitted so the server
     builds ``store=None`` and exposes ``get_latest_frame`` instead of the
     historical tools.
@@ -280,14 +278,14 @@ async def test_get_latest_frame_via_live_hub(
     service_cfg_path.write_text(yaml.safe_dump({
         "endpoint": f"tcp://127.0.0.1:{service_port}",
         "out_dir":  str(out_dir),
-        "hub_pub":  hub_pub_addr,
-        "hub_push": hub_pull_addr,
         "gpu_id":   0,
     }))
     cfg_path.write_text(yaml.safe_dump({
         "host":     "127.0.0.1",
         "port":     port,
         "service_endpoint": f"tcp://127.0.0.1:{service_port}",
+        "hub_pub":  hub_pub_addr,
+        "hub_push": hub_pull_addr,
     }))
 
     service_proc = subprocess.Popen(
@@ -327,8 +325,8 @@ async def test_get_latest_frame_via_live_hub(
             track_id       = "cam",
         )
         # Two hops to drain: connector PUSH → hub, then hub PUB → video-mcp
-        # SUB where the ProcessorEndpoint caches the FRAME_SIGNAL so the
-        # subsequent fetch_latest can resolve it.
+        # SUB where LiveFrameSource caches the FRAME_SIGNAL so the subsequent
+        # get_latest call can resolve it.
         await settle()
         await settle()
 

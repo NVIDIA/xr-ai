@@ -13,12 +13,16 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "fastmcp>=2.0",
     "pyyaml>=6.0",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "xr-ai-agent",
     "xr-ai-logging",
     "xr-ai-nat[services]",
 ]
 
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
+xr-ai-agent = { path = "../../agent-sdk", editable = true }
 xr-ai-nat     = { path = "../../agent-sdk/xr-ai-nat", editable = true }
 
 [project.scripts]

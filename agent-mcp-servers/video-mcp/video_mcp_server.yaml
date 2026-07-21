@@ -4,11 +4,14 @@
 # Video MCP server reference configuration.
 # Copy to your agent sample root as video_mcp_server.yaml and edit.
 #
-# The adapter delegates every operation to video-memory-service. Configure
-# recordings and hub IPC in video_memory_service.yaml, not here.
+# Recorded operations delegate to video-memory-service. Live-frame compatibility
+# uses this process's own hub IPC subscription.
 #
 # MCP endpoint: http://localhost:8210/mcp  (StreamableHTTP transport)
 
 host: 0.0.0.0
 port: 8210
 service_endpoint: tcp://127.0.0.1:8310
+hub_pub: ipc:///tmp/xr_hub_pub
+hub_push: ipc:///tmp/xr_hub_in
+out_dir: /tmp/xr_video_queries

@@ -201,33 +201,35 @@ port: 8250
 
 ## video-mcp
 
-`video-mcp` preserves the MCP surface for camera frames and recordings. Both
-it and native `xr_video_memory` functions call `video-memory-service`, which
-owns two data paths:
+`video-mcp` preserves the MCP surface for camera frames and recordings. Native
+`xr_video_memory` calls `video-memory-service` only for recorded history;
+Video MCP owns the temporary live compatibility path:
 
 - **Historical chunks** — reads the H.264 Annex B chunks the XR-Media-Hub's recorder
   writes to disk (tmpfs by default). `recordings_dir` must match the hub's
-  `video_recording.out_dir`.
-- **Live frames** — the service connects to the hub as a processor endpoint, tracks the most
-  recent frame per participant, and pulls pixels on demand over the hub IPC
-  sockets (`hub_pub` and `hub_push`).
+  `video_recording.out_dir`; `video-memory-service` owns the query and NVDEC
+  decode work.
+- **Live frames** — Video MCP uses its own `LiveFrameSource` over the hub IPC
+  sockets (`hub_pub` and `hub_push`) and exports the raw pixels as legacy PNG
+  results. Native callers obtain live frames directly through that same hub
+  client primitive rather than through video memory.
 
 All tools accept and return raw LiveKit participant identities; filesystem
 sanitization happens internally and is recovered via `.identity` sidecars.
 
 ### video-mcp tools
 
-`list_live_participants()` is always registered — identities currently connected
-to the hub (live IPC roster). The frame tools depend on whether recording is
-enabled (a chunk store on disk):
+`list_live_participants()` is always registered — identities with a fresh camera
+frame. The frame tools depend on whether recording is enabled (a chunk store on
+disk):
 
 **Recording enabled** (`recordings_dir` set, hub `video_recording.enabled: true`):
 
-- `get_frame_from_time(participant_id, second_ago, reference_time_us=0)` — frame
-  at `anchor − second_ago` seconds, where the anchor is the wall clock
-  (`reference_time_us=0`) or an explicit Unix-µs timestamp. Reads recorded NVENC
-  chunks and decodes via NVDEC; `second_ago=0` short-circuits to the live IPC
-  path. Returns a PNG path.
+- `get_frame_from_time(participant_id, second_ago, reference_time_us=0)` — with
+  both time arguments at zero, returns a current live PNG. Otherwise it reads
+  recorded history at `reference_time_us - second_ago` whole seconds.
+  `reference_time_us` is required for recorded history and is a Unix-epoch
+  microsecond timestamp. Returns a PNG path.
 - `list_recorded_participants()` — identities with at least one chunk on disk.
 - `get_video_stats(participant_id)` — `num_chunks`, `total_bytes`,
   `avg_chunk_bytes`, `earliest_us`, `latest_us`.
@@ -238,30 +240,32 @@ enabled (a chunk store on disk):
 **Recording disabled** (no chunk store): two live-only tools:
 
 - `get_frame_from_time(participant_id, second_ago=0, reference_time_us=0)` — only
-  `second_ago=0` is served; any non-zero past lookup returns an error. Use
+  the all-zero live request is served; any recorded lookup returns an error. Use
   `list_live_participants` to confirm camera availability first.
 - `get_latest_frame(participant_id)` — deprecated alias for the `second_ago=0`
   case; prefer `get_frame_from_time`.
 
 ### video-memory and MCP configuration
 
-`video_memory_service.yaml` owns the capability settings:
+`video_memory_service.yaml` owns recorded-history settings:
 
 ```yaml
 endpoint:       tcp://0.0.0.0:8310
 recordings_dir: /dev/shm/xr-ai/recordings   # must match hub video_recording.out_dir
-out_dir:        /tmp/xr_video_queries        # where query/frame outputs are written
-hub_pub:        ipc:///tmp/xr_hub_pub        # hub PUB socket (live frames)
-hub_push:       ipc:///tmp/xr_hub_in         # hub PUSH socket (frame requests)
+out_dir:        /tmp/xr_video_queries        # where recorded query/frame outputs are written
 gpu_id:         0
 ```
 
-`video_mcp_server.yaml` contains only the compatibility boundary:
+`video_mcp_server.yaml` contains the compatibility boundary and live-frame
+subscription:
 
 ```yaml
 host:           0.0.0.0
 port:           8210
 service_endpoint: tcp://127.0.0.1:8310
+hub_pub:        ipc:///tmp/xr_hub_pub
+hub_push:       ipc:///tmp/xr_hub_in
+out_dir:        /tmp/xr_video_queries
 ```
 
 ## vlm-mcp

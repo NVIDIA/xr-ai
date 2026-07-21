@@ -364,6 +364,21 @@ actually uses:
    returns `None` if the frame has expired or on timeout. Concurrent requests
    for the same `(participant, track)` are coalesced into one `FRAME_REQUEST`.
 
+#### LiveFrameSource
+
+`LiveFrameSource` is the higher-level live-camera helper for a caller that
+needs one fresh raw frame for a participant. It waits for a frame within its
+configured freshness window, then returns `FrameData` or raises
+`FrameUnavailable`. It deliberately stops at raw pixels: image conversion,
+model calls, and PNG export remain the consumer's responsibility.
+
+```python
+from xr_ai_agent import LiveFrameSource
+
+frames = LiveFrameSource(ep, max_age_s=2.0, timeout_s=5.0)
+frame = await frames.get("participant-1")
+```
+
 #### Return path
 
 | Method | Sends |

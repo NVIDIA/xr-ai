@@ -27,8 +27,8 @@ tool-calling / reasoning / hardware trade-offs documented below.
 | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4 / FP8 / BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
-| `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed live/recorded video capability |
-| `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → video-memory-service |
+| `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
+| `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded-video service + live hub IPC |
 | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8220 | — | FastMCP → vlm-server (`ask_image` tool) |
 
 All model weights land in `models/` at the repo root (gitignored, shared across
@@ -329,10 +329,10 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   `get_transcript_stats`. Transcripts persist as JSONL alongside a
   `.identity` sidecar so list/query round-trip raw IDs cleanly even
   when sanitized filenames collide.
-- **video-memory-service** owns hub IPC, recorded chunk queries, NVDEC, and
-  PNG output behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in
-  its YAML to enable recorded-video operations; the path must match the
-  hub's `video_recording.out_dir`.
+- **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
+  behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
+  enable recorded-video operations; the path must match the hub's
+  `video_recording.out_dir`. Current frames stay with the caller's hub client.
 - **video-mcp-server** is the optional FastMCP compatibility adapter at
   `/mcp` on port 8210. It discovers whether recording is enabled from the
   service and preserves the existing conditional tool surface.

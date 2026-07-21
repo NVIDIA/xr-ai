@@ -9,3 +9,6 @@
 host:          0.0.0.0
 port:          8210
 service_endpoint: tcp://127.0.0.1:8310
+hub_pub: ipc:///tmp/xr_hub_pub
+hub_push: ipc:///tmp/xr_hub_in
+out_dir: /tmp/xr_video_queries/xr-render-demo
