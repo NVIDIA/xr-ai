@@ -5,4 +5,5 @@
 # XR render demo's scene_service.yaml.
 host: 0.0.0.0
 port: 8220
+# Targets `endpoint` in the XR render demo's scene_service.yaml.
 service_endpoint: tcp://127.0.0.1:8320

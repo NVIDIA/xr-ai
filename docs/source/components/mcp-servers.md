@@ -128,6 +128,9 @@ port: 8220
 service_endpoint: tcp://127.0.0.1:8320
 ```
 
+`service_endpoint` targets the typed scene service's `endpoint`, not the
+render MCP adapter's HTTP listener.
+
 The `cloudxr_env_file` is sourced into the LOVR child's environment so LOVR
 inherits `XR_RUNTIME_JSON` and the CloudXR pin. A missing file is tolerated
 (LOVR then uses the system OpenXR).

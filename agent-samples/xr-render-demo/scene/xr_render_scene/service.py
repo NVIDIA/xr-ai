@@ -20,6 +20,7 @@ from .schemas import (
 class SceneService:
     def __init__(self, dispatcher: SceneDispatcher) -> None:
         self._dispatcher = dispatcher
+        self._spawn_task: asyncio.Task[None] | None = None
 
     async def dispatch(self, operation: str, arguments: dict) -> dict:
         if operation == "start_xr":
@@ -46,14 +47,24 @@ class SceneService:
         if health["spawn_error"] is not None:
             return {"status": "error", "error": health["spawn_error"]}
 
-        async def spawn() -> None:
-            try:
-                await self._dispatcher.start_lovr_once()
-            except Exception:
-                logger.exception("xr-render-scene: start_xr crashed")
-
-        asyncio.create_task(spawn(), name="lovr-spawn")
+        if self._spawn_task is None or self._spawn_task.done():
+            self._spawn_task = asyncio.create_task(
+                self._spawn_lovr(),
+                name="lovr-spawn",
+            )
         return {"status": "starting"}
+
+    async def _spawn_lovr(self) -> None:
+        try:
+            await self._dispatcher.start_lovr_once()
+        except Exception:
+            logger.exception("xr-render-scene: start_xr crashed")
+
+    async def close(self) -> None:
+        task, self._spawn_task = self._spawn_task, None
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def _add(self, request: AddPrimitiveRequest) -> dict:
         position = {"x": request.x, "y": request.y, "z": request.z}

@@ -4,7 +4,6 @@
 """CPU-only contract tests for the sample-local native scene functions."""
 
 import asyncio
-import contextlib
 import uuid
 
 import pytest
@@ -75,6 +74,21 @@ class _MemoryDispatcher:
         return {"ok": True}
 
 
+class _BlockingStartDispatcher(_MemoryDispatcher):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started_event = asyncio.Event()
+        self.cancelled = False
+
+    async def start_lovr_once(self) -> dict:
+        self.started_event.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+
+
 @pytest.mark.asyncio
 async def test_native_scene_groups_share_the_typed_scene_service() -> None:
     endpoint = f"ipc:///tmp/scene-functions-{uuid.uuid4().hex}"
@@ -116,5 +130,21 @@ async def test_native_scene_groups_share_the_typed_scene_service() -> None:
         assert snapshot.objects[0].position.x == 0.5
     finally:
         task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_scene_service_tracks_and_cancels_pending_spawn() -> None:
+    dispatcher = _BlockingStartDispatcher()
+    service = SceneService(dispatcher)
+
+    assert service._start_xr() == {"status": "starting"}
+    first_task = service._spawn_task
+    assert service._start_xr() == {"status": "starting"}
+    assert service._spawn_task is first_task
+
+    await dispatcher.started_event.wait()
+    await service.close()
+
+    assert dispatcher.cancelled
+    assert service._spawn_task is None

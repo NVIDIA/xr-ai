@@ -24,7 +24,6 @@ import zmq
 import zmq.asyncio
 from fastmcp import Client as McpClient
 
-import xr_render_scene.engine as scene_engine
 from render_mcp.__main__ import build_mcp
 from xr_ai_nat.functions._rpc import RPCServer
 from xr_render_scene import SceneClient
@@ -50,6 +49,13 @@ _asyncio = pytest.mark.asyncio
 def _unique_ipc(tmp_path: Path) -> str:
     """Return a per-test ipc:// socket path under tmp_path."""
     return f"ipc://{tmp_path}/scene_{uuid.uuid4().hex[:8]}"
+
+
+async def _cancel_task(task: asyncio.Task[object] | None) -> None:
+    if task is None:
+        return
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.fixture
@@ -90,9 +96,7 @@ async def dispatcher(tmp_path: Path):
         yield disp, pull, client
     finally:
         await client.close()
-        server_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await server_task
+        await _cancel_task(server_task)
         pull.close(linger=0)
         disp.close()
         await stack.__aexit__(None, None, None)
@@ -139,6 +143,19 @@ class TestSceneSocketValidation:
 
 class TestBuildConfigRejectsBadSceneSocket:
     """_build_config propagates the validation failure end-to-end."""
+
+    def test_defaults_xr_app_dir_to_lovr(self, tmp_path: Path):
+        lovr_bin = tmp_path / "lovr-bin"
+        lovr_bin.write_text("#!/bin/sh\nexit 0\n")
+        lovr_bin.chmod(0o755)
+        lovr_dir = tmp_path / "lovr"
+        lovr_dir.mkdir()
+        yaml_path = tmp_path / "scene_service.yaml"
+        yaml_path.write_text("")
+
+        config = _build_config(yaml_path, {"lovr_bin": str(lovr_bin)})
+
+        assert config.xr_app_dir == lovr_dir
 
     def test_malformed_scene_socket_fails_fast(self, tmp_path: Path, monkeypatch):
         # Synthesize a valid lovr_bin so we get past the earlier checks.
@@ -384,7 +401,7 @@ async def test_close_cancels_lovr_watch_task(tmp_path: Path, monkeypatch):
     )
 
     # Swap ManagedProcess out before SceneDispatcher.start_lovr_once runs.
-    monkeypatch.setattr(scene_engine, "ManagedProcess",
+    monkeypatch.setattr("xr_render_scene.engine.ManagedProcess",
                         lambda *a, **kw: _FakeManagedProcessCtx())
 
     stack = contextlib.AsyncExitStack()
@@ -399,8 +416,7 @@ async def test_close_cancels_lovr_watch_task(tmp_path: Path, monkeypatch):
         # close() must cancel the watch task so it can't leak past teardown.
         disp.close()
         # Let the cancellation propagate.
-        with contextlib.suppress(asyncio.CancelledError):
-            await disp._watch_task
+        await _cancel_task(disp._watch_task)
         assert disp._watch_task.done()
     finally:
         await stack.__aexit__(None, None, None)
@@ -438,7 +454,7 @@ async def test_lovr_respawn_closes_previous_launch_context(tmp_path: Path, monke
         created.append(ctx)
         return ctx
 
-    monkeypatch.setattr(scene_engine, "ManagedProcess", _make_ctx)
+    monkeypatch.setattr("xr_render_scene.engine.ManagedProcess", _make_ctx)
 
     stack = contextlib.AsyncExitStack()
     await stack.__aenter__()
@@ -469,8 +485,7 @@ async def test_lovr_respawn_closes_previous_launch_context(tmp_path: Path, monke
         assert sum(c.exited for c in created) == 1  # only the dead one closed
 
         disp.close()
-        with contextlib.suppress(asyncio.CancelledError):
-            await disp._watch_task
+        await _cancel_task(disp._watch_task)
     finally:
         await stack.__aexit__(None, None, None)
 
@@ -548,7 +563,7 @@ async def test_live_forward_fast_drops_during_resync_window(tmp_path: Path, monk
         lovr_bin=lovr_bin, xr_app_dir=xr_app_dir, scene_socket=sock_path,
         cloudxr_env_file=None, endpoint=f"ipc://{tmp_path}/unused",
     )
-    monkeypatch.setattr(scene_engine, "ManagedProcess",
+    monkeypatch.setattr("xr_render_scene.engine.ManagedProcess",
                         lambda *a, **kw: _FakeManagedProcessCtx())
 
     stack = contextlib.AsyncExitStack()
@@ -590,7 +605,7 @@ async def test_live_forward_fast_drops_during_resync_window(tmp_path: Path, monk
 async def test_resync_is_bounded_when_lovr_never_connects(tmp_path: Path, monkeypatch):
     """A LOVR that never connects must not wedge the spawn — resync returns
     after the deadline instead of blocking forever."""
-    monkeypatch.setattr(scene_engine, "_RESYNC_TIMEOUT_S", 0.2)
+    monkeypatch.setattr("xr_render_scene.engine._RESYNC_TIMEOUT_S", 0.2)
     sock_path = _unique_ipc(tmp_path)
     cfg = Config(
         lovr_bin=Path("/nonexistent"), xr_app_dir=tmp_path,

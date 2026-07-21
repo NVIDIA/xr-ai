@@ -7,12 +7,12 @@ XR render demo scene engine and LOVR lifecycle.
 Manages a scene of typed 3D primitives and forwards state changes to LOVR
 (the OpenXR rendering app) as msgpack over ZMQ PUSH (``scene_socket``).
 
-  /mcp/start_xr                              spawn LOVR (idempotent)
-  /mcp/add_primitive(...)                    add a new primitive; returns assigned id
-  /mcp/update_primitive(id, ...)             partially update an existing primitive
-  /mcp/remove_primitive(id)                  remove a primitive from the scene
-  /mcp/get_scene_state                       current state of all scene objects
-  /mcp/get_health                            {status, lovr_started, spawn_error, render_drops}
+  start_xr                                    spawn LOVR (idempotent)
+  add_primitive(...)                          add a new primitive; returns assigned id
+  update_primitive(id, ...)                   partially update an existing primitive
+  remove_primitive(id)                        remove a primitive from the scene
+  get_scene_state                             current state of all scene objects
+  get_health                                  {status, lovr_started, spawn_error, render_drops}
 
 LOVR can't be spawned at process start because CloudXR returns
 ``XR_ERROR_FORM_FACTOR_UNAVAILABLE`` from ``xrGetSystem`` until a streaming
@@ -85,7 +85,7 @@ def _build_config(yaml_path: Path, raw: dict) -> Config:
     if not os.access(lovr_bin, os.X_OK):
         sys.exit(f"xr-render-scene: LOVR binary at {lovr_bin} is not executable")
 
-    xr_app_dir = _resolve(yaml_dir, raw.get("xr_app_dir", "./xr_app"))
+    xr_app_dir = _resolve(yaml_dir, raw.get("xr_app_dir", "./lovr"))
     if not xr_app_dir.is_dir():
         sys.exit(f"xr-render-scene: xr_app_dir {xr_app_dir} is not a directory")
 

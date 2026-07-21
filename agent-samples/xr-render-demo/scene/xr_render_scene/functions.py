@@ -10,7 +10,7 @@ from .client import SceneClient
 
 
 class _SceneFunctionsConfig(FunctionGroupBaseConfig):
-    endpoint: str = Field(description="Private XR render scene endpoint.")
+    endpoint: str = Field(description="XR render scene service endpoint.")
     timeout_s: float = Field(default=10.0, gt=0.0)
 
 

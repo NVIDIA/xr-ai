@@ -37,7 +37,8 @@ async def _serve(config_path: Path, ready_file: Path | None) -> None:
 
     async with contextlib.AsyncExitStack() as stack:
         dispatcher = SceneDispatcher(config, stack)
-        server = RPCServer(config.endpoint, SceneService(dispatcher).dispatch)
+        service = SceneService(dispatcher)
+        server = RPCServer(config.endpoint, service.dispatch)
         logger.info(
             "xr-render-scene rpc={} scene_socket={}",
             config.endpoint,
@@ -46,6 +47,7 @@ async def _serve(config_path: Path, ready_file: Path | None) -> None:
         try:
             await server.serve(ready=ready_file.touch if ready_file else None)
         finally:
+            await service.close()
             dispatcher.close()
             logger.info(
                 "xr-render-scene stopped render_drops={}",
