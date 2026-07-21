@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
-from video_mcp_server.__main__ import build_mcp
+from video_mcp_server.__main__ import _recording_enabled, build_mcp
 from video_mcp_server.live import _frame_to_rgb
 from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
@@ -42,6 +42,11 @@ class _UnusedClient:
 
 class _UnavailableRecordedClient:
     async def list_recorded_participants(self):
+        raise RPCError("video service unavailable", code="connection_error")
+
+
+class _UnavailableStartupClient:
+    async def get_health(self):
         raise RPCError("video service unavailable", code="connection_error")
 
 
@@ -145,6 +150,11 @@ async def test_video_mcp_recorded_discovery_stays_a_list_when_service_fails() ->
         result = await client.call_tool("list_recorded_participants", {})
 
     assert result.data == []
+
+
+@pytest.mark.asyncio
+async def test_video_mcp_starts_live_only_when_recorded_service_is_unavailable() -> None:
+    assert await _recording_enabled(_UnavailableStartupClient()) is False
 
 
 @pytest.mark.asyncio

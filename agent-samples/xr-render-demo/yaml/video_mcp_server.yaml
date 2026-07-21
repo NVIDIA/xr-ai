@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# Recorded operations use video-memory-service; an unavailable service starts
+# this compatibility adapter with its live-only legacy tool set.
+
 # Video MCP server configuration for mcp-agent.
 # Auto-discovered by the launcher and passed as --config to video_mcp_server.
 #

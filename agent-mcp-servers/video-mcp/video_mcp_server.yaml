@@ -6,6 +6,8 @@
 #
 # Recorded operations delegate to video-memory-service. Live-frame compatibility
 # uses this process's own hub IPC subscription.
+# If the recorded-video service is unavailable at startup, this adapter exposes
+# its live-only legacy tool set until it is restarted.
 #
 # MCP endpoint: http://localhost:8210/mcp  (StreamableHTTP transport)
 

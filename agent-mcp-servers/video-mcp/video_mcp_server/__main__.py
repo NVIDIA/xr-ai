@@ -36,6 +36,18 @@ def _error(error: Exception) -> dict:
     return {"error": str(error)}
 
 
+async def _recording_enabled(client: VideoMemoryClient) -> bool:
+    try:
+        return (await client.get_health()).recording_enabled
+    except RPCError as error:
+        logger.warning(
+            "video-mcp recorded-video service unavailable at startup; "
+            "starting with live-only tools: {}",
+            error,
+        )
+        return False
+
+
 def build_mcp(
     client: VideoMemoryClient,
     live_frames: LiveFrameExporter,
@@ -144,11 +156,11 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
     run_dir = Path(config.get("out_dir") or "/tmp/xr_video_queries")
     endpoint_task = asyncio.create_task(endpoint.run(), name="video-mcp-hub-ipc")
     try:
-        health = await client.get_health()
+        recording_enabled = await _recording_enabled(client)
         app = build_mcp(
             client,
             LiveFrameExporter(LiveFrameSource(endpoint), run_dir),
-            recording_enabled=health.recording_enabled,
+            recording_enabled=recording_enabled,
         ).http_app(path="/mcp")
         port = int(config.get("port", 8210))
         server = uvicorn.Server(
@@ -164,7 +176,7 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
             "video-mcp mcp=/mcp port={} service={} recording_enabled={} hub_pub={}",
             port,
             config.get("service_endpoint", "tcp://127.0.0.1:8310"),
-            health.recording_enabled,
+            recording_enabled,
             config.get("hub_pub", _DEFAULT_HUB_PUB),
         )
         if ready_file:
