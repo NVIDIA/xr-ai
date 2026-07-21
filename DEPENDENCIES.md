@@ -110,6 +110,7 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── nvidia-nat-core ==1.8.0
     └── pydantic >=2.10
     └── [mcp] fastmcp >=3.4,<4
+    └── [services] msgpack >=1.0, pyzmq >=27.0
     └── [vision] httpx >=0.27, Pillow >=10.0, xr-ai-models [editable: ../xr-ai-models]
     Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
@@ -121,7 +122,20 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     is no package-wide registration aggregator. The spatial pure math core is
     also used by the transitional Vec and OpenXR MCP compatibility surfaces.
     ``xr_vision`` normalizes an acquired local image and calls an injected
-    xr-ai-models VLM; it does not acquire frames itself.
+    xr-ai-models VLM; it does not acquire frames itself. ``xr_tracking`` calls
+    the typed OpenXR service and returns a complete user coordinate frame.
+
+xr-openxr-service  (services/openxr-service/)
+    └── xr-ai-launcher [editable: ../../utils/xr-ai-launcher]
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
+    └── pyyaml >=6.0
+    └── isaacteleop
+    Owns the long-running headless OpenXR and DeviceIO sessions. Exposes plain
+    dict head-pose and health messages over private msgpack/ZMQ at port 8330;
+    xr-ai-nat owns the typed client contracts. Root pytest adds this source tree
+    to its Python path only for CPU-only pose-math regression tests, avoiding a
+    test-time isaacteleop installation.
 
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
@@ -227,17 +241,13 @@ render-mcp-server  (agent-mcp-servers/render-mcp/)
     cloudxr.env is read synchronously via load_cloudxr_env at start_xr time.
 
 oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
-    └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (load_cloudxr_env)
-    └── isaacteleop                                (headless OpenXR + HeadTracker)
     └── pyyaml >=6.0
     └── uvicorn[standard] >=0.29
     └── fastmcp >=2.0
-    └── xr-ai-nat [editable: ../../agent-sdk/xr-ai-nat]
-    Pure FastMCP at /mcp. Reads pose from CloudXR via a second (headless)
-    OpenXR session; runs alongside LOVR's rendering session.
-    Pose acquisition remains here while coordinate calculations delegate to
-    the shared native spatial-math core.
-    cloudxr-runtime must start before oxr-mcp (serial launch order).
+    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
+    Pure FastMCP at /mcp. Preserves the existing OXR tool schemas while
+    delegating pose acquisition to xr-openxr-service and coordinate operations
+    to the native spatial-math core.
 
 vec-mcp-server  (agent-mcp-servers/vec-mcp/)
     └── uvicorn[standard] >=0.29
@@ -393,7 +403,8 @@ piper-tts-server  (ai-services/tts/piper/)
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | Pure FastMCP (reads NVENC chunks from disk) |
 | `agent-mcp-servers/render-mcp/` | `render-mcp-server` | `render_mcp_server` | 8220 | — | Pure FastMCP → LOVR (msgpack/ZMQ) |
-| `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | Pure FastMCP → headless OpenXR / CloudXR |
+| `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed msgpack/ZMQ → headless OpenXR / CloudXR |
+| `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | FastMCP compatibility adapter → openxr-service |
 | `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
 | `agent-mcp-servers/vec-mcp/` | `vec-mcp-server` | `vec_mcp_server` | 8250 | — | Pure FastMCP; deterministic spatial-math primitives (no model) |
 

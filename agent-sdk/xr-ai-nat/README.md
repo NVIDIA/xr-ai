@@ -69,6 +69,23 @@ function obtains the image first, then passes its exact returned path to
 function performs image I/O off the event loop, normalizes the input to JPEG,
 and makes the model request through `xr-ai-models`.
 
+## XR tracking
+
+Install `xr-ai-nat[services]` and configure `xr_tracking` with the private
+endpoint of `services/openxr-service`:
+
+```yaml
+functions:
+  tracking:
+    _type: xr_tracking
+    endpoint: tcp://127.0.0.1:8330
+```
+
+`tracking__get_user_frame` returns one typed `SpatialFrame` containing the
+user's current origin and basis vectors. Pass that value directly to the
+spatial-math functions; tracking owns pose acquisition while spatial math
+remains deterministic and service-independent.
+
 ## MCP compatibility
 
 Install `xr-ai-nat[mcp]` and pass an explicit list of native functions to
