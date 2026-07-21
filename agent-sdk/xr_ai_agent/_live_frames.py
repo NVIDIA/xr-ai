@@ -8,7 +8,7 @@ import asyncio
 import time
 
 from ._processor import ProcessorEndpoint
-from ._types import FrameData, FrameSignal
+from ._types import FrameData, FrameSignal, ParticipantEvent
 
 
 class FrameUnavailable(Exception):
@@ -35,12 +35,17 @@ class LiveFrameSource:
         self._latest: dict[tuple[str, str], FrameSignal] = {}
         self._events: dict[str, asyncio.Event] = {}
         endpoint.on_frame(self._on_frame)
+        endpoint.on_participant(self._on_participant)
 
     async def _on_frame(self, signal: FrameSignal) -> None:
         self._latest[(signal.participant_id, signal.track_id)] = signal
         event = self._events.get(signal.participant_id)
         if event is not None:
             event.set()
+
+    async def _on_participant(self, event: ParticipantEvent) -> None:
+        if not event.joined:
+            self.release(event.participant_id)
 
     def _freshest(self, participant_id: str) -> FrameSignal | None:
         candidates = [

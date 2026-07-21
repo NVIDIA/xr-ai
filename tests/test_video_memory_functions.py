@@ -18,7 +18,13 @@ from video_mcp_server.__main__ import _recording_enabled, build_mcp
 from video_mcp_server.live import _frame_to_rgb
 from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
-from xr_ai_agent import FrameData, FrameSignal, LiveFrameSource, PixelFormat
+from xr_ai_agent import (
+    FrameData,
+    FrameSignal,
+    LiveFrameSource,
+    ParticipantEvent,
+    PixelFormat,
+)
 from xr_ai_nat.functions._rpc import RPCError, RPCServer
 from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
 from xr_ai_nat.functions.video_memory.schemas import HistoricalFrameRequest
@@ -55,9 +61,13 @@ class _FrameEndpoint:
     def __init__(self, frame: FrameData) -> None:
         self._frame = frame
         self._callbacks = []
+        self._participant_callbacks = []
 
     def on_frame(self, callback) -> None:
         self._callbacks.append(callback)
+
+    def on_participant(self, callback) -> None:
+        self._participant_callbacks.append(callback)
 
     async def request_frame(self, _signal: FrameSignal) -> FrameData:
         return self._frame
@@ -65,6 +75,10 @@ class _FrameEndpoint:
     async def send(self, signal: FrameSignal) -> None:
         for callback in self._callbacks:
             await callback(signal)
+
+    async def send_participant(self, event: ParticipantEvent) -> None:
+        for callback in self._participant_callbacks:
+            await callback(event)
 
 
 def _recording(root: Path, participant_id: str) -> None:
@@ -218,6 +232,52 @@ async def test_live_frame_source_stays_with_the_calling_process() -> None:
 
     assert source.participants() == ["live-user"]
     assert await source.get("live-user") == frame
+
+
+@pytest.mark.asyncio
+async def test_live_frame_source_releases_departed_participants() -> None:
+    now_us = time.time_ns() // 1_000
+    frame = FrameData(
+        seq=1,
+        pts_us=now_us - 10_000_000,
+        width=1,
+        height=1,
+        fmt=PixelFormat.RGB24,
+        data=b"\x00\x00\x00",
+        participant_id="departed-user",
+        track_id="camera",
+    )
+    endpoint = _FrameEndpoint(frame)
+    source = LiveFrameSource(endpoint)
+    await endpoint.send(
+        FrameSignal(
+            slot=0,
+            seq=1,
+            pts_us=frame.pts_us,
+            width=1,
+            height=1,
+            fmt=PixelFormat.RGB24,
+            data_sz=3,
+            participant_id="departed-user",
+            track_id="camera",
+        )
+    )
+    waiter = asyncio.create_task(source.get("departed-user"))
+    await asyncio.sleep(0)
+
+    assert source._latest
+    assert "departed-user" in source._events
+
+    await endpoint.send_participant(
+        ParticipantEvent(participant_id="departed-user", joined=False, pts_us=now_us)
+    )
+
+    assert source._latest == {}
+    assert source._events == {}
+
+    waiter.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await waiter
 
 
 def test_live_png_export_converts_nv12_planes() -> None:
