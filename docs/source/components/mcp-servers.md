@@ -230,7 +230,8 @@ disk):
   recorded history at `reference_time_us - second_ago` whole seconds.
   `reference_time_us` is required for recorded history and is a Unix-epoch
   microsecond timestamp. Returns a PNG path.
-- `list_recorded_participants()` — identities with at least one chunk on disk.
+- `list_recorded_participants()` — identities with at least one chunk on disk,
+  or an `{ "error": "..." }` object when the recorded-video service is unavailable.
 - `get_video_stats(participant_id)` — `num_chunks`, `total_bytes`,
   `avg_chunk_bytes`, `earliest_us`, `latest_us`.
 - `query_video(participant_id, start_us, end_us)` — concatenate the H.264 chunks
@@ -265,7 +266,7 @@ port:           8210
 service_endpoint: tcp://127.0.0.1:8310
 hub_pub:        ipc:///tmp/xr_hub_pub
 hub_push:       ipc:///tmp/xr_hub_in
-out_dir:        /tmp/xr_video_queries
+out_dir:        /tmp/xr_video_queries  # live PNG exports only; the service owns recorded outputs
 ```
 
 ## vlm-mcp

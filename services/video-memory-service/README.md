@@ -35,5 +35,6 @@ gpu_id: 0
 ```
 
 `recordings_dir` must match XR Media Hub's `video_recording.out_dir`. Omit it
-only when running the service for a compatibility health check; all recorded
-operations then return `recording_disabled`.
+only when running the service for a compatibility health check.
+`list_recorded_participants` then returns an empty list; the remaining recorded
+operations return `recording_disabled`.

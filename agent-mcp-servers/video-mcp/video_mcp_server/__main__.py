@@ -107,13 +107,13 @@ def build_mcp(
         return mcp
 
     @mcp.tool()
-    async def list_recorded_participants() -> list[str]:
-        """Return participants with recorded video chunks."""
+    async def list_recorded_participants() -> list[str] | dict[str, str]:
+        """Return recorded participants or an error when the service is unavailable."""
         try:
             return (await client.list_recorded_participants()).participants
         except RPCError as error:
             logger.warning("video-mcp recorded participant discovery failed: {}", error)
-            return []
+            return _error(error)
 
     @mcp.tool()
     async def get_video_stats(participant_id: str) -> dict:

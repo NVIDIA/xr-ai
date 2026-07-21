@@ -168,13 +168,13 @@ async def test_video_mcp_preserves_conditional_tool_sets() -> None:
 
 
 @pytest.mark.asyncio
-async def test_video_mcp_recorded_discovery_stays_a_list_when_service_fails() -> None:
+async def test_video_mcp_recorded_discovery_reports_service_failures() -> None:
     mcp = build_mcp(_UnavailableRecordedClient(), _LiveFrames(), recording_enabled=True)
 
     async with McpClient(mcp) as client:
         result = await client.call_tool("list_recorded_participants", {})
 
-    assert result.data == []
+    assert result.data == {"error": "video service unavailable"}
 
 
 @pytest.mark.asyncio
