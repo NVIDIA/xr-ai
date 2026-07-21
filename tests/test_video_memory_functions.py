@@ -102,9 +102,14 @@ async def _running_server(endpoint: str, dispatch):
 
 def test_chunk_store_preserves_identities_and_windows(tmp_path: Path) -> None:
     _recording(tmp_path, "user/name")
+    (tmp_path / "safe-user" / "interrupted-upload.264").write_bytes(b"ignore")
     store = ChunkStore(tmp_path)
 
     assert store.participants() == ["user/name"]
+    assert [path.name for path, _metadata in store.chunks("user/name")] == [
+        "1000000.264",
+        "2000000.264",
+    ]
     assert store.stats("user/name")["total_bytes"] == len(b"firstsecond")
     assert store.query("user/name", 1_100_000, 2_100_000) == b"firstsecond"
     assert store.frame_chunk("user/name", 2_200_000)[0].name == "2000000.264"

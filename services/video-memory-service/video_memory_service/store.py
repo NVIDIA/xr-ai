@@ -80,11 +80,19 @@ class ChunkStore:
         directory = self._participant_dir(participant_id)
         if directory is None:
             return []
-        paths = sorted(
-            (self._check(path) for path in directory.glob("*.264")),
-            key=lambda path: int(path.stem),
-        )
-        return [(path, self._metadata(path)) for path in paths]
+        paths: list[tuple[Path, int]] = []
+        for path in directory.glob("*.264"):
+            checked = self._check(path)
+            try:
+                timestamp = int(checked.stem)
+            except ValueError:
+                logger.warning("Ignoring video chunk without a timestamp filename: {}", checked)
+                continue
+            paths.append((checked, timestamp))
+        return [
+            (path, self._metadata(path))
+            for path, _timestamp in sorted(paths, key=lambda item: item[1])
+        ]
 
     def stats(self, participant_id: str) -> dict:
         chunks = self.chunks(participant_id)
