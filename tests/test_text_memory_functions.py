@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import pytest
 from fastmcp import Client as McpClient
@@ -13,6 +14,7 @@ from nat.builder.workflow_builder import WorkflowBuilder
 from transcript_mcp_server.__main__ import build_mcp
 from xr_ai_nat.adapters.mcp import create_mcp_server
 from xr_ai_nat.functions.text_memory import TextMemoryError, TextMemoryFunctionsConfig
+from xr_ai_nat.functions.text_memory._store import TextMemoryStore
 
 
 @asynccontextmanager
@@ -132,6 +134,18 @@ async def test_text_memory_disambiguates_sanitized_source_names(tmp_path) -> Non
     assert [segment.text for segment in question] == ["question"]
     assert (tmp_path / "room_a.identity").read_text() == "room/a"
     assert (tmp_path / "room_a_2.identity").read_text() == "room?a"
+
+
+def test_text_memory_store_does_not_follow_identity_symlinks(tmp_path: Path) -> None:
+    root = tmp_path / "transcripts"
+    outside = tmp_path / "outside.identity"
+    outside.write_text("malicious", encoding="utf-8")
+    store = TextMemoryStore(root)
+    (root / "malicious.jsonl").write_text("", encoding="utf-8")
+    (root / "malicious.identity").symlink_to(outside)
+
+    with pytest.raises(ValueError, match="escapes text-memory directory"):
+        store.query("malicious", 0, 1)
 
 
 async def test_mcp_adapter_rejects_ambiguous_or_unknown_names(tmp_path) -> None:

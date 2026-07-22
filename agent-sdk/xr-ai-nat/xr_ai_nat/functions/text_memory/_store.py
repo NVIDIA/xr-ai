@@ -23,9 +23,9 @@ class TextMemoryStore:
     """Persistent timestamped text keyed by an arbitrary source identifier."""
 
     def __init__(self, directory: str | Path) -> None:
-        self.directory = Path(directory)
+        self.directory = Path(directory).resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
-        self._root = self.directory.resolve()
+        self._root = self.directory
         self._lock = Lock()
 
     def _check(self, path: Path) -> Path:
@@ -39,29 +39,30 @@ class TextMemoryStore:
         suffix = 1
         while True:
             stem = safe if suffix == 1 else f"{safe}_{suffix}"
-            identity = self.directory / f"{stem}.identity"
-            data = self.directory / f"{stem}.jsonl"
+            identity = self._check(self.directory / f"{stem}.identity")
+            data = self._check(self.directory / f"{stem}.jsonl")
             if not identity.exists() and not data.exists():
                 identity.write_text(source_id, encoding="utf-8")
-                return self._check(data)
+                return data
             if identity.exists() and identity.read_text(encoding="utf-8") == source_id:
-                return self._check(data)
+                return data
             if not identity.exists() and data.exists() and source_id == safe and suffix == 1:
                 identity.write_text(source_id, encoding="utf-8")
-                return self._check(data)
+                return data
             suffix += 1
 
     def _resolve_existing(self, source_id: str) -> Path | None:
         safe = _safe_name(source_id)
-        canonical_data = self.directory / f"{safe}.jsonl"
-        canonical_identity = self.directory / f"{safe}.identity"
+        canonical_data = self._check(self.directory / f"{safe}.jsonl")
+        canonical_identity = self._check(self.directory / f"{safe}.identity")
         if canonical_data.exists():
             if canonical_identity.exists():
                 if canonical_identity.read_text(encoding="utf-8").strip() == source_id.strip():
-                    return self._check(canonical_data)
+                    return canonical_data
             elif source_id == safe:
-                return self._check(canonical_data)
+                return canonical_data
         for identity in sorted(self.directory.glob("*.identity")):
+            identity = self._check(identity)
             if identity.read_text(encoding="utf-8").strip() == source_id.strip():
                 data = self._check(identity.with_suffix(".jsonl"))
                 return data if data.exists() else None
@@ -100,9 +101,11 @@ class TextMemoryStore:
             sources: list[str] = []
             identified: set[str] = set()
             for identity in sorted(self.directory.glob("*.identity")):
+                identity = self._check(identity)
                 sources.append(identity.read_text(encoding="utf-8"))
                 identified.add(identity.stem)
             for data in sorted(self.directory.glob("*.jsonl")):
+                data = self._check(data)
                 if data.stem not in identified:
                     sources.append(data.stem)
         return sources
