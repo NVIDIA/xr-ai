@@ -20,7 +20,7 @@ agent can reason coarsely while receiving the precise selected timestamp.
 
 ### 2026-07-20 — Simple VLM invokes native live vision
 
-`simple-vlm-example` now builds `LiveVisionFunctionConfig` with a NAT
+`simple-vlm-example` now builds `StreamingVisionConfig` with a NAT
 `WorkflowBuilder` and adapts that function to its existing Pipecat voice
 pipeline. Live-frame tracking, conversion, and VLM streaming therefore have a
 native invocation boundary while voice behavior and model deployment profiles
