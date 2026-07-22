@@ -1,15 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Local-only tests for the sample scene and render MCP compatibility adapter.
+"""CPU-only tests for the sample scene and render MCP compatibility adapter.
 
 LOVR (the OpenXR rendering app) is stubbed — the goal is to verify the scene
 process's ZMQ PUSH wire format, in-memory state, the FastMCP adapter surface,
 config validation, and the lifecycle bookkeeping that keeps the LOVR watch
-task from leaking. No real OpenXR / Vulkan is exercised.
-
-Marked ``gpu`` because the suite is local-development-only: it spins up
-ephemeral ipc:// sockets in /tmp and is not part of the CI matrix.
+task from leaking. No real OpenXR / Vulkan is exercised; the suite only uses
+ephemeral ipc:// sockets and a stubbed LOVR process.
 """
 from __future__ import annotations
 
@@ -34,8 +32,6 @@ from xr_render_scene.engine import (
     _validate_scene_socket,
 )
 from xr_render_scene.service import SceneService
-
-pytestmark = pytest.mark.gpu
 
 # Per-class asyncio marker so the synchronous helper tests below don't trip
 # pytest-asyncio's "marked but not async" warning. asyncio_mode = "auto" also

@@ -92,7 +92,8 @@ class _BlockingStartDispatcher(_MemoryDispatcher):
 @pytest.mark.asyncio
 async def test_native_scene_groups_share_the_typed_scene_service() -> None:
     endpoint = f"ipc:///tmp/scene-functions-{uuid.uuid4().hex}"
-    server = RPCServer(endpoint, SceneService(_MemoryDispatcher()).dispatch)
+    service = SceneService(_MemoryDispatcher())
+    server = RPCServer(endpoint, service.dispatch)
     task = asyncio.create_task(server.serve())
     await asyncio.sleep(0.02)
     try:
@@ -117,6 +118,7 @@ async def test_native_scene_groups_share_the_typed_scene_service() -> None:
             objects = await (await builder.get_function_group("objects")).get_all_functions()
             updates = await (await builder.get_function_group("updates")).get_all_functions()
             state = await (await builder.get_function_group("state")).get_all_functions()
+            control = await (await builder.get_function_group("control")).get_all_functions()
 
             created = await objects["objects__add_primitive"].ainvoke(
                 {"prim_type": "sphere", "r": 1.0, "g": 0.0, "b": 0.0}
@@ -125,10 +127,15 @@ async def test_native_scene_groups_share_the_typed_scene_service() -> None:
                 {"obj_id": created.id, "x": 0.5}
             )
             snapshot = await state["state__get_scene_state"].ainvoke({})
+            health = await control["control__get_health"].ainvoke({})
+            starting = await control["control__start_xr"].ainvoke({})
 
         assert snapshot.objects[0].id == created.id
         assert snapshot.objects[0].position.x == 0.5
+        assert health.lovr_started is False
+        assert starting.status == "starting"
     finally:
+        await service.close()
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
