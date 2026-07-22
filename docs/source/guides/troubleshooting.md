@@ -56,7 +56,7 @@ export LOVR_BIN=~/lovr/build/bin/lovr
 
 `export LOVR_BIN=…` only lasts for the current shell. To make it permanent,
 append the line to `~/.bashrc`, or set `lovr_bin: ~/lovr/build/bin/lovr` in
-`agent-mcp-servers/render-mcp/render_mcp.yaml` instead.
+`agent-samples/xr-render-demo/scene/scene_service.yaml` instead.
 
 If `git clone` was run without `--recursive`, run
 `git submodule update --init --recursive` inside `~/lovr` before `cmake ..`.

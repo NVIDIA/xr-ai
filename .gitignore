@@ -42,7 +42,8 @@ downloads/
 eggs/
 .eggs/
 lib/
-!agent-mcp-servers/render-mcp/xr_app/lib/
+!agent-samples/xr-render-demo/scene/lovr/lib/
+!agent-samples/xr-render-demo/scene/lovr/lib/**
 lib64/
 parts/
 sdist/

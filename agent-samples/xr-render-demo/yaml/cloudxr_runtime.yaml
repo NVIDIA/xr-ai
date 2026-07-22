@@ -23,8 +23,8 @@ cloudxr_env:
 
 # Physical GPU (nvidia-smi index) the CloudXR compositor pins to. Translated
 # to PCI bus selectors for Vulkan, CUDA, and Mesa, set on this process's
-# environment, and appended to cloudxr.env so render-mcp picks them up when
-# it sources the file (and LOVR inherits from render-mcp's spawn env).
+# environment, and appended to cloudxr.env so the scene process picks them up
+# when it sources the file (and LOVR inherits from the scene spawn env).
 gpu_index: 0
 
 # ── Network ports (CloudXR owns these — do not conflict with LiveKit) ─────────
