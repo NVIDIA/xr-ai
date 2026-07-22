@@ -302,8 +302,12 @@ jobs:
     # timeout-minutes hit concludes as `cancelled`, not `failure`, so
     # failure() alone would silently skip the alert on the most important
     # case. Skip on PRs — those are pre-merge dry-runs, not the nightly.
+    #
+    # always() is required here: without it GitHub skips this job entirely
+    # when a needs job fails, before ever evaluating the if expression.
     if: >-
-      (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+      always()
+      && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
       && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
