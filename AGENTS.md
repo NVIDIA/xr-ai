@@ -150,7 +150,7 @@ capability. `XRTrackingFunctionsConfig` exposes the current user frame through
 the typed OpenXR service without routing native agents through MCP.
 `VideoMemoryFunctionsConfig` exposes recorded-video discovery, queries, and
 frame extraction through a typed service while keeping MCP optional; callers
-obtain current frames through the hub client. `LiveVisionFunctionConfig` composes
+obtain current frames through the hub client. `StreamingVisionConfig` composes
 raw frame acquisition with VLM streaming behind one native function for voice
 workflows.
 

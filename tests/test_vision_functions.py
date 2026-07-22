@@ -10,13 +10,15 @@ import time
 from types import SimpleNamespace
 
 import httpx
+import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
 from PIL import Image
+from pydantic import ValidationError
 from xr_ai_agent import FrameData, FrameSignal, PixelFormat
 from xr_ai_nat.functions.vision import (
-    LiveVisionFunctionConfig,
-    LiveVisionRequest,
+    StreamingVisionConfig,
     VisionFunctionsConfig,
+    VisionRequest,
 )
 from xr_ai_nat.functions.vision._images import load_jpeg_data_url
 
@@ -43,6 +45,9 @@ class _Endpoint:
 
     def on_frame(self, callback) -> None:
         self.frame_callback = callback
+
+    def on_participant(self, _callback) -> None:
+        pass
 
     async def request_frame(self, signal: FrameSignal) -> FrameData:
         return FrameData(
@@ -148,17 +153,17 @@ async def test_vision_function_reports_http_error(tmp_path) -> None:
     assert answer == "ask_image: vlm-server request failed: backend unavailable"
 
 
-async def test_live_vision_function_streams_from_current_participant_frame() -> None:
+async def test_streaming_vision_function_uses_current_participant_frame() -> None:
     endpoint = _Endpoint()
     vlm = _Vlm("a blue square")
-    config = LiveVisionFunctionConfig(
+    config = StreamingVisionConfig(
         endpoint=endpoint,
         vlm=vlm,
         system_prompt="Answer briefly.",
     )
 
     async with WorkflowBuilder() as builder:
-        function = await builder.add_function("live_vision", config)
+        function = await builder.add_function("perception", config)
         assert endpoint.frame_callback is not None
         await endpoint.frame_callback(
             FrameSignal(
@@ -175,10 +180,28 @@ async def test_live_vision_function_streams_from_current_participant_frame() -> 
         )
         chunks = [
             chunk.text
-            async for chunk in function.astream(LiveVisionRequest(participant_id="alice", question="What is shown?"))
+            async for chunk in function.astream(VisionRequest(participant_id="alice", query="What is shown?"))
         ]
+        answer = await function.ainvoke(
+            VisionRequest(participant_id="alice", query="What is shown?")
+        )
 
     assert chunks == ["a ", "blue ", "square"]
-    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
+    assert answer.text == "a blue square"
+    assert endpoint.statuses == [
+        ("processing", "alice"),
+        ("idle", "alice"),
+        ("processing", "alice"),
+        ("idle", "alice"),
+    ]
     assert vlm.calls[0][1:] == ("What is shown?", "Answer briefly.")
     assert vlm.calls[0][0].startswith("data:image/jpeg;base64,")
+
+
+def test_streaming_vision_request_rejects_unknown_arguments() -> None:
+    with pytest.raises(ValidationError):
+        VisionRequest(
+            participant_id="alice",
+            query="What is shown?",
+            unsupported=True,
+        )

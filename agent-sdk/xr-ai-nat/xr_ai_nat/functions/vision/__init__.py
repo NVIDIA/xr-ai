@@ -4,17 +4,17 @@
 """Public native vision function group."""
 
 from .functions import (
-    LiveVisionChunk,
-    LiveVisionFunctionConfig,
-    LiveVisionRequest,
-    LiveVisionResult,
+    StreamingVisionConfig,
+    VisionChunk,
     VisionFunctionsConfig,
+    VisionRequest,
+    VisionResult,
 )
 
 __all__ = [
-    "LiveVisionChunk",
-    "LiveVisionFunctionConfig",
-    "LiveVisionRequest",
-    "LiveVisionResult",
+    "StreamingVisionConfig",
+    "VisionChunk",
     "VisionFunctionsConfig",
+    "VisionRequest",
+    "VisionResult",
 ]

@@ -19,7 +19,7 @@ from xr_ai_agent import DataMessage
 from nat.builder.function import Function
 from xr_ai_pipecat import BrainProcessor, GatedQueryFrame
 from xr_ai_pipecat.transport import XRMediaHubTransport
-from xr_ai_nat.functions.vision import LiveVisionRequest
+from xr_ai_nat.functions.vision import VisionRequest
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -80,7 +80,7 @@ class SimpleVlmBrain(BrainProcessor):
         del fresh_match
 
         async def tokens() -> AsyncIterator[str]:
-            request = LiveVisionRequest(participant_id=pid, question=text)
+            request = VisionRequest(participant_id=pid, query=text)
             async for chunk in self._vision.astream(request):
                 yield chunk.text
 

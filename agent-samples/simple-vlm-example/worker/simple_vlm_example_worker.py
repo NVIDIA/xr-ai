@@ -20,9 +20,8 @@ ack) is owned by :class:`xr_ai_voicegate.VoiceGate` inside the
 ``VoiceGateProcessor``. Wake-word config moves from this worker's YAML
 to ``yaml/voice_gate.yaml`` so every pipecat sample shares the schema.
 
-Text data channel + frame tracking + camera-on-demand are owned by
-``SimpleVlmBrain`` and continue to use the ``ProcessorEndpoint`` API
-directly.
+``SimpleVlmBrain`` owns the text data channel. The native vision function owns
+frame tracking and camera-on-demand through the shared ``LiveFrameSource``.
 
 Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
 ---------------------------------------------------------------------
@@ -51,7 +50,7 @@ from nat.builder.workflow_builder import WorkflowBuilder
 from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_nat.functions.vision import LiveVisionFunctionConfig
+from xr_ai_nat.functions.vision import StreamingVisionConfig
 from xr_ai_pipecat import VadConfig, make_voice_pipeline
 from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
@@ -97,7 +96,7 @@ async def main(
     )
 
     transport = XRMediaHubTransport()
-    vision_config = LiveVisionFunctionConfig(
+    vision_config = StreamingVisionConfig(
         endpoint=transport.endpoint,
         vlm=vlm,
         system_prompt=cfg.get("system_prompt", DEFAULT_SYSTEM_PROMPT),
@@ -105,7 +104,7 @@ async def main(
         frame_timeout_s=float(cfg.get("frame_timeout_s", 5.0)),
     )
     async with WorkflowBuilder() as builder:
-        vision = await builder.add_function("live_vision", vision_config)
+        vision = await builder.add_function("perception", vision_config)
         brain = SimpleVlmBrain(
             transport=transport,
             vision=vision,

@@ -20,32 +20,34 @@ from nat.plugin_api import (
     register_function_group,
 )
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+from xr_ai_agent import FrameUnavailable, LiveFrameSource
 
-from ._live import LiveFrameSource, LiveFrameUnavailable
+from .._models import _StrictRequest
+from ._images import frame_jpeg_data_url
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class LiveVisionRequest(BaseModel):
+class VisionRequest(_StrictRequest):
     """Request a VLM answer from one participant's current camera frame."""
 
     participant_id: str = Field(description="Participant whose camera frame should be inspected.")
-    question: str = Field(min_length=1, description="Question to answer from the camera frame.")
+    query: str = Field(min_length=1, description="Question to answer from the camera frame.")
 
 
-class LiveVisionResult(BaseModel):
+class VisionResult(BaseModel):
     """Complete answer from a live-camera vision invocation."""
 
     text: str
 
 
-class LiveVisionChunk(BaseModel):
+class VisionChunk(BaseModel):
     """One streamed text fragment from a live-camera vision invocation."""
 
     text: str
 
 
-class LiveVisionFunctionConfig(FunctionBaseConfig, name="xr_live_vision"):
+class StreamingVisionConfig(FunctionBaseConfig, name="xr_streaming_vision"):
     """Configure one native streaming function over a live XR camera."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -64,8 +66,13 @@ class LiveVisionFunctionConfig(FunctionBaseConfig, name="xr_live_vision"):
             self._frames.release(participant_id)
 
 
-@register_function(config_type=LiveVisionFunctionConfig)
-async def live_vision_function(config: LiveVisionFunctionConfig, _builder: Builder):
+async def _current_image(frames: LiveFrameSource, participant_id: str) -> str:
+    frame = await frames.get(participant_id)
+    return await asyncio.to_thread(frame_jpeg_data_url, frame)
+
+
+@register_function(config_type=StreamingVisionConfig)
+async def streaming_vision(config: StreamingVisionConfig, _builder: Builder):
     frames = LiveFrameSource(
         config.endpoint,
         max_age_s=config.frame_max_age_s,
@@ -73,42 +80,45 @@ async def live_vision_function(config: LiveVisionFunctionConfig, _builder: Build
     )
     config._frames = frames
 
-    async def answer(request: LiveVisionRequest) -> LiveVisionResult:
+    async def answer(request: VisionRequest) -> VisionResult:
+        await config.endpoint.set_status("processing", request.participant_id)
         try:
-            image_url = await frames.image_url(request.participant_id)
+            image_url = await _current_image(frames, request.participant_id)
             response = await config.vlm.ask_image(
                 image_url,
-                request.question,
+                request.query,
                 system_prompt=config.system_prompt,
             )
             text = (response.content or "").strip()
             if not text:
                 text = "I couldn't make out anything in the view."
-        except LiveFrameUnavailable as exc:
+        except FrameUnavailable as exc:
             text = str(exc)
         except Exception:
             _LOGGER.exception("Live VLM request failed")
             text = "VLM server unavailable — please retry."
-        return LiveVisionResult(text=text)
+        finally:
+            await config.endpoint.set_status("idle", request.participant_id)
+        return VisionResult(text=text)
 
-    async def stream(request: LiveVisionRequest) -> AsyncGenerator[LiveVisionChunk, None]:
+    async def stream(request: VisionRequest) -> AsyncGenerator[VisionChunk, None]:
         try:
-            image_url = await frames.image_url(request.participant_id)
-        except LiveFrameUnavailable as exc:
-            yield LiveVisionChunk(text=str(exc))
+            image_url = await _current_image(frames, request.participant_id)
+        except FrameUnavailable as exc:
+            yield VisionChunk(text=str(exc))
             return
 
         await config.endpoint.set_status("processing", request.participant_id)
         try:
             async for token in config.vlm.stream(
                 image_url,
-                request.question,
+                request.query,
                 system_prompt=config.system_prompt,
             ):
-                yield LiveVisionChunk(text=token)
+                yield VisionChunk(text=token)
         except Exception:
             _LOGGER.exception("Live VLM stream failed")
-            yield LiveVisionChunk(text="VLM server unavailable — please retry.")
+            yield VisionChunk(text="VLM server unavailable — please retry.")
         finally:
             await config.endpoint.set_status("idle", request.participant_id)
 
@@ -195,9 +205,9 @@ async def vision_functions(config: VisionFunctionsConfig, _builder: Builder):
 
 
 __all__ = [
-    "LiveVisionChunk",
-    "LiveVisionFunctionConfig",
-    "LiveVisionRequest",
-    "LiveVisionResult",
+    "StreamingVisionConfig",
+    "VisionChunk",
     "VisionFunctionsConfig",
+    "VisionRequest",
+    "VisionResult",
 ]
