@@ -20,9 +20,8 @@ ack) is owned by :class:`xr_ai_voicegate.VoiceGate` inside the
 ``VoiceGateProcessor``. Wake-word config moves from this worker's YAML
 to ``yaml/voice_gate.yaml`` so every pipecat sample shares the schema.
 
-Text data channel + frame tracking + camera-on-demand are owned by
-``SimpleVlmBrain`` and continue to use the ``ProcessorEndpoint`` API
-directly.
+``SimpleVlmBrain`` owns the text data channel. The native vision function owns
+frame tracking and camera-on-demand through the shared ``LiveFrameSource``.
 
 Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
 ---------------------------------------------------------------------
@@ -37,6 +36,7 @@ Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
     silence_duration:           0.4   # seconds of silence ending an utterance
     min_speech:                 0.1   # min seconds of speech before STT fires
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,9 +46,11 @@ import signal
 
 import yaml
 from loguru import logger
+from nat.builder.workflow_builder import WorkflowBuilder
 from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
+from xr_ai_nat.functions.vision import StreamingVisionConfig
 from xr_ai_pipecat import VadConfig, make_voice_pipeline
 from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
@@ -77,10 +79,7 @@ async def main(
     # orchestrator reads the same key to skip the local vlm-server. Otherwise
     # `models_yaml` picks the local config (default models.yaml).
     backend = str(cfg.get("model_backend", "local")).lower()
-    models_yaml_raw = (
-        "models.nim.yaml" if backend == "nim"
-        else cfg.get("models_yaml", "models.yaml")
-    )
+    models_yaml_raw = "models.nim.yaml" if backend == "nim" else cfg.get("models_yaml", "models.yaml")
     models_cfg = load_models_config(_resolve(config_path, models_yaml_raw))
 
     stt = make_stt(models_cfg, "stt")
@@ -97,68 +96,67 @@ async def main(
     )
 
     transport = XRMediaHubTransport()
-    brain = SimpleVlmBrain(
-        transport           = transport,
-        vlm                 = vlm,
-        default_prompt      = cfg.get("default_prompt", "Describe what you see."),
-        system_prompt       = cfg.get("system_prompt",  DEFAULT_SYSTEM_PROMPT),
-        frame_max_age_s = float(cfg.get("frame_max_age_s", 2.0)),
-        frame_timeout_s = float(cfg.get("frame_timeout_s", 5.0)),
+    vision_config = StreamingVisionConfig(
+        endpoint=transport.endpoint,
+        vlm=vlm,
+        system_prompt=cfg.get("system_prompt", DEFAULT_SYSTEM_PROMPT),
+        frame_max_age_s=float(cfg.get("frame_max_age_s", 2.0)),
+        frame_timeout_s=float(cfg.get("frame_timeout_s", 5.0)),
     )
+    async with WorkflowBuilder() as builder:
+        vision = await builder.add_function("perception", vision_config)
+        brain = SimpleVlmBrain(
+            transport=transport,
+            vision=vision,
+            release_vision=vision_config.release,
+            default_prompt=cfg.get("default_prompt", "Describe what you see."),
+        )
 
-    # make_voice_pipeline returns (pipeline, task); only the task is run.
-    _, task = make_voice_pipeline(
-        transport      = transport,
-        stt            = stt,
-        tts            = tts,
-        brain          = brain,
-        vad_cfg        = VadConfig(
-            silence_duration = float(cfg.get("silence_duration", 0.4)),
-            min_speech       = float(cfg.get("min_speech",       0.1)),
-            silero_threshold = float(cfg.get("silero_threshold", 0.5)),
-        ),
-        voice_gate_cfg = voice_gate_cfg,
-        text_topic     = "vlm.response",
-        # Idle-timeout auto-cancel. Disabled by default (0 / unset → None) so a
-        # quiet session stays connected; set a positive seconds value in the
-        # worker YAML to opt in. See xr_ai_pipecat.make_voice_pipeline.
-        idle_timeout_secs = (float(cfg["idle_timeout_secs"])
-                             if cfg.get("idle_timeout_secs") else None),
-    )
+        # make_voice_pipeline returns (pipeline, task); only the task is run.
+        _, task = make_voice_pipeline(
+            transport=transport,
+            stt=stt,
+            tts=tts,
+            brain=brain,
+            vad_cfg=VadConfig(
+                silence_duration=float(cfg.get("silence_duration", 0.4)),
+                min_speech=float(cfg.get("min_speech", 0.1)),
+                silero_threshold=float(cfg.get("silero_threshold", 0.5)),
+            ),
+            voice_gate_cfg=voice_gate_cfg,
+            text_topic="vlm.response",
+            idle_timeout_secs=(float(cfg["idle_timeout_secs"]) if cfg.get("idle_timeout_secs") else None),
+        )
 
-    loop = asyncio.get_running_loop()
-    cancel_requested = False
+        loop = asyncio.get_running_loop()
+        cancel_requested = False
 
-    def _request_cancel() -> None:
-        # PipelineTask.cancel is a coroutine; add_signal_handler needs a
-        # sync callable. Guard against a second signal (e.g. double
-        # ctrl-c) spawning a redundant cancel task while the first is
-        # still draining the pipeline.
-        nonlocal cancel_requested
-        if cancel_requested:
-            return
-        cancel_requested = True
-        asyncio.create_task(task.cancel())
+        def _request_cancel() -> None:
+            nonlocal cancel_requested
+            if cancel_requested:
+                return
+            cancel_requested = True
+            asyncio.create_task(task.cancel())
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, _request_cancel)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, _request_cancel)
 
-    logger.info("simple-vlm-example starting pipecat pipeline")
-    try:
-        await PipelineRunner().run(task)
-    finally:
-        transport.shutdown()
-        for svc in (stt, vlm, tts):
-            try:
-                await svc.close()  # type: ignore[attr-defined]
-            except Exception:
-                logger.opt(exception=True).warning("service close failed")
+        logger.info("simple-vlm-example starting pipecat pipeline")
+        try:
+            await PipelineRunner().run(task)
+        finally:
+            transport.shutdown()
+            for svc in (stt, vlm, tts):
+                try:
+                    await svc.close()  # type: ignore[attr-defined]
+                except Exception:
+                    logger.opt(exception=True).warning("service close failed")
     logger.info("simple-vlm-example stopped")
 
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config",     type=pathlib.Path, default=None)
+    p.add_argument("--config", type=pathlib.Path, default=None)
     p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
 

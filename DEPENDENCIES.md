@@ -111,7 +111,7 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── pydantic >=2.10
     └── [mcp] fastmcp >=3.4,<4
     └── [services] msgpack >=1.0, pyzmq >=27.0
-    └── [vision] httpx >=0.27, Pillow >=10.0, xr-ai-models [editable: ../xr-ai-models]
+    └── [vision] httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-agent [editable: ..], xr-ai-models [editable: ../xr-ai-models]
     Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
     performs deterministic spatial calculations without OpenXR, model, or MCP
@@ -122,7 +122,8 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     is no package-wide registration aggregator. The spatial pure math core is
     also used by the transitional Vec and OpenXR MCP compatibility surfaces.
     ``xr_vision`` normalizes an acquired local image and calls an injected
-    xr-ai-models VLM; it does not acquire frames itself. ``xr_tracking`` calls
+    xr-ai-models VLM. Its separate live-vision function composes current-frame
+    acquisition with complete or streaming VLM invocation. ``xr_tracking`` calls
     the typed OpenXR service and returns a complete user coordinate frame.
     ``xr_video_memory`` calls the typed video-memory service for recorded-video
     discovery, queries, and frame extraction. Live frames stay with the hub
@@ -484,13 +485,13 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-capabilities [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (VisionModule + pixels now come from xr-ai-capabilities, which pulls numpy + Pillow; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision] [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (live-frame acquisition and streaming VLM invocation come from the native NAT vision function; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
 
 Worker runs on the unified pipecat voice pipeline assembled by
 `xr_ai_pipecat.make_voice_pipeline`. `SimpleVlmBrain` (a
-`BrainProcessor`) owns the camera-on-demand state machine, frame
-tracking, the VLM streaming call, and the data-channel side path
-("ping" + ad-hoc text); voice gate (magic phrases, follow-up grace,
+`BrainProcessor`) adapts the native NAT live-vision function to the voice
+pipeline and owns only the data-channel side path ("ping" + ad-hoc text);
+voice gate (magic phrases, follow-up grace,
 listening chime, stop ack) lives in `xr_ai_voicegate` inside the
 `VoiceGateProcessor`. VAD/STT and sentence-batched TTS are also
 provided by the pipeline so the worker only configures the knobs.

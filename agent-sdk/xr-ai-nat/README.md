@@ -69,6 +69,11 @@ function obtains the image first, then passes its exact returned path to
 function performs image I/O off the event loop, normalizes the input to JPEG,
 and makes the model request through `xr-ai-models`.
 
+For live voice workflows, `StreamingVisionConfig` accepts a hub
+`ProcessorEndpoint` and exposes one native function with complete and streaming
+invocation modes. It owns fresh-frame acquisition and VLM invocation; Pipecat
+continues to own audio framing, interruption, and TTS.
+
 ## XR tracking
 
 Install `xr-ai-nat[services]` and configure `xr_tracking` with the private

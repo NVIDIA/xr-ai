@@ -18,6 +18,14 @@ until the compatibility adapter is retired. Recorded-frame requests use an
 absolute Unix-microsecond reference timestamp plus a whole-second offset so an
 agent can reason coarsely while receiving the precise selected timestamp.
 
+### 2026-07-20 — Simple VLM invokes native live vision
+
+`simple-vlm-example` now builds `StreamingVisionConfig` with a NAT
+`WorkflowBuilder` and adapts that function to its existing Pipecat voice
+pipeline. Live-frame tracking, conversion, and VLM streaming therefore have a
+native invocation boundary while voice behavior and model deployment profiles
+remain unchanged.
+
 ### 2026-07-20 — XR render scene and LOVR stay sample-local
 
 The XR render demo owns its scene state, typed native function groups, LOVR
