@@ -95,6 +95,12 @@ class SimpleVlmBrain(BrainProcessor):
         # one lands immediately (library default is queue-behind).
         await self.push_frame(InterruptionFrame())
 
+    async def on_participant_joined(self, pid: str) -> None:
+        # Worker is up and all AI services are healthy — tell this participant.
+        # Fires for newly-arrived clients AND for clients already in the room
+        # when the worker starts (via ProcessorEndpoint roster replay).
+        await self._transport.endpoint.set_status("ready", participant_id=pid)
+
     async def on_participant_left(self, pid: str) -> None:
         self._vision.release(pid)
 
