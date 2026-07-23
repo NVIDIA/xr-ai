@@ -331,6 +331,7 @@ jobs:
         # run links until someone fixes it and closes it.
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           COMMIT_SHA: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
