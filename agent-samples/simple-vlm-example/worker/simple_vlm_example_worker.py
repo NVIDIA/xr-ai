@@ -97,6 +97,7 @@ async def main(
     )
 
     transport = XRMediaHubTransport()
+    await transport.endpoint.mark_ready()
     brain = SimpleVlmBrain(
         transport           = transport,
         vlm                 = vlm,

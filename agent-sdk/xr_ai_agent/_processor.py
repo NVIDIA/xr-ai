@@ -194,7 +194,8 @@ class ProcessorEndpoint:
         # Multiple concurrent requests for the same track share one FRAME_REQUEST.
         self._pending: dict[tuple[str, str], list[asyncio.Future[FrameData]]] = {}
 
-        self._running = False
+        self._running  = False
+        self._is_ready = False
 
     # ── participant roster ────────────────────────────────────────────────────
 
@@ -329,6 +330,24 @@ class ProcessorEndpoint:
                 data=payload,
             ))
 
+    async def mark_ready(self) -> None:
+        """Mark this worker as ready to handle requests.
+
+        Sets an internal flag so that every future participant join automatically
+        receives ``{"status": "ready"}`` on the ``_agent.status`` channel.
+        Also broadcasts immediately to any participants already in
+        ``connected_participants`` (covers late callers — e.g. when the pipeline
+        is already running before ``mark_ready`` is called).
+
+        Call once after all AI services have passed health checks.  Workers that
+        call this before the pipeline starts (the common pattern) rely on the
+        ``ProcessorEndpoint`` roster replay: when ``run()`` replays
+        ``PARTICIPANT_EVENT(joined=True)`` for each pre-existing client, the
+        auto-ready hook fires for each of them.
+        """
+        self._is_ready = True
+        await self.set_status("ready")
+
     async def request_frame(self, signal: FrameSignal,
                             timeout: float = _FRAME_REQUEST_TIMEOUT) -> FrameData | None:
         """
@@ -442,6 +461,8 @@ class ProcessorEndpoint:
                 self._participants.add(msg.participant_id)
                 if self._auto_subscribe:
                     self.subscribe(msg.participant_id)
+                if self._is_ready:
+                    self._spawn(self.set_status("ready", participant_id=msg.participant_id))
             else:
                 self._participants.discard(msg.participant_id)
                 if self._auto_subscribe:
