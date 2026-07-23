@@ -171,6 +171,17 @@ jobs:
         working-directory: tests
         run: uv sync --python 3.12
 
+      - name: Pre-warm magpie TTS venv
+        # The magpie venv is not part of the main `tests/` workspace — it
+        # lives under ai-services/tts/magpie and is only synced lazily inside
+        # the test.  Pre-warm here so that (a) the ~1 GB NeMo install doesn't
+        # count against the 900 s port-open timeout inside the test, and (b)
+        # failures during install produce a named step, not a cryptic "exited
+        # with code 1" from inside the test.
+        run: |
+          set -euo pipefail
+          uv sync --directory ai-services/tts/magpie
+
       - name: Purge leftover xr-ai-vllm containers (pre)
         # Containers are named `xr-ai-vllm-*` by the vLLM launcher. On a
         # persistent self-hosted runner these can survive a previous run

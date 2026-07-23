@@ -66,8 +66,17 @@ async def _wait_for_port(port: int, *, proc: subprocess.Popen, timeout: float) -
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
         if proc.poll() is not None:
+            out = b""
+            if proc.stdout:
+                out = proc.stdout.read()
+            server_log = (
+                f"\n--- server output (last 8 KB) ---\n{out[-8192:].decode(errors='replace')}"
+                if out
+                else "\n(no server output captured)"
+            )
             raise RuntimeError(
                 f"magpie_tts_server exited early with code {proc.returncode}"
+                + server_log
             )
         if _port_open(port):
             return
@@ -111,15 +120,19 @@ async def test_magpie_tts_smoke(tmp_path: Path) -> None:
 
     port = _pick_port(_DEFAULT_PORT)
 
-    cfg_path = tmp_path / "magpie_tts_server.yaml"
-    cfg_path.write_text(yaml.safe_dump({
+    test_cfg: dict = {
         "model":       model_name,
         "device":      "auto",
         "port":        port,
         "host":        "127.0.0.1",
         "sample_rate": sample_rate,
         "model_cache": str(model_cache),
-    }))
+    }
+    if ref_cfg.get("model_revision"):
+        test_cfg["model_revision"] = ref_cfg["model_revision"]
+
+    cfg_path = tmp_path / "magpie_tts_server.yaml"
+    cfg_path.write_text(yaml.safe_dump(test_cfg))
 
     env = {**os.environ, "XR_AI_LOG_ROOT": str(tmp_path / "logs")}
 
