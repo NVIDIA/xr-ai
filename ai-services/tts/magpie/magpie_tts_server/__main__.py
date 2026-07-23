@@ -17,6 +17,8 @@ Accepts --config <path>.yaml (auto-passed by xr-ai-launcher).
 Config keys
 -----------
     model:          str   NeMo TTS model name (required)
+    model_revision: str   HuggingFace commit hash to pin (optional, HF models only).
+                          Omit to always pull HEAD.
     device:         str   "cuda" | "cpu" | "auto" (default: "auto")
     port:           int   HTTP port (default: 8104)
     host:           str   Bind address (default: "0.0.0.0")
@@ -53,11 +55,12 @@ class _TtsBackend:
     """Thread-safe lazy loader for NeMo TTS models."""
 
     def __init__(self, model_name: str, device: str, sample_rate: int,
-                 model_cache: Path) -> None:
+                 model_cache: Path, revision: str | None = None) -> None:
         self._model_name = model_name
         self._device     = device
         self._sample_rate = sample_rate
         self._cache      = model_cache
+        self._revision   = revision
         self._model      = None
         self._lock       = threading.Lock()
 
@@ -75,7 +78,30 @@ class _TtsBackend:
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
             logger.info("Loading NeMo TTS {!r} on {}…", self._model_name, device)
-            model = MagpieTTSModel.from_pretrained(self._model_name)
+            if self._revision and "/" in self._model_name:
+                # Download a pinned revision from HuggingFace directly, then
+                # restore from the cached .nemo file.  NeMo's from_pretrained()
+                # always pulls HEAD, so we bypass it when a revision is pinned.
+                import nemo
+                from pathlib import PurePosixPath
+                from huggingface_hub import hf_hub_download
+                from huggingface_hub import get_token as _get_hf_token
+
+                nemo_filename = PurePosixPath(self._model_name).name + ".nemo"
+                logger.info("Pinned HF revision {!r} — downloading {} …",
+                            self._revision, nemo_filename)
+                nemo_path = hf_hub_download(
+                    repo_id=self._model_name,
+                    filename=nemo_filename,
+                    revision=self._revision,
+                    library_name="nemo",
+                    library_version=nemo.__version__,
+                    token=_get_hf_token(),
+                )
+                logger.info("Restoring from {}", nemo_path)
+                model = MagpieTTSModel.restore_from(restore_path=nemo_path)
+            else:
+                model = MagpieTTSModel.from_pretrained(self._model_name)
             model.eval()
             if device == "cuda":
                 model = model.cuda()
@@ -115,8 +141,9 @@ def _build_app(cfg: dict, model_cache: Path):
     model_name  = cfg["model"]
     device      = cfg.get("device", "auto")
     sample_rate = int(cfg.get("sample_rate", _DEFAULT_SAMPLE_RATE))
+    revision    = cfg.get("model_revision") or None
 
-    backend = _TtsBackend(model_name, device, sample_rate, model_cache)
+    backend = _TtsBackend(model_name, device, sample_rate, model_cache, revision=revision)
 
     app = FastAPI(title="TTS Server", version="0.1.0")
 

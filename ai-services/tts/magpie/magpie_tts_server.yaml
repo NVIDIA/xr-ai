@@ -10,6 +10,13 @@
 #                                         ~1 GB VRAM
 model: nvidia/magpie_tts_multilingual_357m
 
+# Pin to a specific HuggingFace commit so we always load the revision that was
+# validated against the NeMo version in pyproject.toml.  The 2025-07 HEAD added
+# a pt-BR tokenizer that requires newer NeMo API (locale_specific_punct kwarg).
+# Remove this pin after upgrading nemo_toolkit to a version that supports the
+# new model config.
+model_revision: "34d7e40da85cabc97f92198889b65cea27bc7fd1"
+
 # Inference device: "cuda", "cpu", or "auto" (CUDA if available, else CPU).
 device: auto
 
