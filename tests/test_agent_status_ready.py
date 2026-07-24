@@ -22,7 +22,6 @@ import json
 import time
 
 import pytest
-
 from xr_ai_agent import AGENT_STATUS_TOPIC, DataMessage
 from xr_media_hub.ipc import ParticipantEvent
 
