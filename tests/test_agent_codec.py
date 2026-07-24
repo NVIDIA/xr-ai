@@ -19,6 +19,7 @@ from xr_ai_agent._types import (
     ParticipantEvent,
     PixelFormat,
     ReturnAudioFlush,
+    RosterComplete,
     RosterRequest,
 )
 
@@ -87,6 +88,10 @@ class TestTypeIdPreservation:
     def test_roster_request_type_id(self):
         msg = RosterRequest()
         assert rt_type_id(MsgType.ROSTER_REQUEST, msg) == MsgType.ROSTER_REQUEST
+
+    def test_roster_complete_type_id(self):
+        msg = RosterComplete("startup-1")
+        assert rt_type_id(MsgType.ROSTER_COMPLETE, msg) == MsgType.ROSTER_COMPLETE
 
 
 # ── payload field round-trips ──────────────────────────────────────────────────
@@ -251,10 +256,19 @@ class TestReturnAudioFlushCodec:
 
 
 class TestRosterRequestCodec:
-    def test_roundtrip_produces_instance(self):
-        orig = RosterRequest()
+    def test_roundtrip_preserves_request_id(self):
+        orig = RosterRequest("startup-1")
         out = rt(MsgType.ROSTER_REQUEST, orig)
         assert isinstance(out, RosterRequest)
+        assert out.request_id == orig.request_id
+
+
+class TestRosterCompleteCodec:
+    def test_roundtrip_preserves_request_id(self):
+        orig = RosterComplete("startup-1")
+        out = rt(MsgType.ROSTER_COMPLETE, orig)
+        assert isinstance(out, RosterComplete)
+        assert out.request_id == orig.request_id
 
 
 # ── wire format sanity ──────────────────────────────────────────────────────────
@@ -273,8 +287,7 @@ class TestWireFormat:
         assert isinstance(encode(MsgType.ROSTER_REQUEST, msg), bytes)
 
     def test_minimum_wire_length(self):
-        """Even the smallest message (RosterRequest, empty payload) must have
-        at least 1 byte for the type header."""
+        """Every encoded message includes at least its one-byte type header."""
         wire = encode(MsgType.ROSTER_REQUEST, RosterRequest())
         assert len(wire) >= 1
 

@@ -112,8 +112,10 @@ async def run_voice_pipeline(
 
     The callback is intended for a launcher-managed worker's ready file. It
     runs only after the input transport has entered the processor endpoint
-    receive loop, so it represents request readiness rather than completed
-    dependency health checks.
+    receive loop and subscribed to the initial participant roster, so it
+    represents request readiness rather than completed dependency health
+    checks. If the callback fails, the worker is cancelled and the error
+    propagates to the launcher.
     """
     runner_task = asyncio.create_task(
         PipelineRunner().run(worker),

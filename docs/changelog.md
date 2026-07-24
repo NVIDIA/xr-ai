@@ -13,8 +13,9 @@ preserved and not re-litigated.
 
 `run_voice_pipeline` releases a managed worker's ready-file callback only
 after `XRMediaHubInputTransport` has started its `ProcessorEndpoint` receive
-loop. This makes worker readiness shared agent availability rather than a
-per-client interaction state.
+loop, replayed the initial participant roster, and installed those
+subscriptions. This makes worker readiness shared agent availability rather
+than a per-client interaction state.
 
 ### 2026-07-21 — Video memory is recorded history, not live capture
 

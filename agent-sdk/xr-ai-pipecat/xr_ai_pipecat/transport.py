@@ -98,7 +98,7 @@ class XRMediaHubInputTransport(BaseInputTransport):
         await super().start(frame)
         self._started = True
         self._ep_task = asyncio.create_task(self._ep.run(), name="ep-run")
-        await self._ep.wait_until_running()
+        await self._ep.wait_until_ready()
         if self._started_event:
             self._started_event.set()
         logger.info("XRMediaHubInputTransport started")

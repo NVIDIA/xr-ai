@@ -208,7 +208,10 @@ input → VadStt → VoiceGate → brain → StreamingTts → output
 
 Run the returned worker with its transport. For launcher-managed workers, pass
 the ready-file callback so it runs only after the input transport has started
-the hub IPC receive loop:
+the hub IPC receive loop and subscribed to the initial participant roster. If
+the callback fails, the worker is cancelled and the error propagates so the
+launcher reports startup failure rather than waiting on a process that cannot
+signal readiness:
 
 ```python
 from xr_ai_pipecat import run_voice_pipeline

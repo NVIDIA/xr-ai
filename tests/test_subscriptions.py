@@ -56,6 +56,24 @@ async def test_auto_subscribe_tracks_join_and_leave(
     await teardown_clients([alice, bob])
 
 
+async def test_stop_clears_endpoint_startup_barriers(make_processor):
+    """A stopped endpoint must not report readiness from a prior run."""
+    agent = make_processor(auto_subscribe=False)
+    await agent.wait_until_ready()
+
+    agent.stop()
+    running_wait = asyncio.create_task(agent.wait_until_running())
+    ready_wait = asyncio.create_task(agent.wait_until_ready())
+    await asyncio.sleep(0)
+
+    assert not running_wait.done()
+    assert not ready_wait.done()
+
+    running_wait.cancel()
+    ready_wait.cancel()
+    await asyncio.gather(running_wait, ready_wait, return_exceptions=True)
+
+
 # ── auto_subscribe=False ────────────────────────────────────────────────────
 
 
@@ -310,6 +328,35 @@ async def test_unsubscribe_stops_all_traffic_for_pid(
 
 
 # ── roster catch-up ─────────────────────────────────────────────────────────
+
+
+async def test_startup_ready_waits_for_existing_client_subscriptions(
+    hub, make_connector, make_processor,
+):
+    """A late-starting agent is ready only after it can receive existing clients."""
+    alice = await setup_client(make_connector, "alice")
+    seen: list[DataMessage] = []
+
+    async def on_data(msg: DataMessage) -> None:
+        seen.append(msg)
+
+    agent = make_processor()
+    agent.on_data(on_data)
+
+    try:
+        await agent.wait_until_running()
+        ready_task = asyncio.create_task(agent.wait_until_ready())
+        await asyncio.sleep(0.05)
+        assert not ready_task.done()
+
+        await ready_task
+        assert agent.subscribed_participants == {"alice"}
+
+        await alice.connector.push_data(DataMessage("alice", "chat", 1, b"first"))
+        await wait_for(lambda: bool(seen))
+        assert [msg.data for msg in seen] == [b"first"]
+    finally:
+        await teardown_clients([alice])
 
 
 async def test_roster_catch_up_for_late_starting_agent(

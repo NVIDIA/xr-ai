@@ -46,7 +46,8 @@ import zmq.asyncio
 
 from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
                          DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent,
-                         ReturnAudioFlush, ShmRingBuffer, SlotView, decode, encode)
+                         ReturnAudioFlush, RosterComplete, ShmRingBuffer, SlotView, decode,
+                         encode)
 
 
 def _now_us() -> int:
@@ -315,12 +316,12 @@ class HubEndpoint:
             await self.send_return_audio_flush(msg)
 
         elif type_id == MsgType.ROSTER_REQUEST:
-            await self._replay_roster()
+            await self._replay_roster(msg.request_id)
 
         else:
             logger.warning("Unknown message type {} — ignored", type_id)
 
-    async def _replay_roster(self) -> None:
+    async def _replay_roster(self, request_id: str) -> None:
         """Re-publish PARTICIPANT_EVENT(joined=True) for every connected pid.
 
         Used by ProcessorEndpoints starting up mid-session so they can
@@ -337,6 +338,10 @@ class HubEndpoint:
             await self._pub.send_multipart([
                 b"participant", encode(MsgType.PARTICIPANT_EVENT, event),
             ])
+        await self._pub.send_multipart([
+            TOPIC_CONTROL,
+            encode(MsgType.ROSTER_COMPLETE, RosterComplete(request_id)),
+        ])
 
     def _handle_registration(self, reg: ConnectorRegistration) -> None:
         if reg.connector_id in self._ring_registry:

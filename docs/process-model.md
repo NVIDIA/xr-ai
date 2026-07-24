@@ -51,7 +51,8 @@ def run() -> None:
   when it is fully initialized and ready to serve requests.
 - **Pipecat workers** build their voice pipeline, then call
   `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)`. The
-  callback runs only after the input transport's hub IPC receive loop starts.
+  callback runs only after the input transport's hub IPC receive loop and
+  initial participant roster subscriptions are ready.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
 - The worker never imports anything from `server-runtime` or `utils/xr-ai-launcher/`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
