@@ -34,7 +34,6 @@ from ._types import (
     ParticipantEvent,
     PixelFormat,
     ReturnAudioFlush,
-    RosterComplete,
     RosterRequest,
 )
 
@@ -65,6 +64,5 @@ __all__ = [
     "ParticipantEvent",
     "PixelFormat",
     "ReturnAudioFlush",
-    "RosterComplete",
     "RosterRequest",
 ]

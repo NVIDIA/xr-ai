@@ -31,8 +31,8 @@ Endpoints created mid-session use a roster request to learn about
 participants who joined before they did. The hub re-publishes
 ``PARTICIPANT_EVENT(joined=True)`` for every current pid, so already-
 connected pids are auto-subscribed retroactively. The replays go on the
-regular ``participant`` topic; keep your ``on_participant`` callbacks
-idempotent.
+regular ``participant`` topic. The endpoint treats repeated joins and leaves
+as no-ops, so callbacks observe lifecycle transitions once.
 
 Video frame access is two-step:
   1. on_frame callback receives FrameSignal metadata (always, at full rate).
@@ -55,7 +55,6 @@ import json
 import logging
 import os
 import time
-import uuid
 from enum import Flag, auto
 from typing import Awaitable, Callable
 
@@ -197,8 +196,10 @@ class ProcessorEndpoint:
 
         self._running = False
         self._running_event = asyncio.Event()
-        self._initial_roster_event = asyncio.Event()
-        self._roster_request_id: str | None = None
+
+        # Per-participant state overrides the default until a global update.
+        self._default_status: str | None = None
+        self._participant_status: dict[str, str] = {}
 
     # ── participant roster ────────────────────────────────────────────────────
 
@@ -288,7 +289,7 @@ class ProcessorEndpoint:
             ReturnAudioFlush(participant_id=participant_id),
         ))
 
-    async def request_roster(self, request_id: str = "") -> None:
+    async def request_roster(self) -> None:
         """
         Ask the hub to re-publish ``PARTICIPANT_EVENT(joined=True)`` for
         every currently-connected participant.
@@ -297,13 +298,8 @@ class ProcessorEndpoint:
         can pick up clients who joined before this endpoint connected.
         Called automatically once at the start of :meth:`run` when
         ``auto_subscribe=True``.
-
-        ``request_id`` correlates the hub's final ``RosterComplete`` marker
-        with this endpoint's startup barrier.
         """
-        await self._push.send(
-            encode(MsgType.ROSTER_REQUEST, RosterRequest(request_id)),
-        )
+        await self._push.send(encode(MsgType.ROSTER_REQUEST, RosterRequest()))
 
     async def set_status(self, status: str,
                          participant_id: str | None = None) -> None:
@@ -317,26 +313,46 @@ class ProcessorEndpoint:
         Parameters
         ----------
         status :
-            Arbitrary status string.  Conventional values: ``"idle"``,
-            ``"processing"``.
+            Arbitrary current-state string. Conventional values are
+            ``"idle"`` and ``"processing"``.
         participant_id :
-            Target participant.  If *None*, broadcasts to every participant
-            currently in ``connected_participants``.
+            Target participant. If *None*, sets the endpoint default and
+            broadcasts it to every currently connected participant.
         """
-        payload = json.dumps({"status": status}).encode()
-        pts_us  = int(time.time() * 1_000_000)
-        targets = (
-            [participant_id]
-            if participant_id is not None
-            else list(self._participants)
-        )
+        if participant_id is None:
+            self._default_status = status
+            self._participant_status.clear()
+            targets = list(self._participants)
+        elif participant_id in self._participants:
+            self._participant_status[participant_id] = status
+            targets = [participant_id]
+        else:
+            return
+
         for pid in targets:
-            await self.send_return_data(DataMessage(
-                participant_id=pid,
-                topic=AGENT_STATUS_TOPIC,
-                pts_us=pts_us,
-                data=payload,
-            ))
+            await self._send_status(pid, status)
+
+    async def republish_statuses(self) -> None:
+        """Re-send each connected participant's current agent-status state.
+
+        Status is state, not an edge-triggered event. Re-announcing it lets a
+        client that joins or reconnects after the original publication converge
+        without coupling process readiness to participant discovery.
+        """
+        for pid in list(self._participants):
+            status = self._participant_status.get(pid, self._default_status)
+            if status is not None:
+                await self._send_status(pid, status)
+
+    async def _send_status(self, participant_id: str, status: str) -> None:
+        """Send one already-recorded status state to a connected participant."""
+        payload = json.dumps({"status": status}).encode()
+        await self.send_return_data(DataMessage(
+            participant_id=participant_id,
+            topic=AGENT_STATUS_TOPIC,
+            pts_us=int(time.time() * 1_000_000),
+            data=payload,
+        ))
 
     async def request_frame(self, signal: FrameSignal,
                             timeout: float = _FRAME_REQUEST_TIMEOUT) -> FrameData | None:
@@ -379,18 +395,13 @@ class ProcessorEndpoint:
 
     # ── receive loop ──────────────────────────────────────────────────────────
 
-    # Time to wait for the SUB↔PUB handshake to complete before sending
-    # the first roster request. ZMQ drops PUB messages whose topic has no
-    # registered SUBSCRIBE yet (the slow-joiner problem); without this
-    # window, an endpoint started mid-session can miss the roster replay
-    # for ``participant`` events.
+    # Roster discovery converges asynchronously, after the participant
+    # subscription has had a brief opportunity to register with the hub.
     _ROSTER_HANDSHAKE_WAIT = 0.1
-    _ROSTER_SUBSCRIPTION_WAIT = 0.1
 
     async def run(self) -> None:
         """Receive and dispatch messages until stop() is called."""
         self._running_event.clear()
-        self._initial_roster_event.clear()
         self._running = True
         self._running_event.set()
 
@@ -398,12 +409,7 @@ class ProcessorEndpoint:
         # pids so the auto-subscribe handler can scoop them up. Safe even
         # when there are none: the hub responds with zero events.
         if self._auto_subscribe:
-            request_id = uuid.uuid4().hex
-            self._roster_request_id = request_id
-            asyncio.create_task(self._catch_up_roster(request_id))
-        else:
-            self._roster_request_id = None
-            self._initial_roster_event.set()
+            asyncio.create_task(self._catch_up_roster())
 
         try:
             while self._running:
@@ -424,15 +430,13 @@ class ProcessorEndpoint:
         finally:
             self._running = False
             self._running_event.clear()
-            self._initial_roster_event.clear()
-            self._roster_request_id = None
 
-    async def _catch_up_roster(self, request_id: str) -> None:
+    async def _catch_up_roster(self) -> None:
         """Send a roster request after the SUB↔PUB handshake settles."""
         try:
             await asyncio.sleep(self._ROSTER_HANDSHAKE_WAIT)
             if self._running:
-                await self.request_roster(request_id)
+                await self.request_roster()
         except asyncio.CancelledError:
             pass
         except Exception:
@@ -463,26 +467,27 @@ class ProcessorEndpoint:
             # before spawning user callbacks so callbacks observe a
             # consistent roster / subscription view.
             if msg.joined:
+                if msg.participant_id in self._participants:
+                    return
                 self._participants.add(msg.participant_id)
                 if self._auto_subscribe:
                     self.subscribe(msg.participant_id)
+                status = self._participant_status.get(
+                    msg.participant_id, self._default_status,
+                )
+                if status is not None:
+                    self._spawn(self._send_status(msg.participant_id, status))
             else:
+                if msg.participant_id not in self._participants:
+                    return
                 self._participants.discard(msg.participant_id)
                 if self._auto_subscribe:
                     self.unsubscribe(msg.participant_id)
+                self._participant_status.pop(msg.participant_id, None)
             for cb in self._participant_cbs:
                 self._spawn(cb(msg))
-        elif type_id == MsgType.ROSTER_COMPLETE:
-            if msg.request_id == self._roster_request_id:
-                asyncio.create_task(self._finish_initial_roster(msg.request_id))
         else:
             log.debug("Unhandled message type %d on processor endpoint", type_id)
-
-    async def _finish_initial_roster(self, request_id: str) -> None:
-        """Release startup readiness after replayed per-participant subscribes propagate."""
-        await asyncio.sleep(self._ROSTER_SUBSCRIPTION_WAIT)
-        if self._running and request_id == self._roster_request_id:
-            self._initial_roster_event.set()
 
     @staticmethod
     def _spawn(coro) -> None:
@@ -500,16 +505,9 @@ class ProcessorEndpoint:
         """Wait until :meth:`run` has entered its receive loop."""
         await self._running_event.wait()
 
-    async def wait_until_ready(self) -> None:
-        """Wait until startup roster subscriptions can receive participant traffic."""
-        await self._running_event.wait()
-        await self._initial_roster_event.wait()
-
     def stop(self) -> None:
         self._running = False
         self._running_event.clear()
-        self._initial_roster_event.clear()
-        self._roster_request_id = None
 
     def close(self) -> None:
         self._sub.close(linger=0)

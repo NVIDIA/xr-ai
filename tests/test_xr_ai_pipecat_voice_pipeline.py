@@ -206,16 +206,29 @@ class _CallbackStubEndpoint:
         self.run_started.set()
         await self.run_finished.wait()
 
-    async def wait_until_ready(self) -> None:
+    async def wait_until_running(self) -> None:
         await self.ready_to_receive.wait()
 
     def stop(self) -> None:
         self.run_finished.set()
 
 
+class _StatusEndpoint:
+    def __init__(self) -> None:
+        self.statuses: list[str] = []
+        self.republish_calls = 0
+
+    async def set_status(self, status: str) -> None:
+        self.statuses.append(status)
+
+    async def republish_statuses(self) -> None:
+        self.republish_calls += 1
+
+
 class _StartupBarrierTransport:
     def __init__(self) -> None:
         self.started = asyncio.Event()
+        self.endpoint = _StatusEndpoint()
 
     async def wait_until_started(self) -> None:
         await self.started.wait()
@@ -261,10 +274,43 @@ async def test_run_voice_pipeline_releases_ready_after_input_starts(monkeypatch)
 
     runner_finished.set()
     assert await run_task is None
+    assert transport.endpoint.statuses == ["idle"]
 
 
 @pytest.mark.asyncio
-async def test_run_voice_pipeline_rejects_early_clean_exit(monkeypatch):
+async def test_run_voice_pipeline_reannounces_current_status(monkeypatch):
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    monkeypatch.setattr("xr_ai_pipecat.pipeline.PipelineRunner", _Runner)
+    monkeypatch.setattr("xr_ai_pipecat.pipeline._STATUS_REANNOUNCE_INTERVAL_S", 0.01)
+
+    transport = _StartupBarrierTransport()
+    run_task = asyncio.create_task(
+        run_voice_pipeline(_PipelineWorkerStub(), transport),
+    )
+
+    await runner_started.wait()
+    transport.started.set()
+    for _ in range(20):
+        if transport.endpoint.republish_calls:
+            break
+        await asyncio.sleep(0.01)
+
+    assert transport.endpoint.statuses == ["idle"]
+    assert transport.endpoint.republish_calls > 0
+
+    runner_finished.set()
+    assert await run_task is None
+
+
+@pytest.mark.asyncio
+async def test_run_voice_pipeline_allows_early_clean_exit(monkeypatch):
     class _Runner:
         async def run(self, _worker) -> None:
             return
@@ -272,8 +318,7 @@ async def test_run_voice_pipeline_rejects_early_clean_exit(monkeypatch):
     monkeypatch.setattr("xr_ai_pipecat.pipeline.PipelineRunner", _Runner)
 
     worker = _PipelineWorkerStub()
-    with pytest.raises(RuntimeError, match="exited before"):
-        await run_voice_pipeline(worker, _StartupBarrierTransport())
+    assert await run_voice_pipeline(worker, _StartupBarrierTransport()) is None
 
     assert worker.cancel_calls == 0
 

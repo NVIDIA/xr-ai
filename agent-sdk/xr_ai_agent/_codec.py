@@ -18,7 +18,7 @@ import msgpack
 
 from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
                      FrameData, FrameRequest, FrameSignal, MsgType, ParticipantEvent,
-                     PixelFormat, ReturnAudioFlush, RosterComplete, RosterRequest)
+                     PixelFormat, ReturnAudioFlush, RosterRequest)
 
 _TYPE_HDR = struct.Struct("=B")
 
@@ -101,8 +101,5 @@ register_decoder(MsgType.FRAME_DATA,
 register_encoder(MsgType.RETURN_AUDIO_FLUSH, lambda m: [m.participant_id])
 register_decoder(MsgType.RETURN_AUDIO_FLUSH, lambda p: ReturnAudioFlush(p[0]))
 
-register_encoder(MsgType.ROSTER_REQUEST, lambda m: [m.request_id])
-register_decoder(MsgType.ROSTER_REQUEST, lambda p: RosterRequest(p[0] if p else ""))
-
-register_encoder(MsgType.ROSTER_COMPLETE, lambda m: [m.request_id])
-register_decoder(MsgType.ROSTER_COMPLETE, lambda p: RosterComplete(p[0]))
+register_encoder(MsgType.ROSTER_REQUEST, lambda m: [])
+register_decoder(MsgType.ROSTER_REQUEST, lambda p: RosterRequest())

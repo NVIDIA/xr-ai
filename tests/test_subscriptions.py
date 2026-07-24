@@ -12,7 +12,7 @@ Covers:
 * ``auto_subscribe=False``: agents see only participant + control until
   they call ``subscribe(pid)`` explicitly.
 * Roster catch-up: an endpoint started mid-session learns about already-
-  connected participants via ``request_roster()``.
+  connected participants via ``request_roster()``, without delaying startup.
 * Per-pid filter override and idempotent re-subscription.
 * Subscribe-before-join works (ZMQ holds the SUBSCRIBE).
 * Pid-prefix collision: ``alice`` and ``alice2`` traffic does not bleed
@@ -56,22 +56,19 @@ async def test_auto_subscribe_tracks_join_and_leave(
     await teardown_clients([alice, bob])
 
 
-async def test_stop_clears_endpoint_startup_barriers(make_processor):
-    """A stopped endpoint must not report readiness from a prior run."""
+async def test_stop_clears_endpoint_running_barrier(make_processor):
+    """A stopped endpoint must not report running from a prior run."""
     agent = make_processor(auto_subscribe=False)
-    await agent.wait_until_ready()
+    await agent.wait_until_running()
 
     agent.stop()
     running_wait = asyncio.create_task(agent.wait_until_running())
-    ready_wait = asyncio.create_task(agent.wait_until_ready())
     await asyncio.sleep(0)
 
     assert not running_wait.done()
-    assert not ready_wait.done()
 
     running_wait.cancel()
-    ready_wait.cancel()
-    await asyncio.gather(running_wait, ready_wait, return_exceptions=True)
+    await asyncio.gather(running_wait, return_exceptions=True)
 
 
 # ── auto_subscribe=False ────────────────────────────────────────────────────
@@ -330,31 +327,17 @@ async def test_unsubscribe_stops_all_traffic_for_pid(
 # ── roster catch-up ─────────────────────────────────────────────────────────
 
 
-async def test_startup_ready_waits_for_existing_client_subscriptions(
+async def test_startup_running_does_not_wait_for_existing_client_roster(
     hub, make_connector, make_processor,
 ):
-    """A late-starting agent is ready only after it can receive existing clients."""
+    """A late-starting endpoint starts before roster convergence completes."""
     alice = await setup_client(make_connector, "alice")
-    seen: list[DataMessage] = []
-
-    async def on_data(msg: DataMessage) -> None:
-        seen.append(msg)
-
     agent = make_processor()
-    agent.on_data(on_data)
 
     try:
         await agent.wait_until_running()
-        ready_task = asyncio.create_task(agent.wait_until_ready())
-        await asyncio.sleep(0.05)
-        assert not ready_task.done()
-
-        await ready_task
-        assert agent.subscribed_participants == {"alice"}
-
-        await alice.connector.push_data(DataMessage("alice", "chat", 1, b"first"))
-        await wait_for(lambda: bool(seen))
-        assert [msg.data for msg in seen] == [b"first"]
+        assert agent.subscribed_participants == set()
+        await wait_for_subscribed(agent, pids=["alice"])
     finally:
         await teardown_clients([alice])
 
@@ -386,6 +369,55 @@ async def test_roster_catch_up_for_late_starting_agent(
         assert {m.participant_id for m in seen} == {"alice", "bob"}
     finally:
         await teardown_clients([alice, bob])
+
+
+async def test_roster_replay_does_not_repeat_existing_join_callbacks(
+    hub, make_connector, make_processor, settle,
+):
+    """A late endpoint's roster replay must not re-greet existing endpoints."""
+    joins: list[str] = []
+
+    async def on_participant(event) -> None:
+        if event.joined:
+            joins.append(event.participant_id)
+
+    first = make_processor()
+    first.on_participant(on_participant)
+    await settle()
+    alice = await setup_client(make_connector, "alice")
+    await wait_for(lambda: joins == ["alice"])
+
+    second = make_processor()
+    try:
+        await wait_for_subscribed(second, pids=["alice"])
+        await asyncio.sleep(0.1)
+        assert joins == ["alice"]
+    finally:
+        await teardown_clients([alice])
+
+
+async def test_status_republishes_current_state_to_connected_clients(
+    hub, make_connector, make_processor, settle,
+):
+    """Status is stored as state so a later publish can repair a missed update."""
+    agent = make_processor()
+    await settle()
+    await agent.set_status("idle")
+
+    alice = await setup_client(make_connector, "alice")
+    try:
+        await wait_for(lambda: bool(alice.return_data))
+        assert alice.return_data[-1].topic == "_agent.status"
+        assert alice.return_data[-1].data == b'{"status": "idle"}'
+
+        await agent.set_status("processing", "alice")
+        await wait_for(lambda: alice.return_data[-1].data == b'{"status": "processing"}')
+
+        await agent.republish_statuses()
+        await wait_for(lambda: len(alice.return_data) >= 3)
+        assert alice.return_data[-1].data == b'{"status": "processing"}'
+    finally:
+        await teardown_clients([alice])
 
 
 # ── subscribe before join ──────────────────────────────────────────────────

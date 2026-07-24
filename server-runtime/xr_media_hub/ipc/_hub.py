@@ -46,8 +46,7 @@ import zmq.asyncio
 
 from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
                          DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent,
-                         ReturnAudioFlush, RosterComplete, ShmRingBuffer, SlotView, decode,
-                         encode)
+                         ReturnAudioFlush, ShmRingBuffer, SlotView, decode, encode)
 
 
 def _now_us() -> int:
@@ -316,18 +315,19 @@ class HubEndpoint:
             await self.send_return_audio_flush(msg)
 
         elif type_id == MsgType.ROSTER_REQUEST:
-            await self._replay_roster(msg.request_id)
+            await self._replay_roster()
 
         else:
             logger.warning("Unknown message type {} — ignored", type_id)
 
-    async def _replay_roster(self, request_id: str) -> None:
+    async def _replay_roster(self) -> None:
         """Re-publish PARTICIPANT_EVENT(joined=True) for every connected pid.
 
         Used by ProcessorEndpoints starting up mid-session so they can
         subscribe to clients who joined before they connected. The events
         go on the regular ``participant`` topic, so all current
-        subscribers see them — keep on_participant callbacks idempotent.
+        subscribers see them. ProcessorEndpoint de-duplicates the resulting
+        lifecycle transitions before invoking application callbacks.
         """
         pts_us = _now_us()
         for pid, connector_id in self._participant_connector.items():
@@ -338,10 +338,6 @@ class HubEndpoint:
             await self._pub.send_multipart([
                 b"participant", encode(MsgType.PARTICIPANT_EVENT, event),
             ])
-        await self._pub.send_multipart([
-            TOPIC_CONTROL,
-            encode(MsgType.ROSTER_COMPLETE, RosterComplete(request_id)),
-        ])
 
     def _handle_registration(self, reg: ConnectorRegistration) -> None:
         if reg.connector_id in self._ring_registry:

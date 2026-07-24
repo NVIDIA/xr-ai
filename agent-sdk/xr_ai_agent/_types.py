@@ -37,7 +37,6 @@ class MsgType(IntEnum):
     # Roster (processor → hub → processor): used by an endpoint started
     # mid-session to learn about participants who joined before it did.
     ROSTER_REQUEST = 12
-    ROSTER_COMPLETE = 13  # hub finished replaying the requested participant roster
     # Add new types here; existing code is unaffected.
 
 
@@ -145,13 +144,6 @@ class RosterRequest:
 
     Used by a :class:`ProcessorEndpoint` started mid-session to learn
     about clients that joined before it did. Replays go on the regular
-    participant topic, so other endpoints will see them too — keep
-    ``on_participant`` callbacks idempotent.
+    participant topic, so other endpoints will see them too.
     """
-    request_id: str = ""
-
-
-@dataclass(slots=True)
-class RosterComplete:
-    """Marks the end of the roster replay identified by ``request_id``."""
-    request_id: str
+    pass

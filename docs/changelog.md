@@ -13,9 +13,11 @@ preserved and not re-litigated.
 
 `run_voice_pipeline` releases a managed worker's ready-file callback only
 after `XRMediaHubInputTransport` has started its `ProcessorEndpoint` receive
-loop, replayed the initial participant roster, and installed those
-subscriptions. This makes worker readiness shared agent availability rather
-than a per-client interaction state.
+loop. Participant roster catch-up remains asynchronous, so process readiness
+stays a launcher concern rather than a per-client discovery barrier. The
+endpoint stores each agent's current status and Pipecat re-announces that state
+periodically; a late or reconnecting client therefore converges on readiness
+without relying on a one-shot event.
 
 ### 2026-07-21 — Video memory is recorded history, not live capture
 

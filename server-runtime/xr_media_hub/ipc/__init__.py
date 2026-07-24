@@ -43,7 +43,6 @@ from xr_ai_agent import (
     PixelFormat,
     ProcessorEndpoint,
     ReturnAudioFlush,
-    RosterComplete,
     RosterRequest,
     ShmRingBuffer,
     SlotView,
@@ -94,7 +93,6 @@ __all__ = [
     "ParticipantEvent",
     "PixelFormat",
     "ReturnAudioFlush",
-    "RosterComplete",
     "RosterRequest",
     # well-known topic prefixes
     "TOPIC_VIDEO",

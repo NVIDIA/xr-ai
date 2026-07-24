@@ -208,10 +208,11 @@ input → VadStt → VoiceGate → brain → StreamingTts → output
 
 Run the returned worker with its transport. For launcher-managed workers, pass
 the ready-file callback so it runs only after the input transport has started
-the hub IPC receive loop and subscribed to the initial participant roster. If
-the callback fails, the worker is cancelled and the error propagates so the
-launcher reports startup failure rather than waiting on a process that cannot
-signal readiness:
+the hub IPC receive loop. Participant roster catch-up remains asynchronous;
+the worker re-announces its current status periodically so clients that join
+or reconnect later converge on the same state. If the callback fails, the
+worker is cancelled and the error propagates so the launcher reports startup
+failure rather than waiting on a process that cannot signal readiness:
 
 ```python
 from xr_ai_pipecat import run_voice_pipeline
@@ -404,7 +405,8 @@ frame = await frames.get("participant-1")
 | `send_return_data(msg)`              | a `DataMessage` back to a client (text or binary on a topic) |
 | `send_return_audio(chunk)`           | an `AudioChunk` of agent or TTS audio to a client |
 | `flush_return_audio(pid)`            | drops audio queued at the hub for `pid` — interrupts the agent's own playback |
-| `set_status(status, pid=None)`       | publishes agent status (e.g. `"idle"`, `"processing"`) on the reserved `_agent.status` channel; broadcasts when `pid` is omitted |
+| `set_status(status, pid=None)`       | records and publishes agent status (e.g. `"idle"`, `"processing"`) on the reserved `_agent.status` channel; broadcasts when `pid` is omitted |
+| `republish_statuses()`               | re-sends each connected participant's current agent status so a missed one-shot update self-heals |
 | `request_roster()`                   | asks the hub to replay "joined" events for all current pids |
 
 ### IPC message types
