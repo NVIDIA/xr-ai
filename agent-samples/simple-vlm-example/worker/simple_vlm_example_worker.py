@@ -46,10 +46,9 @@ import signal
 
 import yaml
 from loguru import logger
-from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_pipecat import VadConfig, make_voice_pipeline
+from xr_ai_pipecat import VadConfig, make_voice_pipeline, run_voice_pipeline
 from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
 from xr_ai_voicegate import load_voice_gate_config
@@ -88,9 +87,6 @@ async def main(
     tts = make_tts(models_cfg, "tts")
 
     await wait_for_services({"stt": stt.health, "vlm": vlm.health, "tts": tts.health})
-
-    if ready_file:
-        ready_file.touch()
 
     voice_gate_cfg = load_voice_gate_config(
         _resolve(config_path, cfg.get("voice_gate_yaml", "voice_gate.yaml")),
@@ -145,7 +141,11 @@ async def main(
 
     logger.info("simple-vlm-example starting pipecat pipeline")
     try:
-        await PipelineRunner().run(task)
+        await run_voice_pipeline(
+            task,
+            transport,
+            on_ready=ready_file.touch if ready_file else None,
+        )
     finally:
         transport.shutdown()
         for svc in (stt, vlm, tts):

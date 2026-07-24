@@ -31,6 +31,7 @@ from pipecat.frames.frames import (
     InputAudioRawFrame,
     InterruptionFrame,
     OutputAudioRawFrame,
+    StartFrame,
     TextFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
@@ -51,6 +52,7 @@ from xr_ai_pipecat import (
     VadConfig,
     VadSttProcessor,
     VoiceGateProcessor,
+    run_voice_pipeline,
 )
 from xr_ai_voicegate import VoiceGate, VoiceGateConfig
 
@@ -190,6 +192,8 @@ class _CallbackStubEndpoint:
     def __init__(self) -> None:
         self.audio_cb = None
         self.participant_cb = None
+        self.run_started = asyncio.Event()
+        self.run_finished = asyncio.Event()
 
     def on_audio(self, cb) -> None:
         self.audio_cb = cb
@@ -197,8 +201,59 @@ class _CallbackStubEndpoint:
     def on_participant(self, cb) -> None:
         self.participant_cb = cb
 
+    async def run(self) -> None:
+        self.run_started.set()
+        await self.run_finished.wait()
+
+    async def wait_until_running(self) -> None:
+        await self.run_started.wait()
+
     def stop(self) -> None:
+        self.run_finished.set()
+
+
+class _StartupBarrierTransport:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+
+    async def wait_until_started(self) -> None:
+        await self.started.wait()
+
+
+class _PipelineWorkerStub:
+    async def cancel(self) -> None:
         return
+
+
+@pytest.mark.asyncio
+async def test_run_voice_pipeline_releases_ready_after_input_starts(monkeypatch):
+    """The ready callback waits for the input transport's startup barrier."""
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    monkeypatch.setattr("xr_ai_pipecat.pipeline.PipelineRunner", _Runner)
+
+    transport = _StartupBarrierTransport()
+    ready = asyncio.Event()
+    run_task = asyncio.create_task(
+        run_voice_pipeline(_PipelineWorkerStub(), transport, on_ready=ready.set),
+    )
+
+    await runner_started.wait()
+    await asyncio.sleep(0)
+    assert not ready.is_set()
+
+    transport.started.set()
+    await ready.wait()
+    assert not run_task.done()
+
+    runner_finished.set()
+    await run_task
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1415,6 +1470,35 @@ async def test_streaming_tts_observes_each_wav_through_gate():
 # ════════════════════════════════════════════════════════════════════════════
 # XRMediaHubInputTransport
 # ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_input_transport_releases_startup_barrier_after_endpoint_runs():
+    """The transport barrier opens only after its endpoint run loop starts."""
+    from xr_ai_pipecat.transport import (
+        SAMPLE_RATE,
+        XRMediaHubInputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    endpoint = _CallbackStubEndpoint()
+    started = asyncio.Event()
+    transport = XRMediaHubInputTransport(
+        endpoint,
+        TransportParams(
+            audio_in_enabled=True,
+            audio_in_sample_rate=SAMPLE_RATE,
+            audio_in_channels=1,
+        ),
+        started_event=started,
+    )
+
+    try:
+        await transport.start(StartFrame())
+        assert endpoint.run_started.is_set()
+        assert started.is_set()
+    finally:
+        await transport.stop(EndFrame())
 
 
 @pytest.mark.asyncio

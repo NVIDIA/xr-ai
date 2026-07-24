@@ -14,7 +14,12 @@ to this factory.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
+from collections.abc import Callable
+
 from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.worker import PipelineWorker
 
 from xr_ai_models import STTService, TTSService
@@ -95,3 +100,52 @@ def make_voice_pipeline(
             cancel_on_idle_timeout=True,
         )
     return pipeline, worker
+
+
+async def run_voice_pipeline(
+    worker: PipelineWorker,
+    transport: XRMediaHubTransport,
+    *,
+    on_ready: Callable[[], None] | None = None,
+) -> None:
+    """Run a voice pipeline and release ``on_ready`` after hub IPC starts.
+
+    The callback is intended for a launcher-managed worker's ready file. It
+    runs only after the input transport has entered the processor endpoint
+    receive loop, so it represents request readiness rather than completed
+    dependency health checks.
+    """
+    runner_task = asyncio.create_task(
+        PipelineRunner().run(worker),
+        name="voice-pipeline",
+    )
+    started_task = asyncio.create_task(
+        transport.wait_until_started(),
+        name="voice-pipeline-input-start",
+    )
+    try:
+        done, _ = await asyncio.wait(
+            (runner_task, started_task),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if runner_task in done:
+            await runner_task
+            if started_task not in done:
+                raise RuntimeError(
+                    "Voice pipeline exited before its input transport started",
+                )
+        await started_task
+        if on_ready:
+            on_ready()
+        await runner_task
+    except BaseException:
+        if not runner_task.done():
+            await worker.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await runner_task
+        raise
+    finally:
+        if not started_task.done():
+            started_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await started_task

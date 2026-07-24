@@ -195,6 +195,7 @@ class ProcessorEndpoint:
         self._pending: dict[tuple[str, str], list[asyncio.Future[FrameData]]] = {}
 
         self._running = False
+        self._running_event = asyncio.Event()
 
     # ── participant roster ────────────────────────────────────────────────────
 
@@ -379,7 +380,9 @@ class ProcessorEndpoint:
 
     async def run(self) -> None:
         """Receive and dispatch messages until stop() is called."""
+        self._running_event.clear()
         self._running = True
+        self._running_event.set()
 
         # Ask the hub to replay PARTICIPANT_EVENTs for already-connected
         # pids so the auto-subscribe handler can scoop them up. Safe even
@@ -462,6 +465,10 @@ class ProcessorEndpoint:
         t.add_done_callback(_on_done)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
+
+    async def wait_until_running(self) -> None:
+        """Wait until :meth:`run` has entered its receive loop."""
+        await self._running_event.wait()
 
     def stop(self) -> None:
         self._running = False
