@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import collections
+import json
 import signal
 import sys
 import time
@@ -54,18 +55,8 @@ async def on_data(msg: DataMessage) -> None:
     _data_counts[msg.participant_id] += 1
 
 
-async def on_participant(event: ParticipantEvent) -> None:
-    action = "joined" if event.joined else "left"
-    logger.info("participant {} {}", event.participant_id, action)
-    if event.joined:
-        _participants.add(event.participant_id)
-    else:
-        _participants.discard(event.participant_id)
-        _frame_counts.pop(event.participant_id, None)
-        _audio_counts.pop(event.participant_id, None)
-        _data_counts.pop(event.participant_id, None)
-        if _recorder is not None:
-            _recorder.close_participant(event.participant_id)
+_AGENT_STATUS_TOPIC = "_agent.status"
+_LOADING_PAYLOAD    = json.dumps({"status": "loading"}).encode()
 
 
 async def _stats_loop() -> None:
@@ -90,6 +81,30 @@ async def main(ready_file: Path | None = None) -> None:
     cfg = load_config()
 
     hub = HubEndpoint(pull_addr=cfg.hub_push_addr, pub_addr=cfg.hub_sub_addr)
+
+    async def on_participant(event: ParticipantEvent) -> None:
+        action = "joined" if event.joined else "left"
+        logger.info("participant {} {}", event.participant_id, action)
+        if event.joined:
+            _participants.add(event.participant_id)
+            # Signal clients to show a loading state while the AI worker starts.
+            # The worker broadcasts "ready" via set_status() once its AI services
+            # pass health checks, covering both clients who join before and after
+            # the worker comes up.
+            await hub.send_return_data(DataMessage(
+                participant_id=event.participant_id,
+                topic=_AGENT_STATUS_TOPIC,
+                pts_us=int(time.time() * 1_000_000),
+                data=_LOADING_PAYLOAD,
+            ))
+        else:
+            _participants.discard(event.participant_id)
+            _frame_counts.pop(event.participant_id, None)
+            _audio_counts.pop(event.participant_id, None)
+            _data_counts.pop(event.participant_id, None)
+            if _recorder is not None:
+                _recorder.close_participant(event.participant_id)
+
     hub.on_frame(on_frame)
     hub.on_audio(on_audio)
     hub.on_data(on_data)

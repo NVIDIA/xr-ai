@@ -147,6 +147,7 @@ async def main(
         logger.info("tool-calling tools: {}", [t.name for t in tools])
 
         transport = XRMediaHubTransport()
+        await transport.endpoint.mark_ready()
         brain = RenderSceneProcessor(
             transport=transport,
             cfg=cfg,
