@@ -144,7 +144,6 @@ class RosterRequest:
 
     Used by a :class:`ProcessorEndpoint` started mid-session to learn
     about clients that joined before it did. Replays go on the regular
-    participant topic, so other endpoints will see them too — keep
-    ``on_participant`` callbacks idempotent.
+    participant topic, so other endpoints will see them too.
     """
     pass

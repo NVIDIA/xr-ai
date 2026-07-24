@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-24 — Pipecat worker ready files wait for inbound IPC
+
+`run_voice_pipeline` releases a managed worker's ready-file callback only
+after `XRMediaHubInputTransport` has started its `ProcessorEndpoint` receive
+loop. Participant roster catch-up remains asynchronous, so process readiness
+stays a launcher concern rather than a per-client discovery barrier. The
+endpoint stores each agent's current status and Pipecat re-announces that state
+periodically; a late or reconnecting client therefore converges on readiness
+without relying on a one-shot event.
+
 ### 2026-07-21 — Video memory is recorded history, not live capture
 
 `video-memory-service` reads the H.264 chunks written by XR Media Hub and no

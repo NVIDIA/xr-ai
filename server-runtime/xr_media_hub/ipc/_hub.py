@@ -326,7 +326,8 @@ class HubEndpoint:
         Used by ProcessorEndpoints starting up mid-session so they can
         subscribe to clients who joined before they connected. The events
         go on the regular ``participant`` topic, so all current
-        subscribers see them — keep on_participant callbacks idempotent.
+        subscribers see them. ProcessorEndpoint de-duplicates the resulting
+        lifecycle transitions before invoking application callbacks.
         """
         pts_us = _now_us()
         for pid, connector_id in self._participant_connector.items():
