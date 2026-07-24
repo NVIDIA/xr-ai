@@ -253,7 +253,7 @@ async def test_run_voice_pipeline_releases_ready_after_input_starts(monkeypatch)
     assert not run_task.done()
 
     runner_finished.set()
-    await run_task
+    assert await run_task is None
 
 
 # ════════════════════════════════════════════════════════════════════════════

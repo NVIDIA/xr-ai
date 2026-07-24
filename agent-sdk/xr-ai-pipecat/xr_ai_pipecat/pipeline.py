@@ -142,10 +142,10 @@ async def run_voice_pipeline(
         if not runner_task.done():
             await worker.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await runner_task
+                _ = await runner_task
         raise
     finally:
         if not started_task.done():
             started_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
-            await started_task
+            _ = await started_task
