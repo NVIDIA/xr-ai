@@ -1584,8 +1584,8 @@ async def test_streaming_tts_observes_each_wav_through_gate():
 
 
 @pytest.mark.asyncio
-async def test_input_transport_releases_startup_barrier_after_endpoint_is_ready():
-    """The transport barrier waits for the endpoint's initial roster."""
+async def test_input_transport_releases_startup_barrier_after_endpoint_starts():
+    """The barrier releases once the endpoint receive loop starts, not after roster catch-up."""
     from xr_ai_pipecat.transport import (
         SAMPLE_RATE,
         XRMediaHubInputTransport,

@@ -318,6 +318,8 @@ class ProcessorEndpoint:
         participant_id :
             Target participant. If *None*, sets the endpoint default and
             broadcasts it to every currently connected participant.
+            When provided, has no effect until the endpoint has observed that
+            participant's joined event.
         """
         if participant_id is None:
             self._default_status = status

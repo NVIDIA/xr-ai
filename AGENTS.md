@@ -156,7 +156,8 @@ The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
 
 - **Voice pipeline** — `make_voice_pipeline` assembles
   `input → VadStt → VoiceGate → brain → StreamingTts → output`. A sample
-  subclasses `BrainProcessor` and hands it to the factory.
+  subclasses `BrainProcessor`, hands it to the factory, then runs the worker
+  with `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)`.
 - **Wake word / speech gate** — `xr-ai-voicegate` (the `VoiceGate` state
   machine) wired in as `VoiceGateProcessor`; per-sample config in
   `yaml/voice_gate.yaml` (`magic_phrases: ["hey agent"]`, or `[]` for

@@ -101,5 +101,5 @@ register_decoder(MsgType.FRAME_DATA,
 register_encoder(MsgType.RETURN_AUDIO_FLUSH, lambda m: [m.participant_id])
 register_decoder(MsgType.RETURN_AUDIO_FLUSH, lambda p: ReturnAudioFlush(p[0]))
 
-register_encoder(MsgType.ROSTER_REQUEST, lambda m: [])
-register_decoder(MsgType.ROSTER_REQUEST, lambda p: RosterRequest())
+register_encoder(MsgType.ROSTER_REQUEST, lambda _m: [])
+register_decoder(MsgType.ROSTER_REQUEST, lambda _p: RosterRequest())
