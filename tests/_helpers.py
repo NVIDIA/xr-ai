@@ -24,7 +24,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Callable
 
-from xr_ai_agent      import AudioChunk, DataMessage, ReturnAudioFlush
+from xr_ai_agent      import AGENT_STATUS_TOPIC, AudioChunk, DataMessage, ReturnAudioFlush
 from xr_media_hub.ipc import ConnectorEndpoint
 
 
@@ -108,7 +108,12 @@ async def setup_client(
 
     fc = FakeClient(pid=pid, connector=conn, task=None)  # type: ignore[arg-type]
 
-    async def cb_data(msg, fc=fc):  fc.return_data.append(msg)
+    # Real StreamKit clients intercept _agent.status before surfacing data
+    # to the application layer.  Mirror that here so cross-talk assertions
+    # count only application messages.
+    async def cb_data(msg, fc=fc):
+        if msg.topic != AGENT_STATUS_TOPIC:
+            fc.return_data.append(msg)
     async def cb_audio(msg, fc=fc): fc.return_audio.append(msg)
     async def cb_flush(msg, fc=fc): fc.return_audio_flush.append(msg)
 
