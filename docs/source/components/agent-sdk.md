@@ -12,10 +12,11 @@ from:
   `STTService`, `TTSService`) plus OpenAI-compatible HTTP clients, driven by a
   `models.yaml` preset configuration. Swapping a backend is a configuration
   edit, not a code edit.
-- **`xr-ai-pipecat`** — the unified voice pipeline. One call,
-  `make_voice_pipeline`, composes input → VAD/STT → voice gate → brain →
-  streaming TTS → output. Sample workers subclass one class (`BrainProcessor`)
-  and hand it to the factory.
+- **`xr-ai-pipecat`** — the unified voice pipeline. `make_voice_pipeline`
+  composes input → VAD/STT → voice gate → brain → streaming TTS → output;
+  `run_voice_pipeline` starts it and exposes the request-readiness boundary.
+  Sample workers subclass one class (`BrainProcessor`) and hand it to the
+  factory.
 - **`xr-ai-agent`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
@@ -173,9 +174,9 @@ The clients can be exercised without a GPU.
 ## xr-ai-pipecat
 
 The unified [Pipecat](https://github.com/pipecat-ai/pipecat) voice pipeline for
-xr-ai agents. The top-level entry point is `make_voice_pipeline`; sample
-workers subclass `BrainProcessor` and hand the instance to the factory.
-Everything else — VAD/STT, voice gate, streaming TTS — is provided.
+xr-ai agents. Sample workers subclass `BrainProcessor`, compose it with
+`make_voice_pipeline`, and run the result with `run_voice_pipeline`. Everything
+else — VAD/STT, voice gate, streaming TTS — is provided.
 
 ### make_voice_pipeline
 
@@ -201,6 +202,22 @@ The resulting pipeline is:
 
 ```text
 input → VadStt → VoiceGate → brain → StreamingTts → output
+```
+
+### run_voice_pipeline
+
+Run the returned worker with its transport. For launcher-managed workers, pass
+the ready-file callback so it runs only after the input transport has started
+the hub IPC receive loop. Participant roster catch-up remains asynchronous;
+the worker re-announces its current status periodically so clients that join
+or reconnect later converge on the same state. If the callback fails, the
+worker is cancelled and the error propagates so the launcher reports startup
+failure rather than waiting on a process that cannot signal readiness:
+
+```python
+from xr_ai_pipecat import run_voice_pipeline
+
+await run_voice_pipeline(worker, transport, on_ready=ready_file.touch)
 ```
 
 | Stage | Processor | Role |
@@ -388,7 +405,8 @@ frame = await frames.get("participant-1")
 | `send_return_data(msg)`              | a `DataMessage` back to a client (text or binary on a topic) |
 | `send_return_audio(chunk)`           | an `AudioChunk` of agent or TTS audio to a client |
 | `flush_return_audio(pid)`            | drops audio queued at the hub for `pid` — interrupts the agent's own playback |
-| `set_status(status, pid=None)`       | publishes agent status (e.g. `"idle"`, `"processing"`) on the reserved `_agent.status` channel; broadcasts when `pid` is omitted |
+| `set_status(status, pid=None)`       | records and publishes agent status (e.g. `"idle"`, `"processing"`) on the reserved `_agent.status` channel; broadcasts when `pid` is omitted |
+| `republish_statuses()`               | re-sends each connected participant's current agent status so a missed one-shot update self-heals |
 | `request_roster()`                   | asks the hub to replay "joined" events for all current pids |
 
 ### IPC message types

@@ -14,8 +14,14 @@ to this factory.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
+from collections.abc import Callable
+
 from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.worker import PipelineWorker
+from loguru import logger
 
 from xr_ai_models import STTService, TTSService
 from xr_ai_voicegate import VoiceGateConfig
@@ -25,6 +31,18 @@ from .processors.streaming_tts import StreamingTtsProcessor
 from .processors.vad_stt import VadConfig, VadSttProcessor
 from .processors.voice_gate import VoiceGateProcessor
 from .transport import XRMediaHubTransport
+
+_STATUS_REANNOUNCE_INTERVAL_S = 2.0
+
+
+async def _reannounce_status(transport: XRMediaHubTransport) -> None:
+    """Periodically re-send the endpoint's current agent state to clients."""
+    while True:
+        await asyncio.sleep(_STATUS_REANNOUNCE_INTERVAL_S)
+        try:
+            await transport.endpoint.republish_statuses()
+        except Exception:
+            logger.exception("agent-status reannouncement failed")
 
 
 def make_voice_pipeline(
@@ -95,3 +113,63 @@ def make_voice_pipeline(
             cancel_on_idle_timeout=True,
         )
     return pipeline, worker
+
+
+async def run_voice_pipeline(
+    worker: PipelineWorker,
+    transport: XRMediaHubTransport,
+    *,
+    on_ready: Callable[[], None] | None = None,
+) -> None:
+    """Run a voice pipeline and release ``on_ready`` after hub IPC starts.
+
+    The callback is intended for a launcher-managed worker's ready file. It
+    runs only after the input transport has entered the processor endpoint
+    receive loop. Roster discovery converges asynchronously and does not
+    delay process readiness. Once ready, the endpoint publishes an ``idle``
+    state and re-announces the current state periodically so late or
+    reconnecting clients converge without depending on one initial event.
+    If the callback fails, the worker is cancelled and the error propagates
+    to the launcher.
+    """
+    runner_task = asyncio.create_task(
+        PipelineRunner().run(worker),
+        name="voice-pipeline",
+    )
+    started_task = asyncio.create_task(
+        transport.wait_until_started(),
+        name="voice-pipeline-input-start",
+    )
+    status_task: asyncio.Task | None = None
+    try:
+        done, _ = await asyncio.wait(
+            (runner_task, started_task),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if runner_task in done:
+            await runner_task
+            return
+        await started_task
+        if on_ready:
+            on_ready()
+        await transport.endpoint.mark_ready()
+        status_task = asyncio.create_task(
+            _reannounce_status(transport),
+            name="voice-pipeline-status",
+        )
+        await runner_task
+    except BaseException:
+        if not runner_task.done():
+            await worker.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                _ = await runner_task
+        raise
+    finally:
+        if status_task is not None:
+            status_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await status_task
+        if not started_task.done():
+            started_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            _ = await started_task

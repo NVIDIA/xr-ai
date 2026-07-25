@@ -20,10 +20,9 @@ from pathlib import Path
 
 from fastmcp import Client as McpClient
 from loguru import logger
-from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import ToolDef, load_models_config, make_llm, make_stt, make_tts, make_vlm
-from xr_ai_pipecat import VadConfig, make_voice_pipeline
+from xr_ai_pipecat import VadConfig, make_voice_pipeline, run_voice_pipeline
 from xr_ai_pipecat.services import mcp_probe, wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
 from xr_ai_voicegate import load_voice_gate_config
@@ -115,9 +114,6 @@ async def main(
 
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
 
-    if ready_file:
-        ready_file.touch()
-
     async with (
         McpClient(cfg.render_mcp.rstrip("/") + "/mcp") as render,
         McpClient(cfg.oxr_mcp.rstrip("/")    + "/mcp") as oxr,
@@ -206,7 +202,11 @@ async def main(
 
         logger.info("xr_render_demo starting")
         try:
-            await PipelineRunner().run(task)
+            await run_voice_pipeline(
+                task,
+                transport,
+                on_ready=ready_file.touch if ready_file else None,
+            )
         finally:
             transport.shutdown()
             await brain.close()

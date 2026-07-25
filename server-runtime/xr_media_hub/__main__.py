@@ -14,7 +14,6 @@ import asyncio
 import collections
 import signal
 import sys
-import time
 from pathlib import Path
 
 from loguru import logger
