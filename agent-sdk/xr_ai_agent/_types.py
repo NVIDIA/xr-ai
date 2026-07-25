@@ -147,3 +147,5 @@ class RosterRequest:
     participant topic, so other endpoints will see them too.
     """
     pass
+
+

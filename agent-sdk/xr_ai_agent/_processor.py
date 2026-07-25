@@ -356,6 +356,18 @@ class ProcessorEndpoint:
             data=payload,
         ))
 
+    async def mark_ready(self) -> None:
+        """Signal clients that this worker is ready to handle requests.
+
+        Broadcasts ``{"status": "ready"}`` on ``_agent.status`` to all
+        currently-connected participants. The status is stored so any
+        participant joining afterwards receives it immediately via the
+        stored-status re-send in :meth:`run`'s ``PARTICIPANT_EVENT``
+        dispatch. Intended to be called from :func:`run_voice_pipeline`'s
+        ``on_ready`` hook so it fires only after the transport is running.
+        """
+        await self.set_status("ready")
+
     async def request_frame(self, signal: FrameSignal,
                             timeout: float = _FRAME_REQUEST_TIMEOUT) -> FrameData | None:
         """

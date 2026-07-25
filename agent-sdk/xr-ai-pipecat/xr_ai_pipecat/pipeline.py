@@ -152,7 +152,7 @@ async def run_voice_pipeline(
         await started_task
         if on_ready:
             on_ready()
-        await transport.endpoint.set_status("idle")
+        await transport.endpoint.mark_ready()
         status_task = asyncio.create_task(
             _reannounce_status(transport),
             name="voice-pipeline-status",

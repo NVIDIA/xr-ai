@@ -273,12 +273,15 @@ export function renderBase(model) {
     if (!isConnected) {
       agentDot.className     = 'state-dot disconnected';
       agentLabel.textContent = '—';
+    } else if (model.agentStatus === 'loading') {
+      agentDot.className     = 'state-dot connecting';
+      agentLabel.textContent = 'Starting…';
+    } else if (model.agentStatus === 'ready' || model.agentStatus === 'idle') {
+      agentDot.className     = 'state-dot connected';
+      agentLabel.textContent = model.agentStatus === 'ready' ? 'Ready' : 'Idle';
     } else if (model.agentStatus === 'processing') {
       agentDot.className     = 'state-dot connecting';
       agentLabel.textContent = 'Processing…';
-    } else if (model.agentStatus === 'idle') {
-      agentDot.className     = 'state-dot connected';
-      agentLabel.textContent = 'Idle';
     } else {
       agentDot.className     = 'state-dot disconnected';
       agentLabel.textContent = 'Unknown';

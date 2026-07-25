@@ -44,9 +44,12 @@ from typing import Awaitable, Callable
 import zmq
 import zmq.asyncio
 
-from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
-                         DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent,
-                         ReturnAudioFlush, ShmRingBuffer, SlotView, decode, encode)
+import json
+
+from xr_ai_agent import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
+                         ControlMessage, DataMessage, FrameData, FrameRequest, MsgType,
+                         ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
+                         decode, encode)
 
 
 def _now_us() -> int:
@@ -113,6 +116,7 @@ class HubEndpoint:
         self._participant_cbs: list[ParticipantCallback] = []
         self._control_cbs:     list[ControlCallback]     = []
         self._running = False
+        self._loading_payload = json.dumps({"status": "loading"}).encode()
 
     # ── callback registration ─────────────────────────────────────────────────
 
@@ -281,6 +285,15 @@ class HubEndpoint:
         elif type_id == MsgType.PARTICIPANT_EVENT:
             if msg.joined:
                 self._participant_connector[msg.participant_id] = msg.connector_id
+                # Notify the joining client that the AI worker is still starting up.
+                # The worker broadcasts "ready" once its services are healthy, covering
+                # clients that join before or after the worker comes up.
+                await self.send_return_data(DataMessage(
+                    participant_id=msg.participant_id,
+                    topic=AGENT_STATUS_TOPIC,
+                    pts_us=_now_us(),
+                    data=self._loading_payload,
+                ))
             else:
                 self._participant_connector.pop(msg.participant_id, None)
                 # Release any slots held for this participant's tracks. Without
