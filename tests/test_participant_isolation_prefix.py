@@ -26,7 +26,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_agent import AudioChunk, DataMessage, ReturnAudioFlush
+from xr_ai_agent import AGENT_STATUS_TOPIC, AudioChunk, DataMessage, ReturnAudioFlush
 
 pytestmark = pytest.mark.asyncio
 
@@ -55,8 +55,12 @@ async def test_return_data_does_not_leak_to_prefix_participant(hub, make_connect
     short_received: list[DataMessage] = []
     long_received: list[DataMessage] = []
 
-    async def cb_short(msg): short_received.append(msg)
-    async def cb_long(msg): long_received.append(msg)
+    async def cb_short(msg):
+        if msg.topic != AGENT_STATUS_TOPIC:
+            short_received.append(msg)
+    async def cb_long(msg):
+        if msg.topic != AGENT_STATUS_TOPIC:
+            long_received.append(msg)
 
     short_conn.on_return_data(cb_short)
     long_conn.on_return_data(cb_long)

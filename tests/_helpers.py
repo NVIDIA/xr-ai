@@ -85,6 +85,7 @@ class FakeClient:
     connector:  ConnectorEndpoint
     task:       asyncio.Task
     return_data:        list[DataMessage]      = field(default_factory=list)
+    return_statuses:    list[DataMessage]      = field(default_factory=list)
     return_audio:       list[AudioChunk]       = field(default_factory=list)
     return_audio_flush: list[ReturnAudioFlush] = field(default_factory=list)
 
@@ -109,10 +110,12 @@ async def setup_client(
     fc = FakeClient(pid=pid, connector=conn, task=None)  # type: ignore[arg-type]
 
     # Real StreamKit clients intercept _agent.status before surfacing data
-    # to the application layer.  Mirror that here so cross-talk assertions
-    # count only application messages.
+    # to the application layer.  Mirror that here: status messages land in
+    # return_statuses; everything else in return_data.
     async def cb_data(msg, fc=fc):
-        if msg.topic != AGENT_STATUS_TOPIC:
+        if msg.topic == AGENT_STATUS_TOPIC:
+            fc.return_statuses.append(msg)
+        else:
             fc.return_data.append(msg)
     async def cb_audio(msg, fc=fc): fc.return_audio.append(msg)
     async def cb_flush(msg, fc=fc): fc.return_audio_flush.append(msg)

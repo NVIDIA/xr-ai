@@ -406,16 +406,16 @@ async def test_status_republishes_current_state_to_connected_clients(
 
     alice = await setup_client(make_connector, "alice")
     try:
-        await wait_for(lambda: bool(alice.return_data))
-        assert alice.return_data[-1].topic == "_agent.status"
-        assert alice.return_data[-1].data == b'{"status": "idle"}'
+        await wait_for(lambda: bool(alice.return_statuses))
+        assert alice.return_statuses[-1].topic == "_agent.status"
+        assert alice.return_statuses[-1].data == b'{"status": "idle"}'
 
         await agent.set_status("processing", "alice")
-        await wait_for(lambda: alice.return_data[-1].data == b'{"status": "processing"}')
+        await wait_for(lambda: alice.return_statuses[-1].data == b'{"status": "processing"}')
 
         await agent.republish_statuses()
-        await wait_for(lambda: len(alice.return_data) >= 3)
-        assert alice.return_data[-1].data == b'{"status": "processing"}'
+        await wait_for(lambda: len(alice.return_statuses) >= 3)
+        assert alice.return_statuses[-1].data == b'{"status": "processing"}'
     finally:
         await teardown_clients([alice])
 

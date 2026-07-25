@@ -16,7 +16,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_agent import AudioChunk, DataMessage
+from xr_ai_agent import AGENT_STATUS_TOPIC, AudioChunk, DataMessage
 
 from _helpers import wait_for_subscribed
 
@@ -73,8 +73,12 @@ async def test_two_agents_two_clients_isolated_return_paths(hub, make_connector,
     alice_seen: list[DataMessage] = []
     bob_seen:   list[DataMessage] = []
 
-    async def cb_alice(m): alice_seen.append(m)
-    async def cb_bob(m):   bob_seen.append(m)
+    async def cb_alice(m):
+        if m.topic != AGENT_STATUS_TOPIC:
+            alice_seen.append(m)
+    async def cb_bob(m):
+        if m.topic != AGENT_STATUS_TOPIC:
+            bob_seen.append(m)
 
     alice_conn.on_return_data(cb_alice)
     bob_conn  .on_return_data(cb_bob)
