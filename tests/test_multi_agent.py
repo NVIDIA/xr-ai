@@ -16,7 +16,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_agent import AGENT_STATUS_TOPIC, AudioChunk, DataMessage
+from xr_ai_agent import AGENT_STATUS_TOPIC, DataMessage
 
 from _helpers import wait_for_subscribed
 

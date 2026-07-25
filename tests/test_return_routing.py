@@ -20,7 +20,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_agent import AGENT_STATUS_TOPIC, AudioChunk, DataMessage
+from xr_ai_agent import AGENT_STATUS_TOPIC, DataMessage
 
 pytestmark = pytest.mark.asyncio
 
