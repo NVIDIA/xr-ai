@@ -39,7 +39,7 @@ from nat.builder.function import Function
 from xr_ai_agent import DataMessage
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
-from xr_ai_nat.functions.vision import LiveVisionRequest
+from xr_ai_nat.functions.vision import VisionRequest
 from xr_ai_pipecat import BrainProcessor
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
@@ -947,7 +947,7 @@ class RenderSceneProcessor(BrainProcessor):
         _trace_log.info("LOOK  {}", question[:120])
         try:
             result = await self._live_vision.ainvoke(
-                LiveVisionRequest(participant_id=pid, question=question),
+                VisionRequest(participant_id=pid, query=question),
             )
             answer = result.text
             unavailable = (

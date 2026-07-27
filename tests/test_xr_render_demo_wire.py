@@ -41,7 +41,7 @@ from xr_ai_models import (
 )
 from xr_ai_models.config import load_models_config
 from nat.builder.workflow_builder import WorkflowBuilder
-from xr_ai_nat.functions.vision import LiveVisionFunctionConfig
+from xr_ai_nat.functions.vision import StreamingVisionConfig
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -647,7 +647,6 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
         "get_health",
         "get_scene_state",
         "get_video_stats",
-        "list_live_participants",
         "list_recorded_participants",
         "place_inside_by_id",
         "place_object_relative",
@@ -678,6 +677,9 @@ class _FakeEndpoint:
 
     def on_frame(self, cb) -> None:
         self.frame_cbs.append(cb)
+
+    def on_participant(self, _cb) -> None:
+        pass
 
     async def request_frame(self, sig: FrameSignal, timeout: float = 0.0):
         self.frame_requests.append(sig)
@@ -742,7 +744,7 @@ def _now_us_test() -> int:
 
 @asynccontextmanager
 async def _perception_brain(transport, vlm: _FakeVLM):
-    config = LiveVisionFunctionConfig(
+    config = StreamingVisionConfig(
         endpoint=transport.endpoint,
         vlm=vlm,
         system_prompt=_proc._PERCEPTION_SYSTEM_PROMPT,

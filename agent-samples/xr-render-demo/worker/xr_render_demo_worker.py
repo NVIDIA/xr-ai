@@ -26,7 +26,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
-from xr_ai_nat.functions.vision import LiveVisionFunctionConfig
+from xr_ai_nat.functions.vision import StreamingVisionConfig
 from xr_ai_pipecat import VadConfig, make_voice_pipeline
 from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
@@ -100,7 +100,7 @@ async def main(
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
 
     transport = XRMediaHubTransport()
-    live_vision_config = LiveVisionFunctionConfig(
+    live_vision_config = StreamingVisionConfig(
         endpoint=transport.endpoint,
         vlm=vlm_service,
         system_prompt=_PERCEPTION_SYSTEM_PROMPT,
