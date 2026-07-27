@@ -12,9 +12,9 @@ import pytest
 from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
 from transcript_mcp_server.__main__ import build_mcp
-from xr_ai_nat.adapters.mcp import create_mcp_server
 from xr_ai_nat.functions.text_memory import TextMemoryError, TextMemoryFunctionsConfig
 from xr_ai_nat.functions.text_memory._store import TextMemoryStore
+from xr_ai_nat.mcp import create_mcp_server
 
 
 @asynccontextmanager

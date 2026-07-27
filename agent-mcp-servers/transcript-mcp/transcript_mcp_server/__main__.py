@@ -16,8 +16,8 @@ import yaml
 from loguru import logger
 from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
-from xr_ai_nat.adapters.mcp import create_mcp_server
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
+from xr_ai_nat.mcp import create_mcp_server
 
 
 async def build_mcp(directory: str | Path):

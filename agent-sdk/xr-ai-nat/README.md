@@ -152,7 +152,7 @@ separate hub capability, not part of `xr_video_memory`.
 ## MCP compatibility
 
 Install `xr-ai-nat[mcp]` and pass an explicit list of native functions to
-`xr_ai_nat.adapters.mcp.create_mcp_server` when an application must serve
+`xr_ai_nat.mcp.create_mcp_server` when an application must serve
 MCP-only agents. The adapter publishes one MCP tool per selected function and
 supports aliases for compatibility names; MCP is not used for in-process NAT
 composition.
