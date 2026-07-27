@@ -23,9 +23,9 @@ agent can reason coarsely while receiving the precise selected timestamp.
 `ModelsLLMConfig` registers an `xr-ai-models` `LLMService` as a NAT LLM
 provider. Its LangChain client translates NAT agent messages and tools but does
 not own model transport, so built-in NAT agents preserve the same deployment
-profiles and OpenAI-compatible service seam as direct callers. XR render's
-read-only post-action validator is the first consumer; the scene-control loop
-is intentionally unchanged in this slice.
+profiles and OpenAI-compatible service seam as direct callers. The provider is
+independent of the current XR render loop so future NAT agent workflows can use
+the same model-service boundary without a parallel client implementation.
 
 ### 2026-07-20 — XR render composes native capabilities directly
 

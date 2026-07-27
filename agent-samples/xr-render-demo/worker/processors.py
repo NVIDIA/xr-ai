@@ -172,7 +172,6 @@ class RenderSceneProcessor(BrainProcessor):
         live_vision: Function,
         release_vision: Callable[[str], None],
         text_memory: Function | None,
-        validator: Function,
         prompt_path: Path,
         tools: list[ToolDef],
         llm: LLMService,
@@ -185,7 +184,6 @@ class RenderSceneProcessor(BrainProcessor):
         self._live_vision = live_vision
         self._release_vision = release_vision
         self._text_memory = text_memory
-        self._validator = validator
         self._prompt_path = prompt_path
         self._prompt_cache = prompt_path.read_text(encoding="utf-8").strip()
         _prompts = prompt_path.parent
@@ -566,28 +564,6 @@ class RenderSceneProcessor(BrainProcessor):
                 await self._send(pid, msg, topic=_AGENT_PROGRESS_TOPIC)
                 sent.append(msg)
             await asyncio.sleep(repeat_every)
-
-    async def _validate(self, transcript: str, post_scene: dict) -> tuple[bool, str]:
-        """Ask Minitron whether the task was completed as requested.
-
-        Returns (ok, issue). Defaults to ok=True on any failure so a broken
-        validator never blocks the response.
-        """
-        request = f"Request: {transcript}\nCurrent scene: {json.dumps(post_scene or {})}"
-        try:
-            raw = (await asyncio.wait_for(self._validator.ainvoke(request, to_type=str), timeout=8.0)).strip()
-            obj_text = extract_json(raw)
-            if obj_text:
-                obj = json.loads(obj_text)
-                ok = bool(obj.get("ok", True))
-                issue = str(obj.get("issue", ""))
-                logger.debug("validation: ok={}  issue={!r}", ok, issue)
-                return ok, issue
-        except Exception:
-            logger.opt(exception=True).debug(
-                "validation call failed — defaulting to ok",
-            )
-        return True, ""
 
     async def _build_turn_context(self, pid: str, *, ref_us: int = 0) -> str:
         """Pre-fetch scene/pose and format the turn-context block.
