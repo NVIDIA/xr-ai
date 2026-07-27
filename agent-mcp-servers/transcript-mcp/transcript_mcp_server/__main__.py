@@ -1,7 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""MCP compatibility process for the native text-memory functions."""
+"""MCP compatibility process for the native text-memory functions.
+
+Wire-shape note: republishing over the typed native surface (without the former
+``untyped_outputs`` unwrapping) means ``query_transcripts`` and ``list_sources``
+now return typed objects — ``{"segments": [...]}`` and ``{"sources": [...]}`` —
+rather than the bare lists the legacy shim emitted. This is a deliberate change
+that keeps the MCP outputs aligned with the typed native API. This process is a
+transitional compatibility shim (removed in a later phase) and has no in-tree
+consumer, so the typed shape is adopted rather than reproducing the legacy one.
+"""
 
 from __future__ import annotations
 

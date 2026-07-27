@@ -13,7 +13,6 @@ from nat.plugin_api import (
     Builder,
     FunctionGroup,
     FunctionGroupBaseConfig,
-    FunctionGroupRef,
     register_function_group,
 )
 from pydantic import BaseModel, Field, field_validator
@@ -73,22 +72,6 @@ class TranscriptStatsResult(BaseModel):
     total_chars: int
     earliest_us: int | None
     latest_us: int | None
-
-
-class RecallConversationRequest(_StrictRequest):
-    participant_id: str
-    start_us: int = 0
-    end_us: int = Field(default=9_223_372_036_854_775_807)
-
-
-class ConversationEntry(BaseModel):
-    timestamp_us: int
-    role: str
-    text: str
-
-
-class RecallConversationResult(BaseModel):
-    entries: list[ConversationEntry]
 
 
 class _TranscriptStore:
@@ -203,12 +186,6 @@ class TextMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_text_memory"):
     directory: str | Path
 
 
-class ConversationMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_conversation_memory"):
-    """Configure participant-oriented conversation recall."""
-
-    text_memory: FunctionGroupRef = FunctionGroupRef("text_memory")
-
-
 @register_function_group(config_type=TextMemoryFunctionsConfig)
 async def text_memory_functions(config: TextMemoryFunctionsConfig, _builder: Builder):
     """Build the native transcript group over one persistent store."""
@@ -254,51 +231,13 @@ async def text_memory_functions(config: TextMemoryFunctionsConfig, _builder: Bui
     yield group
 
 
-@register_function_group(config_type=ConversationMemoryFunctionsConfig)
-async def conversation_memory_functions(config: ConversationMemoryFunctionsConfig, builder: Builder):
-    """Build participant conversation recall over the transcript store."""
-
-    text_memory = await builder.get_function_group(config.text_memory)
-    text_memory_functions = await text_memory.get_all_functions()
-    query = text_memory_functions[f"{text_memory.instance_name}__query_transcripts"]
-
-    async def recall(request: RecallConversationRequest) -> RecallConversationResult:
-        entries: list[ConversationEntry] = []
-        for role in ("user", "agent"):
-            result = await query.ainvoke(
-                QueryTranscriptsRequest(
-                    source_id=f"{request.participant_id}:{role}",
-                    start_us=request.start_us,
-                    end_us=request.end_us,
-                )
-            )
-            entries.extend(
-                ConversationEntry(timestamp_us=segment.timestamp_us, role=role, text=segment.text)
-                for segment in result.segments
-            )
-        entries.sort(key=lambda entry: entry.timestamp_us)
-        return RecallConversationResult(entries=entries)
-
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "recall_conversation",
-        recall,
-        description="Recall timestamped user and agent turns for one participant and time window.",
-    )
-    yield group
-
-
 __all__ = [
     "AddTranscriptRequest",
     "AddTranscriptResult",
-    "ConversationMemoryFunctionsConfig",
-    "ConversationEntry",
     "ListTranscriptSourcesRequest",
     "ListTranscriptSourcesResult",
     "QueryTranscriptsRequest",
     "QueryTranscriptsResult",
-    "RecallConversationRequest",
-    "RecallConversationResult",
     "TextMemoryFunctionsConfig",
     "TranscriptSegment",
     "TranscriptStatsRequest",

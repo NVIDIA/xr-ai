@@ -42,14 +42,20 @@ request models and typed result models instead of returning errors as data.
 `TranscriptStatsResult` with `count=0` and null `earliest_us`/`latest_us`
 rather than an error. `query_transcripts` and `list_sources` return objects
 (`{"segments": …}`, `{"sources": …}`) in place of bare lists. The store and
-schemas modules (`_store.py`, `schemas.py`) fold into `functions.py`, and a new
-`xr_conversation_memory` function group exposes participant-oriented
-`recall_conversation` over the transcript store. The path-escape guard is
-preserved: every `.identity`/`.jsonl` path is wrapped in `_check()`
-(`resolve()` + `is_relative_to(root)`) before it is read or used, including the
-`glob("*.identity")` loops, so a symlinked identity file is never followed. The
-`transcript-mcp` compatibility shim keeps republishing the four legacy tools
-over the new typed surface.
+schemas modules (`_store.py`, `schemas.py`) fold into `functions.py`. The
+path-escape guard is preserved: every `.identity`/`.jsonl` path is wrapped in
+`_check()` (`resolve()` + `is_relative_to(root)`) before it is read or used,
+including the `glob("*.identity")` loops, so a symlinked identity file is never
+followed. The `transcript-mcp` compatibility shim keeps republishing the four
+legacy tools over the new typed surface; because it no longer applies the
+`untyped_outputs` unwrapping, its `query_transcripts` and `list_sources` MCP
+outputs are now the typed objects (`{"segments": …}`, `{"sources": …}`) rather
+than the bare lists the earlier shim emitted — a deliberate wire-shape change
+that aligns the shim with the typed native API. Participant-oriented
+`recall_conversation` is deferred to land with its producer (the future
+`record_voice_transcripts` writer that stores `{participant_id}:{role}`
+sources); the render worker currently writes transcripts under the bare
+`participant_id`, so wiring recall now would return empty history.
 
 ### 2026-07-27 — MCP export lives under `xr_ai_nat.mcp`
 
