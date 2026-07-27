@@ -136,11 +136,8 @@ async def main(
             llm=llm,
             agent_llm=agent_llm,
         )
-        # Wire xr.session.started → start_xr lifecycle and the typed-text
-        # input path. The agent registers callbacks on the transport's
-        # endpoint; those bound methods keep it alive for the worker's
-        # lifetime.
-        _agent = RenderDemoAgent(transport=transport, brain=brain, tools=toolbox)  # noqa: F841
+        # The endpoint retains the agent's bound callbacks for the worker lifetime.
+        RenderDemoAgent(transport=transport, brain=brain, tools=toolbox)
 
         if ready_file:
             ready_file.touch()
