@@ -235,6 +235,26 @@ async def test_look_at_current_frame_answers_from_live_frame() -> None:
     assert image.startswith("data:image/jpeg;base64,")
 
 
+async def test_look_at_current_frame_builds_and_runs_without_video_memory() -> None:
+    # A live-only consumer must be able to construct and call look_at_current_frame
+    # without configuring a recorded video-memory group (lazy recorded dependency).
+    endpoint = _Endpoint()
+    vlm = _Vlm("It's a red mug.")
+
+    async with WorkflowBuilder() as builder:
+        await builder.add_function_group(
+            "vision",
+            VisionToolsConfig(endpoint=endpoint, vlm=vlm),
+        )
+        vision = await builder.get_function_group("vision")
+        functions = await vision.get_all_functions()
+        look = functions["vision__look_at_current_frame"]
+        await endpoint.frame_callback(_seed_signal())
+        result = await look.ainvoke(LiveVisionRequest(participant_id="alice", question="What am I holding?"))
+
+    assert result.answer == "It's a red mug."
+
+
 async def test_look_at_current_frame_reports_empty_answer_as_unavailable() -> None:
     endpoint = _Endpoint()
     vlm = _Vlm("   ")  # blank answer → FrameUnavailable

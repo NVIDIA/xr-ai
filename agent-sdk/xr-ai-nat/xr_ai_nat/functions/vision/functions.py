@@ -50,7 +50,7 @@ class VisionResult(BaseModel):
 class VisionChunk(BaseModel):
     """One streamed text fragment from a live-camera vision invocation."""
 
-    text: str
+    text: str = Field(description="A partial fragment of the streamed answer text.")
 
 
 class LiveVisionRequest(_StrictRequest):
@@ -63,16 +63,20 @@ class LiveVisionRequest(_StrictRequest):
 class LiveVisionResult(BaseModel):
     """Answer produced from a current or recorded camera frame."""
 
-    answer: str
+    answer: str = Field(description="Plain-English answer derived from the camera frame.")
 
 
 class HistoricalVisionRequest(_StrictRequest):
     """Ask a question about a recorded camera frame from the recent past."""
 
-    participant_id: str
-    question: str = Field(min_length=1)
+    participant_id: str = Field(description="Participant whose recorded camera frame should be inspected.")
+    question: str = Field(min_length=1, description="Specific question about the recorded camera frame.")
     second_ago: int = Field(gt=0, description="Positive offset from the utterance time in seconds.")
-    reference_time_us: int = Field(default=0, ge=0)
+    reference_time_us: int = Field(
+        default=0,
+        ge=0,
+        description="Reference (utterance) time in microseconds that the offset counts back from.",
+    )
 
 
 async def _current_image(frames: LiveFrameSource, participant_id: str) -> str:
@@ -207,9 +211,21 @@ async def vision_tools(config: VisionToolsConfig, builder: Builder):
         timeout_s=config.frame_timeout_s,
     )
     config._frames = frames
-    video_memory = await builder.get_function_group(config.video_memory)
-    recorded_functions = await video_memory.get_all_functions()
-    recorded_frame = recorded_functions[f"{video_memory.instance_name}__get_frame_from_time"]
+
+    # The recorded-frame dependency is resolved lazily so a live-only consumer can
+    # build and call `look_at_current_frame` without configuring a video-memory group.
+    # `look_at_past_frame` resolves (and caches) the group on first invocation.
+    recorded_frame: Any = None
+
+    async def _get_recorded_frame() -> Any:
+        nonlocal recorded_frame
+        if recorded_frame is None:
+            video_memory = await builder.get_function_group(config.video_memory)
+            recorded_functions = await video_memory.get_all_functions()
+            recorded_frame = recorded_functions[
+                f"{video_memory.instance_name}__get_frame_from_time"
+            ]
+        return recorded_frame
 
     async def look(request: LiveVisionRequest) -> LiveVisionResult:
         text = await _ask_image(
@@ -222,6 +238,7 @@ async def vision_tools(config: VisionToolsConfig, builder: Builder):
         return LiveVisionResult(answer=text)
 
     async def look_past(request: HistoricalVisionRequest) -> LiveVisionResult:
+        recorded_frame = await _get_recorded_frame()
         frame = await recorded_frame.ainvoke(
             {
                 "participant_id": request.participant_id,
