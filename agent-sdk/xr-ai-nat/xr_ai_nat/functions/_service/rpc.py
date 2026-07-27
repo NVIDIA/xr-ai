@@ -141,7 +141,7 @@ class RPCClient:
         if receiver is not None:
             receiver.cancel()
             with suppress(asyncio.CancelledError):
-                await receiver
+                _ = await receiver  # drain the cancelled receiver task
         for future in tuple(self._pending.values()):
             if not future.done():
                 future.set_exception(RPCError("RPC client closed", code="closed"))

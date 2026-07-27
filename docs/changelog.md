@@ -15,11 +15,19 @@ The private correlated msgpack/ZMQ transport shared by service-backed functions
 moved from `xr_ai_nat.functions._rpc` (a four-module package) to a single
 `xr_ai_nat.functions._service.rpc` module; `_service/` now owns the transport
 and value models shared across capabilities. The coordinate value models
-(`Vector3`, `SpatialFrame`, plus `Color` and the `ServiceResult` base) moved out
-of `spatial_math/schemas.py` into a capability-neutral `xr_ai_nat.functions.types`
-so every capability draws them from one place. Behaviour is unchanged: the RPC
-wire format and the models' JSON string rendering are identical; this is an
-ownership/location refactor toward one home per shared concern.
+`Vector3` and `SpatialFrame` moved out of `spatial_math/schemas.py` into a
+capability-neutral `xr_ai_nat.functions.types`, drawn from a shared
+`ServiceResult` base. `Color` is added there too as a preparatory shared home;
+the render scene still defines and uses its own `Color`/`Vector3`, so migrating
+that scene schema onto these types is deferred to a later change.
+
+The RPC wire format and the models' JSON string rendering (`__str__` →
+`model_dump_json`) are identical. One deliberate semantic change: the shared
+`ServiceResult` base sets `extra="allow"`, so unknown fields are now retained
+rather than dropped (the previous coordinate base used Pydantic's default
+`extra="ignore"`). This matches the target's intent and only affects inputs
+that carry fields outside the model — the spatial-math/tracking call sites pass
+exactly the declared fields, so their behaviour is unchanged.
 
 ### 2026-07-21 — Video memory is recorded history, not live capture
 
