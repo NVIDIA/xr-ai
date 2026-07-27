@@ -6,7 +6,7 @@
 import asyncio
 from pathlib import Path
 
-from xr_ai_nat.functions._rpc import RPCError
+from xr_ai_nat.functions._service.rpc import RPCError
 from xr_ai_nat.functions.video_memory.schemas import (
     EmptyRequest,
     HistoricalFrameRequest,

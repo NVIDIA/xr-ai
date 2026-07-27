@@ -9,8 +9,8 @@ from typing import Annotated, Literal
 from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, register_function_group
 from pydantic import BeforeValidator, Field
 
+from ..types import SpatialFrame, Vector3
 from . import _math as spatial_math
-from .schemas import SpatialFrame, Vector3
 
 
 def _decode_json(value: object) -> object:

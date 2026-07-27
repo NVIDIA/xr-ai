@@ -7,7 +7,7 @@ import asyncio
 from typing import Any, Protocol
 
 from pydantic import ValidationError
-from xr_ai_nat.functions._rpc import RPCError
+from xr_ai_nat.functions._service.rpc import RPCError
 from xr_ai_nat.functions.xr_tracking._client import HeadPoseRequest, OpenXRHealthRequest
 
 

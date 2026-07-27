@@ -3,7 +3,7 @@
 
 """Private typed client for the recorded-video service."""
 
-from .._rpc import RPCClient
+from .._service.rpc import RPCClient
 from .schemas import (
     EmptyRequest,
     HistoricalFrameRequest,

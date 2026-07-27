@@ -9,6 +9,18 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-27 — Shared service transport and value models under `xr-ai-nat`
+
+The private correlated msgpack/ZMQ transport shared by service-backed functions
+moved from `xr_ai_nat.functions._rpc` (a four-module package) to a single
+`xr_ai_nat.functions._service.rpc` module; `_service/` now owns the transport
+and value models shared across capabilities. The coordinate value models
+(`Vector3`, `SpatialFrame`, plus `Color` and the `ServiceResult` base) moved out
+of `spatial_math/schemas.py` into a capability-neutral `xr_ai_nat.functions.types`
+so every capability draws them from one place. Behaviour is unchanged: the RPC
+wire format and the models' JSON string rendering are identical; this is an
+ownership/location refactor toward one home per shared concern.
+
 ### 2026-07-21 — Video memory is recorded history, not live capture
 
 `video-memory-service` reads the H.264 chunks written by XR Media Hub and no

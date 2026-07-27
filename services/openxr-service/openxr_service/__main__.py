@@ -13,7 +13,7 @@ import yaml
 from loguru import logger
 from xr_ai_launcher import load_cloudxr_env
 from xr_ai_logging import setup_logging
-from xr_ai_nat.functions._rpc import RPCServer
+from xr_ai_nat.functions._service.rpc import RPCServer
 
 from .service import OpenXRService
 

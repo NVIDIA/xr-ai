@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
-from xr_ai_nat.functions._rpc import RPCServer
+from xr_ai_nat.functions._service.rpc import RPCServer
 
 from .service import VideoMemoryService
 from .store import ChunkStore

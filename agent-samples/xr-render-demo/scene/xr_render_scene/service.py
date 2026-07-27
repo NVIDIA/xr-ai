@@ -6,7 +6,7 @@
 import asyncio
 
 from loguru import logger
-from xr_ai_nat.functions._rpc import RPCError
+from xr_ai_nat.functions._service.rpc import RPCError
 
 from .engine import SceneDispatcher
 from .schemas import (

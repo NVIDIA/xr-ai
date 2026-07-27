@@ -23,7 +23,7 @@ import zmq.asyncio
 from fastmcp import Client as McpClient
 
 from render_mcp.__main__ import build_mcp
-from xr_ai_nat.functions._rpc import RPCServer
+from xr_ai_nat.functions._service.rpc import RPCServer
 from xr_render_scene import SceneClient
 from xr_render_scene.engine import (
     Config,

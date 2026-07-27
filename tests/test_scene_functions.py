@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
-from xr_ai_nat.functions._rpc import RPCServer
+from xr_ai_nat.functions._service.rpc import RPCServer
 from xr_render_scene import (
     SceneControlFunctionsConfig,
     SceneObjectFunctionsConfig,

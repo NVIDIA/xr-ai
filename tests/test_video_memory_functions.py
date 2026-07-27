@@ -26,7 +26,7 @@ from xr_ai_agent import (
     ParticipantEvent,
     PixelFormat,
 )
-from xr_ai_nat.functions._rpc import RPCError, RPCServer
+from xr_ai_nat.functions._service.rpc import RPCError, RPCServer
 from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
 from xr_ai_nat.functions.video_memory.schemas import HistoricalFrameRequest
 

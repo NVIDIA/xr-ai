@@ -14,7 +14,7 @@ import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
 from openxr_service.pose import from_native_pose
 from openxr_service.service import OpenXRService
-from xr_ai_nat.functions._rpc import RPCClient, RPCError, RPCServer
+from xr_ai_nat.functions._service.rpc import RPCClient, RPCError, RPCServer
 from xr_ai_nat.functions.spatial_math import SpatialFrame, Vector3
 from xr_ai_nat.functions.xr_tracking import HeadPose, OpenXRHealth, XRTrackingFunctionsConfig
 
