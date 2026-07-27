@@ -8,7 +8,7 @@ import logging
 import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from nat.plugin_api import (
     Builder,
@@ -38,7 +38,14 @@ class VisionRequest(_StrictRequest):
 class VisionResult(BaseModel):
     """Complete answer from a live-camera vision invocation."""
 
-    text: str
+    text: str = Field(description="Answer text or a reason that vision is unavailable.")
+    status: Literal["ok", "unavailable"] = Field(
+        default="ok",
+        description=(
+            "Whether a current frame and VLM answer were available. "
+            "Callers must handle an unavailable result without interpreting its text as a scene answer."
+        ),
+    )
 
 
 class VisionChunk(BaseModel):
@@ -82,6 +89,7 @@ async def streaming_vision(config: StreamingVisionConfig, _builder: Builder):
 
     async def answer(request: VisionRequest) -> VisionResult:
         await config.endpoint.set_status("processing", request.participant_id)
+        status: Literal["ok", "unavailable"] = "ok"
         try:
             image_url = await _current_image(frames, request.participant_id)
             response = await config.vlm.ask_image(
@@ -94,12 +102,14 @@ async def streaming_vision(config: StreamingVisionConfig, _builder: Builder):
                 text = "I couldn't make out anything in the view."
         except FrameUnavailable as exc:
             text = str(exc)
+            status = "unavailable"
         except Exception:
             _LOGGER.exception("Live VLM request failed")
             text = "VLM server unavailable — please retry."
+            status = "unavailable"
         finally:
             await config.endpoint.set_status("idle", request.participant_id)
-        return VisionResult(text=text)
+        return VisionResult(text=text, status=status)
 
     async def stream(request: VisionRequest) -> AsyncGenerator[VisionChunk, None]:
         try:

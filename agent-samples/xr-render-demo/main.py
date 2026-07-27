@@ -89,8 +89,7 @@ def _model_backend() -> str:
 # models.nim.yaml automatically — run LLM/VLM on hosted NIM and just don't start the local
 # llm / agent-llm / vlm model-servers. STT/TTS stay local. See
 # docs/ai-services.md "Hosting models on NVIDIA NIM".
-def _build_processes(backend: str) -> list[Process]:
-    del backend
+def _build_processes() -> list[Process]:
     return [
         Process("stt",       "../../ai-services/stt-server",         "stt_server",
                 launch_mode="reuse"),
@@ -252,7 +251,7 @@ def run() -> None:
     backend = _model_backend()
     if backend == "nim":
         ensure_credentials("NGC_API_KEY")
-    run_stack(_build_processes(backend), _BASE)
+    run_stack(_build_processes(), _BASE)
 
 
 if __name__ == "__main__":

@@ -813,7 +813,7 @@ class RenderSceneProcessor(BrainProcessor):
                 )
             except Exception:
                 logger.exception("agent-llm call failed on iteration {}", iteration)
-                break
+                return "Something went wrong — please try again."
 
             finish = resp.finish_reason or ""
             tool_calls = resp.tool_calls or []
@@ -950,12 +950,7 @@ class RenderSceneProcessor(BrainProcessor):
                 VisionRequest(participant_id=pid, query=question),
             )
             answer = result.text
-            unavailable = (
-                "No camera frame available",
-                "Frame data unavailable",
-                "VLM server unavailable",
-            )
-            if any(answer.startswith(prefix) for prefix in unavailable):
+            if result.status == "unavailable":
                 return {"error": answer, "spoken": _NO_FRAME_MSG}
             _trace_log.info("VLM   {}", answer[:200])
             return {"answer": answer}

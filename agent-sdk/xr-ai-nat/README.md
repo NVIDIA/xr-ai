@@ -74,6 +74,10 @@ For live voice workflows, `StreamingVisionConfig` accepts a hub
 invocation modes. It owns fresh-frame acquisition and VLM invocation; Pipecat
 continues to own audio framing, interruption, and TTS.
 
+Its complete invocation returns a `VisionResult` with `status` set to `ok` or
+`unavailable`; callers must handle an unavailable result without treating its
+text as an answer about the scene.
+
 ## XR tracking
 
 Install `xr-ai-nat[services]` and configure `xr_tracking` with the private

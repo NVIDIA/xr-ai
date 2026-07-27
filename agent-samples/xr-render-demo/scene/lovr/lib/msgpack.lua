@@ -1,4 +1,4 @@
--- Minimal msgpack decoder for LuaJIT (render-mcp scene bridge).
+-- Minimal msgpack decoder for the LuaJIT scene bridge.
 --
 -- Covers the subset emitted by Python's msgpack.packb(..., use_bin_type=True):
 --   fixmap, fixarray, fixstr, fixint, nil, bool,

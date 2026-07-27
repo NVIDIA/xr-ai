@@ -1,6 +1,6 @@
 -- LuaJIT FFI wrapper for ZMQ PULL sockets.
 --
--- render-mcp sets RENDER_ZMQ_LIB to the libzmq bundled with pyzmq before
+-- The scene service sets RENDER_ZMQ_LIB to the libzmq bundled with pyzmq before
 -- spawning LOVR; we fall back to the system library if it is not set.
 --
 -- Public API:

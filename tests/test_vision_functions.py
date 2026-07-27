@@ -218,6 +218,7 @@ async def test_streaming_vision_function_uses_current_participant_frame() -> Non
 
     assert chunks == ["a ", "blue ", "square"]
     assert answer.text == "a blue square"
+    assert answer.status == "ok"
     assert endpoint.statuses == [
         ("processing", "alice"),
         ("idle", "alice"),
@@ -243,9 +244,12 @@ async def test_streaming_vision_function_reports_unavailable_frame(monkeypatch) 
             chunk.text
             async for chunk in function.astream(VisionRequest(participant_id="alice", query="What is shown?"))
         ]
+        answer = await function.ainvoke(VisionRequest(participant_id="alice", query="What is shown?"))
 
     assert chunks == ["No camera frame available — please try again."]
-    assert endpoint.statuses == []
+    assert answer.text == "No camera frame available — please try again."
+    assert answer.status == "unavailable"
+    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
     assert vlm.calls == []
 
 

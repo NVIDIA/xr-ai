@@ -8,7 +8,7 @@
 -- exits. Force line buffering up front so diagnostics show up live.
 io.stdout:setvbuf("line")
 io.stderr:setvbuf("line")
-print("[render-mcp-scene] conf.lua loaded")
+print("[xr-render-scene] conf.lua loaded")
 
 function lovr.conf(t)
     t.headset.drivers = { "openxr" }

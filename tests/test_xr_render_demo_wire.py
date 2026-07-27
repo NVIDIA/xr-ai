@@ -17,6 +17,7 @@ import json
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 # Add the worker directory to sys.path so we can import its modules.
 _WORKER_DIR = (
@@ -806,6 +807,42 @@ async def test_perception_query_reaches_vlm_frame_path() -> None:
     assert transport.endpoint.frame_requests == [sig]
     # The VLM answer is returned to the loop, not a generic fallback.
     assert result == {"answer": "It's a red mug."}
+
+
+async def test_perception_uses_structured_vision_unavailability() -> None:
+    """Unavailable vision results take the graceful path regardless of text."""
+    transport = _CaptureTransport()
+    brain = _make_brain(transport)
+
+    class _UnavailableVision:
+        async def ainvoke(self, _request):
+            return SimpleNamespace(text="The message may change.", status="unavailable")
+
+    brain._live_vision = _UnavailableVision()  # noqa: SLF001
+
+    result = await brain._look_at_current_frame("pid-1", "What is shown?")  # noqa: SLF001
+
+    assert result == {"error": "The message may change.", "spoken": _proc._NO_FRAME_MSG}
+
+
+async def test_agentic_loop_reports_agent_llm_failure() -> None:
+    """A failed agent-LLM request must not fall through to a success reply."""
+    transport = _CaptureTransport()
+    brain = _make_brain(transport)
+
+    async def _context(_pid: str, *, ref_us: int) -> str:
+        return "scene context"
+
+    class _FailingAgentLLM:
+        async def chat(self, *_args, **_kwargs):
+            raise RuntimeError("backend unavailable")
+
+    brain._build_turn_context = _context  # noqa: SLF001
+    brain._agent_llm = _FailingAgentLLM()  # noqa: SLF001
+
+    answer = await brain._agentic_loop("add a cube", "pid-1")  # noqa: SLF001
+
+    assert answer == "Something went wrong — please try again."
 
 
 async def test_perception_no_frame_yields_graceful_message() -> None:

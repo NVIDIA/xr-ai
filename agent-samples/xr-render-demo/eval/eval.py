@@ -472,7 +472,7 @@ CASES = [
         "scene": [{"id": "sphere-0", "type": "sphere",
                    "pos": [0.5, 1.5, -1.5], "color": [1, 0, 0], "size": 0.2}],
         "user":  "Put a green cube on top of the sphere.",
-        # render-mcp `size` is radius for spheres / half-edge for boxes.
+        # Scene `size` is radius for spheres / half-edge for boxes.
         # Sphere top y = 1.5 + 0.2 = 1.7; a default cube (half-edge 0.1)
         # sits ON the sphere when its centre y ≈ 1.8.
         "result": [
