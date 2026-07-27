@@ -6,10 +6,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
-from nat.plugin_api import FunctionGroupRef, LLMRef
+from nat.plugin_api import FunctionGroupRef, LLMFrameworkEnum, LLMRef
 from nat.plugins.langchain.agent.tool_calling_agent.register import ToolCallAgentWorkflowConfig
 from pydantic import ValidationError
 from xr_ai_models import Capabilities, ChatMessage, ChatResponse, ToolCall, ToolDef
@@ -102,3 +103,34 @@ async def test_models_llm_runs_a_nat_tool_calling_agent() -> None:
     assert any(message.role == "assistant" and message.tool_calls for message in second_messages)
     assert any(message.role == "tool" and "1.0" in str(message.content) for message in second_messages)
     assert service.closed is False
+
+
+async def test_models_llm_loads_profile_and_closes_owned_service(tmp_path: Path, monkeypatch) -> None:
+    """Profile-backed providers create and close the service they own."""
+    profile = tmp_path / "models.yaml"
+    profile.write_text(
+        """
+agent_llm:
+  category: llm
+  kind: openai_compat
+  model_name: profile-model
+  base_url: http://localhost:1
+  health_check: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+    service = _ToolCallingLLM()
+
+    def _make_llm(models, role: str):
+        assert models.llm(role).model_name == "profile-model"
+        return service
+
+    monkeypatch.setattr("xr_ai_models.make_llm", _make_llm)
+
+    async with WorkflowBuilder() as builder:
+        llm_ref = LLMRef("profile_llm")
+        await builder.add_llm(llm_ref, ModelsLLMConfig(profile_path=str(profile)))
+        model = await builder.get_llm(llm_ref, LLMFrameworkEnum.LANGCHAIN)
+        assert model.service is service
+
+    assert service.closed is True
