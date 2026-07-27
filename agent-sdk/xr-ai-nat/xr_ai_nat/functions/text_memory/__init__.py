@@ -1,15 +1,38 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Public text-memory function group and result schemas."""
+"""Public text-memory functions and invocation schemas."""
 
-from .functions import TextMemoryFunctionsConfig
-from .schemas import OperationResult, TextMemoryError, TranscriptSegment, TranscriptStats
+from .functions import (
+    AddTranscriptRequest,
+    AddTranscriptResult,
+    ConversationEntry,
+    ConversationMemoryFunctionsConfig,
+    ListTranscriptSourcesRequest,
+    ListTranscriptSourcesResult,
+    QueryTranscriptsRequest,
+    QueryTranscriptsResult,
+    RecallConversationRequest,
+    RecallConversationResult,
+    TextMemoryFunctionsConfig,
+    TranscriptSegment,
+    TranscriptStatsRequest,
+    TranscriptStatsResult,
+)
 
 __all__ = [
-    "OperationResult",
-    "TextMemoryError",
+    "AddTranscriptRequest",
+    "AddTranscriptResult",
+    "ConversationEntry",
+    "ConversationMemoryFunctionsConfig",
+    "ListTranscriptSourcesRequest",
+    "ListTranscriptSourcesResult",
+    "QueryTranscriptsRequest",
+    "QueryTranscriptsResult",
+    "RecallConversationRequest",
+    "RecallConversationResult",
     "TextMemoryFunctionsConfig",
     "TranscriptSegment",
-    "TranscriptStats",
+    "TranscriptStatsRequest",
+    "TranscriptStatsResult",
 ]

@@ -32,6 +32,25 @@ likewise kept as a deprecated alias. Import from
 `xr_ai_nat.functions.video_memory` (or its `._client` submodule) going forward;
 the aliases will be removed in a future version.
 
+### 2026-07-27 — Text-memory adopts typed request/result models
+
+The native `text_memory` capability now speaks explicit `_StrictRequest`
+request models and typed result models instead of returning errors as data.
+`add_transcript` rejects blank text at the request boundary
+(`Field(min_length=1)` plus a `field_validator`) rather than emitting a
+`TextMemoryError`, and `get_transcript_stats` for an unknown source returns a
+`TranscriptStatsResult` with `count=0` and null `earliest_us`/`latest_us`
+rather than an error. `query_transcripts` and `list_sources` return objects
+(`{"segments": …}`, `{"sources": …}`) in place of bare lists. The store and
+schemas modules (`_store.py`, `schemas.py`) fold into `functions.py`, and a new
+`xr_conversation_memory` function group exposes participant-oriented
+`recall_conversation` over the transcript store. The path-escape guard is
+preserved: every `.identity`/`.jsonl` path is wrapped in `_check()`
+(`resolve()` + `is_relative_to(root)`) before it is read or used, including the
+`glob("*.identity")` loops, so a symlinked identity file is never followed. The
+`transcript-mcp` compatibility shim keeps republishing the four legacy tools
+over the new typed surface.
+
 ### 2026-07-27 — MCP export lives under `xr_ai_nat.mcp`
 
 The generic native-function → MCP publisher moved from

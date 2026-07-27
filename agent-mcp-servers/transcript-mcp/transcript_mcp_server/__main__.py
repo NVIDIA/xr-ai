@@ -45,11 +45,6 @@ async def build_mcp(directory: str | Path):
         "transcript-mcp",
         exports,
         tool_names=aliases,
-        untyped_outputs={
-            "text_memory__add_transcript",
-            "text_memory__query_transcripts",
-            "text_memory__get_transcript_stats",
-        },
     )
 
 
