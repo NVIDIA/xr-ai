@@ -16,12 +16,12 @@ from xr_ai_agent import FrameUnavailable, LiveFrameSource, ProcessorEndpoint, Su
 
 from xr_ai_logging import setup_logging
 from xr_ai_nat.functions._service.rpc import RPCError
-from xr_ai_nat.functions.video_memory._client import VideoMemoryClient
-from xr_ai_nat.functions.video_memory.schemas import (
+from xr_ai_nat.functions.video_memory import (
     HistoricalFrameRequest,
     QueryVideoRequest,
     VideoStatsRequest,
 )
+from xr_ai_nat.functions.video_memory._client import VideoMemoryClient
 
 from .live import LiveFrameExporter
 

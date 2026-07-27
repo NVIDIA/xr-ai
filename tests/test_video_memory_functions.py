@@ -27,8 +27,7 @@ from xr_ai_agent import (
     PixelFormat,
 )
 from xr_ai_nat.functions._service.rpc import RPCError, RPCServer
-from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
-from xr_ai_nat.functions.video_memory.schemas import HistoricalFrameRequest
+from xr_ai_nat.functions.video_memory import HistoricalFrameRequest, VideoMemoryFunctionsConfig
 
 
 class _LiveFrames:

@@ -9,6 +9,19 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-27 — Video-memory contracts inline into the typed client
+
+`video_memory/schemas.py` is folded into `video_memory/_client.py`, aligning the
+model surface with the render-subagents branch: request models now extend the
+shared `_StrictRequest` base, `EmptyRequest` splits into the intent-named
+`ListRecordedParticipantsRequest`/`VideoHealthRequest`, `ParticipantsResult`
+becomes `ListRecordedParticipantsResult`, and `VideoMemoryHealth` becomes
+`VideoHealthResult`. A `xr_video_memory_control` readiness function group and a
+`VideoMemoryClient.health()` helper are added. The client keeps importing
+`RPCClient` from `.._rpc` (the `_service.rpc` relocation is a separate open PR)
+and `VideoHealthResult` retains `recording_enabled` so the Video MCP shim's
+conditional tool sets and live-only outage fallback stay intact.
+
 ### 2026-07-27 — MCP export lives under `xr_ai_nat.mcp`
 
 The generic native-function → MCP publisher moved from
