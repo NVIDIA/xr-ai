@@ -16,7 +16,8 @@ import json
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from types import SimpleNamespace
+
+import pytest
 
 # Add the worker directory to sys.path so we can import its modules.
 _WORKER_DIR = (
@@ -41,7 +42,9 @@ from xr_ai_models import (
 )
 from xr_ai_models.config import load_models_config
 from nat.builder.workflow_builder import WorkflowBuilder
-from xr_ai_nat.functions.vision import StreamingVisionConfig
+from nat.plugin_api import FunctionGroupRef
+from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
+from xr_ai_nat.functions.vision import VisionToolsConfig
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -409,11 +412,6 @@ class _UnusedToolbox:
         raise AssertionError(f"unexpected native tool invocation: {name} {arguments}")
 
 
-class _UnusedVision:
-    async def ainvoke(self, request):
-        raise AssertionError(f"unexpected live-vision invocation: {request}")
-
-
 def _make_brain(transport: _CaptureTransport):
     """Build a real RenderSceneProcessor whose service clients are unused.
 
@@ -425,7 +423,6 @@ def _make_brain(transport: _CaptureTransport):
         transport   = transport,
         cfg         = None,
         toolbox     = _UnusedToolbox(),
-        live_vision = _UnusedVision(),
         release_vision = lambda _pid: None,
         text_memory = None,
         prompt_path = _SYSTEM_PROMPT,
@@ -600,11 +597,12 @@ async def test_render_spatial_native_toolbox_builds() -> None:
 async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
     """The shared builder exposes the complete runtime tool surface without MCP discovery."""
     async with WorkflowBuilder() as builder:
-        toolbox = await _caps.build_native_toolbox(
+        toolbox, _vision_config = await _caps.build_native_toolbox(
             builder,
             scene_endpoint="tcp://127.0.0.1:65527",
             openxr_endpoint="tcp://127.0.0.1:65528",
             video_memory_endpoint="tcp://127.0.0.1:65529",
+            frame_endpoint=_FakeEndpoint(),
             vlm=_FakeVLM(),
         )
         names = {tool.name for tool in toolbox.definitions()}
@@ -612,7 +610,6 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
     assert names == {
         "add_primitive",
         "along_direction",
-        "ask_image",
         "between_anchors",
         "displace_object",
         "displace_objects",
@@ -622,6 +619,8 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
         "get_scene_state",
         "get_video_stats",
         "list_recorded_participants",
+        "look_at_current_frame",
+        "look_at_past_frame",
         "place_inside_by_id",
         "place_object_relative",
         "place_user_relative",
@@ -718,24 +717,31 @@ def _now_us_test() -> int:
 
 @asynccontextmanager
 async def _perception_brain(transport, vlm: _FakeVLM):
-    config = StreamingVisionConfig(
+    config = VisionToolsConfig(
         endpoint=transport.endpoint,
         vlm=vlm,
-        system_prompt=_proc._PERCEPTION_SYSTEM_PROMPT,
+        video_memory=FunctionGroupRef("video_memory"),
         frame_max_age_s=60.0,
         frame_timeout_s=0.2,
     )
     async with WorkflowBuilder() as builder:
-        live_vision = await builder.add_function("live_vision_test", config)
+        # A resolvable (offline) video-memory group so the vision group builds;
+        # look_at_current_frame never touches it.
+        await builder.add_function_group(
+            "video_memory",
+            VideoMemoryFunctionsConfig(endpoint="tcp://127.0.0.1:65529"),
+        )
+        await builder.add_function_group("vision", config)
+        vision = await builder.get_function_group("vision")
+        toolbox = _caps.NativeToolbox(await vision.get_all_functions())
         yield _proc.RenderSceneProcessor(
             transport=transport,
             cfg=None,
-            toolbox=_UnusedToolbox(),
-            live_vision=live_vision,
+            toolbox=toolbox,
             release_vision=config.release,
             text_memory=None,
             prompt_path=_SYSTEM_PROMPT,
-            tools=[_proc._PERCEPTION_TOOL_DEF],
+            tools=[],
             llm=None,
             agent_llm=None,
         )
@@ -782,20 +788,19 @@ async def test_perception_query_reaches_vlm_frame_path() -> None:
     assert result == {"answer": "It's a red mug."}
 
 
-async def test_perception_uses_structured_vision_unavailability() -> None:
-    """Unavailable vision results take the graceful path regardless of text."""
+async def test_perception_unavailable_frame_ends_turn_gracefully() -> None:
+    """A failed live-vision invocation ends the turn via the graceful no-frame path.
+
+    The native ``look_at_current_frame`` raises (no frame / no VLM answer); the
+    processor converts any failure into a ``_PerceptionUnavailableError`` carrying
+    the short spoken message rather than feeding an error back to the model."""
     transport = _CaptureTransport()
-    brain = _make_brain(transport)
+    brain = _make_brain(transport)  # _UnusedToolbox.invoke raises on call
 
-    class _UnavailableVision:
-        async def ainvoke(self, _request):
-            return SimpleNamespace(text="The message may change.", status="unavailable")
+    with pytest.raises(_proc._PerceptionUnavailableError) as excinfo:
+        await brain._look_at_current_frame("pid-1", "What is shown?")  # noqa: SLF001
 
-    brain._live_vision = _UnavailableVision()  # noqa: SLF001
-
-    result = await brain._look_at_current_frame("pid-1", "What is shown?")  # noqa: SLF001
-
-    assert result == {"error": "The message may change.", "spoken": _proc._NO_FRAME_MSG}
+    assert excinfo.value.spoken == _proc._NO_FRAME_MSG
 
 
 async def test_agentic_loop_reports_agent_llm_failure() -> None:

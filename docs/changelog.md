@@ -9,6 +9,24 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-27 — Native vision exposes current- and recorded-frame tools
+
+The `xr_ai_nat` vision capability drops the path-based `xr_vision`/`ask_image`
+function group in favour of the native `xr_vision_tools` group
+(`VisionToolsConfig`), which exposes `look_at_current_frame` over the always-on
+live frame source and `look_at_past_frame` over the `video_memory` function
+group. `StreamingVisionConfig` (`xr_streaming_vision`) is retained for
+simple-vlm's streaming Q&A. Frame conversion moved from `vision/_images.py` to
+`vision/_pixels.py`. The xr-render worker now consumes the native perception
+tools directly: the local `look_at_current_frame` `ToolDef` wrapper and the
+`ask_image` two-step were removed from `processors.py`, with the processor
+injecting participant identity (and the utterance timestamp for recorded
+lookups) that the model never supplies. The no-frame path still ends the turn
+with a short spoken message. Camera capture remains always-on streaming — no
+camera-on-demand path was reintroduced. vlm-mcp keeps its file-based `ask_image`
+MCP tool, now self-contained in the server since the native surface no longer
+offers a file-path tool.
+
 ### 2026-07-27 — Video-memory contracts inline into the typed client
 
 The model definitions move into `video_memory/_client.py`, aligning the model

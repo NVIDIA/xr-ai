@@ -1,39 +1,48 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""CPU-only tests for the native image-question vision function."""
-
-from __future__ import annotations
+"""CPU-only tests for the native current- and recorded-frame vision functions."""
 
 import base64
 import io
 import time
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
-import httpx
 import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
-from PIL import Image
-from pydantic import ValidationError
-from xr_ai_agent import FrameData, FrameSignal, FrameUnavailable, PixelFormat
-from xr_ai_nat.functions.vision import (
-    StreamingVisionConfig,
-    VisionFunctionsConfig,
-    VisionRequest,
+from nat.plugin_api import (
+    Builder,
+    FunctionGroup,
+    FunctionGroupBaseConfig,
+    FunctionGroupRef,
+    register_function_group,
 )
-from xr_ai_nat.functions.vision._images import frame_jpeg_data_url, load_jpeg_data_url
+from PIL import Image
+from pydantic import ConfigDict, Field, ValidationError
+from xr_ai_agent import FrameData, FrameSignal, FrameUnavailable, PixelFormat
+from xr_ai_nat.functions.video_memory.schemas import HistoricalFrameRequest, HistoricalFrameResult
+from xr_ai_nat.functions.vision import (
+    HistoricalVisionRequest,
+    LiveVisionRequest,
+    StreamingVisionConfig,
+    VisionRequest,
+    VisionToolsConfig,
+)
+from xr_ai_nat.functions.vision._pixels import encode_image, frame_to_pil
 
 
 class _Vlm:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str = "a blue square") -> None:
         self.content = content
-        self.calls: list[tuple[str, str, str]] = []
+        self.calls: list[tuple[Any, str, str]] = []
 
-    async def ask_image(self, image: str, question: str, *, system_prompt: str = ""):
+    async def ask_image(self, image: Any, question: str, *, system_prompt: str = ""):
         self.calls.append((image, question, system_prompt))
         return SimpleNamespace(content=self.content)
 
-    async def stream(self, image: str, question: str, *, system_prompt: str = ""):
+    async def stream(self, image: Any, question: str, *, system_prompt: str = ""):
         self.calls.append((image, question, system_prompt))
         for token in ("a ", "blue ", "square"):
             yield token
@@ -66,19 +75,59 @@ class _Endpoint:
         self.statuses.append((status, participant_id))
 
 
-class _HttpErrorVlm(_Vlm):
-    async def ask_image(self, image: str, question: str, *, system_prompt: str = ""):
-        raise httpx.HTTPError("backend unavailable")
+def _seed_signal(participant_id: str = "alice") -> FrameSignal:
+    return FrameSignal(
+        slot=0,
+        seq=1,
+        pts_us=time.time_ns() // 1_000,
+        width=2,
+        height=2,
+        fmt=PixelFormat.RGB24,
+        data_sz=12,
+        participant_id=participant_id,
+        track_id="camera",
+    )
 
 
-def test_load_jpeg_data_url_emits_data_url(tmp_path) -> None:
-    image_path = tmp_path / "frame.png"
-    Image.new("RGB", (4, 4), color=(20, 40, 60)).save(image_path)
+# ── recorded-frame stub group (stands in for video-memory-service) ────────────
 
-    image_url = load_jpeg_data_url(image_path)
 
-    assert image_url.startswith("data:image/jpeg;base64,")
-    assert base64.b64decode(image_url.split(",", 1)[1]).startswith(b"\xff\xd8")
+class _VideoMemoryStubConfig(FunctionGroupBaseConfig, name="xr_video_memory_stub"):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    requests: Any = Field(exclude=True, repr=False)
+
+
+@register_function_group(config_type=_VideoMemoryStubConfig)
+async def _video_memory_stub(config: _VideoMemoryStubConfig, _builder: Builder):
+    group = FunctionGroup(config=config)
+
+    async def get_frame_from_time(request: HistoricalFrameRequest) -> HistoricalFrameResult:
+        config.requests.append(request)
+        return HistoricalFrameResult(
+            path="/tmp/frame.png",
+            width=1,
+            height=1,
+            timestamp_us=90,
+            second_ago=request.second_ago,
+            actual_second_ago=10.0,
+        )
+
+    group.add_function("get_frame_from_time", get_frame_from_time, description="Return a recorded frame.")
+    yield group
+
+
+async def _build_vision(builder: WorkflowBuilder, endpoint, vlm, requests):
+    await builder.add_function_group("video_memory", _VideoMemoryStubConfig(requests=requests))
+    await builder.add_function_group(
+        "vision",
+        VisionToolsConfig(endpoint=endpoint, vlm=vlm, video_memory=FunctionGroupRef("video_memory")),
+    )
+    vision = await builder.get_function_group("vision")
+    return await vision.get_all_functions()
+
+
+# ── _pixels frame conversion ──────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
@@ -90,7 +139,7 @@ def test_load_jpeg_data_url_emits_data_url(tmp_path) -> None:
         (PixelFormat.NV12, bytes([80] * 4 + [128, 128])),
     ],
 )
-def test_frame_jpeg_data_url_supports_non_rgb_frame_formats(pixel_format, data) -> None:
+def test_frame_to_pil_supports_non_rgb_frame_formats(pixel_format, data) -> None:
     frame = FrameData(
         seq=1,
         pts_us=0,
@@ -102,7 +151,7 @@ def test_frame_jpeg_data_url_supports_non_rgb_frame_formats(pixel_format, data) 
         track_id="camera",
     )
 
-    image_url = frame_jpeg_data_url(frame)
+    image_url = encode_image(frame_to_pil(frame))
     image = Image.open(io.BytesIO(base64.b64decode(image_url.split(",", 1)[1])))
 
     assert image_url.startswith("data:image/jpeg;base64,")
@@ -110,111 +159,23 @@ def test_frame_jpeg_data_url_supports_non_rgb_frame_formats(pixel_format, data) 
     assert image.size == (2, 2)
 
 
-async def test_vision_function_normalizes_image_and_returns_clean_answer(tmp_path) -> None:
-    image_path = tmp_path / "frame.png"
-    Image.new("RGB", (4, 4), color=(20, 40, 60)).save(image_path)
-    vlm = _Vlm("<think>inspect pixels</think>\n  a blue square  ")
-    config = VisionFunctionsConfig(vlm=vlm, system_prompt="Answer briefly.")
-
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group("vision", config)
-        group = await builder.get_function_group("vision")
-        functions = await group.get_all_functions()
-        answer = await functions["vision__ask_image"].ainvoke(
-            {"question": "What is shown?", "image_path": str(image_path)}
-        )
-
-    assert set(functions) == {"vision__ask_image"}
-    assert set(functions["vision__ask_image"].input_schema.model_json_schema()["properties"]) == {
-        "question",
-        "image_path",
-    }
-    assert answer == "a blue square"
-    image_url, question, system_prompt = vlm.calls[0]
-    assert question == "What is shown?"
-    assert system_prompt == "Answer briefly."
-    assert image_url.startswith("data:image/jpeg;base64,")
-    assert base64.b64decode(image_url.split(",", 1)[1]).startswith(b"\xff\xd8")
-    dumped_config = config.model_dump()
-    assert "vlm" not in dumped_config
-    assert dumped_config["system_prompt"] == "Answer briefly."
-
-
-async def test_vision_function_reports_missing_image_without_calling_model(tmp_path) -> None:
-    vlm = _Vlm("unused")
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group("vision", VisionFunctionsConfig(vlm=vlm))
-        group = await builder.get_function_group("vision")
-        functions = await group.get_all_functions()
-        answer = await functions["vision__ask_image"].ainvoke(
-            {"question": "What is shown?", "image_path": str(tmp_path / "missing.png")}
-        )
-
-    assert "file not found" in answer
-    assert vlm.calls == []
-
-
-async def test_vision_function_reports_empty_image_path_without_calling_model() -> None:
-    vlm = _Vlm("unused")
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group("vision", VisionFunctionsConfig(vlm=vlm))
-        group = await builder.get_function_group("vision")
-        functions = await group.get_all_functions()
-        answer = await functions["vision__ask_image"].ainvoke(
-            {"question": "What is shown?", "image_path": ""}
-        )
-
-    assert answer == "ask_image: image_path is empty — acquire an image first."
-    assert vlm.calls == []
-
-
-async def test_vision_function_reports_http_error(tmp_path) -> None:
-    image_path = tmp_path / "frame.png"
-    Image.new("RGB", (4, 4), color=(20, 40, 60)).save(image_path)
-    vlm = _HttpErrorVlm("unused")
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group("vision", VisionFunctionsConfig(vlm=vlm))
-        group = await builder.get_function_group("vision")
-        functions = await group.get_all_functions()
-        answer = await functions["vision__ask_image"].ainvoke(
-            {"question": "What is shown?", "image_path": str(image_path)}
-        )
-
-    assert answer == "ask_image: vlm-server request failed: backend unavailable"
+# ── StreamingVisionConfig (live-camera streaming) ─────────────────────────────
 
 
 async def test_streaming_vision_function_uses_current_participant_frame() -> None:
     endpoint = _Endpoint()
     vlm = _Vlm("a blue square")
-    config = StreamingVisionConfig(
-        endpoint=endpoint,
-        vlm=vlm,
-        system_prompt="Answer briefly.",
-    )
+    config = StreamingVisionConfig(endpoint=endpoint, vlm=vlm, system_prompt="Answer briefly.")
 
     async with WorkflowBuilder() as builder:
         function = await builder.add_function("perception", config)
         assert endpoint.frame_callback is not None
-        await endpoint.frame_callback(
-            FrameSignal(
-                slot=0,
-                seq=1,
-                pts_us=time.time_ns() // 1_000,
-                width=2,
-                height=2,
-                fmt=PixelFormat.RGB24,
-                data_sz=12,
-                participant_id="alice",
-                track_id="camera",
-            )
-        )
+        await endpoint.frame_callback(_seed_signal())
         chunks = [
             chunk.text
             async for chunk in function.astream(VisionRequest(participant_id="alice", query="What is shown?"))
         ]
-        answer = await function.ainvoke(
-            VisionRequest(participant_id="alice", query="What is shown?")
-        )
+        answer = await function.ainvoke(VisionRequest(participant_id="alice", query="What is shown?"))
 
     assert chunks == ["a ", "blue ", "square"]
     assert answer.text == "a blue square"
@@ -253,10 +214,82 @@ async def test_streaming_vision_function_reports_unavailable_frame(monkeypatch) 
     assert vlm.calls == []
 
 
-def test_streaming_vision_request_rejects_unknown_arguments() -> None:
-    with pytest.raises(ValidationError):
-        VisionRequest(
-            participant_id="alice",
-            query="What is shown?",
-            unsupported=True,
+# ── VisionToolsConfig — look_at_current_frame ─────────────────────────────────
+
+
+async def test_look_at_current_frame_answers_from_live_frame() -> None:
+    endpoint = _Endpoint()
+    vlm = _Vlm("It's a red mug.")
+    requests: list[HistoricalFrameRequest] = []
+
+    async with WorkflowBuilder() as builder:
+        functions = await _build_vision(builder, endpoint, vlm, requests)
+        assert set(functions) == {"vision__look_at_current_frame", "vision__look_at_past_frame"}
+        look = functions["vision__look_at_current_frame"]
+        await endpoint.frame_callback(_seed_signal())
+        result = await look.ainvoke(LiveVisionRequest(participant_id="alice", question="What am I holding?"))
+
+    assert result.answer == "It's a red mug."
+    image, question, _system = vlm.calls[0]
+    assert question == "What am I holding?"
+    assert image.startswith("data:image/jpeg;base64,")
+
+
+async def test_look_at_current_frame_reports_empty_answer_as_unavailable() -> None:
+    endpoint = _Endpoint()
+    vlm = _Vlm("   ")  # blank answer → FrameUnavailable
+    requests: list[HistoricalFrameRequest] = []
+
+    async with WorkflowBuilder() as builder:
+        functions = await _build_vision(builder, endpoint, vlm, requests)
+        look = functions["vision__look_at_current_frame"]
+        await endpoint.frame_callback(_seed_signal())
+        with pytest.raises(FrameUnavailable):
+            await look.ainvoke(LiveVisionRequest(participant_id="alice", question="What am I holding?"))
+
+
+# ── VisionToolsConfig — look_at_past_frame ────────────────────────────────────
+
+
+async def test_look_at_past_frame_uses_recorded_frame_function() -> None:
+    endpoint = _Endpoint()
+    vlm = _Vlm("It was purple.")
+    requests: list[HistoricalFrameRequest] = []
+
+    async with WorkflowBuilder() as builder:
+        functions = await _build_vision(builder, endpoint, vlm, requests)
+        look_past = functions["vision__look_at_past_frame"]
+        result = await look_past.ainvoke(
+            HistoricalVisionRequest(
+                participant_id="alice",
+                question="What color was it?",
+                second_ago=10,
+                reference_time_us=100,
+            )
         )
+
+    assert result.answer == "It was purple."
+    assert requests[0].reference_time_us == 100
+    assert requests[0].second_ago == 10
+    # The recorded PNG path was handed to the VLM as a filesystem path.
+    assert vlm.calls[0][0] == Path("/tmp/frame.png")
+
+
+def test_historical_vision_request_requires_a_positive_offset() -> None:
+    with pytest.raises(ValidationError):
+        HistoricalVisionRequest(
+            participant_id="alice",
+            question="What was visible?",
+            second_ago=0,
+            reference_time_us=100,
+        )
+
+
+def test_vision_request_rejects_unknown_arguments() -> None:
+    with pytest.raises(ValidationError):
+        VisionRequest(participant_id="alice", query="What is shown?", unsupported=True)
+
+
+def test_live_vision_request_rejects_unknown_arguments() -> None:
+    with pytest.raises(ValidationError):
+        LiveVisionRequest(participant_id="alice", question="What is shown?", unsupported=True)

@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from xr_ai_models import ToolDef
 from xr_ai_nat.functions.spatial_math import SpatialMathFunctionsConfig
 from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
-from xr_ai_nat.functions.vision import VisionFunctionsConfig
+from xr_ai_nat.functions.vision import VisionToolsConfig
 from xr_ai_nat.functions.xr_tracking import XRTrackingFunctionsConfig
 from xr_render_scene import (
     SceneControlFunctionsConfig,
@@ -364,9 +364,19 @@ async def build_native_toolbox(
     scene_endpoint: str,
     openxr_endpoint: str,
     video_memory_endpoint: str,
+    frame_endpoint: Any,
     vlm: Any,
-) -> NativeToolbox:
-    """Build the model-facing toolbox shared by the live worker and eval."""
+) -> tuple[NativeToolbox, VisionToolsConfig]:
+    """Build the model-facing toolbox shared by the live worker and eval.
+
+    Returns the toolbox and the vision config so the worker can release cached
+    live-frame state when a participant leaves.
+    """
+    vision_config = VisionToolsConfig(
+        endpoint=frame_endpoint,
+        vlm=vlm,
+        video_memory=FunctionGroupRef("video_memory"),
+    )
     for name, config in (
         ("scene_state", SceneStateFunctionsConfig(endpoint=scene_endpoint)),
         ("scene_updates", SceneUpdateFunctionsConfig(endpoint=scene_endpoint)),
@@ -376,7 +386,7 @@ async def build_native_toolbox(
         ("spatial_math", SpatialMathFunctionsConfig()),
         ("render_spatial", RenderSpatialToolsConfig()),
         ("video_memory", VideoMemoryFunctionsConfig(endpoint=video_memory_endpoint)),
-        ("vision", VisionFunctionsConfig(vlm=vlm)),
+        ("vision", vision_config),
     ):
         await builder.add_function_group(name, config)
 
@@ -392,7 +402,7 @@ async def build_native_toolbox(
     ):
         group = await builder.get_function_group(name)
         functions.update(await group.get_all_functions())
-    return NativeToolbox(functions)
+    return NativeToolbox(functions), vision_config
 
 
 def _plain(value: Any) -> Any:

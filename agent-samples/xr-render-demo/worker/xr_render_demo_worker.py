@@ -26,7 +26,6 @@ from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
-from xr_ai_nat.functions.vision import StreamingVisionConfig
 from xr_ai_pipecat import VadConfig, make_voice_pipeline
 from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
@@ -35,7 +34,7 @@ from xr_ai_voicegate import load_voice_gate_config
 from agent import RenderDemoAgent
 from capabilities import build_native_toolbox
 from config import WorkerConfig, load_config
-from processors import _PERCEPTION_SYSTEM_PROMPT, _PERCEPTION_TOOL_DEF, RenderSceneProcessor
+from processors import RenderSceneProcessor
 
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
 
@@ -100,36 +99,29 @@ async def main(
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
 
     transport = XRMediaHubTransport()
-    live_vision_config = StreamingVisionConfig(
-        endpoint=transport.endpoint,
-        vlm=vlm_service,
-        system_prompt=_PERCEPTION_SYSTEM_PROMPT,
-    )
     async with WorkflowBuilder() as builder:
-        toolbox = await build_native_toolbox(
+        toolbox, vision_config = await build_native_toolbox(
             builder,
             scene_endpoint=cfg.scene_endpoint,
             openxr_endpoint=cfg.openxr_endpoint,
             video_memory_endpoint=cfg.video_memory_endpoint,
+            frame_endpoint=transport.endpoint,
             vlm=vlm_service,
         )
         await builder.add_function_group(
             "text_memory", TextMemoryFunctionsConfig(directory=cfg.text_memory_dir)
         )
 
-        live_vision = await builder.add_function("live_vision", live_vision_config)
         text_memory_functions = await _group_functions(builder, "text_memory")
         text_memory = text_memory_functions["text_memory__add_transcript"]
         tools = toolbox.definitions(exclude=_WORKER_MANAGED_TOOLS)
-        tools.append(_PERCEPTION_TOOL_DEF)
         logger.info("native tool-calling functions: {}", [tool.name for tool in tools])
 
         brain = RenderSceneProcessor(
             transport=transport,
             cfg=cfg,
             toolbox=toolbox,
-            live_vision=live_vision,
-            release_vision=live_vision_config.release,
+            release_vision=vision_config.release,
             text_memory=text_memory,
             prompt_path=_PROMPT_FILE,
             tools=tools,
