@@ -15,7 +15,7 @@ from ._client import (
     VideoStatsRequest,
     VideoStatsResult,
 )
-from .functions import VideoMemoryControlFunctionsConfig, VideoMemoryFunctionsConfig
+from .functions import VideoMemoryFunctionsConfig
 
 __all__ = [
     "HistoricalFrameRequest",
@@ -25,7 +25,6 @@ __all__ = [
     "QueryVideoRequest",
     "QueryVideoResult",
     "VideoMemoryFunctionsConfig",
-    "VideoMemoryControlFunctionsConfig",
     "VideoHealthRequest",
     "VideoHealthResult",
     "VideoStatsRequest",

@@ -28,6 +28,7 @@ from xr_ai_agent import (
 )
 from xr_ai_nat.functions._service.rpc import RPCError, RPCServer
 from xr_ai_nat.functions.video_memory import HistoricalFrameRequest, VideoMemoryFunctionsConfig
+from xr_ai_nat.functions.video_memory._client import VideoMemoryClient
 
 
 class _LiveFrames:
@@ -56,7 +57,7 @@ class _UnusedClient:
 
 
 class _UnavailableRecordedClient:
-    async def list_recorded_participants(self):
+    async def list_recorded_participants(self, _request):
         raise RPCError("video service unavailable", code="connection_error")
 
 
@@ -208,6 +209,26 @@ async def test_video_mcp_recorded_discovery_reports_service_failures() -> None:
         result = await client.call_tool("list_recorded_participants", {})
 
     assert result.data == {"error": "video service unavailable"}
+
+
+@pytest.mark.asyncio
+async def test_video_mcp_lists_recorded_participants_over_a_real_client() -> None:
+    def dispatch(operation: str, arguments: dict) -> dict:
+        if operation == "list_recorded_participants":
+            return {"participants": ["recorded-user"]}
+        raise RPCError("unknown operation", code="unknown_operation")
+
+    endpoint = f"ipc:///tmp/video-mcp-{uuid.uuid4().hex}"
+    client = VideoMemoryClient(endpoint)
+    try:
+        async with _running_server(endpoint, dispatch):
+            mcp = video_mcp_main.build_mcp(client, _LiveFrames(), recording_enabled=True)
+            async with McpClient(mcp) as mcp_client:
+                result = await mcp_client.call_tool("list_recorded_participants", {})
+    finally:
+        await client.close()
+
+    assert result.data == ["recorded-user"]
 
 
 @pytest.mark.asyncio

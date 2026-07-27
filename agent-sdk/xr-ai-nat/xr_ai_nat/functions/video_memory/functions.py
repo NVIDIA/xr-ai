@@ -6,7 +6,7 @@
 from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, register_function_group
 from pydantic import Field
 
-from ._client import VideoHealthRequest, VideoMemoryClient
+from ._client import VideoMemoryClient
 
 
 class VideoMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_video_memory"):
@@ -15,13 +15,6 @@ class VideoMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_video_memory"
     endpoint: str = Field(
         description="Typed video-memory service endpoint.",
     )
-    timeout_s: float = Field(default=30.0, gt=0.0)
-
-
-class VideoMemoryControlFunctionsConfig(FunctionGroupBaseConfig, name="xr_video_memory_control"):
-    """Configure video-memory service readiness operations."""
-
-    endpoint: str = Field(description="Typed video-memory service endpoint.")
     timeout_s: float = Field(default=30.0, gt=0.0)
 
 
@@ -58,33 +51,4 @@ async def video_memory_functions(config: VideoMemoryFunctionsConfig, _builder: B
         await client.close()
 
 
-@register_function_group(config_type=VideoMemoryControlFunctionsConfig)
-async def video_memory_control_functions(config: VideoMemoryControlFunctionsConfig, _builder: Builder):
-    """Expose video-memory service readiness outside query groups."""
-
-    client = VideoMemoryClient(config.endpoint, timeout_s=config.timeout_s)
-
-    # NAT 1.8 group functions require exactly one input parameter.
-    async def is_available(request: VideoHealthRequest) -> bool:
-        del request
-        return await client.health()
-
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "get_health",
-        client.get_health,
-        description="Return recorded-video service readiness.",
-    )
-    group.add_function(
-        "is_available",
-        is_available,
-        description="Return whether the video-memory service is accepting requests.",
-    )
-
-    try:
-        yield group
-    finally:
-        await client.close()
-
-
-__all__ = ["VideoMemoryFunctionsConfig", "VideoMemoryControlFunctionsConfig"]
+__all__ = ["VideoMemoryFunctionsConfig"]
