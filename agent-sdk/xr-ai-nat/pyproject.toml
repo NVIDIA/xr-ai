@@ -20,6 +20,7 @@ agents = ["nvidia-nat-langchain==1.8.0", "xr-ai-models"]
 mcp = ["fastmcp>=3.4,<4"]
 services = ["msgpack>=1.0", "pyzmq>=27.0"]
 vision = ["httpx>=0.27", "numpy>=1.24", "Pillow>=10.0", "xr-ai-agent", "xr-ai-models"]
+voice = ["xr-ai-voice"]
 
 [project.entry-points."nat.plugins"]
 xr_ai_nat_llm = "xr_ai_nat.llm.config"
@@ -32,6 +33,7 @@ xr_ai_nat_video_memory = "xr_ai_nat.functions.video_memory.functions"
 [tool.uv.sources]
 xr-ai-models = { path = "../xr-ai-models", editable = true }
 xr-ai-agent = { path = "..", editable = true }
+xr-ai-voice = { path = "../xr-ai-voice", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_nat"]

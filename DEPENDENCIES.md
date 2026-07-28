@@ -131,6 +131,7 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── [mcp] fastmcp >=3.4,<4
     └── [services] msgpack >=1.0, pyzmq >=27.0
     └── [vision] httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-agent [editable: ..], xr-ai-models [editable: ../xr-ai-models]
+    └── [voice] xr-ai-voice [editable: ../xr-ai-voice]
     Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
     performs deterministic spatial calculations without OpenXR, model, or MCP
