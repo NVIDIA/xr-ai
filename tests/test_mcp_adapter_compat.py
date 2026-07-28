@@ -17,10 +17,10 @@ import pytest
 
 
 def test_legacy_import_resolves_to_same_object() -> None:
-    from xr_ai_nat.adapters.mcp import create_mcp_server as legacy
+    import xr_ai_nat.adapters.mcp as legacy_module
     from xr_ai_nat.mcp import create_mcp_server as canonical
 
-    assert legacy is canonical
+    assert legacy_module.create_mcp_server is canonical
 
 
 def test_legacy_import_emits_deprecation_warning() -> None:
