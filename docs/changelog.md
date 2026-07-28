@@ -14,25 +14,23 @@ preserved and not re-litigated.
 The model definitions move into `video_memory/_client.py`, aligning the model
 surface with the render-subagents branch: request models now extend the shared
 `_StrictRequest` base and a `VideoMemoryClient.health()` helper is added. The
-client keeps importing `RPCClient` from `.._rpc` (the `_service.rpc` relocation
-is a separate open PR) and `VideoHealthResult` retains `recording_enabled` so
-the Video MCP shim's conditional tool sets and live-only outage fallback stay
-intact.
+client imports `RPCClient` from the canonical `xr_ai_nat.functions._service.rpc`
+(#303, merged), and `VideoHealthResult` retains `recording_enabled` so the Video
+MCP shim's conditional tool sets and live-only outage fallback stay intact.
+`VideoMemoryClient.list_recorded_participants()` keeps a no-argument form
+(building the typed request internally, like `get_health()`), so no-argument
+callers continue to work.
 
-`video_memory/schemas.py` is retained as a thin deprecated forwarding alias: it
-re-exports the models whose names are unchanged (`VideoStatsRequest`,
-`VideoStatsResult`, `QueryVideoRequest`, `QueryVideoResult`,
-`HistoricalFrameRequest`, `HistoricalFrameResult`) from `._client` and emits a
-`DeprecationWarning` on import, so existing imports keep working. Import these
-models from `xr_ai_nat.functions.video_memory` or its `._client` submodule going
-forward.
-
-Breaking change: three models were renamed (their differently shaped old names
-are removed, not aliased). `EmptyRequest` split into the intent-named
-`VideoHealthRequest`/`ListRecordedParticipantsRequest`, `ParticipantsResult`
-became `ListRecordedParticipantsResult`, and `VideoMemoryHealth` became
-`VideoHealthResult`. Callers importing the old names must update them; this is
-not a pure relocation.
+`video_memory/schemas.py` is retained as a deprecated forwarding alias (emits a
+`DeprecationWarning` on import). It preserves the full legacy public surface:
+the models whose names are unchanged, plus the renamed ones as aliases — because
+their data contracts are unchanged. `ParticipantsResult` →
+`ListRecordedParticipantsResult`, `VideoMemoryHealth` → `VideoHealthResult`, and
+the legacy no-argument `EmptyRequest` → `ListRecordedParticipantsRequest` (both
+field-less strict requests). The package-level `ParticipantsResult` export is
+likewise kept as a deprecated alias. Import from
+`xr_ai_nat.functions.video_memory` (or its `._client` submodule) going forward;
+the aliases will be removed in a future version.
 
 ### 2026-07-27 — MCP export lives under `xr_ai_nat.mcp`
 

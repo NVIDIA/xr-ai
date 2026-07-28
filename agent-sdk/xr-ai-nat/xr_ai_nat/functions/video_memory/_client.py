@@ -133,10 +133,11 @@ class VideoMemoryClient:
         self._rpc = RPCClient(endpoint, timeout_s=timeout_s)
 
     async def list_recorded_participants(
-        self, request: ListRecordedParticipantsRequest
+        self, request: ListRecordedParticipantsRequest | None = None
     ) -> ListRecordedParticipantsResult:
+        arguments = (request or ListRecordedParticipantsRequest()).model_dump()
         return ListRecordedParticipantsResult.model_validate(
-            await self._rpc.call("list_recorded_participants", request.model_dump())
+            await self._rpc.call("list_recorded_participants", arguments)
         )
 
     async def get_video_stats(self, request: VideoStatsRequest) -> VideoStatsResult:

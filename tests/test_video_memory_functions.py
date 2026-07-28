@@ -28,8 +28,18 @@ from xr_ai_agent import (
     PixelFormat,
 )
 from xr_ai_nat.functions._service.rpc import RPCError, RPCServer
-from xr_ai_nat.functions.video_memory import HistoricalFrameRequest, VideoMemoryFunctionsConfig
-from xr_ai_nat.functions.video_memory._client import VideoMemoryClient, VideoStatsRequest
+from xr_ai_nat.functions.video_memory import (
+    HistoricalFrameRequest,
+    ParticipantsResult,
+    VideoMemoryFunctionsConfig,
+)
+from xr_ai_nat.functions.video_memory._client import (
+    ListRecordedParticipantsRequest,
+    ListRecordedParticipantsResult,
+    VideoHealthResult,
+    VideoMemoryClient,
+    VideoStatsRequest,
+)
 
 
 class _LiveFrames:
@@ -58,7 +68,7 @@ class _UnusedClient:
 
 
 class _UnavailableRecordedClient:
-    async def list_recorded_participants(self, _request):
+    async def list_recorded_participants(self, _request=None):
         raise RPCError("video service unavailable", code="connection_error")
 
 
@@ -223,6 +233,10 @@ async def test_video_mcp_lists_recorded_participants_over_a_real_client() -> Non
     client = VideoMemoryClient(endpoint)
     try:
         async with _running_server(endpoint, dispatch):
+            # The compatibility no-argument client call (client builds the typed
+            # request internally, like get_health).
+            direct = await client.list_recorded_participants()
+            assert direct.participants == ["recorded-user"]
             mcp = video_mcp_main.build_mcp(client, _LiveFrames(), recording_enabled=True)
             async with McpClient(mcp) as mcp_client:
                 result = await mcp_client.call_tool("list_recorded_participants", {})
@@ -448,7 +462,14 @@ def test_video_memory_schemas_alias_forwards_and_warns() -> None:
     with pytest.warns(DeprecationWarning):
         importlib.reload(schemas_module)
 
+    # Unchanged names re-exported.
     assert schemas_module.VideoStatsRequest is VideoStatsRequest
+    # Renamed models are kept as deprecated aliases (same data contracts).
+    assert schemas_module.ParticipantsResult is ListRecordedParticipantsResult
+    assert schemas_module.VideoMemoryHealth is VideoHealthResult
+    assert schemas_module.EmptyRequest is ListRecordedParticipantsRequest
+    # The pre-rename package-level export is preserved too.
+    assert ParticipantsResult is ListRecordedParticipantsResult
 
 
 def test_historical_frame_schema_requires_an_absolute_reference() -> None:

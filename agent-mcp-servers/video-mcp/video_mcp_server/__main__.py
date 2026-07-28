@@ -18,7 +18,6 @@ from xr_ai_logging import setup_logging
 from xr_ai_nat.functions._service.rpc import RPCError
 from xr_ai_nat.functions.video_memory import (
     HistoricalFrameRequest,
-    ListRecordedParticipantsRequest,
     QueryVideoRequest,
     VideoStatsRequest,
 )
@@ -113,7 +112,7 @@ def build_mcp(
         """Return recorded participants or an error when the service is unavailable."""
         try:
             return (
-                await client.list_recorded_participants(ListRecordedParticipantsRequest())
+                await client.list_recorded_participants()
             ).participants
         except RPCError as error:
             logger.warning("video-mcp recorded participant discovery failed: {}", error)

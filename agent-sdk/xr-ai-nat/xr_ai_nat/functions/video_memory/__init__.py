@@ -17,11 +17,16 @@ from ._client import (
 )
 from .functions import VideoMemoryFunctionsConfig
 
+# Deprecated alias for the pre-rename public name (same data contract). Kept so
+# `from xr_ai_nat.functions.video_memory import ParticipantsResult` keeps working.
+ParticipantsResult = ListRecordedParticipantsResult
+
 __all__ = [
     "HistoricalFrameRequest",
     "HistoricalFrameResult",
     "ListRecordedParticipantsRequest",
     "ListRecordedParticipantsResult",
+    "ParticipantsResult",
     "QueryVideoRequest",
     "QueryVideoResult",
     "VideoMemoryFunctionsConfig",
