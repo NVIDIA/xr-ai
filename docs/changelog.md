@@ -9,6 +9,24 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-28 — Introduce `xr-ai-voice` alongside `xr-ai-pipecat`
+
+Added the `xr-ai-voice` SDK package (`agent-sdk/xr-ai-voice`), a voice runtime
+exposing `VoiceSession` plus the `VoiceHandler`/`VoiceQuery`/`VoiceResponse`/
+`VoiceTurn` handler surface and `HubVoiceTransport`. It is introduced alongside
+the existing `xr-ai-pipecat`; neither package is removed and no sample migrates
+onto voice yet (there are no consumers). Readiness is health-based (split across
+`_readiness`/`_session`); if #300's request-readiness lands, it folds into
+`_readiness` when samples migrate.
+
+The voice runtime's `VoiceGateProcessor` relies on the wake-gate's partial-wake
+/ early-chime helpers (`VoiceGate.begin_utterance`, `wake_ack_enabled`,
+`matches_magic_phrase`, `could_match_magic_phrase`, and `play_chime` returning
+whether audio was emitted). These are additive superset helpers not yet present
+in `xr-ai-voicegate` on main, so `utils/xr-ai-voicegate/{gate,config}.py` are
+extended with them in the same change. The additions are backward-compatible:
+existing `xr-ai-voicegate`/`xr-ai-pipecat` callers ignore the `play_chime`
+return value, and their tests continue to pass.
 ### 2026-07-27 — Native vision exposes current- and recorded-frame tools
 
 The `xr_ai_nat` vision capability drops the path-based `xr_vision`/`ask_image`

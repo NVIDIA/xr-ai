@@ -64,6 +64,24 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     readiness checks.
     Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
 
+xr-ai-voice  (agent-sdk/xr-ai-voice/)
+    └── xr-ai-agent     [editable: ..]
+    └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models    [editable: ../xr-ai-models]
+    └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
+    └── xr-ai-voicegate [editable: ../../utils/xr-ai-voicegate]
+    └── pipecat-ai >=1.3
+    └── numpy >=1.24
+    └── scipy >=1.11
+    Voice runtime introduced alongside xr-ai-pipecat (no consumers yet; no
+    sample migrated). Exposes the ``VoiceSession`` public API plus the
+    ``VoiceHandler`` / ``VoiceQuery`` / ``VoiceResponse`` / ``VoiceTurn`` handler
+    surface, ``HubVoiceTransport``, ``VadConfig``, and ``TextMessageInput``;
+    Pipecat, audio framing, and pipeline processors are implementation details.
+    Readiness is health-based (mirrors the upstream target's _readiness /
+    _session). Not a dep of xr-ai-agent itself — import only in workers that opt
+    into the voice runtime.
+
 xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
     └── xr-ai-agent   [editable: ..]
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]

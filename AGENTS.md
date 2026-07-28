@@ -13,11 +13,12 @@ historical decisions in `docs/changelog.md`.
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
-agent-sdk/          # Five packages:
+agent-sdk/          # Six packages:
                     #   xr-ai-agent        — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-capabilities — framework-agnostic reusable agent features (VisionModule)
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
+                    #   xr-ai-voice        — voice runtime (VoiceSession); introduced alongside xr-ai-pipecat
                     #   xr-ai-nat          — typed, in-process NAT functions for XR capabilities
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)

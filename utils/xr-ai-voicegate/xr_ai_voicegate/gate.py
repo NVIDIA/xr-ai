@@ -16,6 +16,7 @@ race through ``feed`` at the same time.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Awaitable, Callable
 
@@ -77,12 +78,16 @@ class VoiceGate:
         self._audio_sink   = audio_sink
         self._tts          = tts
         self._magic_re     = build_magic_pattern(cfg.magic_phrases)
+        self._magic_prefixes = tuple(
+            _normalize_phrase(phrase) for phrase in cfg.magic_phrases
+        )
         # Without a phrase the chime would have no fresh-match event to
         # ride; mirror the original simple-vlm-example wiring rather than
         # firing on every utterance.
         self._chime_enabled: bool = bool(cfg.listening_chime) and self._magic_re is not None
         self._chime_wav: bytes | None = None
         self._followup_until: dict[str, float] = {}
+        self._followup_started: set[str] = set()
 
         self._on_query_h:               QueryHandler | None             = None
         self._on_stop_h:                StopHandler | None              = None
@@ -137,6 +142,30 @@ class VoiceGate:
 
     def forget(self, pid: str) -> None:
         self._followup_until.pop(pid, None)
+        self._followup_started.discard(pid)
+
+    def begin_utterance(self, pid: str) -> None:
+        """Remember when a follow-up starts before its transcript is ready."""
+        if self._followup_until.get(pid, 0.0) > time.monotonic():
+            self._followup_started.add(pid)
+        else:
+            self._followup_started.discard(pid)
+
+    @property
+    def wake_ack_enabled(self) -> bool:
+        """Whether configured wake phrases should produce a listening chime."""
+        return self._chime_enabled
+
+    def matches_magic_phrase(self, text: str) -> bool:
+        """Return whether *text* begins with a configured magic phrase."""
+        return self._magic_re is not None and strip_magic(self._magic_re, text) is not None
+
+    def could_match_magic_phrase(self, text: str) -> bool:
+        """Return whether a growing partial transcript can become a match."""
+        candidate = _normalize_phrase(text)
+        return bool(candidate) and any(
+            phrase.startswith(candidate) for phrase in self._magic_prefixes
+        )
 
     # ── event ladder ──────────────────────────────────────────────────────────
 
@@ -172,7 +201,11 @@ class VoiceGate:
             return
 
         now_mono       = time.monotonic()
-        in_followup    = self._followup_until.get(pid, 0.0) > now_mono
+        in_followup    = (
+            self._followup_until.get(pid, 0.0) > now_mono
+            or pid in self._followup_started
+        )
+        self._followup_started.discard(pid)
         stripped       = strip_magic(self._magic_re, text)
         matched_magic  = stripped is not None
         stop_candidate = stripped if (matched_magic and stripped) else text
@@ -188,6 +221,7 @@ class VoiceGate:
             )
             logger.debug("stop bypass pid=%r %r", pid, stop_candidate[:80])
             self._followup_until.pop(pid, None)
+            self._followup_started.discard(pid)
             await self._invoke(self._on_stop_h, "on_stop", pid)
             return
 
@@ -248,22 +282,25 @@ class VoiceGate:
 
     # ── worker-callable side effects ──────────────────────────────────────────
 
-    async def play_chime(self, pid: str) -> None:
+    async def play_chime(self, pid: str) -> bool:
         """Emit the listening chime on the consumer's audio sink.
 
         No-op when the chime is disabled or has not been built yet (the
         chime is lazily synthesized to match the TTS sample rate the
-        first time ``observe_tts_wav`` is called).
+        first time ``observe_tts_wav`` is called). Returns whether audio was
+        emitted so callers can avoid suppressing a later fallback chime.
         """
         if not self._chime_enabled:
-            return
+            return False
         if self._chime_wav is None:
             logger.debug("play_chime no-op pid=%r — chime not yet built", pid)
-            return
+            return False
         try:
             await self._audio_sink.play_wav(pid, self._chime_wav)
         except Exception:
             logger.exception("chime send error pid=%r", pid)
+            return False
+        return True
 
     def format_phrase_help(self) -> str | None:
         """Return a sentence fragment telling the user how to address the
@@ -329,3 +366,7 @@ class VoiceGate:
             await handler(*args)
         except Exception:
             logger.exception("voicegate handler %s raised", name)
+
+
+def _normalize_phrase(text: str) -> str:
+    return " ".join(re.findall(r"\w+", text.casefold()))
