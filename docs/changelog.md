@@ -13,13 +13,16 @@ preserved and not re-litigated.
 
 The private correlated msgpack/ZMQ transport shared by service-backed functions
 moved from `xr_ai_nat.functions._rpc` (a four-module package) to a single
-`xr_ai_nat.functions._service.rpc` module; `_service/` now owns the transport
-and value models shared across capabilities. The coordinate value models
-`Vector3` and `SpatialFrame` moved out of `spatial_math/schemas.py` into a
-capability-neutral `xr_ai_nat.functions.types`, drawn from a shared
-`ServiceResult` base. `Color` is added there too as a preparatory shared home;
-the render scene still defines and uses its own `Color`/`Vector3`, so migrating
-that scene schema onto these types is deferred to a later change.
+`xr_ai_nat.functions._service.rpc` module; `_service/` owns the private RPC
+transport. The shared value models live separately in a capability-neutral
+`xr_ai_nat.functions.types`: the coordinate models `Vector3` and `SpatialFrame`
+moved there out of `spatial_math/schemas.py`, drawn from a shared, exported
+`ServiceResult` base. `spatial_math/schemas.py` is retained as a deprecated
+re-export alias (with a `DeprecationWarning`) so existing `spatial_math.schemas`
+imports keep working; it will be removed in a future version. `Color` is added
+to `functions.types` too as a preparatory shared home; the render scene still
+defines and uses its own `Color`/`Vector3`, so migrating that scene schema onto
+these types is deferred to a later change.
 
 The RPC wire format and the models' JSON string rendering (`__str__` →
 `model_dump_json`) are identical. One deliberate semantic change: the shared

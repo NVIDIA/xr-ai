@@ -4,8 +4,11 @@
 """Contract for the shared value models in ``xr_ai_nat.functions.types``."""
 from __future__ import annotations
 
+import importlib
 import json
 
+import pytest
+import xr_ai_nat.functions.types as types_module
 from xr_ai_nat.functions.types import ServiceResult, SpatialFrame, Vector3
 
 
@@ -32,3 +35,21 @@ def test_service_result_retains_unknown_fields() -> None:
     assert vec.model_dump()["w"] == 9.0
     assert json.loads(str(vec))["w"] == 9.0
     assert isinstance(vec, ServiceResult)
+
+
+def test_service_result_is_exported() -> None:
+    """``ServiceResult`` is the intended shared base for capability result models,
+    so it is part of the public module surface."""
+    assert "ServiceResult" in types_module.__all__
+
+
+def test_spatial_math_schemas_is_a_deprecated_alias() -> None:
+    """The moved ``spatial_math.schemas`` submodule stays as a deprecated
+    forwarding alias so existing imports keep working (types now live in
+    ``functions.types``)."""
+    import xr_ai_nat.functions.spatial_math.schemas as legacy
+
+    with pytest.warns(DeprecationWarning):
+        legacy = importlib.reload(legacy)
+    assert legacy.Vector3 is Vector3
+    assert legacy.SpatialFrame is SpatialFrame

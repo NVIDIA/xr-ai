@@ -39,4 +39,4 @@ class Color(ServiceResult):
     b: float
 
 
-__all__ = ["Color", "SpatialFrame", "Vector3"]
+__all__ = ["Color", "ServiceResult", "SpatialFrame", "Vector3"]

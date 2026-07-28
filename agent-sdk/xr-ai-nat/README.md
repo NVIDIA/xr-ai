@@ -9,6 +9,19 @@
 Toolkit (NAT). Applications compose these functions directly; process-backed
 or MCP compatibility adapters remain separate boundaries.
 
+## Shared value models and the service boundary
+
+Capabilities draw their shared value types from one capability-neutral module,
+`xr_ai_nat.functions.types`: `Vector3`, `SpatialFrame`, and `Color`, all built
+on the exported `ServiceResult` base (later capability result models are
+expected to subclass `ServiceResult`; it renders as JSON via `__str__` and
+retains unknown fields with `extra="allow"`).
+
+Capabilities that talk to an out-of-process service share one private transport,
+`xr_ai_nat.functions._service.rpc` (a correlated msgpack/ZMQ `RPCClient` /
+`RPCServer`). `_service` owns only the transport; the value models above live in
+`functions.types`, not in `_service`.
+
 ## Model-backed agents
 
 Install `xr-ai-nat[agents]` to make an `xr-ai-models` `LLMService` available
