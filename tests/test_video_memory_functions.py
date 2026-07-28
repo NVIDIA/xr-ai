@@ -5,6 +5,7 @@
 
 import asyncio
 import contextlib
+import importlib
 import json
 import time
 import uuid
@@ -439,6 +440,18 @@ async def test_recorded_frame_reports_frame_export_errors(tmp_path: Path, monkey
         )
 
     assert error.value.code == "frame_export_error"
+
+
+def test_video_memory_schemas_alias_forwards_and_warns() -> None:
+    import xr_ai_nat.functions.video_memory._client as client_module
+    import xr_ai_nat.functions.video_memory.schemas as schemas_module
+
+    with pytest.warns(DeprecationWarning):
+        importlib.reload(schemas_module)
+
+    from xr_ai_nat.functions.video_memory.schemas import VideoStatsRequest
+
+    assert VideoStatsRequest is client_module.VideoStatsRequest
 
 
 def test_historical_frame_schema_requires_an_absolute_reference() -> None:
