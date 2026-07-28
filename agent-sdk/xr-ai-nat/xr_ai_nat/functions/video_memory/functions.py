@@ -13,9 +13,13 @@ class VideoMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_video_memory"
     """Configure recorded-video query operations."""
 
     endpoint: str = Field(
-        description="Typed video-memory service endpoint.",
+        description="Private msgpack/ZMQ endpoint of video-memory-service."
     )
-    timeout_s: float = Field(default=30.0, gt=0.0)
+    timeout_s: float = Field(
+        default=30.0,
+        gt=0.0,
+        description="Maximum time to wait for an H.264 query or frame extraction.",
+    )
 
 
 @register_function_group(config_type=VideoMemoryFunctionsConfig)
@@ -28,22 +32,34 @@ async def video_memory_functions(config: VideoMemoryFunctionsConfig, _builder: B
     group.add_function(
         "list_recorded_participants",
         client.list_recorded_participants,
-        description="List participants with recorded video.",
+        description=(
+            "List exact participant identities with persisted camera history. "
+            "Call this before requesting recorded statistics, clips, or frames."
+        ),
     )
     group.add_function(
         "get_video_stats",
         client.get_video_stats,
-        description="Return the recorded video time range and storage statistics.",
+        description=(
+            "Return a participant's recorded Unix-epoch microsecond range and storage "
+            "statistics. Use the range to validate absolute clip windows."
+        ),
     )
     group.add_function(
         "query_video",
         client.query_video,
-        description="Return a recorded H.264 clip covering a participant time window.",
+        description=(
+            "Write an H.264 clip overlapping an absolute Unix-epoch microsecond window "
+            "and return its local path."
+        ),
     )
     group.add_function(
         "get_frame_from_time",
         client.get_frame_from_time,
-        description="Return a recorded camera frame relative to an utterance timestamp.",
+        description=(
+            "Extract the recorded PNG frame nearest reference_time_us minus second_ago "
+            "whole seconds. This never accesses a current live camera frame."
+        ),
     )
     try:
         yield group

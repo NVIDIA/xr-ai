@@ -29,7 +29,7 @@ from xr_ai_agent import (
 )
 from xr_ai_nat.functions._service.rpc import RPCError, RPCServer
 from xr_ai_nat.functions.video_memory import HistoricalFrameRequest, VideoMemoryFunctionsConfig
-from xr_ai_nat.functions.video_memory._client import VideoMemoryClient
+from xr_ai_nat.functions.video_memory._client import VideoMemoryClient, VideoStatsRequest
 
 
 class _LiveFrames:
@@ -443,15 +443,12 @@ async def test_recorded_frame_reports_frame_export_errors(tmp_path: Path, monkey
 
 
 def test_video_memory_schemas_alias_forwards_and_warns() -> None:
-    import xr_ai_nat.functions.video_memory._client as client_module
     import xr_ai_nat.functions.video_memory.schemas as schemas_module
 
     with pytest.warns(DeprecationWarning):
         importlib.reload(schemas_module)
 
-    from xr_ai_nat.functions.video_memory.schemas import VideoStatsRequest
-
-    assert VideoStatsRequest is client_module.VideoStatsRequest
+    assert schemas_module.VideoStatsRequest is VideoStatsRequest
 
 
 def test_historical_frame_schema_requires_an_absolute_reference() -> None:
