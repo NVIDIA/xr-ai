@@ -13,9 +13,9 @@ import pytest
 from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
 from transcript_mcp_server.__main__ import build_mcp
-from xr_ai_nat.mcp import create_mcp_server
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
-from xr_ai_nat.functions.text_memory.functions import _TranscriptStore
+from xr_ai_nat.functions.text_memory.functions import TranscriptSegment, _TranscriptStore
+from xr_ai_nat.mcp import create_mcp_server
 
 
 @asynccontextmanager
@@ -156,11 +156,9 @@ def test_text_memory_store_does_not_follow_identity_symlinks(tmp_path: Path) -> 
 
 
 def test_text_memory_schemas_alias_forwards_transcript_segment() -> None:
-    from xr_ai_nat.functions.text_memory import functions as functions_module
     from xr_ai_nat.functions.text_memory import schemas as schemas_module
-    from xr_ai_nat.functions.text_memory.schemas import TranscriptSegment
 
-    assert TranscriptSegment is functions_module.TranscriptSegment
+    assert schemas_module.TranscriptSegment is TranscriptSegment
     assert schemas_module.__all__ == ["TranscriptSegment"]
 
     with pytest.warns(DeprecationWarning, match="text_memory"):

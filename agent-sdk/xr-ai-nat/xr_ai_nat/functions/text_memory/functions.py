@@ -23,9 +23,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class AddTranscriptRequest(_StrictRequest):
-    source_id: str
-    timestamp_us: int
-    text: str = Field(min_length=1)
+    source_id: str = Field(description="Participant or internal source identifier.")
+    timestamp_us: int = Field(description="Unix timestamp in microseconds.")
+    text: str = Field(min_length=1, description="Text segment to persist.")
 
     @field_validator("text")
     @classmethod
@@ -45,9 +45,9 @@ class TranscriptSegment(BaseModel):
 
 
 class QueryTranscriptsRequest(_StrictRequest):
-    source_id: str
-    start_us: int
-    end_us: int
+    source_id: str = Field(description="Participant or internal source identifier.")
+    start_us: int = Field(description="Inclusive window start in Unix microseconds.")
+    end_us: int = Field(description="Inclusive window end in Unix microseconds.")
 
 
 class QueryTranscriptsResult(BaseModel):
@@ -63,7 +63,7 @@ class ListTranscriptSourcesResult(BaseModel):
 
 
 class TranscriptStatsRequest(_StrictRequest):
-    source_id: str
+    source_id: str = Field(description="Participant or internal source identifier.")
 
 
 class TranscriptStatsResult(BaseModel):
@@ -211,22 +211,22 @@ async def text_memory_functions(config: TextMemoryFunctionsConfig, _builder: Bui
     group.add_function(
         "add_transcript",
         add,
-        description="Persist one timestamped transcript segment.",
+        description="Persist one timestamped text segment for a source.",
     )
     group.add_function(
         "query_transcripts",
         query,
-        description="Return transcript segments for one source and time window.",
+        description="Return ordered text segments for one source and inclusive time window.",
     )
     group.add_function(
         "list_sources",
         list_sources,
-        description="List transcript sources that contain stored segments.",
+        description="List source identifiers that have persistent text memory.",
     )
     group.add_function(
         "get_transcript_stats",
         stats,
-        description="Return count and time-range statistics for one transcript source.",
+        description="Return count, character, and time-range statistics for one source.",
     )
     yield group
 
