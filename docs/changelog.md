@@ -16,8 +16,18 @@ function group in favour of the native `xr_vision_tools` group
 (`VisionToolsConfig`), which exposes `look_at_current_frame` over the always-on
 live frame source and `look_at_past_frame` over the `video_memory` function
 group. `StreamingVisionConfig` (`xr_streaming_vision`) is retained for
-simple-vlm's streaming Q&A. Frame conversion moved from `vision/_images.py` to
-`vision/_pixels.py`. The xr-render worker now consumes the native perception
+simple-vlm's streaming Q&A.
+
+**Breaking (public API):** `VisionFunctionsConfig` — previously exported from
+`xr_ai_nat.functions.vision` — is removed and semantically replaced by
+`VisionToolsConfig`; the two have different config fields and tool surfaces, so
+this is a versioned breaking change rather than a rename (no forwarding alias).
+Callers on `VisionFunctionsConfig`/`xr_vision`/`ask_image` must migrate to
+`VisionToolsConfig`/`xr_vision_tools`. The `vision/_images.py` → `vision/_pixels.py`
+move is an internal (underscore-private) helper rename with no compatibility
+surface.
+
+The xr-render worker now consumes the native perception
 tools directly: the local `look_at_current_frame` `ToolDef` wrapper and the
 `ask_image` two-step were removed from `processors.py`, with the processor
 injecting participant identity (and the utterance timestamp for recorded
