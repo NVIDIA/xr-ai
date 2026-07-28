@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import importlib
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -152,6 +153,18 @@ def test_text_memory_store_does_not_follow_identity_symlinks(tmp_path: Path) -> 
 
     with pytest.raises(ValueError, match="escapes transcript directory"):
         store.query("malicious", 0, 1)
+
+
+def test_text_memory_schemas_alias_forwards_transcript_segment() -> None:
+    from xr_ai_nat.functions.text_memory import functions as functions_module
+    from xr_ai_nat.functions.text_memory import schemas as schemas_module
+    from xr_ai_nat.functions.text_memory.schemas import TranscriptSegment
+
+    assert TranscriptSegment is functions_module.TranscriptSegment
+    assert schemas_module.__all__ == ["TranscriptSegment"]
+
+    with pytest.warns(DeprecationWarning, match="text_memory"):
+        importlib.reload(schemas_module)
 
 
 async def test_mcp_adapter_rejects_ambiguous_or_unknown_names(tmp_path) -> None:
