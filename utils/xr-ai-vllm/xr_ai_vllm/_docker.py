@@ -25,7 +25,9 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import _lifecycle
@@ -298,7 +300,7 @@ def _container_log_path(container_name: str) -> Path:
     return log_dir / f"{container_name}.log"
 
 
-def _start_log_streamer(container_name: str) -> tuple[subprocess.Popen | None, Path | None]:
+class _LogStreamer:
     """Stream container stdout/stderr to a sibling file (not to the terminal).
 
     `docker run -d` does not pipe container output back to the parent and
@@ -308,40 +310,98 @@ def _start_log_streamer(container_name: str) -> tuple[subprocess.Popen | None, P
     sinks) stay quiet — the user reads the container log on demand via
     ``tail -f``. ``docker logs -f`` replays from container start, so a
     fast crash is still captured.
+
+    ``docker run`` returns before dockerd registers the container, and a
+    ``docker logs -f`` attached too early exits with "No such container"
+    and never recovers. A supervisor thread therefore waits for the container
+    to exist before attaching (image pulls can hold this off for minutes) and
+    re-attaches if the streamer exits while the container is still expected,
+    i.e. until :meth:`stop`.
     """
-    log_path = _container_log_path(container_name)
-    try:
-        out_fd = open(log_path, "ab", buffering=0)
-    except OSError as exc:
-        log.warning("vllm_docker: could not open %s for streaming: %s", log_path, exc)
-        return None, None
-    try:
-        proc = subprocess.Popen(
-            # -t prefixes each line with the daemon-side RFC3339 timestamp so
-            # the file is searchable without going through loguru.
-            ["docker", "logs", "-f", "-t", container_name],
-            stdout=out_fd, stderr=out_fd,
+
+    def __init__(self, container_name: str) -> None:
+        self._name    = container_name
+        self.log_path = _container_log_path(container_name)
+        self._stop_evt  = threading.Event()
+        self._proc: subprocess.Popen | None = None
+        self._announced = False
+        # RFC3339 start point for re-attaches; a plain `docker logs -f`
+        # replays from container start, duplicating the file's contents.
+        self._since: str | None = None
+        self._thread = threading.Thread(
+            target=self._supervise, name=f"docker-logs-{container_name}", daemon=True,
         )
-    except FileNotFoundError:
-        out_fd.close()
-        return None, None
-    out_fd.close()  # the child holds its own dup'd fd
-    log.info("container logs → %s", log_path)
-    return proc, log_path
+        self._thread.start()
 
+    def _attach(self) -> subprocess.Popen | None:
+        try:
+            out_fd = open(self.log_path, "ab", buffering=0)
+        except OSError as exc:
+            log.warning("vllm_docker: could not open %s for streaming: %s",
+                        self.log_path, exc)
+            return None
+        argv = ["docker", "logs", "-f", "-t"]
+        if self._since:
+            argv += ["--since", self._since]
+        argv.append(self._name)
+        try:
+            proc = subprocess.Popen(
+                # -t prefixes each line with the daemon-side RFC3339 timestamp
+                # so the file is searchable without going through loguru.
+                argv,
+                stdout=out_fd, stderr=out_fd,
+            )
+        except OSError as exc:
+            log.warning("vllm_docker: could not attach docker logs: %s", exc)
+            return None
+        finally:
+            out_fd.close()  # on success the child holds its own dup'd fd
+        return proc
 
-def _stop_log_streamer(proc: subprocess.Popen | None) -> None:
-    if proc is None or proc.poll() is not None:
-        return
-    proc.terminate()
-    try:
-        proc.wait(timeout=2)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    def _supervise(self) -> None:
+        while not self._stop_evt.is_set():
+            delay = 0.2
+            while not container_exists(self._name):
+                if self._stop_evt.wait(delay):
+                    return
+                delay = min(delay * 2, 5.0)
+            proc = self._attach()
+            if proc is None:
+                return
+            self._proc = proc
+            if self._stop_evt.is_set():
+                self._terminate(proc)
+                return
+            if not self._announced:
+                self._announced = True
+                log.info("container logs → %s", self.log_path)
+            proc.wait()
+            self._proc = None
+            self._since = datetime.now(timezone.utc).isoformat()
+            # docker logs -f also exits when the container stops; pause so a
+            # stopped-but-expected container doesn't spin the attach loop.
+            self._stop_evt.wait(1.0)
+
+    @staticmethod
+    def _terminate(proc: subprocess.Popen) -> None:
+        if proc.poll() is not None:
+            return
+        proc.terminate()
         try:
             proc.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            pass
+            proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def stop(self) -> None:
+        self._stop_evt.set()
+        proc = self._proc
+        if proc is not None:
+            self._terminate(proc)
+        self._thread.join(timeout=5)
 
 
 def _append_post_mortem(container_name: str, log_path: Path | None, n: int = 200) -> None:
@@ -431,7 +491,8 @@ def run(
         stop_container(container_name, timeout_s=10)
         remove_container(container_name)
         sp = _state["streamer"]
-        _stop_log_streamer(sp if isinstance(sp, subprocess.Popen) else None)
+        if isinstance(sp, _LogStreamer):
+            sp.stop()
         sys.exit(130)
 
     signal.signal(signal.SIGINT,  _on_signal)
@@ -483,8 +544,8 @@ def run(
         proc = subprocess.Popen(argv, start_new_session=True)
         _state["proc"] = proc
 
-    streamer_proc, log_path = _start_log_streamer(container_name)
-    _state["streamer"] = streamer_proc
+    streamer = _LogStreamer(container_name)
+    _state["streamer"] = streamer
     try:
         _lifecycle.wait_until_healthy(
             health_url,
@@ -500,10 +561,9 @@ def run(
         if _state["handling"]:
             raise
         time.sleep(0.5)
-        _append_post_mortem(container_name, log_path)
-        _stop_log_streamer(streamer_proc)
-        if log_path is not None:
-            log.error("vLLM container failed — see %s", log_path)
+        streamer.stop()
+        _append_post_mortem(container_name, streamer.log_path)
+        log.error("vLLM container failed — see %s", streamer.log_path)
         raise
 
     log.info("Ready  →  http://localhost:%d/v1  (docker: %s)", port, container_name)
@@ -520,7 +580,7 @@ def run(
     try:
         _lifecycle.idle_until_stopped(health_url, log_prefix)
     finally:
-        _stop_log_streamer(streamer_proc)
+        streamer.stop()
 
 
 # ── port → container / pid (used by the stop helper) ────────────────────────
