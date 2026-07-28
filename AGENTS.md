@@ -310,6 +310,7 @@ Read these on demand when the topic comes up:
 | `docs/spdx-headers.md` | SPDX comment styles, exceptions, enforcement |
 | `docs/networking.md` | Firewall ports, TLS for the web client |
 | `docs/troubleshooting.md` | Known frictions, first-time setup gotchas, runtime symptoms |
+| `docs/nat-alignment-pr-guidelines.md` | Authoring or reviewing an `xr-ai-nat` alignment PR (`nat-align/*`) — do-not-reverse audits, complete deprecated aliases, strict agent tool schemas, rebase/scope discipline |
 | `docs/changelog.md` | Why something is the way it is — significant decisions in reverse chronological order |
 
 Record significant new decisions in `docs/changelog.md` (reverse chronological).
