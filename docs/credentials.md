@@ -19,18 +19,21 @@ stack automatically — no per-sample wiring needed.
 
 ## HuggingFace token (`HF_TOKEN`)
 
-**Optional.** The samples' default models are **public**, so they download
-without a token. Set `HF_TOKEN` when you want:
+**Required by default** for the samples that download model checkpoints
+(`model_servers`, `simple_vlm_example`). The default models are public, but
+unauthenticated Hub downloads are rate-limited to the point of **stalling
+indefinitely** on multi-GB checkpoints (no error, no progress output), so the
+orchestrators refuse to start without a token rather than hang silently on
+first launch. A token is also required outright for:
 
 - **Gated models** — any model whose HuggingFace page requires accepting a
-  license / requesting access. These *require* a token (and license
-  acceptance on your account) or the download fails.
-- **Higher rate limits and faster downloads** — unauthenticated Hub requests
-  are rate-limited and slower; an authenticated token lifts both.
+  license / requesting access (plus license acceptance on your account).
 
 The samples **do not prompt** for it. If `HF_TOKEN` is not set, the
-orchestrator prints a one-line notice and continues (public models still
-download). Provide it any one of these ways — all are picked up automatically:
+orchestrator prints an actionable error and exits; pass `--allow-anonymous`
+to start without a token anyway (all weights already cached, or you accept
+the stall risk). Provide the token any one of these ways; all are picked up
+automatically:
 
 ```bash
 # 1. Environment variable (highest priority; good for CI / one-off overrides)
@@ -79,8 +82,11 @@ this priority order, highest first:
 4. *(interactive paths only)* prompted, then saved to both locations
 
 `warn_if_missing(...)` runs steps 1–3 and, if the token is still absent, prints
-an actionable notice and continues **without prompting** — this is how
-`HF_TOKEN` is handled in the samples.
+an actionable notice and continues **without prompting**.
+`require_credentials(...)` runs the same steps but exits non-zero when the
+token is absent (unless called with `allow_missing=True`, wired to the
+orchestrators' `--allow-anonymous` flag); this is how `HF_TOKEN` is handled
+in the checkpoint-downloading samples.
 
 ## Managing saved tokens
 

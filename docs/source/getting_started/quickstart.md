@@ -39,10 +39,10 @@ they cannot be stopped, avoiding GPU overcommit.
 uv run model_servers --omni-stack
 ```
 
-The default models are public, so no HuggingFace token is required. Set
-`HF_TOKEN` to lift download rate limits and speed, or to use a gated model: refer
-to the credentials guide. The launcher won't prompt; it prints a one-line notice
-and continues if the token is unset.
+`HF_TOKEN` is required by default: without it the ~50 GB first-run download
+can stall indefinitely. Refer to the
+{doc}`credentials guide </getting_started/credentials>` for how to set it, or
+pass `--allow-anonymous` to run without one.
 
 To stop all model servers when done:
 
@@ -73,9 +73,9 @@ uv run simple_vlm_example
 ```
 
 On the very first run weights download from HuggingFace (~23 GB; can take
-several minutes). The default model is public — no HuggingFace token needed; set
-`HF_TOKEN` only to lift rate limits and speed or for a gated model (refer to the
-credentials guide).
+several minutes). `HF_TOKEN` is required by default; pass `--allow-anonymous`
+to run without one (refer to the
+{doc}`credentials guide </getting_started/credentials>`).
 
 **With model-servers pre-running** — if VLM (port 8100) and STT (port 8103) are
 already up from `model-servers`, the demo detects them at startup and reuses

@@ -353,7 +353,10 @@ xr-ai-tests  (tests/)
     tests, the vlm-mcp adapter, and the sample-local scene native groups plus
     render-mcp adapter surface (LOVR is stubbed). oxr-mcp is not
     included: it needs native isaacteleop + a CloudXR runtime, so its
-    smoke test self-skips on CPU (see tests/README.md).
+    smoke test self-skips on CPU (see tests/README.md). Root pytest adds
+    ai-services/stt-server to its Python path (not a dependency) so the
+    endpoint tests can import its FastAPI app with a mocked backend,
+    avoiding a test-time NeMo installation.
 
     Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
     `-m "not gpu"` in CI). They spawn real ai-services via `uv run` (e.g.
