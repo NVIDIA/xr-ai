@@ -43,14 +43,14 @@ request models and typed result models instead of returning errors as data.
 rather than an error. `query_transcripts` and `list_sources` return objects
 (`{"segments": …}`, `{"sources": …}`) in place of bare lists. The store and
 schemas modules fold into `functions.py`: the private `_store.py` is removed
-outright, while `schemas.py` survives only as a deprecated forwarding alias
-that re-exports the one surviving name, `TranscriptSegment`, and warns on
-import. **Breaking changes to the `text_memory.schemas` public surface:**
-`OperationResult` and `TextMemoryError` are removed (the typed API validates
-input and returns typed results instead of error-as-data), and
-`TranscriptStats` is renamed to `TranscriptStatsResult`; only
-`TranscriptSegment` still imports from `text_memory.schemas`, and that path is
-deprecated in favour of `xr_ai_nat.functions.text_memory`. The
+outright, while `schemas.py` survives as a deprecated forwarding alias (warns on
+import). It keeps `TranscriptSegment` (unchanged) and `TranscriptStats` — which
+was renamed to `TranscriptStatsResult` but kept the same fields (only
+`earliest_us`/`latest_us` widened `int` → `int | None`), so it stays as a
+deprecated alias. **Genuine removals** (no alias): `OperationResult` and
+`TextMemoryError`, because the typed API validates input and returns typed
+results instead of error-as-data. Import from
+`xr_ai_nat.functions.text_memory` going forward. The
 path-escape guard is preserved: every `.identity`/`.jsonl` path is wrapped in
 `_check()` (`resolve()` + `is_relative_to(root)`) before it is read or used,
 including the `glob("*.identity")` loops, so a symlinked identity file is never

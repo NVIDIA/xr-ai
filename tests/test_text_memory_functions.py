@@ -14,7 +14,11 @@ from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
 from transcript_mcp_server.__main__ import build_mcp
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
-from xr_ai_nat.functions.text_memory.functions import TranscriptSegment, _TranscriptStore
+from xr_ai_nat.functions.text_memory.functions import (
+    TranscriptSegment,
+    TranscriptStatsResult,
+    _TranscriptStore,
+)
 from xr_ai_nat.mcp import create_mcp_server
 
 
@@ -159,7 +163,9 @@ def test_text_memory_schemas_alias_forwards_transcript_segment() -> None:
     from xr_ai_nat.functions.text_memory import schemas as schemas_module
 
     assert schemas_module.TranscriptSegment is TranscriptSegment
-    assert schemas_module.__all__ == ["TranscriptSegment"]
+    # TranscriptStats was renamed but kept the same fields, so it stays as an alias.
+    assert schemas_module.TranscriptStats is TranscriptStatsResult
+    assert schemas_module.__all__ == ["TranscriptSegment", "TranscriptStats"]
 
     with pytest.warns(DeprecationWarning, match="text_memory"):
         importlib.reload(schemas_module)
