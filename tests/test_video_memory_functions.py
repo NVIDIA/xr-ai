@@ -247,6 +247,22 @@ async def test_video_mcp_lists_recorded_participants_over_a_real_client() -> Non
 
 
 @pytest.mark.asyncio
+async def test_list_recorded_participants_tool_schema_is_strict_empty() -> None:
+    """The native tool must expose a strict empty-object input, not the client's
+    optional/nullable `request` compatibility parameter."""
+    async with WorkflowBuilder() as builder:
+        await builder.add_function_group(
+            "video", VideoMemoryFunctionsConfig(endpoint="ipc:///tmp/unused")
+        )
+        functions = await (await builder.get_function_group("video")).get_all_functions()
+        schema = functions["video__list_recorded_participants"].input_schema.model_json_schema()
+
+    # No leaked `request` wrapper; the empty request flattens to no properties.
+    assert schema.get("properties", {}) == {}
+    assert "request" not in schema.get("properties", {})
+
+
+@pytest.mark.asyncio
 async def test_video_mcp_starts_live_only_when_recorded_service_is_unavailable() -> None:
     assert await video_mcp_main._recording_enabled(_UnavailableStartupClient()) is False
 
