@@ -130,6 +130,12 @@ class XRMediaHubInputTransport(BaseInputTransport):
         # send falls back to the empty string and the hub drops the
         # message.
         frame.transport_source = chunk.participant_id
+        # Carry the hub's capture time forward on pipecat's standard presentation
+        # timestamp (nanoseconds). This is what anchors a turn to when the
+        # participant actually spoke; stamping wall-clock after STT instead would
+        # bake in VAD hangover plus transcription latency, which then persists
+        # into transcripts and time-relative recorded-frame lookups.
+        frame.pts = chunk.pts_us * 1_000
         await self.push_frame(frame)
 
     async def _on_hub_participant(self, event: ParticipantEvent) -> None:

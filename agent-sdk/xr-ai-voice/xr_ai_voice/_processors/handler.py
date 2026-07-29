@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from pipecat.frames.frames import (
+    CancelFrame,
+    EndFrame,
     Frame,
     InterruptionFrame,
     TextFrame,
@@ -111,6 +113,14 @@ class _VoiceHandlerProcessor(FrameProcessor):
                     for p in list(self._inflight):
                         logger.info("voice handler cancel pid={!r} reason=interruption", p)
                 self._cancel_all_inflight()
+            await self.push_frame(frame, direction)
+            return
+
+        if isinstance(frame, (EndFrame, CancelFrame)):
+            # Pipeline shutdown: cancel and await every in-flight handler task so
+            # a turn cannot keep emitting text — or writing transcripts through a
+            # turn observer — after the session has ended.
+            await self._shutdown_inflight()
             await self.push_frame(frame, direction)
             return
 
@@ -293,6 +303,23 @@ class _VoiceHandlerProcessor(FrameProcessor):
         task = self._inflight.pop(pid, None)
         if task is not None and not task.done():
             task.cancel()
+
+    async def _shutdown_inflight(self) -> None:
+        """Cancel every in-flight handler task and await its teardown.
+
+        Awaiting matters: a cancelled turn still runs its ``finally`` (turn
+        observer, end frame), so returning before that lands would let a
+        transcript write outlive the session.
+        """
+        tasks = [t for t in self._inflight.values() if not t.done()]
+        self._cancel_all_inflight()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass  # expected — we cancelled it ourselves
+            except Exception:
+                logger.exception("voice handler task raised during shutdown")
 
     def _cancel_all_inflight(self) -> None:
         for task in self._inflight.values():

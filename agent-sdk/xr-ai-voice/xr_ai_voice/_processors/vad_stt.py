@@ -26,6 +26,8 @@ from typing import Awaitable, Callable
 
 from loguru import logger
 from pipecat.frames.frames import (
+    CancelFrame,
+    EndFrame,
     Frame,
     InputAudioRawFrame,
     InterruptionFrame,
@@ -110,6 +112,12 @@ class VadSttProcessor(FrameProcessor):
         # eventually finalizes the same speech run. Cleared on the next
         # ``on_speech_start`` for the pid.
         self._stop_fired_for_current_utterance: set[str] = set()
+        # Presentation timestamp (ns) of the most recent audio frame per pid, and
+        # the one captured at speech onset. The onset value anchors the resulting
+        # transcript to when the participant started speaking rather than to when
+        # STT finished, which can be seconds later.
+        self._last_frame_pts: dict[str, int] = {}
+        self._utterance_pts:  dict[str, int] = {}
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────
 
@@ -118,6 +126,16 @@ class VadSttProcessor(FrameProcessor):
 
         if isinstance(frame, InputAudioRawFrame):
             await self._handle_audio(frame)
+            return
+
+        if isinstance(frame, (EndFrame, CancelFrame)):
+            # Pipeline shutdown: tear down every pending probe task so a probe
+            # cannot push a transcript (and trigger a turn) after the session has
+            # ended. The frame is still forwarded so the rest of the pipeline
+            # stops normally.
+            for pid in list(self._probe_task):
+                await self._cancel_probe_task(pid)
+            await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, ParticipantLeftFrame):
@@ -143,6 +161,9 @@ class VadSttProcessor(FrameProcessor):
             # Await the cancelled task before scheduling the next probe so
             # the two tasks never overlap mid-push_frame.
             self._stop_fired_for_current_utterance.discard(pid)
+            onset_pts = self._last_frame_pts.get(pid)
+            if onset_pts is not None:
+                self._utterance_pts[pid] = onset_pts
             await self._cancel_probe_task(pid)
             detector = self._detectors.get(pid)
             try:
@@ -219,6 +240,8 @@ class VadSttProcessor(FrameProcessor):
             # processors that key on the pipecat-standard field (rather
             # than user_id) need the same value.
             tf.transport_source = pid
+            # Anchor the transcript to speech onset, not to STT completion.
+            tf.pts = self._utterance_pts.pop(pid, None)
             await self.push_frame(tf)
 
         det = VadDetector(
@@ -245,6 +268,11 @@ class VadSttProcessor(FrameProcessor):
             )
             return
         det = self._detector_for(pid)
+
+        # Recorded before ``feed`` so a synchronous ``on_speech_start`` sees the
+        # pts of the chunk that triggered it.
+        if frame.pts is not None:
+            self._last_frame_pts[pid] = frame.pts
 
         await det.feed(frame.audio, frame.sample_rate)
 
@@ -348,6 +376,9 @@ class VadSttProcessor(FrameProcessor):
             timestamp = _now_iso(),
         )
         tf.transport_source = pid
+        # Same onset anchor as the final-utterance path. Kept (not popped) so a
+        # subsequent VAD finalize for the same run still carries it.
+        tf.pts = self._utterance_pts.get(pid)
         await self.push_frame(tf)
         ssf = UserStoppedSpeakingFrame()
         ssf.transport_source = pid
@@ -367,6 +398,8 @@ class VadSttProcessor(FrameProcessor):
         self._probe_buffer.pop(pid, None)
         self._probe_sr.pop(pid, None)
         self._stop_fired_for_current_utterance.discard(pid)
+        self._last_frame_pts.pop(pid, None)
+        self._utterance_pts.pop(pid, None)
         if self._current_pid == pid:
             self._current_pid = None
         logger.info("evicted per-participant VAD state pid={!r}", pid)

@@ -75,6 +75,10 @@ class VoiceGateProcessor(FrameProcessor):
             on_participant_joined = self._on_gate_participant_joined,
         )
         self._early_wake_ack: set[str] = set()
+        # Speech-onset timestamp (µs) of the transcript currently being fed to
+        # the gate. ``VoiceGate.feed`` invokes ``_on_gate_query`` synchronously,
+        # so the value is read back inside that callback.
+        self._feeding_pts_us: int | None = None
 
     @property
     def gate(self) -> VoiceGate:
@@ -124,9 +128,14 @@ class VoiceGateProcessor(FrameProcessor):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, TranscriptionFrame):
+            # ``pts`` carries the hub capture time of the audio that opened this
+            # utterance (nanoseconds); the gate's query callback stamps it onto
+            # the turn so downstream consumers anchor to when the user spoke.
+            self._feeding_pts_us = frame.pts // 1_000 if frame.pts is not None else None
             try:
                 await self._gate.feed(frame.user_id, frame.text)
             finally:
+                self._feeding_pts_us = None
                 self._early_wake_ack.discard(frame.user_id)
             return
 
@@ -160,7 +169,14 @@ class VoiceGateProcessor(FrameProcessor):
             participant_id = pid,
             text           = text,
             fresh_match    = fresh_match,
-            pts_us         = time.time_ns() // 1_000,
+            # Speech onset when the transport supplied it; wall clock only as a
+            # fallback for inputs that carry no capture time (e.g. a synthetic
+            # transcript injected without an originating audio frame).
+            pts_us         = (
+                self._feeding_pts_us
+                if self._feeding_pts_us is not None
+                else time.time_ns() // 1_000
+            ),
         ))
 
     async def _on_gate_stop(self, pid: str) -> None:

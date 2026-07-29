@@ -19,6 +19,18 @@ onto voice yet (there are no consumers). Readiness is health-based (split across
 `_readiness`/`_session`); if #300's request-readiness lands, it folds into
 `_readiness` when samples migrate.
 
+The voice runtime anchors every turn to when the participant actually spoke: the
+hub's ``AudioChunk.pts_us`` is carried forward on pipecat's presentation
+timestamp, ``VadSttProcessor`` captures the value at speech onset and stamps it
+onto the transcript, and ``VoiceGateProcessor`` uses it for the dispatched
+query's ``pts_us`` (falling back to wall clock only for a transcript with no
+originating audio). Stamping wall clock after STT instead baked VAD hangover plus
+transcription latency into the timestamp, and that error would persist into
+stored transcripts and time-relative recorded-frame lookups. Pipeline shutdown is
+also complete: ``EndFrame``/``CancelFrame`` cancels and awaits in-flight handler
+turns and tears down pending early-STT probe tasks, so neither a turn nor a probe
+can emit text or write a transcript after the session has ended.
+
 The voice runtime is participant-scoped for the repository's one-hub/many-clients
 model. `StreamingTtsProcessor` keys its pending text, synthesis/order queue,
 sender task, interruption, and hub flush by participant id, so concurrent

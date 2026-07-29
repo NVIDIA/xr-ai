@@ -246,6 +246,63 @@ async def test_vad_stt_emits_transcription_on_utterance(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_vad_stt_anchors_transcript_to_speech_onset(monkeypatch):
+    """The transcript carries the capture time of the audio that opened the
+    utterance, not the time STT happened to finish.
+
+    The hub stamps each AudioChunk; the transport forwards it as the frame's
+    presentation timestamp. Stamping wall-clock after STT instead would bake in
+    VAD hangover plus transcription latency, and that error persists into stored
+    transcripts and time-relative recorded-frame lookups."""
+    stt = _FakeStt(text="hello agent")
+
+    class _StubVad:
+        def __init__(self, on_utterance, on_speech_start, **_):
+            self._on_utt   = on_utterance
+            self._on_start = on_speech_start
+
+        async def feed(self, pcm_int16: bytes, sample_rate: int) -> None:
+            await self._on_start()
+            await self._on_utt(pcm_int16, sample_rate)
+
+    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StubVad)
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig())
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+    frame.pts = 1_700_000_000_000_000  # ns
+
+    sink = await _run_chain(proc, sends=[frame])
+
+    transcripts = [f for f in sink.frames if isinstance(f, TranscriptionFrame)]
+    assert transcripts[0].pts == 1_700_000_000_000_000
+
+
+@pytest.mark.asyncio
+async def test_vad_stt_cancels_probe_tasks_on_pipeline_shutdown(monkeypatch):
+    """A pending early-STT probe must not survive pipeline shutdown — otherwise
+    it can push a transcript (and start a turn) after the session ended."""
+    stt = _FakeStt(text="hello agent")
+
+    class _StubVad:
+        def __init__(self, on_utterance, on_speech_start, **_):
+            self._on_start = on_speech_start
+
+        async def feed(self, pcm_int16: bytes, sample_rate: int) -> None:
+            await self._on_start()  # opens a probe task, never finalizes
+
+    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StubVad)
+    # A long probe delay guarantees the task is still pending at EndFrame.
+    proc = VadSttProcessor(stt=stt, vad_cfg=VadConfig(stop_probe_after_s=30.0))
+    frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
+    frame.transport_source = "web-client"
+
+    await _run_chain(proc, sends=[frame], settle_s=0.15)
+
+    # _run_chain drains with an EndFrame; no probe task may outlive it.
+    assert all(t.done() for t in proc._probe_task.values())  # noqa: SLF001
+
+
+@pytest.mark.asyncio
 async def test_vad_stt_swallows_empty_transcript(monkeypatch):
     stt = _FakeStt(text="")
 
@@ -765,6 +822,38 @@ async def test_voice_gate_processor_dispatches_query_frame_on_fresh_match():
 
 
 @pytest.mark.asyncio
+async def test_voice_gate_processor_stamps_query_with_speech_onset():
+    """The dispatched query carries the transcript's speech-onset timestamp, so
+    a turn is anchored to when the user spoke rather than to when STT
+    finished."""
+    cfg = VoiceGateConfig(magic_phrases=("agent",))
+    proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
+    tf = TranscriptionFrame(text="agent what time is it", user_id="pid-1", timestamp="t")
+    tf.pts = 1_700_000_000_000_000  # ns
+
+    sink = await _run_chain(proc, sends=[tf])
+
+    queries = [f for f in sink.frames if isinstance(f, GatedQueryFrame)]
+    assert queries[0].pts_us == 1_700_000_000_000  # ns -> µs
+
+
+@pytest.mark.asyncio
+async def test_voice_gate_processor_falls_back_to_wall_clock_without_pts():
+    """A transcript with no capture time (e.g. injected without an originating
+    audio frame) still gets a usable timestamp."""
+    cfg = VoiceGateConfig(magic_phrases=("agent",))
+    proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
+
+    sink = await _run_chain(
+        proc,
+        sends=[TranscriptionFrame(text="agent hello", user_id="pid-1", timestamp="t")],
+    )
+
+    queries = [f for f in sink.frames if isinstance(f, GatedQueryFrame)]
+    assert queries[0].pts_us > 0
+
+
+@pytest.mark.asyncio
 async def test_voice_gate_processor_stop_emits_interruption_and_ack_text():
     cfg = VoiceGateConfig(magic_phrases=("agent",))
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
@@ -1270,6 +1359,27 @@ async def test_assistant_on_query_superseded_not_fired_on_serial_queries():
         per_send_delay_s=0.1,
     )
     assert assistant.supersede_calls == []
+
+
+@pytest.mark.asyncio
+async def test_assistant_cancels_inflight_turn_on_pipeline_shutdown():
+    """A handler task must not outlive the pipeline. Otherwise a turn keeps
+    emitting text — and a turn observer keeps writing transcripts — after the
+    session has ended."""
+    class _SlowAssistant(_IterAssistant):
+        def __init__(self) -> None:
+            super().__init__(chunks=[f"chunk{i} " for i in range(10_000)])
+
+    assistant = _SlowAssistant()
+    await _run_chain(
+        assistant,
+        sends=[GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=0)],
+        settle_s=0.1,
+    )
+
+    # _run_chain drains with an EndFrame; the turn must be torn down by then.
+    assert assistant._inflight == {}          # noqa: SLF001
+    assert assistant.cancelled, "the in-flight handler task must be cancelled"
 
 
 @pytest.mark.asyncio
