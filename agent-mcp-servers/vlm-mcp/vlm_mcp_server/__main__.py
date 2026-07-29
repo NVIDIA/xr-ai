@@ -5,7 +5,7 @@
 VLM MCP server.
 
 Thin MCP compatibility process — one tool at /mcp on port 8240. There are no
-REST endpoints, hub IPC subscriptions, or `xr-ai-agent` runtime dependencies.
+REST endpoints, hub IPC subscriptions, or `xr-ai-hub-client` runtime dependencies.
 
 The single tool ``ask_image(question, image_path)`` reads a local PNG path and
 forwards it to the VLM. It is a self-contained file → VLM wrapper: the native

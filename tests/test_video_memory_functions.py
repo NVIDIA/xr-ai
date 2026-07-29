@@ -20,7 +20,7 @@ from video_mcp_server import __main__ as video_mcp_main
 from video_mcp_server.live import _frame_to_rgb
 from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
-from xr_ai_agent import (
+from xr_ai_hub import (
     FrameData,
     FrameSignal,
     LiveFrameSource,

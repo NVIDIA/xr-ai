@@ -36,7 +36,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from xr_ai_agent import DataMessage
+from xr_ai_hub import DataMessage
 from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate
 

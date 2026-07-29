@@ -12,7 +12,7 @@ import uvicorn
 import yaml
 from fastmcp import FastMCP
 from loguru import logger
-from xr_ai_agent import FrameUnavailable, LiveFrameSource, ProcessorEndpoint, Subscribe
+from xr_ai_hub import FrameUnavailable, LiveFrameSource, ProcessorEndpoint, Subscribe
 
 from xr_ai_logging import setup_logging
 from xr_ai_nat.functions._service.rpc import RPCError

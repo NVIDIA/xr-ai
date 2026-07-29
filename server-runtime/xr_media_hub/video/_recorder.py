@@ -50,7 +50,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
-from xr_ai_agent import PixelFormat
+from xr_ai_hub import PixelFormat
 
 if TYPE_CHECKING:
     from xr_media_hub.ipc import SlotView

@@ -12,7 +12,7 @@ touching existing code.
 from __future__ import annotations
 
 import struct
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 import msgpack
 
@@ -38,7 +38,7 @@ def register_decoder(type_id: int, fn: Callable[[list], Any]) -> None:
 
 def encode(type_id: int, msg: Any) -> bytes:
     payload = msgpack.packb(_encoders[type_id](msg), use_bin_type=True)
-    return _TYPE_HDR.pack(type_id) + payload
+    return _TYPE_HDR.pack(type_id) + cast(bytes, payload)
 
 
 def decode(raw: bytes) -> tuple[int, Any]:

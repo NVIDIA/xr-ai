@@ -107,13 +107,13 @@ name = "<kebab-name>-worker"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "xr-ai-agent",
+    "xr-ai-hub-client",
     "xr-ai-models",
     # add task-specific deps here: numpy, torch, etc.
 ]
 
 [tool.uv.sources]
-xr-ai-agent  = { path = "../../../agent-sdk",              editable = true }
+xr-ai-hub-client  = { path = "../../../agent-sdk",              editable = true }
 xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
@@ -196,7 +196,7 @@ import logging
 import signal
 from pathlib import Path
 
-from xr_ai_agent import (          # ← import only what you use
+from xr_ai_hub import (          # ← import only what you use
     AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint,
     Subscribe,                     # ← only needed when scoping subscriptions
 )

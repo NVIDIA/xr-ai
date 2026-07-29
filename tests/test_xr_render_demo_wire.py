@@ -34,7 +34,7 @@ from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.workers.runner import WorkerRunner
 
-from xr_ai_agent import DataMessage
+from xr_ai_hub import DataMessage
 from xr_ai_models import (
     ChatMessage,
     OpenAICompatLLM,
@@ -547,7 +547,7 @@ async def test_quick_ack_spoken_on_non_thinking_turn() -> None:
 # isn't even registered when recording is disabled) and hung. These tests stub
 # the VLM client + the hub frame path and assert the routing mechanically.
 
-from xr_ai_agent import FrameData, FrameSignal, PixelFormat  # noqa: E402
+from xr_ai_hub import FrameData, FrameSignal, PixelFormat  # noqa: E402
 from xr_ai_models import ChatResponse, ToolCall  # noqa: E402
 
 import processors as _proc  # noqa: E402

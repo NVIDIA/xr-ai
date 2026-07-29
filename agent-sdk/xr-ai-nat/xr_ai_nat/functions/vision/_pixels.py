@@ -9,7 +9,7 @@ import io
 
 import numpy as np
 from PIL import Image
-from xr_ai_agent import FrameData, PixelFormat
+from xr_ai_hub import FrameData, PixelFormat
 
 
 def _yuv_to_rgb(y: np.ndarray, u: np.ndarray, v: np.ndarray) -> Image.Image:

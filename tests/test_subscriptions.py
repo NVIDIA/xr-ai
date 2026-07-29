@@ -24,7 +24,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_agent import AudioChunk, DataMessage, Subscribe
+from xr_ai_hub import AudioChunk, DataMessage, Subscribe
 
 from _helpers import setup_client, silence, teardown_clients, wait_for, wait_for_subscribed
 

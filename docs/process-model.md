@@ -13,7 +13,7 @@ Each sample has **two sub-projects**:
 | Sub-project | Role | Dependencies |
 |---|---|---|
 | `<sample>/` | Orchestrator — declares process list in code, launches all | `xr-ai-launcher` only (stdlib) |
-| `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-agent`, numpy, etc. |
+| `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-hub-client`, numpy, etc. |
 
 **Config convention** — the YAML config path for each process is declared
 explicitly in the orchestrator's `PROCESSES` list via the `config=` field of

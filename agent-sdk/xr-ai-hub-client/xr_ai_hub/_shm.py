@@ -85,15 +85,19 @@ class ShmRingBuffer:
             slot_stride = _SH_SIZE + max_frame_bytes
             total       = _GH_SIZE + num_slots * slot_stride
             self._shm   = SharedMemory(name=name, create=True, size=total)
-            _GH.pack_into(self._shm.buf, 0, _MAGIC_GLOBAL, num_slots, max_frame_bytes, slot_stride)
+            buffer = self._shm.buf
+            assert buffer is not None
+            _GH.pack_into(buffer, 0, _MAGIC_GLOBAL, num_slots, max_frame_bytes, slot_stride)
             for i in range(num_slots):
                 off = _GH_SIZE + i * slot_stride
-                _SH.pack_into(self._shm.buf, off, _MAGIC_SLOT, _STATE_FREE, 0, 0, 0, 0, 0, 0, 0)
+                _SH.pack_into(buffer, off, _MAGIC_SLOT, _STATE_FREE, 0, 0, 0, 0, 0, 0, 0)
         else:
             self._shm                              = SharedMemory(name=name, create=False)
-            _, num_slots, max_frame_bytes, slot_stride = _GH.unpack_from(self._shm.buf, 0)
+            buffer = self._shm.buf
+            assert buffer is not None
+            _, num_slots, max_frame_bytes, slot_stride = _GH.unpack_from(buffer, 0)
 
-        self._buf            = self._shm.buf
+        self._buf            = buffer
         self._num_slots      = num_slots
         self._max_frame_bytes = max_frame_bytes
         self._slot_stride    = slot_stride

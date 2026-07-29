@@ -40,7 +40,7 @@ PIL_Image = pytest.importorskip("PIL.Image")
 pytest.importorskip("fastmcp")
 
 from fastmcp import Client as McpClient  # noqa: E402
-from xr_ai_agent import PixelFormat  # noqa: E402
+from xr_ai_hub import PixelFormat  # noqa: E402
 from xr_media_hub.ipc import ConnectorEndpoint  # noqa: E402
 from xr_media_hub.video._recorder import _append_encoded_packets  # noqa: E402
 

@@ -1,13 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for xr_ai_agent._codec (encode/decode round-trips) and _types."""
+"""Unit tests for xr_ai_hub._codec (encode/decode round-trips) and _types."""
 from __future__ import annotations
 
 import pytest
 
-from xr_ai_agent._codec import decode, encode
-from xr_ai_agent._types import (
+from xr_ai_hub._codec import decode, encode
+from xr_ai_hub._types import (
     AudioChunk,
     ConnectorRegistration,
     ControlMessage,
@@ -282,7 +282,7 @@ class TestWireFormat:
         """A byte sequence with an unregistered type_id must raise KeyError."""
         import msgpack
 
-        from xr_ai_agent._codec import _decoders
+        from xr_ai_hub._codec import _decoders
 
         # Pick the first unused type_id dynamically so this test stays valid
         # if 255 is ever registered.

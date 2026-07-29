@@ -53,7 +53,7 @@ at the repository root is the authoritative dependency map. **Any change to a
 `pyproject.toml` must update `DEPENDENCIES.md` in the same commit** — a change
 is not complete until `DEPENDENCIES.md` reflects it. Several hard rules follow
 from this map (for example, `utils/xr-ai-launcher/` is stdlib-only and
-`agent-sdk/xr-ai-agent` depends only on `pyzmq` + `msgpack`); refer to
+`agent-sdk/xr-ai-hub-client` depends only on `pyzmq` + `msgpack`); refer to
 `DEPENDENCIES.md` for the full set.
 
 ## SPDX license headers

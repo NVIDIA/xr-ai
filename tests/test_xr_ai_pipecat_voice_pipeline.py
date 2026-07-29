@@ -1424,7 +1424,7 @@ async def test_input_transport_populates_transport_source_from_chunk_pid():
     downstream return-data / return-audio send routes to ``pid=''`` and
     the hub drops the message on the floor (production bug fixed in
     this commit)."""
-    from xr_ai_agent import AudioChunk
+    from xr_ai_hub import AudioChunk
     from xr_ai_pipecat.transport import (
         SAMPLE_RATE,
         XRMediaHubInputTransport,
@@ -1474,7 +1474,7 @@ async def test_input_transport_emits_participant_joined_frame():
     voice gate never greets and the brain never steers the output
     transport at a participant, so every TTS chunk gets dropped by
     ``XRMediaHubOutputTransport.write_audio_frame``."""
-    from xr_ai_agent import ParticipantEvent
+    from xr_ai_hub import ParticipantEvent
     from xr_ai_pipecat.transport import (
         SAMPLE_RATE,
         XRMediaHubInputTransport,
@@ -1516,7 +1516,7 @@ async def test_input_transport_emits_participant_left_frame():
     """``ParticipantEvent(joined=False)`` from the hub must surface as a
     ``ParticipantLeftFrame`` so ``BrainProcessor`` can run per-pid
     teardown (cancel in-flight, clear target participant)."""
-    from xr_ai_agent import ParticipantEvent
+    from xr_ai_hub import ParticipantEvent
     from xr_ai_pipecat.transport import (
         SAMPLE_RATE,
         XRMediaHubInputTransport,
@@ -1554,7 +1554,7 @@ async def test_input_transport_drops_participant_event_before_start():
     """Same ``_started`` guard as ``_on_hub_audio`` — a late event
     arriving after teardown (or before ``StartFrame``) must be a no-op
     so the bridge doesn't race the pipeline shutdown."""
-    from xr_ai_agent import ParticipantEvent
+    from xr_ai_hub import ParticipantEvent
     from xr_ai_pipecat.transport import (
         SAMPLE_RATE,
         XRMediaHubInputTransport,
@@ -2036,7 +2036,7 @@ async def test_output_transport_writes_audio_to_target_participant():
     ``write_raw_audio_frames`` instead — pipecat never invoked it, so
     every TTS chunk was dropped before reaching the hub. This is the
     regression that locks the right hook in."""
-    from xr_ai_agent import AudioChunk
+    from xr_ai_hub import AudioChunk
     from xr_ai_pipecat.transport import (
         TTS_NATIVE_SAMPLE_RATE,
         XRMediaHubOutputTransport,
@@ -2080,7 +2080,7 @@ async def test_output_transport_routes_audio_by_frame_pid_not_single_target():
     ``self._target_participant`` (set on each ``ParticipantJoinedFrame``, so
     last-join-wins) for every chunk — so A's TTS answer was published on B's
     return-audio track. This locks per-frame routing in."""
-    from xr_ai_agent import AudioChunk
+    from xr_ai_hub import AudioChunk
     from xr_ai_pipecat.transport import (
         TTS_NATIVE_SAMPLE_RATE,
         XRMediaHubOutputTransport,
@@ -2157,7 +2157,7 @@ async def test_gated_query_drives_audio_through_full_pipeline_to_transport():
     frames appearing at the tail — that's the bug we shipped the fix
     for.
     """
-    from xr_ai_agent import AudioChunk
+    from xr_ai_hub import AudioChunk
     from xr_ai_pipecat.transport import (
         TTS_NATIVE_SAMPLE_RATE,
         XRMediaHubOutputTransport,
@@ -2242,7 +2242,7 @@ def test_xr_media_hub_transport_subscribes_to_video_frames():
     filtered out video at the ZMQ subscription layer, causing
     ``_wait_for_camera_frame`` to time out and the VLM call to block
     indefinitely after a query."""
-    from xr_ai_agent._processor import Subscribe
+    from xr_ai_hub._processor import Subscribe
     from xr_ai_pipecat.transport import XRMediaHubTransport
 
     transport = XRMediaHubTransport()

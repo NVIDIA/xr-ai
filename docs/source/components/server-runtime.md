@@ -151,7 +151,7 @@ registered at import time via `register_encoder` and `register_decoder`.
 
 ```{note}
 Agent code should import the IPC types and `ProcessorEndpoint` from
-`xr_ai_agent` directly, **not** from `xr_media_hub.ipc`. The agent SDK's only
+`xr_ai_hub` directly, **not** from `xr_media_hub.ipc`. The agent SDK's only
 runtime dependencies are `pyzmq` and `msgpack` — importing from the agent SDK
 avoids pulling in the full server-runtime dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). `xr_media_hub.ipc` re-exports the same names for the

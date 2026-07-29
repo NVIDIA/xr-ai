@@ -15,7 +15,7 @@ from typing import AsyncIterator
 
 from loguru import logger
 from pipecat.frames.frames import InterruptionFrame
-from xr_ai_agent import DataMessage
+from xr_ai_hub import DataMessage
 from nat.builder.function import Function
 from xr_ai_pipecat import BrainProcessor, GatedQueryFrame
 from xr_ai_pipecat.transport import XRMediaHubTransport

@@ -271,7 +271,7 @@ must exist.
 
 `vlm-mcp` is a thin FastMCP wrapper around the vision-language model in
 `ai-services/vlm-server/` (Cosmos-Reason1-7B via vLLM). It has no hub IPC
-subscription and no `xr-ai-agent` dependency: it just reads a local image and
+subscription and no `xr-ai-hub-client` dependency: it just reads a local image and
 forwards it to the VLM's OpenAI-compatible chat-completions endpoint via the
 `xr-ai-models` SDK.
 

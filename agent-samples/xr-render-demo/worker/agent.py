@@ -18,7 +18,7 @@ import asyncio
 import time
 
 from loguru import logger
-from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent
+from xr_ai_hub import AudioChunk, DataMessage, ParticipantEvent
 
 from processors import RenderSceneProcessor
 from capabilities import NativeToolbox

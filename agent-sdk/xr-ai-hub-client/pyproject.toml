@@ -6,7 +6,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "xr-ai-agent"
+name = "xr-ai-hub-client"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
@@ -15,4 +15,6 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["xr_ai_agent"]
+# ``xr_ai_agent`` is a deprecated forwarding alias for ``xr_ai_hub``; it is
+# shipped alongside the canonical package so existing imports keep working.
+packages = ["xr_ai_hub", "xr_ai_agent"]

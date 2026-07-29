@@ -16,7 +16,7 @@ from:
   `make_voice_pipeline`, composes input → VAD/STT → voice gate → brain →
   streaming TTS → output. Sample workers subclass one class (`BrainProcessor`)
   and hand it to the factory.
-- **`xr-ai-agent`** — the minimal pyzmq + msgpack IPC library every agent uses
+- **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
 - **`xr-ai-nat`** — typed in-process XR functions and the model bridge used by
@@ -314,12 +314,12 @@ utterance is suppressed so the stop-ack does not double.
 
 ### Dependencies
 
-`xr-ai-pipecat` builds on `xr-ai-agent`, `xr-ai-models`, `xr-ai-vad`,
+`xr-ai-pipecat` builds on `xr-ai-hub-client`, `xr-ai-models`, `xr-ai-vad`,
 `xr-ai-voicegate`, and `pipecat-ai`.
 
 ---
 
-## xr-ai-agent
+## xr-ai-hub-client
 
 The lightweight, agent-side IPC library for the XR-Media-Hub. Agents only need
 this package — its sole runtime dependencies are `pyzmq` and `msgpack`. The
@@ -335,7 +335,7 @@ downstream workload — analytics, ML inference, transcription, echo, recording
 — not just agentic pipelines.
 
 ```python
-from xr_ai_agent import ProcessorEndpoint, Subscribe
+from xr_ai_hub import ProcessorEndpoint, Subscribe
 
 ep = ProcessorEndpoint(
     sub_addr  = "ipc:///tmp/xr_hub_pub",
@@ -399,7 +399,7 @@ departure events automatically discard that participant's cached frames and
 wake pending requests; wait state is removed when each request completes.
 
 ```python
-from xr_ai_agent import LiveFrameSource
+from xr_ai_hub import LiveFrameSource
 
 frames = LiveFrameSource(ep, max_age_s=2.0, timeout_s=5.0)
 frame = await frames.get("participant-1")

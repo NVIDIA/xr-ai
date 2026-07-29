@@ -13,7 +13,7 @@ import wave
 import numpy as np
 from pipecat.frames.frames import OutputAudioRawFrame
 
-from xr_ai_agent import AudioChunk
+from xr_ai_hub import AudioChunk
 
 _CHUNK_MS = 20
 _CHUNK_US = _CHUNK_MS * 1_000

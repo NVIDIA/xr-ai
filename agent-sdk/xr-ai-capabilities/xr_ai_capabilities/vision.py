@@ -32,7 +32,7 @@ import time
 from typing import AsyncIterator
 
 from loguru import logger
-from xr_ai_agent import FrameSignal, ProcessorEndpoint
+from xr_ai_hub import FrameSignal, ProcessorEndpoint
 from xr_ai_models import VLMService
 
 from .pixels import encode_image, frame_to_pil

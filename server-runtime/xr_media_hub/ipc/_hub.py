@@ -44,7 +44,7 @@ from typing import Awaitable, Callable
 import zmq
 import zmq.asyncio
 
-from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
+from xr_ai_hub import (AudioChunk, ConnectorRegistration, ControlMessage,
                          DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent,
                          ReturnAudioFlush, ShmRingBuffer, SlotView, decode, encode)
 

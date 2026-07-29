@@ -5,7 +5,7 @@
 
 Capabilities are self-contained features an agent brain can compose — they talk
 to the hub through a ``ProcessorEndpoint`` and depend only on the core SDK
-(``xr-ai-agent`` / ``xr-ai-models``), not on any voice/pipeline framework. The
+(``xr-ai-hub-client`` / ``xr-ai-models``), not on any voice/pipeline framework. The
 first capability is :class:`VisionModule` (live-camera VLM question answering);
 more (teacher-demo, agent-monitor) will follow here.
 """

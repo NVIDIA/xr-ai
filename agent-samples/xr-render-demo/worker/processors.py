@@ -35,7 +35,7 @@ from typing import AsyncIterator
 from loguru import logger
 from nat.builder.function import Function
 
-from xr_ai_agent import DataMessage
+from xr_ai_hub import DataMessage
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
 from xr_ai_pipecat import BrainProcessor

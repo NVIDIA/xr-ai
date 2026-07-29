@@ -37,12 +37,14 @@ CI matrices:
 ## Internal packages
 
 ```
-xr-ai-agent  (agent-sdk/)
+xr-ai-hub-client  (agent-sdk/xr-ai-hub-client/)
     └── pyzmq >=27.0
     └── msgpack >=1.0
+    Ships the canonical ``xr_ai_hub`` package plus a deprecated ``xr_ai_agent``
+    forwarding alias (warns on import) for the former ``xr-ai-agent`` name.
 
 xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
-    └── xr-ai-agent     [editable: ..]
+    └── xr-ai-hub-client     [editable: ../xr-ai-hub-client]
     └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models    [editable: ../xr-ai-models]
     └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
@@ -60,7 +62,7 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     for return. SttClient / TtsClient are thin wrappers around xr-ai-models'
     OpenAICompatSTT / OpenAICompatTTS; httpx is retained for http_probe()
     readiness checks.
-    Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
+    Not a dep of xr-ai-hub-client itself — import only in workers that use Pipecat.
 
 xr-ai-voice  (agent-sdk/xr-ai-voice/)
     └── xr-ai-agent     [editable: ..]
@@ -81,7 +83,7 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     into the voice runtime.
 
 xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
-    └── xr-ai-agent   [editable: ..]
+    └── xr-ai-hub-client   [editable: ../xr-ai-hub-client]
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models  [editable: ../xr-ai-models]
     └── numpy >=1.24
@@ -128,7 +130,7 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── [agents] nvidia-nat-langchain ==1.8.0, xr-ai-models [editable: ../xr-ai-models]
     └── [mcp] fastmcp >=3.4,<4
     └── [services] msgpack >=1.0, pyzmq >=27.0
-    └── [vision] httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-agent [editable: ..], xr-ai-models [editable: ../xr-ai-models]
+    └── [vision] httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
     └── [voice] xr-ai-voice [editable: ../xr-ai-voice]
     Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
@@ -207,7 +209,7 @@ xr-ai-vad  (utils/xr-ai-vad/)
     completes).
 
 xr-media-hub  (server-runtime/)
-    └── xr-ai-agent  [editable: ../agent-sdk]
+    └── xr-ai-hub-client  [editable: ../agent-sdk/xr-ai-hub-client]
     └── pyzmq >=27.0
     └── livekit >=1.0
     └── livekit-api >=1.0
@@ -249,7 +251,7 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── pyyaml >=6.0
     └── numpy >=1.24
     └── Pillow >=10.0
-    └── xr-ai-agent [editable: ../../agent-sdk]
+    └── xr-ai-hub-client [editable: ../../agent-sdk/xr-ai-hub-client]
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
     Pure FastMCP compatibility adapter at /mcp. Preserves the conditional
@@ -313,7 +315,7 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
     remains compatibility-only and is not part of the native function group.
 
 xr-ai-tests  (tests/)
-    └── xr-ai-agent             [editable: ../agent-sdk]
+    └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub-client]
     └── xr-ai-capabilities      [editable: ../agent-sdk/xr-ai-capabilities]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
     └── xr-ai-nat               [editable: ../agent-sdk/xr-ai-nat]
@@ -517,7 +519,7 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision] [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (live-frame acquisition and streaming VLM invocation come from the native NAT vision function; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-hub-client`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision] [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (live-frame acquisition and streaming VLM invocation come from the native NAT vision function; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
 
 Worker runs on the unified pipecat voice pipeline assembled by
 `xr_ai_pipecat.make_voice_pipeline`. `SimpleVlmBrain` (a
@@ -560,7 +562,7 @@ user-relative requests such as "to my left".
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
 | Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-nat` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-models` [editable], `xr-ai-nat[services,vision]` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pyyaml >=6.0, pipecat-ai >=1.3 (native scene, tracking, spatial-math, video-memory, vision, and text-memory functions replace capability MCP clients; silero-vad via xr-ai-pipecat → xr-ai-vad). |
+| Worker | `xr-render-demo-worker` | `xr-ai-hub-client`, `xr-ai-models` [editable], `xr-ai-nat[services,vision]` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pyyaml >=6.0, pipecat-ai >=1.3 (native scene, tracking, spatial-math, video-memory, vision, and text-memory functions replace capability MCP clients; silero-vad via xr-ai-pipecat → xr-ai-vad). |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
@@ -614,7 +616,7 @@ updated in the same commit**.
 - `utils/xr-ai-vllm/` — zero runtime dependencies. Stdlib only. Adding deps
   here would defeat docker mode (whose point is to keep heavy vllm-side deps
   out of the wrapper's venv).
-- `agent-sdk/` (`xr-ai-agent`) — only `pyzmq` + `msgpack`. No server-side packages.
+- `agent-sdk/` (`xr-ai-hub-client`) — only `pyzmq` + `msgpack`. No server-side packages.
 - `agent-sdk/xr-ai-models/` — `xr-ai-logging` + `httpx` + `pyyaml` only. No
   vendor SDKs (no `openai`, no `anthropic`, no `litellm`). All in-tree
   backends speak OpenAI-compatible HTTP; vendor adapters arrive as new
@@ -622,6 +624,6 @@ updated in the same commit**.
 - `agent-sdk/xr-ai-nat/` — NAT framework dependencies plus only the smallest
   capability-specific dependencies. Spatial math remains CPU-only and has no
   tracking, service, model, or MCP dependency.
-- Agent workers — `xr-ai-agent` + `xr-ai-models` + task-specific libs (numpy,
+- Agent workers — `xr-ai-hub-client` + `xr-ai-models` + task-specific libs (numpy,
   torch, etc.). Must never import from `xr-media-hub` or `xr-ai-launcher`.
 - New external deps require a note here explaining why they were added.

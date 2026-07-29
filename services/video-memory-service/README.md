@@ -24,7 +24,7 @@ Every `*_us` field is a Unix-epoch timestamp in microseconds. Keep the
 model-facing offset coarse: use whole `second_ago` values for temporal
 reasoning and use the returned `timestamp_us` to inspect the exact selected
 frame. A current camera frame is not recorded history; obtain it through
-`xr_ai_agent.LiveFrameSource` or, while it remains supported, Video MCP's live
+`xr_ai_hub.LiveFrameSource` or, while it remains supported, Video MCP's live
 compatibility tools.
 
 ```yaml

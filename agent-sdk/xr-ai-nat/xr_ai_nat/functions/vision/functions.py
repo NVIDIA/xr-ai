@@ -20,7 +20,7 @@ from nat.plugin_api import (
     register_function_group,
 )
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
-from xr_ai_agent import FrameUnavailable, LiveFrameSource
+from xr_ai_hub import FrameUnavailable, LiveFrameSource
 
 from .._models import _StrictRequest
 

@@ -34,7 +34,7 @@ docs/               # Design docs and topic deep-dives
   participant (`xr-hub-return-{pid}`) with subscribe permissions restricted to
   that participant; return data uses `destination_identities` for the same
   reason. Agents never need to know.
-- **`agent-sdk/xr-ai-agent`** contains only the agent-facing IPC layer. Its
+- **`agent-sdk/xr-ai-hub-client`** contains only the agent-facing IPC layer. Its
   sole runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI,
   or uvicorn.
 - **Native agents compose typed NAT functions in process.** Runtime-backed

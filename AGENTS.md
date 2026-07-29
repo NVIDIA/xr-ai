@@ -14,7 +14,7 @@ historical decisions in `docs/changelog.md`.
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # Six packages:
-                    #   xr-ai-agent        — IPC client library (pyzmq + msgpack only)
+                    #   xr-ai-hub-client   — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-capabilities — framework-agnostic reusable agent features (VisionModule)
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
@@ -38,7 +38,7 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   `ProcessorEndpoint`; return traffic goes only to the originating client.
 - **Agents talk to the hub via IPC only.** LiveKit is an internal transport
   detail — never surface it to agents.
-- **`agent-sdk/xr-ai-agent` depends only on `pyzmq` + `msgpack`.** No
+- **`agent-sdk/xr-ai-hub-client` depends only on `pyzmq` + `msgpack`.** No
   LiveKit, FastAPI, or uvicorn. `agent-sdk/xr-ai-pipecat` is a separate
   optional package with heavier deps (pipecat-ai, scipy, numpy, httpx,
   fastmcp); it bridges `ProcessorEndpoint` to Pipecat pipelines.
@@ -53,7 +53,7 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   `anthropic`, no `litellm`); all in-tree backends speak
   OpenAI-compatible HTTP.
 - **Workers never import from `server-runtime` or `xr_ai_launcher`.** Only
-  `xr_ai_agent` + `xr_ai_models` + task-specific libs (numpy, torch, …).
+  `xr_ai_hub` + `xr_ai_models` + task-specific libs (numpy, torch, …).
 - **Agentic functions are NAT-first and in-process.** Reusable deterministic
   functions live in `xr-ai-nat` as typed NAT function groups. Existing MCP
   servers remain compatibility surfaces while their capabilities migrate.
@@ -87,7 +87,7 @@ processes may be nested beside them when they are not reusable SDK services:
 | Sub-project | Role | Dependencies |
 |---|---|---|
 | `<sample>/` | Orchestrator — declares `PROCESSES`, calls `run_stack` | `xr-ai-launcher` only |
-| `<sample>/worker/` | Agent worker — connects to hub via IPC | `xr-ai-agent` + task libs |
+| `<sample>/worker/` | Agent worker — connects to hub via IPC | `xr-ai-hub-client` + task libs |
 | `<sample>/<capability>/` | Optional application-specific native function/service slice | Narrow capability deps |
 
 - Processes start serially in declaration order; each must `Path(--ready-file).touch()`
@@ -112,7 +112,7 @@ mechanically:
 
 **Worker code rules** (apply to every sample worker):
 
-- Import IPC types from `xr_ai_agent`; native agent functions come from
+- Import IPC types from `xr_ai_hub`; native agent functions come from
   `xr_ai_nat`.
 - `_HUB_PUB` / `_HUB_PUSH` are module-level constants, not magic strings.
 - Wire `SIGINT` and `SIGTERM` to `agent.shutdown()`; wrap `await agent.run()`
@@ -127,7 +127,7 @@ mechanically:
 **Checklist for a new sample:**
 
 - [ ] `agent-samples/<name>/pyproject.toml` — orchestrator, deps: `xr-ai-launcher` only
-- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-agent` + task libs (list every `.py` in `only-include`)
+- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-hub-client` + task libs (list every `.py` in `only-include`)
 - [ ] `agent-samples/<name>/main.py` — exact orchestrator boilerplate
 - [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` — entry point + (optional) split helpers
 - [ ] `agent-samples/<name>/yaml/xr_media_hub.yaml` — hub config
@@ -243,9 +243,9 @@ Hard rules (also in `DEPENDENCIES.md`):
 
 - `utils/xr-ai-launcher/` has zero runtime dependencies — stdlib only. Keep it that way.
 - `utils/xr-ai-logging/` depends only on `loguru>=0.7`. Used by every process via `setup_logging()`.
-- `agent-sdk/xr-ai-agent` depends only on `pyzmq` + `msgpack`.
+- `agent-sdk/xr-ai-hub-client` depends only on `pyzmq` + `msgpack`.
 - `agent-sdk/xr-ai-models` depends only on `xr-ai-logging` + `httpx` + `pyyaml`. No vendor SDKs.
-- Agent workers import only from `xr_ai_agent` + `xr_ai_models` (and task-specific libs).
+- Agent workers import only from `xr_ai_hub` + `xr_ai_models` (and task-specific libs).
 - Agent workers must never import from `xr_media_hub` or `xr_ai_launcher`.
 - Don't add abstractions until needed by two concrete use-cases.
 

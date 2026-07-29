@@ -8,7 +8,7 @@
 # It exposes one MCP tool — ask_image(question, image_path) — that reads a local
 # image file and forwards it to vlm-server's OpenAI-compatible chat-completions
 # endpoint via the xr-ai-models SDK. There is no hub IPC subscription and no
-# `xr-ai-agent` dependency.
+# `xr-ai-hub-client` dependency.
 #
 # The MCP endpoint is served at http://<host>:<port>/mcp via StreamableHTTP.
 # Use the URL WITHOUT a trailing slash — Starlette's strict path matching

@@ -20,7 +20,7 @@ result is a single, unified logging stack:
 * **stdlib bridge** — a :class:`logging.Handler` (``_InterceptHandler``)
   routes any record emitted via ``logging.getLogger(...)`` into loguru.
   This is how ``utils/xr-ai-launcher/`` (stdlib-only by contract) and
-  ``agent-sdk/xr_ai_agent/`` (pyzmq+msgpack-only by contract) end up in
+  ``agent-sdk/xr-ai-hub-client/`` (pyzmq+msgpack-only by contract) end up in
   the same file/stderr sinks even though they cannot import loguru.
 
 Subprocess coordination
