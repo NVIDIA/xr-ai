@@ -16,7 +16,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_hub import AudioChunk, DataMessage
+from xr_ai_hub import DataMessage
 
 from _helpers import wait_for_subscribed
 
