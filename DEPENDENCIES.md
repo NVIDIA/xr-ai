@@ -136,8 +136,14 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
     performs deterministic spatial calculations without OpenXR, model, or MCP
     dependencies. ``xr_text_memory`` owns persistent per-source JSONL text
-    history. Its optional MCP adapter exports an application's explicit native
-    function list without routing native composition through MCP. Each
+    history, and ``xr_conversation_memory`` composes it into a participant-
+    oriented ``recall_conversation`` view. Its optional MCP adapter exports an
+    application's explicit native function list without routing native
+    composition through MCP. The ``[voice]`` extra adds the
+    ``xr_ai_nat.adapters`` voice adapters: ``as_voice_handler`` wraps a native
+    function as a voice-session handler, and ``record_voice_transcripts``
+    persists each completed turn under ``{participant_id}:{role}`` — the
+    producer that ``recall_conversation`` reads. Each
     capability module is its own ``nat.plugins`` discovery entry point; there
     is no package-wide registration aggregator. The spatial pure math core is
     also used by the transitional Vec and OpenXR MCP compatibility surfaces.

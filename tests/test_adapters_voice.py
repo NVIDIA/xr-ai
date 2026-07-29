@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
-from xr_ai_nat.adapters.voice import as_voice_handler, record_voice_transcripts
+from xr_ai_nat.adapters import as_voice_handler, record_voice_transcripts
 from xr_ai_nat.functions.text_memory import (
     ConversationMemoryFunctionsConfig,
     RecallConversationRequest,
@@ -72,24 +73,42 @@ async def test_record_voice_transcripts_then_recall_conversation(tmp_path) -> No
         recall = (await conversation.get_all_functions())["conversation_memory__recall_conversation"]
 
         record = record_voice_transcripts(add_transcript)
+        # A real exchange gives the user turn and the agent turn the SAME
+        # timestamp — both carry the originating query's time — so recall has to
+        # order the tie user-before-agent rather than relying on distinct stamps.
         await record(VoiceTurn(participant_id="alice", role="user", timestamp_us=10, text="hello"))
-        await record(VoiceTurn(participant_id="alice", role="agent", timestamp_us=20, text="hi there"))
+        await record(VoiceTurn(participant_id="alice", role="agent", timestamp_us=10, text="hi there"))
         await record(VoiceTurn(participant_id="alice", role="user", timestamp_us=30, text="how are you"))
         # Whitespace-only turns are not persisted.
-        await record(VoiceTurn(participant_id="alice", role="agent", timestamp_us=40, text="   "))
+        await record(VoiceTurn(participant_id="alice", role="agent", timestamp_us=30, text="   "))
         # A different participant must not leak into alice's recall.
-        await record(VoiceTurn(participant_id="bob", role="user", timestamp_us=15, text="not alice"))
+        await record(VoiceTurn(participant_id="bob", role="user", timestamp_us=10, text="not alice"))
 
         result = await recall.ainvoke(RecallConversationRequest(participant_id="alice"))
 
     assert [(entry.timestamp_us, entry.role, entry.text) for entry in result.entries] == [
         (10, "user", "hello"),
-        (20, "agent", "hi there"),
+        (10, "agent", "hi there"),
         (30, "user", "how are you"),
     ]
     # The producer stored role-scoped sources under the participant id.
     assert (tmp_path / "alice_user.identity").read_text() == "alice:user"
     assert (tmp_path / "alice_agent.identity").read_text() == "alice:agent"
+
+
+def test_voice_adapters_are_reachable_from_the_public_adapters_namespace() -> None:
+    """Applications are told to use ``xr_ai_nat.adapters.as_voice_handler``; the
+    package must actually export both adapters (they resolve lazily because they
+    need the optional ``[voice]`` extra)."""
+    import xr_ai_nat.adapters as adapters
+    from xr_ai_nat.adapters import voice as voice_module
+
+    assert adapters.as_voice_handler is voice_module.as_voice_handler
+    assert adapters.record_voice_transcripts is voice_module.record_voice_transcripts
+    assert sorted(adapters.__all__) == ["as_voice_handler", "record_voice_transcripts"]
+    assert "as_voice_handler" in dir(adapters)
+    with pytest.raises(AttributeError):
+        adapters.not_an_adapter
 
 
 async def test_recall_conversation_respects_time_window(tmp_path) -> None:

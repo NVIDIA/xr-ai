@@ -85,6 +85,57 @@ It exposes `add_transcript`, `query_transcripts`, `list_sources`, and
 `get_transcript_stats` as native functions. Source identifiers are preserved in
 sidecar files even when their filesystem names require sanitization.
 
+## Conversation recall
+
+The `xr_conversation_memory` group turns that per-source history into a
+participant-oriented view. It composes the `text_memory` group rather than
+touching storage itself:
+
+```yaml
+functions:
+  conversation_memory:
+    _type: xr_conversation_memory
+    text_memory: text_memory
+```
+
+It exposes `recall_conversation(participant_id, …)`, which returns the
+participant's turns — each with a `role` of `user` or `agent` — in time order.
+Turns that share a timestamp (the user turn and the agent turn of one exchange
+both carry the originating query's time) are ordered user-before-agent.
+
+Recall only returns what a producer has written. That producer is the transcript
+observer below: it stores each turn under the role-scoped source
+`{participant_id}:{role}`, exactly the pair `recall_conversation` reads. Without
+it wired up, recall is empty.
+
+## Voice adapters
+
+Install `xr-ai-nat[voice]` to drive a native function from a voice session. Both
+adapters are exported from `xr_ai_nat.adapters` (resolved lazily, so importing
+that package without the extra still works):
+
+```python
+from xr_ai_nat.adapters import as_voice_handler, record_voice_transcripts
+
+handler = as_voice_handler(
+    some_function,
+    request=lambda query: MyRequest(text=query.text),
+    response=str,
+)
+observer = record_voice_transcripts(add_transcript)
+```
+
+- `as_voice_handler(function, *, request, response, streaming=False)` wraps a
+  native function as a voice handler: it maps a `VoiceQuery` onto the function's
+  request model and maps the result back to text. With `streaming=True` it
+  forwards the function's `astream` output chunk by chunk for incremental
+  speech.
+- `record_voice_transcripts(add_transcript)` returns a turn observer that
+  persists each completed turn under `{participant_id}:{role}`, feeding
+  `recall_conversation` above. Recording is an observer rather than a side
+  effect of invoking a function, so a session records turns even when the agent
+  did not handle them.
+
 ## Vision
 
 Install `xr-ai-nat[vision]` to use the `xr_vision_tools` function group. The

@@ -22,7 +22,18 @@ now landing, the `xr_conversation_memory` function group (`recall_conversation`)
 — deferred out of the text-memory PR because it had no producer on main — is
 re-introduced here, alongside an end-to-end record→recall test. It reads those
 role-scoped sources back through the existing typed `query_transcripts` and
-returns timestamp-ordered `ConversationEntry` turns for one participant.
+returns timestamp-ordered `ConversationEntry` turns for one participant. A real
+exchange gives the user turn and the agent turn the same timestamp (both carry
+the originating query's time), so recall orders that tie user-before-agent.
+
+Both adapters are re-exported from the `xr_ai_nat.adapters` package namespace,
+which is the documented import path. The re-export is lazy (PEP 562
+`__getattr__`) because the adapters need the optional extra: importing
+`xr_ai_nat.adapters` without it still succeeds, and only attribute access
+raises — with an error naming the extra to install. Lazy access also keeps the
+deprecated `adapters.mcp` alias from emitting its warning on an unrelated import
+of the package. The `xr-ai-nat` README documents the `[voice]` extra, both
+adapters, `xr_conversation_memory`, and how transcript recording feeds recall.
 
 ### 2026-07-28 — Introduce `xr-ai-voice` alongside `xr-ai-pipecat`
 
