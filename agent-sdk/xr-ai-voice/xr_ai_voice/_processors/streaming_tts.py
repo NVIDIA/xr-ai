@@ -14,8 +14,10 @@ All streaming state — pending text, the synth/order queue, and the sender task
 
 An ``InterruptionFrame`` cancels only the interrupting participant's in-flight
 synthesis and flushes only their hub audio (``transport_source`` carries the
-pid); a frame with no pid falls back to draining every participant. A pipeline
-``EndFrame``/``CancelFrame`` tears down all sender tasks.
+pid); a frame with no pid falls back to draining every participant and flushing
+each of their hub audio. A ``ParticipantLeftFrame`` releases just that
+participant's state, and a pipeline ``EndFrame``/``CancelFrame`` tears down all
+sender tasks.
 
 Every synthesized WAV is offered to ``VoiceGate.observe_tts_wav`` so the gate's
 listening chime can lazily build at the right sample rate. When constructed with
@@ -43,7 +45,7 @@ from xr_ai_models import TTSService
 from xr_ai_voicegate import VoiceGate
 
 from .._audio import wav_to_output_frames
-from .._frames import AssistantResponseEndFrame
+from .._frames import AssistantResponseEndFrame, ParticipantLeftFrame
 
 if TYPE_CHECKING:
     from .._transport import HubVoiceTransport
@@ -108,6 +110,16 @@ class StreamingTtsProcessor(FrameProcessor):
             else:
                 # No pid on the frame — drain every participant (legacy fallback).
                 await self._drain_all_on_interrupt()
+            await self.push_frame(frame, direction)
+            return
+
+        if isinstance(frame, ParticipantLeftFrame):
+            # Release the departing participant's synthesis state before the
+            # frame reaches the output transport (which drops that pid's media
+            # sender). Without this, a lingering synth task could still emit
+            # audio for the departed pid afterwards, and the transport's lazy
+            # routing would recreate the sender it had just released.
+            await self._drain_on_interrupt(frame.participant_id, flush=False)
             await self.push_frame(frame, direction)
             return
 
@@ -304,26 +316,41 @@ class StreamingTtsProcessor(FrameProcessor):
                 "flush_return_audio failed on interrupt pid={!r}", pid,
             )
 
-    async def _drain_on_interrupt(self, pid: str) -> None:
-        """Cancel the interrupting participant's in-flight TTS and flush its hub
-        audio — without touching any other participant's stream."""
+    async def _drain_on_interrupt(self, pid: str, *, flush: bool = True) -> None:
+        """Cancel one participant's in-flight TTS without touching any other's.
+
+        ``flush`` also drops that participant's already-paced hub audio — right
+        for an interruption, pointless for a participant who has already left.
+        """
         st = self._by_pid.pop(pid, None)
         if st is not None:
             st.pending = ""
             queue_len = st.sender_queue.qsize() if st.sender_queue is not None else 0
             await self._teardown_sender(st)
             logger.info("tts sender drained pid={!r} queue_len={}", pid, queue_len)
-        await self._flush_hub(pid)
+        if flush:
+            await self._flush_hub(pid)
 
     async def _drain_all_on_interrupt(self) -> None:
-        """Legacy no-pid fallback: drain every participant and flush the
-        fallback target participant's hub audio."""
-        for pid in list(self._by_pid):
+        """No-pid fallback: drain every participant's synthesis and flush the
+        hub audio of each of them.
+
+        Flushing only the fallback ``target_participant`` would leave audio that
+        is already paced for the other active participants playing out after a
+        global interruption.
+        """
+        pids = list(self._by_pid)
+        for pid in pids:
             st = self._by_pid.pop(pid)
             st.pending = ""
             await self._teardown_sender(st)
-        if self._transport is not None:
-            await self._flush_hub(self._transport.target_participant)
+        if self._transport is None:
+            return
+        # Include the fallback target: audio pushed with no destination is paced
+        # under that pid and has no entry of its own in ``_by_pid``.
+        targets = list(dict.fromkeys([*pids, self._transport.target_participant]))
+        for pid in targets:
+            await self._flush_hub(pid)
 
     async def _shutdown_all(self) -> None:
         """Cancel every participant's sender task on pipeline EndFrame/CancelFrame."""

@@ -2502,6 +2502,94 @@ async def test_streaming_tts_interrupt_is_participant_scoped():
     )
 
 
+@pytest.mark.asyncio
+async def test_streaming_tts_releases_state_on_participant_left():
+    """A departing participant's synthesis state is released, and no audio for
+    that pid is emitted afterwards.
+
+    This matters for the output transport: it drops the pid's media sender when
+    the same frame reaches it, so a lingering synth task emitting audio later
+    would make its lazy routing recreate the sender just released.
+    """
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.flush_calls: list[str] = []
+
+        async def flush_return_audio(self, pid: str) -> None:
+            self.flush_calls.append(pid)
+
+    class _StubTransport:
+        def __init__(self) -> None:
+            self.endpoint           = _StubEndpoint()
+            self.target_participant = ""
+
+    tts  = _FakeTts()
+    tts.delay_s = 0.2  # synthesis still in flight when the participant leaves
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    transport = _StubTransport()
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate, transport=transport)
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            _text_for("Alice speaking. ", "alice"),
+            _text_for("Bob speaking. ", "bob"),
+            ParticipantLeftFrame(participant_id="alice"),
+        ],
+        settle_s=0.4,
+        per_send_delay_s=0.03,
+    )
+
+    # Alice's state is gone; Bob's stream is untouched.
+    assert "alice" not in proc._by_pid  # noqa: SLF001
+    audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
+    assert [f for f in audio if f.transport_destination == "alice"] == [], (
+        "no audio may be emitted for a departed participant"
+    )
+    assert any(f.transport_destination == "bob" for f in audio)
+    # Leaving is not an interruption — there is no live client left to flush.
+    assert transport.endpoint.flush_calls == []
+    # The frame still reaches the rest of the pipeline.
+    assert any(isinstance(f, ParticipantLeftFrame) for f in sink.frames)
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_pidless_interrupt_flushes_every_active_participant():
+    """A pid-less interruption drains every participant, so it must flush every
+    participant's hub audio too — flushing only the fallback target would leave
+    the others' already-paced audio playing out."""
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.flush_calls: list[str] = []
+
+        async def flush_return_audio(self, pid: str) -> None:
+            self.flush_calls.append(pid)
+
+    class _StubTransport:
+        def __init__(self) -> None:
+            self.endpoint           = _StubEndpoint()
+            self.target_participant = "alice"
+
+    tts  = _FakeTts()
+    tts.delay_s = 0.2
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    transport = _StubTransport()
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate, transport=transport)
+
+    await _run_chain(
+        proc,
+        sends=[
+            _text_for("Alice speaking. ", "alice"),
+            _text_for("Bob speaking. ", "bob"),
+            InterruptionFrame(),  # no transport_source
+        ],
+        settle_s=0.4,
+        per_send_delay_s=0.03,
+    )
+
+    assert set(transport.endpoint.flush_calls) == {"alice", "bob"}
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # Regression: output transport rewrites destination to default sender (Bug #1)
 # ════════════════════════════════════════════════════════════════════════════

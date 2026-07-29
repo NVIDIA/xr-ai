@@ -64,9 +64,10 @@ class AssistantResponseEndFrame(DataFrame):
     response on the data channel exactly once. ``pid`` is the
     participant whose turn ended; the data echo addresses the same pid.
 
-    A turn that was cancelled (new query, interruption) still produces
-    one of these on the way out so the consumer never sees an open turn
-    without a corresponding end marker.
+    Only a turn that ran to completion emits one. A cancelled turn (new
+    query, interruption) deliberately does not: its response is partial,
+    and echoing it as the turn's final data would publish text the agent
+    was interrupted out of saying.
     """
 
     pid: str

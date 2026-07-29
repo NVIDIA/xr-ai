@@ -32,7 +32,13 @@ turns and tears down pending early-STT probe tasks, so neither a turn nor a prob
 can emit text or write a transcript after the session has ended.
 
 The voice runtime is participant-scoped for the repository's one-hub/many-clients
-model. `StreamingTtsProcessor` keys its pending text, synthesis/order queue,
+model, and every teardown path is scoped the same way: a ``ParticipantLeftFrame``
+releases just the departing participant's synthesis state (before the frame
+reaches the output transport, which drops that pid's media sender — otherwise a
+lingering synth task could emit audio afterwards and the transport's lazy routing
+would recreate the sender it had just released), and a pid-less interruption
+drains every participant *and* flushes each of their hub audio rather than only
+the fallback target's. `StreamingTtsProcessor` keys its pending text, synthesis/order queue,
 sender task, interruption, and hub flush by participant id, so concurrent
 participants never share a buffer (which would splice their words) or a sender
 (which would misroute audio); an `InterruptionFrame` scopes to its
