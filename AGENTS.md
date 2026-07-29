@@ -122,14 +122,20 @@ mechanically:
 - Callbacks are `async def` even if the work inside is sync.
 - CPU-bound work goes through `loop.run_in_executor(...)` — never block the
   event loop.
-- Imports are absolute (flat module layout). No `__init__.py` or `__main__.py`.
+- A small worker is a flat set of modules with absolute imports and no
+  `__init__.py`. A worker that outgrows that — several collaborating modules
+  plus bundled prompts — becomes an installed package:
+  `worker/<snake_name>_worker/` with `__init__.py` re-exporting `run`, a
+  `__main__.py`, and relative imports between its own modules. `xr-render-demo`
+  uses the package layout. The console-script name is the same either way, so
+  the orchestrator's `Process(...)` entry is unaffected by the choice.
 
 **Checklist for a new sample:**
 
 - [ ] `agent-samples/<name>/pyproject.toml` — orchestrator, deps: `xr-ai-launcher` only
-- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-agent` + task libs (list every `.py` in `only-include`)
+- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-agent` + task libs (flat layout lists every `.py` in `only-include`; a package sets `packages = ["<snake_name>_worker"]`)
 - [ ] `agent-samples/<name>/main.py` — exact orchestrator boilerplate
-- [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` — entry point + (optional) split helpers
+- [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` (or `worker/<snake_name>_worker/`) — entry point + (optional) split helpers
 - [ ] `agent-samples/<name>/yaml/xr_media_hub.yaml` — hub config
 - [ ] `agent-samples/<name>/yaml/<command>.yaml` — one per process that needs config
 - [ ] `agent-samples/<name>/yaml/models.yaml` — logical model names + preset references (see `agent-sdk/xr-ai-models/README.md`)

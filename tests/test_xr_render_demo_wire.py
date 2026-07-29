@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-# Add the worker directory to sys.path so we can import its modules.
+# Add the worker directory to sys.path so we can import the worker package.
 _WORKER_DIR = (
     Path(__file__).resolve().parent.parent
     / "agent-samples" / "xr-render-demo" / "worker"
@@ -91,7 +91,7 @@ def test_models_yaml_loads() -> None:
 def test_worker_config_idle_timeout_disabled_by_default() -> None:
     """The shipped worker YAML ships idle_timeout_secs: 0, which the loader
     maps to None (disabled) so a quiet session is never auto-cancelled."""
-    from config import load_config
+    from xr_render_demo_worker.config import load_config
 
     worker_yaml = (
         Path(__file__).resolve().parent.parent
@@ -103,7 +103,7 @@ def test_worker_config_idle_timeout_disabled_by_default() -> None:
 
 def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
     """A positive idle_timeout_secs in the YAML is parsed to a float."""
-    from config import load_config
+    from xr_render_demo_worker.config import load_config
 
     y = tmp_path / "w.yaml"
     y.write_text("idle_timeout_secs: 300\n")
@@ -373,7 +373,7 @@ def test_tool_def_to_openai_wire_shape() -> None:
 # path runs no LLM/MCP, so the brain is built with None clients and the real
 # prompt files — only the transport is faked to capture _send.
 
-_PROMPTS_DIR = _WORKER_DIR / "prompts"
+_PROMPTS_DIR = _WORKER_DIR / "xr_render_demo_worker" / "prompts"
 _SYSTEM_PROMPT = _PROMPTS_DIR / "system.txt"
 
 _LAUNCH_FAIL_MSG = "I couldn't start the XR session — try Launch XR again."
@@ -550,8 +550,8 @@ async def test_quick_ack_spoken_on_non_thinking_turn() -> None:
 from xr_ai_agent import FrameData, FrameSignal, PixelFormat  # noqa: E402
 from xr_ai_models import ChatResponse, ToolCall  # noqa: E402
 
-import processors as _proc  # noqa: E402
-import capabilities as _caps  # noqa: E402
+import xr_render_demo_worker.processors as _proc  # noqa: E402
+import xr_render_demo_worker.capabilities as _caps  # noqa: E402
 from xr_ai_nat.functions.spatial_math import SpatialMathFunctionsConfig  # noqa: E402
 from xr_ai_nat.functions.xr_tracking import XRTrackingFunctionsConfig  # noqa: E402
 
@@ -641,7 +641,7 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
     for recorded lookups); exposing them verbatim would tell the model to fill a
     required ``participant_id`` it cannot know and whose value is discarded.
     Guards the do-not-reverse of main's trimmed ``{question}`` contract."""
-    from xr_render_demo_worker import _WORKER_MANAGED_TOOLS
+    from xr_render_demo_worker.app import _WORKER_MANAGED_TOOLS
 
     async with WorkflowBuilder() as builder:
         toolbox, _vision_config = await _caps.build_native_toolbox(

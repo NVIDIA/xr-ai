@@ -20,8 +20,8 @@ import time
 from loguru import logger
 from xr_ai_agent import AudioChunk, DataMessage, ParticipantEvent
 
-from processors import RenderSceneProcessor
-from capabilities import NativeToolbox
+from .processors import RenderSceneProcessor
+from .capabilities import NativeToolbox
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 _XR_SESSION_STARTED_TOPIC = "xr.session.started"

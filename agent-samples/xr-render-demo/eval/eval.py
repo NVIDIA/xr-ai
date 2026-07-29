@@ -36,9 +36,9 @@ SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
 # Borrow the worker's config and native-tool assembly so the eval advertises
 # the same model-facing function schemas as the live worker.
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
-from capabilities import build_native_toolbox  # noqa: E402
-from config import load_config  # noqa: E402  — must follow sys.path tweak
-from processors import (  # noqa: E402  — must follow sys.path tweak
+from xr_render_demo_worker.capabilities import build_native_toolbox  # noqa: E402
+from xr_render_demo_worker.config import load_config  # noqa: E402  — must follow sys.path tweak
+from xr_render_demo_worker.processors import (  # noqa: E402  — must follow sys.path tweak
     _LIVE_PERCEPTION_TOOL,
     _PAST_PERCEPTION_TOOL,
     _PERCEPTION_TOOL_DEFS,

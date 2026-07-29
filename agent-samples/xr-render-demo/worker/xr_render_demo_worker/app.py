@@ -31,10 +31,10 @@ from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
 from xr_ai_voicegate import load_voice_gate_config
 
-from agent import RenderDemoAgent
-from capabilities import build_native_toolbox
-from config import WorkerConfig, load_config
-from processors import (
+from .xr_session import RenderDemoAgent
+from .capabilities import build_native_toolbox
+from .config import WorkerConfig, load_config
+from .processors import (
     _LIVE_PERCEPTION_TOOL,
     _PAST_PERCEPTION_TOOL,
     _PERCEPTION_TOOL_DEFS,
@@ -203,7 +203,3 @@ def run() -> None:
     ns, _ = p.parse_known_args()
     cfg = load_config(ns.config)
     asyncio.run(main(cfg, config_path=ns.config, ready_file=ns.ready_file))
-
-
-if __name__ == "__main__":
-    run()

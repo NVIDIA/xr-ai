@@ -9,6 +9,31 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-29 — xr-render-demo worker becomes a package with a scene seam
+
+The render worker's flat modules become the installed `xr_render_demo_worker`
+package, so the sample's growing brain has real internal boundaries instead of
+six top-level modules sharing one `sys.path` entry. `xr_render_demo_worker.py`
+splits into `app.py` (startup + pipeline assembly) and a `__main__.py`, with
+`__init__.py` re-exporting `run`; `agent.py` becomes `xr_session.py`, naming the
+responsibility it already had (XR/LOVR session lifecycle, launch-failure
+notices, text-input intake). Modules import each other relatively, and `prompts/`
+ships inside the package. The console-script name is unchanged, so the
+orchestrator's process table and every launch command still work.
+
+The per-turn scene context moves out of the 1066-line `processors.py` into
+`scene.py` as `build_turn_context(call_tool, …) -> SceneContext`. It was already
+a self-contained unit — pre-fetch scene state, head pose, and the 1.5 m-ahead
+position concurrently, then render them plus the move log and conversation
+history — but it reached into four brain attributes to do it. As a function over
+an injected tool-caller it is now independently testable (the new
+`test_render_scene_context.py` pins the context contract without a pipeline or
+an LLM) and reusable by any agent that needs the same view of the world.
+
+Behavior is unchanged: same prompts, same reasoning loop, same pipeline, same
+tool surface. This is the structural groundwork for splitting the single flat
+reasoning loop into focused agents; no agent split happens here.
+
 ### 2026-07-28 — Introduce `xr-ai-voice` alongside `xr-ai-pipecat`
 
 Added the `xr-ai-voice` SDK package (`agent-sdk/xr-ai-voice`), a voice runtime

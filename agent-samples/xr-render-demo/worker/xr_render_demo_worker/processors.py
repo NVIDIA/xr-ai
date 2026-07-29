@@ -41,9 +41,10 @@ from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
 from xr_ai_pipecat import BrainProcessor
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
-from config import WorkerConfig
-from capabilities import NativeToolbox
-from tooling import (
+from .config import WorkerConfig
+from .capabilities import NativeToolbox
+from .scene import build_turn_context
+from .tooling import (
     extract_json,
     looks_like_leaked_tool_call,
     normalize_tool_args,
@@ -600,111 +601,22 @@ class RenderSceneProcessor(BrainProcessor):
             await asyncio.sleep(repeat_every)
 
     async def _build_turn_context(self, pid: str, *, ref_us: int = 0) -> str:
-        """Pre-fetch scene/pose and format the turn-context block.
+        """Build the turn-context block via :mod:`scene`.
 
-        Fetches scene state, head pose, and the most common spatial position
-        (1.5 m ahead) concurrently — saves 1-3 tool-call iterations per turn —
-        and renders them, plus the move log and conversation history, into the
-        text injected into the agentic loop's user message. Side effect: resets
-        ``self._pre_move_positions`` to the current scene so update_primitive
-        calls during this turn can be recorded as (prev → new) move-log entries.
+        Side effect: refreshes ``self._pre_move_positions`` from the scene
+        snapshot so ``update_primitive`` calls during this turn can be recorded
+        as (prev → new) move-log entries.
         """
-        scene, pose, ahead = await asyncio.gather(
-            self._call_tool("get_scene_state", {}, silent=True),
-            self._call_tool("get_head_pose", {}, silent=True),
-            self._call_tool("position_ahead", {"distance": 1.5}, silent=True),
+        context = await build_turn_context(
+            self._call_tool,
+            pid=pid,
+            ref_us=ref_us,
+            recent_moves=self._recent_moves,
+            history=self._history,
         )
+        self._pre_move_positions = context.pre_move_positions
+        return context.text
 
-        ctx_parts: list[str] = []
-
-        # ── Scene ──────────────────────────────────────────────────────────────
-        self._pre_move_positions = {}
-        if isinstance(scene, dict) and scene.get("objects"):
-            objs = scene["objects"]
-            lines = ["SCENE OBJECTS:"]
-            for o in objs:
-                pos = o.get("position", {})
-                col = o.get("color", {})
-                self._pre_move_positions[o["id"]] = (
-                    float(pos.get("x", 0)),
-                    float(pos.get("y", 0)),
-                    float(pos.get("z", 0)),
-                )
-                lines.append(
-                    f"  {o['id']} ({o['type']})  "
-                    f"pos=({pos.get('x', 0):.2f}, {pos.get('y', 0):.2f}, {pos.get('z', 0):.2f})  "
-                    f"color=(r={col.get('r', 0):.2f} g={col.get('g', 0):.2f} b={col.get('b', 0):.2f})  "
-                    f"size={o.get('size', 0.1):.3f}m"
-                )
-            ctx_parts.append("\n".join(lines))
-        else:
-            ctx_parts.append("SCENE OBJECTS: (empty)")
-
-        # ── Head pose + derived spatial shortcuts ─────────────────────────────
-        if isinstance(pose, dict) and pose.get("is_valid"):
-            p = pose["position"]
-            fv = pose["forward"]
-            rv = pose["right"]
-            uv = pose.get("up", {"x": 0, "y": 1, "z": 0})
-
-            # Compute common offsets directly — no extra tool calls needed.
-            def _off(vec: dict, d: float) -> str:
-                return f"({p['x'] + vec['x'] * d:.2f}, {p['y'] + vec['y'] * d:.2f}, {p['z'] + vec['z'] * d:.2f})"
-
-            ahead_str = (
-                f"({ahead['x']:.2f}, {ahead['y']:.2f}, {ahead['z']:.2f})"
-                if isinstance(ahead, dict) and "x" in ahead
-                else _off(fv, 1.5)
-            )
-
-            ctx_parts.append(
-                "HEAD POSE:\n"
-                f"  position : ({p['x']:.2f}, {p['y']:.2f}, {p['z']:.2f})\n"
-                f"  forward  : ({fv['x']:.3f}, {fv['y']:.3f}, {fv['z']:.3f})  ← 'ahead/forward'\n"
-                f"  right    : ({rv['x']:.3f}, {rv['y']:.3f}, {rv['z']:.3f})  ← 'right'\n"
-                f"  up       : ({uv['x']:.3f}, {uv['y']:.3f}, {uv['z']:.3f})  ← 'up'\n"
-                f"  yaw={pose.get('yaw_deg', 0):.1f}°  pitch={pose.get('pitch_deg', 0):.1f}°\n"
-                "SPATIAL SHORTCUTS (pre-computed — use directly, no tool call needed):\n"
-                f"  1.5m ahead of you     : {ahead_str}\n"
-                f"  1m to your right      : {_off(rv, 1.0)}\n"
-                f"  1m to your left       : {_off(rv, -1.0)}\n"
-                f"  0.5m above eye level  : {_off(uv, 0.5)}\n"
-                f"  1m behind you         : {_off(fv, -1.0)}\n"
-                "  For other distances: new_pos = obj.pos + direction_vec × distance (per component)"
-            )
-        else:
-            ctx_parts.append("HEAD POSE: unavailable")
-
-        if pid:
-            ctx_parts.append(f"Participant: {pid}")
-        if ref_us:
-            ctx_parts.append(f"Reference time (when user spoke): {ref_us} µs")
-
-        # Structured move log — machine-readable prior coords for "put it
-        # back" / "undo" / "revert" so the model doesn't have to parse free
-        # text out of the conversation history.
-        if self._recent_moves:
-            move_lines = []
-            for obj_id, prev, new in self._recent_moves:
-                move_lines.append(
-                    f"  {obj_id}: ({prev[0]:.2f}, {prev[1]:.2f}, {prev[2]:.2f}) → "
-                    f"({new[0]:.2f}, {new[1]:.2f}, {new[2]:.2f})"
-                )
-            ctx_parts.append("[Recent moves] (most recent last — prev → new)\n" + "\n".join(move_lines))
-
-        # Recent conversation history — lets the agent understand "fix that",
-        # "undo", "the sphere I just added", etc.
-        if self._history:
-            hist_lines = []
-            for u, a in self._history:
-                hist_lines.append(f"  User: {u}")
-                hist_lines.append(f"  Agent: {a}")
-            ctx_parts.append("[Recent conversation]\n" + "\n".join(hist_lines))
-
-        context = "\n".join(ctx_parts)
-        logger.debug("pre-fetched context for turn")
-        _trace_log.debug("CTX   {}", context.replace("\n", " | "))
-        return context
 
     def _recover_text_tool_call(
         self,
