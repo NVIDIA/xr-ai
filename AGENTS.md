@@ -125,10 +125,14 @@ mechanically:
 - A small worker is a flat set of modules with absolute imports and no
   `__init__.py`. A worker that outgrows that — several collaborating modules
   plus bundled prompts — becomes an installed package:
-  `worker/<snake_name>_worker/` with `__init__.py` re-exporting `run`, a
-  `__main__.py`, and relative imports between its own modules. `xr-render-demo`
-  uses the package layout. The console-script name is the same either way, so
-  the orchestrator's `Process(...)` entry is unaffected by the choice.
+  `worker/<snake_name>_worker/` with a `__main__.py` holding the entry point,
+  and relative imports between its own modules. Keep `__init__.py` import-light
+  (paths and constants, no submodule imports) and point the console script at
+  `<snake_name>_worker.__main__:run` — an `__init__` that imports the app makes
+  every submodule drag in the whole pipeline, which defeats splitting the worker
+  up in the first place. `xr-render-demo` uses the package layout. The
+  console-script name is the same either way, so the orchestrator's
+  `Process(...)` entry is unaffected by the choice.
 
 **Checklist for a new sample:**
 

@@ -31,7 +31,7 @@ xr-ai-logging      = { path = "../../../utils/xr-ai-logging",          editable 
 xr-render-scene    = { path = "../scene",                              editable = true }
 
 [project.scripts]
-xr_render_demo_worker = "xr_render_demo_worker:run"
+xr_render_demo_worker = "xr_render_demo_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_render_demo_worker"]

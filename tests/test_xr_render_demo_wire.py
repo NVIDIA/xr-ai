@@ -373,8 +373,9 @@ def test_tool_def_to_openai_wire_shape() -> None:
 # path runs no LLM/MCP, so the brain is built with None clients and the real
 # prompt files — only the transport is faked to capture _send.
 
-_PROMPTS_DIR = _WORKER_DIR / "xr_render_demo_worker" / "prompts"
-_SYSTEM_PROMPT = _PROMPTS_DIR / "system.txt"
+# Resolved from the package so a prompt relocation cannot leave this stale.
+from xr_render_demo_worker import PROMPTS_DIR as _PROMPTS_DIR  # noqa: E402
+from xr_render_demo_worker import SYSTEM_PROMPT as _SYSTEM_PROMPT  # noqa: E402
 
 _LAUNCH_FAIL_MSG = "I couldn't start the XR session — try Launch XR again."
 

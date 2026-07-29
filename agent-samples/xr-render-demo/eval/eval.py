@@ -11,8 +11,8 @@ Usage:
   uv run --project ../worker python eval.py "Move it down"  # one query
   uv run --project ../worker python eval.py --prompt PATH   # alternate prompt
 
-By default reads ../worker/prompts/system.txt (the live xr-render-demo
-prompt). Edit it and re-run; no stack restart needed.
+By default reads the system prompt bundled in the xr_render_demo_worker package
+(the live xr-render-demo prompt). Edit it and re-run; no stack restart needed.
 """
 from __future__ import annotations
 
@@ -31,11 +31,13 @@ import yaml
 from nat.builder.workflow_builder import WorkflowBuilder
 
 _HERE       = Path(__file__).resolve().parent
-SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
 
 # Borrow the worker's config and native-tool assembly so the eval advertises
 # the same model-facing function schemas as the live worker.
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
+# Resolved from the worker package rather than a relative literal, so moving the
+# prompts cannot silently break the default eval run.
+from xr_render_demo_worker import SYSTEM_PROMPT as SYS_PROMPT  # noqa: E402
 from xr_render_demo_worker.capabilities import build_native_toolbox  # noqa: E402
 from xr_render_demo_worker.config import load_config  # noqa: E402  — must follow sys.path tweak
 from xr_render_demo_worker.processors import (  # noqa: E402  — must follow sys.path tweak

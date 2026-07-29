@@ -17,7 +17,6 @@ import argparse
 import asyncio
 import pathlib
 import signal
-from pathlib import Path
 
 from loguru import logger
 from nat.builder.function import Function
@@ -33,6 +32,7 @@ from xr_ai_voicegate import load_voice_gate_config
 
 from .xr_session import RenderDemoAgent
 from .capabilities import build_native_toolbox
+from . import SYSTEM_PROMPT
 from .config import WorkerConfig, load_config
 from .processors import (
     _LIVE_PERCEPTION_TOOL,
@@ -58,7 +58,8 @@ async def _group_functions(builder: WorkflowBuilder, *names: str) -> dict[str, F
     return functions
 
 
-_PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
+# Single source of truth for the bundled prompt location (see __init__).
+_PROMPT_FILE = SYSTEM_PROMPT
 
 
 async def main(

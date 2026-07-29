@@ -265,7 +265,7 @@ in one place:
 
 ## Prompt structure
 
-The system prompt at `worker/prompts/system.txt` is worked-example heavy.
+The system prompt at `worker/xr_render_demo_worker/prompts/system.txt` is worked-example heavy.
 It opens with pronoun and reference resolution, then routes placement
 utterances through sequential checks before the LLM picks a tool:
 
