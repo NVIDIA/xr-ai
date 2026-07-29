@@ -87,9 +87,21 @@ sidecar files even when their filesystem names require sanitization.
 
 ## Vision
 
-Install `xr-ai-nat[vision]` to use the `xr_vision_tools` function group. The
-group accepts a hub frame `endpoint`, an injected `xr-ai-models` `VLMService`,
-and a reference to the `video_memory` group for recorded lookups:
+Install `xr-ai-nat[vision]` to use the `xr_vision` path-based function group:
+
+```python
+config = VisionFunctionsConfig(vlm=vlm, system_prompt="Answer briefly.")
+await builder.add_function_group("vision", config)
+```
+
+Image acquisition remains separate: a live-frame or video-memory function
+obtains an image, then passes its exact returned path to `vision__ask_image`.
+The function performs image I/O off the event loop, normalizes the input to
+JPEG, and makes the request through `xr-ai-models`.
+
+Native workflows that own a hub frame endpoint can instead use
+`xr_vision_tools`. This higher-level group accepts the endpoint, the VLM, and a
+reference to the `video_memory` group for recorded lookups:
 
 ```python
 config = VisionToolsConfig(
@@ -126,9 +138,9 @@ Its complete invocation returns a `VisionResult` with `status` set to `ok` or
 `unavailable`; callers must handle an unavailable result without treating its
 text as an answer about the scene.
 
-MCP-only agents that already hold a local image path can still reach the legacy
-file-path `ask_image` tool through the vlm-mcp compatibility server
-(`agent-mcp-servers/vlm-mcp/`), which now owns that path-based surface directly.
+MCP-only agents that already hold a local image path can use `ask_image`
+through the vlm-mcp compatibility server (`agent-mcp-servers/vlm-mcp/`), which
+republishes the native `xr_vision` function.
 
 ## XR tracking
 

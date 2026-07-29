@@ -5,6 +5,7 @@
 
 import math
 import time
+from copy import deepcopy
 from typing import Annotated, Any, Literal
 
 from nat.builder.function import Function
@@ -28,6 +29,14 @@ from xr_render_scene import (
     SceneStateFunctionsConfig,
     SceneUpdateFunctionsConfig,
 )
+
+LIVE_PERCEPTION_TOOL = "look_at_current_frame"
+PAST_PERCEPTION_TOOL = "look_at_past_frame"
+
+_INJECTED_TOOL_ARGUMENTS = {
+    LIVE_PERCEPTION_TOOL: frozenset({"participant_id"}),
+    PAST_PERCEPTION_TOOL: frozenset({"participant_id", "reference_time_us"}),
+}
 
 
 class _EmptyRequest(BaseModel):
@@ -358,6 +367,39 @@ class NativeToolbox:
         return _plain(result)
 
 
+def model_tool_definitions(
+    toolbox: NativeToolbox,
+    *,
+    exclude: set[str] | frozenset[str] = frozenset(),
+) -> list[ToolDef]:
+    """Return native schemas with worker-injected perception context hidden."""
+
+    definitions: list[ToolDef] = []
+    for definition in toolbox.definitions(exclude=exclude):
+        injected = _INJECTED_TOOL_ARGUMENTS.get(definition.name)
+        if not injected:
+            definitions.append(definition)
+            continue
+
+        parameters = deepcopy(definition.parameters)
+        properties = parameters.get("properties", {})
+        for name in injected:
+            properties.pop(name, None)
+        required = [name for name in parameters.get("required", []) if name not in injected]
+        if required:
+            parameters["required"] = required
+        else:
+            parameters.pop("required", None)
+        definitions.append(
+            ToolDef(
+                name=definition.name,
+                description=definition.description,
+                parameters=parameters,
+            )
+        )
+    return definitions
+
+
 async def build_native_toolbox(
     builder: WorkflowBuilder,
     *,
@@ -415,4 +457,11 @@ def _plain(value: Any) -> Any:
     return value
 
 
-__all__ = ["NativeToolbox", "RenderSpatialToolsConfig", "build_native_toolbox"]
+__all__ = [
+    "LIVE_PERCEPTION_TOOL",
+    "NativeToolbox",
+    "PAST_PERCEPTION_TOOL",
+    "RenderSpatialToolsConfig",
+    "build_native_toolbox",
+    "model_tool_definitions",
+]

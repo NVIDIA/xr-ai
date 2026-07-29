@@ -27,6 +27,7 @@ from xr_ai_nat.functions.vision import (
     HistoricalVisionRequest,
     LiveVisionRequest,
     StreamingVisionConfig,
+    VisionFunctionsConfig,
     VisionRequest,
     VisionToolsConfig,
 )
@@ -96,6 +97,7 @@ class _VideoMemoryStubConfig(FunctionGroupBaseConfig, name="xr_video_memory_stub
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     requests: Any = Field(exclude=True, repr=False)
+    path: str
 
 
 @register_function_group(config_type=_VideoMemoryStubConfig)
@@ -105,7 +107,7 @@ async def _video_memory_stub(config: _VideoMemoryStubConfig, _builder: Builder):
     async def get_frame_from_time(request: HistoricalFrameRequest) -> HistoricalFrameResult:
         config.requests.append(request)
         return HistoricalFrameResult(
-            path="/tmp/frame.png",
+            path=config.path,
             width=1,
             height=1,
             timestamp_us=90,
@@ -117,8 +119,11 @@ async def _video_memory_stub(config: _VideoMemoryStubConfig, _builder: Builder):
     yield group
 
 
-async def _build_vision(builder: WorkflowBuilder, endpoint, vlm, requests):
-    await builder.add_function_group("video_memory", _VideoMemoryStubConfig(requests=requests))
+async def _build_vision(builder: WorkflowBuilder, endpoint, vlm, requests, frame_path="/tmp/frame.png"):
+    await builder.add_function_group(
+        "video_memory",
+        _VideoMemoryStubConfig(requests=requests, path=frame_path),
+    )
     await builder.add_function_group(
         "vision",
         VisionToolsConfig(endpoint=endpoint, vlm=vlm, video_memory=FunctionGroupRef("video_memory")),
@@ -268,16 +273,43 @@ async def test_look_at_current_frame_reports_empty_answer_as_unavailable() -> No
             await look.ainvoke(LiveVisionRequest(participant_id="alice", question="What am I holding?"))
 
 
+async def test_path_based_vision_function_remains_available(tmp_path: Path) -> None:
+    image_path = tmp_path / "frame.png"
+    Image.new("RGB", (2, 2), (20, 40, 60)).save(image_path)
+    vlm = _Vlm("<think>hidden</think>It is a blue square.")
+
+    async with WorkflowBuilder() as builder:
+        await builder.add_function_group("vision", VisionFunctionsConfig(vlm=vlm))
+        group = await builder.get_function_group("vision")
+        functions = await group.get_all_functions()
+        result = await functions["vision__ask_image"].ainvoke(
+            {"question": "What is shown?", "image_path": str(image_path)}
+        )
+
+    assert result == "It is a blue square."
+    image, question, _system = vlm.calls[0]
+    assert question == "What is shown?"
+    assert image.startswith("data:image/jpeg;base64,")
+
+
 # ── VisionToolsConfig — look_at_past_frame ────────────────────────────────────
 
 
-async def test_look_at_past_frame_uses_recorded_frame_function() -> None:
+async def test_look_at_past_frame_uses_recorded_frame_function(tmp_path: Path) -> None:
     endpoint = _Endpoint()
     vlm = _Vlm("It was purple.")
     requests: list[HistoricalFrameRequest] = []
+    image_path = tmp_path / "frame.png"
+    Image.new("RGB", (2, 2), (20, 40, 60)).save(image_path)
 
     async with WorkflowBuilder() as builder:
-        functions = await _build_vision(builder, endpoint, vlm, requests)
+        functions = await _build_vision(
+            builder,
+            endpoint,
+            vlm,
+            requests,
+            frame_path=str(image_path),
+        )
         look_past = functions["vision__look_at_past_frame"]
         result = await look_past.ainvoke(
             HistoricalVisionRequest(
@@ -291,8 +323,7 @@ async def test_look_at_past_frame_uses_recorded_frame_function() -> None:
     assert result.answer == "It was purple."
     assert requests[0].reference_time_us == 100
     assert requests[0].second_ago == 10
-    # The recorded PNG path was handed to the VLM as a filesystem path.
-    assert vlm.calls[0][0] == Path("/tmp/frame.png")
+    assert vlm.calls[0][0].startswith("data:image/jpeg;base64,")
 
 
 def test_historical_vision_request_requires_a_positive_offset() -> None:

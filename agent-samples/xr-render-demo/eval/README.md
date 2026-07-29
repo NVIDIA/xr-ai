@@ -106,6 +106,10 @@ override, multi-turn `history`, undo `recent_moves`) is exemplified
 there. Copy the closest existing case and edit. The case dict is
 what the harness consumes directly; there's no case schema layer.
 
+Use `result` for expected scene mutations, `required_calls` for
+non-mutating tool calls such as perception, and `forbidden_tools` when
+the wrong routing path must fail the case.
+
 ## Don't train on the test set
 
 Prompt worked-examples and case fixtures share the same model. The
@@ -137,4 +141,4 @@ when reaching for a fixture word in a worked example.
 
 - The live worker pipeline (VAD, STT, TTS, history bookkeeping).
 - Real scene-service / LOVR effects (fixture-succeeded).
-- Real visual queries (`look_at_current_frame`, `look_at_past_frame`) — stubbed.
+- Real VLM/frame results — perception routing is covered, but tool execution is stubbed.
