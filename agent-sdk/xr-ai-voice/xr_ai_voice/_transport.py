@@ -231,11 +231,24 @@ class XRMediaHubOutputTransport(BaseOutputTransport):
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
         # Register a per-participant sender on join so audio addressed to that
-        # pid has somewhere to route. Senders are not torn down on leave — one
-        # idle sender per pid for the session is cheap, and tearing one down
-        # mid-pipeline needs an EndFrame we don't have here.
+        # pid has somewhere to route, and release it on leave so a long-lived
+        # hub with join/leave churn does not retain idle senders until shutdown.
         if isinstance(frame, ParticipantJoinedFrame):
             await self._ensure_destination(frame.participant_id)
+        elif isinstance(frame, ParticipantLeftFrame):
+            await self._release_destination(frame.participant_id)
+
+    async def _release_destination(self, pid: str) -> None:
+        """Tear down a departed participant's ``MediaSender``."""
+        sender = self._media_senders.pop(pid, None)
+        if sender is None:
+            return
+        try:
+            await sender.cancel(CancelFrame())
+        except Exception:
+            logger.opt(exception=True).debug("media sender cancel failed pid={!r}", pid)
+        if self._target_participant == pid:
+            self._target_participant = ""
 
     async def stop(self, frame: EndFrame):
         await super().stop(frame)

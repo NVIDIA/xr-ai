@@ -397,13 +397,9 @@ class VadSttProcessor(FrameProcessor):
         try:
             await task
         except asyncio.CancelledError:
-            pass
-        try:
-            await task
-        except asyncio.CancelledError:
-            # Expected: we cancelled this probe ourselves; awaiting it
-            # raises CancelledError, which we intentionally swallow so a
-            # fresh probe can't overlap the one being torn down.
+            # Expected: we cancelled this probe ourselves; awaiting it raises
+            # CancelledError, which we swallow so a fresh probe can't overlap the
+            # one being torn down.
             pass
         except Exception:
             logger.exception("stop-probe cancel raised pid={!r}", pid)

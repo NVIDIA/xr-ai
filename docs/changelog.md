@@ -19,6 +19,18 @@ onto voice yet (there are no consumers). Readiness is health-based (split across
 `_readiness`/`_session`); if #300's request-readiness lands, it folds into
 `_readiness` when samples migrate.
 
+The voice runtime is participant-scoped for the repository's one-hub/many-clients
+model. `StreamingTtsProcessor` keys its pending text, synthesis/order queue,
+sender task, interruption, and hub flush by participant id, so concurrent
+participants never share a buffer (which would splice their words) or a sender
+(which would misroute audio); an `InterruptionFrame` scopes to its
+`transport_source` pid — the handler's supersede interrupt now carries that pid.
+Per-participant transport `MediaSender`s are released on `ParticipantLeftFrame`
+and every sender task is torn down on pipeline `EndFrame`/`CancelFrame`, so
+join/leave churn and shutdown retain no state. The `on_query_superseded` callback
+fires only when a new query actually replaces a still-in-flight turn (not for a
+queued follow-up or a query after the previous turn finished).
+
 The voice runtime's `VoiceGateProcessor` relies on the wake-gate's partial-wake
 / early-chime helpers (`VoiceGate.begin_utterance`, `wake_ack_enabled`,
 `matches_magic_phrase`, `could_match_magic_phrase`, and `play_chime` returning

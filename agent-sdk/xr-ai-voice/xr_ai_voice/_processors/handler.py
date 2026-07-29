@@ -61,8 +61,12 @@ class _VoiceHandlerProcessor(FrameProcessor):
         self._inflight: dict[str, asyncio.Task[None]] = {}
         self._queued: dict[str, deque[GatedQueryFrame]] = {}
         self._turn_tokens: dict[str, object] = {}
-        # TTS may still be playing after a handler task finishes, so supersede
-        # hooks are gated by turn history rather than task state.
+        # "Has this participant spoken a turn before." A finished turn may still
+        # have TTS draining downstream, so a follow-up turn interrupts to clear
+        # that lingering audio — tracked by history, not live task state. NOTE:
+        # this drives the downstream interrupt only; the on_query_superseded
+        # callback fires solely on an actual in-flight replacement (see
+        # _spawn_query), never merely because a turn was seen before.
         self._seen_query: set[str] = set()
         # Joined participants receive speech hooks even before their first turn.
         self._joined: set[str] = set()
@@ -167,25 +171,39 @@ class _VoiceHandlerProcessor(FrameProcessor):
             pid,
             frame.fresh_match,
         )
-        was_seen = pid in self._seen_query
-        if was_seen:
+        current = self._inflight.get(pid)
+        is_active = current is not None and not current.done()
+
+        if is_active and self._queue_queries:
+            # A turn is still running: queue this one as a follow-up. This is
+            # NOT a supersede — the running turn completes and this runs after
+            # it — so on_query_superseded does not fire.
+            pending = self._queued.setdefault(pid, deque())
+            pending.append(frame)
+            logger.info("voice handler queued pid={!r} depth={}", pid, len(pending))
+            return
+
+        if is_active:
+            # Non-queue mode: the new query actually replaces the in-flight turn.
+            # That replacement is the only real supersede.
             logger.info("voice handler superseded pid={!r}", pid)
             await self._notify(self._on_query_superseded, pid)
-            current = self._inflight.get(pid)
-            if self._queue_queries and current is not None and not current.done():
-                pending = self._queued.setdefault(pid, deque())
-                pending.append(frame)
-                logger.info("voice handler queued pid={!r} depth={}", pid, len(pending))
-                return
-        self._seen_query.add(pid)
-        if not self._queue_queries:
             self._cancel_pid(pid)
-        await self._start_query(frame, interrupt=was_seen)
+
+        # A prior turn — even a finished one whose TTS may still be draining —
+        # means the new turn interrupts downstream audio so it starts clean.
+        had_prior = pid in self._seen_query
+        self._seen_query.add(pid)
+        await self._start_query(frame, interrupt=had_prior)
 
     async def _start_query(self, frame: GatedQueryFrame, *, interrupt: bool) -> None:
         pid = frame.participant_id
         if interrupt and self._interrupt_on_supersede:
-            await self.push_frame(InterruptionFrame())
+            # Tag the pid so the downstream TTS drain/flush scopes to this
+            # participant instead of every participant's audio.
+            interruption = InterruptionFrame()
+            interruption.transport_source = pid
+            await self.push_frame(interruption)
         token = object()
         self._turn_tokens[pid] = token
         task = asyncio.create_task(

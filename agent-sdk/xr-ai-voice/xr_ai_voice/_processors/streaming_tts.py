@@ -1,26 +1,26 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""``StreamingTtsProcessor`` — sentence-batched parallel TTS.
+"""``StreamingTtsProcessor`` — per-participant sentence-batched parallel TTS.
 
 Consumes ``TextFrame``s (assistant output, one per chunk/token) and emits
-``OutputAudioRawFrame``s. Buffers text until a sentence boundary, kicks
-off TTS for each sentence in parallel, then streams the WAVs out in
-order so playback is monotonic.
+``OutputAudioRawFrame``s. Buffers text per participant until a sentence
+boundary, synthesizes each sentence in parallel, then streams the WAVs out in
+order so each participant's playback stays monotonic.
 
-``InterruptionFrame`` cancels every in-flight synth task and clears the
-output queue so the user does not hear stale audio after asking the
-agent to stop.
+All streaming state — pending text, the synth/order queue, and the sender task
+— is keyed by participant id, so concurrent participants never share a buffer
+(which would interleave their words) or a sender (which would misroute audio).
 
-Every synthesized WAV is offered to ``VoiceGate.observe_tts_wav`` so
-the gate's listening chime can lazily build at the right sample rate.
+An ``InterruptionFrame`` cancels only the interrupting participant's in-flight
+synthesis and flushes only their hub audio (``transport_source`` carries the
+pid); a frame with no pid falls back to draining every participant. A pipeline
+``EndFrame``/``CancelFrame`` tears down all sender tasks.
 
-When constructed with a non-empty ``text_topic`` and a ``transport``,
-the processor also echoes each assistant turn's full assembled response on
-the data channel under that topic — the moment it sees a
-:class:`AssistantResponseEndFrame`. Samples whose assistant already pushes its
-own per-turn data echo (e.g. xr-render-demo) pass ``text_topic=""`` to
-opt out of this and avoid duplicate sends.
+Every synthesized WAV is offered to ``VoiceGate.observe_tts_wav`` so the gate's
+listening chime can lazily build at the right sample rate. When constructed with
+a non-empty ``text_topic`` and a ``transport``, the processor also echoes each
+assistant turn's full assembled response on the data channel under that topic.
 """
 from __future__ import annotations
 
@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from pipecat.frames.frames import (
+    CancelFrame,
+    EndFrame,
     Frame,
     InterruptionFrame,
     TextFrame,
@@ -48,28 +50,34 @@ if TYPE_CHECKING:
 
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-# Matches a sentence-final char optionally followed by closing punctuation
-# (quote, single quote, paren, bracket) and trailing whitespace. The
-# assistant may emit `'... what am I looking at?"'` — the `?` is the
-# sentence end but the buffer's last char is `"`, so an `endswith(.!?)`
-# check would leave the tail in pending and the next turn's text would
-# be concatenated onto it.
+# A sentence-final char optionally followed by closing punctuation (quote,
+# paren, bracket) and trailing whitespace, e.g. ``... looking at?"``. A plain
+# ``endswith((".", "!", "?"))`` would miss the trailing quote and leave the tail
+# in the buffer to concatenate onto the next turn.
 _TRAILING_SENTENCE_END = re.compile(r"""[.!?]["')\]]*\s*$""")
 
 
+class _TtsPidState:
+    """Per-participant streaming state: pending text + its ordered sender."""
+
+    __slots__ = ("pending", "sender_task", "sender_queue", "synth_seq")
+
+    def __init__(self) -> None:
+        self.pending: str = ""
+        self.sender_task: asyncio.Task | None = None
+        self.sender_queue: asyncio.Queue | None = None
+        self.synth_seq: int = 0
+
+
 class StreamingTtsProcessor(FrameProcessor):
-    """Sentence-batched parallel TTS at the tail of the voice pipeline.
+    """Per-participant sentence-batched parallel TTS at the pipeline tail.
 
-    Synthesizes each sentence in parallel and streams the WAVs out in
-    order so playback stays monotonic.
-
-    ``transport`` and ``text_topic`` are optional; when both are
-    supplied (and the topic is non-empty), the processor emits one
-    ``send_return_data`` per :class:`AssistantResponseEndFrame` so the
-    client receives the full assembled reply on the data channel.
-    Leaving them out (or passing an empty topic) disables the echo —
-    used by samples whose assistant already sends its own per-turn data
-    response.
+    ``transport`` and ``text_topic`` are optional; when both are supplied (and
+    the topic is non-empty), the processor emits one ``send_return_data`` per
+    :class:`AssistantResponseEndFrame` so the client receives the full assembled
+    reply on the data channel. Leaving them out (or passing an empty topic)
+    disables the echo — used by samples whose assistant already sends its own
+    per-turn data response.
     """
 
     def __init__(
@@ -85,16 +93,8 @@ class StreamingTtsProcessor(FrameProcessor):
         self._voice_gate = voice_gate
         self._transport  = transport
         self._text_topic = text_topic
-        # Pending text we haven't yet split into a sentence — accumulates
-        # across consecutive TextFrames so e.g. token streams from an
-        # LLM coalesce into whole sentences before TTS is invoked.
-        self._pending: str       = ""
-        self._sender_task: asyncio.Task | None = None
-        self._sender_queue: asyncio.Queue | None = None
-        # Monotonic per-instance counter for unique synth task names — a
-        # wall-clock millisecond stamp collides when two sentences dispatch
-        # within the same millisecond.
-        self._synth_seq: int = 0
+        # Per-participant streaming state, keyed by pid.
+        self._by_pid: dict[str, _TtsPidState] = {}
 
     # ── pipecat frame entrypoint ──────────────────────────────────────────────
 
@@ -102,15 +102,26 @@ class StreamingTtsProcessor(FrameProcessor):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, InterruptionFrame):
-            await self._drain_on_interrupt()
+            pid = frame.transport_source
+            if pid:
+                await self._drain_on_interrupt(pid)
+            else:
+                # No pid on the frame — drain every participant (legacy fallback).
+                await self._drain_all_on_interrupt()
+            await self.push_frame(frame, direction)
+            return
+
+        if isinstance(frame, (EndFrame, CancelFrame)):
+            # Normal pipeline shutdown: cancel/await every participant's sender
+            # task so no TTS background work is retained.
+            await self._shutdown_all()
             await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, AssistantResponseEndFrame):
             await self._handle_response_end(frame)
-            # Forward the marker so any tail processor / sink that
-            # tracks turn boundaries (tests, future debug taps) still
-            # sees it.
+            # Forward the marker so any tail processor / sink that tracks turn
+            # boundaries still sees it.
             await self.push_frame(frame, direction)
             return
 
@@ -122,37 +133,45 @@ class StreamingTtsProcessor(FrameProcessor):
 
     # ── private ───────────────────────────────────────────────────────────────
 
-    def _ensure_sender(self) -> asyncio.Queue:
-        """Spin up the ordered-sender task lazily on first sentence."""
-        if self._sender_queue is None or self._sender_task is None or self._sender_task.done():
-            self._sender_queue = asyncio.Queue()
-            self._sender_task  = asyncio.create_task(
-                self._sender_loop(self._sender_queue),
-                name="tts-sender",
+    def _state(self, pid: str) -> _TtsPidState:
+        st = self._by_pid.get(pid)
+        if st is None:
+            st = _TtsPidState()
+            self._by_pid[pid] = st
+        return st
+
+    def _ensure_sender(self, pid: str) -> asyncio.Queue:
+        """Spin up ``pid``'s ordered-sender task lazily on first sentence."""
+        st = self._state(pid)
+        if st.sender_queue is None or st.sender_task is None or st.sender_task.done():
+            st.sender_queue = asyncio.Queue()
+            st.sender_task  = asyncio.create_task(
+                self._sender_loop(st.sender_queue),
+                name=f"tts-sender-{pid}",
             )
-        return self._sender_queue
+        return st.sender_queue
 
     async def _handle_text(self, frame: TextFrame) -> None:
         if not frame.text:
             return
-        # A trailing space matters when token-stream text frames arrive
-        # without their own punctuation — preserve whatever the producer
-        # sent verbatim.
-        self._pending += frame.text
-        await self._flush_complete_sentences(pid=frame.transport_destination or "")
+        # transport_destination carries the addressed participant; text with no
+        # destination buffers under "" (single-participant / fallback routing).
+        pid = frame.transport_destination or ""
+        self._state(pid).pending += frame.text
+        await self._flush_complete_sentences(pid)
 
     async def _handle_response_end(self, frame: AssistantResponseEndFrame) -> None:
-        """Flush trailing pending text, then send the data echo.
+        """Flush ``frame.pid``'s trailing pending text, then send the data echo.
 
-        The assistant may finish a turn with text that has no
-        sentence-final punctuation (e.g. an aborted partial answer);
-        the boundary regex would leave that fragment in the buffer
-        forever. End-of-response is the right place to flush it so the
+        The assistant may finish a turn with text that has no sentence-final
+        punctuation (e.g. an aborted partial answer); the boundary regex would
+        leave that fragment buffered forever. End-of-response flushes it so the
         user hears the tail of the reply.
         """
-        if self._pending.strip():
-            sentence = self._pending.strip()
-            self._pending = ""
+        st = self._by_pid.get(frame.pid)
+        if st is not None and st.pending.strip():
+            sentence = st.pending.strip()
+            st.pending = ""
             await self._dispatch_sentence(sentence, pid=frame.pid)
 
         if not self._text_topic or self._transport is None:
@@ -176,47 +195,41 @@ class StreamingTtsProcessor(FrameProcessor):
                 frame.pid, self._text_topic,
             )
 
-    async def _flush_complete_sentences(self, *, pid: str) -> None:
-        """Drain every complete sentence in the pending buffer, leaving
-        any trailing fragment in place until more text arrives. A buffer
-        that already ends in sentence-final punctuation is flushed in
-        one shot — covers the assistant-returns-a-complete-string case
-        where no trailing whitespace ever arrives."""
+    async def _flush_complete_sentences(self, pid: str) -> None:
+        """Drain every complete sentence in ``pid``'s pending buffer, leaving a
+        trailing fragment in place until more text arrives. A buffer already
+        ending in sentence-final punctuation is flushed in one shot — covers the
+        assistant-returns-a-complete-string case with no trailing whitespace."""
+        st = self._state(pid)
         while True:
-            m = _SENTENCE_END.search(self._pending)
+            m = _SENTENCE_END.search(st.pending)
             if m is None:
                 break
-            sentence  = self._pending[: m.end()].strip()
-            self._pending = self._pending[m.end() :]
+            sentence  = st.pending[: m.end()].strip()
+            st.pending = st.pending[m.end() :]
             if not sentence:
                 continue
             await self._dispatch_sentence(sentence, pid=pid)
-        # Pending buffer ends in sentence-final punctuation? Flush it
-        # too — the assistant is done writing and there's no follow-up
-        # whitespace to fire the boundary regex. ``_TRAILING_SENTENCE_END``
-        # tolerates trailing closing quotes/brackets after the sentence
-        # char (e.g. ``... what am I looking at?"``) which a plain
-        # ``endswith((".", "!", "?"))`` would miss, leaving the tail in
-        # pending until it concatenated onto the next turn's reply.
-        if self._pending and _TRAILING_SENTENCE_END.search(self._pending):
-            sentence  = self._pending.strip()
-            self._pending = ""
+        if st.pending and _TRAILING_SENTENCE_END.search(st.pending):
+            sentence  = st.pending.strip()
+            st.pending = ""
             if sentence:
                 await self._dispatch_sentence(sentence, pid=pid)
 
     async def _dispatch_sentence(self, sentence: str, *, pid: str) -> None:
         logger.info("tts sentence dispatch pid={!r} len={}", pid, len(sentence))
-        queue = self._ensure_sender()
-        self._synth_seq += 1
+        queue = self._ensure_sender(pid)
+        st = self._state(pid)
+        st.synth_seq += 1
         task  = asyncio.create_task(
             self._tts.synthesize(sentence),
-            name=f"tts-synth-{pid}-{self._synth_seq}",
+            name=f"tts-synth-{pid}-{st.synth_seq}",
         )
         await queue.put((task, pid))
 
     async def _sender_loop(self, queue: asyncio.Queue) -> None:
-        """Awaits each synth task in FIFO order, observes the WAV, and
-        pushes the decoded audio downstream as ``OutputAudioRawFrame``s."""
+        """Await each synth task in FIFO order, observe the WAV, and push the
+        decoded audio downstream as ``OutputAudioRawFrame``s."""
         try:
             while True:
                 item = await queue.get()
@@ -232,8 +245,8 @@ class StreamingTtsProcessor(FrameProcessor):
                     continue
                 if not wav:
                     continue
-                # Let the gate's lazy chime build pick up the sample rate
-                # from real TTS output exactly once.
+                # Let the gate's lazy chime build pick up the sample rate from
+                # real TTS output exactly once.
                 try:
                     self._voice_gate.observe_tts_wav(wav)
                 except Exception:
@@ -251,67 +264,69 @@ class StreamingTtsProcessor(FrameProcessor):
         for out in frames:
             await self.push_frame(out)
 
-    async def _drain_on_interrupt(self) -> None:
-        """Cancel everything in flight + flush the pending buffer.
-
-        Cancelling the synth + sender tasks stops *new* audio from being
-        produced, but anything already queued downstream — the hub's
-        pacing pipe and the LiveKit jitter buffer — keeps playing. The
-        user hears the agent finish its current sentence(s) before
-        silence, and STOP feels broken. Flushing the hub's return-audio
-        buffer on the way out drops that pending audio at the source so
-        the stop is immediate.
-        """
-        self._pending = ""
-        # Snapshot the target pid + queue length before tearing down so
-        # the user-facing log carries useful breadcrumbs (which
-        # participant was being addressed, how much queued audio is
-        # about to be dropped) without exposing transcript content.
-        target_pid = ""
-        if self._transport is not None:
-            target_pid = self._transport.target_participant
-        queue_len = self._sender_queue.qsize() if self._sender_queue is not None else 0
-        if self._sender_task is not None and not self._sender_task.done():
-            self._sender_task.cancel()
+    async def _teardown_sender(self, st: _TtsPidState) -> None:
+        """Cancel one participant's sender task and drop any parked synth tasks."""
+        task = st.sender_task
+        st.sender_task = None
+        if task is not None and not task.done():
+            task.cancel()
             try:
-                await self._sender_task
+                await task
             except asyncio.CancelledError:
-                # Expected: we cancelled this task ourselves; awaiting it
-                # raises CancelledError, which we intentionally swallow so
-                # interrupt drain completes cleanly.
-                pass
-        # Drop any tasks still parked in the queue so they don't keep
-        # running and emit audio after the interrupt.
-        if self._sender_queue is not None:
-            while not self._sender_queue.empty():
+                pass  # expected — we cancelled it ourselves
+        queue = st.sender_queue
+        st.sender_queue = None
+        if queue is not None:
+            while not queue.empty():
                 try:
-                    item = self._sender_queue.get_nowait()
+                    item = queue.get_nowait()
                 except asyncio.QueueEmpty:
                     break
                 if item is None:
                     continue
-                task, _ = item
-                task.cancel()
-        logger.info(
-            "tts sender drained pid={!r} queue_len={}", target_pid, queue_len,
-        )
-        self._sender_queue = None
-        self._sender_task  = None
+                synth_task, _ = item
+                synth_task.cancel()
 
-        # Flush the hub's return-audio buffer so already-paced audio
-        # stops immediately instead of finishing whatever sentence was
-        # mid-playback. Single-participant samples set
-        # ``target_participant`` on ``ParticipantJoinedFrame``; if the
-        # transport isn't wired or no participant is bound yet, there's
-        # nothing to flush.
+    async def _flush_hub(self, pid: str) -> None:
+        """Drop already-paced hub audio for ``pid`` so a stop is immediate.
+
+        Cancelling synth/sender tasks stops *new* audio, but anything already
+        queued downstream (the hub's pacing pipe, the LiveKit jitter buffer)
+        keeps playing; flushing the hub return-audio buffer drops it at source.
+        """
+        if self._transport is None or not pid:
+            return
+        logger.info("hub return-audio flushed pid={!r}", pid)
+        try:
+            await self._transport.endpoint.flush_return_audio(pid)
+        except Exception:
+            logger.opt(exception=True).debug(
+                "flush_return_audio failed on interrupt pid={!r}", pid,
+            )
+
+    async def _drain_on_interrupt(self, pid: str) -> None:
+        """Cancel the interrupting participant's in-flight TTS and flush its hub
+        audio — without touching any other participant's stream."""
+        st = self._by_pid.pop(pid, None)
+        if st is not None:
+            st.pending = ""
+            queue_len = st.sender_queue.qsize() if st.sender_queue is not None else 0
+            await self._teardown_sender(st)
+            logger.info("tts sender drained pid={!r} queue_len={}", pid, queue_len)
+        await self._flush_hub(pid)
+
+    async def _drain_all_on_interrupt(self) -> None:
+        """Legacy no-pid fallback: drain every participant and flush the
+        fallback target participant's hub audio."""
+        for pid in list(self._by_pid):
+            st = self._by_pid.pop(pid)
+            st.pending = ""
+            await self._teardown_sender(st)
         if self._transport is not None:
-            pid = self._transport.target_participant
-            if pid:
-                logger.info("hub return-audio flushed pid={!r}", pid)
-                try:
-                    await self._transport.endpoint.flush_return_audio(pid)
-                except Exception:
-                    logger.opt(exception=True).debug(
-                        "flush_return_audio failed on interrupt pid={!r}",
-                        pid,
-                    )
+            await self._flush_hub(self._transport.target_participant)
+
+    async def _shutdown_all(self) -> None:
+        """Cancel every participant's sender task on pipeline EndFrame/CancelFrame."""
+        for pid in list(self._by_pid):
+            st = self._by_pid.pop(pid)
+            await self._teardown_sender(st)

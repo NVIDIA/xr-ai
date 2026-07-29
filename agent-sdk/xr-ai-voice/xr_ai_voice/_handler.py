@@ -17,6 +17,10 @@ class VoiceQuery:
     participant_id: str
     text: str
     fresh_match: bool
+    #: Unix-epoch microseconds anchoring the query — the utterance PTS carried
+    #: from the hub for spoken input, or ``time.time_ns() // 1_000`` at submit
+    #: time for typed input. Use it to anchor time-relative tool calls (e.g. a
+    #: "what did I just show you" recorded-frame lookup) to when the user spoke.
     timestamp_us: int
 
 
@@ -30,6 +34,9 @@ class VoiceTurn:
 
     participant_id: str
     role: Literal["user", "agent"]
+    #: Unix-epoch microseconds for the turn — the originating query's
+    #: ``timestamp_us`` (both the user and the agent turn of one exchange share
+    #: it, so a transcript orders the pair deterministically).
     timestamp_us: int
     text: str
 

@@ -78,8 +78,8 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     ``VoiceHandler`` / ``VoiceQuery`` / ``VoiceResponse`` / ``VoiceTurn`` handler
     surface, ``HubVoiceTransport``, ``VadConfig``, and ``TextMessageInput``;
     Pipecat, audio framing, and pipeline processors are implementation details.
-    Readiness is health-based (mirrors the upstream target's _readiness /
-    _session). Not a dep of xr-ai-agent itself — import only in workers that opt
+    Readiness is health-based, split across the ``_readiness`` / ``_session``
+    modules. Not a dep of xr-ai-agent itself — import only in workers that opt
     into the voice runtime.
 
 xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)

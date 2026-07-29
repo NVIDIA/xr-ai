@@ -1210,32 +1210,20 @@ async def test_assistant_on_query_superseded_fires_on_second_query_while_infligh
 
 
 @pytest.mark.asyncio
-async def test_assistant_on_query_superseded_fires_when_prior_task_already_done():
-    """Regression: the supersede hook must fire on every non-first
-    query for a pid, even when the prior assistant task has already
-    completed. Real-world case: a short VLM response streams in
-    quickly so the assistant task is done, but its TTS audio is still
-    playing out when the user fires a follow-up query. Gating the
-    hook on ``_inflight[pid].done()`` (the old bug) caused the new
-    query to queue behind the prior audio instead of interrupting it.
-
-    Uses ``_StringAssistant`` (one-shot string response) plus a generous
-    ``per_send_delay_s`` so the first task finishes before the
-    second query arrives. Asserts that at supersede time the prior
-    task was indeed already done, so the assertion exercises the
-    bug case rather than the in-flight case."""
+async def test_assistant_on_query_superseded_not_fired_when_prior_task_done():
+    """The supersede hook fires only for an ACTUAL replacement — a new query
+    that lands while the prior turn is still in flight. When the prior assistant
+    task has already completed before the next query arrives, there is nothing
+    to supersede, so the hook must NOT fire even though the participant has
+    spoken before. (Clearing any lingering TTS is handled by the downstream
+    interrupt, not by this callback.)"""
     class _SupersedeRecorder(_StringAssistant):
         def __init__(self) -> None:
             self.supersede_calls: list[str] = []
-            self.prior_task_done_at_supersede: list[bool] = []
             super().__init__(on_query_superseded=self.on_query_superseded)
 
         async def on_query_superseded(self, pid: str) -> None:
             self.supersede_calls.append(pid)
-            existing = self._inflight.get(pid)
-            self.prior_task_done_at_supersede.append(
-                existing is None or existing.done(),
-            )
 
     assistant = _SupersedeRecorder()
     await _run_chain(
@@ -1244,29 +1232,23 @@ async def test_assistant_on_query_superseded_fires_when_prior_task_already_done(
             GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
             GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
         ],
-        # Long enough that the one-shot ``_StringAssistant`` response for
-        # the first query has fully run and emitted its end frame
-        # before the second query is queued.
+        # Long enough that the one-shot ``_StringAssistant`` response for the
+        # first query has fully run before the second query is queued.
         settle_s=0.3,
         per_send_delay_s=0.2,
     )
-    assert assistant.supersede_calls == ["pid-1"]
-    assert assistant.prior_task_done_at_supersede == [True], (
-        "test must exercise the bug case: prior assistant task already done "
-        "when supersede fires"
-    )
-    # Both queries ran end-to-end.
+    assert assistant.supersede_calls == []
+    # Both queries still ran end-to-end.
     handled = [t for _pid, t, _fm in assistant.handle_calls]
     assert "first"  in handled
     assert "second" in handled
 
 
 @pytest.mark.asyncio
-async def test_assistant_on_query_superseded_fires_on_every_subsequent_query():
-    """The hook fires once per non-first query — three queries fire
-    it twice, four fire it three times, etc. Uses ``_StringAssistant``
-    so each prior task completes before the next query arrives,
-    confirming the gate is per-pid query count, not assistant-task state."""
+async def test_assistant_on_query_superseded_not_fired_on_serial_queries():
+    """Serial queries — each completing before the next arrives — are not
+    supersedes. Four serial queries fire the hook zero times; it fires only when
+    a new query replaces a still-in-flight turn."""
     class _SupersedeRecorder(_StringAssistant):
         def __init__(self) -> None:
             self.supersede_calls: list[str] = []
@@ -1287,8 +1269,7 @@ async def test_assistant_on_query_superseded_fires_on_every_subsequent_query():
         settle_s=0.3,
         per_send_delay_s=0.1,
     )
-    # First query: no supersede. Each subsequent query: one supersede.
-    assert assistant.supersede_calls == ["pid-1", "pid-1", "pid-1"]
+    assert assistant.supersede_calls == []
 
 
 @pytest.mark.asyncio
@@ -1607,9 +1588,9 @@ async def test_streaming_tts_interruption_cancels_and_clears_pending():
     )
     audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
     assert audio == []
-    # Pending buffer is cleared so a subsequent partial sentence does
-    # NOT get concatenated to the abandoned fragment.
-    assert proc._pending == ""  # noqa: SLF001
+    # A pid-less interrupt drains every participant's state, so no pending
+    # fragment survives to concatenate onto a subsequent partial sentence.
+    assert proc._by_pid == {}  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -1677,8 +1658,8 @@ async def test_streaming_tts_no_flush_when_transport_unset():
         per_send_delay_s=0.05,
     )
     # If we got here without an AttributeError, the None-transport path
-    # is exercised. Pending buffer should still be cleared.
-    assert proc._pending == ""  # noqa: SLF001
+    # is exercised. A pid-less interrupt drains every participant's state.
+    assert proc._by_pid == {}  # noqa: SLF001
     audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
     assert audio == []
 
@@ -2278,10 +2259,14 @@ async def test_streaming_tts_flushes_trailing_text_on_response_end():
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
     proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
 
+    text_frame = TextFrame(text="trailing fragment with no period")
+    # The handler tags every TextFrame with the addressed pid; the end frame
+    # carries the same pid, so per-participant flush finds the pending buffer.
+    text_frame.transport_destination = "pid-1"
     sink = await _run_chain(
         proc,
         sends=[
-            TextFrame(text="trailing fragment with no period"),
+            text_frame,
             AssistantResponseEndFrame(pid="pid-1", text="trailing fragment with no period", pts_us=0),
         ],
         settle_s=0.15,
@@ -2316,7 +2301,95 @@ async def test_streaming_tts_flushes_sentence_ending_with_closing_quote():
     # Both sentences must be dispatched in one turn — no residual
     # waiting to be glued onto the next reply.
     assert tts.calls == ['How are you?', '"I am fine."']
-    assert proc._pending == ""  # noqa: SLF001
+    # Both sentences dispatched (nothing left in pending), and the pipeline
+    # EndFrame tore down all per-participant state.
+    assert proc._by_pid == {}  # noqa: SLF001
+
+
+def _text_for(text: str, pid: str) -> TextFrame:
+    f = TextFrame(text=text)
+    f.transport_destination = pid
+    return f
+
+
+def _interrupt_for(pid: str) -> InterruptionFrame:
+    f = InterruptionFrame()
+    f.transport_source = pid
+    return f
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_keeps_participants_separate():
+    """Interleaved token streams for two participants must not share a pending
+    buffer (which would glue their words into one sentence) or a sender (which
+    would misroute audio). Each participant's sentence is synthesized on its own
+    and its audio is addressed only to that participant."""
+    tts  = _FakeTts()
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            _text_for("Alice", "alice"),   # partial — no sentence end yet
+            _text_for("Bob", "bob"),       # interleaves before Alice completes
+            _text_for(". ", "alice"),      # completes Alice's sentence
+            _text_for(". ", "bob"),        # completes Bob's sentence
+        ],
+        settle_s=0.2,
+    )
+    # Per-participant pending: each sentence is synthesized on its own, never
+    # concatenated across pids into "AliceBob.".
+    assert sorted(tts.calls) == ["Alice.", "Bob."]
+    # Each participant's audio is addressed only to that participant.
+    dests = {
+        f.transport_destination
+        for f in sink.frames
+        if isinstance(f, OutputAudioRawFrame)
+    }
+    assert dests == {"alice", "bob"}
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_interrupt_is_participant_scoped():
+    """An interrupt for one participant cancels only their in-flight TTS and
+    flushes only their hub audio — the other participant's stream is untouched."""
+    class _StubEndpoint:
+        def __init__(self) -> None:
+            self.flush_calls: list[str] = []
+
+        async def flush_return_audio(self, pid: str) -> None:
+            self.flush_calls.append(pid)
+
+    class _StubTransport:
+        def __init__(self) -> None:
+            self.endpoint           = _StubEndpoint()
+            self.target_participant = ""
+
+    tts  = _FakeTts()
+    tts.delay_s = 0.2  # so both syntheses are in flight when the interrupt lands
+    gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
+    transport = _StubTransport()
+    proc = StreamingTtsProcessor(tts=tts, voice_gate=gate, transport=transport)
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            _text_for("Alice speaking. ", "alice"),
+            _text_for("Bob speaking. ", "bob"),
+            _interrupt_for("alice"),
+        ],
+        settle_s=0.4,
+        per_send_delay_s=0.03,
+    )
+    # Only Alice's hub audio is flushed; Bob is not touched.
+    assert transport.endpoint.flush_calls == ["alice"]
+    audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
+    # Alice's in-flight audio was cancelled; Bob's still reaches Bob.
+    assert [f.transport_destination for f in audio if f.transport_destination == "alice"] == []
+    assert any(f.transport_destination == "bob" for f in audio), (
+        "bob's audio must survive an alice-scoped interrupt"
+    )
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -2412,6 +2485,38 @@ async def test_output_transport_writes_audio_to_target_participant():
     assert captured[0].participant_id == "web-client"
     assert captured[0].track_id       == "tts"
     assert captured[0].sample_rate    == TTS_NATIVE_SAMPLE_RATE
+
+
+@pytest.mark.asyncio
+async def test_output_transport_releases_media_sender_on_participant_left():
+    """A departing participant's per-pid ``MediaSender`` is torn down so a
+    long-lived hub with join/leave churn does not retain idle senders until
+    pipeline shutdown."""
+    from xr_ai_voice._transport import XRMediaHubOutputTransport
+    from pipecat.transports.base_transport import TransportParams
+
+    class _StubEndpoint:
+        async def send_return_audio(self, *_a, **_kw) -> None:
+            return
+
+    class _StubSender:
+        def __init__(self) -> None:
+            self.cancelled = False
+
+        async def cancel(self, _frame) -> None:
+            self.cancelled = True
+
+    transport = XRMediaHubOutputTransport(_StubEndpoint(), TransportParams())
+    sender = _StubSender()
+    transport._media_senders["alice"] = sender      # noqa: SLF001
+    transport.set_target_participant("alice")
+
+    await transport._release_destination("alice")    # noqa: SLF001
+
+    assert sender.cancelled, "the departing participant's sender must be cancelled"
+    assert "alice" not in transport._media_senders   # noqa: SLF001
+    # The fallback target is cleared when the bound target participant leaves.
+    assert transport.target_participant == ""
 
 
 @pytest.mark.asyncio
