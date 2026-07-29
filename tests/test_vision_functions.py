@@ -305,6 +305,25 @@ def test_historical_vision_request_requires_a_positive_offset() -> None:
         )
 
 
+def test_historical_vision_request_requires_a_positive_reference_time() -> None:
+    # reference_time_us forwards to HistoricalFrameRequest, which requires gt=0.
+    # Omitting it (no default) or passing 0 must be rejected at the boundary
+    # rather than forwarding an invalid downstream request.
+    with pytest.raises(ValidationError):
+        HistoricalVisionRequest(
+            participant_id="alice",
+            question="What was visible?",
+            second_ago=10,
+        )
+    with pytest.raises(ValidationError):
+        HistoricalVisionRequest(
+            participant_id="alice",
+            question="What was visible?",
+            second_ago=10,
+            reference_time_us=0,
+        )
+
+
 def test_vision_request_rejects_unknown_arguments() -> None:
     with pytest.raises(ValidationError):
         VisionRequest(participant_id="alice", query="What is shown?", unsupported=True)

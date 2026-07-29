@@ -73,8 +73,7 @@ class HistoricalVisionRequest(_StrictRequest):
     question: str = Field(min_length=1, description="Specific question about the recorded camera frame.")
     second_ago: int = Field(gt=0, description="Positive offset from the utterance time in seconds.")
     reference_time_us: int = Field(
-        default=0,
-        ge=0,
+        gt=0,
         description="Reference (utterance) time in microseconds that the offset counts back from.",
     )
 

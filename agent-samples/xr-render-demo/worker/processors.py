@@ -135,6 +135,8 @@ _TOOL_PROGRESS: dict[str, str] = {
     "world_offset": "Computing offset...",
     "along_direction": "Computing position...",
     "scale_value": "Computing size...",
+    "look_at_current_frame": "Looking at your camera...",
+    "look_at_past_frame": "Checking the recording...",
     "get_scene_state": "Scanning the scene...",
     "add_primitive": "Creating object...",
     "update_primitive": "Updating object...",
@@ -325,8 +327,21 @@ class RenderSceneProcessor(BrainProcessor):
         text = text.strip()
         if not text:
             return
-
         send_pid = pid or self._transport.target_participant
+        # Bracket the whole turn with the client UI status signal: "processing"
+        # on entry, "idle" in finally so it always clears — including failure or
+        # a barge-in cancellation. Status is a per-client lifecycle signal owned
+        # by the render turn; the native vision functions stay reusable/UI-free.
+        if send_pid:
+            await self._set_status("processing", send_pid)
+        try:
+            async for chunk in self._run_turn_body(pid, send_pid, text):
+                yield chunk
+        finally:
+            if send_pid:
+                await self._set_status("idle", send_pid)
+
+    async def _run_turn_body(self, pid: str, send_pid: str, text: str) -> AsyncIterator[str]:
         # Capture the moment the user finished speaking so visual tool calls
         # can be anchored to that timestamp (not to when the tool fires).
         ref_us = _now_us()
@@ -1031,6 +1046,15 @@ class RenderSceneProcessor(BrainProcessor):
             )
         except Exception:
             logger.exception("send failed  topic={}", topic)
+
+    async def _set_status(self, status: str, pid: str) -> None:
+        """Publish the per-client UI status ('processing' / 'idle') on the
+        reserved ``_agent.status`` channel. Best-effort: it runs from a finally
+        during cancellation, so a failed publish must never break the turn."""
+        try:
+            await self._transport.endpoint.set_status(status, pid)
+        except Exception:
+            logger.opt(exception=True).debug("set_status({!r}) failed", status)
 
     async def on_participant_left(self, pid: str) -> None:
         """Release cached native live-frame state after participant cleanup."""

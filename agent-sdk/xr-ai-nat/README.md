@@ -113,6 +113,10 @@ question — never an image path:
 Each tool performs image I/O off the event loop, normalizes the frame to JPEG,
 and makes the model request through `xr-ai-models`.
 
+The `video_memory` reference is resolved lazily — only on the first
+`look_at_past_frame` call. A **live-only** consumer may omit `video_memory` (and
+need not register that group) as long as it never calls `look_at_past_frame`.
+
 For live voice workflows, `StreamingVisionConfig` (`xr_streaming_vision`) accepts
 a hub `ProcessorEndpoint` and exposes one native function with complete and
 streaming invocation modes. It owns fresh-frame acquisition and VLM invocation;

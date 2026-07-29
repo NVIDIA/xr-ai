@@ -846,6 +846,65 @@ async def test_perception_unavailable_frame_ends_turn_gracefully() -> None:
     assert excinfo.value.spoken == _proc._NO_FRAME_MSG
 
 
+def _stub_turn(brain, loop) -> None:
+    """Stub the LLM-driven parts so _run_turn exercises only the status bracket."""
+    async def _ack(_text):
+        return "", False
+    brain._quick_ack = _ack        # noqa: SLF001
+    brain._agentic_loop = loop     # noqa: SLF001
+
+
+async def test_run_turn_brackets_client_status_processing_then_idle() -> None:
+    """The render turn owns the per-client UI status: 'processing' at entry and
+    'idle' when it ends. (Native vision functions never emit status.)"""
+    transport = _CaptureTransportWithEndpoint()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    async def _loop(_text, _pid, *, ref_us, needs_thinking, thinking_ctx):
+        return "All set."
+
+    _stub_turn(brain, _loop)
+    async for _ in brain._run_turn("pid-1", "add a red sphere"):  # noqa: SLF001
+        pass
+
+    assert transport.endpoint.statuses == [("processing", "pid-1"), ("idle", "pid-1")]
+
+
+async def test_run_turn_status_clears_on_failure() -> None:
+    """'idle' still fires when the turn fails (finally path)."""
+    transport = _CaptureTransportWithEndpoint()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    async def _boom(_text, _pid, *, ref_us, needs_thinking, thinking_ctx):
+        raise RuntimeError("loop failed")
+
+    _stub_turn(brain, _boom)
+    async for _ in brain._run_turn("pid-1", "q"):  # noqa: SLF001
+        pass
+
+    assert transport.endpoint.statuses == [("processing", "pid-1"), ("idle", "pid-1")]
+
+
+async def test_run_turn_status_clears_on_barge_in_cancellation() -> None:
+    """A barge-in cancels the turn; 'idle' must still fire and the
+    CancelledError must propagate."""
+    transport = _CaptureTransportWithEndpoint()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    async def _cancel(_text, _pid, *, ref_us, needs_thinking, thinking_ctx):
+        raise asyncio.CancelledError
+
+    _stub_turn(brain, _cancel)
+    with pytest.raises(asyncio.CancelledError):
+        async for _ in brain._run_turn("pid-1", "q"):  # noqa: SLF001
+            pass
+
+    assert transport.endpoint.statuses == [("processing", "pid-1"), ("idle", "pid-1")]
+
+
 async def test_agentic_loop_reports_agent_llm_failure() -> None:
     """A failed agent-LLM request must not fall through to a success reply."""
     transport = _CaptureTransport()
