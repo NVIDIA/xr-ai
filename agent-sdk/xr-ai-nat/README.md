@@ -99,7 +99,8 @@ functions:
 ```
 
 It exposes `recall_conversation(participant_id, …)`, which returns the
-participant's turns — each with a `role` of `user` or `agent` — in time order.
+participant's turns in time order. Each entry carries `timestamp_us`, the
+verbatim `text`, and a `role` constrained to `user` or `agent`.
 Turns that share a timestamp (the user turn and the agent turn of one exchange
 both carry the originating query's time) are ordered user-before-agent.
 

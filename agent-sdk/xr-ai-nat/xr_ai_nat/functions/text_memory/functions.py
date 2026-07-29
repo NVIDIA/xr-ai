@@ -8,6 +8,7 @@ import json
 import logging
 from pathlib import Path
 from threading import Lock
+from typing import Literal
 
 from nat.plugin_api import (
     Builder,
@@ -191,13 +192,27 @@ class RecallConversationRequest(_StrictRequest):
 
 
 class ConversationEntry(BaseModel):
-    timestamp_us: int
-    role: str
-    text: str
+    """One recalled turn of a participant's conversation."""
+
+    timestamp_us: int = Field(
+        description="Unix-epoch microseconds when the turn was spoken."
+    )
+    role: Literal["user", "agent"] = Field(
+        description="Who produced the turn: the participant ('user') or the agent ('agent')."
+    )
+    text: str = Field(description="Verbatim text of the turn.")
 
 
 class RecallConversationResult(BaseModel):
-    entries: list[ConversationEntry]
+    """A participant's recalled turns."""
+
+    entries: list[ConversationEntry] = Field(
+        description=(
+            "Recalled turns in ascending time order. A user turn and the agent turn "
+            "answering it share one timestamp, and the user turn is ordered first. "
+            "Empty when the participant has no stored turns in the window."
+        )
+    )
 
 
 class TextMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_text_memory"):
@@ -209,7 +224,14 @@ class TextMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_text_memory"):
 class ConversationMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_conversation_memory"):
     """Configure participant-oriented conversation recall over the transcript store."""
 
-    text_memory: FunctionGroupRef = FunctionGroupRef("text_memory")
+    text_memory: FunctionGroupRef = Field(
+        default=FunctionGroupRef("text_memory"),
+        description=(
+            "Instance name of the xr_text_memory function group holding the transcripts. "
+            "Recall reads the role-scoped sources '{participant_id}:user' and "
+            "'{participant_id}:agent' from it; it never touches storage directly."
+        ),
+    )
 
 
 @register_function_group(config_type=TextMemoryFunctionsConfig)

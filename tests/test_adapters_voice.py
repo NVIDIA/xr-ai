@@ -100,7 +100,7 @@ def test_voice_adapters_are_reachable_from_the_public_adapters_namespace() -> No
     """Applications are told to use ``xr_ai_nat.adapters.as_voice_handler``; the
     package must actually export both adapters (they resolve lazily because they
     need the optional ``[voice]`` extra)."""
-    import xr_ai_nat.adapters as adapters
+    from xr_ai_nat import adapters
     from xr_ai_nat.adapters import voice as voice_module
 
     assert adapters.as_voice_handler is voice_module.as_voice_handler
@@ -134,3 +134,42 @@ async def test_recall_conversation_respects_time_window(tmp_path) -> None:
         )
 
     assert [entry.text for entry in result.entries] == ["late"]
+
+
+async def test_recall_conversation_generated_contract_is_fully_described(tmp_path) -> None:
+    """The recall surface is consumed by agents, so its generated schemas must
+    describe every field and constrain ``role`` to the two roles that exist.
+
+    An undescribed field gives the model nothing to reason about, and an
+    unconstrained ``role`` invites it to invent a third value.
+    """
+    async with WorkflowBuilder() as builder:
+        await builder.add_function_group(
+            "text_memory", TextMemoryFunctionsConfig(directory=tmp_path)
+        )
+        await builder.add_function_group(
+            "conversation_memory", ConversationMemoryFunctionsConfig()
+        )
+        conversation = await builder.get_function_group("conversation_memory")
+        recall = (await conversation.get_all_functions())["conversation_memory__recall_conversation"]
+
+        request = recall.input_schema.model_json_schema()
+        result = recall.single_output_schema.model_json_schema()
+
+    # Every request field is described.
+    for name, prop in request["properties"].items():
+        assert prop.get("description"), f"request field {name} has no description"
+
+    # The result and its nested entry model are fully described.
+    entry = result["$defs"]["ConversationEntry"]
+    assert result["properties"]["entries"].get("description")
+    for name in ("timestamp_us", "role", "text"):
+        assert entry["properties"][name].get("description"), f"{name} has no description"
+
+    # role is constrained to exactly the two roles the producer writes.
+    assert entry["properties"]["role"]["enum"] == ["user", "agent"]
+
+
+def test_conversation_memory_config_documents_its_text_memory_reference() -> None:
+    field = ConversationMemoryFunctionsConfig.model_fields["text_memory"]
+    assert field.description and "xr_text_memory" in field.description

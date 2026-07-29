@@ -26,6 +26,13 @@ returns timestamp-ordered `ConversationEntry` turns for one participant. A real
 exchange gives the user turn and the agent turn the same timestamp (both carry
 the originating query's time), so recall orders that tie user-before-agent.
 
+Because agents consume these schemas, the whole recall surface is described:
+every `ConversationEntry` field and `RecallConversationResult.entries` carry
+descriptions, `role` is constrained to `Literal["user", "agent"]` — the only two
+values the producer writes — and the config's `text_memory` reference documents
+which group recall reads from. A regression asserts the generated request/result
+contract keeps its descriptions and the `role` enum.
+
 Both adapters are re-exported from the `xr_ai_nat.adapters` package namespace,
 which is the documented import path. The re-export is lazy (PEP 562
 `__getattr__`) because the adapters need the optional extra: importing
