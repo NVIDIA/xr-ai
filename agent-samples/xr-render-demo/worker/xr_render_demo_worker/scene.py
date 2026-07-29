@@ -45,8 +45,8 @@ class SceneContext:
 async def build_turn_context(
     call_tool: ToolCaller,
     *,
-    pid: str = "",
-    ref_us: int = 0,
+    pid: str,
+    ref_us: int,
     recent_moves: list[Move] | None = None,
     history: list[tuple[str, str]] | None = None,
 ) -> SceneContext:
@@ -54,6 +54,13 @@ async def build_turn_context(
 
     ``call_tool`` is the turn's native-tool invoker; scene state, head pose, and
     the 1.5 m-ahead position are fetched concurrently.
+
+    ``pid`` and ``ref_us`` are required: they identify *whose* turn this is and
+    *when* the user spoke, and omitting either silently drops a line the model
+    relies on (participant identity, and the reference time that anchors
+    recorded-frame lookups). Pass an empty ``pid`` / zero ``ref_us`` explicitly
+    to render without them. ``recent_moves`` and ``history`` are genuinely
+    optional — a caller with no prior turns has neither.
     """
     scene, pose, ahead = await asyncio.gather(
         call_tool("get_scene_state", {}, silent=True),

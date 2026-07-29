@@ -79,7 +79,7 @@ async def test_build_turn_context_prefetches_and_renders_scene_and_pose() -> Non
 async def test_build_turn_context_handles_empty_scene_and_invalid_pose() -> None:
     call_tool, _ = _caller(scene={"objects": []}, pose={"is_valid": False})
 
-    context = await build_turn_context(call_tool)
+    context = await build_turn_context(call_tool, pid="", ref_us=0)
 
     assert "SCENE OBJECTS: (empty)" in context.text
     assert "HEAD POSE: unavailable" in context.text
@@ -94,6 +94,8 @@ async def test_build_turn_context_renders_move_log_and_history() -> None:
 
     context = await build_turn_context(
         call_tool,
+        pid="pid-1",
+        ref_us=1,
         recent_moves=[("sphere_1", (0.0, 0.0, 0.0), (1.0, 1.5, -2.0))],
         history=[("add a sphere", "Done.")],
     )
@@ -110,6 +112,6 @@ async def test_build_turn_context_falls_back_when_position_ahead_unavailable() -
     # forward vector so the model keeps its pre-computed shortcut.
     call_tool, _ = _caller(ahead={"error": "unavailable"})
 
-    context = await build_turn_context(call_tool)
+    context = await build_turn_context(call_tool, pid="", ref_us=0)
 
     assert "1.5m ahead of you     : (0.00, 1.60, -1.50)" in context.text
