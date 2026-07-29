@@ -120,7 +120,7 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
     for the seven in-tree services.  Future backends (LiteLLM, vendor SDKs)
-    plug in as new `kind`s in `factory.py::make_*` without touching the
+    plug in as new `kind`s in `_factory.py::make_*` without touching the
     protocols or callers.  Workers depend on this instead of rolling their
     own httpx wrappers.
 

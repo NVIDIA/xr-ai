@@ -9,6 +9,20 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-29 — xr-ai-models internal modules are privatized
+
+The `xr-ai-models` implementation modules `config.py`, `factory.py`,
+`openai_compat.py`, and `protocols.py` moved to underscore-private names
+(`_config.py`, `_factory.py`, `_openai_compat.py`, `_protocols.py`), matching
+the render-subagents branch. The package's public API is unchanged: every name
+previously re-exported from `xr_ai_models` is still importable from the package
+root (`from xr_ai_models import VLMService, load_models_config, make_vlm, …`).
+In-tree consumers now import from the package root (and tests reach into the
+private modules directly for internal helpers). Because the four old module
+paths were documented public imports, each is retained as a deprecated
+forwarding alias that emits a `DeprecationWarning` on import and re-exports the
+canonical objects (`KIND_OPENAI_COMPAT` / `ModelKind` stay re-exported from
+`xr_ai_models.config`); the aliases will be removed in a future version.
 ### 2026-07-28 — Voice adapters and conversation recall
 
 Added `xr_ai_nat.adapters.voice` (`as_voice_handler`, `record_voice_transcripts`)

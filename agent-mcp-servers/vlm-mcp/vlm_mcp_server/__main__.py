@@ -63,12 +63,11 @@ from xr_ai_logging import setup_logging
 from xr_ai_nat.mcp import create_mcp_server
 from xr_ai_models import (
     ModelsConfig,
+    VLMService,
     VLMSpec,
     load_models_config_from_dict,
     make_vlm,
 )
-from xr_ai_models.config import KIND_OPENAI_COMPAT
-from xr_ai_models.protocols import VLMService
 
 from ._ask_image import AskImageConfig
 
@@ -118,7 +117,6 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
         )
         chat_template_kwargs: dict[str, Any] = {"enable_thinking": enable_thinking}
         spec = VLMSpec(
-            kind=KIND_OPENAI_COMPAT,
             base_url=vlm_server,
             model_name="vlm",
             capabilities={"streaming": True, "vision": True},

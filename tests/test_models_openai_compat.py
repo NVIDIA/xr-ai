@@ -327,7 +327,7 @@ def test_cleartext_key_transport_detection() -> None:
     # A bearer token over plain http:// to a non-loopback host is cleartext
     # credential transmission (CWE-319) — must be flagged. https, loopback,
     # or no key configured are all fine.
-    from xr_ai_models.openai_compat import _is_cleartext_key_transport as is_ct
+    from xr_ai_models._openai_compat import _is_cleartext_key_transport as is_ct
     assert is_ct("http://example.com", "k") is True
     assert is_ct("http://example.com:8000", "k") is True
     assert is_ct("https://example.com", "k") is False

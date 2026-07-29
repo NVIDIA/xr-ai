@@ -39,8 +39,8 @@ from xr_ai_models import (
     ChatMessage,
     OpenAICompatLLM,
     ToolDef,
+    load_models_config,
 )
-from xr_ai_models.config import load_models_config
 from nat.builder.workflow_builder import WorkflowBuilder
 from nat.plugin_api import FunctionGroupRef
 from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig

@@ -6,10 +6,10 @@
 Worker code talks to the four ``*Service`` protocols.  The concrete
 ``OpenAICompat*`` clients cover every in-tree backend (vLLM, in-process
 NeMo/Piper) and any external OpenAI-compatible endpoint.  Additional backend
-kinds (LiteLLM, vendor SDKs) slot in as new ``kind``s in ``factory.py``
-without changing the protocols or callers.
+kinds (LiteLLM, vendor SDKs) slot in as new ``kind``s in the private factory
+implementation without changing the protocols or callers.
 """
-from .protocols import (
+from ._protocols import (
     Capabilities,
     ChatMessage,
     ChatResponse,
@@ -26,13 +26,13 @@ from .protocols import (
     VideoPart,
     VLMService,
 )
-from .openai_compat import (
+from ._openai_compat import (
     OpenAICompatLLM,
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
 )
-from .config import (
+from ._config import (
     LLMSpec,
     ModelsConfig,
     STTSpec,
@@ -41,7 +41,7 @@ from .config import (
     load_models_config,
     load_models_config_from_dict,
 )
-from .factory import make_llm, make_stt, make_tts, make_vlm
+from ._factory import make_llm, make_stt, make_tts, make_vlm
 
 __all__ = [
     "Capabilities",

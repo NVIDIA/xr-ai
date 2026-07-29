@@ -13,7 +13,7 @@ import httpx
 from fastmcp import Client as McpClient
 from loguru import logger
 
-from xr_ai_models.openai_compat import OpenAICompatSTT, OpenAICompatTTS
+from xr_ai_models import OpenAICompatSTT, OpenAICompatTTS
 
 
 # ── STT ───────────────────────────────────────────────────────────────────────

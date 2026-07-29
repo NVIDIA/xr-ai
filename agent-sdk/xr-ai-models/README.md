@@ -146,7 +146,7 @@ gate would block forever. See
 [`docs/ai-services.md`](../../docs/ai-services.md#hosting-models-on-nvidia-nim).
 
 Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
-`kind`s in `factory.py::make_*`; the protocols and callers do not change.
+`kind`s in `_factory.py::make_*`; the protocols and callers do not change.
 
 ## Tests
 
