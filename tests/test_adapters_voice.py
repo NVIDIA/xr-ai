@@ -37,7 +37,7 @@ async def test_as_voice_handler_maps_request_and_response() -> None:
     handler = as_voice_handler(
         _EchoFunction(),
         request=lambda query: query.text.upper(),
-        response=lambda result: str(result),
+        response=str,
     )
     response = await handler(
         VoiceQuery(participant_id="alice", text="hi", fresh_match=True, timestamp_us=1)
