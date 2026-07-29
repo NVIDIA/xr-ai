@@ -26,6 +26,11 @@ _ALIASES = {
     "xr_ai_models.config": [
         ("load_models_config", _config.load_models_config),
         ("KIND_OPENAI_COMPAT", _config.KIND_OPENAI_COMPAT),
+        # Config-vocabulary names not re-exported at the package root must still
+        # import from the deprecated module path.
+        ("Category", _config.Category),
+        ("Spec", _config.Spec),
+        ("ModelKind", _config.ModelKind),
     ],
     "xr_ai_models.factory": [
         ("make_vlm", _factory.make_vlm),
