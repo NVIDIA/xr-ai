@@ -135,8 +135,6 @@ _TOOL_PROGRESS: dict[str, str] = {
     "world_offset": "Computing offset...",
     "along_direction": "Computing position...",
     "scale_value": "Computing size...",
-    "look_at_current_frame": "Looking at your camera...",
-    "look_at_past_frame": "Checking the recording...",
     "get_scene_state": "Scanning the scene...",
     "add_primitive": "Creating object...",
     "update_primitive": "Updating object...",
@@ -330,11 +328,14 @@ class RenderSceneProcessor(BrainProcessor):
         send_pid = pid or self._transport.target_participant
         # Bracket the whole turn with the client UI status signal: "processing"
         # on entry, "idle" in finally so it always clears — including failure or
-        # a barge-in cancellation. Status is a per-client lifecycle signal owned
-        # by the render turn; the native vision functions stay reusable/UI-free.
-        if send_pid:
-            await self._set_status("processing", send_pid)
+        # a barge-in cancellation. The "processing" publish is INSIDE the try so
+        # a cancellation landing during that await still runs the finally (never
+        # leaving the client stuck in "processing"). Status is a per-client
+        # lifecycle signal owned by the render turn; the native vision functions
+        # stay reusable/UI-free.
         try:
+            if send_pid:
+                await self._set_status("processing", send_pid)
             async for chunk in self._run_turn_body(pid, send_pid, text):
                 yield chunk
         finally:

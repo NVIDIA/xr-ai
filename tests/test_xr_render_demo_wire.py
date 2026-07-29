@@ -905,6 +905,43 @@ async def test_run_turn_status_clears_on_barge_in_cancellation() -> None:
     assert transport.endpoint.statuses == [("processing", "pid-1"), ("idle", "pid-1")]
 
 
+async def test_run_turn_status_clears_when_cancelled_during_initial_publish() -> None:
+    """If a barge-in lands while the initial 'processing' publish is still in
+    flight, the turn must still clear to 'idle' — the publish sits inside the
+    protected region, so the finally always runs."""
+    transport = _CaptureTransportWithEndpoint()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    in_processing = asyncio.Event()
+    statuses = transport.endpoint.statuses
+
+    async def _blocking_status(status, pid=None):
+        statuses.append((status, pid or ""))
+        if status == "processing":
+            in_processing.set()
+            await asyncio.sleep(3600)  # hold the publish open until cancelled
+
+    transport.endpoint.set_status = _blocking_status  # type: ignore[assignment]
+
+    async def _loop(_text, _pid, *, ref_us, needs_thinking, thinking_ctx):
+        return "unreached"
+
+    _stub_turn(brain, _loop)
+
+    async def _run() -> None:
+        async for _ in brain._run_turn("pid-1", "q"):  # noqa: SLF001
+            pass
+
+    task = asyncio.create_task(_run())
+    await in_processing.wait()  # cancellation now lands mid-'processing'-publish
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert ("idle", "pid-1") in statuses
+
+
 async def test_agentic_loop_reports_agent_llm_failure() -> None:
     """A failed agent-LLM request must not fall through to a success reply."""
     transport = _CaptureTransport()
