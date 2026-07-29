@@ -137,4 +137,4 @@ when reaching for a fixture word in a worked example.
 
 - The live worker pipeline (VAD, STT, TTS, history bookkeeping).
 - Real scene-service / LOVR effects (fixture-succeeded).
-- Real visual queries (`ask_image`, `get_latest_frame`) — stubbed.
+- Real visual queries (`look_at_current_frame`, `look_at_past_frame`) — stubbed.

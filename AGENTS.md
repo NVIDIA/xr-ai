@@ -68,10 +68,13 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   scene state, native scene functions, and the LOVR app live together under
   `agent-samples/xr-render-demo/scene`; they are not exported from `xr-ai-nat`.
   Render MCP only republishes that sample-local typed capability.
-- **Image acquisition and vision reasoning stay separate.** The native vision
-  function accepts an acquired image path and calls a `VLMService` from
-  `xr-ai-models`; it does not own hub, participant, recording, or MCP state.
-  VLM MCP republishes this function only for MCP clients.
+- **Native vision tools own frame acquisition; the file-path adapter stays
+  separate.** The native `xr_vision_tools` group (`look_at_current_frame` /
+  `look_at_past_frame`) acquires the participant's live or recorded frame itself
+  and calls a `VLMService` from `xr-ai-models`; recorded lookups resolve through
+  the `xr_video_memory` group. The legacy file-path `ask_image` tool is not part
+  of the native surface — it lives self-contained in VLM MCP for MCP-only clients
+  that already hold an image path.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml`. See `docs/credentials.md`.
 
@@ -144,9 +147,10 @@ Typed agent functions live in `xr-ai-nat`. `SpatialMathFunctionsConfig`
 registers deterministic coordinate operations that receive an explicit spatial
 frame; tracking and process boundaries remain outside the math functions.
 `TextMemoryFunctionsConfig` provides persistent timestamped text without a
-network boundary. `VisionFunctionsConfig` adds image-question answering over an
-injected `xr-ai-models` VLM while leaving frame acquisition to its own
-capability. `XRTrackingFunctionsConfig` exposes the current user frame through
+network boundary. `VisionToolsConfig` (`xr_vision_tools`) adds
+`look_at_current_frame` / `look_at_past_frame` question answering over an
+injected `xr-ai-models` VLM, acquiring the participant's live or recorded frame
+itself. `XRTrackingFunctionsConfig` exposes the current user frame through
 the typed OpenXR service without routing native agents through MCP.
 `VideoMemoryFunctionsConfig` exposes recorded-video discovery, queries, and
 frame extraction through a typed service while keeping MCP optional; callers

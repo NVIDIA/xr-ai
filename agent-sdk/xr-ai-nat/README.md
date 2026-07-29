@@ -87,29 +87,44 @@ sidecar files even when their filesystem names require sanitization.
 
 ## Vision
 
-Install `xr-ai-nat[vision]` to use the `xr_vision` function group. The group
-accepts an injected `xr-ai-models` `VLMService` and exposes `ask_image` for a
-local PNG or JPEG path:
+Install `xr-ai-nat[vision]` to use the `xr_vision_tools` function group. The
+group accepts a hub frame `endpoint`, an injected `xr-ai-models` `VLMService`,
+and a reference to the `video_memory` group for recorded lookups:
 
 ```python
-config = VisionFunctionsConfig(vlm=vlm, system_prompt="Answer briefly.")
+config = VisionToolsConfig(
+    endpoint=frame_endpoint,
+    vlm=vlm,
+    video_memory=FunctionGroupRef("video_memory"),
+)
 await builder.add_function_group("vision", config)
 ```
 
-Image acquisition is intentionally separate. A live-frame or video-memory
-function obtains the image first, then passes its exact returned path to
-`vision__ask_image`; callers must never invent or guess a path. The vision
-function performs image I/O off the event loop, normalizes the input to JPEG,
+It exposes two native tools over the always-on live-frame source. Frame
+acquisition happens inside the tools, so callers pass a participant and a
+question — never an image path:
+
+- `look_at_current_frame(participant_id, question)` — inspect the participant's
+  present live camera frame.
+- `look_at_past_frame(participant_id, question, second_ago, reference_time_us)` —
+  inspect a recorded frame `second_ago` whole seconds before the reference time,
+  resolved lazily through the `video_memory` group.
+
+Each tool performs image I/O off the event loop, normalizes the frame to JPEG,
 and makes the model request through `xr-ai-models`.
 
-For live voice workflows, `StreamingVisionConfig` accepts a hub
-`ProcessorEndpoint` and exposes one native function with complete and streaming
-invocation modes. It owns fresh-frame acquisition and VLM invocation; Pipecat
-continues to own audio framing, interruption, and TTS.
+For live voice workflows, `StreamingVisionConfig` (`xr_streaming_vision`) accepts
+a hub `ProcessorEndpoint` and exposes one native function with complete and
+streaming invocation modes. It owns fresh-frame acquisition and VLM invocation;
+Pipecat continues to own audio framing, interruption, and TTS.
 
 Its complete invocation returns a `VisionResult` with `status` set to `ok` or
 `unavailable`; callers must handle an unavailable result without treating its
 text as an answer about the scene.
+
+MCP-only agents that already hold a local image path can still reach the legacy
+file-path `ask_image` tool through the vlm-mcp compatibility server
+(`agent-mcp-servers/vlm-mcp/`), which now owns that path-based surface directly.
 
 ## XR tracking
 

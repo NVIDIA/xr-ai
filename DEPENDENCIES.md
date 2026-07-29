@@ -122,9 +122,12 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     capability module is its own ``nat.plugins`` discovery entry point; there
     is no package-wide registration aggregator. The spatial pure math core is
     also used by the transitional Vec and OpenXR MCP compatibility surfaces.
-    ``xr_vision`` normalizes an acquired local image and calls an injected
-    xr-ai-models VLM. Its separate live-vision function composes current-frame
-    acquisition with complete or streaming VLM invocation. ``xr_tracking`` calls
+    ``xr_vision_tools`` exposes ``look_at_current_frame`` and
+    ``look_at_past_frame`` over the always-on live-frame source, acquiring the
+    frame itself and calling an injected xr-ai-models VLM; recorded lookups
+    resolve through the ``xr_video_memory`` group. A separate
+    ``xr_streaming_vision`` function composes current-frame acquisition with
+    complete or streaming VLM invocation. ``xr_tracking`` calls
     the typed OpenXR service and returns a complete user coordinate frame.
     ``xr_video_memory`` calls the typed video-memory service for recorded-video
     discovery, queries, and frame extraction. Live frames stay with the hub
@@ -209,10 +212,13 @@ vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
     └── xr-ai-nat[mcp,vision] [editable: ../../agent-sdk/xr-ai-nat]
-    Thin MCP compatibility process with one tool at /mcp (no REST). It
-    republishes ``vision__ask_image`` under the existing ``ask_image`` name.
-    Image normalization and the VLM call live in the native vision function;
-    the legacy ``vlm_server:`` URL key remains accepted with a warning.
+    Thin MCP compatibility process with one tool at /mcp (no REST). It owns a
+    self-contained file-path ``ask_image`` tool: image normalization (Pillow,
+    hence the ``[vision]`` extra) and the VLM call live in the server's own
+    ``xr_vlm_ask_image`` group, not in the native vision surface — which is now
+    the path-free, always-on ``xr_vision_tools``. MCP-only agents that hold an
+    image path use this tool; the legacy ``vlm_server:`` URL key remains
+    accepted with a warning.
 
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
