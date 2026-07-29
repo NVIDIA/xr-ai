@@ -802,8 +802,8 @@ def test_perception_tool_def_in_prompt_and_classifier() -> None:
 
 
 async def test_perception_query_reaches_vlm_frame_path() -> None:
-    """A vision question routed to look_at_current_frame turns the camera on,
-    pulls the live frame, and runs the VLM — returning the VLM answer to the
+    """A vision question routed to look_at_current_frame pulls the current
+    always-on live frame and runs the VLM — returning the VLM answer to the
     loop (NOT a generic reasoning-loop fallback)."""
     transport = _CaptureTransportWithEndpoint()
     transport.set_target_participant("pid-1")

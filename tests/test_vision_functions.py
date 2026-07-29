@@ -22,7 +22,7 @@ from nat.plugin_api import (
 from PIL import Image
 from pydantic import ConfigDict, Field, ValidationError
 from xr_ai_agent import FrameData, FrameSignal, FrameUnavailable, PixelFormat
-from xr_ai_nat.functions.video_memory.schemas import HistoricalFrameRequest, HistoricalFrameResult
+from xr_ai_nat.functions.video_memory import HistoricalFrameRequest, HistoricalFrameResult
 from xr_ai_nat.functions.vision import (
     HistoricalVisionRequest,
     LiveVisionRequest,
