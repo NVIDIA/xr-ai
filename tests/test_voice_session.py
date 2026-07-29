@@ -4,7 +4,7 @@
 """Contract tests for shared voice-worker lifecycle primitives."""
 from __future__ import annotations
 
-from xr_ai_agent import DataMessage
+from xr_ai_hub import DataMessage
 from xr_ai_voice import TextMessageInput, VadConfig, VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
 

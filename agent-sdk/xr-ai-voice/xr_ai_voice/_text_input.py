@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 
 from loguru import logger
-from xr_ai_agent import DataMessage
+from xr_ai_hub import DataMessage
 
 from ._session import VoiceSession
 

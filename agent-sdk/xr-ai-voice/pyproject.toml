@@ -10,7 +10,7 @@ name = "xr-ai-voice"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "xr-ai-agent",
+    "xr-ai-hub-client",
     "xr-ai-logging",
     "xr-ai-models",
     "xr-ai-vad",
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-agent      = { path = "..",                         editable = true }
+xr-ai-hub-client      = { path = "../xr-ai-hub-client",                         editable = true }
 xr-ai-logging    = { path = "../../utils/xr-ai-logging",   editable = true }
 xr-ai-models     = { path = "../xr-ai-models",             editable = true }
 xr-ai-vad        = { path = "../../utils/xr-ai-vad",       editable = true }

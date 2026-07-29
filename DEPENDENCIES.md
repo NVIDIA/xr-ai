@@ -65,7 +65,7 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     Not a dep of xr-ai-hub-client itself — import only in workers that use Pipecat.
 
 xr-ai-voice  (agent-sdk/xr-ai-voice/)
-    └── xr-ai-agent     [editable: ..]
+    └── xr-ai-hub-client [editable: ../xr-ai-hub-client]
     └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models    [editable: ../xr-ai-models]
     └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
@@ -79,7 +79,7 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     surface, ``HubVoiceTransport``, ``VadConfig``, and ``TextMessageInput``;
     Pipecat, audio framing, and pipeline processors are implementation details.
     Readiness is health-based, split across the ``_readiness`` / ``_session``
-    modules. Not a dep of xr-ai-agent itself — import only in workers that opt
+    modules. Not a dep of xr-ai-hub-client itself — import only in workers that opt
     into the voice runtime.
 
 xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)

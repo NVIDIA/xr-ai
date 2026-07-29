@@ -32,7 +32,7 @@ from pipecat.transports.base_input import BaseInputTransport
 from pipecat.transports.base_output import BaseOutputTransport
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 
-from xr_ai_agent import (
+from xr_ai_hub import (
     AudioChunk,
     DataMessage,
     ParticipantEvent,
