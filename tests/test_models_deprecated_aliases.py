@@ -11,8 +11,16 @@ re-export the canonical objects, so external imports keep working.
 import importlib
 
 import pytest
-import xr_ai_models
-from xr_ai_models import _config, _factory, _openai_compat, _protocols
+from xr_ai_models import (
+    OpenAICompatVLM,
+    VLMService,
+    _config,
+    _factory,
+    _openai_compat,
+    _protocols,
+    load_models_config,
+    make_vlm,
+)
 
 # old public module path -> [(attribute, canonical object)]
 _ALIASES = {
@@ -48,8 +56,9 @@ def test_deprecated_module_alias_forwards_and_warns(module_name: str) -> None:
 
 
 def test_public_names_reachable_from_package_root() -> None:
-    # Privatization must not change the package's public API surface.
-    assert xr_ai_models.VLMService is _protocols.VLMService
-    assert xr_ai_models.OpenAICompatVLM is _openai_compat.OpenAICompatVLM
-    assert xr_ai_models.load_models_config is _config.load_models_config
-    assert xr_ai_models.make_vlm is _factory.make_vlm
+    # Privatization must not change the package's public API surface: the names
+    # imported from the package root are the canonical private-module objects.
+    assert VLMService is _protocols.VLMService
+    assert OpenAICompatVLM is _openai_compat.OpenAICompatVLM
+    assert load_models_config is _config.load_models_config
+    assert make_vlm is _factory.make_vlm
