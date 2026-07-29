@@ -113,7 +113,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-hub-client  = { path = "../../../agent-sdk",              editable = true }
+xr-ai-hub-client  = { path = "../../../agent-sdk/xr-ai-hub-client", editable = true }
 xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]

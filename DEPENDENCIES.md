@@ -588,7 +588,7 @@ updated in the same commit**.
 
 | Component changed | Must also update |
 |---|---|
-| `agent-sdk/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
+| `agent-sdk/xr-ai-hub-client/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
 | `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
@@ -616,7 +616,7 @@ updated in the same commit**.
 - `utils/xr-ai-vllm/` — zero runtime dependencies. Stdlib only. Adding deps
   here would defeat docker mode (whose point is to keep heavy vllm-side deps
   out of the wrapper's venv).
-- `agent-sdk/` (`xr-ai-hub-client`) — only `pyzmq` + `msgpack`. No server-side packages.
+- `agent-sdk/xr-ai-hub-client/` (`xr-ai-hub-client`) — only `pyzmq` + `msgpack`. No server-side packages.
 - `agent-sdk/xr-ai-models/` — `xr-ai-logging` + `httpx` + `pyyaml` only. No
   vendor SDKs (no `openai`, no `anthropic`, no `litellm`). All in-tree
   backends speak OpenAI-compatible HTTP; vendor adapters arrive as new
