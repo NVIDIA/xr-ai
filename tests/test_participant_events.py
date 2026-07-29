@@ -11,8 +11,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+import xr_media_hub.ipc._hub as hub_module
 
-from xr_ai_agent import ParticipantEvent, PixelFormat
+from xr_ai_agent import ConnectorRegistration, ParticipantEvent, PixelFormat
 
 pytestmark = pytest.mark.asyncio
 
@@ -160,3 +161,30 @@ async def test_connector_reregistration_releases_held_slots(hub, make_connector,
     )
     await settle()
     assert ("alice", "cam") in hub._latest_slots
+
+
+async def test_connector_reregistration_open_failure_drops_stale_ring(monkeypatch):
+    """Regression for #209: a failed SHM reopen during connector
+    re-registration must not leave the just-closed old ring in the registry."""
+
+    class CloseTrackingRing:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    def fail_open(*, name: str, create: bool):
+        raise RuntimeError(f"cannot open {name} create={create}")
+
+    hub = hub_module.HubEndpoint.__new__(hub_module.HubEndpoint)
+    old_ring = CloseTrackingRing()
+    hub._latest_slots = {}
+    hub._ring_registry = {}
+    hub._ring_registry["conn"] = old_ring
+    monkeypatch.setattr(hub_module, "ShmRingBuffer", fail_open)
+
+    hub._handle_registration(ConnectorRegistration(connector_id="conn", shm_name="missing"))
+
+    assert old_ring.closed is True
+    assert "conn" not in hub._ring_registry
