@@ -34,7 +34,12 @@ from xr_ai_voicegate import load_voice_gate_config
 from agent import RenderDemoAgent
 from capabilities import build_native_toolbox
 from config import WorkerConfig, load_config
-from processors import RenderSceneProcessor
+from processors import (
+    _LIVE_PERCEPTION_TOOL,
+    _PAST_PERCEPTION_TOOL,
+    _PERCEPTION_TOOL_DEFS,
+    RenderSceneProcessor,
+)
 
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
 
@@ -114,7 +119,13 @@ async def main(
 
         text_memory_functions = await _group_functions(builder, "text_memory")
         text_memory = text_memory_functions["text_memory__add_transcript"]
-        tools = toolbox.definitions(exclude=_WORKER_MANAGED_TOOLS)
+        # The native perception request models carry participant/reference
+        # context the processor injects; present the model trimmed schemas
+        # (question, and question+second_ago) in place of the raw native ones.
+        tools = toolbox.definitions(
+            exclude=_WORKER_MANAGED_TOOLS | {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
+        )
+        tools.extend(_PERCEPTION_TOOL_DEFS)
         logger.info("native tool-calling functions: {}", [tool.name for tool in tools])
 
         brain = RenderSceneProcessor(

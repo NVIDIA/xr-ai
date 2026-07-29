@@ -635,6 +635,49 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
     }
 
 
+async def test_model_facing_perception_schema_is_trimmed() -> None:
+    """The perception tools reach the model with participant/reference context
+    stripped. The worker injects ``participant_id`` (and ``reference_time_us``
+    for recorded lookups); exposing them verbatim would tell the model to fill a
+    required ``participant_id`` it cannot know and whose value is discarded.
+    Guards the do-not-reverse of main's trimmed ``{question}`` contract."""
+    from xr_render_demo_worker import _WORKER_MANAGED_TOOLS
+
+    async with WorkflowBuilder() as builder:
+        toolbox, _vision_config = await _caps.build_native_toolbox(
+            builder,
+            scene_endpoint="tcp://127.0.0.1:65527",
+            openxr_endpoint="tcp://127.0.0.1:65528",
+            video_memory_endpoint="tcp://127.0.0.1:65529",
+            frame_endpoint=_FakeEndpoint(),
+            vlm=_FakeVLM(),
+        )
+        # The raw native request schemas DO expose the injected context — which is
+        # exactly why they must not reach the model verbatim.
+        native = {tool.name: tool for tool in toolbox.definitions()}
+        assert "participant_id" in native["look_at_current_frame"].parameters["properties"]
+        assert "participant_id" in native["look_at_past_frame"].parameters["properties"]
+
+        # Assemble the model-facing list exactly as the worker does.
+        tools = toolbox.definitions(
+            exclude=_WORKER_MANAGED_TOOLS
+            | {_proc._LIVE_PERCEPTION_TOOL, _proc._PAST_PERCEPTION_TOOL}
+        )
+        tools.extend(_proc._PERCEPTION_TOOL_DEFS)
+
+    model_facing = {tool.name: tool for tool in tools}
+    live = model_facing["look_at_current_frame"].parameters
+    past = model_facing["look_at_past_frame"].parameters
+    assert set(live["properties"]) == {"question"}
+    assert live["required"] == ["question"]
+    assert set(past["properties"]) == {"question", "second_ago"}
+    assert set(past["required"]) == {"question", "second_ago"}
+    # No injected context leaks to the model.
+    for schema in (live, past):
+        assert "participant_id" not in schema["properties"]
+        assert "reference_time_us" not in schema["properties"]
+
+
 class _FakeEndpoint:
     """Hub ProcessorEndpoint double — frame callback, pixel request, status, and
     return-data send. VisionModule now talks to the endpoint directly (the real

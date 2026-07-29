@@ -38,6 +38,11 @@ SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
 from capabilities import build_native_toolbox  # noqa: E402
 from config import load_config  # noqa: E402  — must follow sys.path tweak
+from processors import (  # noqa: E402  — must follow sys.path tweak
+    _LIVE_PERCEPTION_TOOL,
+    _PAST_PERCEPTION_TOOL,
+    _PERCEPTION_TOOL_DEFS,
+)
 _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
 
 def _agent_llm_base_url() -> str:
@@ -1402,7 +1407,12 @@ async def _discover_tools() -> list[dict]:
             frame_endpoint=_NullFrameEndpoint(),
             vlm=object(),
         )
-        definitions = toolbox.definitions(exclude=WORKER_MANAGED)
+        # Present the model trimmed perception schemas (the worker injects the
+        # participant/reference context the native request models expose).
+        definitions = toolbox.definitions(
+            exclude=WORKER_MANAGED | {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
+        )
+        definitions.extend(_PERCEPTION_TOOL_DEFS)
         return [definition.to_openai() for definition in definitions]
 
 

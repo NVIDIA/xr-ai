@@ -65,6 +65,58 @@ _MAX_LOOP = 10  # visual queries need up to 5 steps; give headroom
 _LIVE_PERCEPTION_TOOL = "look_at_current_frame"
 _PAST_PERCEPTION_TOOL = "look_at_past_frame"
 
+# Model-facing perception schemas. The native ``xr_vision_tools`` request models
+# also carry ``participant_id`` (and ``reference_time_us`` for recorded lookups),
+# which the processor injects — the model never supplies them. Presenting the raw
+# generated schema would tell the model to fill a required ``participant_id`` it
+# cannot know and whose value is discarded, so the model sees these trimmed
+# contracts instead (the worker swaps them in for the native ones).
+_LIVE_PERCEPTION_TOOL_DEF = ToolDef(
+    name=_LIVE_PERCEPTION_TOOL,
+    description=(
+        "Inspect the user's present physical view when a request explicitly requires a visible fact. "
+        "Do not use this tool to interpret conversation or inspect the virtual XR scene."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "Specific question about the live camera frame.",
+            },
+        },
+        "required": ["question"],
+    },
+)
+
+_PAST_PERCEPTION_TOOL_DEF = ToolDef(
+    name=_PAST_PERCEPTION_TOOL,
+    description=(
+        "Inspect a recorded camera frame only for an explicitly historical question, using a positive "
+        "seconds offset from the user's utterance time."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "Specific question about the recorded camera frame.",
+            },
+            "second_ago": {
+                "type": "integer",
+                "description": "Positive offset from the utterance time in seconds.",
+            },
+        },
+        "required": ["question", "second_ago"],
+    },
+)
+
+# Presented to the model in place of the native perception request schemas.
+_PERCEPTION_TOOL_DEFS: tuple[ToolDef, ...] = (
+    _LIVE_PERCEPTION_TOOL_DEF,
+    _PAST_PERCEPTION_TOOL_DEF,
+)
+
 # Spoken when a perception query is asked but no live camera frame can be
 # obtained. Short, user-actionable, never a hang or silent failure.
 _NO_FRAME_MSG = "I can't see a camera feed right now — please check your camera."
