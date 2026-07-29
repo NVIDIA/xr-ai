@@ -7,9 +7,10 @@ VLM MCP server.
 Thin MCP compatibility process — one tool at /mcp on port 8240. There are no
 REST endpoints, hub IPC subscriptions, or `xr-ai-agent` runtime dependencies.
 
-The single tool ``ask_image(question, image_path)`` republishes the native
-path-based ``xr_vision`` function. Current- and recorded-frame agent workflows
-use the separate ``xr_vision_tools`` group directly.
+The single tool ``ask_image(question, image_path)`` reads a local PNG path and
+forwards it to the VLM. It is a self-contained file → VLM wrapper: the native
+vision surface is now always-on streaming (``xr_vision_tools``) with no
+file-path tool, so this path-based tool lives with its only consumer.
 
 Typical two-step agent flow
 ───────────────────────────
@@ -59,7 +60,6 @@ from loguru import logger
 from nat.builder.workflow_builder import WorkflowBuilder
 
 from xr_ai_logging import setup_logging
-from xr_ai_nat.functions.vision import VisionFunctionsConfig
 from xr_ai_nat.mcp import create_mcp_server
 from xr_ai_models import (
     ModelsConfig,
@@ -69,6 +69,9 @@ from xr_ai_models import (
 )
 from xr_ai_models.config import KIND_OPENAI_COMPAT
 from xr_ai_models.protocols import VLMService
+
+from ._ask_image import AskImageConfig
+
 
 # ── VLM factory ──────────────────────────────────────────────────────────────
 
@@ -136,10 +139,10 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
 # ── FastMCP build ─────────────────────────────────────────────────────────────
 
 async def build_mcp(vlm: VLMService):
-    """Republish the native file-based vision function under the MCP tool name."""
+    """Expose the file-based image-question function under the MCP tool name."""
 
     async with WorkflowBuilder() as builder:
-        await builder.add_function_group("vision", VisionFunctionsConfig(vlm=vlm))
+        await builder.add_function_group("vision", AskImageConfig(vlm=vlm))
         group = await builder.get_function_group("vision")
         functions = await group.get_all_functions()
 

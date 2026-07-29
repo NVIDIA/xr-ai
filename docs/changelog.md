@@ -9,23 +9,33 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
-### 2026-07-27 — Native vision adds current- and recorded-frame tools
+### 2026-07-27 — Native vision exposes current- and recorded-frame tools
 
-The `xr_ai_nat` vision capability adds the native `xr_vision_tools` group
+The `xr_ai_nat` vision capability drops the path-based `xr_vision`/`ask_image`
+function group in favour of the native `xr_vision_tools` group
 (`VisionToolsConfig`), which exposes `look_at_current_frame` over the always-on
 live frame source and `look_at_past_frame` over the `video_memory` function
-group. `VisionFunctionsConfig` (`xr_vision`) remains the composable path-based
-image-Q&A boundary and VLM MCP continues to republish it. The
-`vision/_images.py` → `vision/_pixels.py` move is an internal
-(underscore-private) helper rename.
+group. `StreamingVisionConfig` (`xr_streaming_vision`) is retained for
+simple-vlm's streaming Q&A.
 
-The xr-render worker now consumes the higher-level perception tools directly,
-injecting participant identity and the utterance timestamp that the model never
-supplies. Its model-facing schemas are projected from the native definitions so
-validation constraints remain aligned. The no-frame path still ends the turn
-with a short spoken message, and per-participant status writes are serialized so
-cleanup from a superseded turn cannot mark its replacement idle. Camera capture
-remains always-on streaming.
+**Breaking (public API):** `VisionFunctionsConfig` — previously exported from
+`xr_ai_nat.functions.vision` — is removed and semantically replaced by
+`VisionToolsConfig`; the two have different config fields and tool surfaces, so
+this is a versioned breaking change rather than a rename (no forwarding alias).
+Callers on `VisionFunctionsConfig`/`xr_vision`/`ask_image` must migrate to
+`VisionToolsConfig`/`xr_vision_tools`. The `vision/_images.py` → `vision/_pixels.py`
+move is an internal (underscore-private) helper rename with no compatibility
+surface.
+
+The xr-render worker now consumes the native perception
+tools directly: the local `look_at_current_frame` `ToolDef` wrapper and the
+`ask_image` two-step were removed from `processors.py`, with the processor
+injecting participant identity (and the utterance timestamp for recorded
+lookups) that the model never supplies. The no-frame path still ends the turn
+with a short spoken message. Camera capture remains always-on streaming — no
+camera-on-demand path was reintroduced. vlm-mcp keeps its file-based `ask_image`
+MCP tool, now self-contained in the server since the native surface no longer
+offers a file-path tool.
 
 ### 2026-07-27 — Video-memory contracts inline into the typed client
 

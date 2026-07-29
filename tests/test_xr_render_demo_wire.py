@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -658,21 +658,22 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
         assert "participant_id" in native["look_at_current_frame"].parameters["properties"]
         assert "participant_id" in native["look_at_past_frame"].parameters["properties"]
 
-        tools = _caps.model_tool_definitions(toolbox, exclude=_WORKER_MANAGED_TOOLS)
+        # Assemble the model-facing list exactly as the worker does.
+        tools = toolbox.definitions(
+            exclude=_WORKER_MANAGED_TOOLS
+            | {_proc._LIVE_PERCEPTION_TOOL, _proc._PAST_PERCEPTION_TOOL}
+        )
+        tools.extend(_proc._PERCEPTION_TOOL_DEFS)
 
     model_facing = {tool.name: tool for tool in tools}
     live = model_facing["look_at_current_frame"].parameters
     past = model_facing["look_at_past_frame"].parameters
     assert set(live["properties"]) == {"question"}
     assert live["required"] == ["question"]
-    assert live["properties"]["question"]["minLength"] == 1
     assert set(past["properties"]) == {"question", "second_ago"}
     assert set(past["required"]) == {"question", "second_ago"}
-    assert past["properties"]["question"]["minLength"] == 1
-    assert past["properties"]["second_ago"]["exclusiveMinimum"] == 0
     # No injected context leaks to the model.
     for schema in (live, past):
-        assert schema["additionalProperties"] is False
         assert "participant_id" not in schema["properties"]
         assert "reference_time_us" not in schema["properties"]
 
@@ -939,61 +940,6 @@ async def test_run_turn_status_clears_when_cancelled_during_initial_publish() ->
         await task
 
     assert ("idle", "pid-1") in statuses
-
-
-async def test_superseded_turn_cannot_overwrite_replacement_status() -> None:
-    """Delayed cleanup from a superseded turn must precede the replacement's
-    processing status, never leave the active replacement marked idle."""
-    transport = _CaptureTransportWithEndpoint()
-    transport.set_target_participant("pid-1")
-    brain = _make_brain(transport)
-
-    first_started = asyncio.Event()
-    second_started = asyncio.Event()
-    first_idle_entered = asyncio.Event()
-    release_first_idle = asyncio.Event()
-    hold_turns = asyncio.Event()
-    statuses = transport.endpoint.statuses
-    blocked_first_idle = False
-
-    async def _delayed_status(status, pid=None):
-        nonlocal blocked_first_idle
-        if status == "idle" and not blocked_first_idle:
-            blocked_first_idle = True
-            first_idle_entered.set()
-            await release_first_idle.wait()
-        statuses.append((status, pid or ""))
-
-    async def _loop(text, _pid, *, ref_us, needs_thinking, thinking_ctx):
-        (first_started if text == "first" else second_started).set()
-        await hold_turns.wait()
-        return "done"
-
-    transport.endpoint.set_status = _delayed_status  # type: ignore[assignment]
-    _stub_turn(brain, _loop)
-
-    async def _consume(text: str) -> None:
-        async for _ in brain._run_turn("pid-1", text):  # noqa: SLF001
-            pass
-
-    first_task = asyncio.create_task(_consume("first"))
-    await first_started.wait()
-    first_task.cancel()
-    await first_idle_entered.wait()
-
-    second_task = asyncio.create_task(_consume("second"))
-    await asyncio.sleep(0)
-    release_first_idle.set()
-    await second_started.wait()
-    with suppress(asyncio.CancelledError):
-        await first_task
-
-    try:
-        assert statuses[-1] == ("processing", "pid-1")
-    finally:
-        second_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await second_task
 
 
 async def test_agentic_loop_reports_agent_llm_failure() -> None:

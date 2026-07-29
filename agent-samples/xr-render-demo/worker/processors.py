@@ -28,8 +28,8 @@ import asyncio
 import json
 import time
 import uuid
-from collections.abc import Callable
 from pathlib import Path
+from collections.abc import Callable
 from typing import AsyncIterator
 
 from loguru import logger
@@ -42,11 +42,7 @@ from xr_ai_pipecat import BrainProcessor
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 from config import WorkerConfig
-from capabilities import (
-    LIVE_PERCEPTION_TOOL,
-    PAST_PERCEPTION_TOOL,
-    NativeToolbox,
-)
+from capabilities import NativeToolbox
 from tooling import (
     extract_json,
     looks_like_leaked_tool_call,
@@ -62,6 +58,64 @@ _trace_log = logger.bind(trace=True)
 
 _MAX_LOOP = 10  # visual queries need up to 5 steps; give headroom
 
+
+# Native perception tools (from the ``xr_vision_tools`` group) exposed to the
+# model. The processor supplies participant context (and the utterance time for
+# recorded lookups) that the model never provides.
+_LIVE_PERCEPTION_TOOL = "look_at_current_frame"
+_PAST_PERCEPTION_TOOL = "look_at_past_frame"
+
+# Model-facing perception schemas. The native ``xr_vision_tools`` request models
+# also carry ``participant_id`` (and ``reference_time_us`` for recorded lookups),
+# which the processor injects — the model never supplies them. Presenting the raw
+# generated schema would tell the model to fill a required ``participant_id`` it
+# cannot know and whose value is discarded, so the model sees these trimmed
+# contracts instead (the worker swaps them in for the native ones).
+_LIVE_PERCEPTION_TOOL_DEF = ToolDef(
+    name=_LIVE_PERCEPTION_TOOL,
+    description=(
+        "Inspect the user's present physical view when a request explicitly requires a visible fact. "
+        "Do not use this tool to interpret conversation or inspect the virtual XR scene."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "Specific question about the live camera frame.",
+            },
+        },
+        "required": ["question"],
+    },
+)
+
+_PAST_PERCEPTION_TOOL_DEF = ToolDef(
+    name=_PAST_PERCEPTION_TOOL,
+    description=(
+        "Inspect a recorded camera frame only for an explicitly historical question, using a positive "
+        "seconds offset from the user's utterance time."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "Specific question about the recorded camera frame.",
+            },
+            "second_ago": {
+                "type": "integer",
+                "description": "Positive offset from the utterance time in seconds.",
+            },
+        },
+        "required": ["question", "second_ago"],
+    },
+)
+
+# Presented to the model in place of the native perception request schemas.
+_PERCEPTION_TOOL_DEFS: tuple[ToolDef, ...] = (
+    _LIVE_PERCEPTION_TOOL_DEF,
+    _PAST_PERCEPTION_TOOL_DEF,
+)
 
 # Spoken when a perception query is asked but no live camera frame can be
 # obtained. Short, user-actionable, never a hang or silent failure.
@@ -175,8 +229,6 @@ class RenderSceneProcessor(BrainProcessor):
         # handle_query, which short-circuits the LLM loop for a matching entry.
         # See enqueue_notice / _emit_notice.
         self._pending_notices: dict[str, list[str]] = {}
-        self._turn_status_tokens: dict[str, object] = {}
-        self._turn_status_locks: dict[str, asyncio.Lock] = {}
 
     # ── public: text-channel entry ────────────────────────────────────────────
 
@@ -274,17 +326,21 @@ class RenderSceneProcessor(BrainProcessor):
         if not text:
             return
         send_pid = pid or self._transport.target_participant
-        status_token = object()
-        if send_pid:
-            self._turn_status_tokens[send_pid] = status_token
+        # Bracket the whole turn with the client UI status signal: "processing"
+        # on entry, "idle" in finally so it always clears — including failure or
+        # a barge-in cancellation. The "processing" publish is INSIDE the try so
+        # a cancellation landing during that await still runs the finally (never
+        # leaving the client stuck in "processing"). Status is a per-client
+        # lifecycle signal owned by the render turn; the native vision functions
+        # stay reusable/UI-free.
         try:
             if send_pid:
-                await self._set_turn_status("processing", send_pid, status_token)
+                await self._set_status("processing", send_pid)
             async for chunk in self._run_turn_body(pid, send_pid, text):
                 yield chunk
         finally:
             if send_pid:
-                await self._set_turn_status("idle", send_pid, status_token)
+                await self._set_status("idle", send_pid)
 
     async def _run_turn_body(self, pid: str, send_pid: str, text: str) -> AsyncIterator[str]:
         # Capture the moment the user finished speaking so visual tool calls
@@ -894,7 +950,7 @@ class RenderSceneProcessor(BrainProcessor):
         _trace_log.info("LOOK  {}", question[:120])
         try:
             result = await self._toolbox.invoke(
-                LIVE_PERCEPTION_TOOL,
+                _LIVE_PERCEPTION_TOOL,
                 {"participant_id": pid, "question": question},
             )
         except Exception as exc:
@@ -912,7 +968,7 @@ class RenderSceneProcessor(BrainProcessor):
         unlike the live path, a missing recorded frame does not end the turn.
         """
         return await self._call_tool(
-            PAST_PERCEPTION_TOOL,
+            _PAST_PERCEPTION_TOOL,
             {
                 "participant_id": pid,
                 "question": str(args.get("question") or "").strip(),
@@ -935,9 +991,9 @@ class RenderSceneProcessor(BrainProcessor):
         # Live perception needs participant context that is not model supplied. Intercept
         # before _normalize_tool_args (which would strip the question text if
         # it ever produced an empty value) and before native invocation.
-        if tool == LIVE_PERCEPTION_TOOL:
+        if tool == _LIVE_PERCEPTION_TOOL:
             return await self._look_at_current_frame(pid, str(args.get("question") or "").strip())
-        if tool == PAST_PERCEPTION_TOOL:
+        if tool == _PAST_PERCEPTION_TOOL:
             return await self._look_at_past_frame(pid, args, ref_us)
 
         # Normalize nested dicts that the LLM sometimes generates instead of
@@ -1001,26 +1057,9 @@ class RenderSceneProcessor(BrainProcessor):
         except Exception:
             logger.opt(exception=True).debug("set_status({!r}) failed", status)
 
-    async def _set_turn_status(self, status: str, pid: str, token: object) -> None:
-        """Serialize status writes and discard cleanup from superseded turns."""
-
-        lock = self._turn_status_locks.setdefault(pid, asyncio.Lock())
-        async with lock:
-            if self._turn_status_tokens.get(pid) is not token:
-                if pid not in self._turn_status_tokens:
-                    self._turn_status_locks.pop(pid, None)
-                return
-            await self._set_status(status, pid)
-            if status == "idle" and self._turn_status_tokens.get(pid) is token:
-                self._turn_status_tokens.pop(pid, None)
-
     async def on_participant_left(self, pid: str) -> None:
         """Release cached native live-frame state after participant cleanup."""
         self._release_vision(pid)
-        self._turn_status_tokens.pop(pid, None)
-        lock = self._turn_status_locks.get(pid)
-        if lock is not None and not lock.locked():
-            self._turn_status_locks.pop(pid, None)
 
     async def close(self) -> None:
         await self._llm.close()

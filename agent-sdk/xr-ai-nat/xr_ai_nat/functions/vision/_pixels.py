@@ -2,23 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Convert hub frames into JPEG data URLs accepted by VLM services."""
-
 from __future__ import annotations
 
 import base64
 import io
-from pathlib import Path
 
 import numpy as np
 from PIL import Image
 from xr_ai_agent import FrameData, PixelFormat
-
-
-def load_jpeg_data_url(image_path: str | Path, quality: int = 85) -> str:
-    """Convert a local image to an RGB JPEG data URL."""
-
-    with Image.open(image_path) as image:
-        return encode_image(image.convert("RGB"), quality=quality)
 
 
 def _yuv_to_rgb(y: np.ndarray, u: np.ndarray, v: np.ndarray) -> Image.Image:
@@ -54,7 +45,7 @@ def frame_to_pil(frame: FrameData) -> Image.Image:
     raise ValueError(f"Unsupported pixel format: {frame.fmt!r}")
 
 
-def encode_image(image: Image.Image, quality: int = 90) -> str:
+def encode_image(image: Image.Image) -> str:
     buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=quality)
+    image.save(buffer, format="JPEG", quality=90)
     return f"data:image/jpeg;base64,{base64.b64encode(buffer.getvalue()).decode()}"

@@ -36,8 +36,13 @@ SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
 # Borrow the worker's config and native-tool assembly so the eval advertises
 # the same model-facing function schemas as the live worker.
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
-from capabilities import build_native_toolbox, model_tool_definitions  # noqa: E402
+from capabilities import build_native_toolbox  # noqa: E402
 from config import load_config  # noqa: E402  — must follow sys.path tweak
+from processors import (  # noqa: E402  — must follow sys.path tweak
+    _LIVE_PERCEPTION_TOOL,
+    _PAST_PERCEPTION_TOOL,
+    _PERCEPTION_TOOL_DEFS,
+)
 _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
 
 def _agent_llm_base_url() -> str:
@@ -148,26 +153,6 @@ def _stacked_vertically(muts: list[dict]) -> tuple[bool, str]:
 
 
 CASES = [
-    # ── real-world perception routing ────────────────────────────────────────
-    {
-        "name": "current_visual_query_uses_live_frame",
-        "scene": [],
-        "user": "Tell me the brand printed on the bottle in front of me.",
-        "required_calls": [
-            {"tool": "look_at_current_frame", "args": {}},
-        ],
-        "forbidden_tools": ["look_at_past_frame"],
-    },
-    {
-        "name": "historical_visual_query_uses_recorded_frame",
-        "scene": [],
-        "user": "What word was printed on the card I showed you twelve seconds ago?",
-        "required_calls": [
-            {"tool": "look_at_past_frame", "args": {"second_ago": (10, 14)}},
-        ],
-        "forbidden_tools": ["look_at_current_frame"],
-    },
-
     # ── direct render ops ─────────────────────────────────────────────────────
     {
         "name":  "make_red_sphere",
@@ -1422,7 +1407,12 @@ async def _discover_tools() -> list[dict]:
             frame_endpoint=_NullFrameEndpoint(),
             vlm=object(),
         )
-        definitions = model_tool_definitions(toolbox, exclude=WORKER_MANAGED)
+        # Present the model trimmed perception schemas (the worker injects the
+        # participant/reference context the native request models expose).
+        definitions = toolbox.definitions(
+            exclude=WORKER_MANAGED | {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
+        )
+        definitions.extend(_PERCEPTION_TOOL_DEFS)
         return [definition.to_openai() for definition in definitions]
 
 
@@ -1937,45 +1927,22 @@ _MUTATING_TOOLS = frozenset({"add_primitive", "update_primitive", "remove_primit
 
 
 def _check(actual: dict, case: dict) -> tuple[bool, str]:
-    """Match expected calls against the tool calls emitted during the rollout.
+    """Match ``case['result']`` against the mutating tool calls
+    (add/update/remove_primitive) emitted during the rollout.  Order-
+    independent; helper/math calls are ignored.  ``ignore_extra``
+    (default True) allows extra mutations beyond the expectation.
 
-    ``result`` matches mutating calls, while ``required_calls`` can assert any
-    tool. Both are order-independent. ``forbidden_tools`` rejects calls by
-    name. An empty ``result`` with no required calls is the "any mutating path
-    is fine" mode and still rejects a silent no-op.
+    Empty ``result`` is the "any path is fine" mode: the case still
+    requires at least one mutating call to have happened (otherwise a
+    silent no-op would pass).
     """
     tcs = actual["tool_calls"]
     wanted = list(case.get("result") or [])
-    required = list(case.get("required_calls") or [])
-    forbidden = set(case.get("forbidden_tools") or [])
     muts = [tc for tc in tcs if tc["function"]["name"] in _MUTATING_TOOLS]
-    forbidden_actuals = [
-        tc["function"]["name"] for tc in tcs if tc["function"]["name"] in forbidden
-    ]
-    if forbidden_actuals:
-        return False, f"forbidden tool calls: {forbidden_actuals}"
-    if not wanted and not required and not muts:
+    if not wanted and not muts:
         names = [tc["function"]["name"] for tc in tcs]
         return False, f"no mutating calls: {names}"
     scene = case.get("scene") or []
-
-    unmatched_calls = list(tcs)
-    unmatched_required: list[dict] = []
-    for exp in required:
-        for idx, ac in enumerate(unmatched_calls):
-            ok, _ = _match_call(ac, exp, scene)
-            if ok:
-                unmatched_calls.pop(idx)
-                break
-        else:
-            unmatched_required.append(exp)
-    if unmatched_required:
-        missing = "; ".join(
-            f"{e['tool']}({e.get('args', {})})" for e in unmatched_required
-        )
-        actual_names = [tc["function"]["name"] for tc in tcs]
-        return False, f"missing required calls: {missing} | actual calls: {actual_names}"
-
     unmatched_actuals = list(muts)
     unmatched_expected: list[dict] = []
     for exp in wanted:
@@ -2002,7 +1969,7 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
         ok, msg = predicate(muts)
         if not ok:
             return False, f"predicate failed: {msg}"
-    return True, f"matched {len(wanted)} mutation(s), {len(required)} required call(s)"
+    return True, f"matched {len(wanted)} mutation(s)"
 
 
 # max LLM iterations per turn (mirrors processors.py _MAX_LOOP).

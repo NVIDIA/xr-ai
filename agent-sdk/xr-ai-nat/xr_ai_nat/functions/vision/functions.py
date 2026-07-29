@@ -5,10 +5,9 @@
 
 import asyncio
 import logging
-import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from nat.plugin_api import (
     Builder,
@@ -183,79 +182,6 @@ async def streaming_vision(config: StreamingVisionConfig, _builder: Builder):
         config._frames = None
 
 
-class VisionFunctionsConfig(FunctionGroupBaseConfig, name="xr_vision"):
-    """Configure image-question answering over an injected VLM service."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    vlm: Any = Field(exclude=True, repr=False)
-    system_prompt: str = ""
-
-
-@register_function_group(config_type=VisionFunctionsConfig)
-async def vision_functions(config: VisionFunctionsConfig, _builder: Builder):
-    """Build path-based image question answering over the configured VLM."""
-
-    group = FunctionGroup(config=config)
-
-    async def ask_image(
-        question: Annotated[str, Field(description="Question to answer from the acquired image.")],
-        image_path: Annotated[
-            str,
-            Field(
-                description=(
-                    "Absolute local PNG or JPEG path returned by image acquisition. "
-                    "Never invent or guess a path."
-                )
-            ),
-        ],
-    ) -> str:
-        if not image_path:
-            return "ask_image: image_path is empty — acquire an image first."
-        path = Path(image_path)
-        if not path.exists():
-            return f"ask_image: file not found at {image_path!r}."
-
-        from ._pixels import load_jpeg_data_url
-
-        try:
-            data_url = await asyncio.to_thread(load_jpeg_data_url, path)
-        except Exception as exc:
-            _LOGGER.exception("Failed to load image at %s", image_path)
-            return f"ask_image: failed to read image at {image_path!r}: {exc}"
-
-        import httpx
-
-        try:
-            response = await config.vlm.ask_image(
-                data_url,
-                question,
-                system_prompt=config.system_prompt,
-            )
-        except httpx.HTTPError as exc:
-            _LOGGER.exception("VLM request failed")
-            return f"ask_image: vlm-server request failed: {exc}"
-
-        return re.sub(
-            r"<think>.*?</think>",
-            "",
-            response.content,
-            flags=re.DOTALL,
-        ).strip()
-
-    group.add_function(
-        "ask_image",
-        ask_image,
-        description=(
-            "Ask a vision-language model a question about an acquired local image file. "
-            "First acquire an image through the appropriate live or recorded-frame capability, "
-            "then pass its exact returned path. Never invent or guess an image path."
-        ),
-    )
-
-    yield group
-
-
 class VisionToolsConfig(FunctionGroupBaseConfig, name="xr_vision_tools"):
     """Configure the one-shot vision tools used by agent workflows."""
 
@@ -319,12 +245,9 @@ async def vision_tools(config: VisionToolsConfig, builder: Builder):
                 "reference_time_us": request.reference_time_us,
             }
         )
-        from ._pixels import load_jpeg_data_url
-
-        image_url = await asyncio.to_thread(load_jpeg_data_url, Path(frame.path))
         text = await _ask_image(
             config.vlm,
-            image_url,
+            Path(frame.path),
             request.question,
             "Answer directly from this recorded camera frame in one short sentence.",
             "The recorded camera image did not produce an answer.",
@@ -360,7 +283,6 @@ __all__ = [
     "LiveVisionResult",
     "StreamingVisionConfig",
     "VisionChunk",
-    "VisionFunctionsConfig",
     "VisionRequest",
     "VisionResult",
     "VisionToolsConfig",
