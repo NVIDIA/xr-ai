@@ -9,6 +9,23 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-30 — Cosmos3 Nano Reasoner becomes the default VLM
+
+The local VLM service and sample profiles now default to the text-output
+Reasoner from the unified `nvidia/Cosmos3-Nano` checkpoint. Standard
+`vllm serve` loads only that Reasoner tower; xr-ai deliberately does not use
+the Generator's separate `--omni --model-class-name
+Cosmos3OmniDiffusersPipeline` path. The reference configs enable NVIDIA's
+recommended `--async-scheduling` flag and use the 26.07 NGC vLLM image;
+vlm-server's pip dependency moves to vLLM 0.23 or newer, the supported Cosmos3
+baseline.
+
+The client profile is a new `cosmos3_nano_reasoner` preset rather than a
+rewrite of `cosmos_vlm`: Cosmos3 does not use Cosmos-Reason1's
+`enable_thinking` chat-template default, and keeping the old preset preserves a
+clean Cosmos-Reason1 compatibility option. Hosted NIM profiles use the
+Reasoner-specific `nvidia/cosmos3-nano-reasoner` served-model name.
+
 ### 2026-07-28 — Voice adapters and conversation recall
 
 Added `xr_ai_nat.adapters.voice` (`as_voice_handler`, `record_voice_transcripts`)

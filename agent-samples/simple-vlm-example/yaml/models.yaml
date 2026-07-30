@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Default model endpoints for simple-vlm-example (Cosmos VLM profile).
+# Default model endpoints for simple-vlm-example (Cosmos3 Reasoner profile).
 # To use the Nemotron-Omni backend instead, point models_yaml at
 # yaml/models.omni.yaml in simple_vlm_example_worker.yaml.
 
@@ -10,7 +10,7 @@ stt:
   base_url: http://localhost:8103
 
 vlm:
-  kind:     preset:cosmos_vlm
+  kind:     preset:cosmos3_nano_reasoner
   base_url: http://localhost:8100
 
 tts:

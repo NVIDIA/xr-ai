@@ -119,7 +119,8 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     quirks live behind one seam: reasoning-field aliasing (nano_v3 →
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
-    for the seven in-tree services.  Future backends (LiteLLM, vendor SDKs)
+    for the in-tree services, including distinct Cosmos3 Nano Reasoner and
+    Cosmos-Reason1 VLM profiles. Future backends (LiteLLM, vendor SDKs)
     plug in as new `kind`s in `factory.py::make_*` without touching the
     protocols or callers.  Workers depend on this instead of rolling their
     own httpx wrappers.
@@ -360,12 +361,15 @@ xr-ai-tests  (tests/)
     `video-mcp-server` rather than redeclared here.
 
 vlm-server  (ai-services/vlm-server/)
-    └── vllm >=0.12.0
+    └── vllm >=0.23.0
     └── pyyaml >=6.0
     └── hf-transfer >=0.1.4
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     └── xr-ai-vllm     [editable: ../../utils/xr-ai-vllm]
-    Model: nvidia/Cosmos-Reason1-7B (Qwen2.5-VL architecture, vLLM).
+    Default model: the text-output Reasoner from nvidia/Cosmos3-Nano. Standard
+    vLLM serving loads only the Reasoner; the Generator's vLLM-Omni path is
+    outside this service. nvidia/Cosmos-Reason1-7B remains configurable with
+    the cosmos_vlm client preset.
     Wrapper Popens `vllm serve` so the launcher's killpg() does not reach
     vLLM — model survives stack restarts (see docs/changelog.md 2026-05-05).
     vllm_backend: pip|docker — pip path uses the wrapper's vllm; docker path
@@ -447,7 +451,7 @@ piper-tts-server  (ai-services/tts/piper/)
 
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
-| `ai-services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
+| `ai-services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `ai-services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `ai-services/tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `ai-services/tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
@@ -533,7 +537,7 @@ provided by the pipeline so the worker only configures the knobs.
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
 in-process.  Model endpoints are configured via `yaml/models.yaml`
-(default: Cosmos profile) or `yaml/models.omni.yaml` (Nemotron-Omni
+(default: Cosmos3 Nano Reasoner profile) or `yaml/models.omni.yaml` (Nemotron-Omni
 on port 8108). Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
 ### model-servers  (agent-samples/model-servers/)
@@ -595,7 +599,7 @@ updated in the same commit**.
 | `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
 | Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `_PERSISTENT_SERVERS` in `agent-samples/xr-render-demo/main.py` |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
-| vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
+| vlm-server YAML config keys (`model`, `model_cache`, `async_scheduling`, …) | `ai-services/vlm-server/vlm_server.yaml`, every per-profile copy in `agent-samples/` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, `docs/adding-cloudxr.md` |
 | `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | xr-render-scene + oxr-mcp + cloudxr-runtime `__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `docs/adding-cloudxr.md`, `docs/xr-render-demo.md` (client-type section) |
 | scene service YAML config keys | `agent-samples/xr-render-demo/scene/scene_service.yaml`, orchestrator process declaration, `docs/xr-render-demo.md` |

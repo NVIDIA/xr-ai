@@ -7,8 +7,7 @@ Spawns the real ``vlm_server`` subprocess against a generated temp YAML, waits
 for the HTTP port to open, issues one chat-completions request with a tiny
 embedded PNG, and checks for a non-empty content string.
 
-Skipped automatically when ``uv`` is missing or no Cosmos-Reason1-7B weights
-are present on disk.
+Skipped automatically when ``uv`` is missing.
 """
 from __future__ import annotations
 
@@ -35,10 +34,10 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 _REPO_ROOT       = Path(__file__).resolve().parent.parent
 _VLM_SERVER_DIR  = _REPO_ROOT / "ai-services" / "vlm-server"
-_DEFAULT_WEIGHTS = Path("~/.cache/huggingface/hub/models--nvidia--Cosmos-Reason1-7B").expanduser()
+_DEFAULT_WEIGHTS = Path("~/.cache/huggingface/hub/models--nvidia--Cosmos3-Nano").expanduser()
 
-# 30 min — enough for a cold first-time weights download (~15 GB) plus
-# vLLM compilation. Cached runs complete in ~60 s.
+# 30 min — enough for a cold first-time weights download plus vLLM compilation.
+# Cached runs complete in ~60 s.
 _STARTUP_TIMEOUT_S   = 1800.0
 _SHUTDOWN_TIMEOUT_S  = 30.0
 
@@ -128,7 +127,7 @@ async def test_vlm_server_chat_completions_smoke():
         cfg_yaml = td_path / "vlm_server.yaml"
         ready_file = td_path / "ready"
         cfg = {
-            "model": "nvidia/Cosmos-Reason1-7B",
+            "model": "nvidia/Cosmos3-Nano",
             "host": "127.0.0.1",
             "port": port,
             "served_model_name": "vlm",
@@ -138,10 +137,12 @@ async def test_vlm_server_chat_completions_smoke():
             "max_model_len": 4096,
             "gpu_memory_utilization": 0.80,
             "enforce_eager": True,  # skip CUDA graph capture for faster smoke
+            "async_scheduling": True,
             "max_images_per_prompt": 1,
             "max_videos_per_prompt": 0,
             # docker backend: nvcc + flashinfer are pre-built in the NGC image.
             "vllm_backend": "docker",
+            "vllm_image": "nvcr.io/nvidia/vllm:26.07-py3",
         }
         cfg_yaml.write_text(yaml.safe_dump(cfg))
 

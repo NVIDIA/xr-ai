@@ -26,7 +26,7 @@ uv run model_servers
 GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). These
 are presets for common configurations; to run on a different GPU, refer to
 {doc}`Running on other GPUs </getting_started/requirements>`.
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
 The default models are public, so no HuggingFace token is required. Set
@@ -47,7 +47,8 @@ channel, or send the literal text `"ping"` — all routes go through the same VL
 pipeline against the latest video frame. Replies arrive as streaming Piper TTS
 audio plus a `vlm.response` text message.
 
-Uses `nvidia/Cosmos-Reason1-7B` (NVIDIA Open Model License + Apache 2.0).
+Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Standard
+vLLM serving loads only the Reasoner, not the separate Generator pipeline.
 
 There are two ways to run it:
 
@@ -60,7 +61,7 @@ uv sync
 uv run simple_vlm_example
 ```
 
-On the very first run weights download from HuggingFace (~23 GB; can take
+On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes). The default model is public — no HuggingFace token needed; set
 `HF_TOKEN` only to lift rate limits and speed or for a gated model (refer to the
 credentials guide).
@@ -115,7 +116,7 @@ endpoint, then tell the worker to use it:
 ```yaml
 # yaml/models.custom.yaml — overlay for a remote VLM endpoint
 vlm:
-  kind:     preset:cosmos_vlm
+  kind:     preset:cosmos3_nano_reasoner
   base_url: https://your-remote-vlm.example.com
 ```
 
@@ -127,6 +128,9 @@ models_yaml: yaml/models.custom.yaml
 When pointing at a remote model, `vlm_server.yaml` is unused — remove the
 `vlm_server` entry from the launcher's process list so no local vLLM process is
 started.
+
+To use Cosmos-Reason1 instead, set `model: nvidia/Cosmos-Reason1-7B` in the
+VLM server YAML and select `preset:cosmos_vlm` in `models.yaml`.
 
 **Hosted NVIDIA NIM** — run the VLM on hosted NIM
 ([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS stay

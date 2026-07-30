@@ -21,10 +21,9 @@ vlm:
   category:    vlm
   # Hosted NIM is OpenAI-compatible; the client appends /v1/chat/completions.
   base_url:    https://integrate.api.nvidia.com
-  # Example model id — confirm the exact slug for your account at
-  # https://build.nvidia.com (any hosted vision model works, e.g.
-  # meta/llama-3.2-11b-vision-instruct).
-  model_name:  nvidia/nemotron-nano-12b-v2-vl
+  # Cosmos3 Nano Reasoner model ID. This is the reasoning VLM, not the
+  # separately served Cosmos3 Generator.
+  model_name:  nvidia/cosmos3-nano-reasoner
   api_key_env: NGC_API_KEY
   # Hosted NIM has no local /health route — skip the worker readiness probe.
   health_check: false

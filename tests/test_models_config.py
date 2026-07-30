@@ -23,8 +23,9 @@ from xr_ai_models.presets import available_presets, get_preset
 # ── preset registry ───────────────────────────────────────────────────────
 
 
-def test_seven_presets_registered() -> None:
+def test_eight_presets_registered() -> None:
     assert set(available_presets()) == {
+        "cosmos3_nano_reasoner",
         "cosmos_vlm",
         "llama_nemotron",
         "magpie_tts",
@@ -128,7 +129,7 @@ nim_llm:
     assert nim.base_url == "https://integrate.api.nvidia.com"
 
 
-def test_vlm_preset(tmp_path) -> None:
+def test_cosmos1_vlm_preset_remains_available(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
 vlm:
   kind:     preset:cosmos_vlm
@@ -142,6 +143,20 @@ vlm:
     }
     assert spec.capabilities.get("vision") is True
     assert spec.capabilities.get("video")  is True
+
+
+def test_cosmos3_nano_reasoner_preset(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+vlm:
+  kind:     preset:cosmos3_nano_reasoner
+  base_url: http://localhost:8100
+"""))
+    spec = cfg.vlm("vlm")
+    assert isinstance(spec, VLMSpec)
+    assert spec.model_name == "vlm"
+    assert spec.default_extras == {}
+    assert spec.capabilities.get("vision") is True
+    assert spec.capabilities.get("video") is True
 
 
 def test_stt_and_tts_presets(tmp_path) -> None:

@@ -130,13 +130,13 @@ FP4; swap to the BF16 variant for Hopper / Ampere.
 
 This is the model that runs the multi-step tool-calling loop.
 
-## VLM — Cosmos-Reason1-7B
+## VLM — Cosmos3 Nano Reasoner
 
 Port 8100 (`vlm-server`).
 
-Loaded in-process by `vlm-server` via HuggingFace transformers
-(Qwen2.5-VL architecture). `<think>…</think>` blocks are stripped before
-returning. Native vision functions read recorded images or acquire a current
+Served by standard vLLM from the unified `nvidia/Cosmos3-Nano` checkpoint,
+which loads only the text-output Reasoner rather than the separate Generator
+pipeline. Native vision functions read recorded images or acquire a current
 participant frame, encode it as an image URL, and invoke the shared
 `xr-ai-models` VLM service. Only invoked when the user asks a visual question.
 
