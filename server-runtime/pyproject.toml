@@ -31,7 +31,7 @@ dependencies = [
     # TLS certificate generation
     "cryptography>=42.0",
     # NVENC video recording (opt-in at runtime via video_recording.enabled in YAML)
-    "PyNvVideoCodec>=1.0",
+    "PyNvVideoCodec>=2.2",
 ]
 
 [project.scripts]

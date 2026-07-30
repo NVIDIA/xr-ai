@@ -15,11 +15,9 @@
 ## Python version
 
 Every `pyproject.toml` in this repo pins `requires-python = ">=3.11,<3.13"` by
-convention. The upper bound exists because `PyNvVideoCodec` (used by
-`xr-media-hub` and `video-memory-service` for NVENC encode / NVDEC decode) does not
-yet publish wheels for Python 3.13. With the cap in place, `uv sync` will pick
-3.12 even on a host where 3.13 is also installed. Loosen the upper bound only
-after `PyNvVideoCodec` ships 3.13 wheels.
+convention. PyNvVideoCodec 2.2 publishes Python 3.13 wheels, but the rest of the
+repository dependency graph and test matrix have not been qualified on 3.13.
+Loosen the upper bound only as a coordinated repository-wide change.
 
 A project may state a different range when its dependencies require it; the
 constraints stay honest because `.github/workflows/lock-check.yml` runs
@@ -220,7 +218,7 @@ xr-media-hub  (server-runtime/)
     └── numpy >=1.24
     └── pyyaml >=6.0
     └── cryptography >=42.0
-    PyNvVideoCodec >=1.0 (NVENC H.264 encoder; used when video_recording.enabled: true)
+    PyNvVideoCodec >=2.2 (NVENC H.264 encoder; used when video_recording.enabled: true)
 
 transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     └── uvicorn[standard] >=0.29
@@ -261,7 +259,7 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
 xr-video-memory-service  (services/video-memory-service/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
-    └── PyNvVideoCodec >=1.0
+    └── PyNvVideoCodec >=2.2
     └── Pillow >=10.0
     └── numpy >=1.24
     └── pyyaml >=6.0

@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-30 — Adopt the PyNvVideoCodec 2.2 packet contract
+
+`xr-media-hub` and `video-memory-service` now require PyNvVideoCodec 2.2 or
+newer. Version 2.2 changed `Encode()` and `EndEncode()` from returning one byte
+string to returning a list of packet dictionaries whose `data` values hold the
+bitstream. The recorder consumes that packet contract directly; passing the new
+result to `bytearray.extend()` dropped every frame with
+`TypeError: 'dict' object cannot be interpreted as an integer`. The
+historical-video GPU fixture follows the same contract and no longer masks type
+errors as unavailable NVENC hardware.
+
 ### 2026-07-29 — xr-ai-models internal modules are privatized
 
 The `xr-ai-models` implementation modules `config.py`, `factory.py`,
