@@ -161,7 +161,7 @@ jobs:
           cache-dependency-glob: |
             tests/pyproject.toml
             tests/uv.lock
-            agent-sdk/pyproject.toml
+            agent-sdk/xr-ai-hub-client/pyproject.toml
             server-runtime/pyproject.toml
 
       - name: Install Python 3.12
