@@ -121,7 +121,7 @@ vlm:
 
 ```yaml
 # yaml/simple_vlm_example_worker.yaml — point the worker at the overlay
-models_yaml: yaml/models.custom.yaml
+models_yaml: models.custom.yaml
 ```
 
 When pointing at a remote model, `vlm_server.yaml` is unused — remove the

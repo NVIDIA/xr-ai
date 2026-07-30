@@ -173,6 +173,12 @@ channel, or send the literal text `"ping"` — all routes go through the
 same VLM pipeline against the latest video frame.  Replies arrive as
 streaming Piper TTS audio plus a `vlm.response` text message.
 
+The packaged worker composes the NAT-native streaming vision function with
+`xr-ai-voice`'s `VoiceSession`; Pipecat remains private to that runtime and no
+MCP client is involved. See the
+[sample README](agent-samples/simple-vlm-example/README.md) for the worker
+layout and configuration boundaries.
+
 Uses `nvidia/Cosmos-Reason1-7B` (NVIDIA Open Model License + Apache 2.0).
 
 There are two ways to run it:
@@ -249,7 +255,7 @@ vlm:
 
 ```yaml
 # yaml/simple_vlm_example_worker.yaml — point the worker at the overlay
-models_yaml: yaml/models.custom.yaml
+models_yaml: models.custom.yaml
 ```
 
 When pointing at a remote model, `vlm_server.yaml` is unused — remove

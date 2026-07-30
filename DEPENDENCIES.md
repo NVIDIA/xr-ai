@@ -73,14 +73,14 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     └── pipecat-ai >=1.3
     └── numpy >=1.24
     └── scipy >=1.11
-    Voice runtime introduced alongside xr-ai-pipecat (no consumers yet; no
-    sample migrated). Exposes the ``VoiceSession`` public API plus the
-    ``VoiceHandler`` / ``VoiceQuery`` / ``VoiceResponse`` / ``VoiceTurn`` handler
-    surface, ``HubVoiceTransport``, ``VadConfig``, and ``TextMessageInput``;
-    Pipecat, audio framing, and pipeline processors are implementation details.
-    Readiness is health-based, split across the ``_readiness`` / ``_session``
-    modules. Not a dep of xr-ai-hub-client itself — import only in workers that opt
-    into the voice runtime.
+    Native voice runtime used by simple-vlm-example. Exposes the
+    ``VoiceSession`` public API plus the ``VoiceHandler`` / ``VoiceQuery`` /
+    ``VoiceResponse`` / ``VoiceTurn`` handler surface, ``HubVoiceTransport``,
+    ``VadConfig``, and ``TextMessageInput``; Pipecat, audio framing, and
+    pipeline processors are implementation details. Readiness is health-based,
+    split across the ``_readiness`` / ``_session`` modules. Not a dep of
+    xr-ai-hub-client itself — import only in workers that opt into the voice
+    runtime.
 
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24
@@ -89,9 +89,9 @@ xr-ai-voicegate  (utils/xr-ai-voicegate/)
     + STOP ladder, the lazy listening chime synthesized at the TTS sample
     rate, and the participant-joined greeting hook. Workers feed STT
     transcripts via ``feed`` and register handlers — either one-at-a-time via
-    ``on_*`` setters or together via ``bind(...)``. Consumed inside
-    xr-ai-pipecat by ``VoiceGateProcessor`` so sample workers don't import it
-    directly when they use the unified pipeline.
+    ``on_*`` setters or together via ``bind(...)``. Voice runtimes consume it
+    through ``VoiceGateProcessor``; applications may also load the shared YAML
+    config directly.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
@@ -303,6 +303,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
     └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
+    └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
@@ -502,16 +503,16 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-hub-client`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision] [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (live-frame acquisition and streaming VLM invocation come from the native NAT vision function; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision,voice] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in the hub client, VAD, pipecat-ai, numpy, and scipy; `xr-ai-nat[vision]` pulls in the hub/model clients, httpx, numpy, and Pillow) |
 
-Worker runs on the unified pipecat voice pipeline assembled by
-`xr_ai_pipecat.make_voice_pipeline`. `SimpleVlmBrain` (a
-`BrainProcessor`) adapts the native NAT live-vision function to the voice
-pipeline and owns only the data-channel side path ("ping" + ad-hoc text);
-voice gate (magic phrases, follow-up grace,
-listening chime, stop ack) lives in `xr_ai_voicegate` inside the
-`VoiceGateProcessor`. VAD/STT and sentence-batched TTS are also
-provided by the pipeline so the worker only configures the knobs.
+The packaged worker registers `StreamingVisionConfig` in-process and maps it to
+`VoiceSession` with `xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` owns
+readiness, hub transport, signals, the private Pipecat pipeline, and cleanup;
+`TextMessageInput` routes `"ping"` and ad-hoc text through the same
+participant-aware path as speech. Voice-gate behavior (magic phrases, follow-up
+grace, listening chime, stop acknowledgement), VAD/STT, and sentence-batched TTS
+remain provided by the shared voice runtime. The sample has no direct
+`xr-ai-pipecat` or MCP dependency.
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded

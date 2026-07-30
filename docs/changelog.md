@@ -9,6 +9,22 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-30 — Simple VLM adopts the native voice runtime
+
+`simple-vlm-example` is the first sample migrated from direct
+`xr-ai-pipecat` assembly to the public `xr-ai-voice` runtime. Its worker is now
+a named package with separate entry-point, configuration, application, and
+prompt resources. `VoiceSession` owns readiness, ready-file creation, hub
+transport, voice-gate processing, signals, turn cancellation, and cleanup,
+while the application composes `StreamingVisionConfig` through
+`xr_ai_nat.adapters.as_voice_handler`.
+
+Voice, typed text, and `ping` continue through one streaming VLM path;
+participant departure releases live-frame state and newer turns interrupt
+superseded speech. Transcript persistence is not added because this sample has
+no conversation-memory behavior to preserve. `xr-ai-pipecat` remains available
+for `xr-render-demo` and other unmigrated consumers.
+
 ### 2026-07-30 — Retire the superseded xr-ai-capabilities package
 
 `xr-ai-capabilities` and its unused `VisionModule` are removed after production

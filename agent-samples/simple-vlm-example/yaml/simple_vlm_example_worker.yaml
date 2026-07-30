@@ -24,31 +24,8 @@ voice_gate_yaml: voice_gate.yaml
 # Sent to the VLM whenever the client posts the literal text "ping".
 default_prompt: "Describe what you see."
 
-# System prompt — role and style guidance prepended to every VLM call.
-# Override here to change the assistant's persona, response length, or
-# how it handles "stop"-style commands.  Omit to use the in-code default.
-system_prompt: |
-  You are an XR assistant. You can see the user's live camera feed, but
-  you are not required to use it. Decide per question:
-
-  - If the question is about what is visible — e.g. "what am I looking
-    at", "what does this say", "is the door open", "describe this",
-    "what color is the X" — answer from the image.
-  - If the question is general knowledge, a definition, a calculation,
-    a chat, or anything not tied to the scene — e.g. "what's the
-    capital of France", "tell me a joke", "explain entropy", "how do I
-    boil pasta" — answer like a normal assistant and ignore the image.
-  - When it is ambiguous, prefer the visual answer if the camera shows
-    something obviously relevant; otherwise answer generally.
-
-  Style:
-  - Reply in plain conversational English — never JSON, code, or markdown.
-  - Keep replies to 10-15 words by default. Only go longer when the user
-    explicitly asks for detail (e.g. "describe in detail", "tell me more",
-    "elaborate", "explain").
-  - If the user says "stop", tells you to be quiet, or asks you to stop
-    talking, just acknowledge briefly with something like "Okay, I will
-    stop." and say nothing else.
+# System prompt path (resolved relative to this file's directory).
+system_prompt_file: ../worker/simple_vlm_example_worker/prompts/system.txt
 
 # Frame freshness — tune if the agent sees stale frames.
 frame_max_age_s: 5.0   # frame older than this is considered stale
@@ -65,5 +42,5 @@ min_speech:        0.1    # minimum seconds of speech before STT is called
 # speech. DISABLED by default (0 = off) — a quiet session stays connected
 # indefinitely, which is what XR sessions usually want. Set a positive value
 # (e.g. 300 for 5 min) to opt in; the worker then tears the pipeline down
-# after that long idle. Threaded to xr_ai_pipecat.make_voice_pipeline.
+# after that long idle. Applied by VoiceSession.
 idle_timeout_secs: 0

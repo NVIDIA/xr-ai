@@ -10,26 +10,24 @@ name = "simple-vlm-example-worker"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "xr-ai-hub-client",
     "xr-ai-logging",
     "xr-ai-models",
-    "xr-ai-nat[vision]",
-    "xr-ai-pipecat",
+    "xr-ai-nat[vision,voice]",
+    "xr-ai-voice",
+    "xr-ai-voicegate",
+    "loguru>=0.7",
     "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
-xr-ai-hub-client        = { path = "../../../agent-sdk/xr-ai-hub-client", editable = true }
-xr-ai-logging      = { path = "../../../utils/xr-ai-logging", editable = true }
-xr-ai-models       = { path = "../../../agent-sdk/xr-ai-models", editable = true }
-xr-ai-nat          = { path = "../../../agent-sdk/xr-ai-nat", editable = true }
-xr-ai-pipecat      = { path = "../../../agent-sdk/xr-ai-pipecat", editable = true }
+xr-ai-logging   = { path = "../../../utils/xr-ai-logging", editable = true }
+xr-ai-models    = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-nat       = { path = "../../../agent-sdk/xr-ai-nat", editable = true }
+xr-ai-voice     = { path = "../../../agent-sdk/xr-ai-voice", editable = true }
+xr-ai-voicegate = { path = "../../../utils/xr-ai-voicegate", editable = true }
 
 [project.scripts]
-simple_vlm_example_worker = "simple_vlm_example_worker:run"
+simple_vlm_example_worker = "simple_vlm_example_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = [
-    "simple_vlm_example_worker.py",
-    "agent.py",
-]
+packages = ["simple_vlm_example_worker"]
