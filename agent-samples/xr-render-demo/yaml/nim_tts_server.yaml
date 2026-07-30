@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Self-hosted NIM: Riva TTS (magpie). Workers reach the gRPC port via the
+# riva_grpc model kind; http_port serves /v1/health/ready only.
+image:     nvcr.io/nim/nvidia/magpie-tts-multilingual:latest
+http_port: 9011
+grpc_port: 50052
+
+# Repo-root models/ (resolved relative to this file).
+nim_cache: ../../../models/nim
+
+# GPU 0 with CloudXR + LOVR + parakeet; the LLM and VLM share GPU 1.
+cuda_visible_devices: "0"

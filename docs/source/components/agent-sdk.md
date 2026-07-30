@@ -197,6 +197,13 @@ sent as an `Authorization: Bearer <value>` header on every request.
 `health()` return `True` without a request — otherwise a worker's readiness
 gate would block forever.
 
+NIM speech (Riva over gRPC, not OpenAI `/v1/audio`) is covered by the
+`riva_grpc` STT/TTS kind. It requires the `riva` extra (`xr-ai-models[riva]`)
+and serves self-hosted Riva/NIM speech containers as well as hosted NVCF
+endpoints (via `function_id:`). Its STT input must be 16-bit PCM: a 16-bit
+PCM WAV (any other sample width raises `ValueError`) or raw int16 PCM with
+an explicit `sample_rate=`.
+
 Non-OpenAI-compatible backends can be added as new `kind`s without changing the
 protocols or callers.
 

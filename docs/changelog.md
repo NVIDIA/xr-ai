@@ -59,6 +59,64 @@ small persistent vLLM embedding server joins the shared model-server stack.
 This replaces the prototype's FastMCP boundary and synchronous HTTP client
 without coupling samples to the retrieval implementation.
 
+### 2026-07-31 — Self-hosted NIM containers via deployment profiles
+
+Users can pull optimized NIM containers from NGC and serve models on their
+own GPUs, per sample and per model role. Defaults are untouched: `local`
+stays the shipped backend; everything here is opt-in.
+
+**Profile-selected NIM hosting.** Each sample ships a `models.nim_local.json`
+deployment profile alongside `models.local.json`/`models.hosted.json`.
+Selecting it (`models_config` in the worker YAML) serves the LLM/VLM roles
+from self-hosted NIM containers and speech from Riva NIM containers; each
+entry's `deployment` section names the `nim_server` service the orchestrator
+launches (config `yaml/nim_<role>_server.yaml`). Defaults are untouched:
+`models.local.json` stays the shipped profile; everything here is opt-in.
+`models.nim_local.json` requires `NGC_API_KEY`.
+
+**Generic container runner, not per-model wrappers.** `ai-services/nim-server`
+is one `nim_server` command parameterized by YAML (image, http/grpc ports,
+cache, GPUs); orchestrators list one Process row per NIM with a distinct
+`config=`. It dispatches through `xr_ai_vllm.serve_nim`, and NIM and vLLM
+docker containers share one lifecycle implementation,
+`_docker.run_container()` (reuse-if-healthy, adopt a running-but-not-ready
+container, stopped-container restart, signal cleanup, log streaming,
+post-mortem). NIM containers get `NGC_API_KEY` (nvcr.io pull + engine
+download) passed by name only, so the value stays off the ps-visible argv;
+docker resolves it from the wrapper's environment. They use bridge
+networking with `-p` maps to each family's internal defaults (LLM/VLM 8000;
+Riva gRPC 50051 + HTTP 9000): env-var port overrides are honored
+inconsistently across NIM images, and host networking collides with whatever
+owns the internal default port. Each container gets a world-writable cache
+volume under `models/nim/` (NIM images disagree about users: Riva speech
+runs as root, LLM/VLM as uid 1000, and forcing `-u` breaks Riva), and
+readiness gates on `/v1/health/ready`. `stop_persistent_servers` tears NIM
+containers down too: it looks up containers by the `xr-ai-vllm.port=<port>`
+label before probing health, because NIM answers readiness only at
+`/v1/health/ready` and a `/health` probe would silently skip it.
+
+**New model kind: `riva_grpc` (STT/TTS).** NIM speech is Riva over gRPC, not
+OpenAI `/v1/audio`, so it cannot ride the `openai_compat` client.
+`_riva_grpc.py` implements `STTService`/`TTSService` via `nvidia-riva-client`
+(sync SDK, wrapped in `asyncio.to_thread`); self-hosted containers use a
+local `base_url` with a gRPC channel-ready health probe, hosted NVCF uses
+`function_id:` metadata with `health_check: false`. STT accepts only 16-bit
+PCM input (WAV or raw int16): frames are sent labelled LINEAR_PCM, so any
+other sample width would transcribe as garbage with no service error. TTS
+uses streaming `synthesize_online` concatenated: the batch `Synthesize` RPC
+segfaults some Riva NIM builds (magpie-tts-multilingual) after producing its
+response. The dependency is an optional extra (`xr-ai-models[riva]`),
+imported lazily in `make_stt`/`make_tts` so the base install stays
+gRPC-free. A cleartext-credential guard mirrors the HTTP one.
+
+Example overlays ship with NGC-catalog-validated images (llama-3.1-8b,
+cosmos-reason1-7b, parakeet-tdt-0.6b-v2, magpie-tts-multilingual). `NIM_KVCACHE_PERCENT` (a fraction of total GPU
+despite the name) and `NIM_PASSTHROUGH_ARGS` (vLLM tool-calling flags, off
+by default in LLM NIM profiles) are the load-bearing env knobs documented in
+the yamls.
+
+Not covered by CI: an actual container pull/run (multi-GB, GPU). Argv
+construction and overlay parsing are unit-tested (`tests/test_nim_docker.py`).
 ### 2026-07-31 — GitHub Pages publishes immutable release documentation
 
 The documentation site now uses `sphinx-multiversion` to render `main` as

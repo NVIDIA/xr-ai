@@ -180,6 +180,33 @@ vlm:
 gate would block forever. See
 [`docs/ai-services.md`](../../docs/ai-services.md#hosting-models-on-nvidia-nim).
 
+## Riva gRPC speech (NIM STT/TTS)
+
+NIM speech is Riva over gRPC, not OpenAI `/v1/audio`. The `riva_grpc` kind
+covers it, for self-hosted Riva/NIM speech containers and for hosted NVCF
+endpoints alike. It requires the `riva` extra (`xr-ai-models[riva]` →
+`nvidia-riva-client`); the import is deferred to `make_stt`/`make_tts` so
+the base install stays gRPC-free.
+
+```yaml
+stt:
+  kind:      riva_grpc
+  category:  stt
+  base_url:  localhost:50051   # self-hosted container's gRPC port
+  language:  en-US
+```
+
+STT input must be 16-bit PCM: `transcribe` accepts a 16-bit PCM WAV (any
+other sample width raises `ValueError`, since the frames go to Riva labelled
+LINEAR_PCM and would transcribe as garbage) or raw int16 PCM with an
+explicit `sample_rate=`.
+
+TTS additionally takes `voice:` and `sample_rate:` (default 44100).
+`health_check: true` (the default) runs a gRPC channel-ready probe. For a
+hosted NVCF endpoint, set `base_url: grpc.nvcf.nvidia.com:443`,
+`use_ssl: true`, `api_key_env`, the model's `function_id:` from
+build.nvidia.com, and `health_check: false` (no health surface).
+
 Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
 `kind`s in `_factory.py::make_*`; the protocols and callers do not change.
 

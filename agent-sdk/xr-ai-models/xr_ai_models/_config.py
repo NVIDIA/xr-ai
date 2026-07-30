@@ -21,10 +21,11 @@ from ._utils import merge_dicts
 
 
 Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
-ModelKind = Literal["openai_compat"]
+ModelKind = Literal["openai_compat", "riva_grpc"]
 Ownership = Literal["managed", "reused", "external"]
 
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
+KIND_RIVA_GRPC: ModelKind = "riva_grpc"
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,10 @@ class STTSpec:
     timeout: float = 30.0
     health_check: bool = True
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    # riva_grpc only — hosted NVCF selects the model by function-id metadata.
+    function_id: str | None = None
+    use_ssl: bool = False
+    language: str = "en-US"
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,12 @@ class TTSSpec:
     timeout: float = 30.0
     health_check: bool = True
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+    # riva_grpc only — hosted NVCF selects the model by function-id metadata.
+    function_id: str | None = None
+    use_ssl: bool = False
+    voice: str = ""
+    language: str = "en-US"
+    sample_rate: int = 44100
 
 
 @dataclass(frozen=True)
@@ -255,10 +266,21 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         common["api_key_env"] = _require_str(body, "api_key_env")
     if category in ("llm", "vlm"):
         return _construct_chat(category, body, common)
+    speech: dict[str, Any] = {
+        **common,
+        "timeout":     float(body.get("timeout", 30.0)),
+        "function_id": body.get("function_id"),
+        "use_ssl":     bool(body.get("use_ssl", False)),
+        "language":    str(body.get("language", "en-US")),
+    }
     if category == "stt":
-        return STTSpec(**common, timeout=float(body.get("timeout", 30.0)))
+        return STTSpec(**speech)
     if category == "tts":
-        return TTSSpec(**common, timeout=float(body.get("timeout", 30.0)))
+        return TTSSpec(
+            **speech,
+            voice=str(body.get("voice", "")),
+            sample_rate=int(body.get("sample_rate", 44100)),
+        )
     if category == "embedding":
         return EmbeddingSpec(
             **common,

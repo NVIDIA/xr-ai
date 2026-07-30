@@ -52,7 +52,7 @@ def wait_until_healthy(
     """
     while True:
         if not is_alive():
-            log.error("vLLM exited before /health became reachable")
+            log.error("server exited before its health endpoint became reachable")
             raise SystemExit(1)
         if health_ok(url, timeout=2.0):
             return
@@ -78,7 +78,7 @@ def idle_until_stopped(url: str, log_prefix: str, poll_s: float = 5.0) -> None:
     try:
         while not stopped[0]:
             if not health_ok(url, timeout=2.0):
-                print(f"[{log_prefix}] vLLM /health unreachable — exiting", flush=True)
+                print(f"[{log_prefix}] health endpoint unreachable — exiting", flush=True)
                 return
             time.sleep(poll_s)
     finally:
