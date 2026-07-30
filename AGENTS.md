@@ -13,10 +13,9 @@ historical decisions in `docs/changelog.md`.
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
-agent-sdk/          # Six packages:
+agent-sdk/          # Five packages:
                     #   xr-ai-hub-client   — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
-                    #   xr-ai-capabilities — framework-agnostic reusable agent features (VisionModule)
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
                     #   xr-ai-voice        — voice runtime (VoiceSession); introduced alongside xr-ai-pipecat
                     #   xr-ai-nat          — typed, in-process NAT functions for XR capabilities
@@ -171,27 +170,15 @@ The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
   `yaml/voice_gate.yaml` (`magic_phrases: ["hey agent"]`, or `[]` for
   always-on). No sample code — config only.
 
-**Reusable capabilities** live in `xr-ai-capabilities` — framework-agnostic
-features that talk to the hub through a `ProcessorEndpoint` and depend only on
-the core SDK (no pipecat), so both pipecat and non-pipecat agents can compose
-them:
-
-- **Live-camera vision Q&A** — `VisionModule` (frame tracking,
-  camera-on-demand, the VLM call). Two call styles over one
-  frame-acquisition path: `ask(pid, q)` **streams** tokens (for TTS) and
-  `perceive(pid, q)` returns a **string** (for agentic tool loops, raising
-  `VisionUnavailable`). `pixels` is its frame → JPEG codec. A pipecat brain
-  constructs it with `VisionModule(transport.endpoint, vlm)`.
-
 A new vision sample's brain therefore reduces to a Pipecat adapter over a
 native vision function; a voice sample gets the wake word from config alone.
 
 ### Scope decision and named follow-ups
 
-The capabilities/pipeline boundary is now explicit: `xr-ai-pipecat` stays "voice
-pipeline plumbing" and reusable capabilities live in `xr-ai-capabilities`, which
-has no pipeline-framework dependency. Keep new reusable agent building blocks in
-`xr-ai-capabilities` — `xr-ai-pipecat` must not become a catch-all.
+The function/pipeline boundary is explicit: `xr-ai-pipecat` stays "voice
+pipeline plumbing", while reusable typed agent functions live in `xr-ai-nat`.
+Application-specific capabilities stay with their application;
+`xr-ai-pipecat` must not become a catch-all.
 Planned structural follow-ups (own PRs):
 
 1. **`MCPToolset`.** `RenderSceneProcessor` still takes one `McpClient` per MCP
@@ -204,7 +191,6 @@ Planned structural follow-ups (own PRs):
    brain = AgentBrain(
        transport=transport, llm=llm,
        toolsets=[MCPToolset(oxr, _OXR_TOOLS), MCPToolset(render)],  # render = catch-all
-       capabilities=[VisionModule(transport.endpoint, vlm)],
    )
    ```
 

@@ -82,22 +82,6 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     modules. Not a dep of xr-ai-hub-client itself — import only in workers that opt
     into the voice runtime.
 
-xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
-    └── xr-ai-hub-client   [editable: ../xr-ai-hub-client]
-    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-models  [editable: ../xr-ai-models]
-    └── numpy >=1.24
-    └── Pillow >=10.0
-    Framework-agnostic, reusable agent capabilities (see AGENTS.md → "Agent
-    sample architecture"). A capability talks to the hub through a
-    ``ProcessorEndpoint`` and depends only on the core SDK — NOT on pipecat or
-    any pipeline framework — so both pipecat and non-pipecat agents can compose
-    it. Hosts ``pixels`` (frame → PIL → JPEG; numpy + Pillow) and ``vision``
-    (VisionModule — live-camera VLM Q&A with camera-on-demand, exposing ``ask``
-    for streaming TTS and ``perceive`` for agentic tool loops), so vision
-    samples no longer copy that code per-worker. A pipecat brain wires it up by
-    passing ``transport.endpoint``.
-
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24
     └── pyyaml >=6.0
@@ -316,9 +300,8 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
 
 xr-ai-tests  (tests/)
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub-client]
-    └── xr-ai-capabilities      [editable: ../agent-sdk/xr-ai-capabilities]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
-    └── xr-ai-nat               [editable: ../agent-sdk/xr-ai-nat]
+    └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
@@ -335,9 +318,9 @@ xr-ai-tests  (tests/)
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
-    └── fastmcp >=3.4,<4 (MCP adapter contracts and tests marked `gpu`)
-    └── Pillow >=10.0   (only used by tests marked `gpu`)
-    └── pyyaml >=6.0    (only used by tests marked `gpu`)
+    └── fastmcp >=3.4,<4 (CPU MCP adapter contracts and GPU MCP tests)
+    └── Pillow >=10.0   (CPU native-vision and GPU image tests)
+    └── pyyaml >=6.0    (CPU subprocess/service configs and GPU service tests)
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages

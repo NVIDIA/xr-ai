@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-30 — Retire the superseded xr-ai-capabilities package
+
+`xr-ai-capabilities` and its unused `VisionModule` are removed after production
+samples migrated live and recorded vision behavior to the typed
+`StreamingVisionConfig` and `VisionToolsConfig` functions in `xr-ai-nat`.
+Keeping both surfaces duplicated frame acquisition and VLM orchestration without
+an active consumer. This removal does not add a replacement abstraction:
+reusable agent functions remain NAT-first, while application-specific
+capabilities stay with their application.
+
 ### 2026-07-30 — Adopt the PyNvVideoCodec 2.2 packet contract
 
 `xr-media-hub` and `video-memory-service` now require PyNvVideoCodec 2.2 or

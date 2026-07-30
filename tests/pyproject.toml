@@ -13,9 +13,8 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-hub-client",
-    "xr-ai-capabilities",
     "xr-ai-models",
-    "xr-ai-nat[agents,services]",
+    "xr-ai-nat[agents,services,vision]",
     "xr-ai-pipecat",
     "xr-ai-voice",
     "xr-media-hub",
@@ -36,7 +35,7 @@ dependencies = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "numpy>=1.24",
-    # GPU/MCP test deps — only exercised by tests marked `gpu`.
+    # Direct test deps used across CPU MCP/vision/service tests and GPU coverage.
     "fastmcp>=3.4,<4",
     "Pillow>=10.0",
     "pyyaml>=6.0",
@@ -44,7 +43,6 @@ dependencies = [
 
 [tool.uv.sources]
 xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub-client",                        editable = true }
-xr-ai-capabilities    = { path = "../agent-sdk/xr-ai-capabilities",     editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
 xr-ai-nat             = { path = "../agent-sdk/xr-ai-nat",              editable = true }
 xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable = true }
