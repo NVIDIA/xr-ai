@@ -35,7 +35,7 @@ Config (vlm_mcp_server.yaml)
     port:                 8240
     models:
       vlm:
-        kind:     preset:cosmos_vlm
+        kind:     preset:cosmos3_nano_reasoner
         base_url: http://localhost:8100
     vlm_request_timeout_s: 60.0
     enable_thinking: false
@@ -98,8 +98,8 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
         if "timeout" not in vlm_entry:
             vlm_entry["timeout"] = vlm_request_timeout_s
 
-        # The cosmos_vlm preset defaults enable_thinking to False; an explicit
-        # top-level true must reach the wire by overriding default_extras.
+        # An explicit top-level true must reach backends that support the
+        # enable_thinking chat-template flag.
         if enable_thinking:
             extras = dict(vlm_entry.get("default_extras") or {})
             ctk = dict(extras.get("chat_template_kwargs") or {})
@@ -114,7 +114,7 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
     elif vlm_server:
         logger.warning(
             "vlm_mcp_server.yaml: 'vlm_server' key is deprecated — "
-            "migrate to a 'models:' block with kind: preset:cosmos_vlm"
+            "migrate to a 'models:' block with an explicit VLM preset"
         )
         chat_template_kwargs: dict[str, Any] = {"enable_thinking": enable_thinking}
         spec = VLMSpec(

@@ -38,16 +38,14 @@ agent_llm:
     tool_calls: true
     reasoning:  true
 
-# Visual question answering used by native vision functions.
-# nvidia/cosmos-reason1-7b mirrors the local default (ai-services/vlm-server
-# also runs Cosmos-Reason1-7B), so the render-demo's ask_image prompts behave
-# the same on NIM as locally. Swap to any hosted vision model on
-# build.nvidia.com if you prefer.
+# Visual question answering used by native vision functions. The hosted model
+# is the Cosmos3 Nano Reasoner, matching the role of the local Reasoner-only
+# vLLM service; it is not the separate Cosmos3 Generator.
 vlm:
   kind:        openai_compat
   category:    vlm
   base_url:    https://integrate.api.nvidia.com
-  model_name:  nvidia/cosmos-reason1-7b
+  model_name:  nvidia/cosmos3-nano-reasoner
   api_key_env: NGC_API_KEY
   health_check: false
   capabilities:

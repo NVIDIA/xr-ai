@@ -381,7 +381,7 @@ to run while the stack is down.
 time.
 
 **Cause:** model weights are downloading from HuggingFace into `models/` at
-the repo root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).
+the repo root (gitignored; the Cosmos3 checkpoint alone is tens of GB).
 
 **Fix:** wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If a download fails, check that `HF_TOKEN` is set if the model

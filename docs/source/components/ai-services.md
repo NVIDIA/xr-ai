@@ -19,7 +19,7 @@ tool-calling, reasoning, and hardware trade-offs documented below.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
-| `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
+| `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `ai-services/tts/magpie/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
@@ -114,7 +114,7 @@ agent_llm:
   base_url: http://localhost:8107
 
 vlm:
-  kind:     preset:cosmos_vlm
+  kind:     preset:cosmos3_nano_reasoner
   base_url: http://localhost:8100
 
 stt:
@@ -145,7 +145,7 @@ vlm:
   kind:        openai_compat
   category:    vlm
   base_url:    https://integrate.api.nvidia.com   # client appends /v1/...
-  model_name:  nvidia/cosmos-reason1-7b           # confirm slug at build.nvidia.com
+  model_name:  nvidia/cosmos3-nano-reasoner       # Reasoner, not Generator
   api_key_env: NGC_API_KEY                         # → Authorization: Bearer
   health_check: false                              # hosted NIM has no /health
   capabilities: { vision: true, streaming: true }
@@ -223,12 +223,15 @@ Both modes honor identical configuration keys — same model, same port, same vL
 flags. The dispatcher lives in `utils/xr-ai-vllm/`. Switching is one YAML edit:
 
 ```yaml
+# vlm-server (Cosmos3)
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.04-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.07-py3
 ```
 
-`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.04-py3`; override to pin
-another tag, an internal mirror, or a custom build.
+`vllm_image:` defaults to `nvcr.io/nvidia/vllm:26.07-py3` for vlm-server,
+whose Cosmos3 support requires vLLM 0.23 or newer. The other wrappers retain
+their `26.04-py3` default. Override either to pin another tag, an internal
+mirror, or a custom build.
 
 ### docker mode — prerequisites
 
@@ -274,10 +277,13 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
 
 ## Per-server notes
 
-- **vlm-server** is a thin launcher around `vllm serve` for Cosmos-Reason1-7B
-  (or any Qwen2.5-VL-compatible VLM). vLLM handles weight loading, image
-  decoding, and the OpenAI-compatible HTTP API. Hosting backend is selectable
-  per YAML — refer to *Choosing the vLLM runtime* above.
+- **vlm-server** defaults to the Cosmos3 Nano Reasoner. Standard
+  `vllm serve nvidia/Cosmos3-Nano --async-scheduling` loads only its
+  text-output Reasoner; xr-ai never enables the Generator's separate
+  `--omni --model-class-name Cosmos3OmniDiffusersPipeline` path. Cosmos-Reason1
+  remains available by pairing `model: nvidia/Cosmos-Reason1-7B` with the
+  `cosmos_vlm` client preset. Hosting backend is selectable per YAML — refer
+  to *Choosing the vLLM runtime* above.
 - **llm/llama_nemotron** is a thin wrapper around `vllm serve` for
   `Llama-3.1-Nemotron-Nano-8B-v1`. vLLM handles native Llama-3.1 tool calling
   via the `llama3_json` parser — `tools=[...]` in the request is rendered via

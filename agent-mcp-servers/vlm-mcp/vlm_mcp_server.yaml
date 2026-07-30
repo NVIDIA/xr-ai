@@ -19,19 +19,16 @@ host:                  0.0.0.0
 port:                  8240
 
 # Model configuration — identifies the VLM backend by logical name "vlm".
-# The cosmos_vlm preset targets ai-services/vlm-server/ (Cosmos-Reason1-7B
-# via vLLM). Only base_url needs to be set here; the preset fills in the rest.
+# The cosmos3_nano_reasoner preset targets ai-services/vlm-server/. Only
+# base_url needs to be set here; the preset fills in the rest.
 models:
   vlm:
-    kind:     preset:cosmos_vlm
+    kind:     preset:cosmos3_nano_reasoner
     base_url: http://localhost:8100
 
 # httpx timeout applied to each call to vlm-server.
 vlm_request_timeout_s: 60.0
 
-# Whether to let the VLM produce chain-of-thought reasoning before answering.
-# false (default) — suppresses <think> generation entirely; faster responses,
-#                   better for real-time captioning and voice loops.
-# true             — enables full reasoning; more accurate on complex queries
-#                   but adds several seconds of latency per request.
+# Forward an enable_thinking chat-template flag for backends that support it.
+# Cosmos3 Nano Reasoner does not use this Qwen-specific switch.
 enable_thinking: false

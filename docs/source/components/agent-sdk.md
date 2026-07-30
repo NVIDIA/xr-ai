@@ -60,7 +60,7 @@ agent_llm:
   base_url: http://localhost:8107
 
 vlm:
-  kind:     preset:cosmos_vlm
+  kind:     preset:cosmos3_nano_reasoner
   base_url: http://localhost:8100
 
 stt:
@@ -78,7 +78,8 @@ Refer to `xr_ai_models/presets/`:
 
 | Preset | Service it targets | Notes |
 |---|---|---|
-| `cosmos_vlm`     | vlm-server                | image + video; `enable_thinking=false` by default. Video requires vlm-server's `max_videos_per_prompt >= 1` |
+| `cosmos3_nano_reasoner` | vlm-server          | default; Cosmos3 Nano text-output Reasoner, image + video; video requires `max_videos_per_prompt >= 1` |
+| `cosmos_vlm`     | vlm-server                | Cosmos-Reason1 compatibility option; image + video; `enable_thinking=false` by default; video requires `max_videos_per_prompt >= 1` |
 | `llama_nemotron` | llama-nemotron-llm-server | OpenAI tool calling via llama3_json (server-side) |
 | `nemotron3_nano` | nemotron3-nano-llm-server | reasoning field: `reasoning` |
 | `nemotron_omni`  | nemotron-omni-llm-server  | reasoning field: `reasoning_content`, vision + video |
@@ -151,7 +152,7 @@ vlm:
   kind:        openai_compat
   category:    vlm
   base_url:    https://integrate.api.nvidia.com
-  model_name:  nvidia/cosmos-reason1-7b
+  model_name:  nvidia/cosmos3-nano-reasoner
   api_key_env: NGC_API_KEY    # → Authorization: Bearer <env value>
   health_check: false         # remote endpoints have no local /health route
 ```

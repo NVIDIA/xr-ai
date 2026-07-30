@@ -11,7 +11,7 @@ Servers started
 ---------------
   stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
   agent-llm  — NVIDIA-Nemotron-3-Nano-30B-A3B      port 8107  (vLLM)
-  vlm        — nvidia/Cosmos-Reason1-7B            port 8100  (vLLM)
+  vlm        — nvidia/Cosmos3-Nano Reasoner        port 8100  (vLLM)
   llm        — nvidia/Llama-3.1-Nemotron-Nano-8B   port 8106  (vLLM)
 
 How to run:

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-vlm_server — vLLM launcher for Cosmos-Reason1-7B (or any Qwen2.5-VL-compatible VLM).
+vlm_server — vLLM launcher for Cosmos3 Nano Reasoner (or another vLLM VLM).
 
 Reads config, builds vLLM serve flags, and dispatches through ``xr_ai_vllm.serve``
 to either the pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm``
@@ -26,15 +26,15 @@ Config keys
     max_model_len:           int    vLLM --max-model-len (default: 8192).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.85).
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
+    async_scheduling:        bool   Enable vLLM async scheduling (default: false).
     max_images_per_prompt:   int    Max images per request (default: 1).
     max_videos_per_prompt:   int    Max video items per request (default: 0).
                                     Set >0 only if your worker sends video;
                                     0 skips vLLM's video activation profiling
-                                    at startup, saving tens of GiB on
-                                    Qwen2.5-VL-class models.
+                                    at startup.
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
-                                    (default: nvcr.io/nvidia/vllm:26.04-py3).
+                                    (default: nvcr.io/nvidia/vllm:26.07-py3).
 """
 import json
 import os
@@ -43,7 +43,6 @@ import sys
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
-    DEFAULT_IMAGE,
     load_config,
     resolve_model_cache,
     serve,
@@ -58,8 +57,10 @@ _DEFAULT_TP          = 1
 _DEFAULT_CTX         = 8192
 _DEFAULT_GPU_MEM     = 0.85
 _DEFAULT_EAGER       = False
+_DEFAULT_ASYNC       = False
 _DEFAULT_MAX_IMAGES  = 1
 _DEFAULT_MAX_VIDEOS  = 0
+_DEFAULT_VLLM_IMAGE  = "nvcr.io/nvidia/vllm:26.07-py3"
 
 _CONTAINER_NAME = "xr-ai-vllm-vlm-server"
 
@@ -82,10 +83,11 @@ def run() -> None:
     max_ctx       = int(cfg.get("max_model_len",    _DEFAULT_CTX))
     gpu_mem       = float(cfg.get("gpu_memory_utilization", _DEFAULT_GPU_MEM))
     enforce_eager = bool(cfg.get("enforce_eager",   _DEFAULT_EAGER))
+    async_sched   = bool(cfg.get("async_scheduling", _DEFAULT_ASYNC))
     max_images    = int(cfg.get("max_images_per_prompt", _DEFAULT_MAX_IMAGES))
     max_videos    = int(cfg.get("max_videos_per_prompt", _DEFAULT_MAX_VIDEOS))
     backend       = cfg.get("vllm_backend",         "pip")
-    image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
+    image         = cfg.get("vllm_image",           _DEFAULT_VLLM_IMAGE)
 
     model_cache = resolve_model_cache(cfg, yaml_dir, default="../models")
     cuda_devices = setup_hf_env(cfg, model_cache)
@@ -101,6 +103,8 @@ def run() -> None:
     ]
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
+    if async_sched:
+        extra_serve_args.append("--async-scheduling")
 
     serve(
         backend=backend,

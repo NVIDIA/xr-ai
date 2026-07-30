@@ -1,11 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# vlm-server — vLLM configuration for Cosmos-Reason1-7B.
+# vlm-server — vLLM configuration for the Cosmos3 Nano Reasoner.
 # OpenAI-compatible API at http://localhost:8100/v1  (served-model-name: "vlm")
 # Accepts image_url content blocks (base64 data URLs or HTTP URLs).
+#
+# Standard `vllm serve nvidia/Cosmos3-Nano` loads only the Reasoner. Do not add
+# `--omni` or `--model-class-name Cosmos3OmniDiffusersPipeline`; those select
+# the separate Generator pipeline.
 
-model: nvidia/Cosmos-Reason1-7B
+model: nvidia/Cosmos3-Nano
 
 host: "0.0.0.0"
 port: 8100
@@ -27,21 +31,16 @@ tensor_parallel_size:   1
 max_model_len:          8192
 gpu_memory_utilization: 0.85
 enforce_eager:          false
+# Recommended by NVIDIA for the Cosmos3 Reasoner vLLM path.
+async_scheduling:       true
 
 # Max images accepted per request.
-#
-# Budget note: each Qwen2.5-VL image consumes ~1.5k tokens of context at the
-# default preprocessor settings (smart_resize, max 1280×28 patches), so 4
-# images fit comfortably inside max_model_len=8192 alongside a typical
-# system+user prompt. If you raise this above ~5, also raise max_model_len
-# or tighten the image-preprocessor patch limit, otherwise long multi-image
-# turns will be truncated by vLLM at request time.
+# Raise max_model_len as needed for larger multi-image prompts.
 max_images_per_prompt:  4
 
 # Max video items accepted per request. Default 0 (disabled).
-# Qwen2.5-VL-class models reserve activation memory at startup for the maximum
-# video feature size, which can cost tens of GiB even if no caller ever sends
-# video. Leave at 0 unless your worker sends video_url content blocks.
+# Multimodal models reserve activation memory at startup for the maximum video
+# feature size. Leave at 0 unless your worker sends video_url content blocks.
 max_videos_per_prompt:  0
 
 # vLLM runtime — pip-installed vllm (default) or NGC docker container.
@@ -54,4 +53,4 @@ vllm_backend: docker
 
 # Container image used when vllm_backend: docker.  Override to pin a different
 # tag, an internal mirror, or a custom build.
-vllm_image: nvcr.io/nvidia/vllm:26.04-py3
+vllm_image: nvcr.io/nvidia/vllm:26.07-py3
