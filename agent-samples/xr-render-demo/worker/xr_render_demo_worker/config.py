@@ -8,15 +8,14 @@ import pathlib
 from dataclasses import dataclass
 
 import yaml
+from models_select import compose_models_config
+from xr_ai_models import ModelsConfig
 
 
 @dataclass(frozen=True)
 class WorkerConfig:
-    # Path to the models.yaml file (resolved relative to cwd).
-    models_yaml: str
-
-    # Path to the voice gate YAML.  Resolved the same way as models_yaml —
-    # bare basenames sit next to this worker's config YAML.
+    # Path to the voice gate YAML.  Bare basenames sit next to this
+    # worker's config YAML.
     voice_gate_yaml: str
 
     scene_endpoint: str
@@ -34,32 +33,25 @@ class WorkerConfig:
     idle_timeout_secs: float | None
 
 
-def load_config(path: pathlib.Path | None) -> WorkerConfig:
-    data: dict = {}
-    if path and path.exists():
-        with open(path) as f:
-            data = yaml.safe_load(f) or {}
+def load_models(path: pathlib.Path | None) -> ModelsConfig:
+    """Effective models config for the worker YAML at ``path``.
 
-    # Resolve models_yaml relative to the config file's directory so the path
-    # works regardless of where the worker process is launched from. The
-    # default `"models.yaml"` is a bare basename — it sits next to this
-    # worker's config YAML in `agent-samples/xr-render-demo/yaml/`. When the
-    # launcher passes `--config`, `path.parent` is that yaml dir; when run
-    # bare without `--config`, the relative path falls back to CWD.
-    #
-    # `model_backend: nim` selects the NIM overlay for hosted LLM/VLM services.
-    backend = str(data.get("model_backend", "local")).lower()
-    models_yaml_raw = (
-        "models.nim.yaml" if backend == "nim"
-        else data.get("models_yaml", "models.yaml")
-    )
-    models_yaml = _resolve_relative(models_yaml_raw, path)
+    ``model_backend`` routes each role (stt, tts, llm, vlm) to a models
+    file; bare filenames resolve relative to the config file's directory
+    (`agent-samples/xr-render-demo/yaml/`), or CWD when run without
+    `--config`. The orchestrator reads the same key to decide which model
+    servers to launch.
+    """
+    return compose_models_config(_read_yaml(path), path)
+
+
+def load_config(path: pathlib.Path | None) -> WorkerConfig:
+    data = _read_yaml(path)
     voice_gate_yaml = _resolve_relative(
         data.get("voice_gate_yaml", "voice_gate.yaml"), path,
     )
 
     return WorkerConfig(
-        models_yaml = models_yaml,
         voice_gate_yaml = voice_gate_yaml,
         scene_endpoint = data.get("scene_endpoint", "tcp://127.0.0.1:8320"),
         openxr_endpoint = data.get("openxr_endpoint", "tcp://127.0.0.1:8330"),
@@ -72,6 +64,13 @@ def load_config(path: pathlib.Path | None) -> WorkerConfig:
         idle_timeout_secs = (float(data["idle_timeout_secs"])
                              if data.get("idle_timeout_secs") else None),
     )
+
+
+def _read_yaml(path: pathlib.Path | None) -> dict:
+    if path and path.exists():
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    return {}
 
 
 def _resolve_relative(raw: str, config_path: pathlib.Path | None) -> str:

@@ -16,21 +16,30 @@ from ._utils import merge_dicts
 
 
 Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
+Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
 """A model role supported by :class:`ModelsConfig`."""
 
-ModelKind = Literal["openai_compat"]
+ModelKind = Literal["openai_compat", "riva_grpc"]
 """A supported model-service adapter implementation."""
 
 Readiness = Literal["health", "none"]
 Ownership = Literal["managed", "reused", "external"]
 
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
+KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
 """The adapter kind for OpenAI-compatible HTTP endpoints."""
+KIND_RIVA_GRPC: ModelKind = "riva_grpc"
+"""The adapter kind for Riva gRPC speech clients (the ``riva`` extra)."""
 
 
 @dataclass(frozen=True)
 class AdapterSpec:
-    """API dialect and model-specific request/response behavior."""
+    """API dialect and model-specific request/response behavior.
+
+    The ``riva_grpc`` speech fields ride here: ``function_id`` (hosted NVCF
+    selects the model by function-id metadata), ``use_ssl``, ``language``,
+    and the TTS-only ``voice`` and ``sample_rate``.
+    """
 
     kind: ModelKind = KIND_OPENAI_COMPAT
     """The concrete client implementation used for this role."""
@@ -46,6 +55,12 @@ class AdapterSpec:
 
     default_extras: dict[str, Any] = field(default_factory=dict)
     """Model-specific fields merged into every request payload."""
+
+    function_id: str | None = None
+    use_ssl: bool = False
+    language: str = "en-US"
+    voice: str = ""
+    sample_rate: int = 44100
 
 
 @dataclass(frozen=True)
@@ -141,6 +156,26 @@ class _RoleSpec:
         """Whether readiness requires a successful endpoint health check."""
 
         return self.endpoint.health_check
+
+    @property
+    def function_id(self) -> str | None:
+        return self.adapter.function_id
+
+    @property
+    def use_ssl(self) -> bool:
+        return self.adapter.use_ssl
+
+    @property
+    def language(self) -> str:
+        return self.adapter.language
+
+    @property
+    def voice(self) -> str:
+        return self.adapter.voice
+
+    @property
+    def sample_rate(self) -> int:
+        return self.adapter.sample_rate
 
     def _set_specs(
         self,
@@ -658,7 +693,9 @@ def _resolve_preset(body: dict[str, Any]) -> tuple[dict[str, Any], Category | No
 
 def _construct(category: Category, body: dict[str, Any]) -> Spec:
     kind = body.get("kind", KIND_OPENAI_COMPAT)
-    if kind != KIND_OPENAI_COMPAT:
+    if kind == KIND_RIVA_GRPC and category not in ("stt", "tts"):
+        raise ValueError("riva_grpc is a speech kind; use it for stt/tts only")
+    if kind not in (KIND_OPENAI_COMPAT, KIND_RIVA_GRPC):
         raise ValueError(f"unsupported adapter kind: {kind!r}")
 
     endpoint = EndpointSpec(
@@ -668,7 +705,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         readiness=_readiness(body),
     )
     adapter = AdapterSpec(
-        kind=KIND_OPENAI_COMPAT,
+        kind=kind,
         model_name=(
             _require_str(body, "model_name")
             if category in ("llm", "vlm", "embedding")
@@ -677,6 +714,11 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         reasoning_field=_optional_str(body, "reasoning_field"),
         capabilities=_mapping(body, "capabilities"),
         default_extras=_mapping(body, "default_extras"),
+        function_id=_optional_str(body, "function_id"),
+        use_ssl=bool(body.get("use_ssl", False)),
+        language=str(body.get("language", "en-US")),
+        voice=str(body.get("voice", "")),
+        sample_rate=int(body.get("sample_rate", 44100)),
     )
     deployment = _deployment(body.get("deployment", {}))
 

@@ -201,6 +201,7 @@ The LLM and VLM can run on [NVIDIA NIM](https://build.nvidia.com) instead of
 local vLLM — NIM exposes the same OpenAI-compatible `/v1/chat/completions`
 API, so this is a model-profile change with no worker code edits. STT and TTS
 stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
+Self-hosted speech NIMs are covered below.
 
 A hosted entry uses an environment-variable reference for its credential,
 disables endpoint health probing, and declares external ownership:
@@ -236,31 +237,55 @@ disables endpoint health probing, and declares external ownership:
   hosted service.
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
-For `simple-vlm-example`, set `models_config: models.hosted.json` in the worker
-YAML. This wrapped JSON profile is consumed by both the worker and orchestrator,
-so the local VLM process is omitted and `NGC_API_KEY` is requested
-automatically. Select `models.local.json` to switch back.
+Set `models_config: models.hosted.json` in the worker YAML. This wrapped
+JSON profile is consumed by both the worker and orchestrator, so the local
+VLM process is omitted and `NGC_API_KEY` is requested automatically. Select
+`models.local.json` to switch back.
 
-`xr-render-demo` retains its `model_backend: nim` selector and
-`models.nim.yaml` overlay. Provide `NGC_API_KEY` and do not run
-`model_servers`, whose single topology starts both local `omni` and `vlm`.
-Instead, start only the local STT service from the repository root, setting
-`GPU_PROFILE` to `dual_48G_ada`, `spark`, or `96G_blackwell`:
+### Self-hosted NIM containers (`models.nim_local.json`)
 
-```bash
-GPU_PROFILE=dual_48G_ada
-uv run --project services/stt-server stt_server \
-  --config "agent-samples/model-servers/yaml/${GPU_PROFILE}/stt_server.yaml"
+The same models can be pulled from NGC and served as **optimized NIM
+containers on your own GPUs**: same APIs as hosted NIM, no network hop, and
+speech included. Self-hosted Riva speech NIMs are reached through the
+`riva_grpc` model kind (requires the `xr-ai-models[riva]` extra, already a
+dependency of the sample workers).
+
+Select the profile with `models_config: models.nim_local.json` in the worker
+YAML. Each entry in that profile deploys as a `nim_server` process
+(`services/nim-server`, a generic wrapper; the sample's
+`yaml/nim_<role>_server.yaml` picks the image and ports) in place of its
+local server, and the worker reads the role's entry from the same profile
+(`openai_compat` for LLM/VLM, `riva_grpc` with no `function_id` for speech).
+Both files ship ready-made in each sample. The container `image:` is the
+model, so swapping models is a `nim_<role>_server.yaml` edit plus the
+matching profile entry.
+
+A self-hosted speech entry uses the Riva gRPC kind:
+
+```yaml
+stt:
+  kind:      riva_grpc
+  category:  stt
+  base_url:  localhost:50051   # the container's gRPC port
+  language:  en-US
 ```
 
-Then start `xr_render_demo` in another terminal. Its orchestrator reuses STT,
-routes LLM and VLM requests to hosted NIM, and starts local TTS itself.
+TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
+(default 44100). `health_check: true` (the default) runs a gRPC
+channel-ready probe.
 
-**Self-hosted NIM containers** work the same way: point `base_url` at the
-container (e.g. `http://localhost:8000`), set `readiness: health`, and choose
-`managed` or `reused` ownership if the launcher owns that service. Legacy flat
-profiles may continue to set `health_check: true` when it
-exposes `/v1/health`.
+Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
+`nvcr.io` image pull *and* by the container itself to download the
+GPU-matched optimized engine from NGC on first start; multi-GB, cached
+under `models/nim/` for later runs), and GPU capacity for every container.
+Set `cuda_visible_devices` in the `nim_*_server.yaml` files to spread
+containers across GPUs. Readiness gates on each container's
+`/v1/health/ready`.
+
+A NIM container serving something the samples don't ship is the same
+mechanism by hand: point an `openai_compat` entry's `base_url` at its port
+(its health route is `/v1/health/ready`, so keep `health_check: false` and
+let the container gate readiness), or a `riva_grpc` entry at its gRPC port.
 
 ## vLLM model persistence
 

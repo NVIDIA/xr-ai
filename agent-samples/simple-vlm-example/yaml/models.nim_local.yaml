@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Self-hosted NIM backend for simple-vlm-example — every model runs in a NIM
+# container on this machine, pulled from nvcr.io and serving the optimized
+# NGC engine.
+#
+# To activate, set ONE key in simple_vlm_example_worker.yaml:
+#   model_backend: nim_local
+# The orchestrator then launches the NIM containers (yaml/nim_*_server.yaml)
+# instead of the local vlm/stt/tts servers. Requires NGC_API_KEY (nvcr.io
+# pull + engine download) and local GPU capacity for all three containers —
+# use cuda_visible_devices in the nim_*_server.yaml files to spread them
+# across GPUs. First start per container downloads a multi-GB engine from NGC.
+# Full guide: docs/ai-services.md "Self-hosted NIM containers".
+#
+# The images and model ids below are examples validated against the NGC
+# catalog on 2026-07-17; swap in any NIM from https://catalog.ngc.nvidia.com.
+#
+# Per-model mixing: use the map form of model_backend (e.g.
+# `model_backend: {vlm: nim_local}`); roles left `local` read their entries
+# from models_yaml, so only the containers you list are launched.
+
+vlm:
+  kind:        openai_compat
+  category:    vlm
+  base_url:    http://localhost:8100
+  # Cosmos-Reason1-7B — the same model the local backend's vlm-server runs.
+  # Must match what the NIM serves in /v1/models (the image's model id).
+  model_name:  nvidia/cosmos-reason1-7b
+  health_check: false   # NIM health is /v1/health/ready, not /health
+  capabilities:
+    streaming: true
+    vision:    true
+
+# Riva speech NIMs — same gRPC API as hosted NVCF, no function id, and a
+# real channel-ready health probe.
+stt:
+  kind:      riva_grpc
+  category:  stt
+  base_url:  localhost:50051
+  language:  en-US
+
+tts:
+  kind:      riva_grpc
+  category:  tts
+  base_url:  localhost:50052
+  voice:     "Magpie-Multilingual.EN-US.Sofia"
+  language:  en-US

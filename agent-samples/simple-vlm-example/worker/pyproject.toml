@@ -14,7 +14,7 @@ dependencies = [
     "xr-ai-agent-runtime",
     "xr-ai-hub-client",
     "xr-ai-logging",
-    "xr-ai-models",
+    "xr-ai-models[riva]",
     "xr-ai-tools[frames,vision]",
     "xr-ai-voice",
     "xr-ai-voicegate",
