@@ -34,7 +34,7 @@ The orchestrator declares the process sequence in code:
 _BASE = Path(__file__).resolve().parent   # sample root
 
 PROCESSES = [
-    Process("hub",    "../../server-runtime", "xr_media_hub",
+    Process("hub",    "../../services/xr-media-hub", "xr_media_hub",
             config="yaml/xr_media_hub.yaml"),
     Process("worker", "worker",               "my_agent_worker",
             config="yaml/my_agent_worker.yaml"),
@@ -62,7 +62,7 @@ def run() -> None:
   `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` to use the
   same IPC-start readiness boundary.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
-- The worker never imports anything from `server-runtime` or `utils/xr-ai-launcher/`.
+- The worker never imports anything from `xr_media_hub` or `xr_ai_launcher`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast: if any process exits, the rest are terminated.
 
@@ -79,7 +79,7 @@ The stack is declared as a sequence of `Process` or `Parallel` items:
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../server-runtime", "xr_media_hub"),
+    Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
     Parallel([
         Process("stt", "../../services/stt-server", "stt_server"),
         Process("tts", "../../services/piper-tts",  "piper_tts_server"),

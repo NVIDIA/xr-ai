@@ -96,7 +96,7 @@ class VideoRecorder:
         except ModuleNotFoundError:
             raise ModuleNotFoundError(
                 "PyNvVideoCodec is required for video recording. "
-                "Install it with: uv sync  (in server-runtime/)"
+                "Install it with: uv sync  (in services/xr-media-hub/)"
             ) from None
 
         self._cfg          = cfg

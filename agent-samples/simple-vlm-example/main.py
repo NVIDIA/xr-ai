@@ -70,7 +70,7 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
             f"model profile declares unknown services: {sorted(unknown_services)}"
         )
     procs = [
-        Process("hub", "../../server-runtime", "xr_media_hub",
+        Process("hub", "../../services/xr-media-hub", "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),
     ]
     for service, process in _MODEL_PROCESSES.items():

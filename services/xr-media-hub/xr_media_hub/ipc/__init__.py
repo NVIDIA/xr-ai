@@ -11,7 +11,7 @@ HubEndpoint         — server  (XR-Media-Hub process)
 ProcessorEndpoint   — subscriber + publisher (agents, analytics, downstream processors)
 
 Agent code should import from `xr_ai_hub` directly rather than this module —
-it avoids pulling in the full server-runtime dependency tree.
+it avoids pulling in the full XR-Media-Hub dependency tree.
 
 Extensibility
 -------------

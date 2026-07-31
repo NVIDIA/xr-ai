@@ -38,8 +38,8 @@ dependencies = [
 xr_media_hub = "xr_media_hub.__main__:run"
 
 [tool.uv.sources]
-xr-ai-hub-client   = { path = "../agent-sdk/xr-ai-hub-client", editable = true }
-xr-ai-logging = { path = "../utils/xr-ai-logging", editable = true }
+xr-ai-hub-client = { path = "../../agent-sdk/xr-ai-hub-client", editable = true }
+xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_media_hub"]

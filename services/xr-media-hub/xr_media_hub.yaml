@@ -7,7 +7,7 @@
 # Copy this file (or a subset of it) to your agent sample directory and
 # edit as needed.  Relative paths are resolved from this file's directory.
 #
-# Run from server-runtime/:
+# Run from services/xr-media-hub/:
 #   uv run xr_media_hub            # auto-discovers this file
 #   uv run xr_media_hub --config xr_media_hub.yaml
 
@@ -25,7 +25,7 @@ enable_web_server: true
 web_server_host:   "0.0.0.0"
 web_server_port:   8080
 # Path is relative to this file's directory.
-web_client_dir:    ../client-samples/web
+web_client_dir:    ../../client-samples/web
 # HTTPS is on by default. A self-signed cert is auto-generated on first run
 # at ~/.local/share/xr-ai/web-server.crt. Browsers reach LiveKit via the
 # same-origin wss://<host>:web_server_port/rtc proxy this server exposes.

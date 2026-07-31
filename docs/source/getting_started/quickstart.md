@@ -156,7 +156,7 @@ it is not stored in YAML; the overlay only names the env var via
 full details (and self-hosted NIM containers).
 
 Each sample has its own `xr_media_hub.yaml` controlling the hub; refer to
-`server-runtime/xr_media_hub.yaml` for the full option list.
+`services/xr-media-hub/xr_media_hub.yaml` for the full option list.
 
 ## XR render demo (voice-driven sphere in CloudXR)
 
@@ -247,13 +247,13 @@ Provide an
 prompt — not in YAML) and just don't start the local `agent-llm` / `vlm`
 model-servers. Refer to the AI-services guide.
 
-## Hub only (server-runtime standalone)
+## Hub only (standalone)
 
 ```bash
-cd server-runtime
+cd services/xr-media-hub
 uv sync
 uv run xr_media_hub
 ```
 
 Useful for development or when running an agent in a separate terminal. The
-XR-Media-Hub auto-discovers `server-runtime/xr_media_hub.yaml`.
+XR-Media-Hub auto-discovers `services/xr-media-hub/xr_media_hub.yaml`.

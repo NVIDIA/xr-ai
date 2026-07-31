@@ -60,7 +60,7 @@ pull request:
 - Keep code warnings and linter errors to a minimum.
 - In general, prefer clarity over clever tricks, and keep the codebase friendly for contributors.
 
-**Python** (`server-runtime/`, `agent-sdk/`, `utils/`, `services/`,
+**Python** (`agent-sdk/`, `utils/`, `services/`,
 `agent-mcp-servers/`, `agent-samples/`, `tests/`)
 - Target Python 3.11+ (CI matrix runs 3.11 and 3.12).
 - Follow PEP 8 for style.

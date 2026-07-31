@@ -126,6 +126,19 @@ published version. Repository links are rewritten while each documentation
 version is read, so historical release pages point to their matching tag. Only
 `main` and `v*` tags are eligible to deploy, so pull requests remain build-only.
 
+### 2026-07-31 — XR-Media-Hub completes the services layout
+
+XR-Media-Hub now lives at `services/xr-media-hub/` with the repository's
+other reusable processes. The move preserves its Python package, distribution,
+command, ports, configuration schema, IPC protocol, LiveKit transport, and
+recorder behavior. The standalone reference configuration still serves the
+repository web client after accounting for the service's additional directory
+depth.
+
+Sample orchestrators adopt only the mechanical hub project-path replacement.
+The render demo's worker, scene, prompts, configuration, evaluations, and
+lifecycle remain unchanged.
+
 ### 2026-07-31 — CloudXR runtime joins the services root
 
 The shared CloudXR OpenXR runtime now lives at

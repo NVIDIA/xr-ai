@@ -10,7 +10,7 @@ orchestrator pattern that wires servers into a sample, see
 `docs/adding-a-sample.md`.
 
 Multiple reusable HTTP servers are available as launchable peers of
-`server-runtime/`. All expose an OpenAI-compatible REST API so agent workers
+`services/xr-media-hub/`. All expose an OpenAI-compatible REST API so agent workers
 can call them with any OpenAI SDK client or plain `httpx` / `requests`.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct children of
@@ -106,7 +106,7 @@ portable across the move; recreate them with `uv sync` in the corresponding
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../server-runtime",                    "xr_media_hub"),
+    Process("hub",    "../../services/xr-media-hub",                    "xr_media_hub"),
     Process("vlm",    "../../services/vlm-server",               "vlm_server"),   # ← add as needed
     # Pick ONE LLM backend per sample — they bind different default ports
     # (8106 / 8107) so running more than one at once is allowed but

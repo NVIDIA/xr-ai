@@ -14,7 +14,7 @@ orchestrator pattern, refer to {doc}`adding-a-sample <adding-a-sample>`.
 
 ```python
 PROCESSES = [
-    Process("hub",     "../../server-runtime",  "xr_media_hub"),
+    Process("hub",     "../../services/xr-media-hub",  "xr_media_hub"),
     Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime"),  # ← add this
     Process("worker",  "worker",                "my_agent_worker"),
 ]

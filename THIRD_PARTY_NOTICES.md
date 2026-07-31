@@ -14,7 +14,7 @@ canonical license text is available.
 
 ## Python (server-side and AI services)
 
-Used by `server-runtime/`, `agent-sdk/`, `utils/`, `services/`,
+Used by `agent-sdk/`, `utils/`, `services/`,
 `agent-mcp-servers/`, `agent-samples/`, and `tests/`.
 For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md).
 
