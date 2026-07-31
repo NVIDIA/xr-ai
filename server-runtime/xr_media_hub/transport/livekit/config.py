@@ -68,6 +68,11 @@ class LiveKitConnectorConfig:
     shm_num_slots:       int = 10
     shm_max_frame_bytes: int = 12_441_600   # 4K NV12
 
+    # ── Return audio pacing ───────────────────────────────────────────────────
+    # Maximum queued TTS audio per participant. When a burst exceeds this,
+    # the LiveKit return-audio pipe drops the oldest queued frames.
+    return_audio_max_buffer_s: float = 3.0
+
     # ── Video recording (NVENC, optional) ─────────────────────────────────────
     # Set video_recording.enabled: true in xr_media_hub.yaml to activate.
     # Frames are encoded via NVENC (pynvvideocodec) and written as H.264
