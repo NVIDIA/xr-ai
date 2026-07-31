@@ -15,8 +15,10 @@ environment, this module runs `docker login nvcr.io` once per process so the
 pull can proceed. Existing `~/.docker/config.json` entries take priority and
 are not overwritten.
 """
+
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -34,9 +36,37 @@ log = logging.getLogger(__name__)
 
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[str] = set()
+_CONFIG_LABEL = "xr-ai-vllm.config"
 
 
 # ── docker run argv builder ──────────────────────────────────────────────────
+
+
+def _launch_fingerprint(
+    *,
+    image: str,
+    port: int,
+    model_cache: Path,
+    cuda_visible_devices: str | None,
+    extra_env: dict[str, str] | None,
+    extra_pip: list[str] | None,
+    vllm_argv: list[str],
+) -> str:
+    payload = {
+        "image": image,
+        "port": port,
+        "model_cache": str(model_cache),
+        "cuda_visible_devices": cuda_visible_devices,
+        "extra_env": extra_env or {},
+        "extra_pip": extra_pip or [],
+        "vllm_argv": vllm_argv,
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:20]
 
 
 def build_run_argv(
@@ -65,6 +95,16 @@ def build_run_argv(
     # caller needing to know the container name — implementation detail stays
     # inside this module.
     argv += ["--label", f"xr-ai-vllm.port={port}"]
+    fingerprint = _launch_fingerprint(
+        image=image,
+        port=port,
+        model_cache=model_cache,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+    )
+    argv += ["--label", f"{_CONFIG_LABEL}={fingerprint}"]
     argv += ["--network", "host"]
     # vLLM workers communicate via /dev/shm; the default 64 MiB tmpfs is too
     # small for the KV cache shards.  --ipc host gives them the host's larger
@@ -157,6 +197,26 @@ def container_running(name: str) -> bool:
         return bool(out)
     except (FileNotFoundError, subprocess.CalledProcessError):
         return False
+
+
+def container_label(name: str, label: str) -> str | None:
+    """Return one Docker container label, or ``None`` when unavailable."""
+
+    try:
+        raw = subprocess.check_output(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                f'{{{{ index .Config.Labels "{label}" }}}}',
+                name,
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        return raw or None
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
 
 
 def remove_container(name: str) -> bool:
@@ -399,6 +459,15 @@ def run(
         sys.exit(2)
 
     health_url = _lifecycle.health_url(host, port)
+    fingerprint = _launch_fingerprint(
+        image=image,
+        port=port,
+        model_cache=model_cache,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+    )
 
     # On abort (Ctrl-C during model-servers startup) the launcher passes
     # no_kill=set() and SIGTERMs every wrapper's process group. Without a
@@ -437,22 +506,49 @@ def run(
     signal.signal(signal.SIGINT,  _on_signal)
     signal.signal(signal.SIGTERM, _on_signal)
 
-    # Reuse a container that survived a wrapper restart (weight persistence).
+    # Reuse a container that survived a wrapper restart only when its launch
+    # contract still matches the active YAML.
     if _lifecycle.health_ok(health_url):
+        if not container_exists(container_name) or container_label(container_name, _CONFIG_LABEL) == fingerprint:
+            print(
+                f"[{log_prefix}] vLLM already running on port {port} — reusing",
+                flush=True,
+            )
+            if ready_file:
+                ready_file.touch()
+            signal.signal(signal.SIGINT, orig_int)
+            signal.signal(signal.SIGTERM, orig_term)
+            _lifecycle.idle_until_stopped(health_url, log_prefix)
+            return
+
         print(
-            f"[{log_prefix}] vLLM already running on port {port} — reusing",
+            f"[{log_prefix}] Running container configuration changed — recreating {container_name}",
             flush=True,
         )
-        if ready_file:
-            ready_file.touch()
-        signal.signal(signal.SIGINT,  orig_int)
-        signal.signal(signal.SIGTERM, orig_term)
-        _lifecycle.idle_until_stopped(health_url, log_prefix)
-        return
+        if not stop_container(container_name) or not remove_container(container_name):
+            log.error(
+                "Unable to replace stale running container %s",
+                container_name,
+            )
+            sys.exit(1)
+
+    if container_exists(container_name) and not container_running(container_name):
+        existing_fingerprint = container_label(container_name, _CONFIG_LABEL)
+        if existing_fingerprint != fingerprint:
+            print(
+                f"[{log_prefix}] Container configuration changed — recreating {container_name}",
+                flush=True,
+            )
+            if not remove_container(container_name):
+                log.error(
+                    "Unable to remove stale stopped container %s",
+                    container_name,
+                )
+                sys.exit(1)
 
     if container_exists(container_name) and not container_running(container_name):
         # Stopped container already has hf_transfer installed — restart it
-        # rather than running a fresh image (avoids reinstalling every time).
+        # when its complete launch configuration still matches.
         print(
             f"[{log_prefix}] Restarting stopped container {container_name}",
             flush=True,

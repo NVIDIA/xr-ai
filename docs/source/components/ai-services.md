@@ -184,15 +184,26 @@ The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 `nemotron_omni_llm_server` is foreground (dies with the wrapper). Each
 persistent wrapper script checks its health endpoint before spawning vLLM:
 
-- **Already running** → touch the ready file immediately, then idle. Stack is
-  ready in seconds; no model reload.
-- **Not running** → spawn vLLM normally, wait for `/health`, touch ready file.
+- **Already running with a matching launch fingerprint** → touch the ready
+  file immediately, then idle. Stack is ready in seconds; no model reload.
+- **Already running with changed or legacy configuration** → stop, remove, and
+  recreate the repository-owned container from the current YAML.
+- **Stopped Docker container with matching launch fingerprint** → restart it,
+  wait for `/health`, then touch the ready file.
+- **Stopped Docker container with changed or legacy configuration** → remove
+  and recreate it from the current YAML before waiting for `/health`.
+- **Not running** → spawn vLLM normally, wait for `/health`, then touch the
+  ready file.
 
 In pip mode, vLLM is spawned with `start_new_session=True` so the launcher's
-`killpg()` does not reach it on shutdown. In docker mode, the container is
-launched detached (`docker run -d --name xr-ai-vllm-<service>`) so it
-similarly outlives the wrapper. Either way the wrapper exits cleanly and
-vLLM keeps running.
+`killpg()` does not reach it on shutdown. In docker mode, Docker owns the
+container while the foreground `docker run` client uses its own session.
+Either way vLLM keeps running after the orchestrator exits.
+
+Docker containers carry a fingerprint of their image, GPU assignment, model
+cache, environment, bootstrap packages, and complete vLLM command. This
+prevents a failed container created by one sample profile from being restarted
+later with stale memory limits or model arguments from another profile.
 
 **Stopping the persisted servers** — run from the sample directory:
 
