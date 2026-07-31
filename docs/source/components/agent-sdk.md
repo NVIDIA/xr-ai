@@ -10,7 +10,7 @@ from:
 
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
   `STTService`, `TTSService`) plus OpenAI-compatible HTTP clients, driven by a
-  model-profile configuration. Swapping a backend is a configuration
+  structured model deployment profile. Swapping a backend is a configuration
   edit, not a code edit.
 - **`xr-ai-voice`** — the native voice runtime. `VoiceSession` owns readiness,
   hub transport, voice gating, streaming responses, signals, and cleanup while
@@ -29,10 +29,11 @@ from:
 ## xr-ai-models
 
 Worker code depends on the four service protocols and constructs concrete
-clients from a model configuration — no hand-rolled `httpx` calls in callers,
-no model quirks leaking out of this package.
+clients from a model deployment profile — no hand-rolled `httpx` calls in
+callers, no model quirks leaking out of this package.
 
-Each sample's model config names the logical models the worker needs;
+Each profile names the logical models the worker needs and separates adapter,
+endpoint, and deployment metadata;
 `make_llm(config, "llm")` / `make_vlm` / `make_stt` / `make_tts` return an
 object satisfying the matching service protocol regardless of backend or
 model-specific quirks (such as reasoning-field naming). Swapping a model is a
@@ -43,7 +44,7 @@ config edit, not a code change.
 ```python
 from xr_ai_models import load_models_config, make_llm, ChatMessage
 
-config = load_models_config("yaml/models.yaml")
+config = load_models_config("yaml/models.local.json")
 async with make_llm(config, "agent_llm") as llm:
     resp = await llm.chat(
         [ChatMessage(role="user", content="hello")],
@@ -53,25 +54,22 @@ async with make_llm(config, "agent_llm") as llm:
     print(resp.content, resp.reasoning)
 ```
 
-`models.yaml`:
+`models.local.json`:
 
-```yaml
-agent_llm:
-  kind:     preset:nemotron3_nano
-  base_url: http://localhost:8107
-
-vlm:
-  kind:     preset:cosmos_vlm
-  base_url: http://localhost:8100
-
-stt:
-  kind:     preset:parakeet_stt
-  base_url: http://localhost:8103
-
-tts:
-  kind:     preset:piper_tts
-  base_url: http://localhost:8105
+```json
+{
+  "models": {
+    "agent_llm": {
+      "category": "llm",
+      "adapter": {"preset": "nemotron3_nano"},
+      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "agent-llm"}
+    }
+  }
+}
 ```
+
+JSON and YAML are both accepted; flat legacy entries remain compatible.
 
 ### Built-in presets
 

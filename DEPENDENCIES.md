@@ -102,7 +102,9 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     Unified service protocols (LLMService, VLMService, STTService, TTSService)
     and OpenAI-compatible HTTP clients that cover every in-tree model backend
     (vLLM-served VLM/LLMs, NeMo Parakeet STT, Piper/Magpie TTS).  Per-model
-    quirks live behind one seam: reasoning-field aliasing (nano_v3 →
+    profiles separate adapter behavior, endpoint connectivity/readiness, and
+    launcher-facing deployment ownership. Per-model quirks remain behind one
+    seam: reasoning-field aliasing (nano_v3 →
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
     for the seven in-tree services.  Future backends (LiteLLM, vendor SDKs)
@@ -165,9 +167,9 @@ xr-ai-launcher  (utils/xr-ai-launcher/)
     `load_cloudxr_env`, plus the single source of truth for native device
     profiles: `NATIVE_DEVICE_PROFILES`, `is_native_profile(profile)`, and
     `read_device_profile(yaml_path)` (env-first NV_DEVICE_PROFILE read, regex
-    YAML fallback). `load_model_deployment()` reads the profile selected by a
-    worker config and maps service ownership to launcher modes without adding
-    a YAML or model-SDK dependency.
+    YAML fallback). `load_model_deployment()` reads the selected wrapped JSON
+    model profile using only stdlib to derive managed/reused services and
+    required credential names, without adding a YAML or model-SDK dependency.
 
 xr-ai-logging  (utils/xr-ai-logging/)
     └── loguru >=0.7
@@ -524,7 +526,9 @@ Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 in-process. The `models_config` key selects a structured deployment profile:
 `models.local.json` manages the default services, `models.hosted.json` uses an
 external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
-8108. Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
+8108. These profiles separate adapter behavior, endpoint readiness and
+credentials, and launcher ownership. Voice-gate knobs are configured via
+`yaml/voice_gate.yaml`.
 
 ### model-servers  (agent-samples/model-servers/)
 
@@ -594,7 +598,7 @@ updated in the same commit**.
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
 | Any new sample added | `DEPENDENCIES.md`, `AGENTS.md`, `README.md` |
 | Any new shared component added (peer of `server-runtime/`) | `AGENTS.md` Architecture section, `DEPENDENCIES.md` |
-| `xr-ai-models` protocols (`LLMService`, `VLMService`, …) or `models.yaml` schema | `AGENTS.md` "HTTP calls go through `xr-ai-models`" rule, `agent-sdk/xr-ai-models/README.md`, every sample's `yaml/models.yaml` |
+| `xr-ai-models` protocols (`LLMService`, `VLMService`, …) or model-profile schema | `AGENTS.md` "HTTP calls go through `xr-ai-models`" rule, `agent-sdk/xr-ai-models/README.md`, sample model profiles |
 | `xr-ai-models` preset added (new in-tree service or backend variant) | `agent-sdk/xr-ai-models/xr_ai_models/presets/__init__.py` registry, `agent-sdk/xr-ai-models/README.md` preset table |
 
 ---

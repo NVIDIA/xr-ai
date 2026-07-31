@@ -8,7 +8,7 @@
 Unified service protocols and OpenAI-compatible HTTP clients for the xr-ai
 model layer.  Worker code depends on the four protocols
 (`LLMService`, `VLMService`, `STTService`, `TTSService`) and constructs
-concrete clients from a `models.yaml` config — no hand-rolled httpx calls
+concrete clients from a model deployment profile — no hand-rolled httpx calls
 in callers, no model quirks leaking out of this package.
 
 ## Why
@@ -19,7 +19,7 @@ hard-coded model quirks (`chat_template_kwargs`, served-model-name strings,
 the `reasoning` vs `reasoning_content` field difference between
 nano_v3 and nemotron_v3 parsers).  Swapping an LLM meant editing N files.
 
-After: one `models.yaml` per sample names the logical models the worker
+After: one selected profile per sample names the logical models the worker
 needs; `make_llm(config, "agent_llm")` returns something that satisfies
 `LLMService` regardless of which backend or quirks are involved.
 
@@ -28,7 +28,7 @@ needs; `make_llm(config, "agent_llm")` returns something that satisfies
 ```python
 from xr_ai_models import load_models_config, make_llm, ChatMessage
 
-config = load_models_config("yaml/models.yaml")
+config = load_models_config("yaml/models.local.json")
 async with make_llm(config, "agent_llm") as llm:
     resp = await llm.chat(
         [ChatMessage(role="user", content="hello")],
@@ -38,24 +38,19 @@ async with make_llm(config, "agent_llm") as llm:
     print(resp.content, resp.reasoning)
 ```
 
-`models.yaml`:
+`models.local.json`:
 
-```yaml
-agent_llm:
-  kind:     preset:nemotron3_nano
-  base_url: http://localhost:8107
-
-vlm:
-  kind:     preset:cosmos_vlm
-  base_url: http://localhost:8100
-
-stt:
-  kind:     preset:parakeet_stt
-  base_url: http://localhost:8103
-
-tts:
-  kind:     preset:piper_tts
-  base_url: http://localhost:8105
+```json
+{
+  "models": {
+    "agent_llm": {
+      "category": "llm",
+      "adapter": {"preset": "nemotron3_nano"},
+      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "agent-llm"}
+    }
+  }
+}
 ```
 
 Built-in presets — see `xr_ai_models/presets/`:
@@ -70,22 +65,38 @@ Built-in presets — see `xr_ai_models/presets/`:
 | `piper_tts`      | tts/piper                | |
 | `magpie_tts`     | tts/magpie               | |
 
-## Explicit (no-preset) spec
+## Profile contract
 
-```yaml
-agent_llm:
-  kind:       openai_compat
-  category:   llm
-  base_url:   http://localhost:8107
-  model_name: llm
-  capabilities: { tool_calls: true, reasoning: true }
-  reasoning_field: reasoning
-  default_extras:
-    chat_template_kwargs: { enable_thinking: false }
-  timeout: 60.0
+```json
+{
+  "models": {
+    "agent_llm": {
+      "category": "llm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "llm",
+        "capabilities": {"tool_calls": true, "reasoning": true},
+        "reasoning_field": "reasoning"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8107",
+        "timeout": 60.0,
+        "readiness": "health"
+      },
+      "deployment": {"ownership": "reused", "service": "agent-llm"}
+    }
+  }
+}
 ```
 
-`category:` is required when not using a preset.
+`category` selects the service protocol. `adapter` owns model and wire quirks;
+`endpoint` owns connectivity, environment-based credentials, timeouts, and
+readiness; `deployment` tells a launcher whether the service is `managed`,
+`reused`, or `external`.
+
+Profiles may be JSON or YAML. The loader also accepts a direct role mapping,
+flat entries, `health_check: true|false`, and `kind: preset:<name>` for
+backward compatibility.
 
 ## Deployment profiles
 
@@ -157,20 +168,30 @@ into the same surface.
 ## Remote / hosted-NIM endpoints
 
 Cloud / remote endpoints (e.g. hosted [NVIDIA NIM](https://build.nvidia.com))
-are a config change — point `base_url` at the OpenAI-compatible URL and set:
+are a profile change:
 
-```yaml
-vlm:
-  kind:        openai_compat
-  category:    vlm
-  base_url:    https://integrate.api.nvidia.com
-  model_name:  nvidia/cosmos-reason1-7b
-  api_key_env: NGC_API_KEY    # → Authorization: Bearer <env value>
-  health_check: false         # remote endpoints have no local /health route
+```json
+{
+  "models": {
+    "vlm": {
+      "category": "vlm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "nvidia/cosmos-reason1-7b"
+      },
+      "endpoint": {
+        "base_url": "https://integrate.api.nvidia.com",
+        "api_key_env": "NGC_API_KEY",
+        "readiness": "none"
+      },
+      "deployment": {"ownership": "external"}
+    }
+  }
+}
 ```
 
-`health_check` (default `true`) gates whether `health()` probes
-`base_url/health`. Remote endpoints don't expose it, so `false` makes
+`readiness: health` makes `health()` probe `base_url/health`. Remote endpoints
+without that route use `readiness: none`, which makes
 `health()` return `True` without a request — otherwise a worker's readiness
 gate would block forever. See
 [`docs/ai-services.md`](../../docs/ai-services.md#hosting-models-on-nvidia-nim).
