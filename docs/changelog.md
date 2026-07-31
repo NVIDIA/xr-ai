@@ -9,6 +9,15 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-31 — Validate persistent vLLM containers before reuse
+
+Docker-hosted vLLM containers carry a fingerprint of their complete launch
+configuration. A healthy or stopped container is reused only when that label
+matches the active image, GPU assignment, environment, bootstrap packages, and
+vLLM arguments; stale or unlabeled repository-owned containers are recreated.
+This keeps persistent model weights fast to reuse without allowing an older
+sample profile to silently override the current configuration.
+
 ### 2026-07-30 — Retire the superseded xr-ai-capabilities package
 
 `xr-ai-capabilities` and its unused `VisionModule` are removed after production
