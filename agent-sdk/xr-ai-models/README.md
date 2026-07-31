@@ -96,7 +96,9 @@ readiness; `deployment` tells a launcher whether the service is `managed`,
 
 Profiles may be JSON or YAML. The loader also accepts a direct role mapping,
 flat entries, `health_check: true|false`, and `kind: preset:<name>` for
-backward compatibility.
+backward compatibility. The public role-spec classes also retain their legacy
+flat positional and keyword constructors and expose flat fields as read-only
+properties.
 
 ## Protocols
 

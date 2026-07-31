@@ -19,10 +19,11 @@ managed, reused, or external. This makes process ownership explicit without
 coupling `xr-ai-models` to the launcher.
 
 The loader accepts nested JSON or YAML profiles, an optional `models` root,
-direct role mappings, and existing flat entries. Read-only flat attribute
-aliases keep current callers compatible. `simple-vlm-example` adopts the nested
-profile and its orchestrator derives model processes and credential names from
-the same file. Render profiles remain unchanged pending their owning refactor.
+direct role mappings, and existing flat entries. Legacy flat constructors and
+read-only attribute aliases keep current callers compatible.
+`simple-vlm-example` adopts the nested profile and its orchestrator derives
+model processes and credential names from the same file. Render profiles remain
+unchanged pending their owning refactor.
 
 ### 2026-07-30 — Simple VLM adopts the native voice runtime
 

@@ -16,7 +16,7 @@ def read_config_scalar(path: Path, key: str, default: str = "") -> str:
     except OSError:
         return default
     match = re.search(
-        rf"^[ \t]*{re.escape(key)}[ \t]*:[ \t]*"
+        rf"^{re.escape(key)}[ \t]*:[ \t]*"
         rf"(?:\"([^\"]*)\"|'([^']*)'|([^#\s]+))",
         text,
         re.MULTILINE,

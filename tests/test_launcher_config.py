@@ -30,6 +30,18 @@ def test_read_config_scalar_supports_plain_and_quoted_values(tmp_path) -> None:
     assert read_config_scalar(config, "label") == "demo worker"
 
 
+def test_read_config_scalar_ignores_nested_keys(tmp_path) -> None:
+    config = tmp_path / "worker.yaml"
+    config.write_text(
+        "defaults:\n"
+        "  models_config: wrong.json\n"
+        "models_config: models.local.json\n",
+        encoding="utf-8",
+    )
+
+    assert read_config_scalar(config, "models_config") == "models.local.json"
+
+
 def test_read_config_scalar_returns_default_for_missing_input(tmp_path) -> None:
     assert read_config_scalar(tmp_path / "missing.yaml", "mode", "local") == "local"
 
