@@ -680,9 +680,9 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
 
 class _FakeEndpoint:
     """Hub ProcessorEndpoint double — frame callback, pixel request, status, and
-    return-data send. VisionModule now talks to the endpoint directly (the real
-    transport.send_return_data is a pure delegate to endpoint.send_return_data),
-    so camera-control messages are recorded here into the shared ``sent`` list."""
+    return-data send. Native vision functions acquire frames through this endpoint;
+    the transport delegates return-data sends to it, so camera-control messages are
+    recorded in the shared ``sent`` list."""
 
     def __init__(self, sent: list[DataMessage] | None = None) -> None:
         self.frame_cbs: list = []
