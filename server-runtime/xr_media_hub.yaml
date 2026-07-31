@@ -3,7 +3,9 @@
 
 # XR Media Hub — reference configuration
 #
-# All available options are listed here with their defaults.
+# All available options are listed here. LiveKit credentials are required;
+# replace the local-dev values below or set LIVEKIT_API_KEY and
+# LIVEKIT_API_SECRET in the environment.
 # Copy this file (or a subset of it) to your agent sample directory and
 # edit as needed.  Relative paths are resolved from this file's directory.
 #
