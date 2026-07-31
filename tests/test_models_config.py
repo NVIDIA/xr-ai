@@ -341,6 +341,14 @@ embedding:
         ("vlm", "vlm", "cosmos_vlm", VLMSpec, "vlm", "http://localhost:8100"),
         ("stt", "stt", "parakeet_stt", STTSpec, "stt", "http://localhost:8103"),
         ("tts", "tts", "piper_tts", TTSSpec, "tts", "http://localhost:8105"),
+        (
+            "embedding",
+            "embedding",
+            "nemotron_embedding",
+            EmbeddingSpec,
+            "embedding",
+            "http://localhost:8109",
+        ),
     ],
 )
 def test_every_role_loads_legacy_and_nested_profiles(
@@ -586,3 +594,191 @@ def test_role_specs_keep_read_only_flat_attribute_compatibility() -> None:
     assert spec.health_check is False
     with pytest.raises(AttributeError):
         spec.base_url = "http://other"
+
+
+def test_role_specs_support_legacy_keyword_construction() -> None:
+    llm_deployment = DeploymentSpec(ownership="managed", service="llm")
+    vlm_deployment = DeploymentSpec(ownership="managed", service="vlm")
+    stt_deployment = DeploymentSpec(ownership="managed", service="stt")
+    tts_deployment = DeploymentSpec(ownership="managed", service="tts")
+    embedding_deployment = DeploymentSpec(
+        ownership="managed",
+        service="embedding",
+    )
+    llm = LLMSpec(
+        base_url="http://llm",
+        model_name="reasoner",
+        api_key_env="LLM_API_KEY",
+        reasoning_field="reasoning_content",
+        capabilities={"tools": True},
+        default_extras={"temperature": 0.2},
+        timeout=12.0,
+        health_check=False,
+        deployment=llm_deployment,
+    )
+    vlm = VLMSpec(
+        base_url="http://vlm",
+        model_name="vision",
+        api_key_env="VLM_API_KEY",
+        capabilities={"vision": True},
+        default_extras={"max_tokens": 128},
+        timeout=13.0,
+        health_check=False,
+        deployment=vlm_deployment,
+    )
+    stt = STTSpec(
+        base_url="http://stt",
+        api_key_env="STT_API_KEY",
+        timeout=14.0,
+        health_check=False,
+        deployment=stt_deployment,
+    )
+    tts = TTSSpec(
+        base_url="http://tts",
+        api_key_env="TTS_API_KEY",
+        timeout=15.0,
+        health_check=False,
+        deployment=tts_deployment,
+    )
+    embedding = EmbeddingSpec(
+        base_url="http://embedding",
+        model_name="embed",
+        api_key_env="EMBEDDING_API_KEY",
+        timeout=16.0,
+        health_check=False,
+        deployment=embedding_deployment,
+    )
+
+    assert llm.adapter == AdapterSpec(
+        model_name="reasoner",
+        reasoning_field="reasoning_content",
+        capabilities={"tools": True},
+        default_extras={"temperature": 0.2},
+    )
+    assert llm.endpoint == EndpointSpec(
+        base_url="http://llm",
+        api_key_env="LLM_API_KEY",
+        timeout=12.0,
+        readiness="none",
+    )
+    assert vlm.adapter == AdapterSpec(
+        model_name="vision",
+        capabilities={"vision": True},
+        default_extras={"max_tokens": 128},
+    )
+    assert vlm.endpoint == EndpointSpec(
+        base_url="http://vlm",
+        api_key_env="VLM_API_KEY",
+        timeout=13.0,
+        readiness="none",
+    )
+    assert stt.endpoint == EndpointSpec(
+        base_url="http://stt",
+        api_key_env="STT_API_KEY",
+        timeout=14.0,
+        readiness="none",
+    )
+    assert tts.endpoint == EndpointSpec(
+        base_url="http://tts",
+        api_key_env="TTS_API_KEY",
+        timeout=15.0,
+        readiness="none",
+    )
+    assert embedding.adapter == AdapterSpec(model_name="embed")
+    assert embedding.endpoint == EndpointSpec(
+        base_url="http://embedding",
+        api_key_env="EMBEDDING_API_KEY",
+        timeout=16.0,
+        readiness="none",
+    )
+    assert llm.deployment == llm_deployment
+    assert vlm.deployment == vlm_deployment
+    assert stt.deployment == stt_deployment
+    assert tts.deployment == tts_deployment
+    assert embedding.deployment == embedding_deployment
+
+
+def test_role_specs_support_legacy_positional_construction() -> None:
+    llm_deployment = DeploymentSpec(ownership="managed", service="llm")
+    vlm_deployment = DeploymentSpec(ownership="managed", service="vlm")
+    stt_deployment = DeploymentSpec(ownership="managed", service="stt")
+    tts_deployment = DeploymentSpec(ownership="managed", service="tts")
+    embedding_deployment = DeploymentSpec(
+        ownership="managed",
+        service="embedding",
+    )
+    llm = LLMSpec(
+        "openai_compat",
+        "http://llm",
+        "reasoner",
+        "LLM_API_KEY",
+        "reasoning_content",
+        {"tools": True},
+        {"temperature": 0.2},
+        12.0,
+        False,
+        llm_deployment,
+    )
+    vlm = VLMSpec(
+        "openai_compat",
+        "http://vlm",
+        "vision",
+        "VLM_API_KEY",
+        {"vision": True},
+        {"max_tokens": 128},
+        13.0,
+        False,
+        vlm_deployment,
+    )
+    stt = STTSpec(
+        "openai_compat",
+        "http://stt",
+        "STT_API_KEY",
+        14.0,
+        False,
+        stt_deployment,
+    )
+    tts = TTSSpec(
+        "openai_compat",
+        "http://tts",
+        "TTS_API_KEY",
+        15.0,
+        False,
+        tts_deployment,
+    )
+    embedding = EmbeddingSpec(
+        "openai_compat",
+        "http://embedding",
+        "embed",
+        "EMBEDDING_API_KEY",
+        16.0,
+        False,
+        embedding_deployment,
+    )
+
+    assert llm.model_name == "reasoner"
+    assert llm.reasoning_field == "reasoning_content"
+    assert llm.default_extras == {"temperature": 0.2}
+    assert llm.health_check is False
+    assert vlm.model_name == "vision"
+    assert vlm.capabilities == {"vision": True}
+    assert vlm.default_extras == {"max_tokens": 128}
+    assert vlm.health_check is False
+    assert stt.base_url == "http://stt"
+    assert stt.api_key_env == "STT_API_KEY"
+    assert stt.timeout == 14.0
+    assert stt.health_check is False
+    assert tts.base_url == "http://tts"
+    assert tts.api_key_env == "TTS_API_KEY"
+    assert tts.timeout == 15.0
+    assert tts.health_check is False
+    assert embedding.base_url == "http://embedding"
+    assert embedding.model_name == "embed"
+    assert embedding.api_key_env == "EMBEDDING_API_KEY"
+    assert embedding.timeout == 16.0
+    assert embedding.health_check is False
+    assert llm.deployment == llm_deployment
+    assert vlm.deployment == vlm_deployment
+    assert stt.deployment == stt_deployment
+    assert tts.deployment == tts_deployment
+    assert embedding.deployment == embedding_deployment

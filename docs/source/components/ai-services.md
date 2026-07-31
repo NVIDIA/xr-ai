@@ -154,9 +154,11 @@ deployment ownership:
 }
 ```
 
-JSON and YAML are both accepted. Flat legacy entries and direct role mappings
-remain supported. Full protocol surface, the preset table, and the profile
-contract are in
+The worker-side `xr-ai-models` loader accepts JSON or YAML, including flat
+legacy entries and direct role mappings. A profile shared with the stdlib-only
+launcher must use the wrapped nested `.json` contract; non-`.json` profiles are
+rejected before deployment metadata is read. Full protocol surface, the preset
+table, and the profile contract are in
 [`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md).
 
 ## Hosting models on NVIDIA NIM

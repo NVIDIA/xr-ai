@@ -33,10 +33,15 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
         worker_config,
         "models_config",
         "models.local.json",
-    )
+    ) or "models.local.json"
     profile_path = Path(raw_path)
     if not profile_path.is_absolute():
         profile_path = worker_config.parent / profile_path
+    if profile_path.suffix.lower() != ".json":
+        raise ValueError(
+            f"{profile_path}: launcher model profiles must use a .json file; "
+            "YAML profiles are supported only by worker-side xr-ai-models"
+        )
     try:
         raw = json.loads(profile_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -54,11 +59,16 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
         if not isinstance(model, dict):
             raise ValueError(f"{profile_path}: model role {role!r} must be an object")
 
-        endpoint = model.get("endpoint", {})
-        deployment = model.get("deployment", {})
-        if not isinstance(endpoint, dict) or not isinstance(deployment, dict):
+        adapter = model.get("adapter")
+        endpoint = model.get("endpoint")
+        deployment = model.get("deployment")
+        if not all(
+            isinstance(section, dict)
+            for section in (adapter, endpoint, deployment)
+        ):
             raise ValueError(
-                f"{profile_path}: invalid endpoint or deployment for {role!r}"
+                f"{profile_path}: {role!r} must define adapter, endpoint, "
+                "and deployment objects"
             )
 
         readiness = endpoint.get("readiness", "health")

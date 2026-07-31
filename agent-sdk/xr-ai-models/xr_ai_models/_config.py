@@ -98,22 +98,160 @@ class _RoleSpec:
     def health_check(self) -> bool:
         return self.endpoint.health_check
 
+    def _set_specs(
+        self,
+        adapter: AdapterSpec,
+        endpoint: EndpointSpec,
+        deployment: DeploymentSpec,
+    ) -> None:
+        object.__setattr__(self, "adapter", adapter)
+        object.__setattr__(self, "endpoint", endpoint)
+        object.__setattr__(self, "deployment", deployment)
 
-@dataclass(frozen=True)
+
+def _structured_specs(
+    adapter: AdapterSpec | None,
+    endpoint: EndpointSpec | None,
+    deployment: DeploymentSpec | None,
+    *,
+    default_timeout: float,
+) -> tuple[AdapterSpec, EndpointSpec, DeploymentSpec] | None:
+    if adapter is None and endpoint is None:
+        return None
+    return (
+        adapter or AdapterSpec(),
+        endpoint or EndpointSpec(timeout=default_timeout),
+        deployment or DeploymentSpec(),
+    )
+
+
+def _reject_mixed_construction(**legacy_nondefault: bool) -> None:
+    mixed = [name for name, nondefault in legacy_nondefault.items() if nondefault]
+    if mixed:
+        raise TypeError(
+            "cannot mix structured model specs with legacy fields: "
+            + ", ".join(mixed)
+        )
+
+
+@dataclass(frozen=True, init=False)
 class LLMSpec(_RoleSpec):
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
     endpoint: EndpointSpec = field(default_factory=EndpointSpec)
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
+    def __init__(
+        self,
+        kind: ModelKind = KIND_OPENAI_COMPAT,
+        base_url: str = "",
+        model_name: str = "",
+        api_key_env: str | None = None,
+        reasoning_field: str | None = None,
+        capabilities: dict[str, Any] | None = None,
+        default_extras: dict[str, Any] | None = None,
+        timeout: float = 60.0,
+        health_check: bool = True,
+        deployment: DeploymentSpec | None = None,
+        *,
+        adapter: AdapterSpec | None = None,
+        endpoint: EndpointSpec | None = None,
+    ) -> None:
+        structured = _structured_specs(
+            adapter,
+            endpoint,
+            deployment,
+            default_timeout=60.0,
+        )
+        if structured is not None:
+            _reject_mixed_construction(
+                kind=kind != KIND_OPENAI_COMPAT,
+                base_url=bool(base_url),
+                model_name=bool(model_name),
+                api_key_env=api_key_env is not None,
+                reasoning_field=reasoning_field is not None,
+                capabilities=capabilities is not None,
+                default_extras=default_extras is not None,
+                timeout=timeout != 60.0,
+                health_check=health_check is not True,
+            )
+            self._set_specs(*structured)
+            return
+        self._set_specs(
+            AdapterSpec(
+                kind=kind,
+                model_name=model_name,
+                reasoning_field=reasoning_field,
+                capabilities=capabilities or {},
+                default_extras=default_extras or {},
+            ),
+            EndpointSpec(
+                base_url=base_url,
+                api_key_env=api_key_env,
+                timeout=timeout,
+                readiness="health" if health_check else "none",
+            ),
+            deployment or DeploymentSpec(),
+        )
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, init=False)
 class VLMSpec(_RoleSpec):
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
     endpoint: EndpointSpec = field(default_factory=EndpointSpec)
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
+    def __init__(
+        self,
+        kind: ModelKind = KIND_OPENAI_COMPAT,
+        base_url: str = "",
+        model_name: str = "",
+        api_key_env: str | None = None,
+        capabilities: dict[str, Any] | None = None,
+        default_extras: dict[str, Any] | None = None,
+        timeout: float = 60.0,
+        health_check: bool = True,
+        deployment: DeploymentSpec | None = None,
+        *,
+        adapter: AdapterSpec | None = None,
+        endpoint: EndpointSpec | None = None,
+    ) -> None:
+        structured = _structured_specs(
+            adapter,
+            endpoint,
+            deployment,
+            default_timeout=60.0,
+        )
+        if structured is not None:
+            _reject_mixed_construction(
+                kind=kind != KIND_OPENAI_COMPAT,
+                base_url=bool(base_url),
+                model_name=bool(model_name),
+                api_key_env=api_key_env is not None,
+                capabilities=capabilities is not None,
+                default_extras=default_extras is not None,
+                timeout=timeout != 60.0,
+                health_check=health_check is not True,
+            )
+            self._set_specs(*structured)
+            return
+        self._set_specs(
+            AdapterSpec(
+                kind=kind,
+                model_name=model_name,
+                capabilities=capabilities or {},
+                default_extras=default_extras or {},
+            ),
+            EndpointSpec(
+                base_url=base_url,
+                api_key_env=api_key_env,
+                timeout=timeout,
+                readiness="health" if health_check else "none",
+            ),
+            deployment or DeploymentSpec(),
+        )
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, init=False)
 class STTSpec(_RoleSpec):
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
     endpoint: EndpointSpec = field(
@@ -121,8 +259,45 @@ class STTSpec(_RoleSpec):
     )
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
-
-@dataclass(frozen=True)
+    def __init__(
+        self,
+        kind: ModelKind = KIND_OPENAI_COMPAT,
+        base_url: str = "",
+        api_key_env: str | None = None,
+        timeout: float = 30.0,
+        health_check: bool = True,
+        deployment: DeploymentSpec | None = None,
+        *,
+        adapter: AdapterSpec | None = None,
+        endpoint: EndpointSpec | None = None,
+    ) -> None:
+        structured = _structured_specs(
+            adapter,
+            endpoint,
+            deployment,
+            default_timeout=30.0,
+        )
+        if structured is not None:
+            _reject_mixed_construction(
+                kind=kind != KIND_OPENAI_COMPAT,
+                base_url=bool(base_url),
+                api_key_env=api_key_env is not None,
+                timeout=timeout != 30.0,
+                health_check=health_check is not True,
+            )
+            self._set_specs(*structured)
+            return
+        self._set_specs(
+            AdapterSpec(kind=kind),
+            EndpointSpec(
+                base_url=base_url,
+                api_key_env=api_key_env,
+                timeout=timeout,
+                readiness="health" if health_check else "none",
+            ),
+            deployment or DeploymentSpec(),
+        )
+@dataclass(frozen=True, init=False)
 class TTSSpec(_RoleSpec):
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
     endpoint: EndpointSpec = field(
@@ -130,12 +305,92 @@ class TTSSpec(_RoleSpec):
     )
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
+    def __init__(
+        self,
+        kind: ModelKind = KIND_OPENAI_COMPAT,
+        base_url: str = "",
+        api_key_env: str | None = None,
+        timeout: float = 30.0,
+        health_check: bool = True,
+        deployment: DeploymentSpec | None = None,
+        *,
+        adapter: AdapterSpec | None = None,
+        endpoint: EndpointSpec | None = None,
+    ) -> None:
+        structured = _structured_specs(
+            adapter,
+            endpoint,
+            deployment,
+            default_timeout=30.0,
+        )
+        if structured is not None:
+            _reject_mixed_construction(
+                kind=kind != KIND_OPENAI_COMPAT,
+                base_url=bool(base_url),
+                api_key_env=api_key_env is not None,
+                timeout=timeout != 30.0,
+                health_check=health_check is not True,
+            )
+            self._set_specs(*structured)
+            return
+        self._set_specs(
+            AdapterSpec(kind=kind),
+            EndpointSpec(
+                base_url=base_url,
+                api_key_env=api_key_env,
+                timeout=timeout,
+                readiness="health" if health_check else "none",
+            ),
+            deployment or DeploymentSpec(),
+        )
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, init=False)
 class EmbeddingSpec(_RoleSpec):
     adapter: AdapterSpec = field(default_factory=AdapterSpec)
     endpoint: EndpointSpec = field(default_factory=EndpointSpec)
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+
+    def __init__(
+        self,
+        kind: ModelKind = KIND_OPENAI_COMPAT,
+        base_url: str = "",
+        model_name: str = "",
+        api_key_env: str | None = None,
+        timeout: float = 60.0,
+        health_check: bool = True,
+        deployment: DeploymentSpec | None = None,
+        *,
+        adapter: AdapterSpec | None = None,
+        endpoint: EndpointSpec | None = None,
+    ) -> None:
+        structured = _structured_specs(
+            adapter,
+            endpoint,
+            deployment,
+            default_timeout=60.0,
+        )
+        if structured is not None:
+            _reject_mixed_construction(
+                kind=kind != KIND_OPENAI_COMPAT,
+                base_url=bool(base_url),
+                model_name=bool(model_name),
+                api_key_env=api_key_env is not None,
+                timeout=timeout != 60.0,
+                health_check=health_check is not True,
+            )
+            self._set_specs(*structured)
+            return
+        self._set_specs(
+            AdapterSpec(kind=kind, model_name=model_name),
+            EndpointSpec(
+                base_url=base_url,
+                api_key_env=api_key_env,
+                timeout=timeout,
+                readiness="health" if health_check else "none",
+            ),
+            deployment or DeploymentSpec(),
+        )
 
 
 Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec | EmbeddingSpec
@@ -222,6 +477,10 @@ def _flatten_entry(body: dict[str, Any]) -> dict[str, Any]:
 
     if not any(key in body for key in ("adapter", "endpoint", "deployment")):
         return dict(body)
+    if "api_key_env" in body:
+        raise ValueError(
+            "structured profiles must declare api_key_env in endpoint"
+        )
 
     sections: dict[str, dict[str, Any]] = {}
     for label in ("adapter", "endpoint", "deployment"):
