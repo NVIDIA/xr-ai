@@ -503,7 +503,7 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision,voice] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in the hub client, VAD, pipecat-ai, numpy, and scipy; `xr-ai-nat[vision]` pulls in the hub/model clients, httpx, numpy, and Pillow) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision,voice] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-nat[vision]` pulls in httpx, numpy, and Pillow) |
 
 The packaged worker registers `StreamingVisionConfig` in-process and maps it to
 `VoiceSession` with `xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` owns

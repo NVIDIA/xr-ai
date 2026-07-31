@@ -133,6 +133,10 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert project["project"]["scripts"]["simple_vlm_example_worker"] == (
         "simple_vlm_example_worker.__main__:run"
     )
+    assert "xr-ai-hub-client" in dependencies
+    assert project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"] == (
+        "../../../agent-sdk/xr-ai-hub-client"
+    )
     assert "xr-ai-nat[vision,voice]" in dependencies
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-pipecat" not in dependencies
