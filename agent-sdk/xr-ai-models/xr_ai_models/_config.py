@@ -22,8 +22,17 @@ from ._utils import merge_dicts
 
 Category = Literal["llm", "vlm", "stt", "tts"]
 ModelKind = Literal["openai_compat"]
+Ownership = Literal["managed", "reused", "external"]
 
 KIND_OPENAI_COMPAT: ModelKind = "openai_compat"
+
+
+@dataclass(frozen=True)
+class DeploymentSpec:
+    """Process ownership for the service behind a model role."""
+
+    ownership: Ownership = "external"
+    service: str | None = None
 
 
 @dataclass(frozen=True)
@@ -37,6 +46,7 @@ class LLMSpec:
     default_extras: dict[str, Any] = field(default_factory=dict)
     timeout: float = 60.0
     health_check: bool = True
+    deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
 
 @dataclass(frozen=True)
@@ -49,6 +59,7 @@ class VLMSpec:
     default_extras: dict[str, Any] = field(default_factory=dict)
     timeout: float = 60.0
     health_check: bool = True
+    deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
 
 @dataclass(frozen=True)
@@ -58,6 +69,7 @@ class STTSpec:
     api_key_env: str | None = None
     timeout: float = 30.0
     health_check: bool = True
+    deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
 
 @dataclass(frozen=True)
@@ -67,6 +79,7 @@ class TTSSpec:
     api_key_env: str | None = None
     timeout: float = 30.0
     health_check: bool = True
+    deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
 
 Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec
@@ -94,6 +107,14 @@ class ModelsConfig:
 
     def tts(self, name: str) -> TTSSpec:
         return _typed(self.entries, name, TTSSpec)
+
+    @property
+    def required_credentials(self) -> tuple[str, ...]:
+        return tuple(sorted({
+            spec.api_key_env
+            for spec in self.entries.values()
+            if spec.api_key_env
+        }))
 
 
 def _typed(entries: dict[str, Spec], name: str, cls: type[T]) -> T:
@@ -128,12 +149,44 @@ def load_models_config_from_dict(
     """
     if not isinstance(raw, dict):
         raise ValueError(f"{source}: top-level must be a mapping")
+    models = raw.get("models", raw)
+    if not isinstance(models, dict):
+        raise ValueError(f"{source}: 'models' must be a mapping")
     entries: dict[str, Spec] = {}
-    for name, body in raw.items():
+    for name, body in models.items():
         if not isinstance(body, dict):
             raise ValueError(f"{source}: entry {name!r} must be a mapping")
-        entries[name] = _build_spec(name, body)
+        entries[name] = _build_spec(name, _flatten_profile_entry(name, body))
     return ModelsConfig(entries=entries)
+
+
+def _flatten_profile_entry(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    if not any(key in body for key in ("adapter", "endpoint", "deployment")):
+        return dict(body)
+
+    adapter = body.get("adapter") or {}
+    endpoint = body.get("endpoint") or {}
+    deployment = body.get("deployment") or {}
+    for label, value in (("adapter", adapter), ("endpoint", endpoint), ("deployment", deployment)):
+        if not isinstance(value, dict):
+            raise ValueError(f"{name!r}: {label} must be a mapping")
+
+    flattened = {
+        key: value
+        for key, value in body.items()
+        if key not in {"adapter", "endpoint", "deployment"}
+    }
+    flattened.update(adapter)
+    flattened.update(endpoint)
+    if "preset" in adapter:
+        flattened["kind"] = f"preset:{adapter['preset']}"
+    if "readiness" in endpoint:
+        readiness = endpoint["readiness"]
+        if readiness not in {"health", "none"}:
+            raise ValueError(f"unsupported readiness policy: {readiness!r}")
+        flattened["health_check"] = readiness == "health"
+    flattened["deployment"] = deployment
+    return flattened
 
 
 def _build_spec(name: str, body: dict[str, Any]) -> Spec:
@@ -172,6 +225,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         # Remote endpoints (e.g. hosted NIM) have no local /health route; set
         # ``health_check: false`` so the worker readiness gate doesn't block.
         "health_check": bool(body.get("health_check", True)),
+        "deployment": _deployment(body.get("deployment") or {}),
     }
     if "api_key_env" in body:
         common["api_key_env"] = body["api_key_env"]
@@ -182,6 +236,18 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
     if category == "tts":
         return TTSSpec(**common, timeout=float(body.get("timeout", 30.0)))
     raise AssertionError(category)
+
+
+def _deployment(body: dict[str, Any]) -> DeploymentSpec:
+    ownership = body.get("ownership", "external")
+    if ownership not in {"managed", "reused", "external"}:
+        raise ValueError(f"unsupported deployment ownership: {ownership!r}")
+    service = body.get("service")
+    if service is not None and (not isinstance(service, str) or not service):
+        raise ValueError("deployment service must be a non-empty string")
+    if ownership != "external" and not service:
+        raise ValueError(f"{ownership} deployments require a service name")
+    return DeploymentSpec(ownership=ownership, service=service)
 
 
 def _construct_chat(category: Category, body: dict[str, Any], common: dict[str, Any]) -> Spec:

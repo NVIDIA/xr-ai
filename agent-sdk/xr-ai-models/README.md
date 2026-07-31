@@ -87,6 +87,28 @@ agent_llm:
 
 `category:` is required when not using a preset.
 
+## Deployment profiles
+
+A profile may separate model behavior, endpoint connectivity, and process
+ownership. The existing flat `models.yaml` format remains supported.
+
+```json
+{
+  "models": {
+    "agent_llm": {
+      "adapter": {"preset": "nemotron3_nano"},
+      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "agent-llm"}
+    }
+  }
+}
+```
+
+Workers pass the profile to `load_models_config()` as usual. A stdlib-only
+orchestrator can call `load_model_deployment(worker_config)` from
+`xr-ai-launcher` to map `managed` to `launch_mode="own"`, `reused` to
+`launch_mode="reuse"`, and `external` to no local process.
+
 ## Protocols
 
 ```python

@@ -128,6 +128,53 @@ nim_llm:
     assert nim.base_url == "https://integrate.api.nvidia.com"
 
 
+def test_profile_separates_adapter_endpoint_and_deployment(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+models:
+  reasoning:
+    category: llm
+    adapter:
+      preset: nemotron3_nano
+    endpoint:
+      base_url: http://localhost:8107
+      readiness: health
+    deployment:
+      ownership: reused
+      service: agent-llm
+  hosted_vision:
+    category: vlm
+    adapter:
+      kind: openai_compat
+      model_name: nvidia/example-vlm
+      capabilities: { vision: true }
+    endpoint:
+      base_url: https://example.test
+      api_key_env: EXAMPLE_API_KEY
+      readiness: none
+    deployment:
+      ownership: external
+"""))
+
+    reasoning = cfg.llm("reasoning")
+    assert reasoning.reasoning_field == "reasoning"
+    assert reasoning.deployment.service == "agent-llm"
+    assert reasoning.health_check is True
+    hosted = cfg.vlm("hosted_vision")
+    assert hosted.health_check is False
+    assert cfg.required_credentials == ("EXAMPLE_API_KEY",)
+
+
+def test_profile_rejects_managed_role_without_service(tmp_path) -> None:
+    with pytest.raises(ValueError, match="require a service name"):
+        load_models_config(_write(tmp_path, """
+models:
+  reasoning:
+    adapter: { preset: nemotron3_nano }
+    endpoint: { base_url: http://localhost:8107 }
+    deployment: { ownership: managed }
+"""))
+
+
 def test_vlm_preset(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
 vlm:

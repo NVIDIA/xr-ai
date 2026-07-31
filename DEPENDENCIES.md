@@ -106,7 +106,8 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     for the seven in-tree services.  Future backends (LiteLLM, vendor SDKs)
     plug in as new `kind`s in `_factory.py::make_*` without touching the
     protocols or callers.  Workers depend on this instead of rolling their
-    own httpx wrappers.
+    own httpx wrappers. Profiles may separate adapter, endpoint, and deployment
+    metadata while the existing flat YAML schema remains valid.
 
 xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── nvidia-nat-core ==1.8.0
@@ -162,7 +163,9 @@ xr-ai-launcher  (utils/xr-ai-launcher/)
     `load_cloudxr_env`, plus the single source of truth for native device
     profiles: `NATIVE_DEVICE_PROFILES`, `is_native_profile(profile)`, and
     `read_device_profile(yaml_path)` (env-first NV_DEVICE_PROFILE read, regex
-    YAML fallback).
+    YAML fallback). `load_model_deployment()` reads the profile selected by a
+    worker config and maps service ownership to launcher modes without adding
+    a YAML or model-SDK dependency.
 
 xr-ai-logging  (utils/xr-ai-logging/)
     └── loguru >=0.7

@@ -21,6 +21,11 @@ explicitly in the orchestrator's `PROCESSES` list via the `config=` field of
 All sample configs live in the `yaml/` directory. Omit `config=` for
 processes that use their own internal defaults.
 
+Samples that support interchangeable local and hosted models may set
+`models_config` in the worker YAML. `load_model_deployment()` reads that JSON
+profile using only the standard library and exposes the declared managed,
+reused, or external service ownership to the orchestrator.
+
 The orchestrator declares the process sequence in code:
 
 ```python

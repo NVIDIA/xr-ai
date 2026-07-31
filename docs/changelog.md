@@ -24,6 +24,15 @@ published version. Repository links are rewritten while each documentation
 version is read, so historical release pages point to their matching tag. Only
 `main` and `v*` tags are eligible to deploy, so pull requests remain build-only.
 
+### 2026-07-31 — Separate model behavior, endpoints, and deployment ownership
+
+Model configuration accepts a nested profile with independent `adapter`,
+`endpoint`, and `deployment` sections while preserving the flat YAML format.
+Workers continue to construct clients through `xr-ai-models`; stdlib-only
+orchestrators read only service ownership and credentials through
+`load_model_deployment()`. This keeps hosted endpoint selection and local
+process lifecycle in one profile without coupling the launcher to the model SDK.
+
 ### 2026-07-30 — Retire the superseded xr-ai-capabilities package
 
 `xr-ai-capabilities` and its unused `VisionModule` are removed after production

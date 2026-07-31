@@ -33,6 +33,7 @@ from ._openai_compat import (
     OpenAICompatVLM,
 )
 from ._config import (
+    DeploymentSpec,
     LLMSpec,
     ModelsConfig,
     STTSpec,
@@ -63,6 +64,7 @@ __all__ = [
     "OpenAICompatSTT",
     "OpenAICompatTTS",
     "OpenAICompatVLM",
+    "DeploymentSpec",
     "LLMSpec",
     "ModelsConfig",
     "STTSpec",

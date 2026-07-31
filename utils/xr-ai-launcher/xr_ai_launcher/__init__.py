@@ -33,16 +33,20 @@ from ._cloudxr_env import (
     load_cloudxr_env,
     read_device_profile,
 )
+from ._config import read_config_scalar
 from ._credentials import ensure_credentials, load_credentials, warn_if_missing
 from ._gpu import detect_gpu_config
+from ._models import ModelDeployment, load_model_deployment
 from ._processes import ManagedProcess
 from ._stack import Parallel, Process, run_stack
 
 __all__ = [
     "XR_RUNTIME_VAR", "load_cloudxr_env",
+    "read_config_scalar",
     "NATIVE_DEVICE_PROFILES", "is_native_profile", "read_device_profile",
     "ensure_credentials", "load_credentials", "warn_if_missing",
     "detect_gpu_config",
+    "ModelDeployment", "load_model_deployment",
     "ManagedProcess",
     "Parallel", "Process", "run_stack",
 ]
