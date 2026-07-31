@@ -38,6 +38,7 @@ jobs:
           # sphinx-multiversion reads the release tags and main directly from Git.
           fetch-depth: 0
       - name: Make current docs build ref available
+        if: github.event_name == 'push'
         run: |
           if ! git show-ref --verify --quiet refs/heads/main; then
             git branch main origin/main
@@ -47,9 +48,23 @@ jobs:
           python-version: "3.12"
       - name: Install doc deps
         run: pip install -r docs/requirements.txt
-      - name: Strict Sphinx build
+      - name: Strict checked-out documentation build
+        if: github.event_name == 'pull_request'
+        env:
+          DOCS_GITHUB_REF: ${{ github.event.pull_request.head.sha }}
         run: make -C docs strict
+      - name: Upload documentation preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-preview
+          path: docs/_build/current
+          if-no-files-found: error
+      - name: Strict versioned documentation build
+        if: github.event_name == 'push'
+        run: make -C docs strict-versions
       - name: Point the site root at the latest release
+        if: github.event_name == 'push'
         shell: bash
         run: |
           latest_release="$(make -s -C docs latest-release)"

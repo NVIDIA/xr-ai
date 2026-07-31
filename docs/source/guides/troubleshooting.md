@@ -236,7 +236,7 @@ in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
 
 **Most common cause:** firewall blocking WebRTC media on UDP 7882 (LiveKit).
 
-**Fix:** open ports per [`docs/networking.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/docs/networking.md). The web client
+**Fix:** open ports per [`docs/networking.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/networking.md). The web client
 will appear to connect (signaling on 7880 succeeds) but media frames are
 silently dropped without 7882.
 
@@ -349,7 +349,7 @@ flip `enforce_eager: false` unless you have a measured reason.
 **By design.** The vLLM-backed servers (`vlm_server`,
 `llama_nemotron_llm_server`, `nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
-restarts. See [`docs/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/docs/ai-services.md) → *vLLM model
+restarts. See [`docs/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/ai-services.md) → *vLLM model
 persistence*.
 
 **Fix:** to fully release VRAM:
@@ -374,4 +374,4 @@ the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).
 
 **Fix:** wait. Subsequent runs use the cached weights and start in
 ~30–60 s. If a download fails, check that `HF_TOKEN` is set if the model
-needs it (see [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/docs/credentials.md)).
+needs it (see [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)).

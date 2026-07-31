@@ -2,6 +2,7 @@
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 -->
+{% if current_version is defined and current_version %}
 <div class="version-switcher__container">
   <details>
     <summary>
@@ -27,3 +28,4 @@
     </ul>
   </details>
 </div>
+{% endif %}

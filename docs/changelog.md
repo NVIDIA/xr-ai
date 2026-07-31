@@ -18,10 +18,11 @@ released stable SemVer tag, falling back to the highest prerelease only when no
 stable release exists (or to `main/` until the first release); the version
 selector identifies the latest release, links to it from older versions, and
 preserves the current page when it exists in the selected version.
-The workflow fetches full Git history and serializes deployments because every
-tag build includes the latest `main` docs as well as its release content. Only
-`main` and `v*` tags are eligible to deploy, so documentation PRs remain
-build-only.
+Pull requests strictly build the checked-out source and expose an HTML artifact
+for review; protected pushes fetch full Git history and strictly render every
+published version. Repository links are rewritten while each documentation
+version is read, so historical release pages point to their matching tag. Only
+`main` and `v*` tags are eligible to deploy, so pull requests remain build-only.
 
 ### 2026-07-30 — Retire the superseded xr-ai-capabilities package
 

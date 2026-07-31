@@ -86,7 +86,7 @@ Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 ## Calling these from a worker
 
 Workers do not hand-roll `httpx` clients against these endpoints.  They
-depend on [`agent-sdk/xr-ai-models`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/agent-sdk/xr-ai-models/README.md),
+depend on [`agent-sdk/xr-ai-models`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md),
 load a per-sample `yaml/models.yaml`, and construct service clients via
 `make_llm`, `make_vlm`, `make_stt`, and `make_tts`.  The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
@@ -129,7 +129,7 @@ tts:
 Swapping a backend is a `kind:` + `base_url:` edit in YAML; worker code does
 not change.  Full protocol surface, the preset table, and the explicit
 (no-preset) specification are in
-[`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/agent-sdk/xr-ai-models/README.md).
+[`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md).
 
 ## Hosting models on NVIDIA NIM
 
@@ -153,7 +153,7 @@ vlm:
 
 - **`api_key_env: NGC_API_KEY`** sends the key as a bearer token. The key is a
   managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
-  subprocess (refer to [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/docs/credentials.md)); or export it.
+  subprocess (refer to [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)); or export it.
 - **`health_check: false`** is required for hosted endpoints — they have no
   local `/health` route, so the worker readiness gate must not probe them.
   (Default is `true` for local servers.)
@@ -239,7 +239,7 @@ another tag, an internal mirror, or a custom build.
 - **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
   `load_credentials()` from `~/.config/xr-ai/credentials.json` per
-  [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/docs/credentials.md)). Otherwise, log in manually once:
+  [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)). Otherwise, log in manually once:
 
   ```bash
   docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY
@@ -286,7 +286,7 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   `"detailed thinking on"` or `"detailed thinking off"` in a system or user
   message; reasoning preamble is **not** stripped server-side. Hosting backend
   is selectable per YAML (refer to *Choosing the vLLM runtime*). Refer to
-  [`ai-services/llm/llama_nemotron/README.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/ai-services/llm/llama_nemotron/README.md)
+  [`ai-services/llm/llama_nemotron/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/ai-services/llm/llama_nemotron/README.md)
   for the full HTTP contract and tuning knobs.
 - **llm/nemotron3_nano** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
@@ -297,7 +297,7 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   `enforce_eager: true` by default to avoid the silent 3–8 min CUDA graph and
   FlashInfer autotune on cold start. Hosting backend is selectable per YAML
   (refer to *Choosing the vLLM runtime*). Refer to
-  [`ai-services/llm/nemotron3_nano/README.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/ai-services/llm/nemotron3_nano/README.md)
+  [`ai-services/llm/nemotron3_nano/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/ai-services/llm/nemotron3_nano/README.md)
   for the vLLM flags it forwards and Blackwell prerequisites.
 - **llm/nemotron_omni** is a vLLM-backed multimodal LLM serving
   `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.

@@ -7,9 +7,9 @@
 
 This page describes the architecture of the xr-render-demo sample. For the
 user-facing
-quickstart, refer to the [repository README](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr).
+quickstart, refer to the [repository README](https://github.com/NVIDIA/xr-ai/blob/main/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr).
 For inference-server mechanics shared with other samples, refer to
-[`docs/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/docs/ai-services.md).
+[`docs/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/ai-services.md).
 
 ## Process stack
 
@@ -311,7 +311,7 @@ Offline regression suite for the agentic loop, run against the live agent LLM.
 It derives schemas from the worker's native NAT functions and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-[`agent-samples/xr-render-demo/eval/README.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/agent-samples/xr-render-demo/eval/README.md)
+[`agent-samples/xr-render-demo/eval/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/xr-render-demo/eval/README.md)
 for the case format and the watch-mode loop. Run with:
 
 ```bash
