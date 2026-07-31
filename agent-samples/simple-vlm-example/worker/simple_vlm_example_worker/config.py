@@ -18,8 +18,7 @@ _DEFAULT_PROMPT = Path(__file__).parent / "prompts" / "system.txt"
 class WorkerConfig:
     """Resolved runtime settings for one simple VLM worker."""
 
-    model_backend: str
-    models_yaml: Path
+    models_config: Path
     voice_gate_yaml: Path
     system_prompt: str
     default_prompt: str
@@ -61,20 +60,16 @@ def _load_system_prompt(data: dict[str, Any], config_path: Path | None) -> str:
 
 
 def load_config(path: Path | None) -> WorkerConfig:
-    """Load worker YAML while preserving the local/NIM overlay contract."""
+    """Load worker settings and resolve paths relative to its YAML."""
 
     data = _read_config(path)
-    model_backend = str(data.get("model_backend", "local")).lower()
-    models_name = (
-        "models.nim.yaml"
-        if model_backend == "nim"
-        else str(data.get("models_yaml", "models.yaml"))
-    )
     idle_timeout = data.get("idle_timeout_secs")
 
     return WorkerConfig(
-        model_backend=model_backend,
-        models_yaml=_resolve(path, models_name),
+        models_config=_resolve(
+            path,
+            str(data.get("models_config", "models.local.json")),
+        ),
         voice_gate_yaml=_resolve(
             path,
             str(data.get("voice_gate_yaml", "voice_gate.yaml")),

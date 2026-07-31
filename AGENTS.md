@@ -44,8 +44,9 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **All HTTP calls to AI services go through `agent-sdk/xr-ai-models`.**
   Workers and MCP servers depend on its four protocols
   (`LLMService`, `VLMService`, `STTService`, `TTSService`) and construct
-  clients from a per-sample `yaml/models.yaml` via `make_llm` /
-  `make_vlm` / `make_stt` / `make_tts`.  Hand-rolled `httpx` clients
+  clients from a per-sample model profile via `make_llm` / `make_vlm` /
+  `make_stt` / `make_tts`. Profiles separate adapter behavior, endpoint
+  connectivity/readiness, and deployment ownership. Hand-rolled `httpx` clients
   against `/v1/chat/completions`, `/v1/audio/transcriptions`, or
   `/v1/audio/speech` are forbidden — model quirks belong in this one
   package's presets, not in callers. No vendor SDKs (no `openai`, no
@@ -133,7 +134,7 @@ mechanically:
 - [ ] `agent-samples/<name>/worker/<snake_name>_worker/__main__.py` — entry point with cohesive sibling modules
 - [ ] `agent-samples/<name>/yaml/xr_media_hub.yaml` — hub config
 - [ ] `agent-samples/<name>/yaml/<command>.yaml` — one per process that needs config
-- [ ] `agent-samples/<name>/yaml/models.yaml` — logical model names + preset references (see `agent-sdk/xr-ai-models/README.md`)
+- [ ] `agent-samples/<name>/yaml/models.local.json` — adapter, endpoint, and deployment specs (see `agent-sdk/xr-ai-models/README.md`)
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
 - [ ] `README.md` updated — sample tour and quickstart
 

@@ -17,7 +17,10 @@ import warnings
 
 from ._config import (
     KIND_OPENAI_COMPAT,
+    AdapterSpec,
     Category,
+    DeploymentSpec,
+    EndpointSpec,
     LLMSpec,
     ModelKind,
     ModelsConfig,
@@ -37,8 +40,11 @@ warnings.warn(
 )
 
 __all__ = [
+    "AdapterSpec",
     "KIND_OPENAI_COMPAT",
     "Category",
+    "DeploymentSpec",
+    "EndpointSpec",
     "LLMSpec",
     "ModelKind",
     "ModelsConfig",

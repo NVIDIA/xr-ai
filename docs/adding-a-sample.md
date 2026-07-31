@@ -39,7 +39,7 @@ agent-samples/<name>/
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── xr_media_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
-│   ├── models.yaml                 ← logical model names + preset references
+│   ├── models.local.json           ← adapter, endpoint, and deployment specs
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
@@ -49,12 +49,12 @@ agent-samples/<name>/
         └── …                       ← cohesive workflow, transport, and config modules
 ```
 
-`yaml/models.yaml` names the logical models the worker needs (`llm`,
-`vlm`, `stt`, `tts`, or any sample-specific name) with `kind:
-preset:<name>` + `base_url:` entries.  The worker passes its path to
+`yaml/models.local.json` names the logical models the worker needs (`llm`,
+`vlm`, `stt`, `tts`, or any sample-specific name). Each role composes an
+adapter, endpoint, and deployment spec. The worker passes its path to
 `load_models_config(...)` and constructs services via `make_llm` /
 `make_vlm` / `make_stt` / `make_tts` from `xr_ai_models`.  Schema, preset
-table, and the explicit (no-preset) spec are in
+table, compatibility formats, and the profile contract are in
 [`agent-sdk/xr-ai-models/README.md`](../agent-sdk/xr-ai-models/README.md).
 
 When the worker is small, keep its implementation in the package's

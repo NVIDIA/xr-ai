@@ -206,8 +206,7 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
         / "system.txt"
     ).read_text()
 
-    assert config.model_backend == "local"
-    assert config.models_yaml == _SAMPLE_DIR / "yaml" / "models.yaml"
+    assert config.models_config == _SAMPLE_DIR / "yaml" / "models.local.json"
     assert config.voice_gate_yaml == _SAMPLE_DIR / "yaml" / "voice_gate.yaml"
     assert config.system_prompt == prompt
     assert config.default_prompt == "Describe what you see."
@@ -216,11 +215,10 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     assert config.idle_timeout_secs is None
 
 
-def test_config_keeps_nim_overlay_and_inline_prompt_compatibility(tmp_path) -> None:
+def test_config_resolves_model_profile_and_inline_prompt(tmp_path) -> None:
     config_path = tmp_path / "worker.yaml"
     config_path.write_text(
-        "model_backend: NIM\n"
-        "models_yaml: ignored.yaml\n"
+        "models_config: models.hosted-nim.json\n"
         "voice_gate_yaml: gate.yaml\n"
         "system_prompt: custom prompt\n"
         "idle_timeout_secs: 30\n"
@@ -228,8 +226,7 @@ def test_config_keeps_nim_overlay_and_inline_prompt_compatibility(tmp_path) -> N
 
     config = load_config(config_path)
 
-    assert config.model_backend == "nim"
-    assert config.models_yaml == tmp_path / "models.nim.yaml"
+    assert config.models_config == tmp_path / "models.hosted-nim.json"
     assert config.voice_gate_yaml == tmp_path / "gate.yaml"
     assert config.system_prompt == "custom prompt"
     assert config.idle_timeout_secs == 30.0

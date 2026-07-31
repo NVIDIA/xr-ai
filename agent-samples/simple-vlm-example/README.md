@@ -13,7 +13,7 @@ topic. Sending the literal text `ping` uses the configured default question,
 The worker is a package under `worker/simple_vlm_example_worker/`:
 
 - `__main__.py` parses launcher arguments.
-- `config.py` resolves worker, model-overlay, voice-gate, and prompt settings.
+- `config.py` resolves worker, model-profile, voice-gate, and prompt settings.
 - `app.py` composes the native runtime.
 - `prompts/system.txt` owns the VLM system prompt.
 
@@ -37,13 +37,17 @@ uv run simple_vlm_example
 Open the web client shown in the hub banner, connect, and then speak, type a
 question, or send `ping`.
 
-The default local endpoints are declared in `yaml/models.yaml`. Keep the
-existing backend selection in `yaml/simple_vlm_example_worker.yaml`:
+The selected `models_config` in `yaml/simple_vlm_example_worker.yaml` owns
+the model adapters, endpoints, readiness, credentials, and process ownership:
 
-- `model_backend: local` loads the file named by `models_yaml`.
-- `model_backend: nim` loads `yaml/models.nim.yaml` and skips the local VLM
-  process while STT and TTS remain local.
-- Point `models_yaml` at `models.omni.yaml` to use the shipped Omni overlay.
+- `models.local.json` runs the default local Cosmos, Parakeet, and Piper services.
+- `models.hosted-nim.json` uses hosted NVIDIA NIM for the VLM while keeping
+  STT and TTS local.
+- `models.omni.json` runs Nemotron-Omni as the local VLM.
+
+The launcher starts only services marked `managed`, reuses services marked
+`reused`, and skips `external` endpoints. Hosted credentials remain environment
+references; no secret value is stored in the profile.
 
 Voice-gate behavior remains in `yaml/voice_gate.yaml`. Worker timing, frame
 freshness, the default `ping` question, and the package prompt path are in

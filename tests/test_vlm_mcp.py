@@ -280,6 +280,38 @@ async def test_make_vlm_from_cfg_new_models_block(mock_vlm, png_path: Path):
     assert payload["chat_template_kwargs"] == {"enable_thinking": False}
 
 
+async def test_make_vlm_from_cfg_nested_models_block(mock_vlm, png_path: Path):
+    server, base_url = mock_vlm
+    server.answer = "nested answer"
+
+    vlm, timeout = _make_vlm_from_cfg({
+        "models": {
+            "vlm": {
+                "category": "vlm",
+                "adapter": {"preset": "cosmos_vlm"},
+                "endpoint": {"base_url": base_url, "readiness": "health"},
+                "deployment": {"ownership": "external"},
+            },
+        },
+        "vlm_request_timeout_s": 7.0,
+        "enable_thinking": True,
+    })
+    mcp = await build_mcp(vlm)
+    try:
+        result = await mcp.call_tool(
+            "ask_image",
+            {"question": "nested q", "image_path": str(png_path)},
+        )
+    finally:
+        await vlm.close()
+
+    assert timeout == 7.0
+    assert result.structured_content["result"] == "nested answer"
+    assert server.requests[0]["chat_template_kwargs"] == {
+        "enable_thinking": True,
+    }
+
+
 async def test_make_vlm_from_cfg_missing_required_keys_raises():
     """Neither models: nor vlm_server: present → ValueError."""
     with pytest.raises(ValueError, match="must specify either"):

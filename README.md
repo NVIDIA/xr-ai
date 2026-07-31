@@ -122,10 +122,11 @@ as you like without reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
 abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS
-behind four service protocols.  Each sample ships a `yaml/models.yaml` that
-names the logical models the worker needs (`llm`, `vlm`, `stt`, …) with
-preset references that pre-fill model-specific quirks (reasoning-field
-aliasing, `chat_template_kwargs`, served-model-name strings).  Workers call
+behind four service protocols. Model profiles name the logical roles
+(`llm`, `vlm`, `stt`, …) and separate adapter behavior, endpoint connectivity,
+and deployment ownership. Presets pre-fill model-specific quirks
+(reasoning-field aliasing, `chat_template_kwargs`, served-model-name strings).
+Workers call
 `make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
 "stt")` / `make_tts(config, "tts")` — no hand-rolled httpx clients, no model
 quirks leaking out of the SDK.  Full quickstart and the built-in preset
@@ -243,36 +244,28 @@ after a moment, and you hear the reply through your speakers.
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
 
-**Remote model** — create a models overlay that points the VLM at your
-remote endpoint, then tell the worker to use it:
+**Remote model** — copy `yaml/models.hosted-nim.json` to
+`yaml/models.custom.json`, then edit its VLM adapter, endpoint, and
+`api_key_env` as needed. Keep the local STT and TTS roles in that profile.
 
 ```yaml
-# yaml/models.custom.yaml — overlay for a remote VLM endpoint
-vlm:
-  kind:     preset:cosmos_vlm
-  base_url: https://your-remote-vlm.example.com
+# yaml/simple_vlm_example_worker.yaml
+models_config: models.custom.json
 ```
 
-```yaml
-# yaml/simple_vlm_example_worker.yaml — point the worker at the overlay
-models_yaml: models.custom.yaml
-```
-
-When pointing at a remote model, `vlm_server.yaml` is unused — remove
-the `vlm_server` entry from the launcher's process list so no local
-vLLM process is started.
+The launcher skips endpoints marked `external`, so no local VLM process starts.
 
 **Hosted NVIDIA NIM** — run the VLM on hosted NIM
 ([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS
-stay local) by setting **one key** in `simple_vlm_example_worker.yaml`:
+stay local) by selecting the shipped profile:
 
 ```yaml
-model_backend: nim     # default is "local"
+models_config: models.hosted-nim.json
 ```
 
-The worker then loads the ready-made `yaml/models.nim.yaml` overlay and the
-orchestrator skips the local vlm-server automatically — no `main.py` edits.
-Pick the hosted model id in `models.nim.yaml` and provide an `NGC_API_KEY` as
+The worker and orchestrator load the same profile, whose `external` VLM
+deployment keeps the local VLM server stopped. Pick the hosted model id in
+`models.hosted-nim.json` and provide an `NGC_API_KEY` as
 an **environment variable** (or save it once via the launcher credential
 prompt) — it is not stored in YAML; the overlay only names the env var via
 `api_key_env: NGC_API_KEY`. See

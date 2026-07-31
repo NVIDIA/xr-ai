@@ -9,6 +9,21 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-30 — Model profiles separate adapter, endpoint, and deployment ownership
+
+Model role specifications now compose `AdapterSpec`, `EndpointSpec`, and
+`DeploymentSpec`. Adapter fields describe the wire dialect and model quirks;
+endpoint fields describe connectivity, environment-based credentials, timeouts,
+and readiness; deployment fields tell stdlib-only launchers whether a service is
+managed, reused, or external. This makes process ownership explicit without
+coupling `xr-ai-models` to the launcher.
+
+The loader accepts nested JSON or YAML profiles, an optional `models` root,
+direct role mappings, and existing flat entries. Read-only flat attribute
+aliases keep current callers compatible. `simple-vlm-example` adopts the nested
+profile and its orchestrator derives model processes and credential names from
+the same file. Render profiles remain unchanged pending their owning refactor.
+
 ### 2026-07-30 — Simple VLM adopts the native voice runtime
 
 `simple-vlm-example` is the first sample migrated from direct

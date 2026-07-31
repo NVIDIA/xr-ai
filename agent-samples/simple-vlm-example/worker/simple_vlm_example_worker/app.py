@@ -48,7 +48,7 @@ async def run_app(
     """Run the worker until the voice session shuts down."""
 
     setup_logging("worker")
-    models = load_models_config(config.models_yaml)
+    models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
     stt = make_stt(models, "stt")
     vlm = make_vlm(models, "vlm")
