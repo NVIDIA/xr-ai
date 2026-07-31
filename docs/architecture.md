@@ -17,8 +17,7 @@ server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # IPC, model, NAT-function, capability, and voice SDK packages
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in per sample)
-ai-services/        # OpenAI-compatible AI inference servers (VLM, STT, TTS, LLM)
-services/           # Long-running typed XR capability services
+services/           # Model-serving and long-running typed XR capability services
 agent-mcp-servers/  # Optional MCP compatibility adapters for non-NAT consumers
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests

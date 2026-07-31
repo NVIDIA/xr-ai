@@ -43,20 +43,20 @@ _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
 _MODEL_PROCESSES = {
     "vlm": Process(
-        "vlm", "../../ai-services/vlm-server", "vlm_server",
+        "vlm", "../../services/vlm-server", "vlm_server",
         config="yaml/vlm_server.yaml",
     ),
     "vlm-omni": Process(
         "vlm-omni",
-        "../../ai-services/llm/nemotron_omni",
+        "../../services/nemotron-omni-llm",
         "nemotron_omni_llm_server",
     ),
     "stt": Process(
-        "stt", "../../ai-services/stt-server", "stt_server",
+        "stt", "../../services/stt-server", "stt_server",
         config="yaml/stt_server.yaml",
     ),
     "tts": Process(
-        "tts", "../../ai-services/tts/piper", "piper_tts_server",
+        "tts", "../../services/piper-tts", "piper_tts_server",
         config="yaml/piper_tts_server.yaml",
     ),
 }

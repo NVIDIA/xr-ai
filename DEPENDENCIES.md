@@ -356,12 +356,12 @@ xr-ai-tests  (tests/)
     render-mcp adapter surface (LOVR is stubbed). oxr-mcp is not
     included: it needs native isaacteleop + a CloudXR runtime, so its
     smoke test self-skips on CPU (see tests/README.md). Root pytest adds
-    ai-services/stt-server to its Python path (not a dependency) so the
+    services/stt-server to its Python path (not a dependency) so the
     endpoint tests can import its FastAPI app with a mocked backend,
     avoiding a test-time NeMo installation.
 
     Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
-    `-m "not gpu"` in CI). They spawn real ai-services via `uv run` (e.g.
+    `-m "not gpu"` in CI). They spawn real model services via `uv run` (e.g.
     `test_gpu_stt_server.py`, `test_gpu_video_mcp.py`), import
     `livekit.rtc` directly to drive `_room_client.py`, exercise NVENC /
     NVDEC via PyNvVideoCodec, and shell out to `docker` to manage a
@@ -369,7 +369,7 @@ xr-ai-tests  (tests/)
     `docker` all come in transitively via `xr-media-hub` /
     `video-mcp-server` rather than redeclared here.
 
-vlm-server  (ai-services/vlm-server/)
+vlm-server  (services/vlm-server/)
     └── vllm >=0.12.0
     └── pyyaml >=6.0
     └── hf-transfer >=0.1.4
@@ -381,7 +381,7 @@ vlm-server  (ai-services/vlm-server/)
     vllm_backend: pip|docker — pip path uses the wrapper's vllm; docker path
     runs `nvcr.io/nvidia/vllm:<tag> vllm serve …` instead.
 
-embedding-server  (ai-services/embedding-server/)
+embedding-server  (services/embedding-server/)
     └── vllm >=0.14.0
     └── pyyaml >=6.0
     └── hf-transfer >=0.1.4
@@ -390,16 +390,17 @@ embedding-server  (ai-services/embedding-server/)
     Model: nvidia/llama-nemotron-embed-1b-v2. Exposes OpenAI-compatible
     embeddings at port 8109 through the shared vLLM hosting wrapper.
 
-stt-server  (ai-services/stt-server/)
+stt-server  (services/stt-server/)
     └── nemo_toolkit[asr] >=2.5
     └── lightning >2.2.1,<=2.4.0    # routed to github.com/Lightning-AI/pytorch-lightning
     └── fastapi >=0.111
     └── uvicorn[standard] >=0.29
     └── python-multipart >=0.0.9
     └── pyyaml >=6.0
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     Model: nvidia/parakeet-tdt-0.6b-v3 (NeMo ASR, in-process)
 
-magpie-tts-server  (ai-services/tts/magpie/)
+magpie-tts-server  (services/magpie-tts/)
     └── nemo_toolkit[tts] >=2.5
     └── lightning >2.2.1,<=2.4.0    # routed to github.com/Lightning-AI/pytorch-lightning
     └── soundfile >=0.12
@@ -408,26 +409,27 @@ magpie-tts-server  (ai-services/tts/magpie/)
     └── uvicorn[standard] >=0.29
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     Model: nvidia/magpie_tts_multilingual_357m (NeMo TTS, in-process)
 
-llama-nemotron-llm-server  (ai-services/llm/llama_nemotron/)
+llama-nemotron-llm-server  (services/llama-nemotron-llm/)
     └── vllm >=0.12.0
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
-    └── xr-ai-logging  [editable: ../../../utils/xr-ai-logging]
-    └── xr-ai-vllm     [editable: ../../../utils/xr-ai-vllm]
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-vllm     [editable: ../../utils/xr-ai-vllm]
     Model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1 (vLLM).
     Native Llama-3.1 tool calling via vLLM's llama3_json parser
     (--enable-auto-tool-choice --tool-call-parser llama3_json) + per-turn
     reasoning toggle ("detailed thinking on/off") via system prompt.
     vllm_backend: pip|docker — same dispatch as the other vllm-backed services.
 
-nemotron3-nano-llm-server  (ai-services/llm/nemotron3_nano/)
+nemotron3-nano-llm-server  (services/nemotron3-nano-llm/)
     └── vllm >=0.12.0
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
-    └── xr-ai-logging  [editable: ../../../utils/xr-ai-logging]
-    └── xr-ai-vllm     [editable: ../../../utils/xr-ai-vllm]
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-vllm     [editable: ../../utils/xr-ai-vllm]
     Model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (vLLM)
            (auto-selected by GPU compute capability — Blackwell SM>=10
            gets NVFP4 + FP8 KV cache, otherwise FP8 weights).
@@ -437,12 +439,12 @@ nemotron3-nano-llm-server  (ai-services/llm/nemotron3_nano/)
     vLLM (the parser plugin is auto-fetched into model_cache on first run).
     vllm_backend: pip|docker — same dispatch as vlm-server.
 
-nemotron-omni-llm-server  (ai-services/llm/nemotron_omni/)
+nemotron-omni-llm-server  (services/nemotron-omni-llm/)
     └── vllm >=0.12.0
     └── hf-transfer >=0.1.4
     └── pyyaml >=6.0
-    └── xr-ai-logging  [editable: ../../../utils/xr-ai-logging]
-    └── xr-ai-vllm     [editable: ../../../utils/xr-ai-vllm]
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-vllm     [editable: ../../utils/xr-ai-vllm]
     Model: nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} (vLLM)
     Multimodal (text + video). Non-persistent foreground wrapper; auto-selects
     quant by GPU compute capability (NVFP4 on Blackwell, FP8 on Ada/Hopper,
@@ -450,12 +452,13 @@ nemotron-omni-llm-server  (ai-services/llm/nemotron_omni/)
     tool-call parser handled server-side by vLLM.
     vllm_backend: pip|docker — same dispatch as vlm-server.
 
-piper-tts-server  (ai-services/tts/piper/)
+piper-tts-server  (services/piper-tts/)
     └── piper-tts >=1.4.0
     └── huggingface-hub >=0.22
     └── fastapi >=0.111
     └── uvicorn[standard] >=0.29
     └── pyyaml >=6.0
+    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     Voices: rhasspy/piper-voices on HuggingFace (ONNX, auto-downloaded)
     Trade-off vs magpie: ~100 ms/sentence on CPU vs. 2-5 s; no GPU needed.
 ```
@@ -466,14 +469,14 @@ piper-tts-server  (ai-services/tts/piper/)
 
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
-| `ai-services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
-| `ai-services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
-| `ai-services/tts/magpie/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
-| `ai-services/tts/piper/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
-| `ai-services/llm/llama_nemotron/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
-| `ai-services/llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (GPU-selected) | vLLM (pip or docker) |
-| `ai-services/llm/nemotron_omni/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} | vLLM (pip or docker) — multimodal text+video |
-| `ai-services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
+| `services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
+| `services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
+| `services/magpie-tts/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `services/piper-tts/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `services/llama-nemotron-llm/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
+| `services/nemotron3-nano-llm/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (GPU-selected) | vLLM (pip or docker) |
+| `services/nemotron-omni-llm/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} | vLLM (pip or docker) — multimodal text+video |
+| `services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed msgpack/ZMQ → recorded H.264 queries |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP compatibility adapter → recorded service + live hub IPC |
@@ -619,11 +622,11 @@ updated in the same commit**.
 | `agent-sdk/xr-ai-hub-client/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
-| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All vLLM wrappers (`ai-services/vlm-server/`, `ai-services/embedding-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), model-server orchestrators |
-| `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
+| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All vLLM wrappers (`services/vlm-server/`, `services/embedding-server/`, `services/llama-nemotron-llm/`, `services/nemotron3-nano-llm/`, `services/nemotron-omni-llm/`), model-server orchestrators |
+| `vllm_backend` / `vllm_image` YAML keys | `services/{vlm-server,embedding-server,llama-nemotron-llm,nemotron3-nano-llm,nemotron-omni-llm}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
 | Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `stop_persistent_servers` names in `agent-samples/model-servers/main.py` |
-| vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
-| vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
+| vlm-server model class or supported architectures | `services/vlm-server/vlm_server.yaml` comments |
+| vlm-server YAML config keys (`model`, `model_cache`, …) | `services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, `docs/adding-cloudxr.md` |
 | `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | xr-render-scene + oxr-mcp + cloudxr-runtime `__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `docs/adding-cloudxr.md`, `docs/xr-render-demo.md` (client-type section) |
 | scene service YAML config keys | `agent-samples/xr-render-demo/scene/scene_service.yaml`, orchestrator process declaration, `docs/xr-render-demo.md` |

@@ -16,8 +16,8 @@ Typical usage::
     PROCESSES = [
         Process("hub",    "../../server-runtime", "xr_media_hub"),
         Parallel([
-            Process("stt", "../../ai-services/stt-server", "stt_server"),
-            Process("tts", "../../ai-services/tts/piper",  "piper_tts_server"),
+            Process("stt", "../../services/stt-server", "stt_server"),
+            Process("tts", "../../services/piper-tts",  "piper_tts_server"),
         ]),
         Process("worker", "worker", "my_agent_worker"),
     ]

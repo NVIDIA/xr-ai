@@ -57,12 +57,12 @@ def _build_processes(stack: str = "vlm-llm") -> list[Process]:
     if not (_BASE / embedding_config).exists():
         embedding_config = f"{ai}/embedding_server.yaml"
     stt = Process(
-        "stt", "../../ai-services/stt-server", "stt_server",
+        "stt", "../../services/stt-server", "stt_server",
         config=f"{ai}/stt_server.yaml",
         launch_mode="persist", port=8103,
     )
     embedding = Process(
-        "embedding", "../../ai-services/embedding-server", "embedding_server",
+        "embedding", "../../services/embedding-server", "embedding_server",
         config=embedding_config,
         launch_mode="persist", port=8109,
     )
@@ -70,7 +70,7 @@ def _build_processes(stack: str = "vlm-llm") -> list[Process]:
         return [
             stt,
             Process(
-                "omni", "../../ai-services/llm/nemotron_omni",
+                "omni", "../../services/nemotron-omni-llm",
                 "nemotron_omni_llm_server",
                 config=f"{ai}/nemotron_omni_llm_server.yaml",
                 launch_mode="persist", port=8108,
@@ -81,10 +81,10 @@ def _build_processes(stack: str = "vlm-llm") -> list[Process]:
         raise ValueError(f"unknown model stack: {stack}")
     return [
         stt,
-        Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+        Process("agent-llm", "../../services/nemotron3-nano-llm",  "nemotron3_nano_llm_server",
                 config=f"{ai}/nemotron3_nano_llm_server.yaml",
                 launch_mode="persist", port=8107),
-        Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
+        Process("vlm",       "../../services/vlm-server",          "vlm_server",
                 config=f"{ai}/vlm_server.yaml",
                 launch_mode="persist", port=8100),
         embedding,

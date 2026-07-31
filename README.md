@@ -118,7 +118,7 @@ frames are dropped if it is closed.
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
 | Agent functions | `agent-sdk/xr-ai-nat/` | Typed, in-process NAT functions for XR capabilities |
-| Capability services | `services/` | Long-running typed services used by native functions |
+| Reusable services | `services/` | Model-serving and typed capability processes |
 | Agent interfaces | `agent-mcp-servers/` | MCP compatibility processes for XR data & rendering |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
@@ -509,7 +509,7 @@ For engineers and agents working in the repo:
 | [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
 | [`docs/architecture.md`](docs/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
 | [`docs/process-model.md`](docs/process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
-| [`docs/ai-services.md`](docs/ai-services.md) | VLM / STT / TTS / LLM server reference + worker call examples |
+| [`docs/ai-services.md`](docs/ai-services.md) | VLM / STT / TTS / LLM / embedding server reference + worker call examples |
 | [`docs/xr-render-demo.md`](docs/xr-render-demo.md) | xr-render-demo architecture: native functions, agentic loop, XR lifecycle |
 | [`docs/adding-a-sample.md`](docs/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
 | [`docs/adding-cloudxr.md`](docs/adding-cloudxr.md) | Wiring CloudXR into a sample |

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Endpoint tests for ai-services/stt-server with a mocked ASR backend.
+"""Endpoint tests for services/stt-server with a mocked ASR backend.
 
 No GPU or NeMo: the module is imported via pythonpath and the backend's
 ``transcribe`` is replaced, so these run in CI. The GPU smoke test that

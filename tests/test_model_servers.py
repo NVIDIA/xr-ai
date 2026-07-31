@@ -20,7 +20,7 @@ _SPEC.loader.exec_module(_model_servers)
 
 _OMNI_PATH = (
     _REPO_ROOT
-    / "ai-services/llm/nemotron_omni/nemotron_omni_llm_server/__main__.py"
+    / "services/nemotron-omni-llm/nemotron_omni_llm_server/__main__.py"
 )
 _OMNI_SPEC = importlib.util.spec_from_file_location("nemotron_omni_main", _OMNI_PATH)
 assert _OMNI_SPEC and _OMNI_SPEC.loader

@@ -21,8 +21,7 @@ agent-sdk/          # Five packages:
                     #   xr-ai-nat          — typed, in-process NAT functions for XR capabilities
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
-ai-services/        # OpenAI-compatible inference servers (VLM, STT, TTS, LLM)
-services/           # Long-running typed capability services
+services/           # Model-serving and long-running typed capability services
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, vec, video, vlm
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
@@ -316,7 +315,7 @@ Read these on demand when the topic comes up:
 | `docs/architecture.md` | Working across module boundaries; understanding hub ↔ transport ↔ agent boundaries; the same-origin wss:// signaling proxy in front of LiveKit |
 | `docs/process-model.md` | Touching `utils/xr-ai-launcher/`, orchestrators, ready-files, or adding a managed process type |
 | `docs/credentials.md` | Code that needs `HF_TOKEN` / `NGC_API_KEY` |
-| `docs/ai-services.md` | Adding, calling, or operating a VLM / STT / TTS / LLM server (incl. vLLM persistence) |
+| `docs/ai-services.md` | Adding, calling, or operating a VLM / STT / TTS / LLM / embedding server (incl. vLLM persistence) |
 | `docs/xr-render-demo.md` | Working inside `agent-samples/xr-render-demo/` — process stack, LLM roles, agentic loop, XR lifecycle |
 | `docs/adding-a-sample.md` | Scaffolding a new sample — full boilerplate templates |
 | `docs/adding-cloudxr.md` | Wiring CloudXR into a sample |
