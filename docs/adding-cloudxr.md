@@ -5,7 +5,7 @@
 
 # Adding CloudXR to a sample
 
-`cloudxr-runtime/` is a shared top-level component, like `server-runtime/`.
+`services/cloudxr-runtime/` is the shared CloudXR service.
 Any sample can stream XR content to a device by adding one line to its
 orchestrator and a config file in the sample root. For the broader
 orchestrator pattern see `docs/adding-a-sample.md`.
@@ -15,7 +15,7 @@ orchestrator pattern see `docs/adding-a-sample.md`.
 ```python
 PROCESSES = [
     Process("hub",     "../../server-runtime",  "xr_media_hub"),
-    Process("cloudxr", "../../cloudxr-runtime", "cloudxr_runtime"),  # ← add this
+    Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime"),  # ← add this
     Process("worker",  "worker",                "my_agent_worker"),
 ]
 ```
