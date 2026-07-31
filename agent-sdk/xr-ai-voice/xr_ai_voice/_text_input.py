@@ -35,7 +35,7 @@ class TextMessageInput:
         if message.topic in self._ignore_topics:
             return
         text = (message.data or b"").decode("utf-8", errors="replace").strip()
-        if not text:
+        if not text or not self._session.is_running:
             return
         if not self._session.transport.target_participant:
             self._session.transport.set_target_participant(message.participant_id)

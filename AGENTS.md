@@ -51,8 +51,9 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   package's presets, not in callers. No vendor SDKs (no `openai`, no
   `anthropic`, no `litellm`); all in-tree backends speak
   OpenAI-compatible HTTP.
-- **Workers never import from `server-runtime` or `xr_ai_launcher`.** Only
-  `xr_ai_hub` + `xr_ai_models` + task-specific libs (numpy, torch, …).
+- **Workers never import from `server-runtime` or `xr_ai_launcher`.** Use the
+  public `xr_ai_hub`, `xr_ai_models`, `xr_ai_nat`, and `xr_ai_voice` SDK
+  surfaces plus task-specific libraries (numpy, torch, …).
 - **Agentic functions are NAT-first and in-process.** Reusable deterministic
   functions live in `xr-ai-nat` as typed NAT function groups. Existing MCP
   servers remain compatibility surfaces while their capabilities migrate.
@@ -112,28 +113,31 @@ mechanically:
 **Worker code rules** (apply to every sample worker):
 
 - Import IPC types from `xr_ai_hub`; native agent functions come from
-  `xr_ai_nat`.
-- `_HUB_PUB` / `_HUB_PUSH` are module-level constants, not magic strings.
-- Wire `SIGINT` and `SIGTERM` to `agent.shutdown()`; wrap `await agent.run()`
-  in `try/finally` calling `shutdown()`.
-- `shutdown()` is synchronous (signal-handler safe). Cancel asyncio tasks
-  first, then `ep.stop()` + `ep.close()`.
+  `xr_ai_nat`, model clients from `xr_ai_models`, and the native voice runtime
+  from `xr_ai_voice`.
+- Raw IPC workers keep `_HUB_PUB` / `_HUB_PUSH` as module-level constants,
+  wire `SIGINT` and `SIGTERM` to a synchronous `shutdown()`, cancel asyncio
+  tasks first, then call `ep.stop()` + `ep.close()`. Voice workers delegate
+  readiness, signals, pipeline cancellation, and cleanup to `VoiceSession`.
 - Callbacks are `async def` even if the work inside is sync.
 - CPU-bound work goes through `loop.run_in_executor(...)` — never block the
   event loop.
-- Imports are absolute (flat module layout). No `__init__.py` or `__main__.py`.
+- New and migrated workers are named packages with relative internal imports,
+  an explicit `__init__.py`, and a `__main__.py` entry point.
 
 **Checklist for a new sample:**
 
 - [ ] `agent-samples/<name>/pyproject.toml` — orchestrator, deps: `xr-ai-launcher` only
-- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-hub-client` + task libs (list every `.py` in `only-include`)
+- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, narrow task deps; package `<snake_name>_worker`
 - [ ] `agent-samples/<name>/main.py` — exact orchestrator boilerplate
-- [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` — entry point + (optional) split helpers
+- [ ] `agent-samples/<name>/worker/<snake_name>_worker/` — package with
+      `__init__.py`, `__main__.py`, and cohesive sibling modules
 - [ ] `agent-samples/<name>/yaml/xr_media_hub.yaml` — hub config
 - [ ] `agent-samples/<name>/yaml/<command>.yaml` — one per process that needs config
 - [ ] `agent-samples/<name>/yaml/models.yaml` — worker-only model config, or a structured JSON deployment profile when the orchestrator also consumes ownership (see `agent-sdk/xr-ai-models/README.md`)
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
-- [ ] `README.md` updated — sample tour and quickstart
+- [ ] `agent-samples/<name>/README.md` — sample-specific setup and operation
+- [ ] Root `README.md` updated — sample tour and quickstart
 
 Boilerplate templates (orchestrator, worker, `pyproject.toml`): `docs/adding-a-sample.md`.
 Reference implementation: `agent-samples/simple-vlm-example/`.
@@ -160,18 +164,26 @@ workflows. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
 NAT's built-in LangChain-backed agent types; applications install
 `xr-ai-nat[agents]` rather than calling LangChain model clients directly.
 
-The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
+The public **native voice runtime** lives in `xr-ai-voice` (it depends on
+pipecat internally):
 
-- **Voice pipeline** — `make_voice_pipeline` assembles
-  `input → VadStt → VoiceGate → brain → StreamingTts → output`. A sample
-  subclasses `BrainProcessor` and hands it to the factory.
+- **Voice session** — `VoiceSession.run(handler)` privately assembles
+  `input → VadStt → VoiceGate → handler → StreamingTts → output`, owns model
+  readiness and ready-file semantics, installs signal handlers, and closes the
+  transport and model clients.
+- **Native handler** — `xr_ai_nat.adapters.as_voice_handler` maps a typed NAT
+  function onto `VoiceSession`; `TextMessageInput` routes participant text
+  through the same turn path as speech.
 - **Wake word / speech gate** — `xr-ai-voicegate` (the `VoiceGate` state
   machine) wired in as `VoiceGateProcessor`; per-sample config in
   `yaml/voice_gate.yaml` (`magic_phrases: ["hey agent"]`, or `[]` for
   always-on). No sample code — config only.
 
-A new vision sample's brain therefore reduces to a Pipecat adapter over a
-native vision function; a voice sample gets the wake word from config alone.
+`xr-ai-pipecat` remains available for samples that still subclass its
+`BrainProcessor`; this migration does not remove it.
+
+A native voice sample adapts its NAT function to `VoiceSession`; wake-word
+behavior comes from config alone.
 
 ### Scope decision and named follow-ups
 

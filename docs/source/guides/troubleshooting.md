@@ -224,13 +224,15 @@ back to OpenH264 (which is royalty-bearing). Refer to the
 **Cause:** an idle-timeout that auto-cancels the voice pipeline after a stretch
 with no user or bot speech.
 
-**Status:** disabled by default. `make_voice_pipeline` passes
-`cancel_on_idle_timeout=False` (overriding pipecat's on-by-default
+**Status:** disabled by default. `VoiceSession` and `make_voice_pipeline` pass
+`cancel_on_idle_timeout=False` (overriding Pipecat's on-by-default
 `IDLE_TIMEOUT_SECS`), so a quiet session stays connected indefinitely.
 
 **If you want it:** set `idle_timeout_secs: <seconds>` (e.g. `300` for 5 min)
 in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
-`xr_render_demo_worker.yaml`); `0` or unset keeps it disabled.
+`xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
+owned by `xr_ai_voice.VoiceSession` or, for a direct Pipecat consumer,
+`xr_ai_pipecat.make_voice_pipeline`.
 
 ### Browser client connects but no audio or no video
 
