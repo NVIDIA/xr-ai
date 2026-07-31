@@ -124,10 +124,11 @@ The worker passes the file to `load_models_config()`. The orchestrator calls
 `load_model_deployment(worker_config)` to map `managed` to an owned process,
 `reused` to `launch_mode="reuse"`, and `external` to no local process. Launcher
 profiles must use the wrapped nested JSON shape and declare credentials as
-`endpoint.api_key_env`; flat YAML remains supported for worker-only configs.
+`endpoint.api_key_env`; the launcher rejects non-`.json` profiles before
+parsing, while flat YAML remains supported for worker-only configs.
 
-`adapter` and `endpoint` are normalized into the existing typed service specs;
-only `deployment` remains separately typed as `DeploymentSpec`.
+Model roles compose `AdapterSpec`, `EndpointSpec`, and `DeploymentSpec`; their
+legacy flat attributes remain available as read-only compatibility aliases.
 
 ### Protocols
 

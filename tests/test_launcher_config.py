@@ -125,6 +125,57 @@ def test_bundled_simple_vlm_profiles_have_launcher_sdk_parity(
     assert deployment.required_credentials == models.required_credentials
 
 
+def test_launcher_rejects_worker_only_yaml_profile(tmp_path) -> None:
+    profile = tmp_path / "models.custom.yaml"
+    profile.write_text(
+        "models:\n"
+        "  vlm:\n"
+        "    category: vlm\n"
+        "    adapter:\n"
+        "      kind: openai_compat\n"
+        "      model_name: custom-vlm\n"
+        "    endpoint:\n"
+        "      base_url: http://localhost:8100\n"
+        "    deployment:\n"
+        "      ownership: managed\n"
+        "      service: vlm\n",
+        encoding="utf-8",
+    )
+    worker_config = tmp_path / "worker.yaml"
+    worker_config.write_text(
+        "models_config: models.custom.yaml\n",
+        encoding="utf-8",
+    )
+
+    assert load_models_config(profile).vlm("vlm").deployment.service == "vlm"
+    with pytest.raises(ValueError, match=r"must use a \.json file"):
+        load_model_deployment(worker_config)
+
+
+def test_launcher_rejects_worker_only_flat_json_profile(tmp_path) -> None:
+    profile = tmp_path / "models.custom.json"
+    profile.write_text(
+        json.dumps({
+            "models": {
+                "vlm": {
+                    "kind": "preset:cosmos_vlm",
+                    "base_url": "http://localhost:8100",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    worker_config = tmp_path / "worker.yaml"
+    worker_config.write_text(
+        "models_config: models.custom.json\n",
+        encoding="utf-8",
+    )
+
+    assert load_models_config(profile).vlm("vlm").base_url.endswith(":8100")
+    with pytest.raises(ValueError, match="must define adapter, endpoint"):
+        load_model_deployment(worker_config)
+
+
 @pytest.mark.parametrize(
     "profile_name",
     ["models.local.json", "models.hosted.json", "models.omni.json"],

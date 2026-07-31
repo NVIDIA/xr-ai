@@ -96,7 +96,9 @@ readiness; `deployment` tells a launcher whether the service is `managed`,
 
 Profiles may be JSON or YAML. The loader also accepts a direct role mapping,
 flat entries, `health_check: true|false`, and `kind: preset:<name>` for
-backward compatibility.
+backward compatibility. The public role-spec classes also retain their legacy
+flat positional and keyword constructors and expose flat fields as read-only
+properties.
 
 ## Deployment profiles
 
@@ -124,8 +126,10 @@ orchestrator can call `load_model_deployment(worker_config)` from
 the launcher must be declared explicitly as `endpoint.api_key_env`; launcher
 profiles do not inherit credentials from adapter presets.
 
-The SDK currently normalizes `adapter` and `endpoint` into the existing typed
-service specs. Only `deployment` remains separately typed as `DeploymentSpec`.
+The launcher validates the `.json` suffix before reading a profile; selecting a
+YAML profile is supported only for worker-side `xr-ai-models` loading. Model
+roles compose `AdapterSpec`, `EndpointSpec`, and `DeploymentSpec`, while their
+legacy flat attributes remain available as read-only compatibility aliases.
 The simple VLM sample provides complete local and hosted profiles.
 
 ## Protocols
