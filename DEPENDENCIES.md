@@ -162,7 +162,8 @@ xr-ai-launcher  (utils/xr-ai-launcher/)
     `load_cloudxr_env`, plus the single source of truth for native device
     profiles: `NATIVE_DEVICE_PROFILES`, `is_native_profile(profile)`, and
     `read_device_profile(yaml_path)` (env-first NV_DEVICE_PROFILE read, regex
-    YAML fallback).
+    YAML fallback). Reused HTTP processes are health-checked before any owned
+    process is spawned; the launcher remains stdlib-only via `urllib.request`.
 
 xr-ai-logging  (utils/xr-ai-logging/)
     └── loguru >=0.7

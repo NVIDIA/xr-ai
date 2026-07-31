@@ -69,6 +69,43 @@ class TestParallelDataclass:
             group.processes = ()  # type: ignore[misc]
 
 
+class TestReusePreflight:
+    class _Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    def test_healthy_service_passes(self, monkeypatch):
+        monkeypatch.setattr(
+            _stack.urllib.request,
+            "urlopen",
+            lambda url, timeout: self._Response(),
+        )
+        process = _stack.Process("vlm", ".", "vlm_server", launch_mode="reuse", port=8100)
+
+        _stack._preflight_reused([process])
+
+    def test_missing_port_is_rejected(self):
+        process = _stack.Process("vlm", ".", "vlm_server", launch_mode="reuse")
+
+        with pytest.raises(ValueError, match="health-check port"):
+            _stack._preflight_reused([process])
+
+    def test_unhealthy_service_stops_before_spawn(self, monkeypatch):
+        def unavailable(_url, timeout):
+            raise OSError("connection refused")
+
+        monkeypatch.setattr(_stack.urllib.request, "urlopen", unavailable)
+        process = _stack.Process("vlm", ".", "vlm_server", launch_mode="reuse", port=8100)
+
+        with pytest.raises(SystemExit, match="required reused service is not healthy"):
+            _stack._preflight_reused([_stack.Parallel([process])])
+
+
 class _FakePopen:
     """Minimal Popen stand-in: alive (poll()->None), spawned without subprocess."""
     def __init__(self, name: str) -> None:

@@ -44,6 +44,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence, Union
@@ -74,7 +75,8 @@ class Process:
                            processes that take no config.
     gpu                  — optional CUDA_VISIBLE_DEVICES value (e.g. ``"0"``, ``"0,1"``).
     launch_mode          — controls spawn + shutdown behaviour:
-    port                 — optional service port, used to stop ``persist`` services.
+    port                 — service port. Required for ``reuse`` health preflight;
+                           also used to stop ``persist`` services.
     quiet_native_output  — when True, captured subprocess lines that don't look like
                            Python loguru output (no ``HH:MM:SS.SSS`` prefix) are routed
                            through stdlib ``logging`` at DEBUG instead of printed to
@@ -247,6 +249,35 @@ def _spawn(proc: Process, base: Path, ready_file: Path) -> subprocess.Popen:
 
 
 # ── readiness wait ─────────────────────────────────────────────────────────────
+
+def _require_reused_ready(proc: Process) -> None:
+    """Fail unless a reused HTTP service is already healthy."""
+    if proc.port is None:
+        raise ValueError(f"reused process {proc.name!r} must declare its health-check port")
+
+    health_url = f"http://127.0.0.1:{proc.port}/health"
+    try:
+        with urllib.request.urlopen(health_url, timeout=2) as response:
+            if response.status == 200:
+                log.info("[%s] reused service ready at %s", proc.name, health_url)
+                return
+            failure = f"HTTP {response.status}"
+    except Exception as exc:
+        failure = f"{type(exc).__name__}: {exc}"
+
+    raise SystemExit(
+        f"[{proc.name}] required reused service is not healthy at {health_url}.\n"
+        f"Last health check: {failure}"
+    )
+
+
+def _preflight_reused(processes: Sequence[Union[Process, Parallel]]) -> None:
+    """Validate external process dependencies before spawning the stack."""
+    for item in processes:
+        members = item.processes if isinstance(item, Parallel) else (item,)
+        for proc in members:
+            if proc.launch_mode == "reuse":
+                _require_reused_ready(proc)
 
 def _wait_ready(name: str, ready_file: Path, proc: subprocess.Popen) -> None:
     """Block until *ready_file* exists. Print a progress line every 5 s."""
@@ -443,6 +474,7 @@ def run_stack(
             run_stack(PROCESSES, _BASE)
     """
     load_credentials()
+    _preflight_reused(processes)
 
     # "persist" and "reuse" processes are left running on shutdown.
     # "reuse" processes are not spawned at all — assumed already running.
