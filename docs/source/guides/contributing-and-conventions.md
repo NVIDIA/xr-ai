@@ -8,10 +8,10 @@
 The conventions every change to xr-ai must satisfy. The authoritative
 sources live at the repository root and override anything summarized here:
 
-- [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
+- [`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/CONTRIBUTING.md)
   — how to build, test, and submit changes, plus the PR process and the
   Developer Certificate of Origin (DCO) sign-off requirement.
-- [`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md) — despite
+- [`AGENTS.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/AGENTS.md) — despite
   the name (which follows the [agents.md](https://agents.md) convention), this
   is the working-conventions doc for **both human developers and AI
   assistants**: architecture, the process model, sample layout, license-header
@@ -42,13 +42,13 @@ commit** as the code change. This applies to new packages, changed entry
 points, new quickstart flows, renamed commands, and new configuration files.
 
 Record significant new decisions in
-[`docs/changelog.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/changelog.md)
+[`docs/changelog.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/docs/changelog.md)
 (reverse chronological). Architectural rationale and historical context belong
 in the changelog, not in source comments.
 
 ## Dependency discipline
 
-[`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md)
+[`DEPENDENCIES.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/DEPENDENCIES.md)
 at the repository root is the authoritative dependency map. **Any change to a
 `pyproject.toml` must update `DEPENDENCIES.md` in the same commit** — a change
 is not complete until `DEPENDENCIES.md` reflects it. Several hard rules follow
@@ -71,7 +71,7 @@ SPDX-License-Identifier: Apache-2.0
 ```
 
 The Apache-2.0 license text lives in
-[`LICENSE`](https://github.com/NVIDIA/xr-ai/blob/main/LICENSE). REUSE does not
+[`LICENSE`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/LICENSE). REUSE does not
 auto-update the copyright year when you touch a file; include the current year
 when adding or editing headers.
 
@@ -109,18 +109,18 @@ wrapper files (`gradlew`, `gradlew.bat`,
 ### Enforcement
 
 Headers are enforced locally by
-[`.github/scripts/check_spdx_headers.py`](https://github.com/NVIDIA/xr-ai/blob/main/.github/scripts/check_spdx_headers.py),
+[`.github/scripts/check_spdx_headers.py`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/.github/scripts/check_spdx_headers.py),
 wired into
-[`.pre-commit-config.yaml`](https://github.com/NVIDIA/xr-ai/blob/main/.pre-commit-config.yaml).
+[`.pre-commit-config.yaml`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/.pre-commit-config.yaml).
 Run `pre-commit install` once after cloning to enable it;
 `python3 .github/scripts/check_spdx_headers.py` audits the whole tree at any
 time. The same check runs in CI as a backstop:
-[`.github/workflows/spdx.yml`](https://github.com/NVIDIA/xr-ai/blob/main/.github/workflows/spdx.yml).
+[`.github/workflows/spdx.yml`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/.github/workflows/spdx.yml).
 
 ## Pull requests
 
 Create a feature branch, keep code and docs in the same commit, ensure builds
 and tests pass locally and in CI, and describe motivation, changes, and testing
 in the PR. All commits must be signed off (`git commit -s`) per the DCO. Refer to
-[`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md)
+[`CONTRIBUTING.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/CONTRIBUTING.md)
 for the full PR process and the DCO text.

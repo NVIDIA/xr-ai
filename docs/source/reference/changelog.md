@@ -9,4 +9,4 @@ Significant architectural and design decisions are recorded newest-first so the
 rationale is preserved. The full decision log is maintained on GitHub.
 
 Read the full changelog on GitHub:
-[`docs/changelog.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/changelog.md).
+[`docs/changelog.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/docs/changelog.md).

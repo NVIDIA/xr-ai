@@ -479,6 +479,7 @@ For engineers and agents working in the repo:
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
+| [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
 | [`docs/architecture.md`](docs/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
 | [`docs/process-model.md`](docs/process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
 | [`docs/ai-services.md`](docs/ai-services.md) | VLM / STT / TTS / LLM server reference + worker call examples |

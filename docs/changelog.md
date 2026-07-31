@@ -9,6 +9,20 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-31 — GitHub Pages publishes immutable release documentation
+
+The documentation site now uses `sphinx-multiversion` to render `main` as
+development documentation and every semantic `v*` tag as a separate release
+site subtree. The root URL redirects through `latest/` to the most recently
+released stable SemVer tag, falling back to the highest prerelease only when no
+stable release exists (or to `main/` until the first release); the version
+selector identifies the latest release, links to it from older versions, and
+preserves the current page when it exists in the selected version.
+The workflow fetches full Git history and serializes deployments because every
+tag build includes the latest `main` docs as well as its release content. Only
+`main` and `v*` tags are eligible to deploy, so documentation PRs remain
+build-only.
+
 ### 2026-07-30 — Retire the superseded xr-ai-capabilities package
 
 `xr-ai-capabilities` and its unused `VisionModule` are removed after production

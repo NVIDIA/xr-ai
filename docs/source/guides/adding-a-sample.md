@@ -55,7 +55,7 @@ preset:<name>` + `base_url:` entries.  The worker passes its path to
 `load_models_config(...)` and constructs services via `make_llm` /
 `make_vlm` / `make_stt` / `make_tts` from `xr_ai_models`.  Schema, preset
 table, and the explicit (no-preset) spec are in
-[`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md).
+[`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/{{ github_ref }}/agent-sdk/xr-ai-models/README.md).
 
 When the worker is small (≲ 100 lines) keep it as a single file —
 `worker/<snake_name>_worker.py` containing everything. Only split once
