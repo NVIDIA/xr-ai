@@ -25,8 +25,7 @@ frame tracking and camera-on-demand through the shared ``LiveFrameSource``.
 
 Config (simple_vlm_example_worker.yaml — auto-passed by the launcher)
 ---------------------------------------------------------------------
-    model_backend:         local   # "local" (default) or "nim" (hosted VLM; uses models.nim.yaml)
-    models_yaml:           yaml/models.yaml      # local-backend models config
+    models_config:         models.local.json     # model deployment profile
     voice_gate_yaml:       yaml/voice_gate.yaml  # path to voice-gate config
     default_prompt:        "Describe what you see."
     system_prompt:               <multiline string>   # role/style guidance
@@ -75,12 +74,9 @@ async def main(
 ) -> None:
     setup_logging("worker")
 
-    # `model_backend: nim` selects the shipped NIM overlay (hosted VLM); the
-    # orchestrator reads the same key to skip the local vlm-server. Otherwise
-    # `models_yaml` picks the local config (default models.yaml).
-    backend = str(cfg.get("model_backend", "local")).lower()
-    models_yaml_raw = "models.nim.yaml" if backend == "nim" else cfg.get("models_yaml", "models.yaml")
-    models_cfg = load_models_config(_resolve(config_path, models_yaml_raw))
+    models_cfg = load_models_config(
+        _resolve(config_path, cfg.get("models_config", "models.local.json"))
+    )
 
     stt = make_stt(models_cfg, "stt")
     vlm = make_vlm(models_cfg, "vlm")

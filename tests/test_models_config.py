@@ -175,6 +175,23 @@ models:
 """))
 
 
+def test_profile_requires_credentials_under_endpoint(tmp_path) -> None:
+    with pytest.raises(ValueError, match="api_key_env in endpoint"):
+        load_models_config(_write(tmp_path, """
+models:
+  hosted_vision:
+    category: vlm
+    api_key_env: WRONG_LOCATION
+    adapter:
+      kind: openai_compat
+      model_name: example-vlm
+    endpoint:
+      base_url: https://example.test
+      readiness: none
+    deployment: { ownership: external }
+"""))
+
+
 def test_vlm_preset(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
 vlm:

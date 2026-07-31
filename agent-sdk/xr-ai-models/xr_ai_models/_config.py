@@ -170,6 +170,10 @@ def _flatten_profile_entry(name: str, body: dict[str, Any]) -> dict[str, Any]:
     for label, value in (("adapter", adapter), ("endpoint", endpoint), ("deployment", deployment)):
         if not isinstance(value, dict):
             raise ValueError(f"{name!r}: {label} must be a mapping")
+    if "api_key_env" in body:
+        raise ValueError(
+            f"{name!r}: structured profiles must declare api_key_env in endpoint"
+        )
 
     flattened = {
         key: value
@@ -213,6 +217,12 @@ def _resolve_preset(body: dict[str, Any]) -> tuple[dict[str, Any], Category | No
         return dict(body), None
     preset_name = kind.split(":", 1)[1]
     preset = _presets.get_preset(preset_name)
+    forbidden = {"base_url", "api_key_env", "health_check", "deployment"} & preset.keys()
+    if forbidden:
+        raise ValueError(
+            f"preset {preset_name!r} contains endpoint or deployment fields: "
+            f"{sorted(forbidden)}"
+        )
     merged = merge_dicts(preset, body, skip_keys=("kind",))
     merged["kind"] = preset.get("kind", KIND_OPENAI_COMPAT)
     return merged, preset["category"]
@@ -228,7 +238,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         "deployment": _deployment(body.get("deployment") or {}),
     }
     if "api_key_env" in body:
-        common["api_key_env"] = body["api_key_env"]
+        common["api_key_env"] = _require_str(body, "api_key_env")
     if category in ("llm", "vlm"):
         return _construct_chat(category, body, common)
     if category == "stt":

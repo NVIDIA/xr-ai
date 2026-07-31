@@ -87,7 +87,7 @@ Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on [`agent-sdk/xr-ai-models`](../agent-sdk/xr-ai-models/README.md),
-load a per-sample `yaml/models.yaml`, and construct service clients via
+load a per-sample model config, and construct service clients via
 `make_llm` / `make_vlm` / `make_stt` / `make_tts`.  The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings) so callers
@@ -159,21 +159,14 @@ vlm:
   (Default is `true` for local servers.)
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
-Each sample ships a ready-made `yaml/models.nim.yaml` overlay, selected by a
-**single key** — no `main.py` edits. To switch a sample to NIM:
+For `simple-vlm-example`, set `models_config: models.hosted.json` in the worker
+YAML. The structured profile is consumed by both the worker and orchestrator,
+so the local VLM process is omitted and `NGC_API_KEY` is requested
+automatically. Select `models.local.json` to switch back.
 
-1. Set `model_backend: nim` in the sample's `*_worker.yaml` (default
-   `local`). The worker then loads `models.nim.yaml`, and the orchestrator
-   (which reads the same key) skips the local model server(s) NIM replaces.
-2. Provide `NGC_API_KEY` — in NIM mode the orchestrator prompts for it once
-   if it isn't already saved or exported.
-3. For xr-render-demo, run the demo without the local `llm` / `agent-llm` /
-   `vlm` model-servers (they're `launch_mode="reuse"`, so just don't start
-   them in the model-servers stack).
-
-Set `model_backend: local` to switch back. (The orchestrator reads
-`model_backend` from the worker YAML with a stdlib regex, so it stays
-pyyaml-free.)
+`xr-render-demo` retains its `model_backend: nim` selector and
+`models.nim.yaml` overlay. Run it without the local `llm` / `agent-llm` / `vlm`
+model-servers and provide `NGC_API_KEY`.
 
 **Self-hosted NIM containers** work the same way — point `base_url` at the
 container (e.g. `http://localhost:8000`) and set `health_check: true` if it

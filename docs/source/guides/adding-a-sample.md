@@ -40,7 +40,7 @@ agent-samples/<name>/
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── xr_media_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
-│   ├── models.yaml                 ← logical model names + preset references
+│   ├── models.yaml                 ← worker-only model config
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
@@ -51,7 +51,9 @@ agent-samples/<name>/
 
 `yaml/models.yaml` names the logical models the worker needs (`llm`,
 `vlm`, `stt`, `tts`, or any sample-specific name) with `kind:
-preset:<name>` + `base_url:` entries.  The worker passes its path to
+preset:<name>` + `base_url:` entries. A sample whose orchestrator derives model
+process ownership uses a structured JSON profile instead. The worker passes
+either path to
 `load_models_config(...)` and constructs services via `make_llm` /
 `make_vlm` / `make_stt` / `make_tts` from `xr_ai_models`.  Schema, preset
 table, and the explicit (no-preset) spec are in

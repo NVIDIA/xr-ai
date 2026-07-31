@@ -109,36 +109,35 @@ a moment, and you hear the reply through your speakers.
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
 
-**Remote model** — create a models overlay that points the VLM at your remote
-endpoint, then tell the worker to use it:
+**Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
+your server, and select it in the worker config:
 
-```yaml
-# yaml/models.custom.yaml — overlay for a remote VLM endpoint
-vlm:
-  kind:     preset:cosmos_vlm
-  base_url: https://your-remote-vlm.example.com
+```json
+{
+  "endpoint": {"base_url": "https://your-remote-vlm.example.com"},
+  "deployment": {"ownership": "external"}
+}
 ```
 
 ```yaml
-# yaml/simple_vlm_example_worker.yaml — point the worker at the overlay
-models_yaml: yaml/models.custom.yaml
+# yaml/simple_vlm_example_worker.yaml
+models_config: models.remote.json
 ```
 
-When pointing at a remote model, `vlm_server.yaml` is unused — remove the
-`vlm_server` entry from the launcher's process list so no local vLLM process is
-started.
+The external deployment declaration makes the orchestrator skip the local VLM
+process automatically.
 
 **Hosted NVIDIA NIM** — run the VLM on hosted NIM
 ([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS stay
 local) by setting **one key** in `simple_vlm_example_worker.yaml`:
 
 ```yaml
-model_backend: nim     # default is "local"
+models_config: models.hosted.json
 ```
 
-The worker then loads the ready-made `yaml/models.nim.yaml` overlay and the
-orchestrator skips the local vlm-server automatically. Pick
-the hosted model id in `models.nim.yaml` and provide an `NGC_API_KEY` as an
+The same profile configures the worker and makes the orchestrator skip the
+local VLM server. Pick the hosted model id in `models.hosted.json` and provide
+an `NGC_API_KEY` as an
 **environment variable** (or save it once via the launcher credential prompt) —
 it is not stored in YAML; the overlay only names the env var via
 `api_key_env: NGC_API_KEY`. Refer to the credentials and AI-services guides for

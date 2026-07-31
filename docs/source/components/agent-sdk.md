@@ -10,7 +10,7 @@ from:
 
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
   `STTService`, `TTSService`) plus OpenAI-compatible HTTP clients, driven by a
-  `models.yaml` preset configuration. Swapping a backend is a configuration
+  model-profile configuration. Swapping a backend is a configuration
   edit, not a code edit.
 - **`xr-ai-pipecat`** — the unified voice pipeline. One call,
   `make_voice_pipeline`, composes input → VAD/STT → voice gate → brain →
@@ -28,10 +28,10 @@ from:
 ## xr-ai-models
 
 Worker code depends on the four service protocols and constructs concrete
-clients from a `models.yaml` configuration — no hand-rolled `httpx` calls in callers,
+clients from a model configuration — no hand-rolled `httpx` calls in callers,
 no model quirks leaking out of this package.
 
-Each sample's `models.yaml` names the logical models the worker needs;
+Each sample's model config names the logical models the worker needs;
 `make_llm(config, "llm")` / `make_vlm` / `make_stt` / `make_tts` return an
 object satisfying the matching service protocol regardless of backend or
 model-specific quirks (such as reasoning-field naming). Swapping a model is a
@@ -102,6 +102,33 @@ agent_llm:
 ```
 
 `category:` is required when not using a preset.
+
+### Deployment profiles
+
+A structured profile can keep model behavior, endpoint connectivity, and
+process ownership in one JSON file consumed by both the worker and a
+stdlib-only orchestrator:
+
+```json
+{
+  "models": {
+    "vlm": {
+      "adapter": {"preset": "cosmos_vlm"},
+      "endpoint": {"base_url": "http://localhost:8100", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "vlm"}
+    }
+  }
+}
+```
+
+The worker passes the file to `load_models_config()`. The orchestrator calls
+`load_model_deployment(worker_config)` to map `managed` to an owned process,
+`reused` to `launch_mode="reuse"`, and `external` to no local process. Launcher
+profiles must use the wrapped nested JSON shape and declare credentials as
+`endpoint.api_key_env`; flat YAML remains supported for worker-only configs.
+
+`adapter` and `endpoint` are normalized into the existing typed service specs;
+only `deployment` remains separately typed as `DeploymentSpec`.
 
 ### Protocols
 

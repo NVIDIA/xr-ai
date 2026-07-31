@@ -30,8 +30,12 @@ Model configuration accepts a nested profile with independent `adapter`,
 `endpoint`, and `deployment` sections while preserving the flat YAML format.
 Workers continue to construct clients through `xr-ai-models`; stdlib-only
 orchestrators read only service ownership and credentials through
-`load_model_deployment()`. This keeps hosted endpoint selection and local
-process lifecycle in one profile without coupling the launcher to the model SDK.
+`load_model_deployment()`. Launcher-visible profiles intentionally use wrapped,
+structured JSON: the launcher does not depend on PyYAML or resolve model
+presets. The simple VLM sample consumes bundled local and hosted profiles
+end-to-end, replacing its separate `model_backend` and `models_yaml` switches.
+This keeps endpoint selection and process lifecycle in one profile without
+coupling the launcher to the model SDK.
 
 ### 2026-07-30 — Retire the superseded xr-ai-capabilities package
 

@@ -3,49 +3,137 @@
 
 """Tests for stdlib-only launcher model deployment reads."""
 
-from xr_ai_launcher import load_model_deployment, read_config_scalar
+import json
+from pathlib import Path
+
+import pytest
+from xr_ai_launcher import load_model_deployment
+from xr_ai_models import load_models_config
+
+_ROOT = Path(__file__).resolve().parents[1]
+_SIMPLE_VLM_YAML = _ROOT / "agent-samples" / "simple-vlm-example" / "yaml"
 
 
-def test_read_config_scalar_supports_plain_and_quoted_values(tmp_path) -> None:
-    config = tmp_path / "worker.yaml"
-    config.write_text(
-        "models_config: models.hosted.json # hosted\n"
-        "profile: 'apple-vision-pro'\n"
-        'label: "demo worker"\n',
+def _write_profile(path: Path, *, credential: str | None = None) -> None:
+    endpoint: dict[str, str] = {"base_url": "http://localhost:8100"}
+    if credential:
+        endpoint["api_key_env"] = credential
+    path.write_text(
+        json.dumps({
+            "models": {
+                "vision": {
+                    "adapter": {"preset": "cosmos_vlm"},
+                    "endpoint": endpoint,
+                    "deployment": {"ownership": "managed", "service": "vlm"},
+                }
+            }
+        }),
         encoding="utf-8",
     )
 
-    assert read_config_scalar(config, "models_config") == "models.hosted.json"
-    assert read_config_scalar(config, "profile") == "apple-vision-pro"
-    assert read_config_scalar(config, "label") == "demo worker"
 
-
-def test_model_deployment_drives_processes_and_credentials(tmp_path) -> None:
+@pytest.mark.parametrize(
+    "selection",
+    [
+        "models.hosted.json",
+        "'models.hosted.json'",
+        '"models.hosted.json"',
+        '"models.hosted.json" # hosted profile',
+    ],
+)
+def test_profile_selection_supports_plain_quoted_and_commented_values(
+    tmp_path, selection
+) -> None:
+    _write_profile(tmp_path / "models.hosted.json", credential="NVIDIA_API_KEY")
     config = tmp_path / "worker.yaml"
-    config.write_text("models_config: hosted.json\n", encoding="utf-8")
-    (tmp_path / "hosted.json").write_text(
-        """{
-          "models": {
-            "vision": {
-              "endpoint": {"api_key_env": "NVIDIA_API_KEY"},
-              "deployment": {"ownership": "external"}
-            },
-            "speech": {
-              "endpoint": {"base_url": "http://localhost:8103"},
-              "deployment": {"ownership": "managed", "service": "stt"}
-            },
-            "reasoning": {
-              "endpoint": {"base_url": "http://localhost:8107"},
-              "deployment": {"ownership": "reused", "service": "agent-llm"}
-            }
-          }
-        }""",
+    config.write_text(f"models_config: {selection}\n", encoding="utf-8")
+
+    deployment = load_model_deployment(config)
+
+    assert deployment.profile_path == tmp_path / "models.hosted.json"
+    assert deployment.launch_mode("vlm") == "own"
+    assert deployment.required_credentials == ("NVIDIA_API_KEY",)
+
+
+def test_profile_selection_ignores_nested_and_block_scalar_text(tmp_path) -> None:
+    _write_profile(tmp_path / "selected.json")
+    _write_profile(tmp_path / "injected.json", credential="WRONG_KEY")
+    config = tmp_path / "worker.yaml"
+    config.write_text(
+        "system_prompt: |\n"
+        "  models_config: injected.json\n"
+        "nested:\n"
+        "  models_config: injected.json\n"
+        "models_config: selected.json\n",
         encoding="utf-8",
     )
 
     deployment = load_model_deployment(config)
 
-    assert deployment.launch_mode("stt") == "own"
-    assert deployment.launch_mode("agent-llm") == "reuse"
-    assert deployment.launch_mode("vlm") is None
-    assert deployment.required_credentials == ("NVIDIA_API_KEY",)
+    assert deployment.profile_path == tmp_path / "selected.json"
+    assert deployment.required_credentials == ()
+
+
+def test_empty_profile_selection_uses_default_without_consuming_next_key(tmp_path) -> None:
+    _write_profile(tmp_path / "models.local.json")
+    config = tmp_path / "worker.yaml"
+    config.write_text(
+        "models_config:\nprofile: injected.json\n",
+        encoding="utf-8",
+    )
+
+    deployment = load_model_deployment(config)
+
+    assert deployment.profile_path == tmp_path / "models.local.json"
+
+
+@pytest.mark.parametrize(
+    "profile_name",
+    ["models.local.json", "models.hosted.json", "models.omni.json"],
+)
+def test_bundled_simple_vlm_profiles_have_launcher_sdk_parity(
+    tmp_path, profile_name
+) -> None:
+    profile = _SIMPLE_VLM_YAML / profile_name
+    worker_config = tmp_path / "worker.yaml"
+    worker_config.write_text(f'models_config: "{profile}"\n', encoding="utf-8")
+
+    deployment = load_model_deployment(worker_config)
+    models = load_models_config(profile)
+    expected_services = {
+        spec.deployment.service: (
+            "own" if spec.deployment.ownership == "managed" else "reuse"
+        )
+        for spec in models.entries.values()
+        if spec.deployment.ownership != "external"
+    }
+
+    assert deployment.services == expected_services
+    assert deployment.required_credentials == models.required_credentials
+
+
+def test_bundled_simple_vlm_profiles_select_expected_ownership(tmp_path) -> None:
+    def load(profile_name: str):
+        config = tmp_path / f"{profile_name}.yaml"
+        config.write_text(
+            f'models_config: "{_SIMPLE_VLM_YAML / profile_name}"\n',
+            encoding="utf-8",
+        )
+        return load_model_deployment(config)
+
+    local = load("models.local.json")
+    hosted = load("models.hosted.json")
+    omni = load("models.omni.json")
+
+    assert local.services == {"stt": "own", "vlm": "own", "tts": "own"}
+    assert hosted.services == {"stt": "own", "tts": "own"}
+    assert hosted.required_credentials == ("NGC_API_KEY",)
+    assert omni.services == {"stt": "own", "vlm-omni": "reuse", "tts": "own"}
+
+
+def test_bundled_worker_selects_local_profile() -> None:
+    deployment = load_model_deployment(
+        _SIMPLE_VLM_YAML / "simple_vlm_example_worker.yaml"
+    )
+
+    assert deployment.profile_path == _SIMPLE_VLM_YAML / "models.local.json"
