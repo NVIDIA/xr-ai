@@ -62,9 +62,7 @@ from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
 from xr_ai_nat.mcp import create_mcp_server
 from xr_ai_models import (
-    ModelsConfig,
     VLMService,
-    VLMSpec,
     load_models_config_from_dict,
     make_vlm,
 )
@@ -94,17 +92,25 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
         if not vlm_entry:
             raise ValueError("models.vlm is missing or empty in vlm_mcp_server.yaml")
 
-        if "timeout" not in vlm_entry:
-            vlm_entry["timeout"] = vlm_request_timeout_s
+        nested = any(
+            key in vlm_entry for key in ("adapter", "endpoint", "deployment")
+        )
+        target = dict(vlm_entry.get("endpoint") or {}) if nested else vlm_entry
+        target.setdefault("timeout", vlm_request_timeout_s)
+        if nested:
+            vlm_entry["endpoint"] = target
 
         # The cosmos_vlm preset defaults enable_thinking to False; an explicit
         # top-level true must reach the wire by overriding default_extras.
         if enable_thinking:
-            extras = dict(vlm_entry.get("default_extras") or {})
+            target = dict(vlm_entry.get("adapter") or {}) if nested else vlm_entry
+            extras = dict(target.get("default_extras") or {})
             ctk = dict(extras.get("chat_template_kwargs") or {})
             ctk["enable_thinking"] = True
             extras["chat_template_kwargs"] = ctk
-            vlm_entry["default_extras"] = extras
+            target["default_extras"] = extras
+            if nested:
+                vlm_entry["adapter"] = target
 
         config = load_models_config_from_dict(
             {"vlm": vlm_entry}, source="vlm_mcp_server.yaml:models"
@@ -116,14 +122,19 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
             "migrate to a 'models:' block with kind: preset:cosmos_vlm"
         )
         chat_template_kwargs: dict[str, Any] = {"enable_thinking": enable_thinking}
-        spec = VLMSpec(
-            base_url=vlm_server,
-            model_name="vlm",
-            capabilities={"streaming": True, "vision": True},
-            default_extras={"chat_template_kwargs": chat_template_kwargs},
-            timeout=vlm_request_timeout_s,
-        )
-        config = ModelsConfig(entries={"vlm": spec})
+        config = load_models_config_from_dict({
+            "vlm": {
+                "category": "vlm",
+                "kind": "openai_compat",
+                "base_url": vlm_server,
+                "model_name": "vlm",
+                "capabilities": {"streaming": True, "vision": True},
+                "default_extras": {
+                    "chat_template_kwargs": chat_template_kwargs,
+                },
+                "timeout": vlm_request_timeout_s,
+            },
+        })
 
     else:
         raise ValueError(
