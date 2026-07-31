@@ -72,7 +72,7 @@ public struct LiveKitConfig: Sendable {
 
     /// Identity of the server-side hub participant the agent publishes through
     /// (the LiveKit connector — `xr-hub-connector` by default, see
-    /// `server-runtime/.../transport/livekit/config.py`). Outbound data is
+    /// `services/xr-media-hub/.../transport/livekit/config.py`). Outbound data is
     /// addressed only to this identity so it is never delivered to peer
     /// participants in the same room. Set to `nil` to broadcast to the whole
     /// room (the pre-isolation behaviour).

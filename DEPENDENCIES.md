@@ -195,8 +195,9 @@ xr-ai-vad  (utils/xr-ai-vad/)
     for speculative downstream warmup (e.g. start the camera before STT
     completes).
 
-xr-media-hub  (server-runtime/)
-    └── xr-ai-hub-client  [editable: ../agent-sdk/xr-ai-hub-client]
+xr-media-hub  (services/xr-media-hub/)
+    └── xr-ai-hub-client  [editable: ../../agent-sdk/xr-ai-hub-client]
+    └── xr-ai-logging     [editable: ../../utils/xr-ai-logging]
     └── pyzmq >=27.0
     └── livekit >=1.0
     └── livekit-api >=1.0
@@ -307,7 +308,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
-    └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
+    └── xr-media-hub            [editable: ../services/xr-media-hub]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
     └── xr-ai-vad               [editable: ../utils/xr-ai-vad]
@@ -580,7 +581,7 @@ updated in the same commit**.
 | Component changed | Must also update |
 |---|---|
 | `agent-sdk/xr-ai-hub-client/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
-| `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
+| `services/xr-media-hub/` config fields (`LiveKitConnectorConfig`) | `services/xr-media-hub/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
 | `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All four vllm wrappers (`services/vlm-server/`, `services/llama-nemotron-llm/`, `services/nemotron3-nano-llm/`, `services/nemotron-omni-llm/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
 | `vllm_backend` / `vllm_image` YAML keys | `services/{vlm-server,llama-nemotron-llm,nemotron3-nano-llm,nemotron-omni-llm}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |

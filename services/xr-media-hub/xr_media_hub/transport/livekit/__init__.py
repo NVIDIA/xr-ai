@@ -5,7 +5,7 @@
 xr_media_hub.transport.livekit — LiveKit connector for XR-Media-Hub.
 
 The LiveKit connector is an internal transport implementation detail.
-It is not exposed to the agent or MCP layer — only to the server-runtime.
+It is not exposed to the agent or MCP layer — only to XR-Media-Hub.
 
 Quick start
 -----------

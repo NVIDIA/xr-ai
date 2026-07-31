@@ -106,7 +106,7 @@ frames are dropped if it is closed.
 | Layer | Directory | Description |
 |---|---|---|
 | Clients | `client-samples/` | Android, iOS/visionOS, Web, and native StreamKit clients |
-| Server runtime | `server-runtime/` | XR-Media-Hub + LiveKit internal transport |
+| Hub service | `services/xr-media-hub/` | XR-Media-Hub + LiveKit internal transport |
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
 | Agent functions | `agent-sdk/xr-ai-nat/` | Typed, in-process NAT functions for XR capabilities |
@@ -274,7 +274,7 @@ NIM containers):
 [`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
 
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
-[`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
+[`services/xr-media-hub/xr_media_hub.yaml`](services/xr-media-hub/xr_media_hub.yaml)
 for the full option list.
 
 ---
@@ -376,16 +376,16 @@ credential prompt — not in YAML) and just don't start the local `llm` /
 
 ---
 
-### Hub only (server-runtime standalone)
+### Hub only (standalone)
 
 ```bash
-cd server-runtime
+cd services/xr-media-hub
 uv sync
 uv run xr_media_hub
 ```
 
 Useful for development or when running an agent in a separate terminal.
-The hub auto-discovers `server-runtime/xr_media_hub.yaml`.
+The hub auto-discovers `services/xr-media-hub/xr_media_hub.yaml`.
 
 ## Clients
 

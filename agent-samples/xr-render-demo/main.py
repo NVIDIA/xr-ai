@@ -99,7 +99,7 @@ def _build_processes() -> list[Process]:
                 launch_mode="reuse"),
         Process("llm",       "../../services/llama-nemotron-llm",  "llama_nemotron_llm_server",
                 launch_mode="reuse"),
-        Process("hub",        "../../server-runtime",                "xr_media_hub",
+        Process("hub",        "../../services/xr-media-hub",                "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),
         Process("cloudxr",    "../../services/cloudxr-runtime",      "cloudxr_runtime",
                 config="yaml/cloudxr_runtime.yaml"),

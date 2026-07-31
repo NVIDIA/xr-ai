@@ -14,7 +14,7 @@ Typical usage::
     _BASE = Path(__file__).resolve().parent
 
     PROCESSES = [
-        Process("hub",    "../../server-runtime", "xr_media_hub"),
+        Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
         Parallel([
             Process("stt", "../../services/stt-server", "stt_server"),
             Process("tts", "../../services/piper-tts",  "piper_tts_server"),

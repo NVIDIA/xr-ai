@@ -68,7 +68,7 @@ def _encode_chunk(out_dir: pathlib.Path, pid: str, start_us: int) -> dict:
     """Encode ``_FRAMES`` synthetic NV12 frames into ``<start_us>.264`` plus
     matching JSON sidecar inside ``out_dir/<pid>/``. Returns the sidecar dict.
 
-    Mirrors ``server-runtime/xr_media_hub/video/_recorder.py``: same encoder
+    Mirrors ``services/xr-media-hub/xr_media_hub/video/_recorder.py``: same encoder
     options, same NV12 layout, same ``.identity`` + ``<start_us>.json``
     layout the video-mcp ``ChunkStore`` reads back.
     """

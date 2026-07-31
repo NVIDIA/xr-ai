@@ -7,7 +7,7 @@ Loads LiveKitConnectorConfig from a YAML file.
 Looks for xr_media_hub.yaml in the current working directory by default.
 Pass --config <path> on the command line to use a different file.
 
-Relative paths in the YAML (e.g. web_client_dir: ../client-samples/web) are
+Relative paths in the YAML (e.g. web_client_dir: ../../client-samples/web) are
 resolved relative to the YAML file's own directory, so the file is portable
 regardless of where the process is started from.
 """
