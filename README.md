@@ -152,6 +152,8 @@ uv run model_servers
 ```
 
 GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
+The dual-Ada profile starts the smaller GPU 0 models before loading the
+dedicated 30B model on GPU 1; other profiles retain large-model-first startup.
 On first run each model downloads from HuggingFace (~50 GB total; can take
 tens of minutes).  On subsequent runs the containers restart in under a minute.
 
