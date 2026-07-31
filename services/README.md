@@ -5,12 +5,13 @@
 
 # Services
 
-Reusable model-serving and typed capability processes live here as direct
-child projects. A common depth keeps process declarations, editable dependency
-paths, operational ownership, and standalone commands predictable.
+Reusable runtime, model-serving, and typed capability processes live here as
+direct child projects. A common depth keeps process declarations, editable
+dependency paths, operational ownership, and standalone commands predictable.
 
 | Service | Responsibility | Default port or endpoint |
 |---|---|---|
+| `cloudxr-runtime/` | CloudXR OpenXR runtime and WebRTC signaling proxy | 49100 (native), 48322 (WSS) |
 | `vlm-server/` | Cosmos vision-language inference | 8100 |
 | `stt-server/` | Parakeet speech recognition | 8103 |
 | `magpie-tts/` | Magpie speech synthesis | 8104 |

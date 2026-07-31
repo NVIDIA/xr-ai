@@ -274,11 +274,11 @@ xr-video-memory-service  (services/video-memory-service/)
     Owns recorded H.264 chunk queries. Exposes typed msgpack/ZMQ at port 8310
     and performs historical decoding via NVDEC; it does not subscribe to hub IPC.
 
-cloudxr-runtime  (cloudxr-runtime/)
+cloudxr-runtime  (services/cloudxr-runtime/)
     └── isaacteleop[cloudxr]
     └── pyyaml
-    └── xr-ai-launcher  [editable: ../utils/xr-ai-launcher] (is_native_profile + read_device_profile)
-    └── xr-ai-logging   [editable: ../utils/xr-ai-logging]
+    └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (is_native_profile + read_device_profile)
+    └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
 
 render-mcp-server  (agent-mcp-servers/render-mcp/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
@@ -629,13 +629,13 @@ updated in the same commit**.
 | vlm-server model class or supported architectures | `services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, `docs/adding-cloudxr.md` |
-| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | xr-render-scene + oxr-mcp + cloudxr-runtime `__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `docs/adding-cloudxr.md`, `docs/xr-render-demo.md` (client-type section) |
+| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | xr-render-scene + oxr-mcp + `services/cloudxr-runtime/cloudxr_runtime/__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `docs/adding-cloudxr.md`, `docs/xr-render-demo.md` (client-type section) |
 | scene service YAML config keys | `agent-samples/xr-render-demo/scene/scene_service.yaml`, orchestrator process declaration, `docs/xr-render-demo.md` |
 | render-mcp YAML config keys | `agent-mcp-servers/render-mcp/render_mcp.yaml`, worker URL constants |
 | oxr-mcp YAML config keys | `agent-mcp-servers/oxr-mcp/oxr_mcp_server.yaml`, sample copies, worker URL constants |
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
 | Any new sample added | `DEPENDENCIES.md`, `AGENTS.md`, `README.md` |
-| Any new shared component added (peer of `server-runtime/`) | `AGENTS.md` Architecture section, `DEPENDENCIES.md` |
+| Any new reusable service added under `services/` | `services/README.md`, `AGENTS.md` Architecture section, `DEPENDENCIES.md` |
 | `xr-ai-models` protocols (`LLMService`, `VLMService`, …) or model-profile schema | `AGENTS.md` "HTTP calls go through `xr-ai-models`" rule, `agent-sdk/xr-ai-models/README.md`, sample model profiles |
 | `xr-ai-models` preset added (new in-tree service or backend variant) | `agent-sdk/xr-ai-models/xr_ai_models/presets/__init__.py` registry, `agent-sdk/xr-ai-models/README.md` preset table |
 

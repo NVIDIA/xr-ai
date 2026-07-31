@@ -4,7 +4,7 @@
 """
 CloudXR environment helper — source ``cloudxr.env`` into ``os.environ``.
 
-With serial process startup (``run_stack`` launches cloudxr-runtime first and
+With serial process startup (``run_stack`` launches ``services/cloudxr-runtime`` first and
 waits for its ready file before starting any OpenXR consumer), callers no
 longer need to poll for the env file — it already exists by the time they
 start.  ``load_cloudxr_env`` is the only function needed.
@@ -20,7 +20,7 @@ log = logging.getLogger("xr_ai_launcher.cloudxr_env")
 
 _EXPORT_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
-# OpenXR runtime selector written by cloudxr-runtime into cloudxr.env.
+# OpenXR runtime selector written by services/cloudxr-runtime into cloudxr.env.
 XR_RUNTIME_VAR = "XR_RUNTIME_JSON"
 
 # Profiles on CloudXR's direct native transport (skip the WSS proxy).

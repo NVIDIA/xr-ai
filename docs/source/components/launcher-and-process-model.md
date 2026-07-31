@@ -39,7 +39,7 @@ PROCESSES = [
     Process("worker", "worker",               "my_agent_worker",
             config="yaml/my_agent_worker.yaml"),
     # Optional shared components — add as needed:
-    # Process("cloudxr", "../../cloudxr-runtime",       "cloudxr_runtime",
+    # Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",
     #         config="yaml/cloudxr_runtime.yaml"),
     # Process("mcp",     "../../agent-mcp-servers/oxr-mcp", "oxr_mcp_server",
     #         config="yaml/oxr_mcp_server.yaml"),
