@@ -21,8 +21,7 @@ agent-sdk/          # Five packages:
                     #   xr-ai-nat          — typed, in-process NAT functions for XR capabilities
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
-ai-services/        # OpenAI-compatible inference servers (VLM, STT, TTS, LLM)
-services/           # Long-running typed capability services
+services/           # Model-serving and long-running typed capability services
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, vec, video, vlm
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests

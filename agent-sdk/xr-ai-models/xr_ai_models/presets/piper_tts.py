@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Preset for ``ai-services/tts/piper`` (Piper ONNX voices)."""
+"""Preset for ``services/piper-tts`` (Piper ONNX voices)."""
 
 PIPER_TTS = {
     "category": "tts",

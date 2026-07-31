@@ -4,7 +4,7 @@
 # VLM MCP server reference configuration.
 # Copy to your agent sample root as vlm_mcp_server.yaml and edit.
 #
-# This server is a pure FastMCP wrapper around vlm-server (ai-services/vlm-server/).
+# This server is a pure FastMCP wrapper around vlm-server (services/vlm-server/).
 # It exposes one MCP tool — ask_image(question, image_path) — that reads a local
 # image file and forwards it to vlm-server's OpenAI-compatible chat-completions
 # endpoint via the xr-ai-models SDK. There is no hub IPC subscription and no
@@ -19,7 +19,7 @@ host:                  0.0.0.0
 port:                  8240
 
 # Model configuration — identifies the VLM backend by logical name "vlm".
-# The cosmos_vlm preset targets ai-services/vlm-server/ (Cosmos-Reason1-7B
+# The cosmos_vlm preset targets services/vlm-server/ (Cosmos-Reason1-7B
 # via vLLM). Only base_url needs to be set here; the preset fills in the rest.
 models:
   vlm:

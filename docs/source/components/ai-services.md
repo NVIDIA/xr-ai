@@ -13,19 +13,19 @@ Multiple reusable HTTP servers are available as launchable peers of
 `server-runtime/`. All expose an OpenAI-compatible REST API so agent workers
 can call them with any OpenAI SDK client or plain `httpx` or `requests`.
 Reference services cover vision-language reasoning, speech recognition,
-text-to-speech, and large language models. Three LLM backends ship
-side-by-side under `ai-services/llm/` — pick one per sample based on the
-tool-calling, reasoning, and hardware trade-offs documented below.
+text-to-speech, and large language models. The projects are direct children of
+`services/`; pick an LLM per sample based on the tool-calling, reasoning, and
+hardware trade-offs documented below.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
-| `ai-services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
-| `ai-services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
-| `ai-services/tts/magpie/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
-| `ai-services/tts/piper/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
-| `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
-| `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
-| `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
+| `services/vlm-server/` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
+| `services/stt-server/` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
+| `services/magpie-tts/` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
+| `services/piper-tts/` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
+| `services/llama-nemotron-llm/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
+| `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
+| `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded service + live hub IPC |
@@ -35,23 +35,54 @@ All model weights land in `models/` at the repository root (not checked into ver
 all servers). Each YAML configures `model_cache` — resolved relative to the
 YAML file.
 
+## Migrating standalone caches from `ai-services/`
+
+Moving the standalone projects into `services/` also normalizes their reference
+YAMLs to the repository-root `models/` directory. Git does not move ignored
+model weights. Existing standalone caches may therefore remain in these legacy
+locations:
+
+| Services | Legacy cache | Current cache |
+|---|---|---|
+| VLM, STT, Nemotron 3 Nano, Nemotron Omni | `ai-services/models/` | `models/` |
+| Magpie TTS, Piper TTS | `ai-services/tts/models/` | `models/` |
+
+Stop the model services, then run the following from the repository root before
+starting the relocated services offline. `--no-clobber` preserves any files
+already present in the current cache while copying missing legacy entries.
+
+```bash
+mkdir -p models
+if [ -d ai-services/models ]; then
+  cp -a --no-clobber ai-services/models/. models/
+fi
+if [ -d ai-services/tts/models ]; then
+  cp -a --no-clobber ai-services/tts/models/. models/
+fi
+```
+
+Keep the legacy directories until the relocated services have started
+successfully with network access disabled. Project virtual environments are not
+portable across the move; recreate them with `uv sync` in the corresponding
+`services/<project>/` directory instead of copying `.venv`.
+
 ## Adding a server to a sample
 
 **1 — Add the process to the orchestrator:**
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../server-runtime",                     "xr_media_hub"),
-    Process("vlm",    "../../ai-services/vlm-server",             "vlm_server"),   # ← add as needed
+    Process("hub",    "../../server-runtime",                    "xr_media_hub"),
+    Process("vlm",    "../../services/vlm-server",               "vlm_server"),   # ← add as needed
     # Pick ONE LLM backend per sample — they bind different default ports
     # (8106 / 8107) so running more than one at once is allowed but
     # usually unnecessary.
-    Process("llm",    "../../ai-services/llm/llama_nemotron",     "llama_nemotron_llm_server"),
-    # Process("llm",  "../../ai-services/llm/nemotron3_nano",     "nemotron3_nano_llm_server"),
-    Process("stt",    "../../ai-services/stt-server",             "stt_server"),
+    Process("llm",    "../../services/llama-nemotron-llm",       "llama_nemotron_llm_server"),
+    # Process("llm",  "../../services/nemotron3-nano-llm",       "nemotron3_nano_llm_server"),
+    Process("stt",    "../../services/stt-server",               "stt_server"),
     # Pick one TTS server
-    Process("tts",    "../../ai-services/tts/piper",    "piper_tts_server"),
-    # Process("tts",    "../../ai-services/tts/magpie",             "magpie_tts_server"),
+    Process("tts",    "../../services/piper-tts",                 "piper_tts_server"),
+    # Process("tts",  "../../services/magpie-tts",                "magpie_tts_server"),
     Process("worker", "worker",                                   "my_agent_worker"),
 ]
 ```
@@ -66,14 +97,14 @@ voice quality and multilingual support when GPU is available; swap the
 
 ```bash
 mkdir -p yaml
-cp ../../ai-services/vlm-server/vlm_server.yaml ./yaml/vlm_server.yaml
+cp ../../services/vlm-server/vlm_server.yaml ./yaml/vlm_server.yaml
 # Pick ONE LLM YAML — copy the one matching the Process you picked above.
-cp ../../ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml ./yaml/llama_nemotron_llm_server.yaml
-# cp ../../ai-services/llm/nemotron3_nano/nemotron3_nano_llm_server.yaml ./yaml/nemotron3_nano_llm_server.yaml
-cp ../../ai-services/stt-server/stt_server.yaml ./yaml/stt_server.yaml
-cp ../../ai-services/tts/piper/piper_tts_server.yaml ./yaml/piper_tts_server.yaml
+cp ../../services/llama-nemotron-llm/llama_nemotron_llm_server.yaml ./yaml/llama_nemotron_llm_server.yaml
+# cp ../../services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml ./yaml/nemotron3_nano_llm_server.yaml
+cp ../../services/stt-server/stt_server.yaml ./yaml/stt_server.yaml
+cp ../../services/piper-tts/piper_tts_server.yaml ./yaml/piper_tts_server.yaml
 # Or for Magpie (multilingual, GPU, ~2-5 s/sentence):
-cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./yaml/magpie_tts_server.yaml
+cp ../../services/magpie-tts/magpie_tts_server.yaml ./yaml/magpie_tts_server.yaml
 # MCP servers:
 cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./yaml/transcript_mcp_server.yaml
 cp ../../services/video-memory-service/video_memory_service.yaml ./yaml/video_memory_service.yaml
@@ -281,7 +312,7 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   (or any Qwen2.5-VL-compatible VLM). vLLM handles weight loading, image
   decoding, and the OpenAI-compatible HTTP API. Hosting backend is selectable
   per YAML — refer to *Choosing the vLLM runtime* above.
-- **llm/llama_nemotron** is a thin wrapper around `vllm serve` for
+- **llama-nemotron-llm** is a thin wrapper around `vllm serve` for
   `Llama-3.1-Nemotron-Nano-8B-v1`. vLLM handles native Llama-3.1 tool calling
   via the `llama3_json` parser — `tools=[...]` in the request is rendered via
   the model's chat template and the resulting tool calls come back in OpenAI
@@ -289,9 +320,9 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   `"detailed thinking on"` or `"detailed thinking off"` in a system or user
   message; reasoning preamble is **not** stripped server-side. Hosting backend
   is selectable per YAML (refer to *Choosing the vLLM runtime*). Refer to
-  [`ai-services/llm/llama_nemotron/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/ai-services/llm/llama_nemotron/README.md)
+  [`services/llama-nemotron-llm/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/services/llama-nemotron-llm/README.md)
   for the full HTTP contract and tuning knobs.
-- **llm/nemotron3_nano** is a thin wrapper around `vllm serve` for
+- **nemotron3-nano-llm** is a thin wrapper around `vllm serve` for
   `NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}` (auto-selected by GPU compute
   capability). vLLM handles tool calling (`qwen3_coder` parser), reasoning
   extraction (`nano_v3` parser — auto-fetched into `model_cache`), and
@@ -300,9 +331,9 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   `enforce_eager: true` by default to avoid the silent 3–8 min CUDA graph and
   FlashInfer autotune on cold start. Hosting backend is selectable per YAML
   (refer to *Choosing the vLLM runtime*). Refer to
-  [`ai-services/llm/nemotron3_nano/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/ai-services/llm/nemotron3_nano/README.md)
+  [`services/nemotron3-nano-llm/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/services/nemotron3-nano-llm/README.md)
   for the vLLM flags it forwards and Blackwell prerequisites.
-- **llm/nemotron_omni** is a vLLM-backed multimodal LLM serving
+- **nemotron-omni-llm** is a vLLM-backed multimodal LLM serving
   `Nemotron-3-Nano-Omni-30B-A3B-Reasoning` (text + video input) at port 8108.
   The YAML auto-selects between three model variants by detected GPU compute
   capability: NVFP4 on Blackwell (SM100+), FP8 on Ada and Hopper, BF16 forced via
@@ -313,8 +344,8 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   cross-restart persistence).
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; the `language` and `temperature` form fields are accepted but ignored.
-- **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
-- **tts/piper** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
+- **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
+- **piper-tts** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
 - **transcript-mcp-server** is pure FastMCP at `/mcp` on port 8200.
   Records are keyed by free-form `source_id` (live participant identity

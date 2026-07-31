@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""GPU smoke test for ai-services/vlm-server.
+"""GPU smoke test for services/vlm-server.
 
 Spawns the real ``vlm_server`` subprocess against a generated temp YAML, waits
 for the HTTP port to open, issues one chat-completions request with a tiny
@@ -34,7 +34,7 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
 _REPO_ROOT       = Path(__file__).resolve().parent.parent
-_VLM_SERVER_DIR  = _REPO_ROOT / "ai-services" / "vlm-server"
+_VLM_SERVER_DIR  = _REPO_ROOT / "services" / "vlm-server"
 _DEFAULT_WEIGHTS = Path("~/.cache/huggingface/hub/models--nvidia--Cosmos-Reason1-7B").expanduser()
 
 # 30 min — enough for a cold first-time weights download (~15 GB) plus

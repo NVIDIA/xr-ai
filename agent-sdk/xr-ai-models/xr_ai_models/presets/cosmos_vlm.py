@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Preset for ``ai-services/vlm-server`` (Cosmos-Reason1-7B via vLLM).
+"""Preset for ``services/vlm-server`` (Cosmos-Reason1-7B via vLLM).
 
 Cosmos-Reason1-7B is a Qwen2.5-VL-7B fine-tune that accepts image *and* video
 content blocks.  Video is opt-in at the server: vlm-server's

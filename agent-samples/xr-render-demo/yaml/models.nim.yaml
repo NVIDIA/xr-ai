@@ -39,7 +39,7 @@ agent_llm:
     reasoning:  true
 
 # Visual question answering used by native vision functions.
-# nvidia/cosmos-reason1-7b mirrors the local default (ai-services/vlm-server
+# nvidia/cosmos-reason1-7b mirrors the local default (services/vlm-server
 # also runs Cosmos-Reason1-7B), so the render-demo's ask_image prompts behave
 # the same on NIM as locally. Swap to any hosted vision model on
 # build.nvidia.com if you prefer.

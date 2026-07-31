@@ -51,14 +51,13 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_LLAMA_DIR = _REPO_ROOT / "ai-services" / "llm" / "llama_nemotron"
-_N3_DIR    = _REPO_ROOT / "ai-services" / "llm" / "nemotron3_nano"
-_OMNI_DIR  = _REPO_ROOT / "ai-services" / "llm" / "nemotron_omni"
+_LLAMA_DIR = _REPO_ROOT / "services" / "llama-nemotron-llm"
+_N3_DIR    = _REPO_ROOT / "services" / "nemotron3-nano-llm"
+_OMNI_DIR  = _REPO_ROOT / "services" / "nemotron-omni-llm"
 
 _HF_HUB_DIRS = [
     Path("~/.cache/huggingface/hub").expanduser(),
     _REPO_ROOT / "models" / "hub",
-    _REPO_ROOT / "ai-services" / "models" / "hub",
 ]
 
 # 30B model cold-start (weight load + FlashInfer JIT) is multi-minute on

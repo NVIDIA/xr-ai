@@ -37,16 +37,16 @@ def _build_processes() -> list[Process]:
     """Detect the GPU profile and return the per-profile process list."""
     ai = f"yaml/{detect_gpu_config()}"
     return [
-        Process("stt",       "../../ai-services/stt-server",         "stt_server",
+        Process("stt",       "../../services/stt-server",          "stt_server",
                 config=f"{ai}/stt_server.yaml",
                 launch_mode="persist", port=8103),
-        Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+        Process("agent-llm", "../../services/nemotron3-nano-llm",  "nemotron3_nano_llm_server",
                 config=f"{ai}/nemotron3_nano_llm_server.yaml",
                 launch_mode="persist", port=8107),
-        Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
+        Process("vlm",       "../../services/vlm-server",          "vlm_server",
                 config=f"{ai}/vlm_server.yaml",
                 launch_mode="persist", port=8100),
-        Process("llm",       "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
+        Process("llm",       "../../services/llama-nemotron-llm",  "llama_nemotron_llm_server",
                 config=f"{ai}/llama_nemotron_llm_server.yaml",
                 launch_mode="persist", port=8106),
     ]

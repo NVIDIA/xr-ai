@@ -18,25 +18,25 @@ _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
 _MODEL_SERVICES = {
     "vlm": (
-        "../../ai-services/vlm-server",
+        "../../services/vlm-server",
         "vlm_server",
         "yaml/vlm_server.yaml",
         8100,
     ),
     "omni": (
-        "../../ai-services/llm/nemotron_omni",
+        "../../services/nemotron-omni-llm",
         "nemotron_omni_llm_server",
         None,
         8108,
     ),
     "stt": (
-        "../../ai-services/stt-server",
+        "../../services/stt-server",
         "stt_server",
         "yaml/stt_server.yaml",
         8103,
     ),
     "tts": (
-        "../../ai-services/tts/piper",
+        "../../services/piper-tts",
         "piper_tts_server",
         "yaml/piper_tts_server.yaml",
         8105,
