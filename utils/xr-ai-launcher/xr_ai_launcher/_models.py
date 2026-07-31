@@ -24,7 +24,7 @@ def _read_top_level_scalar(path: Path, key: str, default: str) -> str:
         if match is None:
             continue
         raw = match.group(1).strip()
-        if not raw or raw[0] in "|>":
+        if not raw or raw[0] in "#|>":
             return default
         if raw[0] in "\"'":
             quote = raw[0]
@@ -32,7 +32,7 @@ def _read_top_level_scalar(path: Path, key: str, default: str) -> str:
             suffix = raw[end + 1:].strip() if end >= 0 else ""
             if end < 0 or (suffix and not suffix.startswith("#")):
                 return default
-            return raw[1:end]
+            return raw[1:end] or default
         comment = re.search(r"[ \t]+#", raw)
         return raw[:comment.start()].rstrip() if comment else raw
     return default

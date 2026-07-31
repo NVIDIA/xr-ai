@@ -164,9 +164,9 @@ def _flatten_profile_entry(name: str, body: dict[str, Any]) -> dict[str, Any]:
     if not any(key in body for key in ("adapter", "endpoint", "deployment")):
         return dict(body)
 
-    adapter = body.get("adapter") or {}
-    endpoint = body.get("endpoint") or {}
-    deployment = body.get("deployment") or {}
+    adapter = body.get("adapter", {})
+    endpoint = body.get("endpoint", {})
+    deployment = body.get("deployment", {})
     for label, value in (("adapter", adapter), ("endpoint", endpoint), ("deployment", deployment)):
         if not isinstance(value, dict):
             raise ValueError(f"{name!r}: {label} must be a mapping")

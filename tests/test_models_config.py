@@ -12,6 +12,7 @@ from xr_ai_models import (
     TTSSpec,
     VLMSpec,
     load_models_config,
+    load_models_config_from_dict,
     make_llm,
     make_stt,
     make_tts,
@@ -190,6 +191,25 @@ models:
       readiness: none
     deployment: { ownership: external }
 """))
+
+
+@pytest.mark.parametrize("section", ["adapter", "endpoint", "deployment"])
+@pytest.mark.parametrize("value", [[], None])
+def test_profile_rejects_non_mapping_sections(section, value) -> None:
+    profile = {
+        "models": {
+            "vision": {
+                "category": "vlm",
+                "adapter": {"kind": "openai_compat", "model_name": "example-vlm"},
+                "endpoint": {"base_url": "https://example.test"},
+                "deployment": {"ownership": "external"},
+            }
+        }
+    }
+    profile["models"]["vision"][section] = value
+
+    with pytest.raises(ValueError, match=rf"{section} must be a mapping"):
+        load_models_config_from_dict(profile)
 
 
 def test_vlm_preset(tmp_path) -> None:

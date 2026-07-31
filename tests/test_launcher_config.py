@@ -87,6 +87,19 @@ def test_empty_profile_selection_uses_default_without_consuming_next_key(tmp_pat
     assert deployment.profile_path == tmp_path / "models.local.json"
 
 
+@pytest.mark.parametrize("selection", ["# use default", "''", '\"\"'])
+def test_effectively_empty_profile_selection_uses_default(
+    tmp_path, selection
+) -> None:
+    _write_profile(tmp_path / "models.local.json")
+    config = tmp_path / "worker.yaml"
+    config.write_text(f"models_config: {selection}\n", encoding="utf-8")
+
+    deployment = load_model_deployment(config)
+
+    assert deployment.profile_path == tmp_path / "models.local.json"
+
+
 @pytest.mark.parametrize(
     "profile_name",
     ["models.local.json", "models.hosted.json", "models.omni.json"],
@@ -110,6 +123,18 @@ def test_bundled_simple_vlm_profiles_have_launcher_sdk_parity(
 
     assert deployment.services == expected_services
     assert deployment.required_credentials == models.required_credentials
+
+
+@pytest.mark.parametrize(
+    "profile_name",
+    ["models.local.json", "models.hosted.json", "models.omni.json"],
+)
+def test_bundled_simple_vlm_profiles_support_worker_accessors(profile_name) -> None:
+    models = load_models_config(_SIMPLE_VLM_YAML / profile_name)
+
+    models.stt("stt")
+    models.vlm("vlm")
+    models.tts("tts")
 
 
 def test_bundled_simple_vlm_profiles_select_expected_ownership(tmp_path) -> None:
