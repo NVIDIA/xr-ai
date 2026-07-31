@@ -53,11 +53,15 @@ def test_tag_whitelist_rejects_the_same_invalid_semver_tags() -> None:
 
 def test_source_links_use_the_current_documentation_ref(monkeypatch) -> None:
     config = runpy.run_path(str(_CONF))
-    ref = "0123456789abcdef0123456789abcdef01234567"
-    monkeypatch.delenv("SPHINX_MULTIVERSION_NAME", raising=False)
-    monkeypatch.setenv("XR_AI_DOCS_GITHUB_REF", ref)
-    source = ["https://github.com/NVIDIA/xr-ai/blob/main/docs/example.md"]
+    for environment, ref in (
+        ("XR_AI_DOCS_GITHUB_REF", "0123456789abcdef0123456789abcdef01234567"),
+        ("SPHINX_MULTIVERSION_NAME", "v2.0.0"),
+    ):
+        monkeypatch.delenv("SPHINX_MULTIVERSION_NAME", raising=False)
+        monkeypatch.delenv("XR_AI_DOCS_GITHUB_REF", raising=False)
+        monkeypatch.setenv(environment, ref)
+        source = ["https://github.com/NVIDIA/xr-ai/blob/main/docs/example.md"]
 
-    config["_rewrite_github_links"](None, "example", source)
+        config["_rewrite_github_links"](None, "example", source)
 
-    assert source == [f"https://github.com/NVIDIA/xr-ai/blob/{ref}/docs/example.md"]
+        assert source == [f"https://github.com/NVIDIA/xr-ai/blob/{ref}/docs/example.md"]
