@@ -53,6 +53,9 @@ def run() -> None:
 - The worker never imports anything from `server-runtime` or `utils/xr-ai-launcher/`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast: if any process exits, the rest are terminated.
+- A process declared with `launch_mode="reuse"` must declare its HTTP `port`.
+  Before spawning anything, `run_stack` requires `GET /health` on that port to
+  return HTTP 200.
 
 ## Adding a new managed process type
 

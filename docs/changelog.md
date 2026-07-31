@@ -9,6 +9,13 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-31 — Preflight reused process dependencies
+
+`run_stack` now requires every `launch_mode="reuse"` process to declare a port
+and return HTTP 200 from `/health` before any owned process is spawned. This
+keeps reuse lightweight while turning a missing shared service into an
+immediate launcher error instead of a delayed worker connection failure.
+
 ### 2026-07-30 — Retire the superseded xr-ai-capabilities package
 
 `xr-ai-capabilities` and its unused `VisionModule` are removed after production
