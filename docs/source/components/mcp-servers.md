@@ -270,7 +270,7 @@ must exist.
 ## vlm-mcp
 
 `vlm-mcp` is a thin FastMCP wrapper around the vision-language model in
-`ai-services/vlm-server/` (Cosmos-Reason1-7B via vLLM). It has no hub IPC
+`services/vlm-server/` (Cosmos-Reason1-7B via vLLM). It has no hub IPC
 subscription and no `xr-ai-hub-client` dependency: it just reads a local image and
 forwards it to the VLM's OpenAI-compatible chat-completions endpoint via the
 `xr-ai-models` SDK.
@@ -296,7 +296,7 @@ host:                  0.0.0.0
 port:                  8240
 models:
   vlm:
-    kind:     preset:cosmos_vlm   # targets ai-services/vlm-server/
+    kind:     preset:cosmos_vlm   # targets services/vlm-server/
     base_url: http://localhost:8100
 vlm_request_timeout_s: 60.0       # per-call httpx timeout
 enable_thinking:       false      # true enables VLM chain-of-thought (slower, more accurate)

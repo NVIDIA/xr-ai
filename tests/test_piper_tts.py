@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Smoke test for ai-services/tts/piper.
+Smoke test for services/piper-tts.
 
 Spawns the Piper TTS server as a subprocess (out of its own venv — the
 test harness must not import the heavy piper/fastapi deps) and round-trips
@@ -38,7 +38,7 @@ pytestmark = pytest.mark.asyncio
 
 
 _REPO_ROOT     = Path(__file__).resolve().parents[1]
-_PIPER_PROJECT = _REPO_ROOT / "ai-services" / "tts" / "piper"
+_PIPER_PROJECT = _REPO_ROOT / "services" / "piper-tts"
 _PIPER_BIN     = _PIPER_PROJECT / ".venv" / "bin" / "piper_tts_server"
 _PIPER_YAML    = _PIPER_PROJECT / "piper_tts_server.yaml"
 _DEFAULT_PORT  = 8105
@@ -145,9 +145,9 @@ async def test_piper_tts_smoke(tmp_path: Path) -> None:
 
     ref_cfg     = yaml.safe_load(_PIPER_YAML.read_text())
     voice       = ref_cfg["voice"]
-    model_cache = (_PIPER_YAML.parent / ref_cfg.get("model_cache", "../models")).resolve()
+    model_cache = (_PIPER_YAML.parent / ref_cfg.get("model_cache", "../../models")).resolve()
     # The piper server eagerly resolves + downloads the configured voice
-    # on startup (see ai-services/tts/piper/piper_tts_server/__main__.py),
+    # on startup (see services/piper-tts/piper_tts_server/__main__.py),
     # so we don't pre-check voice cache state here.
 
     port = pick_free_port(_DEFAULT_PORT)

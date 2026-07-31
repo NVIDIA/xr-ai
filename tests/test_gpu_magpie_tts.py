@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-GPU smoke test for ai-services/tts/magpie.
+GPU smoke test for services/magpie-tts.
 
 Spawns the Magpie NeMo TTS server as a subprocess (out of its own venv —
 the test harness must not pull NeMo / lightning) and round-trips a short
@@ -32,7 +32,7 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 
 _REPO_ROOT      = Path(__file__).resolve().parents[1]
-_MAGPIE_PROJECT = _REPO_ROOT / "ai-services" / "tts" / "magpie"
+_MAGPIE_PROJECT = _REPO_ROOT / "services" / "magpie-tts"
 _MAGPIE_BIN     = _MAGPIE_PROJECT / ".venv" / "bin" / "magpie_tts_server"
 _MAGPIE_YAML    = _MAGPIE_PROJECT / "magpie_tts_server.yaml"
 _DEFAULT_PORT   = 8104
@@ -116,7 +116,7 @@ async def test_magpie_tts_smoke(tmp_path: Path) -> None:
     ref_cfg     = yaml.safe_load(_MAGPIE_YAML.read_text())
     model_name  = ref_cfg["model"]
     sample_rate = int(ref_cfg.get("sample_rate", 22050))
-    model_cache = (_MAGPIE_YAML.parent / ref_cfg.get("model_cache", "../models")).resolve()
+    model_cache = (_MAGPIE_YAML.parent / ref_cfg.get("model_cache", "../../models")).resolve()
 
     port = _pick_port(_DEFAULT_PORT)
 

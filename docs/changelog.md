@@ -9,6 +9,27 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-31 — Model-serving projects share the services root
+
+The VLM, STT, LLM, and TTS server projects now live as direct children of
+`services/`. A common project depth makes process declarations, editable
+dependency paths, and operational ownership predictable while preserving each
+package name, command, port, and serving behavior.
+
+The move normalizes the standalone VLM, STT, Nemotron 3 Nano, Nemotron Omni,
+Magpie TTS, and Piper TTS reference configurations to the repository-level
+`models/` directory. Their previous ignored caches remain under
+`ai-services/models/` or `ai-services/tts/models/` because Git cannot move
+untracked weights. Operators must merge those directories before an offline
+start; `docs/ai-services.md` documents a non-clobbering migration procedure.
+Sample-owned model configurations and the Llama Nemotron standalone
+configuration already resolved to the repository-root cache.
+
+MCP compatibility adapters remain under `agent-mcp-servers/`. The render demo
+adopts the mechanical model-service paths in its orchestrator and corrects one
+stale path in a YAML comment; its worker, scene, prompts, evaluations, and
+architecture are unchanged.
+
 ### 2026-07-30 — Model profiles separate adapter, endpoint, and deployment ownership
 
 Model role specifications now compose `AdapterSpec`, `EndpointSpec`, and
