@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-31 — Make model-server startup order GPU-profile aware
+
+The dual-48-GB Ada stack starts the VLM and 8B LLM before STT and the dedicated
+30B agent LLM. This settles the shared GPU 0 services first and leaves the 30B
+load as the final readiness gate on GPU 1. Single-GPU profiles retain the
+large-model-first order that gives the 30B model an empty device for initial
+kernel compilation.
+
 ### 2026-07-30 — Retire the superseded xr-ai-capabilities package
 
 `xr-ai-capabilities` and its unused `VisionModule` are removed after production

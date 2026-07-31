@@ -533,6 +533,8 @@ Starts stt-server (8103), nemotron3-nano-llm-server (8107, `persistent=True`),
 vlm-server (8100, `persistent=True`), llama-nemotron-llm-server (8106, `persistent=True`).
 The three vLLM servers survive launcher restarts; use `--stop` to shut them down.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
+The dual-Ada profile starts VLM, 8B LLM, STT, then 30B agent LLM; other
+profiles keep the 30B model ahead of the smaller vLLM services.
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 

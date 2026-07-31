@@ -35,21 +35,27 @@ _BASE = Path(__file__).resolve().parent
 # kernels are cached after the first run (~3-8 min).
 def _build_processes() -> list[Process]:
     """Detect the GPU profile and return the per-profile process list."""
-    ai = f"yaml/{detect_gpu_config()}"
-    return [
-        Process("stt",       "../../ai-services/stt-server",         "stt_server",
-                config=f"{ai}/stt_server.yaml",
-                launch_mode="persist", port=8103),
-        Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
-                config=f"{ai}/nemotron3_nano_llm_server.yaml",
-                launch_mode="persist", port=8107),
-        Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
-                config=f"{ai}/vlm_server.yaml",
-                launch_mode="persist", port=8100),
-        Process("llm",       "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
-                config=f"{ai}/llama_nemotron_llm_server.yaml",
-                launch_mode="persist", port=8106),
-    ]
+    profile = detect_gpu_config()
+    ai = f"yaml/{profile}"
+    stt = Process(
+        "stt", "../../ai-services/stt-server", "stt_server",
+        config=f"{ai}/stt_server.yaml", launch_mode="persist", port=8103,
+    )
+    agent_llm = Process(
+        "agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
+        config=f"{ai}/nemotron3_nano_llm_server.yaml", launch_mode="persist", port=8107,
+    )
+    vlm = Process(
+        "vlm", "../../ai-services/vlm-server", "vlm_server",
+        config=f"{ai}/vlm_server.yaml", launch_mode="persist", port=8100,
+    )
+    llm = Process(
+        "llm", "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
+        config=f"{ai}/llama_nemotron_llm_server.yaml", launch_mode="persist", port=8106,
+    )
+    if profile == "dual_48G_ada":
+        return [vlm, llm, stt, agent_llm]
+    return [stt, agent_llm, vlm, llm]
 
 
 def _stop_models() -> None:
