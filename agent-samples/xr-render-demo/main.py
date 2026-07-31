@@ -101,7 +101,7 @@ def _build_processes() -> list[Process]:
                 launch_mode="reuse"),
         Process("hub",        "../../server-runtime",                "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),
-        Process("cloudxr",    "../../cloudxr-runtime",               "cloudxr_runtime",
+        Process("cloudxr",    "../../services/cloudxr-runtime",      "cloudxr_runtime",
                 config="yaml/cloudxr_runtime.yaml"),
         Process("tts",        "../../services/piper-tts",         "piper_tts_server",
                 config="yaml/piper_tts_server.yaml"),

@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-07-31 — CloudXR runtime joins the services root
+
+The shared CloudXR OpenXR runtime now lives at
+`services/cloudxr-runtime/`, beside the other reusable launched services. The
+move preserves the `cloudxr-runtime` package, `cloudxr_runtime` command,
+configuration, ports, environment-file contract, and runtime behavior while
+giving service projects a consistent direct-child layout.
+
+The render demo adopts only the mechanical CloudXR project path in its
+orchestrator. Its scene and worker remain unchanged.
+
 ### 2026-07-31 — Model-serving projects share the services root
 
 The VLM, STT, LLM, and TTS server projects now live as direct children of
