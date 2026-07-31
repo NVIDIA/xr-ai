@@ -56,12 +56,20 @@ def test_source_links_use_the_current_documentation_ref(monkeypatch) -> None:
     for environment, ref in (
         ("XR_AI_DOCS_GITHUB_REF", "0123456789abcdef0123456789abcdef01234567"),
         ("SPHINX_MULTIVERSION_NAME", "v2.0.0"),
+        (None, "main"),
     ):
         monkeypatch.delenv("SPHINX_MULTIVERSION_NAME", raising=False)
         monkeypatch.delenv("XR_AI_DOCS_GITHUB_REF", raising=False)
-        monkeypatch.setenv(environment, ref)
-        source = ["https://github.com/NVIDIA/xr-ai/blob/main/docs/example.md"]
+        if environment:
+            monkeypatch.setenv(environment, ref)
+        source = [
+            "https://github.com/NVIDIA/xr-ai/blob/main/docs/example.md\n"
+            "https://github.com/NVIDIA/xr-ai/tree/main/docs"
+        ]
 
         config["_rewrite_github_links"](None, "example", source)
 
-        assert source == [f"https://github.com/NVIDIA/xr-ai/blob/{ref}/docs/example.md"]
+        assert source == [
+            f"https://github.com/NVIDIA/xr-ai/blob/{ref}/docs/example.md\n"
+            f"https://github.com/NVIDIA/xr-ai/tree/{ref}/docs"
+        ]

@@ -8,6 +8,7 @@ import os
 import re
 
 _GITHUB_BLOB_PREFIX = "https://github.com/NVIDIA/xr-ai/blob/"
+_GITHUB_TREE_PREFIX = "https://github.com/NVIDIA/xr-ai/tree/"
 _SEMVER_IDENTIFIER = r"(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
 _SEMVER_TAG = (
     rf"v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
@@ -27,8 +28,12 @@ def _github_ref() -> str:
 
 
 def _rewrite_github_links(_app, _docname: str, source: list[str]) -> None:
+    ref = _github_ref()
     source[0] = source[0].replace(
-        f"{_GITHUB_BLOB_PREFIX}main/", f"{_GITHUB_BLOB_PREFIX}{_github_ref()}/"
+        f"{_GITHUB_BLOB_PREFIX}main/", f"{_GITHUB_BLOB_PREFIX}{ref}/"
+    )
+    source[0] = source[0].replace(
+        f"{_GITHUB_TREE_PREFIX}main/", f"{_GITHUB_TREE_PREFIX}{ref}/"
     )
 
 # -- Project information -----------------------------------------------------
