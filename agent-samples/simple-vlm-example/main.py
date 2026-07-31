@@ -53,7 +53,7 @@ def _build_processes() -> list[Process]:
     processes = [
         Process(
             "hub",
-            "../../server-runtime",
+            "../../services/xr-media-hub",
             "xr_media_hub",
             config="yaml/xr_media_hub.yaml",
         ),

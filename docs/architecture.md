@@ -13,10 +13,9 @@ design decisions see `docs/changelog.md`.
 
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # IPC, model, NAT-function, capability, and voice SDK packages
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
-services/           # CloudXR, model-serving, and long-running typed XR capability services
+services/           # XR hub, CloudXR, model-serving, and typed XR capability services
 agent-mcp-servers/  # Optional MCP compatibility adapters for non-NAT consumers
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
@@ -48,7 +47,7 @@ docs/               # Design docs and topic deep-dives
 
 Each sample provides its own `xr_media_hub.yaml` in its `yaml/` directory
 (e.g. `agent-samples/simple-vlm-example/yaml/xr_media_hub.yaml`).
-`server-runtime/` also contains a reference copy documenting all available
+`services/xr-media-hub/` also contains a reference copy documenting all available
 fields.
 
 Paths inside the YAML (e.g. `web_client_dir`) resolve relative to the YAML

@@ -139,7 +139,7 @@ from xr_ai_launcher import Process, run_stack
 _BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
-    Process("hub",    "../../server-runtime", "xr_media_hub"),
+    Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
     Process("worker", "worker",               "<snake_name>_worker"),
 ]
 

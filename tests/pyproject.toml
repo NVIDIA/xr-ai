@@ -47,7 +47,7 @@ xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable
 xr-ai-nat             = { path = "../agent-sdk/xr-ai-nat",              editable = true }
 xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable = true }
 xr-ai-voice           = { path = "../agent-sdk/xr-ai-voice",            editable = true }
-xr-media-hub          = { path = "../server-runtime",                   editable = true }
+xr-media-hub          = { path = "../services/xr-media-hub",             editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }
 xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }
 xr-ai-vad             = { path = "../utils/xr-ai-vad",                  editable = true }

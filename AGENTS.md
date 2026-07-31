@@ -12,7 +12,6 @@ historical decisions in `docs/changelog.md`.
 
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # Five packages:
                     #   xr-ai-hub-client   — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
@@ -20,7 +19,7 @@ agent-sdk/          # Five packages:
                     #   xr-ai-voice        — voice runtime (VoiceSession); introduced alongside xr-ai-pipecat
                     #   xr-ai-nat          — typed, in-process NAT functions for XR capabilities
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
-services/           # CloudXR, model-serving, and long-running typed capability services
+services/           # XR hub, CloudXR, model-serving, and typed capability services
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, vec, video, vlm
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
@@ -50,7 +49,7 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   package's presets, not in callers. No vendor SDKs (no `openai`, no
   `anthropic`, no `litellm`); all in-tree backends speak
   OpenAI-compatible HTTP.
-- **Workers never import from `server-runtime` or `xr_ai_launcher`.** Use the
+- **Workers never import from `xr_media_hub` or `xr_ai_launcher`.** Use the
   public `xr_ai_hub`, `xr_ai_models`, `xr_ai_nat`, and `xr_ai_voice` SDK
   surfaces plus task-specific libraries (numpy, torch, …).
 - **Agentic functions are NAT-first and in-process.** Reusable deterministic

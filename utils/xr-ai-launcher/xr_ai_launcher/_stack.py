@@ -429,7 +429,7 @@ def run_stack(
         _BASE = Path(__file__).resolve().parent
 
         PROCESSES = [
-            Process("hub",    "../../server-runtime", "xr_media_hub",
+            Process("hub",    "../../services/xr-media-hub", "xr_media_hub",
                     config="yaml/xr_media_hub.yaml"),
             Parallel([
                 Process("stt", "../../services/stt-server", "stt_server"),
