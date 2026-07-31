@@ -15,7 +15,7 @@ SMVENV        = XR_AI_DOCS_LATEST_VERSION=$(or $(LATEST_RELEASE),main)
 
 .PHONY: help html strict latest-release clean
 help:
-	@echo "Targets: html (versioned build), strict (warnings as errors), clean."
+	@echo "Targets: html (versioned build), strict (warnings as errors), latest-release, clean."
 
 html:
 	@$(SMVENV) $(SPHINXBUILD) "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS)
