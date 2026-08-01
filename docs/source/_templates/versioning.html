@@ -4,15 +4,27 @@
 -->
 {# Only sphinx-multiversion defines ``versions``; a plain ``make html`` build has none. #}
 {% if versions %}
+{% set items = (versions.tags | reverse | list) + (versions.branches | list) %}
 <div class="version-switcher">
   <label for="version-select" class="version-switcher__label">Version</label>
-  <select id="version-select" class="version-switcher__select" onchange="location = this.value;">
-    {%- for item in versions.tags|reverse %}
-    <option value="{{ item.url }}" {% if item == current_version %}selected{% endif %}>{{ item.name }}</option>
-    {%- endfor %}
-    {%- for item in versions.branches %}
-    <option value="{{ item.url }}" {% if item == current_version %}selected{% endif %}>{{ item.name }} (development)</option>
+  <select id="version-select" class="version-switcher__select">
+    {%- for item in items %}
+    <option value="{{ loop.index0 }}" {% if item == current_version %}selected{% endif %}>{{ item.name }}{% if item.name == "main" %} (development){% endif %}</option>
     {%- endfor %}
   </select>
 </div>
+<script>
+  (function () {
+    // Navigate by index into a build-time list, never by reading the URL back
+    // out of the DOM, so page text can never become a navigation target.
+    var urls = {{ items | map(attribute="url") | list | tojson }};
+    var select = document.getElementById("version-select");
+    select.addEventListener("change", function () {
+      var url = urls[select.selectedIndex];
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  })();
+</script>
 {% endif %}
