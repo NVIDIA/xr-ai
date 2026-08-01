@@ -80,6 +80,13 @@ html_theme = "nvidia_sphinx_theme"
 html_show_sphinx = False
 html_title = "XR AI"
 templates_path = ["_templates"]
+html_static_path = ["_static"]
+html_css_files = ["css/custom.css"]
+
+# The theme reserves navbar centre for pydata's JSON-driven switcher, which this
+# site does not configure; sphinx-multiversion drives the sidebar one instead.
+html_theme_options = {"navbar_center": ["navbar-external-links"]}
+html_sidebars = {"**": ["versioning.html", "sidebar-nav-bs"]}
 
 
 def setup(app):
