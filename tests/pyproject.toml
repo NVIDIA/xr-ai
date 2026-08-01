@@ -39,10 +39,6 @@ dependencies = [
     "fastmcp>=3.4,<4",
     "Pillow>=10.0",
     "pyyaml>=6.0",
-    # Transitive via pipecat-ai, constrained here only to hold back 3.10.1: it
-    # added an import hook that rejects any nltk-initiated import resolving
-    # under the cwd, and the venv at tests/.venv puts nltk's own regex there.
-    "nltk<3.10.1",
 ]
 
 [tool.uv.sources]

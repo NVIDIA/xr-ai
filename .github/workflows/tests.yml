@@ -46,10 +46,19 @@ jobs:
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
+      # nltk >= 3.10.1 refuses any import it initiates whose module resolves under
+      # the working directory. pytest runs from tests/, so a venv at tests/.venv
+      # puts nltk's own copy of regex there and the pipecat -> nltk -> regex chain
+      # fails. Keep the venv at the repo root: still inside the checkout, so every
+      # editable path and subprocess keeps working, but no longer under cwd.
       - name: Sync test workspace
         working-directory: tests
+        env:
+          UV_PROJECT_ENVIRONMENT: ../.venv
         run: uv sync --python ${{ matrix.python-version }}
 
       - name: Run tests
         working-directory: tests
+        env:
+          UV_PROJECT_ENVIRONMENT: ../.venv
         run: uv run pytest -v --tb=short --color=yes -m "not gpu"
