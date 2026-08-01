@@ -29,6 +29,12 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
 
+    env:
+      # Keep the venv out of the checkout. nltk >= 3.10.1 refuses any import it
+      # initiates whose module resolves under the working directory, so a venv at
+      # tests/.venv makes its own site-packages copy of ``regex`` look untrusted.
+      UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/test-venv-${{ matrix.python-version }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
