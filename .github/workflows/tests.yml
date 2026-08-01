@@ -46,17 +46,10 @@ jobs:
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      # Both steps below keep the venv out of the checkout. nltk >= 3.10.1 refuses
-      # any import it initiates whose module resolves under the working directory,
-      # so a venv at tests/.venv makes nltk's own copy of regex look untrusted.
       - name: Sync test workspace
         working-directory: tests
-        env:
-          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/test-venv-${{ matrix.python-version }}
         run: uv sync --python ${{ matrix.python-version }}
 
       - name: Run tests
         working-directory: tests
-        env:
-          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/test-venv-${{ matrix.python-version }}
         run: uv run pytest -v --tb=short --color=yes -m "not gpu"

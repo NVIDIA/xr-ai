@@ -324,6 +324,9 @@ xr-ai-tests  (tests/)
     └── fastmcp >=3.4,<4 (CPU MCP adapter contracts and GPU MCP tests)
     └── Pillow >=10.0   (CPU native-vision and GPU image tests)
     └── pyyaml >=6.0    (CPU subprocess/service configs and GPU service tests)
+    └── nltk <3.10.1    (transitive via pipecat-ai; held back because 3.10.1
+                         rejects nltk-initiated imports resolving under the cwd,
+                         which is where tests/.venv puts nltk's own regex)
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages
