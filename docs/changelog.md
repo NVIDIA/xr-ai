@@ -48,6 +48,36 @@ the 8B held is freed. The standalone `ai-services/llm/llama_nemotron` server
 and its `xr-ai-models` preset remain available for samples that want a small
 dedicated model.
 
+### 2026-08-03 — Tea making selects a hardware-specific GPU layout
+
+The tea-making launcher now uses the shared GPU detector to select explicit
+single-96-GiB-Blackwell or dual-48-GiB-Ada service YAMLs. On Blackwell, NVFP4
+Omni starts first with bounded room for colocated STT and embedding, and the
+RTX Pro profile selects Triton for the current MoE compatibility requirement.
+On dual L40/L40S, FP8 Omni owns GPU 0 while STT and embedding use GPU 1. This
+prevents independently launched vLLM services from reserving the same L40 and
+preserves the sample's one-command startup on both target systems.
+
+### 2026-08-03 — Nemotron Omni pins its minimum supported vLLM runtime
+
+Nemotron-3-Nano-Omni declares the `NemotronH_Nano_Omni_Reasoning_V3`
+architecture, which vLLM 0.19 rejects before remote model code can load. The
+Omni service now pins `vllm/vllm-openai:v0.20.0`, removes the obsolete
+model-side Mamba package installation, and requires vLLM 0.20 for pip mode.
+The shared Docker runner explicitly selects `/bin/bash` so images with their
+own `vllm serve` entrypoint can execute setup commands correctly. Its container
+fingerprint version changed so stopped containers created with the old command
+are recreated instead of reused. The GPU smoke test is required to pass rather
+than treating the architecture failure as expected.
+
+### 2026-08-03 — Persistent vLLM containers track launch configuration
+
+Docker-backed vLLM containers carry a fingerprint of their image, model
+arguments, environment, GPU selection, and cache mount. A stopped container is
+reused only when that fingerprint matches the current request; otherwise it is
+recreated so YAML changes such as GPU memory utilization take effect. Healthy
+running containers remain reusable to preserve hot model weights.
+
 ### 2026-08-03 — Native RAG uses a typed service boundary
 
 Dense document retrieval is a reusable `rag-service` capability exposed to

@@ -550,6 +550,24 @@ in-process. The `models_config` key selects a structured deployment profile:
 external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
 8108. Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
+### tea-making-sample  (agent-samples/tea-making-sample/)
+
+YAML-defined visual guide: step-specific VLM captions feed a constrained agent
+loop, while participant-local context, manual navigation, reminders, and timer
+steps are managed by the generic worker.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `tea-making-sample` | `xr-ai-launcher`, `xr-ai-logging` | - |
+| Worker | `tea-making-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | pyyaml >=6.0 |
+
+The launcher starts STT (8103), Nemotron-Omni (8108), the embedding server
+(8109), RAG service (8340), hub, Piper TTS (8105), and the worker. Nemotron-Omni
+serves both `agent_llm` and `vlm`; there is no Llama-Nemotron chat model. The
+worker registers `RAGFunctionsConfig` in-process and calls the native RAG
+service through its typed retrieve function. Step 5 is timer-only and does not
+invoke the VLM or step agent.
+
 ### model-servers  (agent-samples/model-servers/)
 
 Standalone launcher that starts the shared AI inference servers and keeps

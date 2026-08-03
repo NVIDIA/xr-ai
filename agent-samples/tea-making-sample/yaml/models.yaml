@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Model roles for the tea-making guided workflow sample.
+
+agent_llm:
+  kind: preset:nemotron_omni
+  base_url: http://localhost:8108
+  default_extras:
+    chat_template_kwargs:
+      enable_thinking: false
+
+vlm:
+  category: vlm
+  kind: openai_compat
+  model_name: llm
+  base_url: http://localhost:8108
+  capabilities:
+    streaming: true
+    vision: true
+  default_extras:
+    chat_template_kwargs:
+      enable_thinking: false
+
+embedding:
+  kind: preset:nemotron_embedding
+  base_url: http://localhost:8109
+
+stt:
+  kind: preset:parakeet_stt
+  base_url: http://localhost:8103
+
+tts:
+  kind: preset:piper_tts
+  base_url: http://localhost:8105
