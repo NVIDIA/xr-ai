@@ -35,6 +35,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
@@ -152,16 +153,6 @@
   
   <div class="col-lg-9 navbar-header-items">
     
-    <div class="me-auto navbar-header-items__center">
-      
-        <div class="navbar-item"><!--
-  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-  SPDX-License-Identifier: Apache-2.0
--->
-</div>
-      
-    </div>
-    
     
     <div class="navbar-header-items__end">
       
@@ -255,19 +246,6 @@
   <div class="sidebar-header-items sidebar-primary__section">
     
     
-      <div class="sidebar-header-items__center">
-        
-          
-          
-            <div class="navbar-item"><!--
-  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-  SPDX-License-Identifier: Apache-2.0
--->
-</div>
-          
-        
-      </div>
-    
     
     
       <div class="sidebar-header-items__end">
@@ -292,6 +270,12 @@
   </div>
   
     <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+</div>
         <div class="sidebar-primary-item">
 
 
@@ -475,7 +459,7 @@ either path to
 <code class="docutils literal notranslate"><span class="pre">load_models_config(...)</span></code> and constructs services via <code class="docutils literal notranslate"><span class="pre">make_llm</span></code> /
 <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code> / <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> / <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>.  Schema, preset
 table, and the explicit (no-preset) spec are in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/e6e2b6106dddb6b5ca7178ca7ad6bbb36ef5b4e9/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/416d4bd1d6afb0063ac14949500fedf858089d9d/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
 <p>When the worker is small, keep its implementation in the package’s
 <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>. Split it once argument parsing, lifecycle, configuration, and
 workflow composition become distinct responsibilities.</p>
@@ -589,7 +573,7 @@ packages = [&quot;&lt;snake_name&gt;_worker&quot;]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules; see
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/e6e2b6106dddb6b5ca7178ca7ad6bbb36ef5b4e9/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/416d4bd1d6afb0063ac14949500fedf858089d9d/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;&quot;&quot;
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.

@@ -35,6 +35,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=da1a55c7" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
@@ -152,42 +153,6 @@
   
   <div class="col-lg-9 navbar-header-items">
     
-    <div class="me-auto navbar-header-items__center">
-      
-        <div class="navbar-item"><!--
-  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-  SPDX-License-Identifier: Apache-2.0
--->
-
-<div class="version-switcher__container">
-  <details>
-    <summary>
-      Documentation: main (development)
-    </summary>
-    
-    <p><a href="../../v0.1.0-beta/guides/index.html">Open the latest release (v0.1.0-beta).</a></p>
-    
-    <ul>
-    
-      <li>
-        
-          <a href="../../v0.1.0-beta/guides/index.html">v0.1.0-beta</a>
-        
-      </li>
-    
-      <li>
-        
-          <strong>main (development)</strong>
-        
-      </li>
-    
-    </ul>
-  </details>
-</div>
-</div>
-      
-    </div>
-    
     
     <div class="navbar-header-items__end">
       
@@ -277,45 +242,6 @@
   <div class="sidebar-header-items sidebar-primary__section">
     
     
-      <div class="sidebar-header-items__center">
-        
-          
-          
-            <div class="navbar-item"><!--
-  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-  SPDX-License-Identifier: Apache-2.0
--->
-
-<div class="version-switcher__container">
-  <details>
-    <summary>
-      Documentation: main (development)
-    </summary>
-    
-    <p><a href="../../v0.1.0-beta/guides/index.html">Open the latest release (v0.1.0-beta).</a></p>
-    
-    <ul>
-    
-      <li>
-        
-          <a href="../../v0.1.0-beta/guides/index.html">v0.1.0-beta</a>
-        
-      </li>
-    
-      <li>
-        
-          <strong>main (development)</strong>
-        
-      </li>
-    
-    </ul>
-  </details>
-</div>
-</div>
-          
-        
-      </div>
-    
     
     
       <div class="sidebar-header-items__end">
@@ -340,6 +266,35 @@
   </div>
   
     <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item"><!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+
+
+<div class="version-switcher">
+  <label for="version-select" class="version-switcher__label">Version</label>
+  <select id="version-select" class="version-switcher__select">
+    <option value="0" >v0.1.0-beta</option>
+    <option value="1" selected>main (development)</option>
+  </select>
+</div>
+<script>
+  (function () {
+    // Navigate by index into a build-time list, never by reading the URL back
+    // out of the DOM, so page text can never become a navigation target.
+    var urls = ["../../v0.1.0-beta/guides/index.html", "index.html"];
+    var select = document.getElementById("version-select");
+    select.addEventListener("change", function () {
+      var url = urls[select.selectedIndex];
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  })();
+</script>
+</div>
         <div class="sidebar-primary-item">
 
 
