@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: show-seven
+title: Show seven
+instructions: Hold up exactly seven fingers across both hands and keep both hands visible to the camera.
+visual_completion_criteria: Exactly seven extended fingers are clearly visible across two non-overlapping hands.
+knowledge_files:
+  - knowledge/counting.md
+  - knowledge/presentation.md

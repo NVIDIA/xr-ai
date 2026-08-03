@@ -49,9 +49,10 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| model-servers (shared models) | ~74 GB |
+| model-servers (shared models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
-| xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
+| visual-task-guide (requires model-servers) | ~58 GB (models) + hub/TTS |
+| xr-render-demo (requires model-servers) | ~58 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
 **Software**
@@ -285,6 +286,29 @@ for the full option list.
 
 ---
 
+### Visual task guide (on-demand hand-counting workflow)
+
+This sample guides a ten-step hand-counting task with session-local native NAT
+state. Start the shared model servers, then run the sample:
+
+```bash
+cd agent-samples/model-servers
+uv sync && uv run model_servers
+
+cd ../visual-task-guide
+uv sync
+cd worker && uv sync && cd ..
+uv run visual_task_guide
+```
+
+Use `start task`, `next step`, `task status`, and `reset task`. Asking “Did I
+do it correctly?” runs one fresh, target-neutral VLM count and compares the
+result with the trusted current step. Vision never advances progress. See the
+[`sample guide`](agent-samples/visual-task-guide/README.md) and
+[`system diagram`](agent-samples/visual-task-guide/SYSTEM_DIAGRAM.md).
+
+---
+
 ### XR render demo (voice-driven sphere in CloudXR)
 
 Speak to the web client and a sphere in the streamed scene tracks your
@@ -296,8 +320,8 @@ web client for desktop dev.
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
 endpoints, typed capability processes, and the worker. The worker calls those
 processes through native NAT functions; MCP adapters remain optional outward
-compatibility surfaces and are not in the sample's execution path. The Pipecat pipeline pairs a fast
-Llama-8B for quick-acks with a Nemotron-30B agentic tool-calling loop over
+compatibility surfaces and are not in the sample's execution path. The Pipecat
+pipeline uses Nemotron-3-Nano for quick acknowledgements and its agentic loop over
 scene, XR tracking, spatial math, vision, and video-memory functions. Full process map,
 agentic-loop details, and the XR session lifecycle:
 [`docs/xr-render-demo.md`](docs/xr-render-demo.md).

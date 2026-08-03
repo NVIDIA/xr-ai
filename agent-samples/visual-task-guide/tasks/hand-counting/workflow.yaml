@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: hand-counting
+title: Count from one to ten with your hands
+step_files:
+  - steps/01-one.yaml
+  - steps/02-two.yaml
+  - steps/03-three.yaml
+  - steps/04-four.yaml
+  - steps/05-five.yaml
+  - steps/06-six.yaml
+  - steps/07-seven.yaml
+  - steps/08-eight.yaml
+  - steps/09-nine.yaml
+  - steps/10-ten.yaml

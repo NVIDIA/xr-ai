@@ -167,7 +167,7 @@ contains only wrapper messages — nothing from inside the container.
 ```bash
 curl -fsS http://127.0.0.1:8107/health   # nemotron3_nano (agent-llm)
 curl -fsS http://127.0.0.1:8100/health   # vlm_server
-curl -fsS http://127.0.0.1:8106/health   # llama_nemotron (llm)
+curl -fsS http://127.0.0.1:8109/health   # embedding_server
 ```
 
 **Container post-mortem** — the wrapper now streams `docker logs -f` into the

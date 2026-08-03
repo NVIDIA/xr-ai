@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: show-three
+title: Show three
+instructions: Hold up exactly three fingers and keep your hand visible to the camera.
+visual_completion_criteria: Exactly three extended fingers are clearly visible and all other fingers are folded.
+knowledge_files:
+  - knowledge/counting.md
+  - knowledge/presentation.md

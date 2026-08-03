@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-03 — Shared samples use one Nemotron-3-Nano LLM deployment
+
+The shared model-server stack no longer launches Llama-Nemotron on port 8106.
+Visual task guidance uses Nemotron-3-Nano directly, and xr-render-demo maps its
+short-response and agentic logical roles to the same server on port 8107. This
+avoids reserving GPU memory for a second LLM while preserving separate prompts
+and request settings for the two roles.
+
 ### 2026-08-03 — Native RAG uses a typed service boundary
 
 Dense document retrieval is a reusable `rag-service` capability exposed to
@@ -19,6 +27,16 @@ HTTP is added to `xr-ai-models` alongside the existing model protocols, and a
 small persistent vLLM embedding server joins the shared model-server stack.
 This replaces the prototype's FastMCP boundary and synchronous HTTP client
 without coupling samples to the retrieval implementation.
+
+### 2026-08-03 — Visual task validation separates perception from the target
+
+The visual task guide keeps participant progress in memory and resets it on
+each connection. Vision runs only when requested. Its finger-count query omits
+the current step and expected answer; deterministic code compares the returned
+structured count with trusted task state afterward. This prevents the VLM and
+guide LLM from echoing the target instead of reporting visible evidence. Task
+documentation is retrieved through the reusable service-backed `xr_rag` NAT
+group; only the state machine and focused guide workflow remain sample-local.
 
 ### 2026-07-31 — GitHub Pages publishes immutable release documentation
 

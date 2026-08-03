@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+models_config: models.local.json
+task_directory: ../tasks/hand-counting
+rag_endpoint: tcp://127.0.0.1:8340
+caption_prompt_file: ../worker/visual_task_guide_worker/prompts/caption.txt
+frame_max_age_s: 2
+frame_timeout_s: 3
+voice_gate_yaml: voice_gate.yaml
+silence_duration: 0.8
+min_speech: 0.15
+silero_threshold: 0.3
+idle_timeout_secs: 0
