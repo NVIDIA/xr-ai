@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` entries in
-# models.nim_local.yaml). Nemotron-3-Nano is the same agent model the local
+# models.nim_local.json). Nemotron-3-Nano is the same agent model the local
 # backend runs; its A3B MoE decode is fast enough to cover the reactive
 # entry too. Swap in any LLM NIM from https://catalog.ngc.nvidia.com;
 # :latest tracks the newest release.

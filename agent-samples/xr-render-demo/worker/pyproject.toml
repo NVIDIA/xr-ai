@@ -41,5 +41,4 @@ only-include = [
     "processors.py",
     "tooling.py",
     "config.py",
-    "models_select.py",
 ]

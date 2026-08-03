@@ -47,21 +47,23 @@ def pytest_configure(config):
 
 
 def _purge_xr_ai_vllm_containers() -> None:
-    """Force-remove every container named `xr-ai-vllm-*`.
+    """Force-remove every container named `xr-ai-vllm-*` or `xr-ai-nim-*`.
 
     Best-effort: silently no-ops when docker is missing or not running, so
     non-GPU developer boxes don't break. Failures inside docker (hung
     daemon, container in weird state) print but never raise — the goal
     is hygiene, not assertion.
     """
-    try:
-        ps = subprocess.run(
-            ["docker", "ps", "-aq", "--filter", "name=^xr-ai-vllm-"],
-            capture_output=True, text=True, timeout=10,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return
-    ids = ps.stdout.split()
+    ids: list[str] = []
+    for name_filter in ("name=^xr-ai-vllm-", "name=^xr-ai-nim-"):
+        try:
+            ps = subprocess.run(
+                ["docker", "ps", "-aq", "--filter", name_filter],
+                capture_output=True, text=True, timeout=10,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return
+        ids += ps.stdout.split()
     if not ids:
         return
     try:

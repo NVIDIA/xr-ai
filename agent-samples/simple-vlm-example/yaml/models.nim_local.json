@@ -1,0 +1,42 @@
+{
+  "models": {
+    "stt": {
+      "category": "stt",
+      "adapter": {"kind": "riva_grpc", "language": "en-US"},
+      "endpoint": {"base_url": "localhost:50051", "readiness": "health"},
+      "deployment": {
+        "ownership": "managed",
+        "service": "stt-nim",
+        "credentials": ["NGC_API_KEY"]
+      }
+    },
+    "tts": {
+      "category": "tts",
+      "adapter": {
+        "kind": "riva_grpc",
+        "voice": "Magpie-Multilingual.EN-US.Sofia",
+        "language": "en-US"
+      },
+      "endpoint": {"base_url": "localhost:50052", "readiness": "health"},
+      "deployment": {
+        "ownership": "managed",
+        "service": "tts-nim",
+        "credentials": ["NGC_API_KEY"]
+      }
+    },
+    "vlm": {
+      "category": "vlm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "nvidia/cosmos-reason1-7b",
+        "capabilities": {"streaming": true, "vision": true}
+      },
+      "endpoint": {"base_url": "http://localhost:8100", "readiness": "none"},
+      "deployment": {
+        "ownership": "managed",
+        "service": "vlm-nim",
+        "credentials": ["NGC_API_KEY"]
+      }
+    }
+  }
+}

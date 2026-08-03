@@ -5,32 +5,26 @@
 # Paths resolve relative to this file's directory.
 
 # ── AI model services ─────────────────────────────────────────────────────────
-# Model backend, per role (stt, tts, llm, vlm). Role `llm` covers both the
-# reactive llm and agent_llm model entries. Values:
-#   local     — the role's local model-server; entry read from models_yaml (default)
-#   nim       — hosted NVIDIA NIM (build.nvidia.com); no local server; entry
-#               read from models.nim.yaml
-#   nim_local — self-hosted NIM container pulled from NGC via nim-server
-#               (yaml/nim_<role>_server.yaml); entry read from
-#               models.nim_local.yaml; requires docker
-# A scalar applies to every role, except that scalar `nim` keeps stt/tts
-# local (hosted NIM speech is not OpenAI /v1/audio-compatible), so
-# `model_backend: nim` hosts the LLMs and VLM and still runs local speech.
-# The map form sets roles individually; the optional `default` key covers
-# unlisted roles (local when absent):
-#   model_backend:
-#     default: nim_local
-#     tts: local
-# nim and nim_local require NGC_API_KEY (see docs/credentials.md). This is
-# the ONLY change needed to switch (no main.py edit).
-model_backend: local
-
-# Model endpoints (URLs, presets, timeouts) are declared in models.yaml and
-# loaded via xr-ai-models.  Edit that file to change which model runs where.
-# Path is resolved relative to THIS file's directory (`yaml/`), so the bare
-# `models.yaml` here points at `agent-samples/xr-render-demo/yaml/models.yaml`.
-# Used for roles with backend `local`.
-models_yaml: models.yaml
+# Model deployment profile, resolved relative to this file. Each entry's
+# deployment.ownership decides what the orchestrator does: `managed` entries
+# it launches itself, `reused` entries it expects already running, `external`
+# entries need no local process. Shipped presets:
+#   models.local.json     — reuses the model-servers stack for STT, LLMs,
+#                           and VLM (start model-servers first); owns piper
+#                           TTS.
+#   models.hosted.json    — LLMs and VLM on hosted NVIDIA NIM
+#                           (build.nvidia.com); owns local speech. Nothing
+#                           to pre-start.
+#   models.nim_local.json — LLMs and VLM in self-hosted NIM containers
+#                           (yaml/nim_*_server.yaml; requires docker); owns
+#                           local speech. Nothing to pre-start. Riva speech
+#                           NIMs don't fit next to CloudXR + LOVR + the
+#                           LLM/VLM NIMs on 2x48 GB; point stt/tts at the
+#                           shipped nim_stt/tts_server.yaml on a bigger box.
+# hosted and nim_local need NGC_API_KEY (see docs/credentials.md). Entries
+# mix freely; copy a preset under any name and select it here. This is the
+# only change needed to switch.
+models_config: models.local.json
 
 # ── Voice gate ────────────────────────────────────────────────────────────────
 # Magic-phrase opt-in gate; see voice_gate.yaml for the schema.  Ships with

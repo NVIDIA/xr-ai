@@ -109,19 +109,27 @@ def test_serve_nim_exits_without_ngc_key(tmp_path, monkeypatch):
         )
 
 
-# ── shipped overlays parse through the real loader ─────────────────────────
+# ── shipped profiles parse through the real loader ─────────────────────────
 
 
 @pytest.mark.parametrize("sample", ["xr-render-demo", "simple-vlm-example"])
-def test_sample_nim_local_overlays_parse(sample: str) -> None:
-    path = _REPO_ROOT / "agent-samples" / sample / "yaml" / "models.nim_local.yaml"
+def test_sample_nim_local_profiles_parse(sample: str) -> None:
+    path = _REPO_ROOT / "agent-samples" / sample / "yaml" / "models.nim_local.json"
     cfg = load_models_config(path)
-    # Speech rides the Riva gRPC kind: local container, no NVCF function id,
-    # and a real channel-ready health probe (the default).
-    for spec in (cfg.stt("stt"), cfg.tts("tts")):
-        assert spec.kind == "riva_grpc"
-        assert spec.function_id is None
-        assert spec.health_check is True
+    if sample == "simple-vlm-example":
+        # Speech rides the Riva gRPC kind: local container, no NVCF function
+        # id, and a real channel-ready health probe (the default).
+        for spec in (cfg.stt("stt"), cfg.tts("tts")):
+            assert spec.kind == "riva_grpc"
+            assert spec.function_id is None
+            assert spec.health_check is True
+    else:
+        # xr-render-demo keeps speech local: Riva speech NIMs don't fit next
+        # to CloudXR + LOVR + the LLM/VLM NIMs on 2x48 GB.
+        assert cfg.stt("stt").kind == "openai_compat"
+        assert cfg.stt("stt").base_url == "http://localhost:8103"
+        assert cfg.tts("tts").kind == "openai_compat"
+        assert cfg.tts("tts").base_url == "http://localhost:8105"
     vlm = cfg.vlm("vlm")
     assert vlm.kind == "openai_compat"
     assert vlm.model_name

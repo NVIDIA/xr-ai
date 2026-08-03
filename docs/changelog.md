@@ -62,17 +62,23 @@ without coupling samples to the retrieval implementation.
 ### 2026-07-31 — Self-hosted NIM containers via deployment profiles
 
 Users can pull optimized NIM containers from NGC and serve models on their
-own GPUs, per sample and per model role. Defaults are untouched: `local`
-stays the shipped backend; everything here is opt-in.
+own GPUs, per sample. Defaults are untouched: `models.local.json` stays the
+shipped profile; everything here is opt-in.
 
 **Profile-selected NIM hosting.** Each sample ships a `models.nim_local.json`
 deployment profile alongside `models.local.json`/`models.hosted.json`.
 Selecting it (`models_config` in the worker YAML) serves the LLM/VLM roles
-from self-hosted NIM containers and speech from Riva NIM containers; each
-entry's `deployment` section names the `nim_server` service the orchestrator
-launches (config `yaml/nim_<role>_server.yaml`). Defaults are untouched:
-`models.local.json` stays the shipped profile; everything here is opt-in.
-`models.nim_local.json` requires `NGC_API_KEY`.
+from self-hosted NIM containers, and speech from Riva NIM containers where
+the GPU budget allows (simple-vlm-example; xr-render-demo keeps speech local:
+Riva speech NIMs don't fit next to CloudXR + LOVR + the LLM/VLM NIMs on
+2x48 GB). Each NIM entry's `deployment` section names the `nim_server`
+service the orchestrator launches (config `yaml/nim_<role>_server.yaml`) and
+lists `NGC_API_KEY` under `credentials`, a new deployment field, collected
+only by the launcher, for keys the launched service itself needs when the
+endpoint takes no API key. xr-render-demo moves to the same profile scheme
+(`models.local.json`/`models.hosted.json`/`models.nim_local.json` replace
+`models.yaml`/`models.nim.yaml` and the `model_backend`/`models_yaml`
+worker keys).
 
 **Generic container runner, not per-model wrappers.** `ai-services/nim-server`
 is one `nim_server` command parameterized by YAML (image, http/grpc ports,
@@ -115,8 +121,10 @@ despite the name) and `NIM_PASSTHROUGH_ARGS` (vLLM tool-calling flags, off
 by default in LLM NIM profiles) are the load-bearing env knobs documented in
 the yamls.
 
-Not covered by CI: an actual container pull/run (multi-GB, GPU). Argv
-construction and overlay parsing are unit-tested (`tests/test_nim_docker.py`).
+Argv construction and profile parsing are unit-tested
+(`tests/test_nim_docker.py`); the nightly GPU workflow runs a real
+pull/serve/chat/stop cycle against the llama-3.1-8b NIM
+(`tests/test_gpu_nim_server.py`, requires `NGC_API_KEY` on the runner).
 ### 2026-07-31 — GitHub Pages publishes immutable release documentation
 
 The documentation site now uses `sphinx-multiversion` to render `main` as

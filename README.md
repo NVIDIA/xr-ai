@@ -384,14 +384,14 @@ uv run model_servers --stop
 (STT/TTS stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
 
 ```yaml
-model_backend: nim     # default is "local"
+models_config: models.hosted.json     # default is models.local.json
 ```
 
-The worker loads `yaml/models.nim.yaml` for the native model-backed functions —
-no `main.py` edits. Provide
-an `NGC_API_KEY` as an **environment variable** (or via the launcher
-credential prompt — not in YAML) and just don't start the local
-`agent-llm` / `vlm` model-servers. See
+The profile is consumed by both the worker and orchestrator, so there are
+no `main.py`
+edits, and the stack owns its own speech servers, so the model-servers stack
+isn't needed at all. Provide an `NGC_API_KEY` as an **environment variable** (or via the
+launcher credential prompt, not in YAML). See
 [`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
 
 ---

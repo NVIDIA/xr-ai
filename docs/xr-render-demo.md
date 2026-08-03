@@ -84,14 +84,15 @@ the XR compositor and the agentic LLM do not share a card.
 
 ## Worker configuration
 
-The worker reads two YAML files:
+The worker reads two config files:
 
 - `yaml/xr_render_demo_worker.yaml` — native capability endpoints, text-memory directory, and VAD tunables.
-- `yaml/models.yaml` (path set by `models_yaml:` in the worker YAML) — model
-  endpoint declarations consumed by `xr-ai-models`.  Each entry maps a logical
-  name (`llm`, `agent_llm`, `stt`, `tts`, `vlm`) to a `kind: preset:<name>`
-  and a `base_url`.  Edit this file to change which model runs where without
-  touching the worker code.
+- `yaml/models.local.json` (deployment profile set by `models_config:` in the
+  worker YAML): model endpoint and deployment declarations consumed by
+  `xr-ai-models` and the orchestrator.  Each entry maps a logical name
+  (`llm`, `agent_llm`, `stt`, `tts`, `vlm`) to an adapter (preset or explicit
+  spec), an endpoint, and a deployment.  Edit this file to change which model
+  runs where without touching the worker code.
 
 ## The LLM server
 

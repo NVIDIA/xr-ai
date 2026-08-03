@@ -30,10 +30,16 @@ KIND_RIVA_GRPC: ModelKind = "riva_grpc"
 
 @dataclass(frozen=True)
 class DeploymentSpec:
-    """Process ownership for the service behind a model role."""
+    """Process ownership for the service behind a model role.
+
+    ``credentials`` names keys the launched service itself needs (e.g.
+    NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
+    even when the endpoint takes no API key.
+    """
 
     ownership: Ownership = "external"
     service: str | None = None
+    credentials: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -299,7 +305,14 @@ def _deployment(body: dict[str, Any]) -> DeploymentSpec:
         raise ValueError("deployment service must be a non-empty string")
     if ownership != "external" and not service:
         raise ValueError(f"{ownership} deployments require a service name")
-    return DeploymentSpec(ownership=ownership, service=service)
+    credentials = body.get("credentials", [])
+    if not isinstance(credentials, list):
+        raise ValueError("deployment credentials must be a list")
+    if not all(isinstance(name, str) and name for name in credentials):
+        raise ValueError("deployment credentials must be non-empty strings")
+    return DeploymentSpec(
+        ownership=ownership, service=service, credentials=tuple(credentials)
+    )
 
 
 def _construct_chat(category: Category, body: dict[str, Any], common: dict[str, Any]) -> Spec:

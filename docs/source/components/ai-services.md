@@ -189,6 +189,20 @@ Both files ship ready-made in each sample. The container `image:` is the
 model, so swapping models is a `nim_<role>_server.yaml` edit plus the
 matching profile entry.
 
+Selection is per entry, not per profile: each model role independently picks
+a local server, a self-hosted NIM container, or a hosted endpoint through
+its own `adapter`/`endpoint`/`deployment` sections. The shipped profiles are
+presets, not a closed set; a mixed setup (say, local speech, hosted LLMs,
+and only the VLM as a NIM container) is a copy of a shipped profile with the
+relevant entries changed, saved under any name and selected with
+`models_config`. When mixing with entries `reused` from the
+model-servers stack, mind port overlaps: model-servers always starts all
+four servers, so give a NIM container a free port or drop the overlapping
+local server from the mix. Profiles size to the box: simple-vlm-example hosts
+speech as Riva NIM containers, while xr-render-demo's profile keeps speech
+local: Riva speech NIMs don't fit next to CloudXR + LOVR + the LLM/VLM
+NIMs on 2x48 GB.
+
 A self-hosted speech entry uses the Riva gRPC kind:
 
 ```yaml
@@ -215,6 +229,12 @@ A NIM container serving something the samples don't ship is the same
 mechanism by hand: point an `openai_compat` entry's `base_url` at its port
 (its health route is `/v1/health/ready`, so keep `health_check: false` and
 let the container gate readiness), or a `riva_grpc` entry at its gRPC port.
+With `ownership: external` (you run the container yourself) that is the
+whole change. For the orchestrator to launch or expect it, the entry's
+`deployment.service` must name a process row in the sample's `main.py`
+(`_MODEL_PROCESSES`); a service name with no row fails fast at startup, and
+adding one row plus its config YAML is the only `main.py` edit the profile
+system ever needs.
 
 ## vLLM model persistence
 
@@ -233,10 +253,10 @@ launched detached (`docker run -d --name xr-ai-vllm-<service>`) so it
 similarly outlives the wrapper. Either way the wrapper exits cleanly and
 vLLM keeps running.
 
-**Stopping the persisted servers** — run from the sample directory:
+**Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run xr_render_demo --stop
+uv run --project agent-samples/model-servers model_servers --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -305,7 +325,7 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 
 ### Cleanup
 
-`uv run xr_render_demo --stop` works for both modes. Cleanup locates labelled
+`model_servers --stop` works for both modes. Cleanup locates labelled
 Docker containers before inspecting ports, then stops them with `docker stop`
 (escalating to `docker kill` after 20 s). Pip-mode processes carry an
 `xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort

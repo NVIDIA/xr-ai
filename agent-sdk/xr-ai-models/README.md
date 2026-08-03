@@ -112,7 +112,11 @@ orchestrator can call `load_model_deployment(worker_config)` from
 `xr-ai-launcher` to map `managed` to `launch_mode="own"`, `reused` to
 `launch_mode="reuse"`, and `external` to no local process. Credentials used by
 the launcher must be declared explicitly as `endpoint.api_key_env`; launcher
-profiles do not inherit credentials from adapter presets.
+profiles do not inherit credentials from adapter presets. A deployment may
+additionally list `credentials` the launched service itself needs (e.g.
+`NGC_API_KEY` for a NIM container's nvcr.io pull and engine download) even
+when the endpoint takes no API key; only the launcher collects these, and
+`ModelsConfig.required_credentials` stays endpoint keys only.
 
 The SDK currently normalizes `adapter` and `endpoint` into the existing typed
 service specs. Only `deployment` remains separately typed as `DeploymentSpec`.

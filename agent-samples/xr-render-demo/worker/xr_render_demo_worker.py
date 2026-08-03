@@ -24,7 +24,7 @@ from nat.builder.function import Function
 from nat.builder.workflow_builder import WorkflowBuilder
 from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
-from xr_ai_models import ChatMessage, load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import ChatMessage, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
 from xr_ai_pipecat import VadConfig, make_voice_pipeline
 from xr_ai_pipecat.services import wait_for_services
@@ -33,7 +33,7 @@ from xr_ai_voicegate import load_voice_gate_config
 
 from agent import RenderDemoAgent
 from capabilities import build_native_toolbox
-from config import WorkerConfig, load_config
+from config import WorkerConfig, load_config, load_models
 from processors import (
     _LIVE_PERCEPTION_TOOL,
     _PAST_PERCEPTION_TOOL,
@@ -82,7 +82,7 @@ async def main(
     )
     logger.bind(trace=True).info("=== trace started ===")
 
-    models_cfg = load_models_config(cfg.models_yaml)
+    models_cfg = load_models(config_path)
     llm = make_llm(models_cfg, "llm")
     agent_llm = make_llm(models_cfg, "agent_llm")
     stt = make_stt(models_cfg, "stt")

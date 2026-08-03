@@ -211,8 +211,8 @@ nim-server  (ai-services/nim-server/)
     Generic launcher for a self-hosted NVIDIA NIM container: one
     `nim_server` command serves any NIM image; the YAML picks image/ports.
     Orchestrators list one Process row per NIM with a distinct `config=`,
-    one per sample model role whose `model_backend` value is `nim_local`.
-    Requires NGC_API_KEY.
+    one per managed NIM service in the `models.nim_local.json` deployment
+    profile. Requires NGC_API_KEY.
 
 xr-ai-vad  (utils/xr-ai-vad/)
     └── numpy >=1.24
@@ -566,8 +566,9 @@ Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
 in-process. The `models_config` key selects a structured deployment profile:
 `models.local.json` manages the default services, `models.hosted.json` uses an
-external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
-8108. Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
+external NVIDIA NIM VLM, `models.omni.json` reuses Nemotron-Omni on port
+8108, and `models.nim_local.json` serves every role from self-hosted NIM
+containers. Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
 ### model-servers  (agent-samples/model-servers/)
 
@@ -601,17 +602,23 @@ user-relative requests such as "to my left".
 | Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-nat` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
 | Worker | `xr-render-demo-worker` | `xr-ai-hub-client`, `xr-ai-models[riva]` [editable], `xr-ai-nat[services,vision]` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pyyaml >=6.0, pipecat-ai >=1.3 (native scene, tracking, spatial-math, video-memory, vision, and text-memory functions replace capability MCP clients; silero-vad via xr-ai-pipecat → xr-ai-vad). |
 
-Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
-`yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
-`make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
-a transitive dep of `xr-ai-pipecat` and `xr-ai-nat[vision]`.
+Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in the
+deployment profile selected by `models_config` (`yaml/models.local.json` /
+`models.hosted.json` / `models.nim_local.json`) and loaded via
+`xr-ai-models` `load_models_config` / `make_llm` / `make_stt` / `make_tts` /
+`make_vlm`.  `httpx` is retained as a transitive dep of `xr-ai-pipecat` and
+`xr-ai-nat[vision]`.
 
-Requires `model-servers` to be running first — model servers are declared as
-`launch_mode="reuse"` so the launcher skips spawning them but the dependency
-is explicit in the process list.
+Whether `model-servers` must run first depends on the selected profile's
+deployment ownership, not its name: `reused` entries resolve to
+`launch_mode="reuse"`, so the launcher skips spawning them and expects them
+already healthy (in `models.local.json` that covers stt/llm/agent-llm/vlm,
+all served by `model-servers`); `managed` entries are launched and owned by
+the demo itself; `external` entries need no local process. The shipped
+hosted and nim_local profiles contain no `reused` entries.
 Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
-scene (8320), openxr-service (8330), and worker. The model-server
-entries are declared with `launch_mode="reuse"` and must already be healthy.
+scene (8320), openxr-service (8330), and worker. The reused
+model-server entries must already be healthy.
 No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
