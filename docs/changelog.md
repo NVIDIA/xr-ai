@@ -26,9 +26,9 @@ The visual task guide keeps participant progress in memory and resets it on
 each connection. Vision runs only when requested. Its finger-count query omits
 the current step and expected answer; deterministic code compares the returned
 structured count with trusted task state afterward. This prevents the VLM and
-guide LLM from echoing the target instead of reporting visible evidence, while
-keeping all state, vision, guidance, and RAG composition inside native NAT
-functions.
+guide LLM from echoing the target instead of reporting visible evidence. Task
+documentation is retrieved through the reusable service-backed `xr_rag` NAT
+group; only the state machine and focused guide workflow remain sample-local.
 
 ### 2026-07-31 — GitHub Pages publishes immutable release documentation
 

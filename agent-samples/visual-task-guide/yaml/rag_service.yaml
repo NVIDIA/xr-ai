@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+endpoint: tcp://0.0.0.0:8340
+documents_dir: ../tasks/hand-counting/knowledge
+models_config: models.local.json
+embedding_role: embedding
+cache_dir: /tmp/xr-ai-visual-task-guide-rag-cache
+chunk_size: 500
+overlap: 80
+embedding_dim: 768
+batch_size: 16
+min_score: 0.25

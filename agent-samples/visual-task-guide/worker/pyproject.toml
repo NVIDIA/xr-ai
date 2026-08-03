@@ -13,7 +13,7 @@ dependencies = [
     "xr-ai-hub-client",
     "xr-ai-logging",
     "xr-ai-models",
-    "xr-ai-nat[agents,vision,voice]",
+    "xr-ai-nat[agents,services,vision,voice]",
     "xr-ai-voice",
     "xr-ai-voicegate",
     "loguru>=0.7",

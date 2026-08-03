@@ -22,20 +22,6 @@ class TaskStatusResult(StrictModel):
     next_step: TaskStep | None
 
 
-class KnowledgeSearchRequest(StrictModel):
-    query: str = Field(min_length=1)
-    limit: int = Field(default=4, ge=1, le=8)
-
-
-class KnowledgeResult(StrictModel):
-    citation: str
-    text: str
-
-
-class KnowledgeSearchResult(StrictModel):
-    results: list[KnowledgeResult]
-
-
 class GuideAgentRequest(StrictModel):
     participant_id: str
     user_text: str
@@ -52,9 +38,6 @@ class TaskGuideReply(StrictModel):
 
 
 __all__ = [
-    "KnowledgeResult",
-    "KnowledgeSearchRequest",
-    "KnowledgeSearchResult",
     "GuideAgentRequest",
     "TaskGuideReply",
     "TaskGuideRequest",

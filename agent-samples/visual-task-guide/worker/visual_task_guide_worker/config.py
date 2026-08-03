@@ -15,6 +15,7 @@ import yaml
 class WorkerConfig:
     models_config: Path
     task_directory: Path
+    rag_endpoint: str
     caption_prompt: str
     frame_max_age_s: float
     frame_timeout_s: float
@@ -44,6 +45,7 @@ def load_config(path: Path | None) -> WorkerConfig:
     return WorkerConfig(
         models_config=_resolve(path, str(data.get("models_config", "models.local.json"))),
         task_directory=_resolve(path, str(data.get("task_directory", "../tasks/hand-counting"))),
+        rag_endpoint=str(data.get("rag_endpoint", "tcp://127.0.0.1:8340")),
         caption_prompt=prompt,
         frame_max_age_s=float(data.get("frame_max_age_s", 2.0)),
         frame_timeout_s=float(data.get("frame_timeout_s", 3.0)),

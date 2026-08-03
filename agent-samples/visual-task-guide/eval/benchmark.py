@@ -12,12 +12,10 @@ from typing import Any
 from nat.builder.workflow_builder import WorkflowBuilder
 from visual_task_guide_worker.agent import TaskGuideAgentConfig
 from visual_task_guide_worker.models import GuideAgentRequest
-from visual_task_guide_worker.task_functions import (
-    TaskKnowledgeFunctionsConfig,
-    TaskStateFunctionsConfig,
-)
+from visual_task_guide_worker.task_functions import TaskStateFunctionsConfig
 from visual_task_guide_worker.task_store import TaskStore
 from xr_ai_models import load_models_config, make_llm, make_vlm
+from xr_ai_nat.functions.rag import RAGFunctionsConfig
 from xr_ai_nat.llm import ModelsLLMConfig
 
 try:
@@ -32,16 +30,6 @@ _GUIDE_PROMPT = _SAMPLE / "worker/visual_task_guide_worker/prompts/guide_agent.t
 _FIXTURES = _HERE / "fixtures"
 
 
-class LoggingTaskStore(TaskStore):
-    def __init__(self, task_directory: Path) -> None:
-        super().__init__(task_directory)
-        self.search_calls: list[str] = []
-
-    def search(self, query: str, *, limit: int):
-        self.search_calls.append(query)
-        return super().search(query, limit=limit)
-
-
 def audit_fixture_leakage() -> None:
     prompts = f"{_CAPTION_PROMPT.read_text()} {_GUIDE_PROMPT.read_text()}".casefold()
     leaked = [marker for marker in LEAKAGE_MARKERS if marker.casefold() in prompts]
@@ -49,13 +37,18 @@ def audit_fixture_leakage() -> None:
         raise ValueError(f"eval fixture details leaked into prompts: {leaked}")
 
 
-async def run_eval(models_path: Path, selected: set[str] | None = None) -> dict[str, Any]:
+async def run_eval(
+    models_path: Path,
+    selected: set[str] | None = None,
+    *,
+    rag_endpoint: str = "tcp://127.0.0.1:8340",
+) -> dict[str, Any]:
     audit_fixture_leakage()
     models = load_models_config(models_path)
     llm = make_llm(models, "guide_llm")
     vlm = make_vlm(models, "vlm")
     results: list[dict[str, Any]] = []
-    store = LoggingTaskStore(_SAMPLE / "tasks/hand-counting")
+    store = TaskStore(_SAMPLE / "tasks/hand-counting")
     try:
         store.start("eval-user")
 
@@ -89,14 +82,16 @@ async def run_eval(models_path: Path, selected: set[str] | None = None) -> dict[
                 ),
             )
             await builder.add_function_group("task_state", TaskStateFunctionsConfig(store=store))
-            await builder.add_function_group("task_knowledge", TaskKnowledgeFunctionsConfig(store=store))
+            await builder.add_function_group(
+                "task_knowledge",
+                RAGFunctionsConfig(endpoint=rag_endpoint),
+            )
             guide = await builder.add_function("task_guide_agent", TaskGuideAgentConfig())
 
             for index, case in enumerate(GUIDE_CASES):
                 if selected and case["name"] not in selected:
                     continue
                 before_revision = store.progress("eval-user").revision
-                before_searches = len(store.search_calls)
                 try:
                     reply = await guide.ainvoke(
                         GuideAgentRequest(
@@ -106,11 +101,9 @@ async def run_eval(models_path: Path, selected: set[str] | None = None) -> dict[
                         )
                     )
                     text = reply.response.casefold()
-                    searched = len(store.search_calls) > before_searches
                     passed = (
                         all(term in text for term in case["required_terms"])
                         and len(reply.response.split()) <= case["max_words"]
-                        and (searched or not case["requires_knowledge"])
                         and store.progress("eval-user").revision == before_revision
                     )
                     output: Any = reply.response
@@ -138,9 +131,16 @@ def run() -> None:
         help="xr-ai-models deployment profile with reachable guide_llm and vlm endpoints.",
     )
     parser.add_argument("--case", action="append", default=[])
+    parser.add_argument("--rag-endpoint", default="tcp://127.0.0.1:8340")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    report = asyncio.run(run_eval(args.models.resolve(), set(args.case) or None))
+    report = asyncio.run(
+        run_eval(
+            args.models.resolve(),
+            set(args.case) or None,
+            rag_endpoint=args.rag_endpoint,
+        )
+    )
     rendered = json.dumps(report, indent=2)
     print(rendered)
     if args.output:

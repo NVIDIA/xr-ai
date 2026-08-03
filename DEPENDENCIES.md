@@ -554,13 +554,18 @@ external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
 
 On-demand hand-counting workflow with session-local task state, deterministic
 controls and validation, native current-frame vision, and a focused NAT guide
-agent over bundled lexical task knowledge.
+agent over bundled task knowledge retrieved through `rag-service`.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `visual-task-guide` | `xr-ai-launcher` | — |
-| Worker | `visual-task-guide-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[agents,vision,voice] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pydantic >=2.10, pyyaml >=6.0 |
-| Eval | `visual-task-guide-eval` | `visual-task-guide-worker [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[agents,vision] [editable]` | Pillow >=10.0 |
+| Worker | `visual-task-guide-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[agents,services,vision,voice] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pydantic >=2.10, pyyaml >=6.0 |
+| Eval | `visual-task-guide-eval` | `visual-task-guide-worker [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[agents,services,vision] [editable]` | Pillow >=10.0 |
+
+The orchestrator reuses embedding-server (8109), launches `rag-service`
+(private ZMQ 8340) over the task knowledge directory, then starts the hub and
+worker. The worker composes the service through `RAGFunctionsConfig`; it has no
+sample-local retrieval implementation.
 
 ### model-servers  (agent-samples/model-servers/)
 

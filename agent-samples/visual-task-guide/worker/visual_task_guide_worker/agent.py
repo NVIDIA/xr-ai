@@ -7,6 +7,7 @@ from pathlib import Path
 
 from nat.plugin_api import Builder, FunctionBaseConfig, FunctionGroupRef, FunctionInfo, LLMRef, register_function
 from nat.plugins.langchain.agent.tool_calling_agent.register import ToolCallAgentWorkflowConfig
+from xr_ai_nat.functions.rag import RetrieveResult
 
 from .models import GuideAgentRequest, TaskGuideReply
 
@@ -26,28 +27,31 @@ async def task_guide_agent(config: TaskGuideAgentConfig, builder: Builder):
     get_status = state_functions[f"{state_group.instance_name}__get_task_status"]
     knowledge_group = await builder.get_function_group(config.task_knowledge)
     knowledge_functions = await knowledge_group.get_all_functions()
-    search_knowledge = knowledge_functions[f"{knowledge_group.instance_name}__search_task_knowledge"]
+    retrieve = knowledge_functions[f"{knowledge_group.instance_name}__retrieve"]
     reasoning = await builder.add_function(
         "task_guide_reasoning",
         ToolCallAgentWorkflowConfig(
             llm_name=config.llm_name,
-            tool_names=[config.task_knowledge],
             system_prompt=_PROMPT.read_text(encoding="utf-8").strip(),
-            handle_tool_errors=True,
-            max_iterations=2,
+            max_iterations=1,
             max_empty_response_retries=1,
         ),
     )
 
     async def guide(request: GuideAgentRequest) -> TaskGuideReply:
         status = await get_status.ainvoke({"participant_id": request.participant_id})
-        knowledge = await search_knowledge.ainvoke({"query": request.user_text, "limit": 2})
+        knowledge = RetrieveResult.model_validate(
+            await retrieve.ainvoke({"query": request.user_text, "top_k": 2})
+        )
+        context = "\n".join(
+            f"[{result.source}] {result.text}" for result in knowledge.results
+        ) or "No relevant task documentation was retrieved."
         message = (
             f"Trusted task state: {status.progress.state}\n"
             f"Current step: {status.current_step}\n"
             f"User request: {request.user_text}\n"
             f"Latest live observation: {request.latest_observation}\n"
-            f"Retrieved task knowledge: {knowledge}"
+            f"Retrieved task knowledge:\n{context}"
         )
         output = await reasoning.ainvoke(message, to_type=str)
         return TaskGuideReply(response=str(output or "I could not produce task guidance."))

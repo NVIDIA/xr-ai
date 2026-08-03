@@ -51,7 +51,7 @@ endpoint and no local GPU is required for the agent or hub.
 |---|---|
 | model-servers (shared models) | ~74 GB |
 | simple-vlm-example (standalone) | ~23 GB |
-| visual-task-guide (requires model-servers) | ~70 GB (models) + hub/TTS |
+| visual-task-guide (requires model-servers) | ~74 GB (models) + hub/TTS |
 | xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 

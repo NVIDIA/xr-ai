@@ -23,18 +23,25 @@ def _build_processes() -> list[Process]:
         ),
         "stt": ("../../ai-services/stt-server", "stt_server", None, 8103),
         "tts": ("../../ai-services/tts/piper", "piper_tts_server", "yaml/piper_tts_server.yaml", 8105),
+        "embedding": ("../../ai-services/embedding-server", "embedding_server", None, 8109),
     }
     unknown = deployment.services.keys() - definitions.keys()
     if unknown:
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
     processes = []
-    for role in ("vlm", "llm", "stt", "tts"):
+    for role in ("vlm", "llm", "stt", "tts", "embedding"):
         mode = deployment.launch_mode(role)
         if mode:
             project, command, config, port = definitions[role]
             processes.append(Process(role, project, command, config=config, launch_mode=mode, port=port))
     processes.extend(
         [
+            Process(
+                "rag",
+                "../../services/rag-service",
+                "rag_service",
+                config="yaml/rag_service.yaml",
+            ),
             Process("hub", "../../server-runtime", "xr_media_hub", config="yaml/xr_media_hub.yaml"),
             Process("worker", "worker", "visual_task_guide_worker", config=_WORKER_CONFIG),
         ]

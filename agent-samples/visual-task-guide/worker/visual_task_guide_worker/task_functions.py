@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Sample-local native NAT groups for task state and knowledge retrieval."""
+"""Sample-local native NAT groups for task state and controls."""
 
 from typing import Any
 
@@ -9,23 +9,11 @@ from loguru import logger
 from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, register_function_group
 from pydantic import ConfigDict, Field
 
-from .models import (
-    KnowledgeResult,
-    KnowledgeSearchRequest,
-    KnowledgeSearchResult,
-    TaskStatusRequest,
-    TaskStatusResult,
-)
+from .models import TaskStatusRequest, TaskStatusResult
 from .task_store import TaskStore
 
 
 class TaskStateFunctionsConfig(FunctionGroupBaseConfig, name="visual_task_state"):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    store: Any = Field(exclude=True, repr=False)
-
-
-class TaskKnowledgeFunctionsConfig(FunctionGroupBaseConfig, name="visual_task_knowledge"):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     store: Any = Field(exclude=True, repr=False)
@@ -105,36 +93,7 @@ async def task_control_functions(config: TaskControlFunctionsConfig, _builder: B
     yield group
 
 
-@register_function_group(config_type=TaskKnowledgeFunctionsConfig)
-async def task_knowledge_functions(config: TaskKnowledgeFunctionsConfig, _builder: Builder):
-    store: TaskStore = config.store
-
-    async def search(request: KnowledgeSearchRequest) -> KnowledgeSearchResult:
-        chunks = store.search(request.query, limit=request.limit)
-        logger.info(
-            "task knowledge searched query={!r} results={} citations={}",
-            request.query,
-            len(chunks),
-            [chunk.citation for chunk in chunks],
-        )
-        return KnowledgeSearchResult(
-            results=[
-                KnowledgeResult(citation=chunk.citation, text=chunk.text)
-                for chunk in chunks
-            ]
-        )
-
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "search_task_knowledge",
-        search,
-        description="Retrieve bounded task documentation chunks with citations.",
-    )
-    yield group
-
-
 __all__ = [
     "TaskControlFunctionsConfig",
-    "TaskKnowledgeFunctionsConfig",
     "TaskStateFunctionsConfig",
 ]

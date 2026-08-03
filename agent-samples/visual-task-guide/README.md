@@ -56,7 +56,7 @@ microphone for voice interaction or use the text box:
 - “Did I do the step correctly?” captures one fresh frame and compares its
   reliable count with the current step without invoking RAG.
 - “How many fingers do you see?” captures one fresh frame.
-- “How should I position both hands?” uses the bundled lexical RAG.
+- “How should I position both hands?” uses dense retrieval over the bundled task documents.
 
 Voice and typed commands are both dispatched directly; this focused demo does
 not require a wake phrase, but accepts an optional “agent” or “hey agent”
@@ -64,24 +64,25 @@ prefix. A vision request runs only when the user asks a visual question. The
 workflow uses a neutral count query with no target answer, then captures one
 latest frame. Validation parses the VLM's compact count contract and compares
 it deterministically with the trusted step. Direct count questions bypass the
-guide LLM; other questions combine the fresh visual result with bounded lexical
+guide LLM; other questions combine the fresh visual result with bounded dense
 retrieval in one 128-token pass.
 
 The worker console logs task transitions, RAG citations, and total workflow
 latency. Model prompts and full payloads are not logged.
 
-The reusable boundaries are `StreamingVisionConfig` and `ModelsLLMConfig`. The
-sample owns the session-local state machine, task workflow, and focused guide agent.
+The reusable boundaries are `StreamingVisionConfig`, `RAGFunctionsConfig`, and
+`ModelsLLMConfig`. The sample owns the session-local state machine, task
+workflow, and focused guide agent.
 Progress resets whenever the worker starts or the participant reconnects.
 
 ## Evaluate deployed prompts
 
-With the shared VLM and guide LLM running:
+With the shared model servers and this sample's RAG service running:
 
 ```bash
 uv run --project eval visual_task_guide_eval
 ```
 
 The harness calls both deployed models, checks concise output, verifies native
-RAG retrieval, and audits fixture leakage. See
+dense RAG retrieval, and audits fixture leakage. See
 [`eval/README.md`](eval/README.md).

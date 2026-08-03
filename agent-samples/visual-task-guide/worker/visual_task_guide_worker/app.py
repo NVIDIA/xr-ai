@@ -14,6 +14,7 @@ from xr_ai_hub import DataMessage
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_nat.adapters import as_voice_handler
+from xr_ai_nat.functions.rag import RAGFunctionsConfig
 from xr_ai_nat.functions.vision import StreamingVisionConfig
 from xr_ai_nat.llm import ModelsLLMConfig
 from xr_ai_voice import TextMessageInput, VadConfig, VoiceSession
@@ -24,7 +25,6 @@ from .config import WorkerConfig
 from .models import TaskGuideRequest, TaskStatusResult
 from .task_functions import (
     TaskControlFunctionsConfig,
-    TaskKnowledgeFunctionsConfig,
     TaskStateFunctionsConfig,
 )
 from .task_store import TaskStore
@@ -74,7 +74,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         await builder.add_function("streaming_vision", vision_config)
         await builder.add_function_group("task_state", TaskStateFunctionsConfig(store=store))
         await builder.add_function_group("task_control", TaskControlFunctionsConfig(store=store))
-        await builder.add_function_group("task_knowledge", TaskKnowledgeFunctionsConfig(store=store))
+        await builder.add_function_group(
+            "task_knowledge",
+            RAGFunctionsConfig(endpoint=config.rag_endpoint),
+        )
         await builder.add_llm(
             "guide_llm",
             ModelsLLMConfig(

@@ -15,8 +15,10 @@ voice/text -> VoiceSession -> TaskGuideWorkflowConfig
 camera -> XR Media Hub -> StreamingVisionConfig -> current-frame VLM
                                                       :8100 / reused
                               v
-                       read-only NAT guide agent -> lexical task RAG
-                              |                     :8106 / reused
+                       read-only NAT guide agent -> xr_rag NAT group
+                              |                     -> RAG service :8340
+                              |                     -> embedding :8109 / reused
+                              |                     guide LLM :8106 / reused
                               v
                       voice + agent.response reply
 ```

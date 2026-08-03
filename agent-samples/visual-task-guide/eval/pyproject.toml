@@ -12,7 +12,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "visual-task-guide-worker",
     "xr-ai-models",
-    "xr-ai-nat[agents,vision]",
+    "xr-ai-nat[agents,services,vision]",
     "pillow>=10.0",
 ]
 

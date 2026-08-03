@@ -17,7 +17,6 @@ from visual_task_guide_worker.finger_count import format_finger_count, parse_fin
 from visual_task_guide_worker.models import GuideAgentRequest, TaskGuideReply, TaskGuideRequest
 from visual_task_guide_worker.task_functions import (
     TaskControlFunctionsConfig,
-    TaskKnowledgeFunctionsConfig,
     TaskStateFunctionsConfig,
 )
 from visual_task_guide_worker.task_store import TaskStore
@@ -67,6 +66,10 @@ def test_deployed_eval_covers_both_prompts_without_fixture_leakage() -> None:
     models = json.loads((_SAMPLE / "yaml/models.local.json").read_text(encoding="utf-8"))
     assert models["models"]["guide_llm"]["deployment"] == {"ownership": "reused", "service": "llm"}
     assert models["models"]["vlm"]["deployment"] == {"ownership": "reused", "service": "vlm"}
+    assert models["models"]["embedding"]["deployment"] == {
+        "ownership": "reused",
+        "service": "embedding",
+    }
 
 
 def test_sample_uses_standard_web_client_without_recorded_video_service() -> None:
@@ -79,6 +82,8 @@ def test_sample_uses_standard_web_client_without_recorded_video_service() -> Non
     assert "magic_phrases: []\n" in voice_gate
     assert "video_recording:" not in hub_config
     assert "video-memory-service" not in launcher
+    assert "services/rag-service" in launcher
+    assert "RAGFunctionsConfig" in app
     assert 'text_topic=_OUTPUT_TOPIC' in app
 
 
@@ -97,9 +102,7 @@ def test_bundled_workflow_counts_from_one_through_ten(tmp_path) -> None:
         "show-nine",
         "show-ten",
     ]
-    results = store.search("both hands separated", limit=2)
-    assert results
-    assert all(result.citation.startswith("knowledge/") for result in results)
+    assert all(step.knowledge_files for step in store.steps)
 
 
 def test_task_store_requires_explicit_state_transitions(tmp_path) -> None:
@@ -150,17 +153,11 @@ async def test_native_task_groups_separate_read_and_mutating_controls(tmp_path) 
     async with WorkflowBuilder() as builder:
         await builder.add_function_group("task_state", TaskStateFunctionsConfig(store=store))
         await builder.add_function_group("task_control", TaskControlFunctionsConfig(store=store))
-        await builder.add_function_group("task_knowledge", TaskKnowledgeFunctionsConfig(store=store))
         state = await builder.get_function_group("task_state")
         control = await builder.get_function_group("task_control")
-        knowledge = await builder.get_function_group("task_knowledge")
         state_functions = await state.get_all_functions()
         control_functions = await control.get_all_functions()
-        knowledge_functions = await knowledge.get_all_functions()
         status = await state_functions["task_state__get_task_status"].ainvoke({"participant_id": "alice"})
-        results = await knowledge_functions["task_knowledge__search_task_knowledge"].ainvoke(
-            {"query": "clearly extended fingers", "limit": 2}
-        )
 
     assert set(state_functions) == {"task_state__get_task_status"}
     assert set(control_functions) == {
@@ -169,7 +166,6 @@ async def test_native_task_groups_separate_read_and_mutating_controls(tmp_path) 
         "task_control__advance_task",
     }
     assert status.progress.state == "not_started"
-    assert results.results
 
 
 @pytest.mark.asyncio

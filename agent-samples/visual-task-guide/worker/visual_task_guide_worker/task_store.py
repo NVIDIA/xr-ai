@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 from typing import Literal
@@ -44,13 +42,6 @@ class TaskProgress(BaseModel):
     transitions: list[str] = Field(default_factory=list)
 
 
-@dataclass(frozen=True, slots=True)
-class KnowledgeChunk:
-    citation: str
-    text: str
-    tokens: frozenset[str]
-
-
 class TaskStore:
     """Validate one task folder and keep code-owned progress in memory."""
 
@@ -63,7 +54,6 @@ class TaskStore:
         ids = [step.id for step in self.steps]
         if len(ids) != len(set(ids)):
             raise ValueError("task step IDs must be unique")
-        self.knowledge = tuple(self._load_knowledge())
         self._progress: dict[str, TaskProgress] = {}
         self._lock = Lock()
 
@@ -81,22 +71,6 @@ class TaskStore:
             if not candidate.is_file():
                 raise ValueError(f"missing knowledge file: {knowledge}")
         return step
-
-    @staticmethod
-    def _tokens(text: str) -> frozenset[str]:
-        return frozenset(re.findall(r"[a-z0-9]+", text.casefold()))
-
-    def _load_knowledge(self):
-        paths = {self._resolve_inside(relative) for step in self.steps for relative in step.knowledge_files}
-        for path in sorted(paths):
-            text = path.read_text(encoding="utf-8")
-            text = re.sub(r"\A<!--.*?-->\s*", "", text, flags=re.DOTALL)
-            for index, paragraph in enumerate(part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()):
-                yield KnowledgeChunk(
-                    citation=f"{path.relative_to(self.task_directory)}#chunk-{index + 1}",
-                    text=paragraph,
-                    tokens=self._tokens(paragraph),
-                )
 
     def _load_progress_unlocked(self, participant_id: str) -> TaskProgress:
         return self._progress.get(
@@ -166,18 +140,7 @@ class TaskStore:
             self._save_unlocked(progress)
             return progress
 
-    def search(self, query: str, *, limit: int) -> list[KnowledgeChunk]:
-        terms = self._tokens(query)
-        ranked = sorted(
-            self.knowledge,
-            key=lambda chunk: (len(terms & chunk.tokens), chunk.citation),
-            reverse=True,
-        )
-        return [chunk for chunk in ranked if terms & chunk.tokens][:limit]
-
-
 __all__ = [
-    "KnowledgeChunk",
     "TaskDefinition",
     "TaskProgress",
     "TaskStep",
