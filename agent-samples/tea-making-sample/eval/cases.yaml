@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+navigation:
+  - utterance: "Let's proceed to the following stage."
+    proposed_intent: advance
+    explicit_command: true
+    expected_intent: advance
+  - utterance: "Carry on to whatever comes after this."
+    proposed_intent: advance
+    explicit_command: true
+    expected_intent: advance
+  - utterance: "I just placed the infuser in the cup."
+    proposed_intent: advance
+    explicit_command: false
+    expected_intent: answer
+  - utterance: "Use another camera frame."
+    proposed_intent: advance
+    explicit_command: false
+    expected_intent: answer
+  - utterance: "What temperature is visible?"
+    proposed_intent: status
+    explicit_command: false
+    expected_intent: answer
+  - utterance: "Don't move on yet."
+    proposed_intent: advance
+    explicit_command: true
+    expected_intent: answer
+
+timer_questions:
+  - utterance: "How much time has passed?"
+    expected: elapsed
+  - utterance: "How long do I still need to wait?"
+    expected: remaining
+  - utterance: "How much longer?"
+    expected: remaining
+  - utterance: "What is the elapsed time?"
+    expected: elapsed

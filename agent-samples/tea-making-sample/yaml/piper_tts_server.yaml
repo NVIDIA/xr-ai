@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+voice: en_US-lessac-medium
+port: 8105
+use_cuda: false
+model_cache: ../../../models
