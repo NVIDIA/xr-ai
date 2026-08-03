@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: show-eight
+title: Show eight
+instructions: Hold up exactly eight fingers across both hands and keep both hands visible to the camera.
+visual_completion_criteria: Exactly eight extended fingers are clearly visible across two non-overlapping hands.
+knowledge_files:
+  - knowledge/counting.md
+  - knowledge/presentation.md

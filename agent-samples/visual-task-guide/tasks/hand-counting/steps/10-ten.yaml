@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: show-ten
+title: Show ten
+instructions: Hold up all ten fingers and keep both hands visible to the camera.
+visual_completion_criteria: Exactly ten extended fingers are clearly visible across two non-overlapping hands.
+knowledge_files:
+  - knowledge/counting.md
+  - knowledge/presentation.md

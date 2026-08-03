@@ -550,6 +550,18 @@ in-process. The `models_config` key selects a structured deployment profile:
 external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
 8108. Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
+### visual-task-guide  (agent-samples/visual-task-guide/)
+
+On-demand hand-counting workflow with session-local task state, deterministic
+controls and validation, native current-frame vision, and a focused NAT guide
+agent over bundled lexical task knowledge.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `visual-task-guide` | `xr-ai-launcher` | — |
+| Worker | `visual-task-guide-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[agents,vision,voice] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pydantic >=2.10, pyyaml >=6.0 |
+| Eval | `visual-task-guide-eval` | `visual-task-guide-worker [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[agents,vision] [editable]` | Pillow >=10.0 |
+
 ### model-servers  (agent-samples/model-servers/)
 
 Standalone launcher that starts the shared AI inference servers and keeps

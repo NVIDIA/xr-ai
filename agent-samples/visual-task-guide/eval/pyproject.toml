@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "visual-task-guide-eval"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "visual-task-guide-worker",
+    "xr-ai-models",
+    "xr-ai-nat[agents,vision]",
+    "pillow>=10.0",
+]
+
+[tool.uv.sources]
+visual-task-guide-worker = { path = "../worker", editable = true }
+xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
+xr-ai-nat = { path = "../../../agent-sdk/xr-ai-nat", editable = true }
+
+[project.scripts]
+visual_task_guide_eval = "benchmark:run"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["benchmark.py", "cases.py"]

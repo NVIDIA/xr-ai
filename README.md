@@ -51,6 +51,7 @@ endpoint and no local GPU is required for the agent or hub.
 |---|---|
 | model-servers (shared models) | ~74 GB |
 | simple-vlm-example (standalone) | ~23 GB |
+| visual-task-guide (requires model-servers) | ~70 GB (models) + hub/TTS |
 | xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -282,6 +283,29 @@ NIM containers):
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
 for the full option list.
+
+---
+
+### Visual task guide (on-demand hand-counting workflow)
+
+This sample guides a ten-step hand-counting task with session-local native NAT
+state. Start the shared model servers, then run the sample:
+
+```bash
+cd agent-samples/model-servers
+uv sync && uv run model_servers
+
+cd ../visual-task-guide
+uv sync
+cd worker && uv sync && cd ..
+uv run visual_task_guide
+```
+
+Use `start task`, `next step`, `task status`, and `reset task`. Asking “Did I
+do it correctly?” runs one fresh, target-neutral VLM count and compares the
+result with the trusted current step. Vision never advances progress. See the
+[`sample guide`](agent-samples/visual-task-guide/README.md) and
+[`system diagram`](agent-samples/visual-task-guide/SYSTEM_DIAGRAM.md).
 
 ---
 

@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: show-four
+title: Show four
+instructions: Hold up exactly four fingers and keep your hand visible to the camera.
+visual_completion_criteria: Exactly four extended fingers are clearly visible and all other fingers are folded.
+knowledge_files:
+  - knowledge/counting.md
+  - knowledge/presentation.md

@@ -1,0 +1,28 @@
+{
+  "models": {
+    "guide_llm": {
+      "category": "llm",
+      "adapter": {"preset": "llama_nemotron"},
+      "endpoint": {"base_url": "http://localhost:8106", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "llm"}
+    },
+    "vlm": {
+      "category": "vlm",
+      "adapter": {"preset": "cosmos_vlm"},
+      "endpoint": {"base_url": "http://localhost:8100", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "vlm"}
+    },
+    "stt": {
+      "category": "stt",
+      "adapter": {"preset": "parakeet_stt"},
+      "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "stt"}
+    },
+    "tts": {
+      "category": "tts",
+      "adapter": {"preset": "piper_tts"},
+      "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "tts"}
+    }
+  }
+}

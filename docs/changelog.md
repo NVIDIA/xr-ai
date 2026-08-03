@@ -20,6 +20,16 @@ small persistent vLLM embedding server joins the shared model-server stack.
 This replaces the prototype's FastMCP boundary and synchronous HTTP client
 without coupling samples to the retrieval implementation.
 
+### 2026-08-03 — Visual task validation separates perception from the target
+
+The visual task guide keeps participant progress in memory and resets it on
+each connection. Vision runs only when requested. Its finger-count query omits
+the current step and expected answer; deterministic code compares the returned
+structured count with trusted task state afterward. This prevents the VLM and
+guide LLM from echoing the target instead of reporting visible evidence, while
+keeping all state, vision, guidance, and RAG composition inside native NAT
+functions.
+
 ### 2026-07-31 — GitHub Pages publishes immutable release documentation
 
 The documentation site now uses `sphinx-multiversion` to render `main` as

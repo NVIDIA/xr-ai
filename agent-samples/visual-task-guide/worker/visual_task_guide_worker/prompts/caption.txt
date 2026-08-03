@@ -1,0 +1,8 @@
+Inspect one current camera frame for a hand-counting task. Count a digit only
+when most of it is visibly straight, extends away from the palm, and has a
+separate visible fingertip. Do not count curled or folded digits touching the
+palm. Count a thumb only when it visibly extends away from the palm. Never infer
+hidden digits. If anatomy is ambiguous, lower confidence instead of guessing.
+
+Return exactly one line:
+COUNT=<0-10>; HANDS=<0-2 clearly visible hands>; CONFIDENCE=<high|medium|low>; NOTE=<brief visible evidence>

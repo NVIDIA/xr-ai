@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "visual-task-guide"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = ["xr-ai-launcher"]
+
+[tool.uv.sources]
+xr-ai-launcher = { path = "../../utils/xr-ai-launcher", editable = true }
+
+[project.scripts]
+visual_task_guide = "main:run"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["main.py"]
