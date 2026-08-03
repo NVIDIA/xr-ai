@@ -12,15 +12,118 @@ This page explains how XR-Media-Hub, the transport, and agents fit together.
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
-agent-sdk/          # IPC, model, NAT-function, and voice-pipeline SDK packages
+agent-sdk/          # IPC, model, NAT-function, capability, and voice SDK packages
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # NVIDIA CloudXR integration: OpenXR runtime + WSS proxy, opt-in per sample
 ai-services/        # OpenAI-compatible AI inference servers (VLM, STT, TTS, LLM)
+services/           # Long-running typed XR capability services
 agent-mcp-servers/  # Optional MCP compatibility adapters for non-NAT consumers
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
 docs/               # Design docs and topic deep-dives
+models/             # Gitignored model-weight cache
+deps/               # Gitignored downloaded runtime binaries
 ```
+
+## Dependency diagram
+
+The labels on the arrows are part of the contract: an HTTP or typed-RPC
+connection is a runtime boundary, not a Python package dependency.
+
+```text
+ client-samples/
+      ├── LiveKit media + data ──▶ server-runtime/ (XR-Media-Hub)
+      │                                      │
+      │                                      └── hub IPC via xr-ai-hub-client ──┐
+      │                                                                          ▼
+      └── CloudXR / WebRTC ──▶ cloudxr-runtime/                 agent-samples/<sample>/worker
+                                      │                              │       │       │
+                                      │                              │       │       └── imports voice runtime + utils
+                                      │                              │       └── imports xr-ai-models ── HTTP ──▶ ai-services/
+                                      │                              └── imports xr-ai-nat
+                                      │                                      ├── invokes deterministic functions in process
+                                      │                                      └── typed RPC ──▶ services/
+                                      │                                                       or
+                                      │                                              agent-samples/<sample>/<capability>
+                                      │                                                       ▲
+                                      └──────────── OpenXR, for example ──────────────────────┘
+
+ external MCP consumer ── MCP ─▶ agent-mcp-servers/
+                                      │
+                                      └─ republishes selected NAT or
+                                         sample-local capabilities
+```
+
+The worker reaches XR-Media-Hub through `xr-ai-hub-client`. The diagram leaves
+that package on the IPC edge instead of drawing another box through the middle.
+MCP adapters are not on a native sample's execution path.
+
+## Folder ownership
+
+| Folder | Owns | Dependency boundary |
+|---|---|---|
+| `client-samples/` | Platform UI, device capture, and client SDK integration | Talks to the hub or CloudXR over network protocols; contains no agent or model-service implementation |
+| `server-runtime/` | Media fan-out, same-participant return routing, recording, and LiveKit transport | Depends on `xr-ai-hub-client`; workers never import it |
+| `agent-sdk/` | Reusable, in-process APIs used by agent applications | Must not depend on a sample; keep optional framework and capability dependencies in their own distributions or extras |
+| `utils/` | Process-agnostic launcher, logging, VAD, vLLM, and voice-gate infrastructure | Must not own application capabilities; dependency limits are defined in `DEPENDENCIES.md` |
+| `ai-services/` | OpenAI-compatible LLM, VLM, STT, and TTS server processes | Called through `xr-ai-models`, never through hand-written worker HTTP clients |
+| `services/` | Reusable long-running capability providers, such as OpenXR tracking and recorded video memory | Exposes typed service contracts consumed by NAT functions; a process boundary does not imply MCP |
+| `agent-samples/` | End-to-end applications: orchestration, workers, configuration, prompts, and sample-specific capabilities | May compose SDK packages and services; reusable capabilities must move to `agent-sdk/` or `services/` once a second application needs them |
+| `agent-mcp-servers/` | Optional outward compatibility adapters | May publish selected native functions or sample-local capabilities; native workers do not depend on or launch them |
+| `cloudxr-runtime/` | Shared CloudXR OpenXR runtime and signaling proxy | Opt-in managed process; rendering application state remains with its sample |
+| `tests/` | Cross-package, multi-client, and compatibility integration tests | May exercise several distributions; package-local behavior should still be testable at its owning boundary |
+| `docs/` | Current architecture, guides, and historical decisions | `docs/changelog.md` records decisions; topic pages describe the current contract |
+| `models/`, `deps/` | Downloaded weights and runtime binaries | Gitignored caches only; never the source of importable code |
+
+### Agent SDK organization
+
+```text
+agent-sdk/
+├── xr-ai-hub-client/    # Minimal pyzmq + msgpack IPC client
+├── xr-ai-models/        # Model protocols, presets, and OpenAI-compatible clients
+├── xr-ai-nat/           # Typed NAT functions and framework adapters
+├── xr-ai-voice/         # VoiceSession runtime
+├── xr-ai-pipecat/       # Optional Pipecat pipeline bridge
+└── xr-ai-capabilities/  # Framework-agnostic reusable capabilities
+```
+
+### Agent sample organization
+
+```text
+agent-samples/<sample>/
+├── main.py              # Orchestrator: declares managed processes
+├── pyproject.toml       # Orchestrator dependencies only
+├── yaml/                # Hub, worker, model, and process configuration
+├── worker/
+│   ├── pyproject.toml   # Worker SDK and task dependencies
+│   └── ...              # Agent logic, prompts, and worker entry point
+└── <capability>/        # Optional sample-specific service/function slice
+```
+
+Put code in a sample-local capability directory when it is inseparable from
+that application, as `xr-render-demo/scene/` is from LOVR scene state. Put a
+reusable in-process contract in `agent-sdk/`; put its reusable long-running
+provider in `services/`. `agent-mcp-servers/` is only the publication boundary
+for consumers that cannot invoke NAT functions directly.
+
+### Placement rules
+
+When adding a component, choose its folder by ownership:
+
+1. Put platform UI or device integration in `client-samples/`.
+2. Put media routing and transport implementation in `server-runtime/`.
+3. Put an in-process API needed by more than one application in `agent-sdk/`.
+4. Put a reusable long-running capability provider in `services/`, with its
+   typed agent-facing function or client in `xr-ai-nat`.
+5. Keep application-specific functions, services, assets, and prompts under
+   `agent-samples/<sample>/`.
+6. Put model-serving processes in `ai-services/` and call them through
+   `xr-ai-models`.
+7. Put process-management and cross-cutting infrastructure in `utils/`.
+8. Add an `agent-mcp-servers/` adapter only to publish an existing capability
+   to MCP-only consumers; do not move the capability implementation there.
+
+Do not add a new top-level folder when one of these owners already fits.
 
 ## Key design decisions
 
