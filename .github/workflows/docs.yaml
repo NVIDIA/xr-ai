@@ -5,6 +5,16 @@
 # GitHub Pages defaults to the latest semantic-version release while retaining
 # ``main`` as development docs. Its environment admits only main and ``v*``
 # refs; sphinx-multiversion selects release tags from complete Git history.
+#
+# The site is published from the ``gh-pages`` branch rather than as a Pages
+# artifact, because one artifact can only serve one site and per-PR previews
+# need to live beside the real one:
+#
+#   /                      the published site (root redirect -> latest release)
+#   /preview/pr-<N>/       one preview per open same-repo PR
+#
+# Publishing the site never touches ``preview/``; closing a PR removes only its
+# own directory (see docs-preview-cleanup.yaml).
 name: Docs
 
 on:
@@ -38,7 +48,6 @@ jobs:
           # sphinx-multiversion reads the release tags and main directly from Git.
           fetch-depth: 0
       - name: Make current docs build ref available
-        if: github.event_name == 'push'
         run: |
           if ! git show-ref --verify --quiet refs/heads/main; then
             git branch main origin/main
@@ -48,23 +57,17 @@ jobs:
           python-version: "3.12"
       - name: Install doc deps
         run: pip install -r docs/requirements.txt
+      # sphinx-multiversion builds the refs recorded in Git, so it never renders
+      # a PR's own content. Build the checked-out tree too and publish it under
+      # ``current/`` so a docs PR can be reviewed for content as well as chrome.
       - name: Strict checked-out documentation build
         if: github.event_name == 'pull_request'
         env:
           DOCS_GITHUB_REF: ${{ github.event.pull_request.head.sha }}
         run: make -C docs strict
-      - name: Upload documentation preview
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: docs-preview
-          path: docs/_build/current
-          if-no-files-found: error
       - name: Strict versioned documentation build
-        if: github.event_name == 'push'
         run: make -C docs strict-versions
       - name: Point the site root at the latest release
-        if: github.event_name == 'push'
         shell: bash
         run: |
           latest_release="$(make -s -C docs latest-release)"
@@ -78,23 +81,90 @@ jobs:
           sed "s|__XR_AI_DOCS_TARGET__|${latest_target}|g" \
             docs/source/_static/latest-redirect.html > docs/_build/latest/index.html
           cp docs/source/_static/root-redirect.html docs/_build/index.html
-      - name: Upload Pages artifact
-        if: github.event_name == 'push' && github.repository == 'NVIDIA/xr-ai'
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload documentation site
+        uses: actions/upload-artifact@v4
         with:
+          name: docs-site
           path: docs/_build
+          if-no-files-found: error
 
-  deploy:
-    name: Deploy to GitHub Pages
-    if: github.event_name == 'push' && github.repository == 'NVIDIA/xr-ai'
+  publish:
+    name: Publish to GitHub Pages
+    # Fork PRs get the build artifact only: their token is read-only, so the
+    # preview cannot be published and the job is skipped rather than failed.
+    if: >-
+      github.repository == 'NVIDIA/xr-ai'
+      && (github.event_name == 'push'
+          || github.event.pull_request.head.repo.full_name == github.repository)
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write
+    concurrency:
+      # Every publisher pushes the same branch. Serialize them all — including
+      # across PRs — and never cancel a run mid-push.
+      group: docs-gh-pages
+      cancel-in-progress: false
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Download documentation site
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-site
+          path: site
+      # A build queued before the PR closed can reach this job after the close
+      # event's cleanup has already run and found nothing to remove. Checking
+      # the state before publishing skips the common case; checking again after
+      # makes it durable, because a close that lands inside that window is
+      # observed here and undone. A close after the second check still has its
+      # own cleanup run ahead of it.
+      - name: Confirm the pull request is still open
+        id: before
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          state="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .state)"
+          echo "state=${state}" >> "$GITHUB_OUTPUT"
+          if [[ "$state" != open ]]; then
+            echo "::notice::PR #${PR_NUMBER} is ${state}; skipping the preview publish."
+          fi
+      - name: Publish
+        if: github.event_name == 'push' || steps.before.outputs.state == 'open'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Empty on push, which selects the site root instead of a preview dir.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: .github/scripts/publish_docs.sh site
+      - name: Drop the preview if the pull request closed mid-publish
+        id: after
+        if: github.event_name == 'pull_request' && steps.before.outputs.state == 'open'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          state="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .state)"
+          if [[ "$state" != open ]]; then
+            echo "::notice::PR #${PR_NUMBER} closed during the publish; removing the preview."
+            .github/scripts/remove_docs_preview.sh "$PR_NUMBER"
+            echo "removed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Summarize
+        if: >-
+          (github.event_name == 'push' || steps.before.outputs.state == 'open')
+          && steps.after.outputs.removed != 'true'
+        shell: bash
+        run: |
+          if [[ -n "${{ github.event.pull_request.number }}" ]]; then
+            url="https://nvidia.github.io/xr-ai/preview/pr-${{ github.event.pull_request.number }}/"
+          else
+            url="https://nvidia.github.io/xr-ai/"
+          fi
+          echo "Docs published to <$url>" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Remove a PR's docs preview from the gh-pages branch once the PR closes.
+# Runs on pull_request_target so a fork PR's own head can never supply the code
+# that runs with write access — this workflow checks out the base branch only.
+#
+# This is not the sole guarantee. A docs build queued before the close can
+# publish after this job has already run; docs.yaml re-checks the PR state
+# after publishing and removes the directory it just wrote.
+name: Docs preview cleanup
+
+on:
+  pull_request_target:
+    types: [closed]
+
+jobs:
+  cleanup:
+    name: Remove preview
+    if: github.repository == 'NVIDIA/xr-ai'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      # Shares the publisher's group: both push the gh-pages branch.
+      group: docs-gh-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Remove preview/pr-${{ github.event.pull_request.number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          .github/scripts/remove_docs_preview.sh \
+            "${{ github.event.pull_request.number }}"
