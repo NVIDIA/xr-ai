@@ -14,6 +14,7 @@ from __future__ import annotations
 import warnings
 
 from ._openai_compat import (
+    OpenAICompatEmbedding,
     OpenAICompatLLM,
     OpenAICompatSTT,
     OpenAICompatTTS,
@@ -28,6 +29,7 @@ warnings.warn(
 )
 
 __all__ = [
+    "OpenAICompatEmbedding",
     "OpenAICompatLLM",
     "OpenAICompatSTT",
     "OpenAICompatTTS",

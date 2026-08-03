@@ -8,12 +8,14 @@ import pytest
 
 from xr_ai_models import (
     LLMSpec,
+    EmbeddingSpec,
     STTSpec,
     TTSSpec,
     VLMSpec,
     load_models_config,
     load_models_config_from_dict,
     make_llm,
+    make_embedding,
     make_stt,
     make_tts,
     make_vlm,
@@ -24,7 +26,7 @@ from xr_ai_models.presets import available_presets, get_preset
 # ── preset registry ───────────────────────────────────────────────────────
 
 
-def test_seven_presets_registered() -> None:
+def test_eight_presets_registered() -> None:
     assert set(available_presets()) == {
         "cosmos_vlm",
         "llama_nemotron",
@@ -33,6 +35,7 @@ def test_seven_presets_registered() -> None:
         "nemotron_omni",
         "parakeet_stt",
         "piper_tts",
+        "nemotron_embedding",
     }
 
 
@@ -310,3 +313,19 @@ tts:
         await vlm.close()
         await stt.close()
         await tts.close()
+
+
+async def test_embedding_preset_and_factory(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+embedding:
+  kind: preset:nemotron_embedding
+  base_url: http://localhost:8109
+"""))
+    spec = cfg.embedding("embedding")
+    assert isinstance(spec, EmbeddingSpec)
+    assert spec.model_name == "embed"
+    embedding = make_embedding(cfg, "embedding")
+    try:
+        assert embedding.health_url == "http://localhost:8109/health"
+    finally:
+        await embedding.close()

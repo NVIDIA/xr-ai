@@ -99,13 +99,14 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── httpx >=0.27
     └── pyyaml >=6.0
-    Unified service protocols (LLMService, VLMService, STTService, TTSService)
+    Unified service protocols (LLMService, VLMService, STTService, TTSService,
+    EmbeddingService)
     and OpenAI-compatible HTTP clients that cover every in-tree model backend
     (vLLM-served VLM/LLMs, NeMo Parakeet STT, Piper/Magpie TTS).  Per-model
     quirks live behind one seam: reasoning-field aliasing (nano_v3 →
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
-    for the seven in-tree services.  Future backends (LiteLLM, vendor SDKs)
+    for the in-tree services. Future backends (LiteLLM, vendor SDKs)
     plug in as new `kind`s in `_factory.py::make_*` without touching the
     protocols or callers.  Workers depend on this instead of rolling their
     own httpx wrappers. Profiles may separate adapter, endpoint, and deployment
@@ -142,7 +143,8 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     complete or streaming VLM invocation. ``xr_tracking`` calls
     the typed OpenXR service and returns a complete user coordinate frame.
     ``xr_video_memory`` calls the typed video-memory service for recorded-video
-    discovery, queries, and frame extraction. Live frames stay with the hub
+    discovery, queries, and frame extraction. ``xr_rag`` calls the typed RAG
+    service for document discovery and dense passage retrieval. Live frames stay with the hub
     client owned by their caller. The ``agents`` extra registers
     ``ModelsLLMConfig`` so NAT's built-in LangChain-backed agents delegate
     model I/O to an ``xr-ai-models`` LLMService.
@@ -159,6 +161,16 @@ xr-openxr-service  (services/openxr-service/)
     to its Python path only for CPU-only pose-math regression tests, avoiding a
     test-time isaacteleop installation.
 
+xr-rag-service  (services/rag-service/)
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models [editable: ../../agent-sdk/xr-ai-models]
+    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
+    └── numpy >=1.24
+    └── pyyaml >=6.0
+    Recursively indexes Markdown and text documents, caches dense embeddings
+    by content and index settings, and exposes private msgpack/ZMQ retrieval at
+    port 8340. Applications consume the typed ``xr_rag`` NAT group.
+
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
     `_cloudxr_env` owns the shared CloudXR env helpers (stdlib-only, os + re):
@@ -174,11 +186,11 @@ xr-ai-logging  (utils/xr-ai-logging/)
 
 xr-ai-vllm  (utils/xr-ai-vllm/)
     └── (stdlib only — zero runtime deps)
-    Pluggable vLLM hosting for the four vLLM-backed services.  Dispatches to
+    Pluggable vLLM hosting for vLLM-backed services. Dispatches to
     either pip-installed `vllm serve` or `docker run nvcr.io/nvidia/vllm:<tag>`
     based on each YAML's `vllm_backend:` key.  Stays stdlib-only so docker mode
     does not pull vllm/torch/etc. into the wrapper's venv just to manage a
-    container.  Imported by the four vllm wrappers and by the orchestrator
+    container. Imported by the vLLM wrappers and by the orchestrator
     `--stop` flow.  Besides `serve` / `stop_persistent_servers`, exposes the
     shared wrapper helpers `resolve_model_cache`, `load_config`, `setup_hf_env`,
     and `gpu_compute_major` (all stdlib-only; pyyaml is imported function-locally
@@ -307,6 +319,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub-client]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
     └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
+    └── xr-rag-service [editable: ../services/rag-service]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
@@ -359,6 +372,15 @@ vlm-server  (ai-services/vlm-server/)
     vLLM — model survives stack restarts (see docs/changelog.md 2026-05-05).
     vllm_backend: pip|docker — pip path uses the wrapper's vllm; docker path
     runs `nvcr.io/nvidia/vllm:<tag> vllm serve …` instead.
+
+embedding-server  (ai-services/embedding-server/)
+    └── vllm >=0.12.0
+    └── pyyaml >=6.0
+    └── hf-transfer >=0.1.4
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-vllm [editable: ../../utils/xr-ai-vllm]
+    Model: nvidia/llama-nemotron-embed-1b-v2. Exposes OpenAI-compatible
+    embeddings at port 8109 through the shared vLLM hosting wrapper.
 
 stt-server  (ai-services/stt-server/)
     └── nemo_toolkit[asr] >=2.5
@@ -443,12 +465,14 @@ piper-tts-server  (ai-services/tts/piper/)
 | `ai-services/llm/llama_nemotron/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `ai-services/llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (GPU-selected) | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} | vLLM (pip or docker) — multimodal text+video |
+| `ai-services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed msgpack/ZMQ → recorded H.264 queries |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP compatibility adapter → recorded service + live hub IPC |
 | `agent-samples/xr-render-demo/scene/` | `xr-render-scene` | `xr_render_scene` | 8320 | — | Sample-local typed scene service → LOVR |
 | `agent-mcp-servers/render-mcp/` | `render-mcp` | `render_mcp` | 8220 | — | FastMCP compatibility adapter → xr-render-scene |
 | `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed msgpack/ZMQ → headless OpenXR / CloudXR |
+| `services/rag-service/` | `xr-rag-service` | `rag_service` | 8340 | — | Typed msgpack/ZMQ → dense document retrieval |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | FastMCP compatibility adapter → openxr-service |
 | `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
 | `agent-mcp-servers/vec-mcp/` | `vec-mcp-server` | `vec_mcp_server` | 8250 | — | Pure FastMCP; deterministic spatial-math primitives (no model) |
@@ -537,8 +561,9 @@ run this first to warm up model weights before starting any demo sample.
 | Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
 
 Starts stt-server (8103), nemotron3-nano-llm-server (8107, `persistent=True`),
-vlm-server (8100, `persistent=True`).
-The vLLM servers survive launcher restarts; use `--stop` to shut them down.
+vlm-server (8100, `persistent=True`), and embedding-server (8109,
+`persistent=True`). The vLLM servers survive launcher restarts; use `--stop`
+to shut them down.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)
@@ -581,7 +606,7 @@ updated in the same commit**.
 | `agent-sdk/xr-ai-hub-client/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
-| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/model-servers/main.py` (`--stop`) |
+| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All vLLM wrappers (`ai-services/vlm-server/`, `ai-services/embedding-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), model-server orchestrators |
 | `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
 | Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `stop_persistent_servers` names in `agent-samples/model-servers/main.py` |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |

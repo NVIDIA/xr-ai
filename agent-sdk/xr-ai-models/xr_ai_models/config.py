@@ -18,6 +18,7 @@ import warnings
 from ._config import (
     KIND_OPENAI_COMPAT,
     Category,
+    EmbeddingSpec,
     LLMSpec,
     ModelKind,
     ModelsConfig,
@@ -39,6 +40,7 @@ warnings.warn(
 __all__ = [
     "KIND_OPENAI_COMPAT",
     "Category",
+    "EmbeddingSpec",
     "LLMSpec",
     "ModelKind",
     "ModelsConfig",

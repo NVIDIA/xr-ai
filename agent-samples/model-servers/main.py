@@ -12,6 +12,7 @@ Servers started
   stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
   agent-llm  — NVIDIA-Nemotron-3-Nano-30B-A3B      port 8107  (vLLM)
   vlm        — nvidia/Cosmos-Reason1-7B            port 8100  (vLLM)
+  embedding  — nvidia/llama-nemotron-embed-1b-v2   port 8109  (vLLM)
 
 How to run:
     uv run --project agent-samples/model-servers model_servers
@@ -45,6 +46,9 @@ def _build_processes() -> list[Process]:
         Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
                 config=f"{ai}/vlm_server.yaml",
                 launch_mode="persist", port=8100),
+        Process("embedding", "../../ai-services/embedding-server", "embedding_server",
+                config=f"{ai}/embedding_server.yaml",
+                launch_mode="persist", port=8109),
     ]
 
 

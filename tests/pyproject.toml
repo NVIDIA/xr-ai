@@ -30,6 +30,7 @@ dependencies = [
     "xr-render-scene",
     "video-mcp-server",
     "xr-video-memory-service",
+    "xr-rag-service",
     "vec-mcp-server",
     # Test runner.
     "pytest>=8.0",
@@ -59,6 +60,7 @@ render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable
 xr-render-scene       = { path = "../agent-samples/xr-render-demo/scene", editable = true }
 video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
 xr-video-memory-service = { path = "../services/video-memory-service", editable = true }
+xr-rag-service          = { path = "../services/rag-service", editable = true }
 vec-mcp-server        = { path = "../agent-mcp-servers/vec-mcp",        editable = true }
 
 [tool.hatch.build.targets.wheel]
