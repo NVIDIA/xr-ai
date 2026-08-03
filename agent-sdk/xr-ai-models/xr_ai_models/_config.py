@@ -88,13 +88,20 @@ class EndpointSpec:
 
 @dataclass(frozen=True)
 class DeploymentSpec:
-    """Process ownership for the endpoint that serves a model role."""
+    """Process ownership for the endpoint that serves a model role.
+
+    ``credentials`` names keys the launched service itself needs (e.g.
+    NGC_API_KEY for a NIM container's nvcr.io pull and engine download)
+    even when the endpoint takes no API key.
+    """
 
     ownership: Ownership = "external"
     """Whether the launcher starts, reuses, or does not manage the service."""
 
     service: str | None = None
     """The launcher service name for managed or reused deployments."""
+
+    credentials: tuple[str, ...] = ()
 
 
 class _RoleSpec:
@@ -763,7 +770,14 @@ def _deployment(value: Any) -> DeploymentSpec:
     service = _optional_str(value, "service")
     if ownership != "external" and service is None:
         raise ValueError(f"{ownership} deployments require a service name")
-    return DeploymentSpec(ownership=ownership, service=service)
+    credentials = value.get("credentials", [])
+    if not isinstance(credentials, list):
+        raise ValueError("deployment credentials must be a list")
+    if not all(isinstance(name, str) and name for name in credentials):
+        raise ValueError("deployment credentials must be non-empty strings")
+    return DeploymentSpec(
+        ownership=ownership, service=service, credentials=tuple(credentials)
+    )
 
 
 def _timeout(body: dict[str, Any], category: Category) -> float:

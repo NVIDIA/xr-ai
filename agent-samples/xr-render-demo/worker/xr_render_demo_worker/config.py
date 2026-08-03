@@ -8,8 +8,7 @@ import pathlib
 from dataclasses import dataclass
 
 import yaml
-from models_select import compose_models_config
-from xr_ai_models import ModelsConfig
+from xr_ai_models import ModelsConfig, load_models_config
 
 
 @dataclass(frozen=True)
@@ -36,13 +35,15 @@ class WorkerConfig:
 def load_models(path: pathlib.Path | None) -> ModelsConfig:
     """Effective models config for the worker YAML at ``path``.
 
-    ``model_backend`` routes each role (stt, tts, llm, vlm) to a models
-    file; bare filenames resolve relative to the config file's directory
+    ``models_config`` selects the deployment profile; bare filenames resolve
+    relative to the config file's directory
     (`agent-samples/xr-render-demo/yaml/`), or CWD when run without
-    `--config`. The orchestrator reads the same key to decide which model
-    servers to launch.
+    `--config`. The orchestrator reads the same profile to decide which
+    model servers to launch.
     """
-    return compose_models_config(_read_yaml(path), path)
+    data = _read_yaml(path)
+    selected = data.get("models_config", "models.local.json")
+    return load_models_config(_resolve_relative(selected, path))
 
 
 def load_config(path: pathlib.Path | None) -> WorkerConfig:

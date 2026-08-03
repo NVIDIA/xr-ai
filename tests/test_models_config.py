@@ -193,6 +193,49 @@ models:
     assert cfg.required_credentials == ("EXAMPLE_API_KEY",)
 
 
+def test_profile_deployment_credentials(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+models:
+  vision:
+    adapter: { preset: cosmos_vlm }
+    endpoint: { base_url: http://localhost:8100, readiness: none }
+    deployment:
+      ownership: managed
+      service: vlm-nim
+      credentials: [NGC_API_KEY]
+"""))
+
+    vision = cfg.vlm("vision")
+    assert vision.deployment.credentials == ("NGC_API_KEY",)
+    # Deployment credentials are the launcher's concern; the worker-side
+    # aggregate stays endpoint keys only.
+    assert cfg.required_credentials == ()
+
+
+@pytest.mark.parametrize(
+    ("credentials", "match"),
+    [
+        ("NGC_API_KEY", "must be a list"),
+        ("[123]", "non-empty strings"),
+        ('[""]', "non-empty strings"),
+    ],
+)
+def test_profile_rejects_invalid_deployment_credentials(
+    tmp_path, credentials, match
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        load_models_config(_write(tmp_path, f"""
+models:
+  vision:
+    adapter: {{ preset: cosmos_vlm }}
+    endpoint: {{ base_url: http://localhost:8100 }}
+    deployment:
+      ownership: managed
+      service: vlm-nim
+      credentials: {credentials}
+"""))
+
+
 def test_profile_rejects_managed_role_without_service(tmp_path) -> None:
     with pytest.raises(ValueError, match="require a service name"):
         load_models_config(_write(tmp_path, """

@@ -10,5 +10,5 @@ grpc_port: 50052
 # Repo-root models/ (resolved relative to this file).
 nim_cache: ../../../models/nim
 
-# GPU 0 with CloudXR + LOVR + parakeet; the LLM and VLM share GPU 1.
+# GPU 0 with CloudXR + LOVR + parakeet + the VLM; the LLM has GPU 1 to itself.
 cuda_visible_devices: "0"

@@ -245,24 +245,14 @@ uv run model_servers --stop
 stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
 
 ```yaml
-model_backend: nim     # default is "local"
+models_config: models.hosted.json     # default is models.local.json
 ```
 
-The worker loads `yaml/models.nim.yaml` for native model-backed Functions.
-Provide an `NGC_API_KEY` as an **environment variable** (or via the launcher
-credential prompt — not in YAML). Do not run `model_servers`, because its
-single topology starts both local `omni` and `vlm`. Start STT by itself from
-the repository root, setting `GPU_PROFILE` to `dual_48G_ada`, `spark`, or
-`96G_blackwell`:
-
-```bash
-GPU_PROFILE=dual_48G_ada
-uv run --project services/stt-server stt_server \
-  --config "agent-samples/model-servers/yaml/${GPU_PROFILE}/stt_server.yaml"
-```
-
-Then start `xr_render_demo` in another terminal. Refer to the AI-services
-guide.
+The profile is consumed by both the worker and orchestrator, so there are
+no `main.py`
+edits, and the stack owns its own speech servers, so the model-servers stack
+isn't needed at all. Provide an `NGC_API_KEY` as an **environment variable** (or via the
+launcher credential prompt, not in YAML). Refer to the AI-services guide.
 
 ## Hub only (standalone)
 

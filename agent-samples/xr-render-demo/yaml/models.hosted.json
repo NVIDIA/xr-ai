@@ -1,0 +1,55 @@
+{
+  "models": {
+    "llm": {
+      "category": "llm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "meta/llama-3.1-8b-instruct"
+      },
+      "endpoint": {
+        "base_url": "https://integrate.api.nvidia.com",
+        "api_key_env": "NGC_API_KEY",
+        "readiness": "none"
+      },
+      "deployment": {"ownership": "external"}
+    },
+    "agent_llm": {
+      "category": "llm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "meta/llama-3.1-70b-instruct",
+        "capabilities": {"tool_calls": true, "reasoning": true}
+      },
+      "endpoint": {
+        "base_url": "https://integrate.api.nvidia.com",
+        "api_key_env": "NGC_API_KEY",
+        "readiness": "none"
+      },
+      "deployment": {"ownership": "external"}
+    },
+    "stt": {
+      "adapter": {"preset": "parakeet_stt"},
+      "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "stt"}
+    },
+    "tts": {
+      "adapter": {"preset": "piper_tts"},
+      "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "tts"}
+    },
+    "vlm": {
+      "category": "vlm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "nvidia/cosmos-reason1-7b",
+        "capabilities": {"streaming": true, "vision": true}
+      },
+      "endpoint": {
+        "base_url": "https://integrate.api.nvidia.com",
+        "api_key_env": "NGC_API_KEY",
+        "readiness": "none"
+      },
+      "deployment": {"ownership": "external"}
+    }
+  }
+}

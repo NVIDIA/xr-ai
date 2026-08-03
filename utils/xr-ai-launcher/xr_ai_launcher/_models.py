@@ -91,6 +91,20 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
                 )
             credentials.add(credential)
 
+        # Keys the launched service itself needs; see the rationale on
+        # xr_ai_models DeploymentSpec.credentials.
+        deployment_credentials = deployment.get("credentials", [])
+        if not isinstance(deployment_credentials, list):
+            raise ValueError(
+                f"{profile_path}: deployment credentials for {role!r} must be a list"
+            )
+        for name in deployment_credentials:
+            if not isinstance(name, str) or not name:
+                raise ValueError(
+                    f"{profile_path}: deployment credentials for {role!r} must be non-empty strings"
+                )
+            credentials.add(name)
+
         ownership = deployment.get("ownership", "external")
         if ownership == "external":
             continue

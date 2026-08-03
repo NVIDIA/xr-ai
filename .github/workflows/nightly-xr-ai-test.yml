@@ -129,13 +129,13 @@ jobs:
         # Wipe them, then assert we have most of the GPU back.
         run: |
           set -euo pipefail
-          leftovers=$(docker ps -aq --filter 'name=^xr-ai-vllm-' || true)
+          leftovers=$(docker ps -aq --filter 'name=^xr-ai-vllm-' --filter 'name=^xr-ai-nim-' || true)
           if [ -n "$leftovers" ]; then
             echo "Removing leftover containers:"
-            docker ps -a --filter 'name=^xr-ai-vllm-' --format '  {{.Names}} ({{.Status}})'
+            docker ps -a --filter 'name=^xr-ai-vllm-' --filter 'name=^xr-ai-nim-' --format '  {{.Names}} ({{.Status}})'
             docker rm -f $leftovers
           else
-            echo "No leftover xr-ai-vllm-* containers."
+            echo "No leftover xr-ai-vllm-* / xr-ai-nim-* containers."
           fi
           echo "--- nvidia-smi free memory ---"
           nvidia-smi --query-gpu=index,name,memory.free,memory.total \
@@ -160,19 +160,19 @@ jobs:
           uv run --with pytest-timeout pytest -v --tb=short --color=yes -m gpu
           --timeout=1200 --timeout-method=signal
 
-      - name: Purge xr-ai-vllm containers (post)
+      - name: Purge xr-ai containers (post)
         # Always-run cleanup so a failed test (or a cancelled job) does
         # not leak GPU memory into the next nightly run.
         if: always()
         run: |
           set -u
-          leftovers=$(docker ps -aq --filter 'name=^xr-ai-vllm-' || true)
+          leftovers=$(docker ps -aq --filter 'name=^xr-ai-vllm-' --filter 'name=^xr-ai-nim-' || true)
           if [ -n "$leftovers" ]; then
             echo "Removing containers left running after tests:"
-            docker ps -a --filter 'name=^xr-ai-vllm-' --format '  {{.Names}} ({{.Status}})'
+            docker ps -a --filter 'name=^xr-ai-vllm-' --filter 'name=^xr-ai-nim-' --format '  {{.Names}} ({{.Status}})'
             docker rm -f $leftovers || true
           else
-            echo "No xr-ai-vllm-* containers to remove."
+            echo "No xr-ai-vllm-* / xr-ai-nim-* containers to remove."
           fi
 
   notify:
