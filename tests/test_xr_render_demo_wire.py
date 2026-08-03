@@ -77,7 +77,7 @@ def test_models_yaml_loads() -> None:
     tts_spec      = cfg.tts("tts")
     vlm_spec      = cfg.vlm("vlm")
 
-    assert llm_spec.base_url       == "http://localhost:8106"
+    assert llm_spec.base_url       == "http://localhost:8107"
     assert agent_llm_spec.base_url == "http://localhost:8107"
     assert stt_spec.base_url       == "http://localhost:8103"
     assert tts_spec.base_url       == "http://localhost:8105"
@@ -85,6 +85,7 @@ def test_models_yaml_loads() -> None:
 
     # nemotron3_nano preset must set reasoning_field so ChatResponse.reasoning
     # is populated from the server's "reasoning" field.
+    assert llm_spec.reasoning_field == "reasoning"
     assert agent_llm_spec.reasoning_field == "reasoning"
 
 

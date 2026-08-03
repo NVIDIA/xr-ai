@@ -6,8 +6,8 @@
 # Presets live in agent-sdk/xr-ai-models/xr_ai_models/presets/.
 
 llm:
-  kind: preset:llama_nemotron
-  base_url: http://localhost:8106
+  kind: preset:nemotron3_nano
+  base_url: http://localhost:8107
 
 agent_llm:
   kind: preset:nemotron3_nano

@@ -171,9 +171,8 @@ class RenderSceneProcessor(BrainProcessor):
     """
     Multi-step agentic loop over native NAT functions.
 
-    Uses Llama-Nemotron (port 8106) with OpenAI tool calling + LMFE for the
-    reasoning loop — guaranteed syntactically valid tool calls every iteration.
-    Uses Minitron (port 8101) for the parallel quick-ack (fast, cheap).
+    Uses Nemotron-3-Nano (port 8107) for the reasoning loop and parallel
+    quick acknowledgements.
 
     On each utterance:
       1. Quick-ack fires immediately (parallel, max 25 tokens) → agent.progress

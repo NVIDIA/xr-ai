@@ -578,8 +578,8 @@ run this first to warm up model weights before starting any demo sample.
 | Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
 
 Starts stt-server (8103), nemotron3-nano-llm-server (8107, `persistent=True`),
-vlm-server (8100), llama-nemotron-llm-server (8106), and embedding-server
-(8109). The vLLM servers survive launcher restarts; use `--stop` to shut them down.
+vlm-server (8100), and embedding-server (8109). The vLLM servers survive
+launcher restarts; use `--stop` to shut them down.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)
@@ -604,7 +604,7 @@ Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
 is explicit in the process list.
 Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
-scene (8320), openxr-service (8330), and worker. The four model-server
+scene (8320), openxr-service (8330), and worker. The three model-server
 entries are declared with `launch_mode="reuse"` and must already be healthy.
 No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK

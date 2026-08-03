@@ -49,10 +49,10 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| model-servers (shared models) | ~74 GB |
+| model-servers (shared models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
-| visual-task-guide (requires model-servers) | ~74 GB (models) + hub/TTS |
-| xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
+| visual-task-guide (requires model-servers) | ~58 GB (models) + hub/TTS |
+| xr-render-demo (requires model-servers) | ~58 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
 **Software**
@@ -320,8 +320,8 @@ web client for desktop dev.
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
 endpoints, typed capability processes, and the worker. The worker calls those
 processes through native NAT functions; MCP adapters remain optional outward
-compatibility surfaces and are not in the sample's execution path. The Pipecat pipeline pairs a fast
-Llama-8B for quick-acks with a Nemotron-30B agentic tool-calling loop over
+compatibility surfaces and are not in the sample's execution path. The Pipecat
+pipeline uses Nemotron-3-Nano for quick acknowledgements and its agentic loop over
 scene, XR tracking, spatial math, vision, and video-memory functions. Full process map,
 agentic-loop details, and the XR session lifecycle:
 [`docs/xr-render-demo.md`](docs/xr-render-demo.md).

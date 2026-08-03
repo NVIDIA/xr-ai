@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-03 — Shared samples use one Nemotron-3-Nano LLM deployment
+
+The shared model-server stack no longer launches Llama-Nemotron on port 8106.
+Visual task guidance uses Nemotron-3-Nano directly, and xr-render-demo maps its
+short-response and agentic logical roles to the same server on port 8107. This
+avoids reserving GPU memory for a second LLM while preserving separate prompts
+and request settings for the two roles.
+
 ### 2026-08-03 — Native RAG uses a typed service boundary
 
 Dense document retrieval is a reusable `rag-service` capability exposed to

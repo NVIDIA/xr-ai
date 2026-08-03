@@ -19,9 +19,9 @@ local GPU is required for the agent or XR-Media-Hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| model-servers (all 4 models) | ~70 GB |
+| model-servers (all 4 models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
-| xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
+| xr-render-demo (requires model-servers) | ~58 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
 ## Software
