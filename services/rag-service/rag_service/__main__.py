@@ -16,6 +16,7 @@ from xr_ai_nat.functions._service.rpc import RPCServer
 
 from .index import DenseIndex
 from .service import RAGService
+from .startup import corpus_metadata, reusable_client
 
 
 def _resolve(path: str, config_path: Path) -> Path:
@@ -24,6 +25,23 @@ def _resolve(path: str, config_path: Path) -> Path:
 
 
 async def _serve(config: dict, config_path: Path, ready_file: Path | None) -> None:
+    address = str(config.get("endpoint", "tcp://0.0.0.0:8340"))
+    documents_dir = _resolve(str(config["documents_dir"]), config_path)
+    existing = await reusable_client(address, documents_dir)
+    if existing is not None:
+        logger.info("rag-service already running at {} - reusing", address)
+        if ready_file is not None:
+            ready_file.touch()
+        try:
+            while True:
+                await asyncio.sleep(2.0)
+                if not await existing.health():
+                    raise RuntimeError(
+                        f"reused RAG service at {address} became unavailable"
+                    )
+        finally:
+            await existing.close()
+
     models_path = _resolve(str(config["models_config"]), config_path)
     models = load_models_config(models_path)
     embedder = make_embedding(models, str(config.get("embedding_role", "embedding")))
@@ -31,7 +49,7 @@ async def _serve(config: dict, config_path: Path, ready_file: Path | None) -> No
         if not await embedder.health():
             raise RuntimeError("embedding service is not healthy")
         index = await DenseIndex.build(
-            _resolve(str(config["documents_dir"]), config_path),
+            documents_dir,
             embedder,
             cache_dir=_resolve(str(config.get("cache_dir", ".rag-cache")), config_path),
             chunk_size=int(config.get("chunk_size", 900)),
@@ -46,14 +64,14 @@ async def _serve(config: dict, config_path: Path, ready_file: Path | None) -> No
             ),
             min_score=float(config.get("min_score", 0.3)),
         )
-        address = str(config.get("endpoint", "tcp://0.0.0.0:8340"))
+        _, corpus_id = corpus_metadata(documents_dir)
         logger.info(
             "rag-service rpc={} documents={} chunks={}",
             address,
             len(index.documents),
             len(index.chunks),
         )
-        await RPCServer(address, RAGService(index).dispatch).serve(
+        await RPCServer(address, RAGService(index, corpus_id=corpus_id).dispatch).serve(
             ready=ready_file.touch if ready_file else None
         )
     finally:

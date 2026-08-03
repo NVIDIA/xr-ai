@@ -307,7 +307,11 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
   swap backends. Hosting backend is selectable per YAML (refer to *Choosing the
   vLLM runtime*); runs foreground in both pip and docker modes (no
-  cross-restart persistence).
+  cross-restart persistence). This architecture requires vLLM 0.20.0 or newer;
+  the Docker configuration therefore uses `vllm/vllm-openai:v0.20.0` rather
+  than the repository-wide NGC default. The optional `moe_backend` YAML key is
+  forwarded as `--moe-backend`; use `triton` for the current RTX Pro Blackwell
+  compatibility path.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; the `language` and `temperature` form fields are accepted but ignored.
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.

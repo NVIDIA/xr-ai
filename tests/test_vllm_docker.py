@@ -6,15 +6,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from xr_ai_vllm._docker import (
     _already_logged_in,
+    _config_fingerprint,
     _registry_for,
     build_run_argv,
+    container_config_matches,
     container_exists,
     container_running,
     pid_on_port,
+)
+from xr_ai_vllm._docker import (
+    run as run_docker,
 )
 
 
@@ -99,6 +104,27 @@ class TestBuildRunArgv:
         idx = argv.index("--label")
         assert argv[idx + 1] == "xr-ai-vllm.port=8100"
 
+    def test_config_fingerprint_label_set(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        argv = build_run_argv(**kwargs)
+        labels = [
+            argv[index + 1]
+            for index, value in enumerate(argv)
+            if value == "--label"
+        ]
+        fingerprint = _fingerprint_for_kwargs(kwargs)
+        assert f"xr-ai-vllm.config={fingerprint}" in labels
+
+    def test_config_fingerprint_changes_with_vllm_args(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        first = _fingerprint_for_kwargs(kwargs)
+        kwargs["vllm_argv"] = [
+            *kwargs["vllm_argv"],
+            "--gpu-memory-utilization",
+            "0.05",
+        ]
+        assert _fingerprint_for_kwargs(kwargs) != first
+
     def test_network_host(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert "--network" in argv
@@ -152,10 +178,23 @@ class TestBuildRunArgv:
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert "nvcr.io/nvidia/vllm:26.04-py3" in argv
 
+    def test_shell_entrypoint_overrides_image_entrypoint(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        kwargs["image"] = "vllm/vllm-openai:v0.20.0"
+
+        argv = build_run_argv(**kwargs)
+
+        entrypoint_index = argv.index("--entrypoint")
+        image_index = argv.index("vllm/vllm-openai:v0.20.0")
+        assert argv[entrypoint_index + 1] == "/bin/bash"
+        assert entrypoint_index < image_index
+        assert argv[image_index + 1] == "-c"
+        assert "vllm serve my-model" in argv[image_index + 2]
+
     def test_no_extra_pip_runs_only_hf_transfer_install(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
-        # bash -c "<install>... && vllm serve ..." — the install is the last
-        # argv entry; with no extra_pip there must be exactly one pip line.
+        # /bin/bash -c "<install>... && vllm serve ..." — the install is the
+        # last argv entry; with no extra_pip there must be exactly one pip line.
         bash_cmd = argv[-1]
         assert bash_cmd.count("pip install ") == 1
         assert "hf_transfer" in bash_cmd
@@ -189,9 +228,158 @@ class TestContainerHelpers:
         ):
             assert not container_running("some-name")
 
+    def test_container_config_matches_label(self):
+        labels = json.dumps({"xr-ai-vllm.config": "expected"})
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            return_value=labels,
+        ):
+            assert container_config_matches("some-name", "expected")
+
+    def test_container_config_rejects_missing_label(self):
+        with patch(
+            "xr_ai_vllm._docker.subprocess.check_output",
+            return_value="{}",
+        ):
+            assert not container_config_matches("some-name", "expected")
+
     def test_pid_on_port_returns_none_when_tools_missing(self):
         with patch(
             "xr_ai_vllm._docker.subprocess.check_output",
             side_effect=FileNotFoundError,
         ):
             assert pid_on_port(8100) is None
+
+
+class TestRun:
+    def test_reuses_healthy_running_container_when_config_matches(self, tmp_path):
+        ready_file = tmp_path / "ready"
+        with (
+            patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=True),
+            patch("xr_ai_vllm._docker.container_running", return_value=True),
+            patch("xr_ai_vllm._docker.container_config_matches", return_value=True),
+            patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped") as idle,
+            patch("xr_ai_vllm._docker.subprocess.Popen") as popen,
+            patch("xr_ai_vllm._docker.signal.signal"),
+        ):
+            run_docker(
+                image="image:latest",
+                container_name="xr-ai-vllm-test",
+                log_prefix="test",
+                vllm_argv=["vllm", "serve", "model"],
+                host="0.0.0.0",
+                port=8109,
+                model_cache=tmp_path,
+                hf_token=None,
+                cuda_visible_devices=None,
+                extra_env=None,
+                extra_pip=None,
+                ready_file=ready_file,
+            )
+
+        assert ready_file.exists()
+        idle.assert_called_once()
+        popen.assert_not_called()
+
+    def test_recreates_healthy_running_container_when_config_changed(self, tmp_path):
+        process = MagicMock()
+        process.poll.return_value = None
+        with (
+            patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=True),
+            patch("xr_ai_vllm._docker.container_running", return_value=True),
+            patch("xr_ai_vllm._docker.container_exists", return_value=False),
+            patch("xr_ai_vllm._docker.container_config_matches", return_value=False),
+            patch("xr_ai_vllm._docker.stop_container", return_value=True) as stop,
+            patch("xr_ai_vllm._docker.remove_container", return_value=True) as remove,
+            patch("xr_ai_vllm._docker._maybe_ngc_login"),
+            patch(
+                "xr_ai_vllm._docker.build_run_argv",
+                return_value=["docker", "run"],
+            ),
+            patch("xr_ai_vllm._docker.subprocess.Popen", return_value=process) as popen,
+            patch(
+                "xr_ai_vllm._docker._start_log_streamer",
+                return_value=(None, None),
+            ),
+            patch("xr_ai_vllm._docker._lifecycle.wait_until_healthy"),
+            patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped"),
+            patch("xr_ai_vllm._docker.signal.signal"),
+        ):
+            run_docker(
+                image="image:latest",
+                container_name="xr-ai-vllm-test",
+                log_prefix="test",
+                vllm_argv=["vllm", "serve", "model"],
+                host="0.0.0.0",
+                port=8109,
+                model_cache=tmp_path,
+                hf_token=None,
+                cuda_visible_devices=None,
+                extra_env=None,
+                extra_pip=None,
+                ready_file=None,
+            )
+
+        stop.assert_called_once_with("xr-ai-vllm-test", timeout_s=10)
+        remove.assert_called_once_with("xr-ai-vllm-test")
+        popen.assert_called_once_with(["docker", "run"], start_new_session=True)
+
+    def test_recreates_stopped_container_when_config_changed(self, tmp_path):
+        process = MagicMock()
+        process.poll.return_value = None
+        with (
+            patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
+            patch("xr_ai_vllm._docker.container_exists", return_value=True),
+            patch("xr_ai_vllm._docker.container_running", return_value=False),
+            patch(
+                "xr_ai_vllm._docker.container_config_matches",
+                return_value=False,
+            ),
+            patch("xr_ai_vllm._docker.remove_container", return_value=True) as remove,
+            patch("xr_ai_vllm._docker._maybe_ngc_login"),
+            patch(
+                "xr_ai_vllm._docker.build_run_argv",
+                return_value=["docker", "run"],
+            ),
+            patch("xr_ai_vllm._docker.subprocess.Popen", return_value=process) as popen,
+            patch(
+                "xr_ai_vllm._docker._start_log_streamer",
+                return_value=(None, None),
+            ),
+            patch("xr_ai_vllm._docker._lifecycle.wait_until_healthy"),
+            patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped"),
+            patch("xr_ai_vllm._docker.signal.signal"),
+        ):
+            run_docker(
+                image="image:latest",
+                container_name="xr-ai-vllm-test",
+                log_prefix="test",
+                vllm_argv=["vllm", "serve", "model"],
+                host="0.0.0.0",
+                port=8109,
+                model_cache=tmp_path,
+                hf_token=None,
+                cuda_visible_devices=None,
+                extra_env=None,
+                extra_pip=None,
+                ready_file=None,
+            )
+
+        remove.assert_called_once_with("xr-ai-vllm-test")
+        popen.assert_called_once_with(["docker", "run"], start_new_session=True)
+
+
+def _fingerprint_for_kwargs(kwargs: dict) -> str:
+    return _config_fingerprint(
+        image=kwargs["image"],
+        port=kwargs["port"],
+        model_cache=kwargs["model_cache"],
+        hf_token=kwargs["hf_token"],
+        cuda_visible_devices=kwargs["cuda_visible_devices"],
+        extra_env=kwargs["extra_env"],
+        extra_pip=kwargs["extra_pip"],
+        vllm_argv=kwargs["vllm_argv"],
+    )

@@ -9,8 +9,9 @@ from .index import DenseIndex
 
 
 class RAGService:
-    def __init__(self, index: DenseIndex) -> None:
+    def __init__(self, index: DenseIndex, *, corpus_id: str | None = None) -> None:
         self._index = index
+        self._corpus_id = corpus_id
 
     async def dispatch(self, method: str, arguments: dict) -> dict:
         if method == "retrieve":
@@ -32,9 +33,12 @@ class RAGService:
         if method == "list_documents":
             return {"documents": self._index.documents}
         if method == "get_health":
-            return {
+            result: dict[str, object] = {
                 "ready": await self._index.health(),
                 "document_count": len(self._index.documents),
                 "chunk_count": len(self._index.chunks),
             }
+            if self._corpus_id is not None:
+                result["corpus_id"] = self._corpus_id
+            return result
         raise ValueError(f"unknown method: {method}")

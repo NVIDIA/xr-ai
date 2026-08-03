@@ -285,6 +285,31 @@ for the full option list.
 
 ---
 
+### Tea-making guide (YAML-driven visual workflow)
+
+The tea-making sample demonstrates a reusable guided-task engine. Each YAML
+step supplies its own VLM prompt, agent prompt, context schema, tools,
+completion rule, and skip defaults. The guide updates context silently from
+live frames, waits for the user to request the next step, and answers questions
+from current state or native RAG at any point.
+
+Nemotron-Omni provides both vision and agent reasoning. The final steeping step
+uses a wall-clock timer without running the VLM, answers elapsed/remaining-time
+questions, and announces when steeping is complete. See the
+[sample README](agent-samples/tea-making-sample/README.md) for the workflow and
+customization format.
+
+```bash
+cd agent-samples/tea-making-sample
+uv sync
+uv run tea_making_sample
+```
+
+The sample owns its model processes. Stop the shared `model-servers` stack
+first so Nemotron-Omni has enough free GPU memory.
+
+---
+
 ### XR render demo (voice-driven sphere in CloudXR)
 
 Speak to the web client and a sphere in the streamed scene tracks your

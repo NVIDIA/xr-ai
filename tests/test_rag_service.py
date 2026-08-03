@@ -12,6 +12,7 @@ from nat.builder.workflow_builder import WorkflowBuilder
 from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
 from rag_service.index import _chunk_text
+from rag_service.startup import connect_endpoint, corpus_metadata, reusable_client
 from xr_ai_nat.functions._service.rpc import RPCServer
 from xr_ai_nat.functions.rag import RAGFunctionsConfig, RetrieveRequest, RetrieveResult
 
@@ -201,3 +202,51 @@ async def test_native_function_group_uses_typed_contracts(tmp_path) -> None:
 def test_retrieve_request_rejects_blank_query() -> None:
     with pytest.raises(ValidationError, match="query must not be blank"):
         RetrieveRequest(query="  ")
+
+
+def test_startup_metadata_and_wildcard_endpoint(tmp_path) -> None:
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Make tea carefully.")
+
+    names, first_id = corpus_metadata(documents)
+    assert names == ["guide.md"]
+    assert connect_endpoint("tcp://0.0.0.0:8340") == "tcp://127.0.0.1:8340"
+    assert connect_endpoint("ipc:///tmp/rag") == "ipc:///tmp/rag"
+
+    (documents / "guide.md").write_text("Updated tea guidance.")
+    assert corpus_metadata(documents)[1] != first_id
+
+
+@pytest.mark.parametrize("publish_corpus_id", [False, True])
+async def test_reuses_compatible_running_service(tmp_path, publish_corpus_id) -> None:
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "guide.md").write_text("Reset the task before starting again.")
+    corpus_id = corpus_metadata(documents)[1]
+    index = await DenseIndex.build(
+        documents,
+        _Embedding(),
+        cache_dir=tmp_path / "cache",
+        embedding_dim=3,
+    )
+    endpoint = f"ipc:///tmp/rag-reuse-{uuid.uuid4().hex}"
+    server = RPCServer(
+        endpoint,
+        RAGService(
+            index,
+            corpus_id=corpus_id if publish_corpus_id else None,
+        ).dispatch,
+    )
+    task = asyncio.create_task(server.serve())
+    await asyncio.sleep(0.02)
+    client = None
+    try:
+        client = await reusable_client(endpoint, documents)
+        assert client is not None
+        assert await client.health()
+    finally:
+        if client is not None:
+            await client.close()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

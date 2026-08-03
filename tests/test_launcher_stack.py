@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -139,6 +140,93 @@ class TestRunStackShutdownContract:
 
         # Clean exit preserves the persist set so the container outlives us.
         assert stub_stack["no_kill"] == {"vlm"}
+
+
+class TestLauncherOwnership:
+    def test_matches_only_owned_orphan_wrapper(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_stack.tempfile, "tempdir", str(tmp_path))
+        base = tmp_path / "sample"
+        config = base / "yaml" / "hub.yaml"
+        project = tmp_path / "server-runtime"
+        ready = tmp_path / "xr-ai-old" / "hub.ready"
+        process = _stack.Process(
+            "hub",
+            project,
+            "xr_media_hub",
+            config=config,
+        )
+        argv = [
+            "uv",
+            "run",
+            "--quiet",
+            "--project",
+            str(project),
+            "xr_media_hub",
+            "--config",
+            str(config),
+            "--ready-file",
+            str(ready),
+        ]
+
+        assert _stack._abandoned_process_name(argv, [process], base) == "hub"
+
+        outside = [*argv]
+        outside[outside.index("--config") + 1] = str(tmp_path / "other" / "hub.yaml")
+        assert _stack._abandoned_process_name(outside, [process], base) is None
+
+        persistent = _stack.Process(
+            "hub",
+            project,
+            "xr_media_hub",
+            config=config,
+            launch_mode="persist",
+        )
+        assert _stack._abandoned_process_name(argv, [persistent], base) is None
+
+    def test_finds_only_parentless_matching_process_groups(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_stack.tempfile, "tempdir", str(tmp_path))
+        base = tmp_path / "sample"
+        config = base / "yaml" / "worker.yaml"
+        project = base / "worker"
+        ready = tmp_path / "xr-ai-old" / "worker.ready"
+        process = _stack.Process("worker", project, "worker", config=config)
+        proc_root = tmp_path / "proc"
+        orphan = proc_root / "101"
+        child = proc_root / "102"
+        orphan.mkdir(parents=True)
+        child.mkdir()
+        argv = [
+            "uv",
+            "run",
+            "--project",
+            str(project),
+            "worker",
+            "--config",
+            str(config),
+            "--ready-file",
+            str(ready),
+        ]
+        (orphan / "status").write_text("PPid:\t1\n")
+        (orphan / "cmdline").write_bytes(b"\0".join(value.encode() for value in argv))
+        (child / "status").write_text("PPid:\t101\n")
+        (child / "cmdline").write_bytes(b"\0".join(value.encode() for value in argv))
+        monkeypatch.setattr(_stack.os, "getpgid", lambda pid: {101: 201}[pid])
+        monkeypatch.setattr(_stack.os, "getpgrp", lambda: 999)
+
+        assert _stack._find_abandoned_process_groups(
+            [process], base, proc_root=proc_root
+        ) == {201: {"worker"}}
+
+    def test_stack_lock_rejects_concurrent_launcher(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_stack.tempfile, "tempdir", str(tmp_path))
+        first = _stack._acquire_stack_lock(Path("sample"))
+        try:
+            with pytest.raises(RuntimeError, match="already running"):
+                _stack._acquire_stack_lock(Path("sample"))
+        finally:
+            _stack._release_stack_lock(first)
+
+
 class TestStripConflictingCudnn:
     """LD_LIBRARY_PATH sanitization so a host cuDNN can't shadow the venv one."""
 

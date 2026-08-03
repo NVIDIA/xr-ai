@@ -28,15 +28,14 @@ Config keys (nemotron_omni_llm_server.yaml)
     video_pruning_rate:       float  --video-pruning-rate (default: 0.5).
     video_fps:                int    FPS for video input sampling (default: 2).
     video_num_frames:         int    Max frames per video (default: 256).
+    moe_backend:              str    Optional vLLM MoE backend (for example,
+                                     "triton" on RTX Pro Blackwell).
     vllm_backend:             str    "pip" (default) or "docker".
-    vllm_image:               str    NGC image when vllm_backend=docker
-                                     (default: nvcr.io/nvidia/vllm:26.04-py3).
-    extra_pip:                list   Pip packages installed into the NGC
-                                     container before `vllm serve` runs
-                                     (docker backend only; default:
-                                     ["mamba-ssm", "causal-conv1d"] since
-                                     Nemotron-Omni's hybrid SSM backbone
-                                     requires both at model-load time).
+    vllm_image:               str    Image when vllm_backend=docker (default:
+                                     vllm/vllm-openai:v0.20.0, the minimum
+                                     version supporting this architecture).
+    extra_pip:                list   Optional packages installed before
+                                     `vllm serve` (docker backend only).
 """
 import json
 import os
@@ -44,7 +43,6 @@ import os
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import (
-    DEFAULT_IMAGE,
     gpu_compute_major,
     load_config,
     resolve_model_cache,
@@ -67,6 +65,7 @@ _DEFAULT_EAGER   = False
 _DEFAULT_PRUNE   = 0.5
 _DEFAULT_FPS     = 2
 _DEFAULT_FRAMES  = 256
+_DEFAULT_IMAGE   = "vllm/vllm-openai:v0.20.0"
 
 _CONTAINER_NAME = "xr-ai-vllm-nemotron-omni-llm-server"
 
@@ -108,14 +107,10 @@ def run() -> None:
     prune_rate    = float(cfg.get("video_pruning_rate", _DEFAULT_PRUNE))
     video_fps     = int(cfg.get("video_fps",        _DEFAULT_FPS))
     video_frames  = int(cfg.get("video_num_frames", _DEFAULT_FRAMES))
+    moe_backend   = cfg.get("moe_backend")
     backend       = cfg.get("vllm_backend",         "pip")
-    image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
-    # Nemotron-Omni's hybrid SSM/Transformer backbone imports `mamba_ssm`
-    # at model-load time, and `causal_conv1d` is its required CUDA-kernel
-    # peer dep. Neither ships in the NGC vLLM image, so we install both
-    # into the container before `vllm serve` runs. Configurable via YAML
-    # for users who want to pin specific versions or add more wheels.
-    extra_pip     = cfg.get("extra_pip", ["mamba-ssm", "causal-conv1d"])
+    image         = cfg.get("vllm_image",           _DEFAULT_IMAGE)
+    extra_pip     = cfg.get("extra_pip", [])
 
     media_io_kwargs = json.dumps({"video": {"fps": video_fps, "num_frames": video_frames}})
 
@@ -135,6 +130,8 @@ def run() -> None:
     ]
     if use_kv_fp8:
         extra_serve_args += ["--kv-cache-dtype", "fp8"]
+    if moe_backend:
+        extra_serve_args += ["--moe-backend", str(moe_backend)]
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
 

@@ -20,11 +20,13 @@ The stack is declared as a sequence of ``Process`` or ``Parallel`` items:
 
 For each process the launcher:
 
-  1. Resolves the project directory and YAML config from the sample root.
-  2. Spawns ``uv run --project <dir> <command> --config <yaml> --ready-file <f>``.
-  3. Waits for the process to create *<f>* (the ready file), printing a
+  1. Locks the sample root and cleans up launcher-owned process groups orphaned
+     by an earlier abnormal exit.
+  2. Resolves the project directory and YAML config from the sample root.
+  3. Spawns ``uv run --project <dir> <command> --config <yaml> --ready-file <f>``.
+  4. Waits for the process to create *<f>* (the ready file), printing a
      progress line every five seconds so slow starts remain visible.
-  4. Once all processes are ready, monitors them: any exit triggers a
+  5. Once all processes are ready, monitors them: any exit triggers a
      graceful shutdown of the rest.
 
 Each process is responsible for creating its own ready file at the moment it
@@ -34,6 +36,7 @@ the IPC socket connects, after the HTTP server starts listening, etc.
 from __future__ import annotations
 
 import glob
+import hashlib
 import logging
 import os
 import re
@@ -46,7 +49,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence, Union
+from typing import Sequence, TextIO, Union
 
 from ._credentials import load_credentials
 
@@ -123,6 +126,183 @@ class Parallel:
 
     def __init__(self, processes: Sequence[Process]) -> None:
         object.__setattr__(self, "processes", tuple(processes))
+
+
+def _all_processes(
+    processes: Sequence[Union[Process, Parallel]],
+) -> list[Process]:
+    return [
+        process
+        for item in processes
+        for process in (item.processes if isinstance(item, Parallel) else [item])
+    ]
+
+
+def _acquire_stack_lock(base: Path) -> TextIO | None:
+    """Prevent two launchers from managing the same sample concurrently."""
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - flock is available on supported Linux hosts
+        return None
+
+    sample = str(base.resolve())
+    key = hashlib.sha256(sample.encode()).hexdigest()[:16]
+    lock_path = Path(tempfile.gettempdir()) / f"xr-ai-launcher-{key}.lock"
+    handle = lock_path.open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        handle.seek(0)
+        owner = handle.read().strip() or "owner unknown"
+        handle.close()
+        raise RuntimeError(
+            f"Another launcher is already running for {sample} ({owner})"
+        ) from exc
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f"pid={os.getpid()}")
+    handle.flush()
+    return handle
+
+
+def _release_stack_lock(handle: TextIO | None) -> None:
+    if handle is None:
+        return
+    try:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
+def _argument(argv: list[str], name: str) -> str | None:
+    try:
+        return argv[argv.index(name) + 1]
+    except (ValueError, IndexError):
+        return None
+
+
+def _abandoned_process_name(
+    argv: list[str],
+    processes: Sequence[Union[Process, Parallel]],
+    base: Path,
+) -> str | None:
+    """Match an orphaned launcher wrapper proven to belong to this sample."""
+    if len(argv) < 2 or Path(argv[0]).name != "uv" or argv[1] != "run":
+        return None
+
+    ready_value = _argument(argv, "--ready-file")
+    config_value = _argument(argv, "--config")
+    project_value = _argument(argv, "--project")
+    if ready_value is None or config_value is None or project_value is None:
+        return None
+
+    ready_parent = Path(ready_value).parent
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    if (
+        ready_parent.parent.resolve() != temp_root
+        or not ready_parent.name.startswith("xr-ai-")
+    ):
+        return None
+
+    resolved_base = base.resolve()
+    if not Path(config_value).resolve().is_relative_to(resolved_base):
+        return None
+
+    resolved_project = Path(project_value).resolve()
+    for process in _all_processes(processes):
+        if process.launch_mode != "own" or process.config is None:
+            continue
+        if Path(config_value).name != Path(process.config).name:
+            continue
+        if (
+            resolved_project == (resolved_base / process.project).resolve()
+            and process.command in argv
+        ):
+            return process.name
+    return None
+
+
+def _parent_pid(status_path: Path) -> int | None:
+    for line in status_path.read_text().splitlines():
+        if line.startswith("PPid:"):
+            return int(line.split()[1])
+    return None
+
+
+def _find_abandoned_process_groups(
+    processes: Sequence[Union[Process, Parallel]],
+    base: Path,
+    *,
+    proc_root: Path = Path("/proc"),
+) -> dict[int, set[str]]:
+    groups: dict[int, set[str]] = {}
+    if not proc_root.is_dir():
+        return groups
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        try:
+            if _parent_pid(entry / "status") != 1:
+                continue
+            argv = [
+                value.decode(errors="replace")
+                for value in (entry / "cmdline").read_bytes().split(b"\0")
+                if value
+            ]
+            name = _abandoned_process_name(argv, processes, base)
+            if name is None:
+                continue
+            pgid = os.getpgid(pid)
+        except (FileNotFoundError, PermissionError, ProcessLookupError, ValueError):
+            continue
+        if pgid != os.getpgrp():
+            groups.setdefault(pgid, set()).add(name)
+    return groups
+
+
+def _process_group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def _cleanup_abandoned_processes(
+    processes: Sequence[Union[Process, Parallel]],
+    base: Path,
+) -> None:
+    groups = _find_abandoned_process_groups(processes, base)
+    if not groups:
+        return
+    for pgid, names in groups.items():
+        log.warning(
+            "Stopping abandoned process group %s from an earlier %s launch",
+            pgid,
+            ", ".join(sorted(names)),
+        )
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    deadline = time.monotonic() + _STOP_TIMEOUT
+    remaining = set(groups)
+    while remaining and time.monotonic() < deadline:
+        remaining = {pgid for pgid in remaining if _process_group_alive(pgid)}
+        if remaining:
+            time.sleep(0.1)
+    for pgid in remaining:
+        log.warning("Force-killing abandoned process group %s", pgid)
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 # ── subprocess helpers ─────────────────────────────────────────────────────────
@@ -423,6 +603,12 @@ def run_stack(
     instead — useful for launchers whose processes are all ``launch_mode="persist"``
     and should outlive the orchestrator (e.g. ``model-servers``).
 
+    Only one launcher may manage a given resolved *base* at a time. Before
+    spawning, the launcher also stops parentless ``own`` process groups whose
+    command, project, config, and launcher readiness path prove that they came
+    from an abandoned run of this sample. ``persist`` and ``reuse`` processes
+    are never selected by this cleanup.
+
     *base* is the sample root — all relative paths in ``Process.project``
     and ``Process.config`` are resolved against it::
 
@@ -442,15 +628,28 @@ def run_stack(
         def run() -> None:
             run_stack(PROCESSES, _BASE)
     """
+    lock = _acquire_stack_lock(base)
+    try:
+        _cleanup_abandoned_processes(processes, base)
+        _run_stack_unlocked(processes, base, exit_after_ready=exit_after_ready)
+    finally:
+        _release_stack_lock(lock)
+
+
+def _run_stack_unlocked(
+    processes: Sequence[Union[Process, Parallel]],
+    base: Path,
+    *,
+    exit_after_ready: bool = False,
+) -> None:
     load_credentials()
 
     # "persist" and "reuse" processes are left running on shutdown.
     # "reuse" processes are not spawned at all — assumed already running.
     _no_kill: set[str] = {
-        p.name
-        for item in processes
-        for p in (item.processes if isinstance(item, Parallel) else [item])
-        if p.launch_mode in ("persist", "reuse")
+        process.name
+        for process in _all_processes(processes)
+        if process.launch_mode in ("persist", "reuse")
     }
 
     launched: dict[str, subprocess.Popen] = {}

@@ -47,6 +47,7 @@ class RAGHealthResult(BaseModel):
     ready: bool
     document_count: int
     chunk_count: int
+    corpus_id: str | None = None
 
 
 class RAGClient:

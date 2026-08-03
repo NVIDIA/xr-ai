@@ -40,14 +40,19 @@ video_pruning_rate: 0.5   # fraction of redundant video tokens to drop
 video_fps:          2     # FPS for video sampling
 video_num_frames:   256   # max frames per video clip
 
-# vLLM runtime — pip-installed vllm (default) or NGC docker container.
+# RTX Pro Blackwell currently requires the Triton MoE backend. Leave unset on
+# platforms where vLLM's automatic backend selection is supported.
+# moe_backend: triton
+
+# vLLM runtime — pip-installed vllm or a Docker container.
 #   pip     — vllm CLI from this wrapper's venv (today's behavior)
-#   docker  — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …`
+#   docker  — `docker run vllm/vllm-openai:<tag> vllm serve …`
 # Both honor the same config keys above; only the runtime hosting vllm differs.
 # docker mode requires Docker Engine + NVIDIA Container Toolkit and a
-# `docker login nvcr.io` (or NGC_API_KEY in the environment).
+# compatible NVIDIA driver.
 vllm_backend: docker
 
-# Container image used when vllm_backend: docker.  Override to pin a different
-# tag, an internal mirror, or a custom build.
-vllm_image: nvcr.io/nvidia/vllm:26.04-py3
+# Nemotron-3-Nano-Omni requires vLLM 0.20.0 or newer. The prior NGC 26.04
+# image contained vLLM 0.19.0 and rejected its architecture before loading.
+vllm_image: vllm/vllm-openai:v0.20.0
+extra_pip: []

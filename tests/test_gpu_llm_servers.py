@@ -330,29 +330,6 @@ async def test_nemotron3_nano_persistent(tmp_path: Path) -> None:
 # ── test 3: nemotron_omni multimodal ────────────────────────────────────────
 
 
-# Nemotron-3-Nano-Omni-30B's `config.json` declares architecture
-# `NemotronH_Nano_Omni_Reasoning_V3`, which is not yet in the vLLM
-# 0.19.0 model registry shipped by `nvcr.io/nvidia/vllm:26.04-py3` —
-# `--trust-remote-code` (already passed) does not help because the
-# registry lookup happens before remote-code dispatch.  Two ways out:
-# (a) bump `DEFAULT_IMAGE` to an NGC tag whose vLLM has registered the
-# arch, or (b) pin a newer vllm wheel via extra_pip (defeats the point
-# of the prebuilt container).  Neither is in scope for this PR.  Keep
-# the test running (not skipped) so the next nightly catches the fix
-# automatically; `strict=False` so an upstream image bump doesn't
-# break this suite on the day the fix lands.
-@pytest.mark.xfail(
-    reason="vLLM 0.19.0 in nvcr.io/nvidia/vllm:26.04-py3 does not register "
-           "the NemotronH_Nano_Omni_Reasoning_V3 architecture, so startup "
-           "fails in create_model_config (config.json arch check) — before "
-           "any model code loads. The test config below sets extra_pip=[] so "
-           "this guaranteed failure no longer pays the ~16 min mamba-ssm / "
-           "causal-conv1d CUDA-kernel compile it never reaches. When vLLM "
-           "registers the arch, the failure mode shifts to a mamba_ssm "
-           "ImportError at model load — that's the signal to restore extra_pip "
-           "(and bump DEFAULT_IMAGE) and run this for real.",
-    strict=False,
-)
 async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
@@ -377,12 +354,9 @@ async def test_nemotron_omni_multimodal(tmp_path: Path) -> None:
         "video_pruning_rate":     0.5,
         "video_fps":              2,
         "video_num_frames":       8,
-        # docker backend: nvcc + flashinfer are pre-built in the NGC image.
+        # Nemotron Omni's architecture was added in vLLM 0.20.0.
         "vllm_backend":           "docker",
-        # This test xfails at the vLLM arch check (see the xfail reason),
-        # which runs before any model code imports mamba_ssm. Skip the
-        # default mamba-ssm/causal-conv1d source build — it's a ~16 min
-        # CUDA-kernel compile this guaranteed failure never reaches.
+        "vllm_image":             "vllm/vllm-openai:v0.20.0",
         "extra_pip":              [],
     }
     cfg_yaml = tmp_path / "nemotron_omni_llm_server.yaml"

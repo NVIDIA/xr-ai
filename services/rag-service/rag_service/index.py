@@ -114,10 +114,7 @@ class DenseIndex:
             raise ValueError("overlap must be non-negative and smaller than chunk_size")
         if embedding_dim <= 0 or batch_size <= 0:
             raise ValueError("embedding_dim and batch_size must be positive")
-        paths = sorted(
-            path for path in documents_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in {".md", ".txt"}
-        )
+        paths = find_document_paths(documents_dir)
         documents = [str(path.relative_to(documents_dir)) for path in paths]
         chunks = [
             Chunk(source=source, text=part)
@@ -205,6 +202,15 @@ class DenseIndex:
             }
             for index in indices
         ]
+
+
+def find_document_paths(documents_dir: Path) -> list[Path]:
+    """Return supported corpus files in stable source-name order."""
+    return sorted(
+        path
+        for path in documents_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".md", ".txt"}
+    )
 
 
 def _normalize(vectors: np.ndarray) -> np.ndarray:
