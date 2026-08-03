@@ -55,13 +55,26 @@ _MODELS_YAML = (
 
 
 def _make_llm(stub: StubOpenAI, *, model_name: str = "llm",
-              reasoning_field: str | None = None) -> OpenAICompatLLM:
+              reasoning_field: str | None = None,
+              default_extras: dict | None = None) -> OpenAICompatLLM:
     """Build an LLM client wired to a StubOpenAI transport."""
     return OpenAICompatLLM(
         "http://stub",
         model_name,
         reasoning_field=reasoning_field,
+        default_extras=default_extras,
         client=stub.client(),
+    )
+
+
+def _make_spec_llm(stub: StubOpenAI, name: str) -> OpenAICompatLLM:
+    """Build an LLM client from the shipped models.yaml spec for *name*."""
+    spec = load_models_config(_MODELS_YAML).llm(name)
+    return _make_llm(
+        stub,
+        model_name=spec.model_name,
+        reasoning_field=spec.reasoning_field,
+        default_extras=spec.default_extras,
     )
 
 
@@ -77,7 +90,7 @@ def test_models_yaml_loads() -> None:
     tts_spec      = cfg.tts("tts")
     vlm_spec      = cfg.vlm("vlm")
 
-    assert llm_spec.base_url       == "http://localhost:8106"
+    assert llm_spec.base_url       == "http://localhost:8107"
     assert agent_llm_spec.base_url == "http://localhost:8107"
     assert stt_spec.base_url       == "http://localhost:8103"
     assert tts_spec.base_url       == "http://localhost:8105"
@@ -86,6 +99,14 @@ def test_models_yaml_loads() -> None:
     # nemotron3_nano preset must set reasoning_field so ChatResponse.reasoning
     # is populated from the server's "reasoning" field.
     assert agent_llm_spec.reasoning_field == "reasoning"
+
+    # Both logical models share the nemotron3_nano server. The preset must pin
+    # thinking off at the wire level: Nemotron-3-Nano's template defaults
+    # thinking-on, which would burn the quick-ack's 40-token budget on hidden
+    # reasoning and return empty content with finish_reason="length".
+    for spec in (llm_spec, agent_llm_spec):
+        assert spec.model_name == "llm"
+        assert spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
 
 
 def test_worker_config_idle_timeout_disabled_by_default() -> None:
@@ -115,10 +136,10 @@ def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
 
 
 async def test_quick_ack_wire_golden() -> None:
-    """quick-ack: max_tokens=40, temperature=0.0, no tools, no thinking."""
+    """quick-ack: max_tokens=40, temperature=0.0, no tools, thinking pinned off."""
     stub = StubOpenAI()
     stub.set_chat_message(content='{"ack": "On it!", "think": false}')
-    llm = _make_llm(stub)
+    llm = _make_spec_llm(stub, "llm")
 
     messages = [
         ChatMessage(role="system", content="You are a quick-ack classifier."),
@@ -128,12 +149,11 @@ async def test_quick_ack_wire_golden() -> None:
 
     body = stub.last_json()
 
-    # Field presence matches pre-migration golden.
     assert body["model"]        == "llm"
     assert body["max_tokens"]   == 40
     assert body["temperature"]  == 0.0
     assert "tools" not in body
-    assert "chat_template_kwargs" not in body
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
     assert len(body["messages"]) == 2
     assert body["messages"][0]["role"] == "system"
     assert body["messages"][1]["role"] == "user"
@@ -147,10 +167,10 @@ async def test_quick_ack_wire_golden() -> None:
 
 
 async def test_still_working_wire_golden() -> None:
-    """still-working: max_tokens=24, temperature=0.9, no tools, no thinking."""
+    """still-working: max_tokens=24, temperature=0.9, no tools, thinking pinned off."""
     stub = StubOpenAI()
     stub.set_chat_message(content="Still calculating the position...")
-    llm = _make_llm(stub)
+    llm = _make_spec_llm(stub, "llm")
 
     messages = [
         ChatMessage(role="system", content="Generate a short still-working message."),
@@ -164,7 +184,7 @@ async def test_still_working_wire_golden() -> None:
     assert body["max_tokens"]  == 24
     assert body["temperature"] == 0.9
     assert "tools" not in body
-    assert "chat_template_kwargs" not in body
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
 
     assert resp.content == "Still calculating the position..."
 
@@ -177,8 +197,7 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content="Done — sphere added in front of you.")
 
-    # nemotron3_nano uses model_name="llm" and reasoning_field="reasoning"
-    agent_llm = _make_llm(stub, reasoning_field="reasoning")
+    agent_llm = _make_spec_llm(stub, "agent_llm")
 
     tools = [
         ToolDef(
@@ -248,10 +267,10 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
 
 
 async def test_agentic_loop_wire_golden_thinking_off() -> None:
-    """agentic-loop with thinking off: no chat_template_kwargs in body."""
+    """agentic-loop with thinking off: the preset's wire-level default applies."""
     stub = StubOpenAI()
     stub.set_chat_message(content="Done.")
-    agent_llm = _make_llm(stub, reasoning_field="reasoning")
+    agent_llm = _make_spec_llm(stub, "agent_llm")
 
     messages = [
         ChatMessage(role="system", content="You are a spatial AI assistant."),
@@ -267,7 +286,7 @@ async def test_agentic_loop_wire_golden_thinking_off() -> None:
 
     body = stub.last_json()
     assert body["max_tokens"] == 1024
-    assert "chat_template_kwargs" not in body
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
 
 
 # ── reasoning-field normalization ─────────────────────────────────────────────

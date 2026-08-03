@@ -10,12 +10,12 @@ the sample-specific brain — a multi-step agentic loop over native NAT
 functions for scene, tracking, spatial math, vision, and video memory.
 
 Agentic loop (max ``_MAX_LOOP`` iterations):
-  - Llama-Nemotron emits an OpenAI ``tool_calls`` payload → execute tool,
+  - Nemotron-3-Nano emits an OpenAI ``tool_calls`` payload → execute tool,
     append result, continue.
   - When the model returns text instead of a tool call, that text is the
     final user-visible response.
 
-A parallel "quick-ack" call to Minitron fires at the start of each turn
+A parallel "quick-ack" call fires at the start of each turn
 to (a) speak an immediate acknowledgment and (b) classify whether the
 agentic loop needs thinking enabled. A periodic "still-working" loop
 streams contextual progress messages to the data channel while the agent
@@ -171,12 +171,12 @@ class RenderSceneProcessor(BrainProcessor):
     """
     Multi-step agentic loop over native NAT functions.
 
-    Uses Llama-Nemotron (port 8106) with OpenAI tool calling + LMFE for the
-    reasoning loop — guaranteed syntactically valid tool calls every iteration.
-    Uses Minitron (port 8101) for the parallel quick-ack (fast, cheap).
+    Uses Nemotron-3-Nano (port 8107) with OpenAI tool calling for the
+    reasoning loop; the parallel quick-ack shares the same server via the
+    `llm` logical model.
 
     On each utterance:
-      1. Quick-ack fires immediately (parallel, max 25 tokens) → agent.progress
+      1. Quick-ack is awaited first (max 40 tokens) → agent.progress
       2. Agentic loop: model calls tools via OpenAI tool_calls protocol until
          it returns a text response (finish_reason != "tool_calls")
       3. Progress messages sent before each tool execution → agent.progress
@@ -348,15 +348,16 @@ class RenderSceneProcessor(BrainProcessor):
         ref_us = _now_us()
         t0 = time.monotonic()
 
-        # Quick-ack: fast Minitron call that (a) speaks an immediate
+        # Quick-ack: fast LLM call that (a) speaks an immediate
         # acknowledgment and (b) classifies whether Nemotron needs
         # reasoning enabled.  Await it first so the think flag is ready
-        # before the main loop starts — it takes ~1s so the delay is small.
+        # before the main loop starts. On failure default to thinking so a
+        # spatial request degrades to a slower turn, not a wrong answer.
         try:
             ack, needs_thinking = await self._quick_ack(text)
         except Exception:
             logger.exception("quick ack failed")
-            ack, needs_thinking = "", False
+            ack, needs_thinking = "", True
 
         if ack and send_pid:
             # ACK-SPEAK POLICY (deliberate): speak the quick-ack on EVERY turn,
@@ -519,16 +520,20 @@ class RenderSceneProcessor(BrainProcessor):
                     return ack, think
                 except json.JSONDecodeError:
                     pass
-            # Fallback: treat raw text as ack, no thinking
+            # Fallback: treat raw text as ack, no thinking. A truncated JSON
+            # payload has no closing brace, so extract_json returns None —
+            # don't speak the fragment.
+            if raw.startswith("{"):
+                return "", False
             return raw, False
         except Exception as exc:
             logger.warning("quick-ack failed: {}", exc)
-        return "", False
+        return "", True
 
-    # ── agentic loop (OpenAI tool calling + LMFE) ────────────────────────────
+    # ── agentic loop (OpenAI tool calling) ───────────────────────────────────
 
     async def _still_working_msg(self, transcript: str, sent: list[str], thinking_ctx: list[str]) -> str:
-        """Ask Minitron for a short contextual 'still working' sentence.
+        """Ask the LLM for a short contextual 'still working' sentence.
 
         `sent` is the list of messages already shown this turn.
         `thinking_ctx` is a one-element list holding the latest reasoning_content

@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-03 — xr-render-demo drops the dedicated quick-response LLM
+
+The Llama-3.1-Nemotron-Nano-8B server (port 8106) is no longer part of the
+`model-servers` or xr-render-demo stacks. Nemotron-3-Nano-30B is fast enough
+for the quick-ack and still-working calls, so the `llm` logical model now
+points at the same server as `agent_llm` (port 8107) and the ~16 GiB of VRAM
+the 8B held is freed. The standalone `ai-services/llm/llama_nemotron` server
+and its `xr-ai-models` preset remain available for samples that want a small
+dedicated model.
+
 ### 2026-07-31 — GitHub Pages publishes immutable release documentation
 
 The documentation site now uses `sphinx-multiversion` to render `main` as

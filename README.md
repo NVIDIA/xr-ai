@@ -49,9 +49,9 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| model-servers (all 4 models) | ~70 GB |
+| model-servers (all models) | ~55 GB |
 | simple-vlm-example (standalone) | ~23 GB |
-| xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
+| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
 **Software**
@@ -140,7 +140,7 @@ on startup.
 
 ### Model servers (shared AI services)
 
-`model-servers` starts the four inference services used across demos and exits
+`model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running `xr-render-demo`, or whenever you want to
 pre-warm models:
@@ -296,8 +296,8 @@ web client for desktop dev.
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
 endpoints, typed capability processes, and the worker. The worker calls those
 processes through native NAT functions; MCP adapters remain optional outward
-compatibility surfaces and are not in the sample's execution path. The Pipecat pipeline pairs a fast
-Llama-8B for quick-acks with a Nemotron-30B agentic tool-calling loop over
+compatibility surfaces and are not in the sample's execution path. The Pipecat pipeline runs
+quick-acks and a Nemotron-30B agentic tool-calling loop over
 scene, XR tracking, spatial math, vision, and video-memory functions. Full process map,
 agentic-loop details, and the XR session lifecycle:
 [`docs/xr-render-demo.md`](docs/xr-render-demo.md).
@@ -312,7 +312,7 @@ cd agent-samples/model-servers
 uv sync && uv run model_servers
 ```
 
-This exits immediately once all four services are ready.  Weights stay loaded
+This exits immediately once all services are ready.  Weights stay loaded
 in the background.
 
 #### Step 2 — Start the demo
@@ -376,7 +376,7 @@ model_backend: nim     # default is "local"
 The worker loads `yaml/models.nim.yaml` for the native model-backed functions —
 no `main.py` edits. Provide
 an `NGC_API_KEY` as an **environment variable** (or via the launcher
-credential prompt — not in YAML) and just don't start the local `llm` /
+credential prompt — not in YAML) and just don't start the local
 `agent-llm` / `vlm` model-servers. See
 [`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
 

@@ -25,7 +25,6 @@ exit terminates the whole stack.
 | stt | `ai-services/stt-server/` | `stt_server` | 8103 |
 | tts | `ai-services/tts/piper/` | `piper_tts_server` | 8105 |
 | vlm | `ai-services/vlm-server/` | `vlm_server` | 8100 |
-| llm | `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 |
 | agent-llm | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 |
 | video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
@@ -94,18 +93,25 @@ The worker reads two YAML files:
   and a `base_url`.  Edit this file to change which model runs where without
   touching the worker code.
 
-## The LLM servers
+## The LLM server
 
-Both are vLLM `execvp` shims — a small Python wrapper that reads YAML config,
+### NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107
+
+A vLLM `execvp` shim — a small Python wrapper that reads YAML config,
 sets `HF_HOME` / token env vars, then `os.execvp`s into `vllm serve`. The
 Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
 and tool calling from that point on.
 
-### Llama-3.1-Nemotron-Nano-8B-v1 — port 8106 — fast reactive brain
+`vllm serve` with `--tool-call-parser qwen3_coder` and
+`--reasoning-parser nano_v3` (plugin auto-fetched from the model card into
+`model_cache`). `enforce_eager` defaults to `true` — CUDA graph capture +
+FlashInfer FP4 MoE autotune silently takes 3–8 minutes on cold start without
+it. Requires a Blackwell GPU (B200 / RTX PRO 6000 / Jetson Thor) for native
+FP4; swap to the BF16 variant for Hopper / Ampere.
 
-`vllm serve` with `--tool-call-parser llama3_json --enable-auto-tool-choice`.
-`enforce_eager` defaults to `false`. Used for three cheap, latency-sensitive
-calls — none of which actually use tool calling:
+One server backs both logical models in `yaml/models.yaml`: `agent_llm` runs
+the multi-step tool-calling loop, and `llm` serves two cheap, latency-sensitive
+calls (thinking stays off):
 
 - **Quick-ack** — fires in parallel with the agentic loop the moment an
   utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
@@ -118,17 +124,6 @@ calls — none of which actually use tool calling:
   generates a short contextual phrase like *"Still finding the right
   position"* on a 7s repeat. Sent to the data channel only — never spoken,
   to avoid stacking up in the TTS queue behind the real response.
-
-### NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107 — agentic loop
-
-`vllm serve` with `--tool-call-parser qwen3_coder` and
-`--reasoning-parser nano_v3` (plugin auto-fetched from the model card into
-`model_cache`). `enforce_eager` defaults to `true` — CUDA graph capture +
-FlashInfer FP4 MoE autotune silently takes 3–8 minutes on cold start without
-it. Requires a Blackwell GPU (B200 / RTX PRO 6000 / Jetson Thor) for native
-FP4; swap to the BF16 variant for Hopper / Ampere.
-
-This is the model that runs the multi-step tool-calling loop.
 
 ## VLM — Cosmos-Reason1-7B
 
@@ -208,7 +203,7 @@ worker owns the XR lifecycle.
 
 On each `TranscriptionFrame`:
 
-1. **Quick-ack** fires immediately (Llama-8B :8106, parallel task).
+1. **Quick-ack** fires immediately (`llm` :8107, parallel task).
 2. **Still-working timer** starts (fires at 5s, repeats every 7s, data
    channel only).
 3. **Pre-fetch** (concurrent): `get_scene_state` + `get_head_pose` +

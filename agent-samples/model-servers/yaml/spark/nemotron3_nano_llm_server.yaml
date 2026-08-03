@@ -14,8 +14,8 @@
 #
 # 0.25 × 119.67 = 29.9 GiB cap: ~18.7 GiB NVFP4 weights + ~9 GiB KV cache.
 #
-# Physical budget:  agent-llm ~30 + vlm ~24 + llm ~19 + STT ~2 + overhead ~8
-#   ≈ 83 GiB of 96 GiB physical — leaves ~13 GiB headroom for LOVR/drivers.
+# Physical budget:  agent-llm ~30 + vlm ~24 + STT ~2 + overhead ~8
+#   ≈ 64 GiB of 96 GiB physical — leaves ~32 GiB headroom for LOVR/drivers.
 
 host: "0.0.0.0"
 port: 8107

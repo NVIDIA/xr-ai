@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-model-servers orchestrator — starts the four AI inference servers and exits.
+model-servers orchestrator — starts the shared AI inference servers and exits.
 
-All four servers are launch_mode="persist" so they keep running after this
+All servers are launch_mode="persist" so they keep running after this
 process exits.  Model weights stay hot across stack restarts.
 
 Servers started
@@ -12,7 +12,6 @@ Servers started
   stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
   agent-llm  — NVIDIA-Nemotron-3-Nano-30B-A3B      port 8107  (vLLM)
   vlm        — nvidia/Cosmos-Reason1-7B            port 8100  (vLLM)
-  llm        — nvidia/Llama-3.1-Nemotron-Nano-8B   port 8106  (vLLM)
 
 How to run:
     uv run --project agent-samples/model-servers model_servers
@@ -46,9 +45,6 @@ def _build_processes() -> list[Process]:
         Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
                 config=f"{ai}/vlm_server.yaml",
                 launch_mode="persist", port=8100),
-        Process("llm",       "../../ai-services/llm/llama_nemotron", "llama_nemotron_llm_server",
-                config=f"{ai}/llama_nemotron_llm_server.yaml",
-                launch_mode="persist", port=8106),
     ]
 
 

@@ -165,7 +165,7 @@ so the local VLM process is omitted and `NGC_API_KEY` is requested
 automatically. Select `models.local.json` to switch back.
 
 `xr-render-demo` retains its `model_backend: nim` selector and
-`models.nim.yaml` overlay. Run it without the local `llm` / `agent-llm` / `vlm`
+`models.nim.yaml` overlay. Run it without the local `agent-llm` / `vlm`
 model-servers and provide `NGC_API_KEY`.
 
 **Self-hosted NIM containers** work the same way — point `base_url` at the

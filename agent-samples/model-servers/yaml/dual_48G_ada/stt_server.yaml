@@ -13,7 +13,7 @@ model: nvidia/parakeet-tdt-0.6b-v3
 # Inference device: "cuda", "cpu", or "auto" (CUDA if available, else CPU).
 device: auto
 
-# GPU 1 only — GPU 0 is fully allocated to vlm + llm.
+# GPU 1 only — GPU 0 is fully allocated to vlm.
 cuda_visible_devices: "1"
 
 port: 8103

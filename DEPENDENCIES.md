@@ -528,7 +528,7 @@ external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
 
 ### model-servers  (agent-samples/model-servers/)
 
-Standalone launcher that starts the four AI inference servers and keeps
+Standalone launcher that starts the shared AI inference servers and keeps
 them alive across stack restarts.  No hub, worker, or agent involved —
 run this first to warm up model weights before starting any demo sample.
 
@@ -537,8 +537,8 @@ run this first to warm up model weights before starting any demo sample.
 | Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
 
 Starts stt-server (8103), nemotron3-nano-llm-server (8107, `persistent=True`),
-vlm-server (8100, `persistent=True`), llama-nemotron-llm-server (8106, `persistent=True`).
-The three vLLM servers survive launcher restarts; use `--stop` to shut them down.
+vlm-server (8100, `persistent=True`).
+The vLLM servers survive launcher restarts; use `--stop` to shut them down.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)
@@ -563,7 +563,7 @@ Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
 is explicit in the process list.
 Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
-scene (8320), openxr-service (8330), and worker. The four model-server
+scene (8320), openxr-service (8330), and worker. The model-server
 entries are declared with `launch_mode="reuse"` and must already be healthy.
 No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK
@@ -581,9 +581,9 @@ updated in the same commit**.
 | `agent-sdk/xr-ai-hub-client/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
-| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
+| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/model-servers/main.py` (`--stop`) |
 | `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
-| Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `_PERSISTENT_SERVERS` in `agent-samples/xr-render-demo/main.py` |
+| Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `stop_persistent_servers` names in `agent-samples/model-servers/main.py` |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, `docs/adding-cloudxr.md` |
