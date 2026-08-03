@@ -18,7 +18,7 @@ camera -> XR Media Hub -> StreamingVisionConfig -> current-frame VLM
                        read-only NAT guide agent -> xr_rag NAT group
                               |                     -> RAG service :8340
                               |                     -> embedding :8109 / reused
-                              |                     guide LLM :8106 / reused
+                              |              Nemotron-3-Nano :8107 / reused
                               v
                       voice + agent.response reply
 ```

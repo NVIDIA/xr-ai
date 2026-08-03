@@ -15,11 +15,11 @@ def _build_processes() -> list[Process]:
     deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
     definitions = {
         "vlm": ("../../ai-services/vlm-server", "vlm_server", None, 8100),
-        "llm": (
-            "../../ai-services/llm/llama_nemotron",
-            "llama_nemotron_llm_server",
+        "agent-llm": (
+            "../../ai-services/llm/nemotron3_nano",
+            "nemotron3_nano_llm_server",
             None,
-            8106,
+            8107,
         ),
         "stt": ("../../ai-services/stt-server", "stt_server", None, 8103),
         "tts": ("../../ai-services/tts/piper", "piper_tts_server", "yaml/piper_tts_server.yaml", 8105),
@@ -29,7 +29,7 @@ def _build_processes() -> list[Process]:
     if unknown:
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
     processes = []
-    for role in ("vlm", "llm", "stt", "tts", "embedding"):
+    for role in ("vlm", "agent-llm", "stt", "tts", "embedding"):
         mode = deployment.launch_mode(role)
         if mode:
             project, command, config, port = definitions[role]

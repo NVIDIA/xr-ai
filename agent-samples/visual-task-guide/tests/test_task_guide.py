@@ -64,7 +64,12 @@ def test_deployed_eval_covers_both_prompts_without_fixture_leakage() -> None:
     assert GUIDE_CASES and VLM_CASES
     assert all(case["max_words"] <= 30 for case in GUIDE_CASES)
     models = json.loads((_SAMPLE / "yaml/models.local.json").read_text(encoding="utf-8"))
-    assert models["models"]["guide_llm"]["deployment"] == {"ownership": "reused", "service": "llm"}
+    assert models["models"]["guide_llm"]["adapter"] == {"preset": "nemotron3_nano"}
+    assert models["models"]["guide_llm"]["endpoint"]["base_url"] == "http://localhost:8107"
+    assert models["models"]["guide_llm"]["deployment"] == {
+        "ownership": "reused",
+        "service": "agent-llm",
+    }
     assert models["models"]["vlm"]["deployment"] == {"ownership": "reused", "service": "vlm"}
     assert models["models"]["embedding"]["deployment"] == {
         "ownership": "reused",

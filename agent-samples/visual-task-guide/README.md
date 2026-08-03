@@ -41,9 +41,9 @@ cd worker && uv sync && cd ..
 uv run visual_task_guide
 ```
 
-The launcher requires the shared VLM, guide LLM, and STT endpoints before it
-starts the hub, Piper TTS, and worker. This sample does not launch video memory
-or record historical video.
+The launcher requires the shared VLM, Nemotron-3-Nano guide LLM, STT, and
+embedding endpoints before it starts the hub, Piper TTS, RAG service, and
+worker. This sample does not launch video memory or record historical video.
 
 Open `https://localhost:8080`, connect, and start the camera. Start the
 microphone for voice interaction or use the text box:

@@ -2,9 +2,9 @@
   "models": {
     "guide_llm": {
       "category": "llm",
-      "adapter": {"preset": "llama_nemotron"},
-      "endpoint": {"base_url": "http://localhost:8106", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "llm"}
+      "adapter": {"preset": "nemotron3_nano"},
+      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "agent-llm"}
     },
     "vlm": {
       "category": "vlm",
