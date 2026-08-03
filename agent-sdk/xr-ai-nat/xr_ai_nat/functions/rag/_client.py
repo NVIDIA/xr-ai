@@ -3,7 +3,7 @@
 
 """Typed contracts and private client for document retrieval."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .._models import _StrictRequest
 from .._service.rpc import RPCClient
@@ -12,6 +12,13 @@ from .._service.rpc import RPCClient
 class RetrieveRequest(_StrictRequest):
     query: str = Field(min_length=1, description="Question or search phrase to retrieve context for.")
     top_k: int = Field(default=4, ge=1, le=20, description="Maximum matching chunks to return.")
+
+    @field_validator("query")
+    @classmethod
+    def query_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("query must not be blank")
+        return value
 
 
 class RetrievedChunk(BaseModel):

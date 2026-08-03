@@ -51,6 +51,10 @@ PROCESSES = [
     Process("llm",    "../../ai-services/llm/llama_nemotron",     "llama_nemotron_llm_server"),
     # Process("llm",  "../../ai-services/llm/nemotron3_nano",     "nemotron3_nano_llm_server"),
     Process("stt",    "../../ai-services/stt-server",             "stt_server"),
+    # Add these together when the application uses native document retrieval.
+    Process("embedding", "../../ai-services/embedding-server",    "embedding_server"),
+    Process("rag",    "../../services/rag-service",               "rag_service",
+            config="yaml/rag_service.yaml"),
     # Pick one TTS server
     Process("tts",    "../../ai-services/tts/piper",    "piper_tts_server"),
     # Process("tts",    "../../ai-services/tts/magpie",             "magpie_tts_server"),
@@ -73,6 +77,8 @@ cp ../../ai-services/vlm-server/vlm_server.yaml ./yaml/vlm_server.yaml
 cp ../../ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml ./yaml/llama_nemotron_llm_server.yaml
 # cp ../../ai-services/llm/nemotron3_nano/nemotron3_nano_llm_server.yaml ./yaml/nemotron3_nano_llm_server.yaml
 cp ../../ai-services/stt-server/stt_server.yaml ./yaml/stt_server.yaml
+cp ../../ai-services/embedding-server/embedding_server.yaml ./yaml/embedding_server.yaml
+cp ../../services/rag-service/rag_service.yaml ./yaml/rag_service.yaml
 cp ../../ai-services/tts/piper/piper_tts_server.yaml ./yaml/piper_tts_server.yaml
 # Or for Magpie (multilingual, GPU, ~2-5 s/sentence):
 cp ../../ai-services/tts/magpie/magpie_tts_server.yaml ./yaml/magpie_tts_server.yaml
@@ -84,6 +90,8 @@ cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./yaml/video_mcp_serv
 
 Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 `yaml/<command>.yaml` in the sample root and passes it as `--config`.
+For RAG, also point `rag_service.yaml` at an application-owned document
+directory and a model profile containing an `embedding` role.
 
 ## Calling these from a worker
 

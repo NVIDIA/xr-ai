@@ -17,9 +17,6 @@ from xr_ai_nat.functions._service.rpc import RPCServer
 from .index import DenseIndex
 from .service import RAGService
 
-_DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "rag_service.yaml"
-
-
 def _resolve(path: str, config_path: Path) -> Path:
     candidate = Path(path)
     return candidate if candidate.is_absolute() else (config_path.parent / candidate).resolve()
@@ -64,11 +61,11 @@ async def _serve(config: dict, config_path: Path, ready_file: Path | None) -> No
 
 def run() -> None:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--config", type=Path, default=None)
+    parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--ready-file", type=Path, default=None)
     args, _ = parser.parse_known_args()
     setup_logging("rag-service")
-    config_path = (args.config or _DEFAULT_CONFIG).resolve()
+    config_path = args.config.resolve()
     config = yaml.safe_load(config_path.read_text()) or {}
     asyncio.run(_serve(config, config_path, args.ready_file))
 

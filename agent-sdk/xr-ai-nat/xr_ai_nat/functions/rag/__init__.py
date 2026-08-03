@@ -6,7 +6,6 @@
 from ._client import (
     ListDocumentsRequest,
     ListDocumentsResult,
-    RAGClient,
     RAGHealthRequest,
     RAGHealthResult,
     RetrievedChunk,
@@ -18,7 +17,6 @@ from .functions import RAGFunctionsConfig
 __all__ = [
     "ListDocumentsRequest",
     "ListDocumentsResult",
-    "RAGClient",
     "RAGFunctionsConfig",
     "RAGHealthRequest",
     "RAGHealthResult",

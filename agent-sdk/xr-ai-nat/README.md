@@ -220,6 +220,29 @@ intentionally a whole-second offset before that event; the returned
 `timestamp_us` reports the exact frame selected. Current live frames are a
 separate hub capability, not part of `xr_video_memory`.
 
+## Document retrieval
+
+Install `xr-ai-nat[services]` and configure `xr_rag` with the private endpoint
+of `services/rag-service`:
+
+```yaml
+functions:
+  rag:
+    _type: xr_rag
+    endpoint: tcp://127.0.0.1:8340
+```
+
+The group exposes `retrieve(query, top_k)` for grounded passage lookup and
+`list_documents()` for collection discovery. Both functions return typed source
+paths; retrieval also returns cosine-similarity scores. Add
+`FunctionGroupRef("rag")` to a NAT agent's tool list rather than constructing a
+service client in application code.
+
+Start the embedding service before `rag-service`, and start the agent worker
+only after `rag-service` signals readiness. The retrieval service owns document
+loading, chunking, embedding-cache invalidation, and model calls; the NAT group
+owns its private RPC client.
+
 ## MCP compatibility
 
 Install `xr-ai-nat[mcp]` and pass an explicit list of native functions to
