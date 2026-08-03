@@ -7,6 +7,9 @@ from __future__ import annotations
 import pytest
 
 from xr_ai_models import (
+    AdapterSpec,
+    DeploymentSpec,
+    EndpointSpec,
     LLMSpec,
     STTSpec,
     TTSSpec,
@@ -65,10 +68,10 @@ agent_llm:
 """))
     spec = cfg.llm("agent_llm")
     assert isinstance(spec, LLMSpec)
-    assert spec.base_url        == "http://localhost:8107"
-    assert spec.model_name      == "llm"
-    assert spec.reasoning_field == "reasoning"
-    assert spec.capabilities["reasoning"] is True
+    assert spec.endpoint.base_url == "http://localhost:8107"
+    assert spec.adapter.model_name == "llm"
+    assert spec.adapter.reasoning_field == "reasoning"
+    assert spec.adapter.capabilities["reasoning"] is True
 
 
 def test_inline_spec_requires_category(tmp_path) -> None:
@@ -310,3 +313,406 @@ tts:
         await vlm.close()
         await stt.close()
         await tts.close()
+
+
+@pytest.mark.parametrize(
+    ("role", "category", "preset", "spec_type", "accessor", "base_url"),
+    [
+        ("llm", "llm", "nemotron3_nano", LLMSpec, "llm", "http://localhost:8107"),
+        ("vlm", "vlm", "cosmos_vlm", VLMSpec, "vlm", "http://localhost:8100"),
+        ("stt", "stt", "parakeet_stt", STTSpec, "stt", "http://localhost:8103"),
+        ("tts", "tts", "piper_tts", TTSSpec, "tts", "http://localhost:8105"),
+    ],
+)
+def test_every_role_loads_legacy_and_nested_profiles(
+    role,
+    category,
+    preset,
+    spec_type,
+    accessor,
+    base_url,
+) -> None:
+    legacy = load_models_config_from_dict({
+        role: {
+            "kind": f"preset:{preset}",
+            "base_url": base_url,
+        },
+    })
+    nested = load_models_config_from_dict({
+        "models": {
+            role: {
+                "category": category,
+                "adapter": {"preset": preset},
+                "endpoint": {
+                    "base_url": base_url,
+                    "readiness": "health",
+                },
+                "deployment": {
+                    "ownership": "managed",
+                    "service": role,
+                },
+            },
+        },
+    })
+
+    legacy_spec = getattr(legacy, accessor)(role)
+    nested_spec = getattr(nested, accessor)(role)
+    assert isinstance(legacy_spec, spec_type)
+    assert isinstance(nested_spec, spec_type)
+    assert legacy_spec.adapter == nested_spec.adapter
+    assert legacy_spec.endpoint == nested_spec.endpoint
+    assert legacy_spec.deployment == DeploymentSpec()
+    assert nested_spec.deployment == DeploymentSpec(
+        ownership="managed",
+        service=role,
+    )
+
+
+def test_nested_profile_separates_adapter_endpoint_and_deployment() -> None:
+    cfg = load_models_config_from_dict({
+        "models": {
+            "agent_llm": {
+                "category": "llm",
+                "adapter": {
+                    "preset": "nemotron3_nano",
+                    "reasoning_field": "reasoning_content",
+                },
+                "endpoint": {
+                    "base_url": "https://models.example.test",
+                    "api_key_env": "MODEL_TOKEN",
+                    "timeout": 90,
+                    "readiness": "none",
+                },
+                "deployment": {
+                    "ownership": "reused",
+                    "service": "agent-llm",
+                },
+            },
+        },
+    })
+
+    spec = cfg.llm("agent_llm")
+    assert spec.adapter == AdapterSpec(
+        kind="openai_compat",
+        model_name="llm",
+        reasoning_field="reasoning_content",
+        capabilities={
+            "streaming": True,
+            "tool_calls": True,
+            "reasoning": True,
+        },
+        default_extras={
+            "chat_template_kwargs": {"enable_thinking": False},
+        },
+    )
+    assert spec.endpoint == EndpointSpec(
+        base_url="https://models.example.test",
+        api_key_env="MODEL_TOKEN",
+        timeout=90.0,
+        readiness="none",
+    )
+    assert spec.deployment == DeploymentSpec(
+        ownership="reused",
+        service="agent-llm",
+    )
+    assert cfg.required_credentials == ("MODEL_TOKEN",)
+
+
+def test_direct_nested_mapping_without_models_root_is_supported() -> None:
+    cfg = load_models_config_from_dict({
+        "vlm": {
+            "category": "vlm",
+            "adapter": {"preset": "cosmos_vlm"},
+            "endpoint": {"base_url": "http://localhost:8100"},
+        },
+    })
+    assert cfg.vlm("vlm").adapter.model_name == "vlm"
+
+
+def test_render_shape_fixture_remains_compatible() -> None:
+    cfg = load_models_config_from_dict({
+        "llm": {
+            "kind": "preset:llama_nemotron",
+            "base_url": "http://localhost:8106",
+        },
+        "agent_llm": {
+            "kind": "preset:nemotron3_nano",
+            "base_url": "http://localhost:8107",
+        },
+        "stt": {
+            "kind": "preset:parakeet_stt",
+            "base_url": "http://localhost:8103",
+        },
+        "tts": {
+            "kind": "preset:piper_tts",
+            "base_url": "http://localhost:8105",
+        },
+        "vlm": {
+            "kind": "preset:cosmos_vlm",
+            "base_url": "http://localhost:8100",
+        },
+    }, source="render-shape fixture")
+
+    assert set(cfg.entries) == {"llm", "agent_llm", "stt", "tts", "vlm"}
+    assert cfg.llm("agent_llm").adapter.reasoning_field == "reasoning"
+    assert cfg.vlm("vlm").endpoint.base_url == "http://localhost:8100"
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        (
+            {
+                "category": "llm",
+                "adapter": [],
+                "endpoint": {"base_url": "http://localhost"},
+            },
+            "adapter must be a mapping",
+        ),
+        (
+            {
+                "category": "llm",
+                "adapter": {"kind": "other", "model_name": "llm"},
+                "endpoint": {"base_url": "http://localhost"},
+            },
+            "unsupported adapter kind",
+        ),
+        (
+            {
+                "category": "llm",
+                "adapter": {"kind": "openai_compat", "model_name": "llm"},
+                "endpoint": {
+                    "base_url": "http://localhost",
+                    "readiness": "socket",
+                },
+            },
+            "unsupported readiness",
+        ),
+        (
+            {
+                "category": "stt",
+                "adapter": {"kind": "openai_compat"},
+                "endpoint": {
+                    "base_url": "http://localhost",
+                    "api_key_env": 123,
+                },
+            },
+            "api_key_env",
+        ),
+        (
+            {
+                "category": "tts",
+                "adapter": {"kind": "openai_compat"},
+                "endpoint": {
+                    "base_url": "http://localhost",
+                    "timeout": 0,
+                },
+            },
+            "timeout",
+        ),
+        (
+            {
+                "category": "vlm",
+                "adapter": {
+                    "kind": "openai_compat",
+                    "model_name": "vlm",
+                    "capabilities": [],
+                },
+                "endpoint": {"base_url": "http://localhost"},
+            },
+            "capabilities must be a mapping",
+        ),
+        (
+            {
+                "category": "stt",
+                "adapter": {"kind": "openai_compat"},
+                "endpoint": {"base_url": "http://localhost"},
+                "deployment": {"ownership": "managed"},
+            },
+            "require a service",
+        ),
+        (
+            {
+                "category": "stt",
+                "adapter": {"kind": "openai_compat"},
+                "endpoint": {"base_url": "http://localhost"},
+                "deployment": {"ownership": "borrowed"},
+            },
+            "unsupported deployment ownership",
+        ),
+        (
+            {
+                "category": "stt",
+                "base_url": "http://legacy",
+                "adapter": {"kind": "openai_compat"},
+                "endpoint": {"base_url": "http://nested"},
+            },
+            "also declared at role level",
+        ),
+    ],
+)
+def test_invalid_nested_profiles_are_rejected(body, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        load_models_config_from_dict({"models": {"role": body}})
+
+
+def test_role_specs_keep_read_only_flat_attribute_compatibility() -> None:
+    spec = LLMSpec(
+        adapter=AdapterSpec(model_name="llm"),
+        endpoint=EndpointSpec(base_url="http://localhost", readiness="none"),
+    )
+
+    assert spec.model_name == "llm"
+    assert spec.base_url == "http://localhost"
+    assert spec.health_check is False
+    with pytest.raises(AttributeError):
+        spec.base_url = "http://other"
+
+
+def test_role_specs_support_legacy_keyword_construction() -> None:
+    llm_deployment = DeploymentSpec(ownership="managed", service="llm")
+    vlm_deployment = DeploymentSpec(ownership="managed", service="vlm")
+    stt_deployment = DeploymentSpec(ownership="managed", service="stt")
+    tts_deployment = DeploymentSpec(ownership="managed", service="tts")
+    llm = LLMSpec(
+        base_url="http://llm",
+        model_name="reasoner",
+        api_key_env="LLM_API_KEY",
+        reasoning_field="reasoning_content",
+        capabilities={"tools": True},
+        default_extras={"temperature": 0.2},
+        timeout=12.0,
+        health_check=False,
+        deployment=llm_deployment,
+    )
+    vlm = VLMSpec(
+        base_url="http://vlm",
+        model_name="vision",
+        api_key_env="VLM_API_KEY",
+        capabilities={"vision": True},
+        default_extras={"max_tokens": 128},
+        timeout=13.0,
+        health_check=False,
+        deployment=vlm_deployment,
+    )
+    stt = STTSpec(
+        base_url="http://stt",
+        api_key_env="STT_API_KEY",
+        timeout=14.0,
+        health_check=False,
+        deployment=stt_deployment,
+    )
+    tts = TTSSpec(
+        base_url="http://tts",
+        api_key_env="TTS_API_KEY",
+        timeout=15.0,
+        health_check=False,
+        deployment=tts_deployment,
+    )
+
+    assert llm.adapter == AdapterSpec(
+        model_name="reasoner",
+        reasoning_field="reasoning_content",
+        capabilities={"tools": True},
+        default_extras={"temperature": 0.2},
+    )
+    assert llm.endpoint == EndpointSpec(
+        base_url="http://llm",
+        api_key_env="LLM_API_KEY",
+        timeout=12.0,
+        readiness="none",
+    )
+    assert vlm.adapter == AdapterSpec(
+        model_name="vision",
+        capabilities={"vision": True},
+        default_extras={"max_tokens": 128},
+    )
+    assert vlm.endpoint == EndpointSpec(
+        base_url="http://vlm",
+        api_key_env="VLM_API_KEY",
+        timeout=13.0,
+        readiness="none",
+    )
+    assert stt.endpoint == EndpointSpec(
+        base_url="http://stt",
+        api_key_env="STT_API_KEY",
+        timeout=14.0,
+        readiness="none",
+    )
+    assert tts.endpoint == EndpointSpec(
+        base_url="http://tts",
+        api_key_env="TTS_API_KEY",
+        timeout=15.0,
+        readiness="none",
+    )
+    assert llm.deployment == llm_deployment
+    assert vlm.deployment == vlm_deployment
+    assert stt.deployment == stt_deployment
+    assert tts.deployment == tts_deployment
+
+
+def test_role_specs_support_legacy_positional_construction() -> None:
+    llm_deployment = DeploymentSpec(ownership="managed", service="llm")
+    vlm_deployment = DeploymentSpec(ownership="managed", service="vlm")
+    stt_deployment = DeploymentSpec(ownership="managed", service="stt")
+    tts_deployment = DeploymentSpec(ownership="managed", service="tts")
+    llm = LLMSpec(
+        "openai_compat",
+        "http://llm",
+        "reasoner",
+        "LLM_API_KEY",
+        "reasoning_content",
+        {"tools": True},
+        {"temperature": 0.2},
+        12.0,
+        False,
+        llm_deployment,
+    )
+    vlm = VLMSpec(
+        "openai_compat",
+        "http://vlm",
+        "vision",
+        "VLM_API_KEY",
+        {"vision": True},
+        {"max_tokens": 128},
+        13.0,
+        False,
+        vlm_deployment,
+    )
+    stt = STTSpec(
+        "openai_compat",
+        "http://stt",
+        "STT_API_KEY",
+        14.0,
+        False,
+        stt_deployment,
+    )
+    tts = TTSSpec(
+        "openai_compat",
+        "http://tts",
+        "TTS_API_KEY",
+        15.0,
+        False,
+        tts_deployment,
+    )
+
+    assert llm.model_name == "reasoner"
+    assert llm.reasoning_field == "reasoning_content"
+    assert llm.default_extras == {"temperature": 0.2}
+    assert llm.health_check is False
+    assert vlm.model_name == "vision"
+    assert vlm.capabilities == {"vision": True}
+    assert vlm.default_extras == {"max_tokens": 128}
+    assert vlm.health_check is False
+    assert stt.base_url == "http://stt"
+    assert stt.api_key_env == "STT_API_KEY"
+    assert stt.timeout == 14.0
+    assert stt.health_check is False
+    assert tts.base_url == "http://tts"
+    assert tts.api_key_env == "TTS_API_KEY"
+    assert tts.timeout == 15.0
+    assert tts.health_check is False
+    assert llm.deployment == llm_deployment
+    assert vlm.deployment == vlm_deployment
+    assert stt.deployment == stt_deployment
+    assert tts.deployment == tts_deployment

@@ -37,6 +37,11 @@ end-to-end, replacing its separate `model_backend` and `models_yaml` switches.
 This keeps endpoint selection and process lifecycle in one profile without
 coupling the launcher to the model SDK.
 
+The loader accepts nested JSON or YAML profiles, an optional `models` root,
+direct role mappings, and existing flat entries. Legacy flat constructors and
+read-only attribute aliases keep current callers compatible. Render profiles
+remain unchanged pending their owning refactor.
+
 ### 2026-07-30 — Simple VLM adopts the native voice runtime
 
 `simple-vlm-example` is the first sample migrated from direct
