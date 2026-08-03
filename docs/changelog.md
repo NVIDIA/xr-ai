@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-03 — Native RAG uses a typed service boundary
+
+Dense document retrieval is a reusable `rag-service` capability exposed to
+agents as the native `xr_rag` NAT function group. The service owns document
+loading, chunking, content-addressed embedding caches, and retrieval; its
+private msgpack/ZMQ transport remains behind typed NAT contracts. Embedding
+HTTP is added to `xr-ai-models` alongside the existing model protocols, and a
+small persistent vLLM embedding server joins the shared model-server stack.
+This replaces the prototype's FastMCP boundary and synchronous HTTP client
+without coupling samples to the retrieval implementation.
+
 ### 2026-07-31 — GitHub Pages publishes immutable release documentation
 
 The documentation site now uses `sphinx-multiversion` to render `main` as

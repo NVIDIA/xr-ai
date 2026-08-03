@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from xr_ai_models import (
     Capabilities,
+    EmbeddingService,
     LLMService,
+    OpenAICompatEmbedding,
     OpenAICompatLLM,
     OpenAICompatSTT,
     OpenAICompatTTS,
@@ -20,6 +22,11 @@ from xr_ai_models import (
 def test_openai_compat_llm_satisfies_llm_service() -> None:
     llm = OpenAICompatLLM("http://stub", "llm")
     assert isinstance(llm, LLMService)
+
+
+def test_openai_compat_embedding_satisfies_embedding_service() -> None:
+    embedding = OpenAICompatEmbedding("http://stub", "embed")
+    assert isinstance(embedding, EmbeddingService)
 
 
 def test_openai_compat_vlm_satisfies_vlm_service() -> None:

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import warnings
 
-from ._factory import make_llm, make_stt, make_tts, make_vlm
+from ._factory import make_embedding, make_llm, make_stt, make_tts, make_vlm
 
 warnings.warn(
     "xr_ai_models.factory is deprecated; import from xr_ai_models instead. "
@@ -21,4 +21,4 @@ warnings.warn(
     stacklevel=2,
 )
 
-__all__ = ["make_llm", "make_stt", "make_tts", "make_vlm"]
+__all__ = ["make_embedding", "make_llm", "make_stt", "make_tts", "make_vlm"]

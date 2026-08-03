@@ -49,7 +49,7 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| model-servers (all 4 models) | ~70 GB |
+| model-servers (shared models) | ~74 GB |
 | simple-vlm-example (standalone) | ~23 GB |
 | xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
@@ -121,13 +121,13 @@ the demo itself: start `model-servers` once, then run the demo as many times
 as you like without reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
-abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS
-behind four service protocols. Each sample ships a model config that names the
+abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
+embeddings behind typed service protocols. Each sample ships a model config that names the
 logical models the worker needs (`llm`, `vlm`, `stt`, …) with
 preset references that pre-fill model-specific quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings).  Workers call
 `make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
-"stt")` / `make_tts(config, "tts")` — no hand-rolled httpx clients, no model
+"stt")` / `make_tts(config, "tts")` / `make_embedding(config, "embedding")` — no hand-rolled httpx clients, no model
 quirks leaking out of the SDK.  Full quickstart and the built-in preset
 table: [`agent-sdk/xr-ai-models/README.md`](agent-sdk/xr-ai-models/README.md).
 
@@ -140,7 +140,7 @@ on startup.
 
 ### Model servers (shared AI services)
 
-`model-servers` starts the four inference services used across demos and exits
+`model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running `xr-render-demo`, or whenever you want to
 pre-warm models:
@@ -312,7 +312,7 @@ cd agent-samples/model-servers
 uv sync && uv run model_servers
 ```
 
-This exits immediately once all four services are ready.  Weights stay loaded
+This exits immediately once all services are ready. Weights stay loaded
 in the background.
 
 #### Step 2 — Start the demo

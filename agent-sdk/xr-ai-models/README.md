@@ -6,8 +6,8 @@
 # xr-ai-models
 
 Unified service protocols and OpenAI-compatible HTTP clients for the xr-ai
-model layer.  Worker code depends on the four protocols
-(`LLMService`, `VLMService`, `STTService`, `TTSService`) and constructs
+model layer. Worker code depends on typed protocols including `LLMService`,
+`VLMService`, `STTService`, `TTSService`, and `EmbeddingService`, and constructs
 concrete clients from a `models.yaml` config — no hand-rolled httpx calls
 in callers, no model quirks leaking out of this package.
 
@@ -66,6 +66,7 @@ Built-in presets — see `xr_ai_models/presets/`:
 | `llama_nemotron` | llama-nemotron-llm-server | OpenAI tool calling via llama3_json (server-side) |
 | `nemotron3_nano` | nemotron3-nano-llm-server | reasoning field: `reasoning` |
 | `nemotron_omni`  | nemotron-omni-llm-server  | reasoning field: `reasoning_content`, vision + video |
+| `nemotron_embedding` | embedding-server | OpenAI-compatible dense embeddings |
 | `parakeet_stt`   | stt-server               | |
 | `piper_tts`      | tts/piper                | |
 | `magpie_tts`     | tts/magpie               | |
@@ -147,6 +148,10 @@ class STTService(Protocol):
 class TTSService(Protocol):
     async def synthesize(self, text: str, *, response_format="wav",
                          timeout=None) -> bytes: ...
+    async def health(self) -> bool: ...
+
+class EmbeddingService(Protocol):
+    async def embed(self, texts, *, timeout=None) -> list[list[float]]: ...
     async def health(self) -> bool: ...
 ```
 

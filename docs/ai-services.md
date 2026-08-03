@@ -13,7 +13,7 @@ Multiple reusable HTTP servers are available as launchable peers of
 `server-runtime/`. All expose an OpenAI-compatible REST API so agent workers
 can call them with any OpenAI SDK client or plain `httpx` / `requests`.
 Reference services cover vision-language reasoning, speech recognition,
-text-to-speech, and large language models. Three LLM backends ship
+text-to-speech, embeddings, and large language models. Three LLM backends ship
 side-by-side under `ai-services/llm/` — pick one per sample based on the
 tool-calling / reasoning / hardware trade-offs documented below.
 
@@ -26,8 +26,10 @@ tool-calling / reasoning / hardware trade-offs documented below.
 | `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4 / FP8 / BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
+| `ai-services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
+| `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded-video service + live hub IPC |
 | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8220 | — | FastMCP → vlm-server (`ask_image` tool) |
 
@@ -88,7 +90,7 @@ Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on [`agent-sdk/xr-ai-models`](../agent-sdk/xr-ai-models/README.md),
 load a per-sample model config, and construct service clients via
-`make_llm` / `make_vlm` / `make_stt` / `make_tts`.  The SDK encapsulates the
+`make_llm` / `make_vlm` / `make_stt` / `make_tts` / `make_embedding`. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings) so callers
 never branch on backend.
@@ -106,7 +108,7 @@ async with make_llm(config, "agent_llm") as llm:
     print(resp.content, resp.reasoning)
 ```
 
-A matching `models.yaml` for the four built-in service backends:
+A matching `models.yaml` for the built-in service categories:
 
 ```yaml
 agent_llm:
@@ -124,6 +126,10 @@ stt:
 tts:
   kind:     preset:piper_tts
   base_url: http://localhost:8105
+
+embedding:
+  kind:     preset:nemotron_embedding
+  base_url: http://localhost:8109
 ```
 
 Swapping a backend is a `kind:` + `base_url:` edit in YAML; worker code does
@@ -175,7 +181,7 @@ exposes `/v1/health`.
 ## vLLM model persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
-`nemotron3_nano_llm_server`) **survive stack restarts by design**.
+`nemotron3_nano_llm_server`, `embedding_server`) **survive stack restarts by design**.
 `nemotron_omni_llm_server` is foreground (dies with the wrapper). Each
 persistent wrapper script checks its health endpoint before spawning vLLM:
 
@@ -207,8 +213,8 @@ list if you change the port or container name.
 
 ## Choosing the vLLM runtime (pip vs Docker)
 
-All four vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
-`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`) accept a
+All vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`) accept a
 `vllm_backend:` key in their YAML to pick how vLLM is hosted:
 
 | `vllm_backend` | Runtime | Default | Use when |

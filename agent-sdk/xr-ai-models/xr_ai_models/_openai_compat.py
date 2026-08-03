@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""OpenAI-compatible HTTP clients for the four service protocols.
+"""OpenAI-compatible HTTP clients for model service protocols.
 
 Per-model quirks (reasoning field name, mandatory ``chat_template_kwargs``)
 are absorbed by ``reasoning_field`` and ``default_extras`` on the
@@ -635,6 +635,69 @@ class OpenAICompatTTS:
             await self._client.aclose()
 
     async def __aenter__(self) -> "OpenAICompatTTS":
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.close()
+
+
+# ── Embeddings ────────────────────────────────────────────────────────────
+
+
+class OpenAICompatEmbedding:
+    """OpenAI-compatible ``/v1/embeddings`` client."""
+
+    def __init__(
+        self,
+        base_url: str,
+        model_name: str,
+        *,
+        api_key_env: str | None = None,
+        timeout: float = 60.0,
+        health_check: bool = True,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        base = base_url.rstrip("/")
+        self._url = base + "/v1/embeddings"
+        self.health_url = base + "/health"
+        self._model = model_name
+        self._api_key = os.environ.get(api_key_env) if api_key_env else None
+        _warn_if_cleartext_key(base_url, self._api_key)
+        self._health_check = health_check
+        self._client = client or httpx.AsyncClient(timeout=timeout, trust_env=False)
+        self._owns_client = client is None
+
+    async def embed(
+        self,
+        texts: Sequence[str],
+        *,
+        timeout: float | None = None,
+    ) -> list[list[float]]:
+        if not texts:
+            return []
+        kwargs: dict[str, Any] = {
+            "json": {"model": self._model, "input": list(texts)},
+            "headers": _auth_headers(self._api_key),
+        }
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        response = await self._client.post(self._url, **kwargs)
+        if response.is_error:
+            logger.error("embedding {} {}: {}", self._model, response.status_code, response.text[:300])
+        response.raise_for_status()
+        rows = sorted(response.json()["data"], key=lambda row: row["index"])
+        if len(rows) != len(texts):
+            raise ValueError(f"embedding service returned {len(rows)} vectors for {len(texts)} inputs")
+        return [[float(value) for value in row["embedding"]] for row in rows]
+
+    async def health(self) -> bool:
+        return await _http_health(self._client, self.health_url, self._health_check)
+
+    async def close(self) -> None:
+        if self._owns_client:
+            await self._client.aclose()
+
+    async def __aenter__(self) -> "OpenAICompatEmbedding":
         return self
 
     async def __aexit__(self, *exc: Any) -> None:

@@ -20,7 +20,7 @@ from . import presets as _presets
 from ._utils import merge_dicts
 
 
-Category = Literal["llm", "vlm", "stt", "tts"]
+Category = Literal["llm", "vlm", "stt", "tts", "embedding"]
 ModelKind = Literal["openai_compat"]
 Ownership = Literal["managed", "reused", "external"]
 
@@ -82,8 +82,19 @@ class TTSSpec:
     deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
 
 
-Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec
-T = TypeVar("T", LLMSpec, VLMSpec, STTSpec, TTSSpec)
+@dataclass(frozen=True)
+class EmbeddingSpec:
+    kind: ModelKind = KIND_OPENAI_COMPAT
+    base_url: str = ""
+    model_name: str = ""
+    api_key_env: str | None = None
+    timeout: float = 60.0
+    health_check: bool = True
+    deployment: DeploymentSpec = field(default_factory=DeploymentSpec)
+
+
+Spec = LLMSpec | VLMSpec | STTSpec | TTSSpec | EmbeddingSpec
+T = TypeVar("T", LLMSpec, VLMSpec, STTSpec, TTSSpec, EmbeddingSpec)
 
 
 @dataclass(frozen=True)
@@ -107,6 +118,9 @@ class ModelsConfig:
 
     def tts(self, name: str) -> TTSSpec:
         return _typed(self.entries, name, TTSSpec)
+
+    def embedding(self, name: str) -> EmbeddingSpec:
+        return _typed(self.entries, name, EmbeddingSpec)
 
     @property
     def required_credentials(self) -> tuple[str, ...]:
@@ -203,7 +217,7 @@ def _build_spec(name: str, body: dict[str, Any]) -> Spec:
             f" but entry overrides to {explicit_category!r}"
         )
     category = preset_category or explicit_category
-    if category not in {"llm", "vlm", "stt", "tts"}:
+    if category not in {"llm", "vlm", "stt", "tts", "embedding"}:
         raise ValueError(
             f"{name!r}: missing or unknown category (got {category!r});"
             " presets set it implicitly — set ``category:`` if not using one"
@@ -245,6 +259,12 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         return STTSpec(**common, timeout=float(body.get("timeout", 30.0)))
     if category == "tts":
         return TTSSpec(**common, timeout=float(body.get("timeout", 30.0)))
+    if category == "embedding":
+        return EmbeddingSpec(
+            **common,
+            model_name=_require_str(body, "model_name"),
+            timeout=float(body.get("timeout", 60.0)),
+        )
     raise AssertionError(category)
 
 
