@@ -8,7 +8,9 @@
 The public voice-session API for XR agents. Pipecat implements the pipeline,
 but applications work with XR concepts rather than Pipecat modules:
 
-- `VoiceSession` owns readiness, hub transport, private pipeline assembly, signals, execution, and cleanup.
+- `VoiceSession` owns readiness, hub transport, private pipeline assembly,
+  signals, execution, and cleanup. Its default hub transport opens only after
+  service probes succeed.
 - `VoiceHandler` is an async callable from `VoiceQuery` to text or a text stream.
 - `TextMessageInput` routes typed participant messages through the same turn path as speech.
 - `HubVoiceTransport` is available when an application needs to share one transport explicitly.
@@ -32,7 +34,8 @@ async with session:            # awaits STT/TTS readiness, touches ready_file
 ```
 
 A handler may also return an `AsyncIterator[str]` to stream the reply token by
-token. Typed messages route through the same path via `TextMessageInput`.
+token. Typed messages route through the same path via `TextMessageInput`; data
+received outside an active `run()` is ignored.
 
 `VoiceSession.run()` accepts participant lifecycle callbacks, a turn observer,
 and explicit follow-up policies. `queue_queries` preserves FIFO execution per

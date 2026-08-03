@@ -4,8 +4,10 @@
 """Contract tests for shared voice-worker lifecycle primitives."""
 from __future__ import annotations
 
+import pytest
 from xr_ai_hub import DataMessage
 from xr_ai_voice import TextMessageInput, VadConfig, VoiceSession
+from xr_ai_voice import _session as session_module
 from xr_ai_voicegate import VoiceGateConfig
 
 
@@ -31,6 +33,7 @@ class _Session:
     def __init__(self) -> None:
         self.transport = _Transport()
         self.queries: list[tuple[str, str, bool, int | None]] = []
+        self.is_running = True
 
     async def enqueue_query(
         self,
@@ -80,6 +83,22 @@ async def test_data_query_adapter_routes_text_and_ignores_control_topics() -> No
     assert session.queries == [("alice", "HELLO", True, 2)]
 
 
+async def test_data_query_adapter_drops_text_while_session_is_stopped() -> None:
+    session = _Session()
+    session.is_running = False
+    TextMessageInput(session=session)  # type: ignore[arg-type]
+
+    await session.transport.endpoint.callback(DataMessage(
+        participant_id="alice",
+        topic="",
+        pts_us=2,
+        data=b"hello",
+    ))
+
+    assert session.transport.target_participant == ""
+    assert session.queries == []
+
+
 async def test_voice_session_owns_readiness_ready_file_and_cleanup(tmp_path) -> None:
     stt = _Service()
     tts = _Service()
@@ -104,3 +123,62 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(tmp_path) -> 
     assert stt.closed == 1
     assert tts.closed == 1
     assert extra.closed == 1
+
+
+async def test_voice_session_defers_default_transport_until_services_are_ready(
+    monkeypatch,
+) -> None:
+    transports: list[_Transport] = []
+
+    class ProbeService(_Service):
+        async def health(self) -> bool:
+            assert transports == []
+            return True
+
+    def make_transport() -> _Transport:
+        transport = _Transport()
+        transports.append(transport)
+        return transport
+
+    monkeypatch.setattr(session_module, "HubVoiceTransport", make_transport)
+    session = VoiceSession(
+        stt=ProbeService(),  # type: ignore[arg-type]
+        tts=ProbeService(),  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+    )
+
+    assert transports == []
+    async with session:
+        assert session.transport is transports[0]
+
+    assert transports[0].shutdown_called
+
+
+async def test_voice_session_cleans_up_when_readiness_fails(monkeypatch) -> None:
+    class FailingService(_Service):
+        async def health(self) -> bool:
+            raise RuntimeError("unavailable")
+
+    transports: list[_Transport] = []
+    monkeypatch.setattr(
+        session_module,
+        "HubVoiceTransport",
+        lambda: transports.append(_Transport()),
+    )
+    stt = FailingService()
+    tts = _Service()
+    session = VoiceSession(
+        stt=stt,  # type: ignore[arg-type]
+        tts=tts,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+    )
+
+    with pytest.raises(RuntimeError, match="unavailable"):
+        async with session:
+            pass
+
+    assert transports == []
+    assert stt.closed == 1
+    assert tts.closed == 1

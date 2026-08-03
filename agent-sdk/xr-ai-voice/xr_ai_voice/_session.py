@@ -49,8 +49,20 @@ class VoiceSession:
         self.closeables = tuple(closeables)
         self.text_topic = text_topic
         self.idle_timeout_secs = idle_timeout_secs
-        self.transport = transport or HubVoiceTransport()
+        self._transport = transport
         self._handler_processor: _VoiceHandlerProcessor | None = None
+
+    @property
+    def transport(self) -> HubVoiceTransport:
+        """Return the transport, constructing the default only when needed."""
+        if self._transport is None:
+            self._transport = HubVoiceTransport()
+        return self._transport
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the session currently accepts voice or text queries."""
+        return self._handler_processor is not None
 
     async def __aenter__(self) -> "VoiceSession":
         probes = {
@@ -58,9 +70,14 @@ class VoiceSession:
             "tts": self.tts.health,
             **self.probes,
         }
-        await wait_for_services(probes)
-        if self.ready_file:
-            self.ready_file.touch()
+        try:
+            await wait_for_services(probes)
+            _ = self.transport
+            if self.ready_file:
+                self.ready_file.touch()
+        except BaseException:
+            await self.close()
+            raise
         return self
 
     async def run(
@@ -153,7 +170,8 @@ class VoiceSession:
 
     async def close(self) -> None:
         """Release transport and model clients; safe to call without a context manager."""
-        self.transport.shutdown()
+        if self._transport is not None:
+            self._transport.shutdown()
         seen: set[int] = set()
         for service in (self.stt, self.tts, *self.closeables):
             if id(service) in seen:

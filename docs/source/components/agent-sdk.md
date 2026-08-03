@@ -12,10 +12,11 @@ from:
   `STTService`, `TTSService`) plus OpenAI-compatible HTTP clients, driven by a
   model-profile configuration. Swapping a backend is a configuration
   edit, not a code edit.
-- **`xr-ai-pipecat`** — the unified voice pipeline. One call,
-  `make_voice_pipeline`, composes input → VAD/STT → voice gate → brain →
-  streaming TTS → output. Sample workers subclass one class (`BrainProcessor`)
-  and hand it to the factory.
+- **`xr-ai-voice`** — the native voice runtime. `VoiceSession` owns readiness,
+  hub transport, voice gating, streaming responses, signals, and cleanup while
+  applications provide a `VoiceHandler`.
+- **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
+  consumers such as `xr-render-demo`.
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
@@ -221,12 +222,43 @@ lifecycle ownership.
 
 ---
 
+## xr-ai-voice
+
+Native voice applications work with participant-aware turns rather than
+Pipecat processors. A handler returns a string or an async stream of strings:
+
+```python
+from xr_ai_voice import VadConfig, VoiceSession
+
+session = VoiceSession(
+    stt=stt,
+    tts=tts,
+    vad=VadConfig(),
+    voice_gate=voice_gate_config,
+    probes={"vlm": vlm.health},
+    ready_file=ready_file,
+    closeables=(vlm,),
+)
+async with session:
+    await session.run(handler, on_participant_left=release_participant)
+```
+
+`TextMessageInput` routes typed messages through the same turn path as speech
+and ignores data received outside an active `run()`. The default hub transport
+is opened only after readiness probes succeed; failed readiness closes the
+session's model clients without opening hub sockets.
+NAT applications create handlers with
+`xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` preserves participant
+routing, cancels superseded or interrupted turns, installs signal handlers,
+and closes its transport and model clients.
+
 ## xr-ai-pipecat
 
 The unified [Pipecat](https://github.com/pipecat-ai/pipecat) voice pipeline for
-xr-ai agents. The top-level entry point is `make_voice_pipeline`; sample
-workers subclass `BrainProcessor` and hand the instance to the factory.
-Everything else — VAD/STT, voice gate, streaming TTS — is provided.
+xr-ai agents that still use the direct processor API. The top-level entry point
+is `make_voice_pipeline`; those workers subclass `BrainProcessor` and hand the
+instance to the factory. Everything else — VAD/STT, voice gate, streaming TTS —
+is provided.
 
 ### make_voice_pipeline
 
