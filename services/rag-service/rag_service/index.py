@@ -77,6 +77,12 @@ class DenseIndex:
         self._query_prefix = query_prefix
         self._min_score = min_score
 
+    async def health(self) -> bool:
+        try:
+            return await self._embedder.health()
+        except Exception:
+            return False
+
     @classmethod
     async def build(
         cls,
@@ -124,8 +130,11 @@ class DenseIndex:
             try:
                 with np.load(cache_path) as cached:
                     vectors = cached["vectors"]
-                if vectors.shape[0] != len(chunks):
-                    vectors = None
+                _validate_vectors(
+                    vectors,
+                    row_count=len(chunks),
+                    embedding_dim=embedding_dim,
+                )
             except (OSError, KeyError, ValueError):
                 vectors = None
         if vectors is None:
@@ -133,7 +142,18 @@ class DenseIndex:
             texts = [passage_prefix + chunk.text for chunk in chunks]
             for offset in range(0, len(texts), batch_size):
                 rows.extend(await embedder.embed(texts[offset:offset + batch_size]))
-            vectors = np.asarray(rows, dtype=np.float32)[:, :embedding_dim]
+            vectors = np.asarray(rows, dtype=np.float32)
+            if vectors.ndim != 2 or vectors.shape[1] < embedding_dim:
+                raise ValueError(
+                    f"embedding service returned shape {vectors.shape}; "
+                    f"expected {len(chunks)} rows with at least {embedding_dim} columns"
+                )
+            vectors = vectors[:, :embedding_dim]
+            _validate_vectors(
+                vectors,
+                row_count=len(chunks),
+                embedding_dim=embedding_dim,
+            )
             vectors = _normalize(vectors)
             temporary = cache_path.with_name(f".{cache_path.name}.{os.getpid()}.tmp.npz")
             np.savez_compressed(temporary, vectors=vectors)
@@ -149,12 +169,17 @@ class DenseIndex:
         )
 
     async def retrieve(self, query: str, *, top_k: int) -> list[dict]:
-        vector = np.asarray(
-            (await self._embedder.embed([self._query_prefix + query]))[0][
-                : self._embedding_dim
-            ],
+        rows = np.asarray(
+            await self._embedder.embed([self._query_prefix + query]),
             dtype=np.float32,
-        )[None, :]
+        )
+        if rows.ndim != 2 or rows.shape[1] < self._embedding_dim:
+            raise ValueError(
+                f"embedding service returned shape {rows.shape}; expected one row "
+                f"with at least {self._embedding_dim} columns"
+            )
+        vector = rows[:, : self._embedding_dim]
+        _validate_vectors(vector, row_count=1, embedding_dim=self._embedding_dim)
         scores = self.vectors @ _normalize(vector)[0]
         indices = [
             index
@@ -174,3 +199,16 @@ class DenseIndex:
 def _normalize(vectors: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
     return vectors / np.maximum(norms, 1e-12)
+
+
+def _validate_vectors(
+    vectors: np.ndarray,
+    *,
+    row_count: int,
+    embedding_dim: int,
+) -> None:
+    expected = (row_count, embedding_dim)
+    if vectors.shape != expected:
+        raise ValueError(f"embedding vectors have shape {vectors.shape}; expected {expected}")
+    if not np.isfinite(vectors).all():
+        raise ValueError("embedding vectors contain non-finite values")

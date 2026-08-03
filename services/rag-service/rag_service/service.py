@@ -22,8 +22,7 @@ class RAGService:
                 raise ValueError("top_k must be between 1 and 20")
             results = await self._index.retrieve(query, top_k=top_k)
             logger.info(
-                "rag retrieval query={!r} results={}",
-                query,
+                "rag retrieval results={}",
                 [
                     {"source": result["source"], "score": round(result["score"], 3)}
                     for result in results
@@ -34,7 +33,7 @@ class RAGService:
             return {"documents": self._index.documents}
         if method == "get_health":
             return {
-                "ready": True,
+                "ready": await self._index.health(),
                 "document_count": len(self._index.documents),
                 "chunk_count": len(self._index.chunks),
             }

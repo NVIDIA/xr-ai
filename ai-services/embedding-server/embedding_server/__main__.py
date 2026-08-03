@@ -6,8 +6,8 @@ embedding_server — vLLM launcher for nvidia/llama-nemotron-embed-1b-v2.
 
 Reads config and dispatches through ``xr_ai_vllm.serve`` to either the
 pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm`` docker container
-(per ``vllm_backend`` in YAML). Runs vLLM with ``--runner pooling --convert
-embed`` so it exposes ``/v1/embeddings``; chat/completions is not available.
+(per ``vllm_backend`` in YAML). The model config selects vLLM's pooling runner
+and exposes ``/v1/embeddings``; chat/completions is not available.
 
 Accepts ``--config <path>.yaml`` (auto-passed by xr-ai-launcher).
 
@@ -24,8 +24,6 @@ Config keys
     max_model_len:           int    vLLM --max-model-len (default: 8192).
     gpu_memory_utilization:  float  vLLM --gpu-memory-utilization (default: 0.20).
     enforce_eager:           bool   Skip CUDA graph capture (default: false).
-    embedding_dim:           int    Matryoshka truncation dimension for consumers
-                                    (metadata only — not passed to vLLM).
     vllm_backend:            str    "pip" (default) or "docker".
     vllm_image:              str    NGC image when vllm_backend=docker
                                     (default: nvcr.io/nvidia/vllm:26.04-py3).
@@ -79,11 +77,6 @@ def run() -> None:
     cuda_devices = setup_hf_env(cfg, model_cache)
 
     extra_serve_args = [
-        # vLLM ≥0.10 replaced --task with --runner / --convert.
-        # --runner pooling + --convert embed reproduces the old `--task embed`
-        # semantics: pooling runner + embedding head, exposes /v1/embeddings.
-        "--runner", "pooling",
-        "--convert", "embed",
         "--served-model-name", served_name,
         "--trust-remote-code",
         "--max-num-seqs", str(max_seqs),

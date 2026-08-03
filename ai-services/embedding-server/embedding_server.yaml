@@ -28,13 +28,6 @@ max_model_len:          8192
 gpu_memory_utilization: 0.20
 enforce_eager:          false
 
-# Matryoshka truncation dimension used by consumers (rag-mcp-server).
-# This model natively supports 384 / 512 / 768 / 1024 / 2048 dims.
-# 768 is a good quality/size balance.
-# NOTE: this key is NOT passed to vLLM — vLLM always returns full 2048-dim
-# vectors.  Consumers must truncate to this dimension before comparing.
-embedding_dim: 768
-
 # vLLM runtime — pip-installed vllm (default) or NGC docker container.
 #   pip     — vllm CLI from this wrapper's venv (today's behavior)
 #   docker  — `docker run nvcr.io/nvidia/vllm:<tag> vllm serve …`
