@@ -172,7 +172,7 @@ cd agent-samples/model-servers
 uv sync && uv run model_servers
 ```
 
-This exits immediately once all four services are ready. Weights stay loaded in
+This exits immediately once all configured services are ready. Weights stay loaded in
 the background.
 
 ### Step 2 — Start the demo

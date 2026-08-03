@@ -374,7 +374,7 @@ vlm-server  (ai-services/vlm-server/)
     runs `nvcr.io/nvidia/vllm:<tag> vllm serve …` instead.
 
 embedding-server  (ai-services/embedding-server/)
-    └── vllm >=0.12.0
+    └── vllm >=0.14.0
     └── pyyaml >=6.0
     └── hf-transfer >=0.1.4
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]

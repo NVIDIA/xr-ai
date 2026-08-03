@@ -51,16 +51,14 @@ All endpoints are provided by vLLM's OpenAI-compatible server at
 | `max_model_len`          | int   | `8192`                                | Max input tokens (model native max)                           |
 | `gpu_memory_utilization` | float | `0.20`                                | vLLM `--gpu-memory-utilization` (low: model is only 1B)       |
 | `enforce_eager`          | bool  | `false`                               | Skip CUDA graph capture                                       |
-| `embedding_dim`          | int   | `768`                                 | Matryoshka dim for consumers — **not passed to vLLM**         |
 | `vllm_backend`           | str   | `pip`                                 | `pip` (wrapper venv) or `docker` (NGC container)              |
 | `vllm_image`             | str   | `nvcr.io/nvidia/vllm:26.04-py3`       | Used when `vllm_backend: docker`                              |
 
 ## Matryoshka dimensions
 
-vLLM always returns 2048-dimensional vectors. Consumers must truncate to
-`embedding_dim` before comparison. The first N dimensions of a Matryoshka
-vector are a valid embedding at dimension N, so `vec[:768]` is a proper
-768-dim embedding.
+vLLM returns 2048-dimensional vectors. Consumers may truncate them to a
+supported Matryoshka dimension before comparison. The RAG service uses its
+own `embedding_dim` setting for this choice.
 
 ## Example request
 
@@ -69,7 +67,7 @@ curl -s http://localhost:8109/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{"model": "embed", "input": "query: how do I reset the device?"}' \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['data'][0]['embedding']))"
-# → 2048  (truncate to embedding_dim in the consumer)
+# → 2048
 ```
 
 ## Choosing the vLLM runtime (pip vs Docker)

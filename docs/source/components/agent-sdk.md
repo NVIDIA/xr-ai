@@ -9,9 +9,9 @@ The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
-  `STTService`, `TTSService`) plus OpenAI-compatible HTTP clients, driven by a
-  model-profile configuration. Swapping a backend is a configuration
-  edit, not a code edit.
+  `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP
+  clients, driven by a model-profile configuration. Swapping a backend is a
+  configuration edit, not a code edit.
 - **`xr-ai-voice`** — the native voice runtime. `VoiceSession` owns readiness,
   hub transport, voice gating, streaming responses, signals, and cleanup while
   applications provide a `VoiceHandler`.
@@ -28,7 +28,7 @@ from:
 
 ## xr-ai-models
 
-Worker code depends on the four service protocols and constructs concrete
+Worker code depends on the service protocols and constructs concrete
 clients from a model configuration — no hand-rolled `httpx` calls in callers,
 no model quirks leaking out of this package.
 
@@ -71,6 +71,10 @@ stt:
 tts:
   kind:     preset:piper_tts
   base_url: http://localhost:8105
+
+embedding:
+  kind:     preset:nemotron_embedding
+  base_url: http://localhost:8109
 ```
 
 ### Built-in presets
@@ -86,6 +90,7 @@ Refer to `xr_ai_models/presets/`:
 | `parakeet_stt`   | stt-server                | |
 | `piper_tts`      | tts/piper                 | |
 | `magpie_tts`     | tts/magpie                | |
+| `nemotron_embedding` | embedding-server      | dense text embeddings |
 
 ### Explicit (no-preset) specification
 

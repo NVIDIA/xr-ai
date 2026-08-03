@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Structural-typing checks for the four xr-ai-models protocols."""
+"""Structural-typing checks for the xr-ai-models service protocols."""
 from __future__ import annotations
 
 from xr_ai_models import (
