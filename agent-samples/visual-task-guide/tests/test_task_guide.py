@@ -82,6 +82,7 @@ def test_sample_uses_standard_web_client_without_recorded_video_service() -> Non
     voice_gate = (_SAMPLE / "yaml/voice_gate.yaml").read_text(encoding="utf-8")
     launcher = (_SAMPLE / "main.py").read_text(encoding="utf-8")
     app = (_SAMPLE / "worker/visual_task_guide_worker/app.py").read_text(encoding="utf-8")
+    agent = (_SAMPLE / "worker/visual_task_guide_worker/agent.py").read_text(encoding="utf-8")
 
     assert "web_client_dir: ../../../client-samples/web\n" in hub_config
     assert "magic_phrases: []\n" in voice_gate
@@ -89,6 +90,8 @@ def test_sample_uses_standard_web_client_without_recorded_video_service() -> Non
     assert "video-memory-service" not in launcher
     assert "services/rag-service" in launcher
     assert "RAGFunctionsConfig" in app
+    assert "ChatCompletionConfig" in agent
+    assert "ToolCallAgentWorkflowConfig" not in agent
     assert 'text_topic=_OUTPUT_TOPIC' in app
 
 

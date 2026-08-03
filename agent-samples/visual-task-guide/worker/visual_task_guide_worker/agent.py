@@ -6,7 +6,7 @@
 from pathlib import Path
 
 from nat.plugin_api import Builder, FunctionBaseConfig, FunctionGroupRef, FunctionInfo, LLMRef, register_function
-from nat.plugins.langchain.agent.tool_calling_agent.register import ToolCallAgentWorkflowConfig
+from nat.tool.chat_completion import ChatCompletionConfig
 from xr_ai_nat.functions.rag import RetrieveResult
 
 from .models import GuideAgentRequest, TaskGuideReply
@@ -30,11 +30,9 @@ async def task_guide_agent(config: TaskGuideAgentConfig, builder: Builder):
     retrieve = knowledge_functions[f"{knowledge_group.instance_name}__retrieve"]
     reasoning = await builder.add_function(
         "task_guide_reasoning",
-        ToolCallAgentWorkflowConfig(
+        ChatCompletionConfig(
             llm_name=config.llm_name,
             system_prompt=_PROMPT.read_text(encoding="utf-8").strip(),
-            max_iterations=1,
-            max_empty_response_retries=1,
         ),
     )
 
