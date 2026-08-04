@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nemotron-3-Nano-Omni — dual 48 GB Ada configuration.
+# FP8 Omni occupies GPU 0; the shared STT configuration uses GPU 1.
+
+host: "0.0.0.0"
+port: 8108
+hf_token: ""
+model_cache: ../../../../models
+
+cuda_visible_devices: "0"
+max_num_seqs: 8
+tensor_parallel_size: 1
+max_model_len: 32768
+gpu_memory_utilization: 0.78
+enforce_eager: false
+
+video_pruning_rate: 0.5
+video_fps: 2
+video_num_frames: 64
+
+vllm_backend: docker
+vllm_image: vllm/vllm-openai:v0.20.0
+extra_pip: []

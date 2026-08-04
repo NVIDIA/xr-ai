@@ -155,6 +155,16 @@ GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
 On first run each model downloads from HuggingFace (~50 GB total; can take
 tens of minutes).  On subsequent runs the containers restart in under a minute.
 
+The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
+STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
+Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
+Switching stacks stops the incompatible persistent models first and aborts if
+they cannot be stopped, avoiding GPU overcommit.
+
+```bash
+uv run model_servers --omni-stack
+```
+
 The default models are public, so no HuggingFace token is required.  Set
 `HF_TOKEN` to lift download rate limits / speed, or to use a gated model — see
 [`docs/credentials.md`](docs/credentials.md).  The launcher won't prompt; it
@@ -165,6 +175,8 @@ To stop all model servers when done:
 ```bash
 uv run model_servers --stop
 ```
+
+`--stop` always stops both stack variants, so it takes no stack-selection flag.
 
 ### Simple VLM example (vision Q&A over voice + text)
 

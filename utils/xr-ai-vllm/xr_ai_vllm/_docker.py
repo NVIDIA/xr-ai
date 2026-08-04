@@ -528,13 +528,8 @@ def run(
 _CONTAINER_PREFIX = "xr-ai-vllm-"
 
 
-def container_on_port(port: int) -> str | None:
-    """Return the name of a running xr-ai-vllm container serving *port*, or None.
-
-    ``docker ps --filter publish=<port>`` silently misses ``--network host``
-    containers.  We label each container with ``xr-ai-vllm.port=<port>`` at
-    run time and filter by that label here instead.
-    """
+def container_on_port_checked(port: int) -> tuple[str | None, bool]:
+    """Return a labelled container and whether Docker discovery succeeded."""
     try:
         out = subprocess.check_output(
             ["docker", "ps",
@@ -544,17 +539,32 @@ def container_on_port(port: int) -> str | None:
             stderr=subprocess.DEVNULL,
         ).strip()
         names = out.splitlines()
-        return names[0] if names else None
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
+        return (names[0] if names else None), True
+    except FileNotFoundError:
+        # Without the Docker CLI, a local Docker container cannot be managed;
+        # pip-mode ownership is still established from the listener process.
+        return None, True
+    except subprocess.CalledProcessError:
+        return None, False
 
 
-def pid_on_port(port: int) -> int | None:
-    """Return the pid listening on *port* (any v4/v6 socket), or None.
+def container_on_port(port: int) -> str | None:
+    """Return the name of a running xr-ai-vllm container serving *port*, or None.
+
+    ``docker ps --filter publish=<port>`` silently misses ``--network host``
+    containers.  We label each container with ``xr-ai-vllm.port=<port>`` at
+    run time and filter by that label here instead.
+    """
+    container, _ = container_on_port_checked(port)
+    return container
+
+
+def pid_on_port_checked(port: int) -> tuple[int | None, bool]:
+    """Return the listening PID and whether a listener inspection succeeded.
 
     Tries `ss` first (always present on modern Linux), falls back to `lsof`.
-    Used by the stop helper to send SIGTERM to the vLLM process (pip or docker
-    with --network host — both are visible to ss(8) on the host).
+    A tool reporting no listener is a successful inspection; unavailable or
+    failing tools leave the result unknown.
     """
     try:
         out = subprocess.check_output(
@@ -564,8 +574,9 @@ def pid_on_port(port: int) -> int | None:
         )
         m = re.search(r"pid=(\d+)", out)
         if m:
-            return int(m.group(1))
-    except Exception:
+            return int(m.group(1)), True
+        return None, True
+    except (FileNotFoundError, subprocess.CalledProcessError):
         pass
     try:
         out = subprocess.check_output(
@@ -574,7 +585,26 @@ def pid_on_port(port: int) -> int | None:
             stderr=subprocess.DEVNULL,
         ).strip()
         if out:
-            return int(out.splitlines()[0])
-    except Exception:
-        pass
-    return None
+            return int(out.splitlines()[0]), True
+        return None, True
+    except subprocess.CalledProcessError:
+        return None, True
+    except FileNotFoundError:
+        return None, False
+
+
+def pid_on_port(port: int) -> int | None:
+    """Return the pid listening on *port* (any v4/v6 socket), or None."""
+    pid, _ = pid_on_port_checked(port)
+    return pid
+
+
+def is_xr_ai_server_process(pid: int, label: str) -> bool:
+    """Return whether *pid* has the expected xr-ai server command line."""
+    try:
+        command = Path(f"/proc/{pid}/cmdline").read_text(errors="replace")
+    except OSError:
+        return False
+    if label == "stt":
+        return "stt_server" in command
+    return "vllm" in command

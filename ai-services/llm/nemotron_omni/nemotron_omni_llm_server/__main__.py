@@ -6,8 +6,8 @@ nemotron_omni_llm_server — vLLM launcher for Nemotron-3-Nano-Omni-30B-A3B-Reas
 
 Omni multimodal model (text + video). Selects the weight quantisation based
 on GPU compute capability and dispatches through ``xr_ai_vllm.serve`` to either
-the pip-installed ``vllm`` CLI or the NGC ``nvcr.io/nvidia/vllm`` docker
-container (per ``vllm_backend`` in YAML).
+the pip-installed ``vllm`` CLI or a configured vLLM Docker image (per
+``vllm_backend`` in YAML).
 
 Config keys (nemotron_omni_llm_server.yaml)
 -------------------------------------------
@@ -28,10 +28,11 @@ Config keys (nemotron_omni_llm_server.yaml)
     video_pruning_rate:       float  --video-pruning-rate (default: 0.5).
     video_fps:                int    FPS for video input sampling (default: 2).
     video_num_frames:         int    Max frames per video (default: 256).
+    moe_backend:              str    Optional vLLM MoE backend.
     vllm_backend:             str    "pip" (default) or "docker".
-    vllm_image:               str    NGC image when vllm_backend=docker
+    vllm_image:               str    Docker image when vllm_backend=docker
                                      (default: nvcr.io/nvidia/vllm:26.04-py3).
-    extra_pip:                list   Pip packages installed into the NGC
+    extra_pip:                list   Pip packages installed into the Docker
                                      container before `vllm serve` runs
                                      (docker backend only; default:
                                      ["mamba-ssm", "causal-conv1d"] since
@@ -108,6 +109,7 @@ def run() -> None:
     prune_rate    = float(cfg.get("video_pruning_rate", _DEFAULT_PRUNE))
     video_fps     = int(cfg.get("video_fps",        _DEFAULT_FPS))
     video_frames  = int(cfg.get("video_num_frames", _DEFAULT_FRAMES))
+    moe_backend   = cfg.get("moe_backend")
     backend       = cfg.get("vllm_backend",         "pip")
     image         = cfg.get("vllm_image",           DEFAULT_IMAGE)
     # Nemotron-Omni's hybrid SSM/Transformer backbone imports `mamba_ssm`
@@ -135,12 +137,14 @@ def run() -> None:
     ]
     if use_kv_fp8:
         extra_serve_args += ["--kv-cache-dtype", "fp8"]
+    if moe_backend:
+        extra_serve_args += ["--moe-backend", str(moe_backend)]
     if enforce_eager:
         extra_serve_args.append("--enforce-eager")
 
     serve(
         backend=backend,
-        persistent=False,
+        persistent=True,
         image=image,
         container_name=_CONTAINER_NAME,
         log_prefix="nemotron_omni",

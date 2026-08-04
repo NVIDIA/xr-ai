@@ -560,10 +560,13 @@ run this first to warm up model weights before starting any demo sample.
 |---|---|---|---|
 | Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
 
-Starts stt-server (8103), nemotron3-nano-llm-server (8107, `persistent=True`),
-vlm-server (8100, `persistent=True`), and embedding-server (8109,
-`persistent=True`). The vLLM servers survive launcher restarts; use `--stop`
-to shut them down.
+The default `--vlm-llm-stack` starts stt-server (8103),
+nemotron3-nano-llm-server (8107, `persistent=True`), and vlm-server (8100,
+`persistent=True`), plus embedding-server (8109, `persistent=True`).
+`--omni-stack` replaces Nano and Cosmos with nemotron-omni-llm-server (8108,
+`persistent=True`) while retaining stt-server and embedding-server. The stacks
+are mutually exclusive; `--stop` shuts down every model-server port without
+selecting one.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)

@@ -9,6 +9,15 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-04 — Model servers select one multimodal stack
+
+`model_servers` defaults to the separate Nemotron-3 Nano and Cosmos services,
+with `--omni-stack` selecting Nemotron-3 Nano Omni instead. The launcher keeps
+STT and embeddings in both layouts and persists Omni like the other shared
+vLLM services, so the launcher can exit after readiness without unloading
+weights. `--stop` cleans every stack-specific port without requiring the
+original selection.
+
 ### 2026-08-03 — Spoken text must carry terminal punctuation
 
 The TTS stage batches on sentence-final punctuation and flushes trailing
