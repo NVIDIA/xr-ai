@@ -49,7 +49,7 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| model-servers (all models) | ~55 GB |
+| model-servers (shared models) | ~60 GB |
 | simple-vlm-example (standalone) | ~23 GB |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
@@ -121,13 +121,13 @@ the demo itself: start `model-servers` once, then run the demo as many times
 as you like without reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
-abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS
-behind four service protocols. Each sample ships a model config that names the
+abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
+embeddings behind typed service protocols. Each sample ships a model config that names the
 logical models the worker needs (`llm`, `vlm`, `stt`, …) with
 preset references that pre-fill model-specific quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings).  Workers call
 `make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
-"stt")` / `make_tts(config, "tts")` — no hand-rolled httpx clients, no model
+"stt")` / `make_tts(config, "tts")` / `make_embedding(config, "embedding")` — no hand-rolled httpx clients, no model
 quirks leaking out of the SDK.  Full quickstart and the built-in preset
 table: [`agent-sdk/xr-ai-models/README.md`](agent-sdk/xr-ai-models/README.md).
 
@@ -282,6 +282,34 @@ NIM containers):
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`server-runtime/xr_media_hub.yaml`](server-runtime/xr_media_hub.yaml)
 for the full option list.
+
+---
+
+### Tea-making guide (YAML-driven visual workflow)
+
+The tea-making sample demonstrates a reusable guided-task engine. Each YAML
+step supplies its own VLM prompt, agent prompt, context schema, tools,
+completion rule, and skip defaults. The guide updates context silently from
+live frames, waits for the user to request the next step, and answers questions
+from current state or native RAG at any point.
+
+Nemotron-3 Nano is the tool-calling agent LLM, while Cosmos-Reason1-7B handles
+scene understanding from live frames. The final steeping step uses a wall-clock
+timer without running the VLM, answers elapsed/remaining-time questions, and
+announces when steeping is complete. See the
+[sample README](agent-samples/tea-making-sample/README.md) for the workflow and
+customization format.
+
+```bash
+# Start the persistent shared model stack first.
+uv run --project agent-samples/model-servers model_servers
+
+# Then start the tea workflow.
+uv run --project agent-samples/tea-making-sample tea_making_sample
+```
+
+The tea launcher reuses STT, Nemotron-3 Nano, Cosmos, and the embedding service
+from `model-servers`; it never launches or reallocates those models itself.
 
 ---
 

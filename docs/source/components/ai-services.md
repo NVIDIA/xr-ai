@@ -13,7 +13,7 @@ Multiple reusable HTTP servers are available as launchable peers of
 `server-runtime/`. All expose an OpenAI-compatible REST API so agent workers
 can call them with any OpenAI SDK client or plain `httpx` or `requests`.
 Reference services cover vision-language reasoning, speech recognition,
-text-to-speech, and large language models. Three LLM backends ship
+text-to-speech, embeddings, and large language models. Three LLM backends ship
 side-by-side under `ai-services/llm/` — pick one per sample based on the
 tool-calling, reasoning, and hardware trade-offs documented below.
 
@@ -26,6 +26,7 @@ tool-calling, reasoning, and hardware trade-offs documented below.
 | `ai-services/llm/llama_nemotron/` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
+| `ai-services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded service + live hub IPC |
@@ -88,10 +89,10 @@ Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on [`agent-sdk/xr-ai-models`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md),
 load a per-sample model config, and construct service clients via
-`make_llm`, `make_vlm`, `make_stt`, and `make_tts`.  The SDK encapsulates the
-OpenAI-compatible wire format and the per-model quirks (reasoning-field
-aliasing, `chat_template_kwargs`, served-model-name strings) so callers
-never branch on backend.
+`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK
+encapsulates the OpenAI-compatible wire format and the per-model quirks
+(reasoning-field aliasing, `chat_template_kwargs`, served-model-name strings)
+so callers never branch on backend.
 
 ```python
 from xr_ai_models import load_models_config, make_llm, ChatMessage
@@ -106,7 +107,7 @@ async with make_llm(config, "agent_llm") as llm:
     print(resp.content, resp.reasoning)
 ```
 
-A matching `models.yaml` for the four built-in service backends:
+A matching `models.yaml` for the built-in service categories:
 
 ```yaml
 agent_llm:
@@ -124,6 +125,10 @@ stt:
 tts:
   kind:     preset:piper_tts
   base_url: http://localhost:8105
+
+embedding:
+  kind:     preset:nemotron_embedding
+  base_url: http://localhost:8109
 ```
 
 Swapping a backend is a `kind:` + `base_url:` edit in YAML; worker code does
@@ -175,7 +180,7 @@ exposes `/v1/health`.
 ## vLLM model persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
-`nemotron3_nano_llm_server`) **survive stack restarts by design**.
+`nemotron3_nano_llm_server`, `embedding_server`) **survive stack restarts by design**.
 `nemotron_omni_llm_server` is foreground (dies with the wrapper). Each
 persistent wrapper script checks its health endpoint before spawning vLLM:
 
@@ -205,8 +210,8 @@ The target ports and container names match the defaults in the per-profile YAML 
 
 ## Choosing the vLLM runtime (pip vs Docker)
 
-All four vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
-`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`) accept a
+All five vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
+`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`) accept a
 `vllm_backend:` key in their YAML to pick how vLLM is hosted:
 
 | `vllm_backend` | Runtime | Default | Use when |
@@ -302,7 +307,11 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
   swap backends. Hosting backend is selectable per YAML (refer to *Choosing the
   vLLM runtime*); runs foreground in both pip and docker modes (no
-  cross-restart persistence).
+  cross-restart persistence). This architecture requires vLLM 0.20.0 or newer;
+  the Docker configuration therefore uses `vllm/vllm-openai:v0.20.0` rather
+  than the repository-wide NGC default. The optional `moe_backend` YAML key is
+  forwarded as `--moe-backend`; use `triton` for the current RTX Pro Blackwell
+  compatibility path.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; the `language` and `temperature` form fields are accepted but ignored.
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.

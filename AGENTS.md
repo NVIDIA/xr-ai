@@ -42,12 +42,13 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   optional package with heavier deps (pipecat-ai, scipy, numpy, httpx,
   fastmcp); it bridges `ProcessorEndpoint` to Pipecat pipelines.
 - **All HTTP calls to AI services go through `agent-sdk/xr-ai-models`.**
-  Workers and MCP servers depend on its four protocols
-  (`LLMService`, `VLMService`, `STTService`, `TTSService`) and construct
+  Workers and services depend on its typed protocols
+  (`LLMService`, `VLMService`, `STTService`, `TTSService`, `EmbeddingService`)
+  and construct
   clients from a per-sample model config via `make_llm` /
-  `make_vlm` / `make_stt` / `make_tts`.  Hand-rolled `httpx` clients
+  `make_vlm` / `make_stt` / `make_tts` / `make_embedding`. Hand-rolled `httpx` clients
   against `/v1/chat/completions`, `/v1/audio/transcriptions`, or
-  `/v1/audio/speech` are forbidden — model quirks belong in this one
+  `/v1/audio/speech`, or `/v1/embeddings` are forbidden — model quirks belong in this one
   package's presets, not in callers. No vendor SDKs (no `openai`, no
   `anthropic`, no `litellm`); all in-tree backends speak
   OpenAI-compatible HTTP.
@@ -57,6 +58,9 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **Agentic functions are NAT-first and in-process.** Reusable deterministic
   functions live in `xr-ai-nat` as typed NAT function groups. Existing MCP
   servers remain compatibility surfaces while their capabilities migrate.
+- **RAG is a native typed capability.** `rag-service` owns document chunking,
+  embedding caches, and dense retrieval behind private msgpack/ZMQ;
+  `RAGFunctionsConfig` exposes it as the `xr_rag` NAT function group.
 - **A process boundary does not imply MCP.** `xr-ai-nat[mcp]` may expose an
   application's explicit native-function list to MCP-only agents, but native
   applications invoke the functions directly. XR tracking calls the typed

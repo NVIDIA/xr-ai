@@ -33,6 +33,7 @@ class StubOpenAI:
         self._stream_tokens:  list[str] = []
         self._transcribe_text: str = "stub-transcription"
         self._speech_bytes:    bytes = b"RIFF\x00\x00\x00\x00WAVEstub"
+        self._embeddings: list[list[float]] = [[1.0, 0.0]]
         self._health_status:  int = 200
 
     # ── configuration setters ──────────────────────────────────────────────
@@ -69,6 +70,9 @@ class StubOpenAI:
 
     def set_health_status(self, status: int) -> None:
         self._health_status = status
+
+    def set_embeddings(self, vectors: list[list[float]]) -> None:
+        self._embeddings = vectors
 
     # ── transport / client ─────────────────────────────────────────────────
 
@@ -123,5 +127,13 @@ class StubOpenAI:
                 content=self._speech_bytes,
                 headers={"Content-Type": "audio/wav"},
             )
+
+        if path == "/v1/embeddings":
+            return httpx.Response(200, json={
+                "data": [
+                    {"index": index, "embedding": vector}
+                    for index, vector in enumerate(self._embeddings)
+                ]
+            })
 
         return httpx.Response(404, text=f"unknown path: {path}")

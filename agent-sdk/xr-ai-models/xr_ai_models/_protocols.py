@@ -3,7 +3,7 @@
 
 """Service protocols, message types, and capability flags.
 
-Worker code depends on the four ``*Service`` protocols and treats every
+Worker code depends on the ``*Service`` protocols and treats every
 concrete client as a structural match.  Reasoning-token field naming differs
 across servers (``reasoning`` for nano_v3, ``reasoning_content`` for
 nemotron_v3); ``ChatResponse.reasoning`` is the canonical post-normalization
@@ -195,6 +195,20 @@ class TTSService(Protocol):
         response_format: str = "wav",
         timeout: float | None = None,
     ) -> bytes: pass
+
+    async def health(self) -> bool: pass
+
+    async def close(self) -> None: pass
+
+
+@runtime_checkable
+class EmbeddingService(Protocol):
+    async def embed(
+        self,
+        texts: Sequence[str],
+        *,
+        timeout: float | None = None,
+    ) -> list[list[float]]: pass
 
     async def health(self) -> bool: pass
 

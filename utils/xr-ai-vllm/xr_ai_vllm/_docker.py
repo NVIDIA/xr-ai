@@ -17,6 +17,7 @@ are not overwritten.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -34,6 +35,40 @@ log = logging.getLogger(__name__)
 
 _DOCKER_CONFIG = Path.home() / ".docker" / "config.json"
 _LOGIN_DONE: set[str] = set()
+_CONFIG_LABEL = "xr-ai-vllm.config"
+_RUNNER_CONFIG_VERSION = 2
+
+
+def _config_fingerprint(
+    *,
+    image: str,
+    port: int,
+    model_cache: Path,
+    hf_token: str | None,
+    cuda_visible_devices: str | None,
+    extra_env: dict[str, str] | None,
+    extra_pip: list[str] | None,
+    vllm_argv: list[str],
+) -> str:
+    """Return a stable digest for options baked into a Docker container."""
+
+    payload = {
+        "runner_config_version": _RUNNER_CONFIG_VERSION,
+        "image": image,
+        "port": port,
+        "model_cache": str(model_cache),
+        "hf_token": hf_token or "",
+        "cuda_visible_devices": cuda_visible_devices or "all",
+        "extra_env": extra_env or {},
+        "extra_pip": extra_pip or [],
+        "vllm_argv": vllm_argv,
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 # ── docker run argv builder ──────────────────────────────────────────────────
@@ -61,10 +96,21 @@ def build_run_argv(
     """
     argv: list[str] = ["docker", "run"]
     argv += ["--name", container_name]
+    fingerprint = _config_fingerprint(
+        image=image,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+    )
     # Label lets container_on_port find this container by port without the
     # caller needing to know the container name — implementation detail stays
     # inside this module.
     argv += ["--label", f"xr-ai-vllm.port={port}"]
+    argv += ["--label", f"{_CONFIG_LABEL}={fingerprint}"]
     argv += ["--network", "host"]
     # vLLM workers communicate via /dev/shm; the default 64 MiB tmpfs is too
     # small for the KV cache shards.  --ipc host gives them the host's larger
@@ -97,7 +143,10 @@ def build_run_argv(
         argv += ["-e", f"{key}={val}"]
 
     argv += ["-v", f"{model_cache}:{model_cache}"]
-
+    # Some images, including vllm/vllm-openai, define `vllm serve` as their
+    # entrypoint. Override it so the setup commands below are interpreted by a
+    # shell instead of being passed as arguments to that image entrypoint.
+    argv += ["--entrypoint", "/bin/bash"]
     argv.append(image)
     # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
     # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
@@ -113,7 +162,7 @@ def build_run_argv(
             f"pip install -q --no-build-isolation {shlex.join(extra_pip)}"
         )
     install_cmds.append(shlex.join(vllm_argv))
-    argv += ["bash", "-c", " && ".join(install_cmds)]
+    argv += ["-c", " && ".join(install_cmds)]
     return argv
 
 
@@ -157,6 +206,25 @@ def container_running(name: str) -> bool:
         return bool(out)
     except (FileNotFoundError, subprocess.CalledProcessError):
         return False
+
+
+def container_config_matches(name: str, fingerprint: str) -> bool:
+    """Return whether a container was created from the requested config."""
+
+    try:
+        out = subprocess.check_output(
+            ["docker", "inspect", "--format", "{{json .Config.Labels}}", name],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        labels = json.loads(out)
+    except (
+        FileNotFoundError,
+        subprocess.CalledProcessError,
+        json.JSONDecodeError,
+    ):
+        return False
+    return isinstance(labels, dict) and labels.get(_CONFIG_LABEL) == fingerprint
 
 
 def remove_container(name: str) -> bool:
@@ -437,22 +505,58 @@ def run(
     signal.signal(signal.SIGINT,  _on_signal)
     signal.signal(signal.SIGTERM, _on_signal)
 
+    fingerprint = _config_fingerprint(
+        image=image,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+    )
+
     # Reuse a container that survived a wrapper restart (weight persistence).
     if _lifecycle.health_ok(health_url):
+        managed_container = container_running(container_name)
+        if not managed_container or container_config_matches(container_name, fingerprint):
+            print(
+                f"[{log_prefix}] vLLM already running on port {port} — reusing",
+                flush=True,
+            )
+            if ready_file:
+                ready_file.touch()
+            signal.signal(signal.SIGINT,  orig_int)
+            signal.signal(signal.SIGTERM, orig_term)
+            _lifecycle.idle_until_stopped(health_url, log_prefix)
+            return
+
         print(
-            f"[{log_prefix}] vLLM already running on port {port} — reusing",
+            f"[{log_prefix}] Running container config changed; recreating {container_name}",
             flush=True,
         )
-        if ready_file:
-            ready_file.touch()
-        signal.signal(signal.SIGINT,  orig_int)
-        signal.signal(signal.SIGTERM, orig_term)
-        _lifecycle.idle_until_stopped(health_url, log_prefix)
-        return
+        if not stop_container(container_name, timeout_s=10) or not remove_container(
+            container_name
+        ):
+            log.error("could not replace running container %s", container_name)
+            sys.exit(2)
 
-    if container_exists(container_name) and not container_running(container_name):
-        # Stopped container already has hf_transfer installed — restart it
-        # rather than running a fresh image (avoids reinstalling every time).
+    stopped_container = container_exists(container_name) and not container_running(
+        container_name
+    )
+    if stopped_container and not container_config_matches(container_name, fingerprint):
+        print(
+            f"[{log_prefix}] Container config changed; recreating {container_name}",
+            flush=True,
+        )
+        if not remove_container(container_name):
+            log.error("could not remove stale container %s", container_name)
+            sys.exit(2)
+        stopped_container = False
+
+    if stopped_container:
+        # The stopped container matches the requested config and already has
+        # hf_transfer installed, so it is safe to restart without reinstalling.
         print(
             f"[{log_prefix}] Restarting stopped container {container_name}",
             flush=True,

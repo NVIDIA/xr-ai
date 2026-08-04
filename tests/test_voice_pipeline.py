@@ -21,7 +21,7 @@ import gc
 import io
 import wave
 import warnings
-from typing import Any, AsyncIterator, Sequence
+from typing import Any, AsyncIterator, Callable, Sequence
 
 import numpy as np
 import pytest
@@ -97,6 +97,7 @@ async def _run_chain(
     sends: Sequence[Frame],
     settle_s: float = 0.1,
     per_send_delay_s: float = 0.0,
+    settle_until: Callable[[_CaptureSink], bool] | None = None,
 ) -> _CaptureSink:
     """Build a Pipeline(processors), start a PipelineWorker, feed
     ``sends`` through the worker's downstream queue, then drain with an
@@ -107,7 +108,8 @@ async def _run_chain(
     ``per_send_delay_s`` introduces a sleep between queued frames so
     earlier ones can start executing before the next arrives — useful
     for interruption tests that need a previous frame to actually start
-    work before the interrupt lands.
+    work before the interrupt lands. ``settle_until`` can replace the
+    fixed delay with an observable completion condition.
     """
     sink = _CaptureSink()
     pipeline = Pipeline([*processors, sink])
@@ -127,7 +129,19 @@ async def _run_chain(
             await worker.queue_frame(f)
             if i < len(sends) - 1 and per_send_delay_s:
                 await asyncio.sleep(per_send_delay_s)
-        await asyncio.sleep(settle_s)
+        if settle_until is None:
+            await asyncio.sleep(settle_s)
+        else:
+            async def wait_for_condition() -> None:
+                while not settle_until(sink):
+                    await asyncio.sleep(0.01)
+
+            try:
+                await asyncio.wait_for(wait_for_condition(), timeout=settle_s)
+            except TimeoutError:
+                # Let the caller's domain-specific assertion report what was
+                # missing instead of replacing it with a generic timeout.
+                pass
         await worker.queue_frame(EndFrame())
 
     await asyncio.gather(runner.run(), drive())
@@ -507,7 +521,14 @@ async def test_vad_stt_stop_probe_emits_interruption_on_stop_match(monkeypatch):
 
     frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
     frame.transport_source = "web-client"
-    sink = await _run_chain(proc, sends=[frame], settle_s=0.2)
+    sink = await _run_chain(
+        proc,
+        sends=[frame],
+        settle_s=1.0,
+        settle_until=lambda capture: any(
+            isinstance(item, UserStoppedSpeakingFrame) for item in capture.frames
+        ),
+    )
 
     kinds = [type(f).__name__ for f in sink.frames]
     assert "InterruptionFrame"        in kinds
