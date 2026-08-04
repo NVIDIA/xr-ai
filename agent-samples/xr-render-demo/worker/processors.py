@@ -15,7 +15,7 @@ Agentic loop (max ``_MAX_LOOP`` iterations):
   - When the model returns text instead of a tool call, that text is the
     final user-visible response.
 
-A parallel "quick-ack" call fires at the start of each turn
+An initial "quick-ack" call is awaited before the agentic loop starts
 to (a) speak an immediate acknowledgment and (b) classify whether the
 agentic loop needs thinking enabled. A periodic "still-working" loop
 streams contextual progress messages to the data channel while the agent
@@ -172,7 +172,7 @@ class RenderSceneProcessor(BrainProcessor):
     Multi-step agentic loop over native NAT functions.
 
     Uses Nemotron-3-Nano (port 8107) with OpenAI tool calling for the
-    reasoning loop; the parallel quick-ack shares the same server via the
+    reasoning loop; the pre-loop quick-ack shares the same server via the
     `llm` logical model.
 
     On each utterance:

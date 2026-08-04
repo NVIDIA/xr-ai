@@ -95,7 +95,7 @@ One server backs both logical models in `yaml/models.yaml`: `agent_llm` runs
 the multi-step tool-calling loop, and `llm` serves two cheap, latency-sensitive
 calls (thinking stays off):
 
-- **Quick-ack** — fires in parallel with the agentic loop the moment an
+- **Quick-ack** — awaited before the agentic loop starts, the moment an
   utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
   spoken acknowledgment. Also classifies whether the request needs
   open-ended reasoning (`think: true/false`): positional operations always
@@ -186,7 +186,7 @@ The LLM tool schemas are derived from those Functions. `start_xr` and
 
 On each `TranscriptionFrame`:
 
-1. **Quick-ack** fires immediately (`llm` :8107, parallel task).
+1. **Quick-ack** runs first (`llm` :8107, awaited before the loop).
 2. **Still-working timer** starts (fires at 5s, repeats every 10s, data
    channel only).
 3. **Pre-fetch** (concurrent): `get_scene_state` + `get_head_pose` +
