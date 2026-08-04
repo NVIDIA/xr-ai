@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from xr_ai_models import load_models_config
+from xr_ai_vllm import _docker
 from xr_ai_vllm._nim import build_nim_run_argv, serve_nim
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -80,10 +81,9 @@ class TestBuildNimRunArgv:
 def test_serve_nim_uses_world_writable_per_container_cache(tmp_path, monkeypatch):
     # Riva NIMs write the cache as root, LLM/VLM NIMs as uid 1000 — each
     # container gets its own world-writable subdir so neither blocks the other.
-    import xr_ai_vllm._nim as nim_mod
     monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
     captured: dict = {}
-    monkeypatch.setattr(nim_mod._docker, "run_container",
+    monkeypatch.setattr(_docker, "run_container",
                         lambda **kw: captured.update(kw))
     serve_nim(
         image="nvcr.io/nim/meta/llama-3.1-8b-instruct:latest",
