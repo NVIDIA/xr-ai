@@ -21,6 +21,7 @@ from .workflow import (
     WorkflowSession,
     WorkflowStep,
     render_template,
+    speech_text,
 )
 
 NoticeFn = Callable[[str, str], Awaitable[None]]
@@ -126,12 +127,51 @@ class WorkflowGuide:
                 )
             else:
                 logger.debug("guide answer_user dispatch pid={} step={}", participant_id, step.id)
+
+                async def inspect_current_view(question: str) -> dict[str, Any]:
+                    if not hasattr(self._vision, "inspect"):
+                        return {"error": "A live camera view is not available."}
+                    observation = await self._vision.inspect(
+                        participant_id,
+                        question,
+                        step=step,
+                        context=dict(session.context) if session is not None else {},
+                        task=self._workflow.task,
+                    )
+                    observed_at_us = _now_us()
+                    if session is not None:
+                        async with session.lock:
+                            if session.active and session.step_id == step.id:
+                                self._store_observation(
+                                    session,
+                                    step,
+                                    observation.text,
+                                    observation.frame_pts_us,
+                                    kind="visual_question",
+                                    question=question,
+                                )
+                    result = {
+                        "question": question,
+                        "visual_evidence": observation.text,
+                        "frame_pts_us": observation.frame_pts_us,
+                        "observed_at_us": observed_at_us,
+                    }
+                    logger.info(
+                        "guide visual question pid={} step={} question={!r} answer={!r}",
+                        participant_id,
+                        step.id,
+                        question,
+                        observation.text[:500],
+                    )
+                    return result
+
                 response = await self._agent.answer_user(
                     transcript=clean,
                     session=session,
                     current_step=step,
                     observation_log=session.observation_log if session is not None else [],
                     recent_turns=self._history.get(participant_id, []),
+                    visual_query=inspect_current_view,
                 )
         finally:
             if session is not None:
@@ -139,6 +179,7 @@ class WorkflowGuide:
                 deferred_notice = session.deferred_notice
                 session.deferred_notice = ""
 
+        response = speech_text(response)
         self._record(participant_id, clean, response)
         logger.info(
             "guide response pid={} intent={} text={!r}",
@@ -187,10 +228,7 @@ class WorkflowGuide:
             return "No guided workflow is active."
         async with session.lock:
             current = self._workflow.step_by_id(session.step_id)
-            complete = (
-                session.ready_step_id == current.id
-                or self._workflow.advance_when_met(current, session.context)
-            )
+            complete = session.ready_step_id == current.id or self._workflow.advance_when_met(current, session.context)
             skipped = not complete
             applied: dict[str, Any] = {}
             if skipped:
@@ -242,10 +280,7 @@ class WorkflowGuide:
         if session is None or not session.active:
             return "No guided workflow is active."
         step = self._workflow.step_by_id(session.step_id)
-        suffix = (
-            " It is ready; say next when you want to continue."
-            if session.ready_step_id == step.id else ""
-        )
+        suffix = " It is ready; say next when you want to continue." if session.ready_step_id == step.id else ""
         return f"On step {step.id}: {step.name}. State: {session.step_state}.{suffix}"
 
     async def monitor_forever(self) -> None:
@@ -305,12 +340,7 @@ class WorkflowGuide:
         timer_step = False
         updating_complete = False
         async with session.lock:
-            if (
-                not session.active
-                or not session.connected
-                or session.evaluation_active
-                or session.user_turn_active
-            ):
+            if not session.active or not session.connected or session.evaluation_active or session.user_turn_active:
                 return
             step = self._workflow.step_by_id(session.step_id)
             if step.is_idle:
@@ -392,11 +422,7 @@ class WorkflowGuide:
                 return
 
             async with session.lock:
-                if (
-                    not session.active
-                    or not session.connected
-                    or session.step_id != step.id
-                ):
+                if not session.active or not session.connected or session.step_id != step.id:
                     return
                 if observation.frame_pts_us <= session.last_frame_pts_us:
                     return
@@ -425,6 +451,15 @@ class WorkflowGuide:
                         update_state,
                         observation_patch,
                     )
+                if updating_complete:
+                    session.step_state = "complete"
+                    logger.debug(
+                        "guide completed state refreshed without step agent pid={} step={} fields={}",
+                        session.participant_id,
+                        step.id,
+                        sorted(observation_patch),
+                    )
+                    return
 
             result = await self._agent.run_step(
                 step=step,
@@ -443,46 +478,19 @@ class WorkflowGuide:
             reminder_notice = ""
             urgent_notice = ""
             async with session.lock:
-                if (
-                    not session.active
-                    or not session.connected
-                    or session.step_id != step.id
-                ):
-                    return
-                if updating_complete and session.ready_step_id != step.id:
-                    return
-                if updating_complete:
-                    complete_fields = step.state_update_fields("complete")
-                    self._merge_context(
-                        session.context,
-                        guarded_patch,
-                        allowed=complete_fields,
-                    )
-                    session.step_state = "complete"
-                    logger.info(
-                        "guide completed state updated pid={} step={} fields={} "
-                        "values={}",
-                        session.participant_id,
-                        step.id,
-                        sorted(complete_fields),
-                        {
-                            name: session.context.get(name)
-                            for name in complete_fields
-                        },
-                    )
+                if not session.active or not session.connected or session.step_id != step.id:
                     return
                 self._merge_context(
                     session.context,
                     guarded_patch,
-                    allowed={field.name for field in step.context_fields},
+                    allowed=step.writable_fields,
                 )
                 if result.assistant_message:
                     session.pending_instruction = result.assistant_message
                     if result.speak:
                         urgent_notice = result.assistant_message
                 logger.debug(
-                    "guide eval result pid={} step={} state={} ready={} patch_keys={} "
-                    "assistant_message={!r} speak={}",
+                    "guide eval result pid={} step={} state={} ready={} patch_keys={} assistant_message={!r} speak={}",
                     session.participant_id,
                     step.id,
                     result.step_state,
@@ -499,10 +507,7 @@ class WorkflowGuide:
                 ):
                     ready_notice = self._mark_ready_for_next(session, step)
                 else:
-                    session.step_state = (
-                        result.step_state
-                        if result.step_state != "complete" else "started"
-                    )
+                    session.step_state = result.step_state if result.step_state != "complete" else "started"
                     reminder_notice = self._reminder_due(session, step)
 
             if urgent_notice and not ready_notice:
@@ -537,6 +542,9 @@ class WorkflowGuide:
         step: WorkflowStep,
         text: str,
         frame_pts_us: int,
+        *,
+        kind: str = "step_monitor",
+        question: str = "",
     ) -> None:
         if not text.strip():
             return
@@ -545,9 +553,13 @@ class WorkflowGuide:
                 "step_id": step.id,
                 "step_name": step.name,
                 "frame_pts_us": frame_pts_us,
+                "observed_at_us": _now_us(),
+                "kind": kind,
                 "caption": text.strip(),
             }
         )
+        if question:
+            session.observation_log[-1]["question"] = question
         logger.debug(
             "vlm observation stored pid={} step={} frame_pts_us={} caption={!r}",
             session.participant_id,
@@ -652,7 +664,7 @@ class WorkflowGuide:
         *,
         force: bool = False,
     ) -> None:
-        text = text.strip()
+        text = speech_text(text)
         if not text or not session.connected:
             return
         if session.user_turn_active:
@@ -718,12 +730,17 @@ class WorkflowGuide:
     ) -> str:
         if not template.strip():
             return fallback
-        return render_template(
-            template,
-            context=session.context,
-            step=step,
-            task=self._workflow.task,
-        ).strip() or fallback
+        return (
+            speech_text(
+                render_template(
+                    template,
+                    context=session.context,
+                    step=step,
+                    task=self._workflow.task,
+                ).strip()
+            )
+            or fallback
+        )
 
     def _record(self, participant_id: str, user: str, assistant: str) -> None:
         turns = self._history.setdefault(participant_id, [])
@@ -860,12 +877,7 @@ def _validated_model_intent(
         return NavigationIntent()
     clean = _normalize_command(text)
     words = set(clean.split())
-    if (
-        intent.intent == "advance"
-        and active
-        and intent.explicit_command
-        and not _looks_like_question(text, clean)
-    ):
+    if intent.intent == "advance" and active and intent.explicit_command and not _looks_like_question(text, clean):
         return intent
     if intent.intent == "start" and not active and words & _START_WORDS:
         return intent
@@ -884,12 +896,8 @@ def _time_question_answer(
     if session is None:
         return ""
     clean = _normalize_command(text)
-    start_time_requested = any(
-        phrase in clean for phrase in _START_TIME_QUERY_PHRASES
-    )
-    if not start_time_requested and not any(
-        phrase in clean for phrase in _TIME_QUERY_PHRASES
-    ):
+    start_time_requested = any(phrase in clean for phrase in _START_TIME_QUERY_PHRASES)
+    if not start_time_requested and not any(phrase in clean for phrase in _TIME_QUERY_PHRASES):
         return ""
     status = workflow.find_timer_status(
         session.context,
@@ -901,25 +909,12 @@ def _time_question_answer(
         if timer_step is None or timer_step.timer is None:
             return ""
         timer = timer_step.timer
-        started_at_us = _positive_context_int(
-            session.context.get(timer.started_at_us_field)
-        )
-        duration_seconds = _positive_context_int(
-            session.context.get(timer.duration_seconds_field)
-        )
-        remaining_requested = any(
-            phrase in clean for phrase in _REMAINING_TIME_PHRASES
-        )
+        started_at_us = _positive_context_int(session.context.get(timer.started_at_us_field))
+        duration_seconds = _positive_context_int(session.context.get(timer.duration_seconds_field))
+        remaining_requested = any(phrase in clean for phrase in _REMAINING_TIME_PHRASES)
         if started_at_us <= 0 and (start_time_requested or remaining_requested):
-            target = (
-                f" The target duration is {_format_duration(duration_seconds)}."
-                if duration_seconds > 0
-                else ""
-            )
-            return (
-                f"The {timer.label} timer has not started because no start time "
-                f"is recorded yet.{target}"
-            )
+            target = f" The target duration is {_format_duration(duration_seconds)}." if duration_seconds > 0 else ""
+            return f"The {timer.label} timer has not started because no start time is recorded yet.{target}"
         return ""
     if start_time_requested:
         started = datetime.fromtimestamp(
@@ -934,17 +929,11 @@ def _time_question_answer(
         if status.expired:
             return f"The {status.label} time is up."
         remaining = _format_duration(status.remaining_seconds)
-        return (
-            f"There is about {remaining} left for {status.label}. "
-            f"About {elapsed} has elapsed out of {target}."
-        )
+        return f"There is about {remaining} left for {status.label}. About {elapsed} has elapsed out of {target}."
     if status.expired:
         return f"About {elapsed} has elapsed. The {status.label} time is up."
     remaining = _format_duration(status.remaining_seconds)
-    return (
-        f"About {elapsed} has elapsed since {status.label} started. "
-        f"There is about {remaining} left."
-    )
+    return f"About {elapsed} has elapsed since {status.label} started. There is about {remaining} left."
 
 
 def _relevant_timer_step(
@@ -974,13 +963,13 @@ def _format_duration(total_seconds: int) -> str:
             return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
         minute_text = f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
         second_text = f"{seconds} second" if seconds == 1 else f"{seconds} seconds"
-        return f"{minute_text} {second_text}"
+        return f"{minute_text} and {second_text}"
     hours, minutes = divmod(minutes, 60)
     hour_text = f"{hours} hour" if hours == 1 else f"{hours} hours"
     if minutes == 0:
         return hour_text
     minute_text = f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
-    return f"{hour_text} {minute_text}"
+    return f"{hour_text} and {minute_text}"
 
 
 def _apply_vlm_verdict_guards(
@@ -990,11 +979,7 @@ def _apply_vlm_verdict_guards(
     ready_to_advance: bool,
 ) -> tuple[dict[str, Any], bool]:
     verdicts = _parse_vlm_verdicts(observation_text)
-    blocking = {
-        name: value
-        for name, value in verdicts.items()
-        if value in {"no", "unclear"}
-    }
+    blocking = {name: value for name, value in verdicts.items() if value in {"no", "unclear"}}
     if not blocking:
         return context_patch, ready_to_advance
 
@@ -1002,14 +987,11 @@ def _apply_vlm_verdict_guards(
     for key, value in context_patch.items():
         field_token = _tokenize_for_match(str(key))
         contradicted = [
-            f"{name}:{state}"
-            for name, state in blocking.items()
-            if name in field_token and _truthy_patch_value(value)
+            f"{name}:{state}" for name, state in blocking.items() if name in field_token and _truthy_patch_value(value)
         ]
         if contradicted:
             logger.warning(
-                "dropping context update contradicted by VLM verdict step={} field={} "
-                "value={!r} verdicts={}",
+                "dropping context update contradicted by VLM verdict step={} field={} value={!r} verdicts={}",
                 step.id,
                 key,
                 value,
@@ -1032,10 +1014,7 @@ def _apply_vlm_verdict_guards(
 
 
 def _parse_vlm_verdicts(text: str) -> dict[str, str]:
-    return {
-        _tokenize_for_match(match.group(1)): match.group(2).casefold()
-        for match in _VERDICT_RE.finditer(text)
-    }
+    return {_tokenize_for_match(match.group(1)): match.group(2).casefold() for match in _VERDICT_RE.finditer(text)}
 
 
 def _tokenize_for_match(text: str) -> str:
@@ -1068,12 +1047,7 @@ def _looks_like_advance(text: str, workflow: WorkflowDefinition) -> bool:
 
 
 def _looks_like_status_request(clean: str) -> bool:
-    return (
-        "status" in clean.split()
-        or "what step" in clean
-        or "where are we" in clean
-        or "workflow progress" in clean
-    )
+    return "status" in clean.split() or "what step" in clean or "where are we" in clean or "workflow progress" in clean
 
 
 def _contains_negation(text: str) -> bool:
