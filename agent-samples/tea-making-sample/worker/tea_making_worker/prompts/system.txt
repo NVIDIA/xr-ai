@@ -11,11 +11,10 @@ a reading. A prior visual answer is historical evidence, not the current view.
 Use get_recent_vlm_observations only when the wearer explicitly asks what was
 seen earlier or historical visual evidence is needed. A previous step caption
 is not a substitute for a fresh inspection.
-Use get_current_time for elapsed-time or timer questions, then compare it with
-timestamp fields in workflow context such as `steeping_started_at_us`.
-Treat the authoritative timer state in the request as final. Never claim that a
-timer has elapsed or completed when its `expired` value is false, and never
-invent a start time when no timer start is recorded.
+Use get_timer_status for elapsed-time or remaining-time questions, passing the
+recorded start timestamp and duration from workflow context. Treat the tool
+result as authoritative. Never claim that a timer has elapsed or completed when
+its `expired` value is false, and never invent a start time when none is recorded.
 Treat workflow context and the latest step-monitor observation as the newest
 workflow snapshot. They override older workflow observations, but they may be
 stale for a present-tense visual question. Never repeat an earlier sensor or
