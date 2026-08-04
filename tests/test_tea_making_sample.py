@@ -513,6 +513,27 @@ async def test_answer_agent_can_inspect_a_fresh_view_for_visual_questions() -> N
     assert '"visual_evidence": "The kettle display reads 82 C."' in (model_calls[1][-1].content)
 
 
+def test_visual_question_answer_is_not_reused_as_current_step_observation() -> None:
+    observation_log = [
+        {
+            "step_id": 3,
+            "kind": "step_monitor",
+            "caption": "WATER_TEMPERATURE: 35 C",
+        },
+        {
+            "step_id": 3,
+            "kind": "visual_question",
+            "question": "What temperature is it now?",
+            "caption": "The display reads 37 C.",
+        },
+    ]
+
+    latest = agent_module._latest_step_observation(observation_log, 3)  # noqa: SLF001
+
+    assert "35 C" in latest
+    assert "37 C" not in latest
+
+
 async def test_guide_logs_fresh_visual_answers_and_normalizes_them_for_speech() -> None:
     workflow = _workflow()
     inspected: list[str] = []
@@ -1082,7 +1103,7 @@ async def test_answer_agent_receives_completed_step_state_and_yaml_procedure() -
     assert "ready=True" in prompt
 
 
-async def test_answer_agent_prioritizes_latest_visual_state_over_old_turns() -> None:
+async def test_answer_agent_prioritizes_latest_step_monitor_over_old_turns() -> None:
     workflow = _workflow()
     step = workflow.step_by_id(3)
     captured: list = []
@@ -1134,13 +1155,13 @@ async def test_answer_agent_prioritizes_latest_visual_state_over_old_turns() -> 
     )
 
     prompt = captured[-1].content
-    assert prompt.index("The water is currently 59 C.") < prompt.index("[Authoritative current state]")
+    assert prompt.index("The water is currently 59 C.") < prompt.index("[Workflow snapshot]")
     assert '"water_temperature_current": "100 C"' in prompt
     assert "TEMPERATURE_READING: 100 C" in prompt
     assert (
         "TEMPERATURE_READING: 59 C"
         not in prompt.split(
-            "[Latest VLM observation]",
+            "[Latest step-monitor observation]",
             maxsplit=1,
         )[1]
     )
