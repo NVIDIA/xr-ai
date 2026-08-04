@@ -351,13 +351,9 @@ class RenderSceneProcessor(BrainProcessor):
         # Quick-ack: fast LLM call that (a) speaks an immediate
         # acknowledgment and (b) classifies whether Nemotron needs
         # reasoning enabled.  Await it first so the think flag is ready
-        # before the main loop starts. On failure default to thinking so a
-        # spatial request degrades to a slower turn, not a wrong answer.
-        try:
-            ack, needs_thinking = await self._quick_ack(text)
-        except Exception:
-            logger.exception("quick ack failed")
-            ack, needs_thinking = "", True
+        # before the main loop starts. On failure _quick_ack falls back to
+        # ("", False); thinking degrades tool-following accuracy.
+        ack, needs_thinking = await self._quick_ack(text)
 
         if ack and send_pid:
             # ACK-SPEAK POLICY (deliberate): speak the quick-ack on EVERY turn,
@@ -371,7 +367,10 @@ class RenderSceneProcessor(BrainProcessor):
             # single spoken ack is enough to signal "I'm on it". Also mirror
             # the ack to the panel.
             await self._send(send_pid, ack, topic=_AGENT_PROGRESS_TOPIC)
-            yield ack
+            # TTS batches on sentence-final punctuation; an unterminated ack
+            # would sit in its buffer until the final response lands and play
+            # concatenated with it.
+            yield ack if ack[-1] in ".!?" else ack + "."
 
         # Start a "still working" timer — fires if reasoning takes >5s.
         # Cancelled as soon as the loop returns.
@@ -379,7 +378,7 @@ class RenderSceneProcessor(BrainProcessor):
         # the still-working messages can reflect what the 30B is reasoning about.
         thinking_ctx: list[str] = [""]
         still_task = asyncio.create_task(
-            self._still_working_loop(text, send_pid, thinking_ctx, enabled=needs_thinking),
+            self._still_working_loop(text, send_pid, thinking_ctx),
             name="still-working",
         )
 
@@ -514,7 +513,9 @@ class RenderSceneProcessor(BrainProcessor):
                 try:
                     obj = json.loads(obj_text)
                     ack = str(obj.get("ack", "")).strip()
-                    think = bool(obj.get("think", False))
+                    # Strict is-True: a model emitting "think": "false" must
+                    # not truthy its way into the thinking path.
+                    think = obj.get("think") is True
                     logger.info("quick-ack: {!r}  think={}", ack, think)
                     _trace_log.info("ACK   {}  [think={}]", ack, think)
                     return ack, think
@@ -527,8 +528,8 @@ class RenderSceneProcessor(BrainProcessor):
                 return "", False
             return raw, False
         except Exception as exc:
-            logger.warning("quick-ack failed: {}", exc)
-        return "", True
+            logger.warning("quick-ack failed: {!r}", exc)
+        return "", False
 
     # ── agentic loop (OpenAI tool calling) ───────────────────────────────────
 
@@ -580,15 +581,12 @@ class RenderSceneProcessor(BrainProcessor):
         *,
         first_after: float = 5.0,
         repeat_every: float = 10.0,
-        enabled: bool = True,
     ) -> None:
-        """Speak periodic contextual updates while the agentic loop runs.
+        """Post periodic contextual updates while the agentic loop runs.
 
-        Only fires when enabled=True (i.e. needs_thinking).  Non-thinking turns
-        resolve in under a second — a "still working" message would just be noise.
+        Purely time-gated: any turn still running after ``first_after``
+        gets panel updates, thinking or not.
         """
-        if not enabled:
-            return
         sent: list[str] = []
         await asyncio.sleep(first_after)
         while True:

@@ -431,12 +431,13 @@ class _UnusedToolbox:
         raise AssertionError(f"unexpected native tool invocation: {name} {arguments}")
 
 
-def _make_brain(transport: _CaptureTransport):
+def _make_brain(transport: _CaptureTransport, llm=None):
     """Build a real RenderSceneProcessor whose service clients are unused.
 
     The notice path (enqueue_notice → handle_query short-circuit →
     _emit_notice) never dereferences them. The constructor eagerly reads
     the real prompt files, so point at the bundled prompts/ directory.
+    Pass ``llm`` to exercise the real _quick_ack parse paths against a stub.
     """
     return _proc.RenderSceneProcessor(
         transport   = transport,
@@ -446,7 +447,7 @@ def _make_brain(transport: _CaptureTransport):
         text_memory = None,
         prompt_path = _SYSTEM_PROMPT,
         tools       = [],
-        llm         = None,
+        llm         = llm,
         agent_llm   = None,
     )
 
@@ -555,6 +556,128 @@ async def test_quick_ack_spoken_on_non_thinking_turn() -> None:
     # Ack is also mirrored to the panel on agent.progress.
     progress = [m for m in transport.sent if m.topic == "agent.progress"]
     assert any(m.data.decode() == "On it." for m in progress)
+
+
+def test_tool_result_json_is_sanitized() -> None:
+    """A final response that is nothing but a JSON object (e.g. an echoed
+    tool result) must be flagged so it never reaches TTS; prose that merely
+    contains JSON passes."""
+    from tooling import looks_like_leaked_tool_call
+
+    assert looks_like_leaked_tool_call('{"id": "box-1", "ok": true, "reason": null}')
+    assert looks_like_leaked_tool_call('[{"id": "box-1", "ok": true}]')
+    assert not looks_like_leaked_tool_call('Added box-1 ({"ok": true} from the scene).')
+    assert not looks_like_leaked_tool_call("Added a blue sphere.")
+
+
+async def test_quick_ack_parses_wellformed_json() -> None:
+    """_quick_ack returns the ack string and a strict-bool think flag."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content='{"ack": "On it", "think": true}')
+    brain = _make_brain(_CaptureTransport(), llm=_make_spec_llm(stub, "llm"))
+    assert await brain._quick_ack("move the cube") == ("On it", True)  # noqa: SLF001
+
+
+async def test_quick_ack_string_think_is_not_truthy() -> None:
+    """A model emitting "think": "false" (a string) must not enable thinking."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content='{"ack": "On it", "think": "false"}')
+    brain = _make_brain(_CaptureTransport(), llm=_make_spec_llm(stub, "llm"))
+    assert await brain._quick_ack("move the cube") == ("On it", False)  # noqa: SLF001
+
+
+async def test_quick_ack_truncated_json_not_spoken() -> None:
+    """A truncated JSON payload has no closing brace; the raw fragment must
+    not be returned as a speakable ack."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content='{"ack": "Let me ta')
+    brain = _make_brain(_CaptureTransport(), llm=_make_spec_llm(stub, "llm"))
+    assert await brain._quick_ack("what am I holding") == ("", False)  # noqa: SLF001
+
+
+async def test_quick_ack_bare_prose_fallback() -> None:
+    """Non-JSON prose is used as the ack with thinking off."""
+    stub = StubOpenAI()
+    stub.set_chat_message(content="On it")
+    brain = _make_brain(_CaptureTransport(), llm=_make_spec_llm(stub, "llm"))
+    assert await brain._quick_ack("add a sphere") == ("On it", False)  # noqa: SLF001
+
+
+async def test_quick_ack_transport_error_falls_back_silent_fast() -> None:
+    """LLM failure → no ack, thinking off (fail toward the tool-trusting mode)."""
+
+    class _BoomLLM:
+        async def chat(self, *_a, **_k):
+            raise TimeoutError
+
+    brain = _make_brain(_CaptureTransport(), llm=_BoomLLM())
+    assert await brain._quick_ack("move it up") == ("", False)  # noqa: SLF001
+
+
+async def test_already_punctuated_ack_not_doubled() -> None:
+    """An ack ending in !/? passes through unchanged (no "On it!.")."""
+    transport = _CaptureTransport()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    async def _fake_quick_ack(_text):
+        return ("On it!", False)
+
+    async def _fake_loop(*_a, **_k):
+        return "Done."
+
+    brain._quick_ack = _fake_quick_ack      # noqa: SLF001
+    brain._agentic_loop = _fake_loop        # noqa: SLF001
+
+    gen = await brain.handle_query("pid-1", "add a cube", False)
+    spoken = [s async for s in gen]
+    assert spoken == ["On it!", "Done."]
+
+
+async def test_empty_ack_yields_no_spoken_line() -> None:
+    """The quick-ack failure fallback ("", False) must not yield an empty
+    ack line or post an empty progress message; the final reply still lands."""
+    transport = _CaptureTransport()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    async def _fake_quick_ack(_text):
+        return ("", False)
+
+    async def _fake_loop(*_a, **_k):
+        return "All set."
+
+    brain._quick_ack = _fake_quick_ack      # noqa: SLF001
+    brain._agentic_loop = _fake_loop        # noqa: SLF001
+
+    gen = await brain.handle_query("pid-1", "add a cube", False)
+    spoken = [s async for s in gen]
+    assert spoken == ["All set."]
+    assert not [m for m in transport.sent if m.topic == "agent.progress"]
+
+
+async def test_unpunctuated_ack_gets_terminal_period() -> None:
+    """Acks without terminal punctuation are normalized before being yielded
+    to TTS; the panel copy stays verbatim."""
+    transport = _CaptureTransport()
+    transport.set_target_participant("pid-1")
+    brain = _make_brain(transport)
+
+    async def _fake_quick_ack(_text):
+        return ("Let me take a look", True)
+
+    async def _fake_loop(*_a, **_k):
+        return "Done."
+
+    brain._quick_ack = _fake_quick_ack      # noqa: SLF001
+    brain._agentic_loop = _fake_loop        # noqa: SLF001
+
+    gen = await brain.handle_query("pid-1", "what am I holding", False)
+    spoken = [s async for s in gen]
+
+    assert spoken[0] == "Let me take a look."
+    progress = [m for m in transport.sent if m.topic == "agent.progress"]
+    assert any(m.data.decode() == "Let me take a look" for m in progress)
 
 
 # ── live-frame perception routing (look_at_current_frame) ──────────────────────
@@ -810,14 +933,13 @@ async def _perception_brain(transport, vlm: _FakeVLM):
 
 
 def test_perception_tool_def_in_prompt_and_classifier() -> None:
-    """The new perception tool is named in the system prompt, and the
-    quick-ack classifier still flags real-world visual lookups as think=true
-    (so they enter the reasoning loop where the tool lives)."""
+    """The perception tool is named in the system prompt, and the quick-ack
+    classifier treats camera lookups as tool-settled (think=false territory):
+    thinking is reserved for requests no tool pattern covers."""
     prompt = _SYSTEM_PROMPT.read_text(encoding="utf-8")
     assert "look_at_current_frame" in prompt
-    # The classifier prompt routes real-world camera queries to think=true.
     ack = (_PROMPTS_DIR / "quick_ack.txt").read_text(encoding="utf-8").lower()
-    assert "real world" in ack and "camera" in ack
+    assert "default is false" in ack and "camera" in ack
 
 
 async def test_perception_query_reaches_vlm_frame_path() -> None:

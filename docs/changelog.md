@@ -9,6 +9,26 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-03 — Spoken text must carry terminal punctuation
+
+The TTS stage batches on sentence-final punctuation and flushes trailing
+fragments only at end of turn, so any mid-turn utterance yielded without
+terminal punctuation plays late, concatenated with the final response. The
+render demo's spoken quick-ack is punctuation-normalized at the yield site;
+whole-message JSON (an echoed tool result) is sanitized before TTS.
+
+### 2026-08-03 — Thinking is reserved for requests the tools can't settle
+
+The quick-ack classifier routes every positional operation — placement,
+movement, resizing, recoloring, removal, camera lookups — to the
+non-thinking fast path: the spatial-math tools compute exact answers, so
+reasoning over them adds latency without improving results. `think: true`
+is reserved for vague corrections and free-form compositions no tool
+pattern covers. Live-verified on Nemotron-3-Nano-30B: relative placements,
+displacement with unit conversion, and midpoint placement all execute
+correctly without thinking. The still-working panel ticker is purely
+time-gated so slow non-thinking turns get progress updates too.
+
 ### 2026-08-03 — xr-render-demo drops the dedicated quick-response LLM
 
 The Llama-3.1-Nemotron-Nano-8B server (port 8106) is no longer part of the
