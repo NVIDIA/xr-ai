@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+from xr_ai_vllm import _docker
 from xr_ai_vllm._docker import (
     _already_logged_in,
     _registry_for,
@@ -208,34 +209,32 @@ class TestRunContainer:
         return captured
 
     def test_reuse_healthy_touches_ready_file_without_popen(self, monkeypatch, tmp_path):
-        import xr_ai_vllm._docker as d
-        self._common_stubs(monkeypatch, d)
-        monkeypatch.setattr(d._lifecycle, "health_ok", lambda url, **kw: True)
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: True)
 
         def _no_popen(*a, **kw):
             raise AssertionError("Popen must not be called on healthy reuse")
 
-        monkeypatch.setattr(d.subprocess, "Popen", _no_popen)
+        monkeypatch.setattr(_docker.subprocess, "Popen", _no_popen)
         kwargs = self._kwargs(tmp_path)
-        d.run_container(**kwargs)
+        _docker.run_container(**kwargs)
         assert kwargs["ready_file"].exists()
 
     def test_adopt_running_container_aliveness_follows_container(
         self, monkeypatch, tmp_path,
     ):
-        import xr_ai_vllm._docker as d
-        captured = self._common_stubs(monkeypatch, d)
-        monkeypatch.setattr(d._lifecycle, "health_ok", lambda url, **kw: False)
+        captured = self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
         running = {"v": True}
-        monkeypatch.setattr(d, "container_running", lambda name: running["v"])
-        monkeypatch.setattr(d, "container_exists", lambda name: True)
+        monkeypatch.setattr(_docker, "container_running", lambda name: running["v"])
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
 
         def _no_popen(*a, **kw):
             raise AssertionError("adopting a running container must not docker run/start")
 
-        monkeypatch.setattr(d.subprocess, "Popen", _no_popen)
+        monkeypatch.setattr(_docker.subprocess, "Popen", _no_popen)
         kwargs = self._kwargs(tmp_path)
-        d.run_container(**kwargs)
+        _docker.run_container(**kwargs)
         assert kwargs["ready_file"].exists()
         is_alive = captured["is_alive"]
         assert is_alive() is True
@@ -243,11 +242,10 @@ class TestRunContainer:
         assert is_alive() is False
 
     def test_stopped_container_restarted_via_docker_start(self, monkeypatch, tmp_path):
-        import xr_ai_vllm._docker as d
-        self._common_stubs(monkeypatch, d)
-        monkeypatch.setattr(d._lifecycle, "health_ok", lambda url, **kw: False)
-        monkeypatch.setattr(d, "container_running", lambda name: False)
-        monkeypatch.setattr(d, "container_exists", lambda name: True)
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        monkeypatch.setattr(_docker, "container_running", lambda name: False)
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
         popen_argvs: list[list[str]] = []
 
         class _FakeProc:
@@ -261,9 +259,9 @@ class TestRunContainer:
             popen_argvs.append(list(argv))
             return _FakeProc()
 
-        monkeypatch.setattr(d.subprocess, "Popen", _popen)
+        monkeypatch.setattr(_docker.subprocess, "Popen", _popen)
         kwargs = self._kwargs(tmp_path)
-        d.run_container(**kwargs)
+        _docker.run_container(**kwargs)
         assert popen_argvs == [["docker", "start", "-a", "xr-ai-test-ctr"]]
         assert kwargs["ready_file"].exists()
 
