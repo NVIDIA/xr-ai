@@ -169,8 +169,7 @@ steps:
       Set context_ready only when the tea name, spoken guidance, numeric target,
       and timer duration are known. Otherwise request a clearer label once the
       worker's reminder interval is reached.
-    agent_tools:
-      rag_lookup: {}
+    agent_tools: [rag_lookup]
     advance_when:
       all:
         - field: context_ready
@@ -286,15 +285,6 @@ steps:
       has completed the step, keep that milestone latched while live observation
       fields may continue changing until the wearer proceeds.
     agent_tools: []
-    state_updates:
-      - context_field: water_temperature_current
-        observation_key: TEMPERATURE_READING
-        states: [started, needs_input, complete]
-        value_map:
-          not_visible: "not visible"
-      - context_field: water_boil_cue
-        observation_key: BOIL_CUE
-        states: [started, needs_input, complete]
     advance_when:
       field: water_ready
       equals: true
@@ -330,19 +320,13 @@ steps:
       End with:
       STEEPING_STARTED: yes/no/unclear
     agent_prompt: |
-      When the latest VLM verdict first says the tea has entered the hot water and
-      no start timestamp exists, capture the time. Never overwrite an existing
-      steeping start timestamp. If steeping has not started, request that the tea
-      be placed in the water only when the worker asks for a delayed reminder.
-    agent_tools:
-      get_current_time:
-        vlm_verdict: STEEPING_STARTED
-        equals: "yes"
-        auto_invoke: true
-        when_context_empty: steeping_started_at_us
-        context_outputs:
-          epoch_us: steeping_started_at_us
-          iso: steeping_started_at_iso
+      When the latest caption says the tea has entered the hot water and
+      no start timestamp exists, call get_current_time. Copy the tool's epoch_us
+      to steeping_started_at_us and iso to steeping_started_at_iso in the context
+      patch. Never overwrite an existing steeping start timestamp. If steeping
+      has not started, request that the tea be placed in the water only when the
+      worker asks for a delayed reminder.
+    agent_tools: [get_current_time]
     advance_when:
       field: steeping_started_at_us
       gt: 0
@@ -359,7 +343,7 @@ steps:
 
   - id: 5
     name: Wait for steeping to finish
-    description: Track elapsed steeping time without periodic VLM captions.
+    description: Track elapsed steeping time through an agent tool without VLM captions.
     reads:
       - tea_name
       - steep_time
@@ -369,16 +353,12 @@ steps:
     writes:
       - steeping_complete
     agent_prompt: |
-      Use the authoritative timer state when answering questions. Report elapsed
-      and remaining time in natural spoken language. Do not ask the wearer to show
-      the tea or repeat a completed action. A fresh visual question can still use
-      the general live-view inspection tool even though periodic captions are off.
-    agent_tools: []
-    timer:
-      label: steeping
-      started_at_us_field: steeping_started_at_us
-      duration_seconds_field: steep_duration_seconds
-      completion_field: steeping_complete
+      On every iteration, call get_timer_status with steeping_started_at_us,
+      steep_duration_seconds, and the label "steeping". Set steeping_complete
+      true only when the tool returns expired true. Otherwise leave it unset and
+      keep the step started. Do not ask the wearer to show the tea or repeat a
+      completed action.
+    agent_tools: [get_timer_status]
     advance_when:
       field: steeping_complete
       equals: true

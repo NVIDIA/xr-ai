@@ -6,8 +6,6 @@
 from __future__ import annotations
 
 import json
-import re
-import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,12 +25,6 @@ from .workflow import (
 _OBSERVATION_LOG_TOOL = "get_recent_vlm_observations"
 _VISUAL_INSPECTION_TOOL = "inspect_current_view"
 VisualQueryFn = Callable[[str], Awaitable[dict[str, Any]]]
-_VLM_VERDICT_RE = re.compile(
-    r"^\s*([A-Z][A-Z0-9_ ]+)\s*:\s*(yes|no|unclear)\b",
-    re.IGNORECASE | re.MULTILINE,
-)
-
-
 @dataclass(frozen=True, slots=True)
 class StepAgentResult:
     """Structured output from one step-agent iteration."""
@@ -80,17 +72,14 @@ class WorkflowAgent:
         self,
         *,
         step: WorkflowStep,
-        session: WorkflowSession,
+        participant_id: str,
+        context: dict[str, Any],
+        observation_log: list[dict[str, Any]],
         vlm_observation: str,
     ) -> StepAgentResult:
-        automatic_patch = await self._auto_invoke_step_tools(
-            step,
-            vlm_observation,
-            session.context,
-        )
         prompt_context = self._workflow.context_for_step(
             step,
-            {**session.context, **automatic_patch},
+            context,
         )
         messages = [
             ChatMessage(role="system", content=_STEP_SYSTEM_PROMPT),
@@ -102,26 +91,24 @@ class WorkflowAgent:
         raw = await self._run_tool_loop(
             messages,
             max_tokens=1536,
-            observation_log=session.observation_log,
-            tool_defs=self._step_tool_defs(step, vlm_observation),
+            observation_log=observation_log,
+            tool_defs=self._step_tool_defs(step),
         )
         logger.debug(
             "step agent raw pid={} step={} text={!r}",
-            session.participant_id,
+            participant_id,
             step.id,
             raw[:1000],
         )
         obj = _json_object(raw)
         if not isinstance(obj, dict):
             logger.warning("step agent did not return JSON: {!r}", raw[:200])
-            return StepAgentResult(context_patch=automatic_patch)
+            return StepAgentResult(context_patch={})
 
         context_patch = obj.get("context")
         if not isinstance(context_patch, dict):
             valid = step.writable_fields
             context_patch = {key: value for key, value in obj.items() if key in valid}
-        context_patch = {**context_patch, **automatic_patch}
-
         return StepAgentResult(
             context_patch=dict(context_patch),
             step_state=_valid_step_state(obj.get("step_state")),
@@ -208,7 +195,6 @@ class WorkflowAgent:
     ) -> str:
         system = self._read_answer_prompt()
         context = session.context if session is not None else self._workflow.initial_context()
-        timer_state = self._timer_state_for_prompt(session)
         history = (
             "\n".join(f"User: {user}\nAssistant: {assistant}" for user, assistant in recent_turns[-4:]) or "(none)"
         )
@@ -237,7 +223,6 @@ class WorkflowAgent:
                     f"ready={bool(session and session.ready_step_id == current_step.id)}\n"
                     f"workflow_active={bool(session and session.active)}\n\n"
                     f"[Workflow context]\n{context_for_prompt(context)}\n\n"
-                    f"[Authoritative timer state]\n{timer_state}\n\n"
                     f"[Latest step-monitor observation]\n{latest_observation}\n\n"
                     f"[VLM observation log]\n"
                     f"A rolling internal log is available through "
@@ -260,33 +245,6 @@ class WorkflowAgent:
             response[:1000],
         )
         return response.strip() or "Done."
-
-    def _timer_state_for_prompt(self, session: WorkflowSession | None) -> str:
-        if session is None:
-            return "No active timer."
-        status = self._workflow.find_timer_status(
-            session.context,
-            current_step_id=session.step_id,
-            now_us=time.time_ns() // 1_000,
-        )
-        if status is None:
-            return "No timer start and duration are currently recorded."
-        return json.dumps(
-            {
-                "label": status.label,
-                "started_at_us": status.started_at_us,
-                "duration_seconds": status.duration_seconds,
-                "elapsed_seconds": status.elapsed_seconds,
-                "remaining_seconds": status.remaining_seconds,
-                "expired": status.expired,
-                "instruction": (
-                    "Treat these derived values as authoritative. Never claim the timer "
-                    "is complete when expired is false."
-                ),
-            },
-            ensure_ascii=True,
-            sort_keys=True,
-        )
 
     def _step_user_prompt(
         self,
@@ -381,85 +339,23 @@ class WorkflowAgent:
     def _step_tool_defs(
         self,
         step: WorkflowStep,
-        vlm_observation: str,
     ) -> list[ToolDef]:
         if not step.agent_tools:
             return []
         definitions = {tool.name: tool for tool in self._tool_defs}
         enabled: list[ToolDef] = []
-        for name, policy in step.agent_tools.items():
+        for name in step.agent_tools:
             tool = definitions.get(name)
             if tool is None:
                 logger.warning("step {} references unknown agent tool {}", step.id, name)
                 continue
-            if _tool_policy_met(policy, vlm_observation):
-                enabled.append(tool)
+            enabled.append(tool)
         logger.debug(
             "step agent tools step={} enabled={}",
             step.id,
             [tool.name for tool in enabled],
         )
         return enabled
-
-    async def _auto_invoke_step_tools(
-        self,
-        step: WorkflowStep,
-        vlm_observation: str,
-        context: dict[str, Any],
-    ) -> dict[str, Any]:
-        patch: dict[str, Any] = {}
-        for name, policy in step.agent_tools.items():
-            if not policy.get("auto_invoke") or not _tool_policy_met(
-                policy,
-                vlm_observation,
-            ):
-                continue
-            empty_field = str(policy.get("when_context_empty") or "").strip()
-            effective_context = {**context, **patch}
-            if empty_field and _context_value_present(_dotted_value(effective_context, empty_field)):
-                logger.debug(
-                    "automatic step tool skipped step={} tool={} field={} reason=present",
-                    step.id,
-                    name,
-                    empty_field,
-                )
-                continue
-            arguments = policy.get("arguments") or {}
-            if not isinstance(arguments, dict):
-                arguments = {}
-            logger.info("automatic step tool call step={} tool={}", step.id, name)
-            try:
-                result = await self._tools.invoke(name, arguments)
-            except Exception:
-                logger.exception("automatic step tool failed step={} tool={}", step.id, name)
-                continue
-            logger.debug(
-                "automatic step tool result step={} tool={} result={}",
-                step.id,
-                name,
-                result,
-            )
-            outputs = policy.get("context_outputs") or {}
-            if not isinstance(result, dict) or not isinstance(outputs, dict):
-                logger.warning(
-                    "automatic step tool returned unmappable result step={} tool={}",
-                    step.id,
-                    name,
-                )
-                continue
-            mapped = {
-                str(context_field): _dotted_value(result, str(result_field))
-                for result_field, context_field in outputs.items()
-            }
-            mapped = {key: value for key, value in mapped.items() if value is not None}
-            patch.update(mapped)
-            logger.info(
-                "automatic step tool captured step={} tool={} context={}",
-                step.id,
-                name,
-                mapped,
-            )
-        return patch
 
     async def _execute_tool(
         self,
@@ -524,11 +420,11 @@ class WorkflowAgent:
             return self._answer_prompt_cache
 
 
-_STEP_SYSTEM_PROMPT = """You run one step of a YAML-defined guided workflow.
-You receive a VLM observation produced by the step's VLM prompt, the current
-workflow context, and the step-specific procedure. Use tools only when needed:
-RAG for task reference information, current time for timestamps, and the VLM
-observation log if earlier visual evidence matters.
+_STEP_SYSTEM_PROMPT = """You run one iteration of a YAML-defined workflow step.
+You receive the latest optional VLM caption, current workflow context, and the
+step-specific procedure. Interpret the caption and perform every state update
+through the returned context patch. Call the step's enabled tools whenever its
+procedure requires current time, timer status, RAG, or other external data.
 
 Return only valid JSON. The top-level object must contain:
 - context: a partial patch containing only fields this step can write and only
@@ -547,7 +443,9 @@ notice.
 
 Do not change the workflow step number. Do not invent visible facts. A writable
 observation may change more than once within one step; prefer newer evidence to
-older context. Omit unchanged fields instead of copying the entire context."""
+older context. For durable milestones, retain established true values unless
+the procedure says otherwise. Omit unchanged fields instead of copying the
+entire context."""
 
 
 _NAVIGATION_SYSTEM_PROMPT = """Classify one user utterance for a guided workflow.
@@ -662,39 +560,6 @@ def _latest_step_observation(
     if latest is None:
         return "(none)"
     return json.dumps(latest, ensure_ascii=True, sort_keys=True)
-
-
-def _tool_policy_met(policy: dict[str, Any], vlm_observation: str) -> bool:
-    verdict_name = str(policy.get("vlm_verdict") or "").strip()
-    if not verdict_name:
-        return True
-    raw_expected = policy.get("equals", "yes")
-    if isinstance(raw_expected, bool):
-        expected = "yes" if raw_expected else "no"
-    else:
-        expected = str(raw_expected).casefold().strip()
-    verdicts = {
-        _normalize_verdict_name(match.group(1)): match.group(2).casefold()
-        for match in _VLM_VERDICT_RE.finditer(vlm_observation)
-    }
-    return verdicts.get(_normalize_verdict_name(verdict_name)) == expected
-
-
-def _normalize_verdict_name(text: str) -> str:
-    return re.sub(r"[^A-Z0-9]+", "_", text.upper()).strip("_")
-
-
-def _dotted_value(data: dict[str, Any], dotted: str) -> Any:
-    value: Any = data
-    for part in dotted.split("."):
-        if not isinstance(value, dict):
-            return None
-        value = value.get(part)
-    return value
-
-
-def _context_value_present(value: Any) -> bool:
-    return value not in (None, "", 0, 0.0, False, [], {})
 
 
 def _valid_step_state(value: Any) -> str:

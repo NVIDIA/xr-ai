@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,12 +17,6 @@ from typing import Any
 import yaml
 
 _TEMPLATE_RE = re.compile(r"{{\s*([a-zA-Z0-9_.-]+)(?:\s*\|\s*([a-zA-Z0-9_-]+))?\s*}}")
-_OBSERVATION_FIELD_RE = re.compile(
-    r"^\s*([A-Z][A-Z0-9_ ]+)\s*:\s*(.*?)\s*$",
-    re.IGNORECASE | re.MULTILINE,
-)
-_STEP_STATES = frozenset({"started", "needs_input", "complete"})
-_INVALID_CONTEXT_VALUE = object()
 _TEMPERATURE_RE = re.compile(
     r"(?<![\w.])(-?\d+(?:\.\d+)?)\s*(?:°\s*)?([CF])\b",
     re.IGNORECASE,
@@ -69,38 +62,6 @@ class ContextField:
 
 
 @dataclass(frozen=True, slots=True)
-class TimerSpec:
-    """YAML-defined wall-clock timer for a non-visual workflow step."""
-
-    label: str
-    started_at_us_field: str
-    duration_seconds_field: str
-    completion_field: str
-
-
-@dataclass(frozen=True, slots=True)
-class TimerStatus:
-    """Current timer values derived from workflow context."""
-
-    label: str
-    started_at_us: int
-    duration_seconds: int
-    elapsed_seconds: int
-    remaining_seconds: int
-    expired: bool
-
-
-@dataclass(frozen=True, slots=True)
-class StateUpdateSpec:
-    """Declarative mapping from a structured VLM field to workflow context."""
-
-    context_field: str
-    states: tuple[str, ...]
-    observation_key: str = ""
-    value_map: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
 class WorkflowStep:
     """One YAML-configured step in the guided workflow."""
 
@@ -110,13 +71,12 @@ class WorkflowStep:
     vlm_prompt: str
     agent_prompt: str
     context_fields: tuple[ContextField, ...]
+    mechanism: str = "caption_agent"
     read_fields: tuple[str, ...] = ()
     partial_context: bool = False
     advance_when: dict[str, Any] = field(default_factory=dict)
     skip_defaults: dict[str, Any] = field(default_factory=dict)
-    agent_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
-    timer: TimerSpec | None = None
-    state_updates: tuple[StateUpdateSpec, ...] = ()
+    agent_tools: tuple[str, ...] = ()
     on_enter_message: str = ""
     on_reminder_message: str = ""
     on_complete_message: str = ""
@@ -149,39 +109,6 @@ class WorkflowStep:
 
         writes = tuple(item.name for item in self.context_fields)
         return tuple(dict.fromkeys((*self.read_fields, *writes)))
-
-    def state_update_fields(self, state: str) -> set[str]:
-        return {update.context_field for update in self.state_updates if state in update.states}
-
-    def observation_context_patch(
-        self,
-        observation: str,
-        *,
-        state: str,
-    ) -> dict[str, Any]:
-        observed = {
-            _normalize_observation_key(match.group(1)): match.group(2).strip()
-            for match in _OBSERVATION_FIELD_RE.finditer(observation)
-        }
-        field_types = {item.name: item.type for item in self.context_fields}
-        patch: dict[str, Any] = {}
-        for update in self.state_updates:
-            if state not in update.states or not update.observation_key:
-                continue
-            raw_value = observed.get(_normalize_observation_key(update.observation_key))
-            if not raw_value:
-                continue
-            mapped = update.value_map.get(
-                _normalize_observation_value(raw_value),
-                raw_value,
-            )
-            value = _coerce_context_value(
-                mapped,
-                field_types[update.context_field],
-            )
-            if value is not _INVALID_CONTEXT_VALUE:
-                patch[update.context_field] = value
-        return patch
 
 
 @dataclass(slots=True)
@@ -371,54 +298,6 @@ class WorkflowDefinition:
         rule = step.advance_when or {}
         return _rule_met(rule, context) if rule else ready_to_advance
 
-    def timer_status(
-        self,
-        step: WorkflowStep,
-        context: dict[str, Any],
-        *,
-        now_us: int,
-    ) -> TimerStatus | None:
-        spec = step.timer
-        if spec is None:
-            return None
-        started_at_us = _positive_int(_lookup(context, spec.started_at_us_field))
-        duration_seconds = _positive_int(_lookup(context, spec.duration_seconds_field))
-        if started_at_us <= 0 or duration_seconds <= 0:
-            return None
-        elapsed_us = max(0, now_us - started_at_us)
-        duration_us = duration_seconds * 1_000_000
-        return TimerStatus(
-            label=spec.label,
-            started_at_us=started_at_us,
-            duration_seconds=duration_seconds,
-            elapsed_seconds=elapsed_us // 1_000_000,
-            remaining_seconds=max(
-                0,
-                math.ceil((duration_us - elapsed_us) / 1_000_000),
-            ),
-            expired=elapsed_us >= duration_us,
-        )
-
-    def find_timer_status(
-        self,
-        context: dict[str, Any],
-        *,
-        current_step_id: int,
-        now_us: int,
-    ) -> TimerStatus | None:
-        timer_steps = (step for step in self.steps if step.timer is not None)
-        ordered = sorted(timer_steps, key=lambda step: step.id != current_step_id)
-        for step in ordered:
-            status = self.timer_status(step, context, now_us=now_us)
-            if status is not None:
-                return status
-        return None
-
-    def mark_timer_complete(self, step: WorkflowStep, context: dict[str, Any]) -> None:
-        if step.timer is not None:
-            context[step.timer.completion_field] = True
-
-
 def _rule_met(rule: dict[str, Any], context: dict[str, Any]) -> bool:
     all_rules = rule.get("all")
     if isinstance(all_rules, list):
@@ -580,13 +459,12 @@ def _parse_step(
         vlm_prompt=str(raw.get("vlm_prompt") or ""),
         agent_prompt=str(raw.get("agent_prompt") or ""),
         context_fields=context_fields,
+        mechanism=str(raw.get("mechanism") or "caption_agent").strip(),
         read_fields=read_fields,
         partial_context=registry_enabled,
         advance_when=dict(raw.get("advance_when") or {}),
         skip_defaults=dict(raw.get("skip_defaults") or {}),
-        agent_tools=_parse_agent_tools(raw.get("agent_tools") or {}),
-        timer=_parse_timer(raw.get("timer")),
-        state_updates=_parse_state_updates(raw.get("state_updates")),
+        agent_tools=_parse_agent_tools(raw.get("agent_tools") or []),
         on_enter_message=str(raw.get("on_enter_message") or ""),
         on_reminder_message=str(raw.get("on_reminder_message") or ""),
         on_complete_message=str(raw.get("on_complete_message") or ""),
@@ -594,67 +472,13 @@ def _parse_step(
     )
 
 
-def _parse_agent_tools(raw: Any) -> dict[str, dict[str, Any]]:
-    if isinstance(raw, list):
-        return {str(name): {} for name in raw}
-    if not isinstance(raw, dict):
-        raise ValueError("agent_tools must be a mapping or list")
-    tools: dict[str, dict[str, Any]] = {}
-    for name, policy in raw.items():
-        if policy is not None and not isinstance(policy, dict):
-            raise ValueError(f"agent tool policy must be a mapping: {name}")
-        tools[str(name)] = dict(policy or {})
-    return tools
-
-
-def _parse_state_updates(raw: Any) -> tuple[StateUpdateSpec, ...]:
-    if raw is None:
-        return ()
+def _parse_agent_tools(raw: Any) -> tuple[str, ...]:
     if not isinstance(raw, list):
-        raise ValueError("state_updates must be a list")
-    updates: list[StateUpdateSpec] = []
-    for item in raw:
-        if not isinstance(item, dict):
-            raise ValueError("each state_updates entry must be a mapping")
-        context_field = str(item.get("context_field") or "").strip()
-        if not context_field:
-            raise ValueError("state_updates entry must define context_field")
-        raw_states = item.get("states") or ["started", "needs_input"]
-        if not isinstance(raw_states, list) or not raw_states:
-            raise ValueError("state_updates states must be a non-empty list")
-        value_map = item.get("value_map") or {}
-        if not isinstance(value_map, dict):
-            raise ValueError("state_updates value_map must be a mapping")
-        updates.append(
-            StateUpdateSpec(
-                context_field=context_field,
-                states=tuple(str(state).casefold().strip() for state in raw_states),
-                observation_key=str(item.get("observation_key") or "").strip(),
-                value_map={_normalize_observation_value(key): value for key, value in value_map.items()},
-            )
-        )
-    return tuple(updates)
-
-
-def _parse_timer(raw: Any) -> TimerSpec | None:
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        raise ValueError("timer must be a mapping")
-    required = (
-        "started_at_us_field",
-        "duration_seconds_field",
-        "completion_field",
-    )
-    missing = [name for name in required if not str(raw.get(name) or "").strip()]
-    if missing:
-        raise ValueError(f"timer is missing required fields: {', '.join(missing)}")
-    return TimerSpec(
-        label=str(raw.get("label") or "timer").strip(),
-        started_at_us_field=str(raw["started_at_us_field"]),
-        duration_seconds_field=str(raw["duration_seconds_field"]),
-        completion_field=str(raw["completion_field"]),
-    )
+        raise ValueError("agent_tools must be a list of tool names")
+    names = tuple(str(name).strip() for name in raw if str(name).strip())
+    if len(names) != len(set(names)):
+        raise ValueError("agent_tools must not contain duplicate names")
+    return names
 
 
 def _parse_context_fields(raw: Any, *, lazy: bool = False) -> list[ContextField]:
@@ -748,58 +572,16 @@ def _validate_definition(definition: WorkflowDefinition, path: Path) -> None:
             raise ValueError(f"step {step.id} must define description: {path}")
         if not step.agent_prompt.strip():
             raise ValueError(f"step {step.id} must define agent_prompt: {path}")
-        if step.timer is None and not step.vlm_prompt.strip():
-            raise ValueError(f"step {step.id} must define vlm_prompt or timer: {path}")
+        if not step.mechanism:
+            raise ValueError(f"step {step.id} must define a mechanism: {path}")
         if not step.advance_when:
             raise ValueError(f"step {step.id} must define advance_when: {path}")
 
         writable = step.writable_fields
-        available = writable | set(step.read_fields)
         unknown_defaults = set(step.skip_defaults) - writable
         if unknown_defaults:
             names = ", ".join(sorted(unknown_defaults))
             raise ValueError(f"step {step.id} skip_defaults use unknown fields {names}: {path}")
-        unknown_update_fields = {update.context_field for update in step.state_updates} - writable
-        if unknown_update_fields:
-            names = ", ".join(sorted(unknown_update_fields))
-            raise ValueError(f"step {step.id} updates unknown context fields {names}: {path}")
-        invalid_states = {
-            state for update in step.state_updates for state in update.states if state not in _STEP_STATES
-        }
-        if invalid_states:
-            names = ", ".join(sorted(invalid_states))
-            raise ValueError(f"step {step.id} state_updates use invalid states {names}: {path}")
-        if step.state_update_fields("complete") and not step.vlm_prompt.strip():
-            raise ValueError(f"step {step.id} cannot update complete state without a vlm_prompt: {path}")
-        for tool_name, policy in step.agent_tools.items():
-            if not policy.get("auto_invoke"):
-                continue
-            outputs = policy.get("context_outputs")
-            if not isinstance(outputs, dict) or not outputs:
-                raise ValueError(f"step {step.id} automatic tool {tool_name} must define context_outputs: {path}")
-            unknown_outputs = {str(name) for name in outputs.values()} - writable
-            if unknown_outputs:
-                names = ", ".join(sorted(unknown_outputs))
-                raise ValueError(
-                    f"step {step.id} automatic tool {tool_name} uses unknown context fields {names}: {path}"
-                )
-            empty_field = str(policy.get("when_context_empty") or "").strip()
-            if empty_field and empty_field not in available:
-                raise ValueError(
-                    f"step {step.id} automatic tool {tool_name} checks unknown context field {empty_field}: {path}"
-                )
-        if step.timer is not None:
-            timer_fields = {
-                step.timer.started_at_us_field,
-                step.timer.duration_seconds_field,
-                step.timer.completion_field,
-            }
-            unknown_timer_fields = timer_fields - available
-            if unknown_timer_fields:
-                names = ", ".join(sorted(unknown_timer_fields))
-                raise ValueError(f"step {step.id} timer uses unknown fields {names}: {path}")
-            if step.timer.completion_field not in writable:
-                raise ValueError(f"step {step.id} timer completion field must be writable: {path}")
 
 
 def _default_for_type(field_type: str) -> Any:
@@ -810,50 +592,6 @@ def _default_for_type(field_type: str) -> Any:
         "integer": 0,
         "number": 0.0,
     }.get(field_type, "")
-
-
-def _normalize_observation_key(value: Any) -> str:
-    return re.sub(r"[^A-Z0-9]+", "_", str(value).upper()).strip("_")
-
-
-def _normalize_observation_value(value: Any) -> str:
-    if isinstance(value, bool):
-        return "yes" if value else "no"
-    return str(value).casefold().strip()
-
-
-def _coerce_context_value(value: Any, field_type: str) -> Any:
-    if field_type == "string":
-        return str(value)
-    if field_type == "boolean":
-        if isinstance(value, bool):
-            return value
-        normalized = str(value).casefold().strip()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-        return _INVALID_CONTEXT_VALUE
-    if field_type == "integer":
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return _INVALID_CONTEXT_VALUE
-    if field_type == "number":
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return _INVALID_CONTEXT_VALUE
-    if field_type in {"array", "object"}:
-        decoded = value
-        if isinstance(value, str):
-            try:
-                decoded = json.loads(value)
-            except json.JSONDecodeError:
-                return _INVALID_CONTEXT_VALUE
-        expected_type = list if field_type == "array" else dict
-        return decoded if isinstance(decoded, expected_type) else _INVALID_CONTEXT_VALUE
-    return value
 
 
 def _render_default(value: Any, values: dict[str, Any]) -> Any:
@@ -898,14 +636,6 @@ def _unset_for_skip(value: Any, field: ContextField | None) -> bool:
     return field.default in (None, "", False, 0, 0.0)
 
 
-def _positive_int(value: Any) -> int:
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, number)
-
-
 def _compare_number(value: Any, expected: Any, comparator: Any) -> bool:
     try:
         left = float(value)
@@ -917,9 +647,6 @@ def _compare_number(value: Any, expected: Any, comparator: Any) -> bool:
 
 __all__ = [
     "ContextField",
-    "StateUpdateSpec",
-    "TimerSpec",
-    "TimerStatus",
     "WorkflowDefinition",
     "WorkflowSession",
     "WorkflowStep",

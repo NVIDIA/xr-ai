@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,12 +24,14 @@ sys.path.insert(0, str(_OMNI_DIR))
 from nemotron_omni_llm_server import __main__ as omni_server_module  # noqa: E402
 from tea_making_worker import agent as agent_module  # noqa: E402
 from tea_making_worker import guide as guide_module  # noqa: E402
+from tea_making_worker import tools as tools_module  # noqa: E402
 from tea_making_worker.agent import (  # noqa: E402
     NavigationIntent,
     StepAgentResult,
     WorkflowAgent,
 )
 from tea_making_worker.guide import WorkflowGuide  # noqa: E402
+from tea_making_worker.step_mechanism import StepIteration, StepMechanisms  # noqa: E402
 from tea_making_worker.workflow import (  # noqa: E402
     WorkflowDefinition,
     WorkflowSession,
@@ -49,7 +52,7 @@ def _workflow() -> WorkflowDefinition:
     return WorkflowDefinition.load(_SAMPLE_DIR / "yaml" / "workflow.yaml")
 
 
-def test_shipped_workflow_uses_omni_native_rag_and_timer_only_step_five() -> None:
+def test_shipped_workflow_uses_omni_native_rag_and_one_step_mechanism() -> None:
     workflow = _workflow()
     models = yaml.safe_load((_SAMPLE_DIR / "yaml" / "models.yaml").read_text())
     worker = yaml.safe_load((_SAMPLE_DIR / "yaml" / "tea_making_worker.yaml").read_text())
@@ -96,20 +99,14 @@ def test_shipped_workflow_uses_omni_native_rag_and_timer_only_step_five() -> Non
 
     assert not (_SAMPLE_DIR / "yaml" / "rag.yaml").exists()
     assert not (_WORKER_DIR / "tea_making_worker" / "rag.py").exists()
-    assert step_five.timer is not None
+    assert {step.mechanism for step in workflow.steps if not step.is_idle} == {
+        "caption_agent"
+    }
     assert step_five.vlm_prompt == ""
-    assert step_five.timer.completion_field == "steeping_complete"
+    assert step_five.agent_tools == ("get_timer_status",)
+    assert workflow.step_by_id(4).agent_tools == ("get_current_time",)
     step_three = workflow.step_by_id(3)
-    state_updates = {update.context_field: update for update in step_three.state_updates}
-    assert set(state_updates) == {"water_temperature_current", "water_boil_cue"}
-    assert state_updates["water_temperature_current"].observation_key == ("TEMPERATURE_READING")
-    assert state_updates["water_temperature_current"].states == (
-        "started",
-        "needs_input",
-        "complete",
-    )
-    assert state_updates["water_boil_cue"].observation_key == "BOIL_CUE"
-    assert "water_ready" not in state_updates
+    assert step_three.agent_tools == ()
     assert "water_temperature_current" in {field.name for field in step_three.context_fields}
     assert workflow.sparse_context is True
     assert workflow.initial_context() == {}
@@ -173,7 +170,7 @@ def test_omni_server_forwards_configured_moe_backend(monkeypatch, tmp_path: Path
     assert serve_args[backend_index + 1] == "triton"
 
 
-async def test_state_updates_are_driven_by_arbitrary_workflow_yaml(
+async def test_caption_agent_mechanism_applies_changing_agent_patches(
     tmp_path: Path,
 ) -> None:
     workflow_path = tmp_path / "workflow.yaml"
@@ -193,21 +190,9 @@ async def test_state_updates_are_driven_by_arbitrary_workflow_yaml(
                         "id": 1,
                         "name": "Read instrument",
                         "description": "Read an arbitrary instrument.",
+                        "mechanism": "caption_agent",
                         "vlm_prompt": ("End with PRESSURE_READING and ALARM_ACTIVE lines."),
                         "agent_prompt": "Interpret the latest instrument reading.",
-                        "state_updates": [
-                            {
-                                "context_field": "pressure_kpa",
-                                "observation_key": "PRESSURE_READING",
-                                "states": ["started", "complete"],
-                            },
-                            {
-                                "context_field": "alarm_active",
-                                "observation_key": "ALARM_ACTIVE",
-                                "states": ["started", "complete"],
-                                "value_map": {"yes": True, "no": False},
-                            },
-                        ],
                         "context_output": {
                             "fields": {
                                 "pressure_kpa": {
@@ -255,39 +240,14 @@ async def test_state_updates_are_driven_by_arbitrary_workflow_yaml(
     )
 
     workflow = WorkflowDefinition.load(workflow_path)
-    step = workflow.step_by_id(1)
-
-    assert step.observation_context_patch(
-        "Visible display.\nPRESSURE_READING: 42.5\nALARM_ACTIVE: yes",
-        state="started",
-    ) == {"pressure_kpa": 42.5, "alarm_active": True}
-    assert step.observation_context_patch(
-        "PRESSURE_READING: 44.0\nALARM_ACTIVE: no",
-        state="complete",
-    ) == {"pressure_kpa": 44.0, "alarm_active": False}
-    assert (
-        step.observation_context_patch(
-            "PRESSURE_READING: 45.0\nALARM_ACTIVE: yes",
-            state="needs_input",
-        )
-        == {}
-    )
-    assert (
-        step.observation_context_patch(
-            "PRESSURE_READING: unavailable\nALARM_ACTIVE: unclear",
-            state="started",
-        )
-        == {}
-    )
-
     observations = iter(
         [
             SimpleNamespace(
-                text="PRESSURE_READING: 42.5\nALARM_ACTIVE: yes",
+                text="PRESSURE_READING: 42.5\nALARM_ACTIVE: no",
                 frame_pts_us=1,
             ),
             SimpleNamespace(
-                text="PRESSURE_READING: 44.0\nALARM_ACTIVE: no",
+                text="PRESSURE_READING: 44.0\nALARM_ACTIVE: yes",
                 frame_pts_us=2,
             ),
         ]
@@ -303,11 +263,16 @@ async def test_state_updates_are_driven_by_arbitrary_workflow_yaml(
             return None
 
     class _Agent:
-        async def run_step(self, *, session, **_kwargs):
-            agent_contexts.append(dict(session.context))
+        async def run_step(self, *, context, vlm_observation, **_kwargs):
+            agent_contexts.append(dict(context))
+            is_complete = "ALARM_ACTIVE: yes" in vlm_observation
             return StepAgentResult(
-                context_patch={"pressure_kpa": 1.0, "alarm_active": True},
-                step_state="started",
+                context_patch={
+                    "pressure_kpa": 44.0 if is_complete else 42.5,
+                    "alarm_active": is_complete,
+                },
+                step_state="complete" if is_complete else "started",
+                ready_to_advance=is_complete,
             )
 
     async def notice(participant_id: str, text: str) -> None:
@@ -323,26 +288,102 @@ async def test_state_updates_are_driven_by_arbitrary_workflow_yaml(
         participant_id="alice",
         step_id=1,
         context=workflow.initial_context(),
+        last_reminder_us=guide_module._now_us(),  # noqa: SLF001
     )
 
     await guide._evaluate(session)  # noqa: SLF001
 
-    assert agent_contexts[0]["pressure_kpa"] == 42.5
-    assert agent_contexts[0]["alarm_active"] is True
+    assert agent_contexts[0]["pressure_kpa"] == 0
+    assert agent_contexts[0]["alarm_active"] is False
     assert session.context["pressure_kpa"] == 42.5
+    assert session.context["alarm_active"] is False
+    assert session.ready_step_id is None
+
+    await guide._evaluate(session)  # noqa: SLF001
+
+    assert agent_contexts[1]["pressure_kpa"] == 42.5
+    assert agent_contexts[1]["alarm_active"] is False
+    assert session.context["pressure_kpa"] == 44.0
     assert session.context["alarm_active"] is True
     assert session.ready_step_id == 1
     assert session.step_state == "complete"
     assert len(notices) == 1
 
+
+async def test_workflow_can_inject_a_different_step_mechanism(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.yaml"
+    workflow_path.write_text(
+        yaml.safe_dump(
+            {
+                "task": {"name": "custom-mechanism"},
+                "steps": [
+                    {"id": 0, "name": "Idle", "description": "Wait."},
+                    {
+                        "id": 1,
+                        "name": "Custom step",
+                        "description": "Run custom logic.",
+                        "mechanism": "scripted",
+                        "agent_prompt": "This prompt belongs to the custom mechanism.",
+                        "context_output": {
+                            "fields": {"done": {"type": "boolean", "default": False}}
+                        },
+                        "advance_when": {"field": "done", "equals": True},
+                    },
+                    {
+                        "id": 2,
+                        "name": "Later custom step",
+                        "description": "Keep the first step from being final.",
+                        "mechanism": "scripted",
+                        "agent_prompt": "Not evaluated in this test.",
+                        "context_output": {
+                            "fields": {"finished": {"type": "boolean", "default": False}}
+                        },
+                        "advance_when": {"field": "finished", "equals": True},
+                    },
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    workflow = WorkflowDefinition.load(workflow_path)
+    calls: list[int] = []
+
+    class _ScriptedMechanism:
+        name = "scripted"
+
+        async def run(self, *, step, **_kwargs):
+            calls.append(step.id)
+            return StepIteration(
+                result=StepAgentResult(
+                    context_patch={"done": True},
+                    step_state="complete",
+                    ready_to_advance=True,
+                )
+            )
+
+    async def notice(_participant_id: str, _text: str) -> None:
+        return None
+
+    guide = WorkflowGuide(
+        workflow=workflow,
+        vision=SimpleNamespace(release=lambda _participant_id: None),
+        agent=SimpleNamespace(),
+        notice=notice,
+        step_mechanisms=StepMechanisms([_ScriptedMechanism()]),
+    )
+    session = WorkflowSession(
+        participant_id="alice",
+        step_id=1,
+        context=workflow.initial_context(),
+    )
+
     await guide._evaluate(session)  # noqa: SLF001
 
-    assert len(agent_contexts) == 1
-    assert session.context["pressure_kpa"] == 44.0
-    assert session.context["alarm_active"] is False
+    assert calls == [1]
+    assert session.context["done"] is True
     assert session.ready_step_id == 1
     assert session.step_state == "complete"
-    assert len(notices) == 1
 
 
 def test_sparse_context_carries_values_with_projected_reads_and_partial_writes(
@@ -386,13 +427,6 @@ def test_sparse_context_carries_values_with_projected_reads_and_partial_writes(
                         "writes": {
                             "live_value": {"type": "number", "required": True},
                         },
-                        "state_updates": [
-                            {
-                                "context_field": "live_value",
-                                "observation_key": "LIVE_VALUE",
-                                "states": ["started", "needs_input"],
-                            }
-                        ],
                         "advance_when": {"field": "live_value", "gte": 10},
                     },
                 ],
@@ -417,14 +451,8 @@ def test_sparse_context_carries_values_with_projected_reads_and_partial_writes(
     }
     assert set(step.context_schema()["properties"]) == {"live_value"}
     assert "required" not in step.context_schema()
-    assert step.observation_context_patch(
-        "LIVE_VALUE: 9.5",
-        state="started",
-    ) == {"live_value": 9.5}
-    assert step.observation_context_patch(
-        "LIVE_VALUE: 11.0",
-        state="needs_input",
-    ) == {"live_value": 11.0}
+    assert step.mechanism == "caption_agent"
+    assert step.agent_tools == ()
 
 
 def test_templates_and_response_normalization_are_speech_friendly() -> None:
@@ -614,33 +642,32 @@ def test_step_four_skip_replaces_zero_timestamp_with_current_time() -> None:
     assert context["steeping_started_at_iso"]
 
 
-def test_vlm_yes_policy_accepts_yaml_boolean_and_string_values() -> None:
-    observation = "tea bag, entering the water\n\nSTEEPING_STARTED: yes"
-
-    assert agent_module._tool_policy_met(  # noqa: SLF001
-        {"vlm_verdict": "STEEPING_STARTED", "equals": True},
-        observation,
-    )
-    assert agent_module._tool_policy_met(  # noqa: SLF001
-        {"vlm_verdict": "STEEPING_STARTED", "equals": "yes"},
-        observation,
-    )
-
-
-async def test_vlm_yes_automatically_captures_steeping_start_time() -> None:
+async def test_step_agent_calls_time_tool_to_capture_steeping_start() -> None:
     workflow = _workflow()
     step = workflow.step_by_id(4)
-    captured_messages: list = []
+    model_calls: list[list] = []
     tool_calls: list[tuple[str, dict]] = []
 
     class _Llm:
         async def chat(self, messages, **_kwargs):
-            captured_messages.extend(messages)
+            model_calls.append(list(messages))
+            if len(model_calls) == 1:
+                return SimpleNamespace(
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id="time-1",
+                            name="get_current_time",
+                            arguments="{}",
+                        )
+                    ],
+                )
             return SimpleNamespace(
                 content=(
-                    '{"context":{"steeping_started_at_us":0,'
-                    '"steeping_started_at_iso":""},"ready_to_advance":false,'
-                    '"step_state":"started","assistant_message":"","speak":false}'
+                    '{"context":{"steeping_started_at_us":1785798780376000,'
+                    '"steeping_started_at_iso":"2026-08-03T16:13:00-07:00"},'
+                    '"ready_to_advance":true,"step_state":"complete",'
+                    '"assistant_message":"","speak":false}'
                 ),
                 tool_calls=[],
             )
@@ -663,22 +690,18 @@ async def test_vlm_yes_automatically_captures_steeping_start_time() -> None:
         workflow=workflow,
         answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
     )
-    session = WorkflowSession(
-        participant_id="alice",
-        step_id=4,
-        context=workflow.initial_context(),
-    )
-
     result = await agent.run_step(
         step=step,
-        session=session,
+        participant_id="alice",
+        context=workflow.initial_context(),
+        observation_log=[],
         vlm_observation="tea bag, entering the water\n\nSTEEPING_STARTED: yes",
     )
 
     assert tool_calls == [("get_current_time", {})]
     assert result.context_patch["steeping_started_at_us"] == 1_785_798_780_376_000
     assert result.context_patch["steeping_started_at_iso"] == ("2026-08-03T16:13:00-07:00")
-    assert "1785798780376000" in captured_messages[1].content
+    assert '"epoch_us": 1785798780376000' in model_calls[1][-1].content
 
 
 def test_navigation_eval_cases_require_explicit_movement_language() -> None:
@@ -700,86 +723,188 @@ def test_navigation_eval_cases_require_explicit_movement_language() -> None:
         assert actual.intent == case["expected_intent"], case["utterance"]
 
 
-def test_timer_question_eval_cases_report_elapsed_or_remaining(monkeypatch) -> None:
+async def test_timer_tool_reports_elapsed_remaining_and_expiration() -> None:
+    now = datetime(2026, 8, 3, 16, 13, tzinfo=timezone(timedelta(hours=-7)))
+
+    class _Rag:
+        instance_name = "test__retrieve"
+
+    guide_tools = tools_module.GuideTools({"retrieve": _Rag()}, clock=lambda: now)
+    started_at_us = int((now - timedelta(seconds=65)).timestamp() * 1_000_000)
+
+    active = await guide_tools.invoke(
+        "get_timer_status",
+        {
+            "started_at_us": started_at_us,
+            "duration_seconds": 180,
+            "label": "steeping",
+        },
+    )
+
+    assert active["elapsed_seconds"] == 65
+    assert active["remaining_seconds"] == 115
+    assert active["expired"] is False
+
+    guide_tools._clock = lambda: now + timedelta(seconds=120)  # noqa: SLF001
+    expired = await guide_tools.invoke(
+        "get_timer_status",
+        {"started_at_us": started_at_us, "duration_seconds": 180},
+    )
+    assert expired["remaining_seconds"] == 0
+    assert expired["expired"] is True
+
+
+async def test_timer_tool_rejects_a_missing_start_time() -> None:
+    class _Rag:
+        instance_name = "test__retrieve"
+
+    guide_tools = tools_module.GuideTools({"retrieve": _Rag()})
+    status = await guide_tools.invoke(
+        "get_timer_status",
+        {"started_at_us": 0, "duration_seconds": 180},
+    )
+
+    assert status["started"] is False
+    assert status["expired"] is False
+    assert "positive start timestamp" in status["error"]
+
+
+async def test_step_agent_uses_timer_tool_to_complete_no_caption_step() -> None:
     workflow = _workflow()
-    now_us = 10_000_000_000
+    step = workflow.step_by_id(5)
+    model_calls: list[list] = []
+    tool_calls: list[tuple[str, dict]] = []
+
+    class _Llm:
+        async def chat(self, messages, **_kwargs):
+            model_calls.append(list(messages))
+            if len(model_calls) == 1:
+                return SimpleNamespace(
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id="timer-1",
+                            name="get_timer_status",
+                            arguments=(
+                                '{"started_at_us":1785798780000000,'
+                                '"duration_seconds":180,"label":"steeping"}'
+                            ),
+                        )
+                    ],
+                )
+            return SimpleNamespace(
+                content=(
+                    '{"context":{"steeping_complete":true},'
+                    '"ready_to_advance":true,"step_state":"complete",'
+                    '"assistant_message":"","speak":false}'
+                ),
+                tool_calls=[],
+            )
+
+    class _Tools:
+        def definitions(self):
+            return [SimpleNamespace(name="get_timer_status")]
+
+        async def invoke(self, name, arguments):
+            tool_calls.append((name, arguments))
+            return {
+                "label": "steeping",
+                "elapsed_seconds": 181,
+                "remaining_seconds": 0,
+                "expired": True,
+            }
+
+    agent = WorkflowAgent(
+        llm=_Llm(),
+        tools=_Tools(),
+        workflow=workflow,
+        answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
+    )
     context = workflow.initial_context()
     context.update(
-        steeping_started_at_us=now_us - 65_000_000,
+        steeping_started_at_us=1_785_798_780_000_000,
+        steep_duration_seconds=180,
+    )
+
+    result = await agent.run_step(
+        step=step,
+        participant_id="alice",
+        context=context,
+        observation_log=[],
+        vlm_observation="",
+    )
+
+    assert tool_calls[0][0] == "get_timer_status"
+    assert result.context_patch == {"steeping_complete": True}
+    assert result.ready_to_advance is True
+    assert '"expired": true' in model_calls[1][-1].content
+
+
+async def test_answer_agent_uses_timer_tool_for_remaining_time_question() -> None:
+    workflow = _workflow()
+    step = workflow.step_by_id(5)
+    calls = 0
+
+    class _Llm:
+        async def chat(self, _messages, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return SimpleNamespace(
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id="timer-answer-1",
+                            name="get_timer_status",
+                            arguments=(
+                                '{"started_at_us":1785798780000000,'
+                                '"duration_seconds":180,"label":"steeping"}'
+                            ),
+                        )
+                    ],
+                )
+            return SimpleNamespace(
+                content="About one minute and fifty-five seconds remain.",
+                tool_calls=[],
+            )
+
+    class _Tools:
+        def definitions(self):
+            return [SimpleNamespace(name="get_timer_status")]
+
+        async def invoke(self, _name, _arguments):
+            return {
+                "elapsed_seconds": 65,
+                "remaining_seconds": 115,
+                "expired": False,
+            }
+
+    agent = WorkflowAgent(
+        llm=_Llm(),
+        tools=_Tools(),
+        workflow=workflow,
+        answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
+    )
+    context = workflow.initial_context()
+    context.update(
+        steeping_started_at_us=1_785_798_780_000_000,
         steep_duration_seconds=180,
     )
     session = WorkflowSession(participant_id="alice", step_id=5, context=context)
-    cases = yaml.safe_load((_SAMPLE_DIR / "eval" / "cases.yaml").read_text())
-    monkeypatch.setattr(guide_module, "_now_us", lambda: now_us)
 
-    for case in cases["timer_questions"]:
-        answer = guide_module._time_question_answer(  # noqa: SLF001
-            case["utterance"],
-            session,
-            workflow,
-        )
-        if case["expected"] == "elapsed":
-            assert "1 minute and 5 seconds" in answer
-        else:
-            assert "1 minute and 55 seconds" in answer
-            assert "left" in answer
-
-    monkeypatch.setattr(guide_module, "_now_us", lambda: now_us + 120_000_000)
-    assert "time is up" in guide_module._time_question_answer(  # noqa: SLF001
-        "How much longer do I need to wait?",
-        session,
-        workflow,
+    answer = await agent.answer_user(
+        transcript="How long do I still need to wait?",
+        session=session,
+        current_step=step,
+        observation_log=[],
+        recent_turns=[],
     )
 
-
-def test_timer_questions_do_not_invent_a_missing_start_time() -> None:
-    workflow = _workflow()
-    context = workflow.initial_context()
-    context["steep_duration_seconds"] = 180
-    session = WorkflowSession(participant_id="alice", step_id=4, context=context)
-
-    remaining = guide_module._time_question_answer(  # noqa: SLF001
-        "How long do I have remaining?",
-        session,
-        workflow,
-    )
-    started = guide_module._time_question_answer(  # noqa: SLF001
-        "When did I steep the tea?",
-        session,
-        workflow,
-    )
-
-    assert "has not started" in remaining
-    assert "3 minutes" in remaining
-    assert "no start time is recorded" in started
+    assert calls == 2
+    assert answer == "About one minute and fifty-five seconds remain."
 
 
-def test_timer_start_time_question_uses_recorded_timestamp(monkeypatch) -> None:
-    workflow = _workflow()
-    started_at_us = 1_785_798_780_000_000
-    context = workflow.initial_context()
-    context.update(
-        steeping_started_at_us=started_at_us,
-        steep_duration_seconds=180,
-    )
-    session = WorkflowSession(participant_id="alice", step_id=5, context=context)
-    monkeypatch.setattr(
-        guide_module,
-        "_now_us",
-        lambda: started_at_us + 30_000_000,
-    )
-
-    answer = guide_module._time_question_answer(  # noqa: SLF001
-        "When did I steep the tea?",
-        session,
-        workflow,
-    )
-
-    assert "timer started at" in answer
-    assert "time is up" not in answer
-
-
-async def test_timer_step_expires_without_calling_vision_or_step_agent() -> None:
+async def test_no_caption_timer_step_runs_agent_and_finishes_workflow() -> None:
     workflow = _workflow()
     now_us = guide_module._now_us()  # noqa: SLF001
     context = workflow.initial_context()
@@ -788,6 +913,7 @@ async def test_timer_step_expires_without_calling_vision_or_step_agent() -> None
         steep_duration_seconds=180,
     )
     notices: list[tuple[str, str]] = []
+    agent_calls: list[str] = []
 
     class _Vision:
         async def observe(self, *_args, **_kwargs):
@@ -797,8 +923,13 @@ async def test_timer_step_expires_without_calling_vision_or_step_agent() -> None
             return None
 
     class _Agent:
-        async def run_step(self, *_args, **_kwargs):
-            raise AssertionError("timer-only step must not invoke the step agent")
+        async def run_step(self, *, vlm_observation, **_kwargs):
+            agent_calls.append(vlm_observation)
+            return StepAgentResult(
+                context_patch={"steeping_complete": True},
+                step_state="complete",
+                ready_to_advance=True,
+            )
 
     async def notice(participant_id: str, text: str) -> None:
         notices.append((participant_id, text))
@@ -813,6 +944,7 @@ async def test_timer_step_expires_without_calling_vision_or_step_agent() -> None
 
     await guide._evaluate(session)  # noqa: SLF001
 
+    assert agent_calls == [""]
     assert session.active is False
     assert session.step_id == 0
     assert session.step_state == "idle"
@@ -856,58 +988,6 @@ async def test_completed_step_does_not_repeat_guidance_or_recheck_vision() -> No
     await guide._evaluate(session)  # noqa: SLF001
 
     assert session.step_state == "complete"
-    assert notices == []
-
-
-async def test_completed_water_step_silently_updates_observed_state() -> None:
-    workflow = _workflow()
-    notices: list[tuple[str, str]] = []
-
-    class _Vision:
-        async def observe(self, *_args, **_kwargs):
-            return SimpleNamespace(
-                text="TEMPERATURE_READING: 75 C\nBOIL_CUE: no",
-                frame_pts_us=2_000_000,
-            )
-
-        def release(self, _participant_id: str) -> None:
-            return None
-
-    class _Agent:
-        async def run_step(self, *_args, **_kwargs):
-            raise AssertionError("completed live updates must not invoke the step agent")
-
-    async def notice(participant_id: str, text: str) -> None:
-        notices.append((participant_id, text))
-
-    guide = WorkflowGuide(
-        workflow=workflow,
-        vision=_Vision(),
-        agent=_Agent(),
-        notice=notice,
-    )
-    context = workflow.initial_context()
-    context.update(
-        tea_name="Aged Earl Grey",
-        water_temperature_current="59 C",
-        water_ready=True,
-    )
-    session = WorkflowSession(
-        participant_id="alice",
-        step_id=3,
-        context=context,
-        ready_step_id=3,
-        step_state="complete",
-    )
-
-    await guide._evaluate(session)  # noqa: SLF001
-
-    assert session.context["water_temperature_current"] == "75 C"
-    assert session.context["water_ready"] is True
-    assert session.context["water_boil_cue"] == "no"
-    assert session.context["tea_name"] == "Aged Earl Grey"
-    assert session.step_state == "complete"
-    assert session.ready_step_id == 3
     assert notices == []
 
 

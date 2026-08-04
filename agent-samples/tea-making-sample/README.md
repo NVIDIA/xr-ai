@@ -12,63 +12,53 @@ feeding that caption into a tool-calling LLM loop, and updating step context.
 The code is intentionally generic. The main customization points are:
 
 - `yaml/workflow.yaml`: shared context fields, step reads and writes, VLM prompts,
-  agent prompts, per-step tools, completion rules, skip defaults, and timers.
+  agent prompts, mechanism names, per-step tools, completion rules, and skip defaults.
 - `rag-documents/`: Markdown reference documents indexed by the native RAG
   service and returned through `rag_lookup`.
 - `worker/tea_making_worker/prompts/system.txt`: user-question answering behavior.
 
 ## Workflow Shape
 
-Visual steps follow the same loop:
+Every active tea step uses the default `caption_agent` mechanism. A step only
+needs a `mechanism` key when it overrides that default:
 
-1. The worker periodically captures the latest live camera frame.
-2. The step's `vlm_prompt` captions only the visual facts needed for that step.
-3. The step enters a mini state machine: `started`, `needs_input`, or `complete`.
-4. The LLM receives the caption, the step's projected context, a schema for its
-   writable fields, and the step's `agent_prompt`.
-5. The LLM can call only the tools enabled by that step's `agent_tools`, then
-   returns a partial JSON context patch.
-6. The worker marks the step ready when `advance_when` is satisfied.
-7. The worker waits for a semantic proceed command before moving to the next
-   step. If the step is incomplete, it applies that step's `skip_defaults` first.
+1. The guide resolves the step's YAML `mechanism` through a mechanism registry.
+2. If the step has a `vlm_prompt`, the mechanism captures one fresh frame and
+   produces one internal caption. A step without that prompt skips vision.
+3. The LLM receives the optional caption, projected context, writable-field
+   schema, and `agent_prompt`.
+4. The LLM can call only the tools listed in `agent_tools`, then returns one
+   partial JSON context patch.
+5. The guide applies that patch and marks the step ready when `advance_when` is
+   satisfied.
+6. The guide waits for a semantic proceed command before moving to the next
+   step. If incomplete, it applies that step's `skip_defaults` first.
 
-The worker gives the step's `on_enter_message` once at the beginning. Periodic
-VLM/LLM passes silently update context. If the step still lacks required
-information after `runtime.reminder_interval_s`, it sends one delayed reminder
-by default. It does not repeat every VLM caption or rephrase the same opening
-instruction.
+The guide gives `on_enter_message` once. Periodic mechanism iterations silently
+update context. If information is still missing after
+`runtime.reminder_interval_s`, it sends one delayed reminder by default.
 
-Tools that must run for correctness can set `auto_invoke: true` in
-`agent_tools`, with `when_context_empty` and `context_outputs` mappings. The
-worker then invokes the tool as soon as its optional VLM verdict policy matches
-and merges mapped results authoritatively, while prompts remain responsible for
-task-specific interpretation and guidance.
-
-A step may define a YAML `timer` instead of a `vlm_prompt`. Timer-only steps do
-not capture frames or invoke the step agent. The worker derives elapsed and
-remaining time from context, answers timer questions deterministically, and
-sends the configured completion notice when time expires.
-
-A visual step can declaratively map structured VLM output into context with
-`state_updates`:
+There is no separate caption-to-state mapping. The caption always goes through
+the agent, and the agent's patch is the only state update. New captions can
+replace writable observations during the same incomplete step:
 
 ```yaml
-state_updates:
-  - context_field: measured_value
-    observation_key: MEASURED_VALUE
-    states: [started, needs_input, complete]
-    value_map:
-      not_visible: "not visible"
+mechanism: caption_agent
+vlm_prompt: "Read the current display."
+agent_prompt: "Replace measured_value with the newest visible reading."
+writes: [measured_value]
 ```
 
-The worker parses the named observation line, coerces the value using the
-context field's YAML type, and applies it authoritatively before and after the
-step agent runs. `states` controls which step mini-states accept the update. A
-mapping that includes `complete` keeps that field current while the completed
-step waits for the wearer to say next, without reopening the step or repeating
-guidance. `value_map` is optional and can translate VLM labels into typed
-context values such as booleans. This mechanism is task-independent; changing
-the workflow YAML is sufficient to reuse it for other observed state.
+Time is handled like other external information. Step 4 enables
+`get_current_time` so the agent can record when steeping starts. Step 5 has no
+`vlm_prompt`; its periodic agent iteration calls `get_timer_status` and sets
+`steeping_complete` when the tool reports expiration. User timer questions use
+the same tool through the answer agent.
+
+`CaptionAgentStepMechanism` is separate from `WorkflowGuide` in
+`step_mechanism.py`. Another workflow can implement the small `StepMechanism`
+protocol, register it in `StepMechanisms`, and select it by name for any YAML
+step. Session, reminder, completion, and navigation lifecycle stays shared.
 
 Workflow state is persistent and sparse. Declare reusable fields once under
 `context.fields`; then give each step a `reads` list and a `writes` list:
@@ -105,9 +95,8 @@ can recognize conversational commands such as "carry on to the next part";
 ordinary progress reports do not advance the workflow.
 
 The worker logs guide decisions to `worker.log`: user query text, classifier
-intent, step transitions, VLM observations, context patch keys, dropped updates
-that contradict VLM verdict lines, tool calls/results, reminders, notices, and
-final response text.
+intent, mechanism iterations, step transitions, VLM observations, agent context
+patch keys, tool calls/results, reminders, notices, and final response text.
 
 Transient web-client disconnects pause visual monitoring without clearing the
 active step or accumulated context. Monitoring resumes when the same
@@ -117,8 +106,8 @@ VLM captions are internal evidence. They are stored in the per-participant
 observation log and returned to the LLM through `get_recent_vlm_observations`
 when historical evidence is needed, but they are not posted directly to the
 user. For present-tense visual questions, `inspect_current_view` captures a new
-frame using the wearer's actual question. This also works in timer-only steps;
-it does not turn periodic VLM monitoring back on.
+frame using the wearer's actual question. This also works in no-caption steps;
+it does not turn periodic VLM monitoring on for those steps.
 
 Messages support speech-oriented template filters: `| duration` turns seconds
 into natural durations, `| local_time` renders epoch or ISO timestamps as local
@@ -132,7 +121,7 @@ The included tea workflow has these steps:
 - `2` Fill water and start heating
 - `3` Wait for water to boil
 - `4` Steeping the tea
-- `5` Wait for steeping to finish (timer only; no VLM captions)
+- `5` Wait for steeping to finish (agent tool only; no VLM captions)
 
 After steeping starts, advance to step 5 with wording such as "next", "let's
 proceed", or "carry on". While the timer is active, questions such as "how much
@@ -188,7 +177,7 @@ Then rerun `tea_making_sample`.
 To build a different guided task, copy `yaml/workflow.yaml` and replace the
 field registry, step projections, prompts, and RAG documents. The worker does
 not know about tea-specific fields; it loads the YAML, generates write schemas,
-runs visual or timer steps, applies `skip_defaults`, and evaluates
-`advance_when`. Keep task-specific behavior in `vlm_prompt`, `agent_prompt`,
-`state_updates`, `agent_tools`, and timer mappings rather than adding task
-branches to the worker.
+runs the selected step mechanism, applies `skip_defaults`, and evaluates
+`advance_when`. Keep task-specific behavior in `vlm_prompt`, `agent_prompt`, and
+the plain `agent_tools` list. Add a new `StepMechanism` only when a workflow
+step genuinely needs a different execution strategy.
