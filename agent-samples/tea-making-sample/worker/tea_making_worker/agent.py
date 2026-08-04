@@ -228,16 +228,17 @@ class WorkflowAgent:
                     f"description={current_step.description}\n\n"
                     f"[Step procedure]\n{current_step.agent_prompt}\n\n"
                     f"[Recent conversation]\n{history}\n\n"
-                    f"[Authoritative current state]\n"
-                    f"The workflow context and latest VLM observation below supersede "
-                    f"older conversation turns and older observations.\n\n"
+                    f"[Workflow snapshot]\n"
+                    f"The workflow context and latest step-monitor observation below "
+                    f"supersede older workflow observations, but they are not a fresh "
+                    f"camera inspection for the current request.\n\n"
                     f"[Step state]\n"
                     f"state={session.step_state if session is not None else 'idle'}\n"
                     f"ready={bool(session and session.ready_step_id == current_step.id)}\n"
                     f"workflow_active={bool(session and session.active)}\n\n"
                     f"[Workflow context]\n{context_for_prompt(context)}\n\n"
                     f"[Authoritative timer state]\n{timer_state}\n\n"
-                    f"[Latest VLM observation]\n{latest_observation}\n\n"
+                    f"[Latest step-monitor observation]\n{latest_observation}\n\n"
                     f"[VLM observation log]\n"
                     f"A rolling internal log is available through "
                     f"{_OBSERVATION_LOG_TOOL}. Use it only when visual evidence "
@@ -650,7 +651,12 @@ def _latest_step_observation(
     step_id: int,
 ) -> str:
     latest = next(
-        (entry for entry in reversed(observation_log) if entry.get("step_id") == step_id),
+        (
+            entry
+            for entry in reversed(observation_log)
+            if entry.get("step_id") == step_id
+            and entry.get("kind", "step_monitor") == "step_monitor"
+        ),
         None,
     )
     if latest is None:
