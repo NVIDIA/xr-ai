@@ -17,6 +17,7 @@ from xr_ai_nat.functions._service.rpc import RPCServer
 from .index import DenseIndex
 from .service import RAGService
 
+
 def _resolve(path: str, config_path: Path) -> Path:
     candidate = Path(path)
     return candidate if candidate.is_absolute() else (config_path.parent / candidate).resolve()

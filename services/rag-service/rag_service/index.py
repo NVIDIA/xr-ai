@@ -39,18 +39,29 @@ def _chunk_text(text: str, *, chunk_size: int, overlap: int) -> list[str]:
         buffer = ""
         words: list[str] = []
         for word in paragraph.split():
-            candidate = " ".join([*words, word])
-            if len(candidate) <= chunk_size:
-                words.append(word)
-                continue
-            if words:
-                chunk = " ".join(words)
-                chunks.append(chunk)
-                prefix = chunk[-overlap:].lstrip() if overlap else ""
-                words = ([prefix] if prefix else []) + [word]
-            else:
-                chunks.append(word[:chunk_size])
-                words = [word[chunk_size:]] if word[chunk_size:] else []
+            remainder = word
+            while remainder:
+                current = " ".join(words)
+                separator = 1 if current else 0
+                available = chunk_size - len(current) - separator
+                if available <= 0:
+                    chunks.append(current)
+                    prefix = current[-overlap:].lstrip() if overlap else ""
+                    words = [prefix] if prefix else []
+                    continue
+                if len(remainder) <= available:
+                    words.append(remainder)
+                    break
+                if words:
+                    words.append(remainder[:available])
+                    remainder = remainder[available:]
+                    chunk = " ".join(words)
+                    chunks.append(chunk)
+                    prefix = chunk[-overlap:].lstrip() if overlap else ""
+                    words = [prefix] if prefix else []
+                    continue
+                chunks.append(remainder[:chunk_size])
+                remainder = remainder[chunk_size:]
         buffer = " ".join(words)
     if buffer:
         chunks.append(buffer)

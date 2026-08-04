@@ -11,6 +11,7 @@ import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
 from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
+from rag_service.index import _chunk_text
 from xr_ai_nat.functions._service.rpc import RPCServer
 from xr_ai_nat.functions.rag import RAGFunctionsConfig, RetrieveRequest, RetrieveResult
 
@@ -64,6 +65,13 @@ async def test_build_retrieve_list_and_health(tmp_path) -> None:
     assert health == {"ready": True, "document_count": 2, "chunk_count": 2}
     embedder.healthy = False
     assert (await service.dispatch("get_health", {}))["ready"] is False
+
+
+def test_chunk_text_splits_oversized_unbroken_token() -> None:
+    chunks = _chunk_text("x" * 2_500, chunk_size=900, overlap=120)
+
+    assert [len(chunk) for chunk in chunks] == [900, 900, 700]
+    assert "".join(chunks) == "x" * 2_500
 
 
 async def test_cache_reuse_and_invalidation(tmp_path) -> None:
