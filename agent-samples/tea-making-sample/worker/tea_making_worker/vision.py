@@ -56,11 +56,57 @@ class StepVision:
         *,
         task: dict[str, Any],
     ) -> VisualObservation:
+        prompt = render_template(
+            step.vlm_prompt,
+            context=context,
+            step=step,
+            task=task,
+        )
+        return await self._ask_current_frame(
+            participant_id,
+            prompt,
+            purpose=f"step:{step.id}",
+        )
+
+    async def inspect(
+        self,
+        participant_id: str,
+        question: str,
+        *,
+        step: WorkflowStep,
+        context: dict[str, Any],
+        task: dict[str, Any],
+    ) -> VisualObservation:
+        """Answer a wearer-specific visual question from a newly captured frame."""
+
+        prompt = (
+            "Inspect the current camera frame to answer the wearer's question. "
+            "Report only facts visible now, including readable text or display values. "
+            "If the requested object, property, or text is not visible enough to answer, "
+            "say so directly. Do not substitute an older workflow observation or infer "
+            "a hidden state.\n\n"
+            f"Task: {task.get('name', 'guided workflow')}\n"
+            f"Current step: {step.name}\n"
+            f"Wearer's visual question: {question}"
+        )
+        return await self._ask_current_frame(
+            participant_id,
+            prompt,
+            purpose=f"question:{step.id}",
+        )
+
+    async def _ask_current_frame(
+        self,
+        participant_id: str,
+        prompt: str,
+        *,
+        purpose: str,
+    ) -> VisualObservation:
         started = time.perf_counter()
         logger.debug(
-            "vlm frame wait begin pid={} step={} timeout_s={}",
+            "vlm frame wait begin pid={} purpose={} timeout_s={}",
             participant_id,
-            step.id,
+            purpose,
             self._frame_timeout_s,
         )
         try:
@@ -70,24 +116,18 @@ class StepVision:
             raise FrameUnavailable("Camera frame request timed out.") from exc
         frame_elapsed_ms = (time.perf_counter() - started) * 1000
         logger.debug(
-            "vlm frame acquired pid={} step={} frame_pts_us={} elapsed_ms={:.1f}",
+            "vlm frame acquired pid={} purpose={} frame_pts_us={} elapsed_ms={:.1f}",
             participant_id,
-            step.id,
+            purpose,
             frame.pts_us,
             frame_elapsed_ms,
         )
         image = encode_image(frame_to_pil(frame))
-        prompt = render_template(
-            step.vlm_prompt,
-            context=context,
-            step=step,
-            task=task,
-        )
         vlm_started = time.perf_counter()
         logger.debug(
-            "vlm request begin pid={} step={} timeout_s={}",
+            "vlm request begin pid={} purpose={} timeout_s={}",
             participant_id,
-            step.id,
+            purpose,
             self._vlm_timeout_s,
         )
         response = await self._vlm.ask_image(
@@ -98,9 +138,9 @@ class StepVision:
             timeout=self._vlm_timeout_s,
         )
         logger.debug(
-            "vlm request complete pid={} step={} request_ms={:.1f} total_ms={:.1f}",
+            "vlm request complete pid={} purpose={} request_ms={:.1f} total_ms={:.1f}",
             participant_id,
-            step.id,
+            purpose,
             (time.perf_counter() - vlm_started) * 1000,
             (time.perf_counter() - started) * 1000,
         )

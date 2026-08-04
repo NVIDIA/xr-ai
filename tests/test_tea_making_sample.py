@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import yaml
+from xr_ai_models import ToolCall
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE_DIR = _REPO_ROOT / "agent-samples" / "tea-making-sample"
@@ -31,6 +32,8 @@ from tea_making_worker.guide import WorkflowGuide  # noqa: E402
 from tea_making_worker.workflow import (  # noqa: E402
     WorkflowDefinition,
     WorkflowSession,
+    render_template,
+    speech_text,
 )
 
 _MAIN_SPEC = importlib.util.spec_from_file_location(
@@ -49,9 +52,7 @@ def _workflow() -> WorkflowDefinition:
 def test_shipped_workflow_uses_omni_native_rag_and_timer_only_step_five() -> None:
     workflow = _workflow()
     models = yaml.safe_load((_SAMPLE_DIR / "yaml" / "models.yaml").read_text())
-    worker = yaml.safe_load(
-        (_SAMPLE_DIR / "yaml" / "tea_making_worker.yaml").read_text()
-    )
+    worker = yaml.safe_load((_SAMPLE_DIR / "yaml" / "tea_making_worker.yaml").read_text())
     step_five = workflow.step_by_id(5)
 
     assert models["agent_llm"]["kind"] == "preset:nemotron_omni"
@@ -62,9 +63,7 @@ def test_shipped_workflow_uses_omni_native_rag_and_timer_only_step_five() -> Non
     for profile in ("96G_blackwell", "dual_48G_ada"):
         profile_dir = _SAMPLE_DIR / "yaml" / profile
         embedding = yaml.safe_load((profile_dir / "embedding_server.yaml").read_text())
-        omni = yaml.safe_load(
-            (profile_dir / "nemotron_omni_llm_server.yaml").read_text()
-        )
+        omni = yaml.safe_load((profile_dir / "nemotron_omni_llm_server.yaml").read_text())
         stt = yaml.safe_load((profile_dir / "stt_server.yaml").read_text())
 
         assert omni["vllm_image"] == "vllm/vllm-openai:v0.20.0"
@@ -76,27 +75,17 @@ def test_shipped_workflow_uses_omni_native_rag_and_timer_only_step_five() -> Non
         assert embedding["cuda_visible_devices"] in {"0", "1"}
 
     blackwell_dir = _SAMPLE_DIR / "yaml" / "96G_blackwell"
-    blackwell_omni = yaml.safe_load(
-        (blackwell_dir / "nemotron_omni_llm_server.yaml").read_text()
-    )
-    blackwell_embedding = yaml.safe_load(
-        (blackwell_dir / "embedding_server.yaml").read_text()
-    )
+    blackwell_omni = yaml.safe_load((blackwell_dir / "nemotron_omni_llm_server.yaml").read_text())
+    blackwell_embedding = yaml.safe_load((blackwell_dir / "embedding_server.yaml").read_text())
     assert blackwell_omni["cuda_visible_devices"] == "0"
     assert blackwell_omni["gpu_memory_utilization"] <= 0.80
     assert "moe_backend" not in blackwell_omni
     assert blackwell_embedding["cuda_visible_devices"] == "0"
     assert blackwell_embedding["gpu_memory_utilization"] <= 0.05
-    assert (
-        blackwell_omni["gpu_memory_utilization"]
-        + blackwell_embedding["gpu_memory_utilization"]
-        < 0.86
-    )
+    assert blackwell_omni["gpu_memory_utilization"] + blackwell_embedding["gpu_memory_utilization"] < 0.86
 
     ada_dir = _SAMPLE_DIR / "yaml" / "dual_48G_ada"
-    ada_omni = yaml.safe_load(
-        (ada_dir / "nemotron_omni_llm_server.yaml").read_text()
-    )
+    ada_omni = yaml.safe_load((ada_dir / "nemotron_omni_llm_server.yaml").read_text())
     ada_embedding = yaml.safe_load((ada_dir / "embedding_server.yaml").read_text())
     ada_stt = yaml.safe_load((ada_dir / "stt_server.yaml").read_text())
     assert ada_omni["cuda_visible_devices"] == "0"
@@ -111,26 +100,24 @@ def test_shipped_workflow_uses_omni_native_rag_and_timer_only_step_five() -> Non
     assert step_five.vlm_prompt == ""
     assert step_five.timer.completion_field == "steeping_complete"
     step_three = workflow.step_by_id(3)
-    state_updates = {
-        update.context_field: update for update in step_three.state_updates
-    }
-    assert set(state_updates) == {"water_temperature_current", "water_ready"}
-    assert state_updates["water_temperature_current"].observation_key == (
-        "TEMPERATURE_READING"
-    )
+    state_updates = {update.context_field: update for update in step_three.state_updates}
+    assert set(state_updates) == {"water_temperature_current", "water_boil_cue"}
+    assert state_updates["water_temperature_current"].observation_key == ("TEMPERATURE_READING")
     assert state_updates["water_temperature_current"].states == (
         "started",
         "needs_input",
         "complete",
     )
-    assert state_updates["water_ready"].value_map == {
-        "yes": True,
-        "no": False,
-        "unclear": False,
-    }
-    assert "water_temperature_current" in {
-        field.name for field in step_three.context_fields
-    }
+    assert state_updates["water_boil_cue"].observation_key == "BOIL_CUE"
+    assert "water_ready" not in state_updates
+    assert "water_temperature_current" in {field.name for field in step_three.context_fields}
+    assert workflow.sparse_context is True
+    assert workflow.initial_context() == {}
+    assert step_three.read_fields == (
+        "tea_name",
+        "tea_temperature",
+        "target_temperature_c",
+    )
 
 
 def test_launcher_selects_hardware_specific_model_configs() -> None:
@@ -143,13 +130,9 @@ def test_launcher_selects_hardware_specific_model_configs() -> None:
         by_name = {process.name: process for process in processes}
 
         assert processes[0].name == "omni"
-        assert by_name["omni"].config == (
-            f"yaml/{expected}/nemotron_omni_llm_server.yaml"
-        )
+        assert by_name["omni"].config == (f"yaml/{expected}/nemotron_omni_llm_server.yaml")
         assert by_name["stt"].config == f"yaml/{expected}/stt_server.yaml"
-        assert by_name["embedding"].config == (
-            f"yaml/{expected}/embedding_server.yaml"
-        )
+        assert by_name["embedding"].config == (f"yaml/{expected}/embedding_server.yaml")
 
 
 def test_omni_server_forwards_configured_moe_backend(monkeypatch, tmp_path: Path) -> None:
@@ -210,9 +193,7 @@ async def test_state_updates_are_driven_by_arbitrary_workflow_yaml(
                         "id": 1,
                         "name": "Read instrument",
                         "description": "Read an arbitrary instrument.",
-                        "vlm_prompt": (
-                            "End with PRESSURE_READING and ALARM_ACTIVE lines."
-                        ),
+                        "vlm_prompt": ("End with PRESSURE_READING and ALARM_ACTIVE lines."),
                         "agent_prompt": "Interpret the latest instrument reading.",
                         "state_updates": [
                             {
@@ -284,14 +265,20 @@ async def test_state_updates_are_driven_by_arbitrary_workflow_yaml(
         "PRESSURE_READING: 44.0\nALARM_ACTIVE: no",
         state="complete",
     ) == {"pressure_kpa": 44.0, "alarm_active": False}
-    assert step.observation_context_patch(
-        "PRESSURE_READING: 45.0\nALARM_ACTIVE: yes",
-        state="needs_input",
-    ) == {}
-    assert step.observation_context_patch(
-        "PRESSURE_READING: unavailable\nALARM_ACTIVE: unclear",
-        state="started",
-    ) == {}
+    assert (
+        step.observation_context_patch(
+            "PRESSURE_READING: 45.0\nALARM_ACTIVE: yes",
+            state="needs_input",
+        )
+        == {}
+    )
+    assert (
+        step.observation_context_patch(
+            "PRESSURE_READING: unavailable\nALARM_ACTIVE: unclear",
+            state="started",
+        )
+        == {}
+    )
 
     observations = iter(
         [
@@ -350,13 +337,231 @@ async def test_state_updates_are_driven_by_arbitrary_workflow_yaml(
 
     await guide._evaluate(session)  # noqa: SLF001
 
-    assert agent_contexts[1]["pressure_kpa"] == 44.0
-    assert agent_contexts[1]["alarm_active"] is False
+    assert len(agent_contexts) == 1
     assert session.context["pressure_kpa"] == 44.0
     assert session.context["alarm_active"] is False
     assert session.ready_step_id == 1
     assert session.step_state == "complete"
     assert len(notices) == 1
+
+
+def test_sparse_context_carries_values_with_projected_reads_and_partial_writes(
+    tmp_path: Path,
+) -> None:
+    workflow_path = tmp_path / "workflow.yaml"
+    workflow_path.write_text(
+        yaml.safe_dump(
+            {
+                "task": {"name": "instrument-guide"},
+                "context": {
+                    "fields": {
+                        "durable_fact": {"type": "string"},
+                    }
+                },
+                "steps": [
+                    {
+                        "id": 0,
+                        "name": "Idle",
+                        "description": "Wait.",
+                        "reads": [],
+                        "writes": [],
+                    },
+                    {
+                        "id": 1,
+                        "name": "Identify",
+                        "description": "Identify the instrument.",
+                        "vlm_prompt": "Read its label.",
+                        "agent_prompt": "Store the identified instrument.",
+                        "reads": [],
+                        "writes": ["durable_fact"],
+                        "advance_when": {"field": "durable_fact", "exists": True},
+                    },
+                    {
+                        "id": 2,
+                        "name": "Measure",
+                        "description": "Read the changing measurement.",
+                        "vlm_prompt": "End with LIVE_VALUE.",
+                        "agent_prompt": "Use the newest reading.",
+                        "reads": ["durable_fact"],
+                        "writes": {
+                            "live_value": {"type": "number", "required": True},
+                        },
+                        "state_updates": [
+                            {
+                                "context_field": "live_value",
+                                "observation_key": "LIVE_VALUE",
+                                "states": ["started", "needs_input"],
+                            }
+                        ],
+                        "advance_when": {"field": "live_value", "gte": 10},
+                    },
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    workflow = WorkflowDefinition.load(workflow_path)
+    step = workflow.step_by_id(2)
+    context = {
+        "durable_fact": "pressure gauge",
+        "live_value": 8.0,
+        "unrelated_internal_value": "do not expose",
+    }
+
+    assert workflow.initial_context() == {}
+    assert workflow.context_for_step(step, context) == {
+        "durable_fact": "pressure gauge",
+        "live_value": 8.0,
+    }
+    assert set(step.context_schema()["properties"]) == {"live_value"}
+    assert "required" not in step.context_schema()
+    assert step.observation_context_patch(
+        "LIVE_VALUE: 9.5",
+        state="started",
+    ) == {"live_value": 9.5}
+    assert step.observation_context_patch(
+        "LIVE_VALUE: 11.0",
+        state="needs_input",
+    ) == {"live_value": 11.0}
+
+
+def test_templates_and_response_normalization_are_speech_friendly() -> None:
+    workflow = _workflow()
+    step = workflow.step_by_id(4)
+    rendered = render_template(
+        ("Started at {{started | local_time}} for {{seconds | duration}} using {{temperature | spoken}}."),
+        context={
+            "started": "2026-08-03T16:13:00-07:00",
+            "seconds": 185,
+            "temperature": "93 C",
+        },
+        step=step,
+        task=workflow.task,
+    )
+
+    assert "2026-08-03" not in rendered
+    assert "4:13 P.M." in rendered
+    assert "3 minutes and 5 seconds" in rendered
+    assert "93 degrees Celsius" in rendered
+    assert speech_text("Heat to 175°F, not 80 C.") == ("Heat to 175 degrees Fahrenheit, not 80 degrees Celsius.")
+
+
+async def test_answer_agent_can_inspect_a_fresh_view_for_visual_questions() -> None:
+    workflow = _workflow()
+    step = workflow.step_by_id(5)
+    model_calls: list[list] = []
+    visual_questions: list[str] = []
+
+    class _Llm:
+        async def chat(self, messages, **_kwargs):
+            model_calls.append(list(messages))
+            if len(model_calls) == 1:
+                return SimpleNamespace(
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id="visual-1",
+                            name="inspect_current_view",
+                            arguments=('{"question":"What temperature is the kettle showing now?"}'),
+                        )
+                    ],
+                )
+            return SimpleNamespace(
+                content="The kettle currently shows 82 degrees Celsius.",
+                tool_calls=[],
+            )
+
+    class _Tools:
+        def definitions(self):
+            return []
+
+        async def invoke(self, _name, _arguments):
+            raise AssertionError("no non-visual tool call expected")
+
+    async def visual_query(question: str) -> dict:
+        visual_questions.append(question)
+        return {
+            "visual_evidence": "The kettle display reads 82 C.",
+            "frame_pts_us": 123,
+        }
+
+    agent = WorkflowAgent(
+        llm=_Llm(),
+        tools=_Tools(),
+        workflow=workflow,
+        answer_prompt=_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt",
+    )
+    session = WorkflowSession(
+        participant_id="alice",
+        step_id=5,
+        context={"steeping_started_at_us": 1, "steep_duration_seconds": 180},
+    )
+
+    answer = await agent.answer_user(
+        transcript="What temperature is the kettle showing now?",
+        session=session,
+        current_step=step,
+        observation_log=[],
+        recent_turns=[],
+        visual_query=visual_query,
+    )
+
+    assert visual_questions == ["What temperature is the kettle showing now?"]
+    assert answer == "The kettle currently shows 82 degrees Celsius."
+    assert '"visual_evidence": "The kettle display reads 82 C."' in (model_calls[1][-1].content)
+
+
+async def test_guide_logs_fresh_visual_answers_and_normalizes_them_for_speech() -> None:
+    workflow = _workflow()
+    inspected: list[str] = []
+
+    class _Vision:
+        async def inspect(self, _participant_id, question, **_kwargs):
+            inspected.append(question)
+            return SimpleNamespace(
+                text="The kettle display reads 82 C.",
+                frame_pts_us=321,
+            )
+
+        def release(self, _participant_id: str) -> None:
+            return None
+
+    class _Agent:
+        async def classify_intent(self, **_kwargs):
+            return NavigationIntent(intent="answer", confidence=0.99)
+
+        async def answer_user(self, *, transcript, visual_query, **_kwargs):
+            evidence = await visual_query(transcript)
+            assert evidence["visual_evidence"] == "The kettle display reads 82 C."
+            return "It reads 82 C."
+
+    async def notice(_participant_id: str, _text: str) -> None:
+        return None
+
+    guide = WorkflowGuide(
+        workflow=workflow,
+        vision=_Vision(),
+        agent=_Agent(),
+        notice=notice,
+    )
+    session = WorkflowSession(
+        participant_id="alice",
+        step_id=5,
+        context={"steeping_started_at_us": 1, "steep_duration_seconds": 180},
+    )
+    guide._sessions["alice"] = session  # noqa: SLF001
+
+    response = await guide.handle_query(
+        participant_id="alice",
+        text="What does the kettle display show now?",
+    )
+
+    assert inspected == ["What does the kettle display show now?"]
+    assert response == "It reads 82 degrees Celsius."
+    assert session.observation_log[-1]["kind"] == "visual_question"
+    assert session.observation_log[-1]["question"] == ("What does the kettle display show now?")
 
 
 def test_yaml_completion_rule_cannot_be_bypassed_by_model_readiness() -> None:
@@ -368,6 +573,7 @@ def test_yaml_completion_rule_cannot_be_bypassed_by_model_readiness() -> None:
     context.update(
         tea_name="green tea",
         tea_temperature="175 F",
+        target_temperature_c=80,
         steep_time="2 minutes",
         steep_duration_seconds=120,
         context_ready=True,
@@ -434,9 +640,7 @@ async def test_vlm_yes_automatically_captures_steeping_start_time() -> None:
         llm=_Llm(),
         tools=_Tools(),
         workflow=workflow,
-        answer_prompt=(
-            _WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"
-        ),
+        answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
     )
     session = WorkflowSession(
         participant_id="alice",
@@ -452,9 +656,7 @@ async def test_vlm_yes_automatically_captures_steeping_start_time() -> None:
 
     assert tool_calls == [("get_current_time", {})]
     assert result.context_patch["steeping_started_at_us"] == 1_785_798_780_376_000
-    assert result.context_patch["steeping_started_at_iso"] == (
-        "2026-08-03T16:13:00-07:00"
-    )
+    assert result.context_patch["steeping_started_at_iso"] == ("2026-08-03T16:13:00-07:00")
     assert "1785798780376000" in captured_messages[1].content
 
 
@@ -496,9 +698,9 @@ def test_timer_question_eval_cases_report_elapsed_or_remaining(monkeypatch) -> N
             workflow,
         )
         if case["expected"] == "elapsed":
-            assert "1 minute 5 seconds" in answer
+            assert "1 minute and 5 seconds" in answer
         else:
-            assert "1 minute 55 seconds" in answer
+            assert "1 minute and 55 seconds" in answer
             assert "left" in answer
 
     monkeypatch.setattr(guide_module, "_now_us", lambda: now_us + 120_000_000)
@@ -594,10 +796,8 @@ async def test_timer_step_expires_without_calling_vision_or_step_agent() -> None
     assert session.step_id == 0
     assert session.step_state == "idle"
     assert session.ready_step_id is None
-    assert session.context["steeping_complete"] is False
-    assert notices == [
-        ("alice", "The steeping time is up. Remove the tea bag, infuser, or leaves now.")
-    ]
+    assert "steeping_complete" not in session.context
+    assert notices == [("alice", "The steeping time is up. Remove the tea bag, infuser, or leaves now.")]
 
 
 async def test_completed_step_does_not_repeat_guidance_or_recheck_vision() -> None:
@@ -645,7 +845,7 @@ async def test_completed_water_step_silently_updates_observed_state() -> None:
     class _Vision:
         async def observe(self, *_args, **_kwargs):
             return SimpleNamespace(
-                text="TEMPERATURE_READING: 75 C\nWATER_READY: no",
+                text="TEMPERATURE_READING: 75 C\nBOIL_CUE: no",
                 frame_pts_us=2_000_000,
             )
 
@@ -654,16 +854,7 @@ async def test_completed_water_step_silently_updates_observed_state() -> None:
 
     class _Agent:
         async def run_step(self, *_args, **_kwargs):
-            return StepAgentResult(
-                context_patch={
-                    "water_temperature_current": "59 C",
-                    "water_ready": True,
-                    "tea_name": "must not replace existing context",
-                },
-                step_state="started",
-                assistant_message="This must stay silent.",
-                speak=True,
-            )
+            raise AssertionError("completed live updates must not invoke the step agent")
 
     async def notice(participant_id: str, text: str) -> None:
         notices.append((participant_id, text))
@@ -691,7 +882,8 @@ async def test_completed_water_step_silently_updates_observed_state() -> None:
     await guide._evaluate(session)  # noqa: SLF001
 
     assert session.context["water_temperature_current"] == "75 C"
-    assert session.context["water_ready"] is False
+    assert session.context["water_ready"] is True
+    assert session.context["water_boil_cue"] == "no"
     assert session.context["tea_name"] == "Aged Earl Grey"
     assert session.step_state == "complete"
     assert session.ready_step_id == 3
@@ -775,8 +967,8 @@ async def test_final_advance_resets_to_idle_and_restart_uses_fresh_context() -> 
     assert session.active is False
     assert session.step_id == 0
     assert session.step_state == "idle"
-    assert session.context["tea_name"] == ""
-    assert session.context["steeping_started_at_us"] == 0
+    assert "tea_name" not in session.context
+    assert "steeping_started_at_us" not in session.context
     assert session.observation_log == []
 
     assert guide.status("alice") == "No guided workflow is active."
@@ -784,7 +976,7 @@ async def test_final_advance_resets_to_idle_and_restart_uses_fresh_context() -> 
     restarted = guide._sessions["alice"]  # noqa: SLF001
     assert restarted.active is True
     assert restarted.step_id == 1
-    assert restarted.context["tea_name"] == ""
+    assert "tea_name" not in restarted.context
 
 
 def test_start_making_tea_trigger_starts_only_while_idle() -> None:
@@ -865,9 +1057,7 @@ async def test_answer_agent_receives_completed_step_state_and_yaml_procedure() -
         llm=_Llm(),
         tools=_Tools(),
         workflow=workflow,
-        answer_prompt=(
-            _WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"
-        ),
+        answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
     )
     session = WorkflowSession(
         participant_id="alice",
@@ -910,9 +1100,7 @@ async def test_answer_agent_prioritizes_latest_visual_state_over_old_turns() -> 
         llm=_Llm(),
         tools=_Tools(),
         workflow=workflow,
-        answer_prompt=(
-            _WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"
-        ),
+        answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
     )
     context = workflow.initial_context()
     context.update(water_temperature_current="100 C", water_ready=True)
@@ -946,12 +1134,13 @@ async def test_answer_agent_prioritizes_latest_visual_state_over_old_turns() -> 
     )
 
     prompt = captured[-1].content
-    assert prompt.index("The water is currently 59 C.") < prompt.index(
-        "[Authoritative current state]"
-    )
+    assert prompt.index("The water is currently 59 C.") < prompt.index("[Authoritative current state]")
     assert '"water_temperature_current": "100 C"' in prompt
     assert "TEMPERATURE_READING: 100 C" in prompt
-    assert "TEMPERATURE_READING: 59 C" not in prompt.split(
-        "[Latest VLM observation]",
-        maxsplit=1,
-    )[1]
+    assert (
+        "TEMPERATURE_READING: 59 C"
+        not in prompt.split(
+            "[Latest VLM observation]",
+            maxsplit=1,
+        )[1]
+    )
