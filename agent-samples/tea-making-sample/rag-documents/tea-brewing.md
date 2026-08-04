@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # **Numi Organic Tea: Comprehensive Variety & Brewing Guide**
 
 Welcome to the complete reference manual for Numi Organic Teas. Founded on the principles of organic integrity, Fair Trade sourcing, and pure ingredients (100% real fruits, flowers, and spices with zero synthetic flavorings), Numi offers a diverse portfolio of tea categories.

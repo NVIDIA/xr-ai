@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,8 @@ from .workflow import (
 )
 
 _OBSERVATION_LOG_TOOL = "get_recent_vlm_observations"
+_VISUAL_INSPECTION_TOOL = "inspect_current_view"
+VisualQueryFn = Callable[[str], Awaitable[dict[str, Any]]]
 _VLM_VERDICT_RE = re.compile(
     r"^\s*([A-Z][A-Z0-9_ ]+)\s*:\s*(yes|no|unclear)\b",
     re.IGNORECASE | re.MULTILINE,
@@ -65,7 +68,11 @@ class WorkflowAgent:
         self._llm = llm
         self._tools = tools
         self._workflow = workflow
-        self._tool_defs = [*tools.definitions(), _observation_log_tool_def()]
+        self._tool_defs = [
+            *tools.definitions(),
+            _observation_log_tool_def(),
+            _visual_inspection_tool_def(),
+        ]
         self._answer_prompt_path = answer_prompt
         self._answer_prompt_cache = answer_prompt.read_text(encoding="utf-8").strip()
 
@@ -81,7 +88,10 @@ class WorkflowAgent:
             vlm_observation,
             session.context,
         )
-        prompt_context = {**session.context, **automatic_patch}
+        prompt_context = self._workflow.context_for_step(
+            step,
+            {**session.context, **automatic_patch},
+        )
         messages = [
             ChatMessage(role="system", content=_STEP_SYSTEM_PROMPT),
             ChatMessage(
@@ -108,7 +118,7 @@ class WorkflowAgent:
 
         context_patch = obj.get("context")
         if not isinstance(context_patch, dict):
-            valid = {field.name for field in step.context_fields}
+            valid = step.writable_fields
             context_patch = {key: value for key, value in obj.items() if key in valid}
         context_patch = {**context_patch, **automatic_patch}
 
@@ -128,11 +138,11 @@ class WorkflowAgent:
         current_step: WorkflowStep,
         recent_turns: list[tuple[str, str]],
     ) -> NavigationIntent:
-        context = session.context if session is not None else self._workflow.initial_context()
-        history = "\n".join(
-            f"User: {user}\nAssistant: {assistant}"
-            for user, assistant in recent_turns[-2:]
-        ) or "(none)"
+        full_context = session.context if session is not None else self._workflow.initial_context()
+        context = self._workflow.context_for_step(current_step, full_context)
+        history = (
+            "\n".join(f"User: {user}\nAssistant: {assistant}" for user, assistant in recent_turns[-2:]) or "(none)"
+        )
         messages = [
             ChatMessage(role="system", content=_NAVIGATION_SYSTEM_PROMPT),
             ChatMessage(
@@ -157,7 +167,7 @@ class WorkflowAgent:
         try:
             response = await self._llm.chat(
                 messages,
-                max_tokens=256,
+                max_tokens=64,
                 temperature=0.0,
                 enable_thinking=False,
                 timeout=self._workflow.navigation_timeout_s,
@@ -194,14 +204,14 @@ class WorkflowAgent:
         current_step: WorkflowStep,
         observation_log: list[dict[str, Any]],
         recent_turns: list[tuple[str, str]],
+        visual_query: VisualQueryFn | None = None,
     ) -> str:
         system = self._read_answer_prompt()
         context = session.context if session is not None else self._workflow.initial_context()
         timer_state = self._timer_state_for_prompt(session)
-        history = "\n".join(
-            f"User: {user}\nAssistant: {assistant}"
-            for user, assistant in recent_turns[-4:]
-        ) or "(none)"
+        history = (
+            "\n".join(f"User: {user}\nAssistant: {assistant}" for user, assistant in recent_turns[-4:]) or "(none)"
+        )
         latest_observation = _latest_step_observation(
             observation_log,
             current_step.id,
@@ -240,6 +250,7 @@ class WorkflowAgent:
             messages,
             max_tokens=1024,
             observation_log=observation_log,
+            visual_query=visual_query,
         )
         logger.info(
             "answer agent response active={} step={} text={!r}",
@@ -295,15 +306,11 @@ class WorkflowAgent:
             },
             "assistant_message": {
                 "type": "string",
-                "description": (
-                    "Optional short guidance, correction, or missing-info request."
-                ),
+                "description": ("Optional short guidance, correction, or missing-info request."),
             },
             "speak": {
                 "type": "boolean",
-                "description": (
-                    "Reserved for urgent notices; false for ordinary missing information."
-                ),
+                "description": ("Reserved for urgent notices; false for ordinary missing information."),
             },
         }
         return (
@@ -326,6 +333,7 @@ class WorkflowAgent:
         max_tokens: int,
         observation_log: list[dict[str, Any]] | None = None,
         tool_defs: list[ToolDef] | None = None,
+        visual_query: VisualQueryFn | None = None,
     ) -> str:
         available_tools = self._tool_defs if tool_defs is None else tool_defs
         for iteration in range(self._workflow.max_agent_iterations):
@@ -358,6 +366,7 @@ class WorkflowAgent:
                     call,
                     iteration=iteration,
                     observation_log=observation_log or [],
+                    visual_query=visual_query,
                 )
                 messages.append(
                     ChatMessage(
@@ -406,9 +415,7 @@ class WorkflowAgent:
                 continue
             empty_field = str(policy.get("when_context_empty") or "").strip()
             effective_context = {**context, **patch}
-            if empty_field and _context_value_present(
-                _dotted_value(effective_context, empty_field)
-            ):
+            if empty_field and _context_value_present(_dotted_value(effective_context, empty_field)):
                 logger.debug(
                     "automatic step tool skipped step={} tool={} field={} reason=present",
                     step.id,
@@ -459,6 +466,7 @@ class WorkflowAgent:
         *,
         iteration: int,
         observation_log: list[dict[str, Any]],
+        visual_query: VisualQueryFn | None = None,
     ) -> dict[str, Any]:
         try:
             arguments = json.loads(call.arguments or "{}")
@@ -474,6 +482,24 @@ class WorkflowAgent:
                 result,
             )
             return result
+        if call.name == _VISUAL_INSPECTION_TOOL:
+            question = str(arguments.get("question") or "").strip()
+            if visual_query is None:
+                return {"error": "A live camera view is not available."}
+            if not question:
+                return {"error": "question is required"}
+            try:
+                result = await visual_query(question)
+                logger.debug(
+                    "guide tool result iter={} tool={} result={}",
+                    iteration,
+                    call.name,
+                    result,
+                )
+                return result
+            except Exception as exc:
+                logger.exception("live visual inspection failed")
+                return {"error": str(exc)}
         try:
             result = await self._tools.invoke(call.name, arguments)
             logger.debug(
@@ -504,8 +530,8 @@ RAG for task reference information, current time for timestamps, and the VLM
 observation log if earlier visual evidence matters.
 
 Return only valid JSON. The top-level object must contain:
-- context: the context fields for this step, with updated values only when
-  they are supported by the VLM observation, RAG, tools, or existing context.
+- context: a partial patch containing only fields this step can write and only
+  values supported by the latest VLM observation, RAG, tools, or context.
 - ready_to_advance: whether this step is complete.
 - step_state: started, needs_input, or complete for this step's internal state.
 - assistant_message: optional concise high-level guidance or a missing-info
@@ -518,8 +544,9 @@ The VLM observation is internal evidence. assistant_message is only for a short
 actionable correction, missing-info request, or useful "ready for next" style
 notice.
 
-Do not change the workflow step number. Do not invent visible facts. Preserve
-existing context values unless new evidence improves them."""
+Do not change the workflow step number. Do not invent visible facts. A writable
+observation may change more than once within one step; prefer newer evidence to
+older context. Omit unchanged fields instead of copying the entire context."""
 
 
 _NAVIGATION_SYSTEM_PROMPT = """Classify one user utterance for a guided workflow.
@@ -567,6 +594,33 @@ def _observation_log_tool_def() -> ToolDef:
     )
 
 
+def _visual_inspection_tool_def() -> ToolDef:
+    return ToolDef(
+        name=_VISUAL_INSPECTION_TOOL,
+        description=(
+            "Capture a fresh camera frame and answer a question about what is visible "
+            "right now. Use this for present-tense visual questions, object or text "
+            "identification, current readings, quantities, appearance, placement, or "
+            "safety checks. Do not rely on an older workflow caption when this tool can "
+            "inspect the current view."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": (
+                        "The wearer's complete visual question, preserving the object, "
+                        "property, or text they want inspected."
+                    ),
+                },
+            },
+            "required": ["question"],
+            "additionalProperties": False,
+        },
+    )
+
+
 def _recent_observations(
     observation_log: list[dict[str, Any]],
     arguments: dict[str, Any],
@@ -583,11 +637,7 @@ def _recent_observations(
     except (TypeError, ValueError):
         step_id = None
 
-    entries = [
-        dict(entry)
-        for entry in observation_log
-        if step_id is None or entry.get("step_id") == step_id
-    ]
+    entries = [dict(entry) for entry in observation_log if step_id is None or entry.get("step_id") == step_id]
     return {
         "entries": entries[-count:],
         "returned": min(len(entries), count),
@@ -600,11 +650,7 @@ def _latest_step_observation(
     step_id: int,
 ) -> str:
     latest = next(
-        (
-            entry
-            for entry in reversed(observation_log)
-            if entry.get("step_id") == step_id
-        ),
+        (entry for entry in reversed(observation_log) if entry.get("step_id") == step_id),
         None,
     )
     if latest is None:
@@ -691,7 +737,7 @@ def _extract_json(text: str) -> str | None:
                 continue
             depth -= 1
             if depth == 0 and start >= 0:
-                return text[start:index + 1]
+                return text[start : index + 1]
     return None
 
 
