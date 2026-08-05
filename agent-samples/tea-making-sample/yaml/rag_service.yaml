@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# The sample launcher keeps this model selector aligned with the worker.
 endpoint: tcp://0.0.0.0:8340
 documents_dir: ../rag-documents
 models_config: models.omni.json

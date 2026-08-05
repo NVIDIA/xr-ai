@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Switch to models.split.json to reuse the shared Nano/Cosmos model servers.
+# The sample launcher replaces these selectors from its required command-line modes.
 models_config: models.omni.json
 workflow_config: workflow.yaml
 voice_gate_config: voice_gate.yaml

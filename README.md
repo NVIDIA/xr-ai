@@ -311,18 +311,17 @@ Vision prompts are focus-only guides and return plain captions; YAML evidence
 gates apply per-step grounding thresholds before visual completion. Guidance
 also resets to idle for every new connection and after an app restart.
 
-The default profile reuses Nemotron-3-Omni for both vision and agent reasoning,
-plus STT and embedding from the shared model-server Omni stack. A local typed
-RAG service grounds missing package instructions in the sample's tea corpus.
-An alternate profile reuses the shared Cosmos and Nemotron-3-Nano stack. See the
-[sample README](agent-samples/tea-making-sample/README.md) for the workflow
-format, model selection, observability events, and adaptation guide.
+The required launch options select either Nemotron-3-Omni or the shared Cosmos
+and Nemotron-3-Nano stack, plus wake-word or always-on speech. A local typed RAG
+service grounds missing package instructions in the sample's tea corpus. See
+the [sample README](agent-samples/tea-making-sample/README.md) for all launch
+combinations, workflow format, observability events, and adaptation guide.
 
 ```bash
 cd agent-samples/tea-making-sample
 uv sync
 uv run --project ../model-servers model_servers --omni-stack
-uv run tea_making_sample
+uv run tea_making_sample --model-mode omni --voice-mode always-on
 ```
 
 ---

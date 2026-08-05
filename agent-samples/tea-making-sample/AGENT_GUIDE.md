@@ -66,9 +66,9 @@ changes.
 21. Tea identification is literal OCR, not visual classification. The vision
     focus excludes artwork and supplied words; RAG may provide brewing values
     only when its passage contains the variety already visible in the caption.
-22. `models.omni.json` is the default deployment and reuses `model_servers
-    --omni-stack`. Keep the worker and RAG service model config aligned;
-    `models.split.json` is the explicit shared Nano/Cosmos alternative.
+22. Launching requires explicit model and voice modes. The orchestrator writes
+    temporary worker and RAG configs from those selections so their model
+    profiles cannot diverge; never restore an implicit launch default.
 23. Continuous Omni captions disable reasoning and have a small output cap.
     Omni agent calls also disable reasoning so their token budget produces a
     tool call. A bounded caption timeout is recoverable and must leave the
@@ -76,6 +76,8 @@ changes.
 24. Identification has no draft state. Its agent ignores prior incomplete
     identity, derives the name from the fresh front-label caption, and either
     commits every final field with `tea_ready: true` or commits no updates.
+25. Wake-word and always-on behavior are separate voice-gate profiles selected
+    by `--voice-mode`; do not make operators edit a shared gate file to switch.
 
 ## Nested machines
 

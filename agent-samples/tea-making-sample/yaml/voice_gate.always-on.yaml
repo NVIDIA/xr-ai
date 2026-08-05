@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+magic_phrases: []
+listening_chime: false
+followup_grace_s: 0.0
+welcome_message: >-
+  Welcome to the tea-making guide. Ask me to help you make tea when you are ready.

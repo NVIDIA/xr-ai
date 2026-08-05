@@ -5,10 +5,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -112,16 +115,10 @@ def test_state_commit_waits_for_explicit_advance() -> None:
     assert workflow.project(workflow.step("fill_water"), session.state) == {"water_filled": False}
 
 
-def test_model_profiles_default_to_reused_omni_with_split_reuse() -> None:
+def test_model_profiles_define_reused_omni_and_split_stacks() -> None:
     split = json.loads((_SAMPLE / "yaml" / "models.split.json").read_text(encoding="utf-8"))["models"]
     omni = json.loads((_SAMPLE / "yaml" / "models.omni.json").read_text(encoding="utf-8"))["models"]
-    worker = yaml.safe_load((_SAMPLE / "yaml" / "tea_making_worker.yaml").read_text(encoding="utf-8"))
 
-    rag = yaml.safe_load((_SAMPLE / "yaml" / "rag_service.yaml").read_text(encoding="utf-8"))
-
-    assert worker["models_config"] == "models.omni.json"
-    assert rag["models_config"] == "models.omni.json"
-    assert load_config(None).models_config == Path("models.omni.json")
     assert split["agent_llm"]["adapter"]["preset"] == "nemotron3_nano"
     assert split["vlm"]["adapter"]["preset"] == "cosmos_vlm"
     assert {split[role]["deployment"]["ownership"] for role in ("agent_llm", "vlm", "stt", "embedding")} == {"reused"}
@@ -201,19 +198,57 @@ def test_user_facing_values_use_natural_units() -> None:
     assert render_message("{{ value | duration }}", {"value": 65}) == "1 minute and 5 seconds"
 
 
-def test_default_launcher_reuses_omni_stack(monkeypatch) -> None:
-    monkeypatch.setattr(sample_main, "detect_gpu_config", lambda: "96G_blackwell")
-    processes = sample_main._build_processes()
-    modes = {process.name: process.launch_mode for process in processes}
-    assert modes == {
-        "omni": "reuse",
-        "stt": "reuse",
-        "embedding": "reuse",
-        "tts": "own",
-        "rag": "own",
-        "hub": "own",
-        "worker": "own",
+def test_launcher_requires_explicit_model_and_voice_modes() -> None:
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        sample_main.run([])
+    help_text = output.getvalue()
+    assert "--model-mode {omni,vlm-llm}" in help_text
+    assert "--voice-mode {wake-word,always-on}" in help_text
+
+    args = sample_main._parse_args(["--model-mode", "omni", "--voice-mode", "always-on"])
+    assert args is not None
+    assert (args.model_mode, args.voice_mode) == ("omni", "always-on")
+
+
+def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
+    expected_services = {
+        "omni": {"omni", "stt", "embedding", "tts", "rag", "hub", "worker"},
+        "vlm-llm": {"agent-llm", "vlm", "stt", "embedding", "tts", "rag", "hub", "worker"},
     }
+    original_detect = sample_main.detect_gpu_config
+    sample_main.detect_gpu_config = lambda: "96G_blackwell"
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime_dir = Path(directory)
+            for model_mode, model_file in sample_main._MODEL_CONFIGS.items():
+                for voice_mode, voice_file in sample_main._VOICE_CONFIGS.items():
+                    worker_path, rag_path = sample_main._materialize_configs(
+                        runtime_dir,
+                        model_mode,
+                        voice_mode,
+                    )
+                    worker = load_config(worker_path)
+                    rag = yaml.safe_load(rag_path.read_text(encoding="utf-8"))
+                    assert worker.models_config == (_SAMPLE / "yaml" / model_file).resolve()
+                    assert worker.voice_gate_config == (_SAMPLE / "yaml" / voice_file).resolve()
+                    gate = yaml.safe_load(worker.voice_gate_config.read_text(encoding="utf-8"))
+                    if voice_mode == "wake-word":
+                        assert gate["magic_phrases"] == ["agent", "hey agent"]
+                        assert gate["followup_grace_s"] == 5.0
+                    else:
+                        assert gate["magic_phrases"] == []
+                    assert Path(rag["models_config"]) == worker.models_config
+                    assert Path(rag["documents_dir"]) == (_SAMPLE / "rag-documents").resolve()
+
+                processes = sample_main._build_processes(worker_path, rag_path)
+                assert {process.name for process in processes} == expected_services[model_mode]
+                assert all(
+                    process.launch_mode == ("own" if process.name in {"tts", "rag", "hub", "worker"} else "reuse")
+                    for process in processes
+                )
+    finally:
+        sample_main.detect_gpu_config = original_detect
 
 
 def test_eval_cases_cover_every_route_and_step() -> None:

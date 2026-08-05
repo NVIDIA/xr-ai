@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+magic_phrases:
+  - agent
+  - hey agent
+listening_chime: true
+followup_grace_s: 5.0
+welcome_message: >-
+  Welcome to the tea-making guide. Start each command with "Agent" or "Hey Agent."

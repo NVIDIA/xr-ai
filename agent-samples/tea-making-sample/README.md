@@ -124,35 +124,49 @@ ignored so they cannot erase an active walkthrough.
 
 ## Model modes
 
-The default `models.omni.json` reuses the shared model-server Omni stack:
+The launcher requires both model and voice behavior explicitly. With no
+arguments it prints the available choices and exits without starting services:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --omni-stack
 uv run --project agent-samples/tea-making-sample tea_making_sample
 ```
 
-This reuses Nemotron-3-Omni for both the `agent_llm` and `vlm` roles, Parakeet
-STT, and Nemotron Embed. The sample manages Piper TTS, the typed RAG service,
-the media hub, and its worker. The sample profile disables reasoning and caps
-generation only for short continuous captions; agent calls retain their own
-tool-loop budget but also disable hidden reasoning so that budget produces a
-tool call. A timed-out caption is logged as `vision.timeout` and the next frame
-continues the same observation loop.
+Select Nemotron-3-Omni for both vision and agent reasoning with:
 
-To use the split stack instead, change `models_config` in both
-`yaml/tea_making_worker.yaml` and `yaml/rag_service.yaml` to
-`models.split.json`, start `agent-samples/model-servers` without
-`--omni-stack`, then launch the sample. This reuses Cosmos Reason1 for vision,
-Nemotron-3-Nano for agents, Parakeet STT, and Nemotron Embed; the sample
-continues to manage Piper TTS.
+```bash
+uv run --project agent-samples/model-servers model_servers --omni-stack
+uv run --project agent-samples/tea-making-sample tea_making_sample \
+  --model-mode omni --voice-mode always-on
+```
+
+Select Cosmos Reason1 for vision and Nemotron-3-Nano for agents with:
+
+```bash
+uv run --project agent-samples/model-servers model_servers --vlm-llm-stack
+uv run --project agent-samples/tea-making-sample tea_making_sample \
+  --model-mode vlm-llm --voice-mode wake-word
+```
+
+`--voice-mode always-on` accepts every transcribed utterance.
+`--voice-mode wake-word` requires each command to start with “Agent” or “Hey
+Agent”; saying only the wake phrase opens a five-second follow-up window. The
+launcher selects dedicated gate profiles and writes temporary worker and RAG
+configs, so switching modes never edits source YAML and both processes always
+use the same model profile.
+
+The Omni profile disables hidden reasoning and caps only continuous caption
+generation; agent calls retain their tool-loop budget. A timed-out caption is
+logged as `vision.timeout` and the next frame continues the same observation
+loop. Both model modes reuse Parakeet STT and Nemotron Embed while the sample
+manages Piper TTS, the typed RAG service, the media hub, and its worker.
 
 Both modes use the embedding endpoint at port 8109. The RAG service reads
 `yaml/rag_service.yaml`, indexes the local Markdown corpus, and exposes only the
 shared `rag__retrieve` capability; the worker narrows it to the step-selectable
 `rag_lookup` NAT function.
 
-Open the web client shown by the hub and say, “Agent, help me make tea.” The
-voice gate is configured in `yaml/voice_gate.yaml`.
+Open the web client shown by the hub. In wake-word mode, say, “Agent, help me
+make tea.” In always-on mode, say, “Help me make tea.”
 
 ## Observability
 

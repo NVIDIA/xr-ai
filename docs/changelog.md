@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Tea launch modes are explicit and source-free
+
+The tea-making launcher requires a model mode and voice mode on every run;
+invoking it without arguments prints its choices and starts nothing. Model
+selection switches between the shared Nemotron-3-Omni stack and the split
+Cosmos/Nemotron-3-Nano stack. Voice selection switches between dedicated
+wake-word and always-on gate profiles. The launcher materializes temporary
+worker and RAG configs with aligned absolute paths, avoiding source edits and
+duplicated configuration combinations.
+
 ### 2026-08-05 — Tea guidance defaults to the Omni stack
 
 The tea-making sample reuses `model_servers --omni-stack` by default, using the
