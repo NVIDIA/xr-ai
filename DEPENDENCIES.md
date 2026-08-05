@@ -565,8 +565,8 @@ The launcher starts STT (8103), Nemotron-Omni (8108), the embedding server
 (8109), RAG service (8340), hub, Piper TTS (8105), and the worker. Nemotron-Omni
 serves both `agent_llm` and `vlm`; there is no Llama-Nemotron chat model. The
 worker registers `RAGFunctionsConfig` in-process and calls the native RAG
-service through its typed retrieve function. Step 5 is timer-only and does not
-invoke the VLM or step agent.
+service through its typed retrieve function. The final steeping step uses the
+VLM until immersion is detected, then switches to timer-tool polling.
 
 ### model-servers  (agent-samples/model-servers/)
 
