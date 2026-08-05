@@ -98,7 +98,9 @@ def build_run_argv(
 
     argv += ["-v", f"{model_cache}:{model_cache}"]
 
-    argv.append(image)
+    # NGC vLLM images default to `vllm serve`; override it because the setup
+    # installs must run in a shell before the server starts.
+    argv += ["--entrypoint", "/bin/bash", image]
     # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
     # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
     install_cmds = ["pip install -q hf_transfer"]
@@ -113,7 +115,7 @@ def build_run_argv(
             f"pip install -q --no-build-isolation {shlex.join(extra_pip)}"
         )
     install_cmds.append(shlex.join(vllm_argv))
-    argv += ["bash", "-c", " && ".join(install_cmds)]
+    argv += ["-c", " && ".join(install_cmds)]
     return argv
 
 
@@ -451,37 +453,35 @@ def run(
         return
 
     if container_exists(container_name) and not container_running(container_name):
-        # Stopped container already has hf_transfer installed — restart it
-        # rather than running a fresh image (avoids reinstalling every time).
+        # A container's command and entrypoint are immutable. Recreate failed
+        # containers so launcher fixes and changed service arguments take effect.
         print(
-            f"[{log_prefix}] Restarting stopped container {container_name}",
+            f"[{log_prefix}] Recreating stopped container {container_name}",
             flush=True,
         )
-        proc = subprocess.Popen(
-            ["docker", "start", "-a", container_name],
-            start_new_session=True,
-        )
-        _state["proc"] = proc
-    else:
-        _maybe_ngc_login(image)
-        argv = build_run_argv(
-            image=image,
-            container_name=container_name,
-            port=port,
-            model_cache=model_cache,
-            hf_token=hf_token,
-            cuda_visible_devices=cuda_visible_devices,
-            extra_env=extra_env,
-            extra_pip=extra_pip,
-            vllm_argv=vllm_argv,
-        )
-        print(
-            f"[{log_prefix}] Launching vLLM (docker)  image={image}  "
-            f"container={container_name}  http://{host}:{port}/v1",
-            flush=True,
-        )
-        proc = subprocess.Popen(argv, start_new_session=True)
-        _state["proc"] = proc
+        if not remove_container(container_name):
+            log.error("Could not remove stopped container %s", container_name)
+            sys.exit(1)
+
+    _maybe_ngc_login(image)
+    argv = build_run_argv(
+        image=image,
+        container_name=container_name,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+    )
+    print(
+        f"[{log_prefix}] Launching vLLM (docker)  image={image}  "
+        f"container={container_name}  http://{host}:{port}/v1",
+        flush=True,
+    )
+    proc = subprocess.Popen(argv, start_new_session=True)
+    _state["proc"] = proc
 
     streamer_proc, log_path = _start_log_streamer(container_name)
     _state["streamer"] = streamer_proc

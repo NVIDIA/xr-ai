@@ -250,8 +250,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 
 ### docker mode — runtime details
 
-- Container is launched with `--network host --ipc host --gpus …` (matches
-  gives vLLM the shared-memory region its workers expect).
+- Container is launched with `--network host --ipc host --runtime nvidia`
+  (forwarding `NVIDIA_VISIBLE_DEVICES`), and `/bin/bash` overrides the image
+  entrypoint so setup installs run before `vllm serve`.
+- Failed stopped containers are recreated because Docker cannot change their
+  recorded entrypoint or command.
 - The host `model_cache` is bind-mounted at the same path inside the
   container and `HF_HOME` is set to it, so weights cached by pip mode are
   reused by docker mode and vice versa.

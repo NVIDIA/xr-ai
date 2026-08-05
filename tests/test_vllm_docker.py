@@ -152,9 +152,16 @@ class TestBuildRunArgv:
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert "nvcr.io/nvidia/vllm:26.04-py3" in argv
 
+    def test_shell_overrides_image_entrypoint(self, tmp_path):
+        argv = build_run_argv(**self._base_kwargs(tmp_path))
+        image = "nvcr.io/nvidia/vllm:26.04-py3"
+        image_index = argv.index(image)
+        assert argv[image_index - 2 : image_index] == ["--entrypoint", "/bin/bash"]
+        assert argv[image_index + 1] == "-c"
+
     def test_no_extra_pip_runs_only_hf_transfer_install(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
-        # bash -c "<install>... && vllm serve ..." — the install is the last
+        # /bin/bash -c "<install>... && vllm serve ..." — the install is the last
         # argv entry; with no extra_pip there must be exactly one pip line.
         bash_cmd = argv[-1]
         assert bash_cmd.count("pip install ") == 1
