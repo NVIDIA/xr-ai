@@ -57,7 +57,7 @@ class Step:
     evidence: Evidence | None
     complete_when: dict[str, Any]
     next_step: str | None
-    skip_state: dict[str, Any]
+    state_on_skip: dict[str, Any]
     enter_message: str
     complete_message: str
     skip_message: str
@@ -146,8 +146,8 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
     reads = _names(raw.get("reads", []), f"steps.{step_id}.reads")
     writes = _names(raw.get("writes", []), f"steps.{step_id}.writes")
     completion = _mapping(raw.get("complete_when"), f"steps.{step_id}.complete_when")
-    skip_state = _mapping(raw.get("skip_state", {}), f"steps.{step_id}.skip_state")
-    unknown = (set(reads) | set(writes) | completion.keys() | skip_state.keys()) - fields.keys()
+    state_on_skip = _mapping(raw.get("state_on_skip", {}), f"steps.{step_id}.state_on_skip")
+    unknown = (set(reads) | set(writes) | completion.keys() | state_on_skip.keys()) - fields.keys()
     if unknown:
         raise ValueError(f"step {step_id!r} references unknown state: {sorted(unknown)}")
     trigger = _mapping(raw.get("trigger"), f"steps.{step_id}.trigger")
@@ -180,7 +180,7 @@ def _step(value: Any, fields: dict[str, StateField]) -> Step:
         evidence=_evidence(evidence, step_id),
         complete_when=dict(completion),
         next_step=str(raw["next"]) if raw.get("next") is not None else None,
-        skip_state=dict(skip_state),
+        state_on_skip=dict(state_on_skip),
         enter_message=str(messages.get("enter", "")).strip(),
         complete_message=str(messages.get("complete", "")).strip(),
         skip_message=str(messages.get("skip", "")).strip(),

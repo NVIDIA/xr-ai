@@ -106,10 +106,10 @@ class SessionStore:
         if not complete and not skip:
             return f"{step.title} is not complete yet. Say skip if you want to move on anyway."
         if skip:
-            invalid = self._invalid_patch(step, step.skip_state)
+            invalid = self._invalid_patch(step, step.state_on_skip)
             if invalid:
                 raise ValueError(f"invalid skip state for {step.id}: {invalid}")
-            session.state.update(copy.deepcopy(step.skip_state))
+            session.state.update(copy.deepcopy(step.state_on_skip))
         transition = self._transition(session, step)
         if not skip:
             return transition

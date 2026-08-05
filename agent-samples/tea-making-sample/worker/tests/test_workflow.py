@@ -33,6 +33,7 @@ class WorkflowTest(unittest.TestCase):
             self.assertTrue(step.agent.prompt)
             self.assertTrue(step.voice.prompt)
             self.assertTrue(step.complete_when)
+            self.assertTrue(step.state_on_skip)
         identify = self.workflow.step("identify")
         self.assertEqual(identify.agent.tools, ("rag_lookup",))
         self.assertIn("rag_lookup", identify.voice.tools)

@@ -34,7 +34,9 @@ limit adjacent-variety contamination.
 
 The router gives explicit step-change commands precedence over task-question
 delegation. Next, continue, advance, and skip must call the workflow advance
-function and can never be rewritten into a step question.
+function and can never be rewritten into a step question. The step schema names
+its explicit-skip patch `state_on_skip`, distinguishing the mutation from the
+`complete_when` readiness predicate.
 
 ### 2026-08-05 — Docker vLLM setup owns the image entrypoint
 

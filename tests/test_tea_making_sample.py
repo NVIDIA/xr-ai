@@ -56,9 +56,12 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert "briefly message real non-completing changes" in STEP
     assert "Empty on no change/completion" in STEP
     assert "Never route these to ask_step" in ROUTER
-    for step in workflow.steps.values():
+    for step, source in zip(workflow.steps.values(), raw["steps"], strict=True):
         assert step.trigger.function
         assert step.complete_when
+        assert step.state_on_skip
+        assert "state_on_skip" in source
+        assert "skip_state" not in source
         assert len(str(step.trigger.arguments.get("question", ""))) <= 240
         assert len(step.agent.prompt) <= 420
         assert len(step.voice.prompt) <= 300

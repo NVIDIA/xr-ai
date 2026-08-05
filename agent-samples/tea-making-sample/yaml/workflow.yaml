@@ -84,7 +84,7 @@ steps:
       tools: [current_view, rag_lookup]
     complete_when: {tea_ready: true}
     next: fill_water
-    skip_state:
+    state_on_skip:
       tea_name: generic tea
       target_temperature_c: 93
       steep_duration_s: 180
@@ -128,7 +128,7 @@ steps:
       tools: [current_view]
     complete_when: {water_filled: true}
     next: heat_water
-    skip_state: {water_filled: true}
+    state_on_skip: {water_filled: true}
     messages:
       enter: Fill a kettle or pot with fresh water and keep it in view.
       complete: The vessel has water. Say next when ready.
@@ -169,7 +169,7 @@ steps:
       tools: [current_view]
     complete_when: {water_ready: true}
     next: start_steeping
-    skip_state: {heating_started: true, water_ready: true}
+    state_on_skip: {heating_started: true, water_ready: true}
     messages:
       enter: Heat the water to {{ target_temperature_c | temperature_c }}.
       complete: The water is ready. Say next when ready.
@@ -208,7 +208,7 @@ steps:
       tools: [current_view]
     complete_when: {steeping_started: true}
     next: steep_timer
-    skip_state: {steeping_started_at_us: 1, steeping_started: true}
+    state_on_skip: {steeping_started_at_us: 1, steeping_started: true}
     messages:
       enter: Put the tea in the water; I will start the timer when I see it immersed.
       complete: Steeping timer started. Say next to monitor it.
@@ -238,7 +238,7 @@ steps:
       tools: [clock__timer]
     complete_when: {steeping_complete: true}
     next: null
-    skip_state: {steeping_complete: true}
+    state_on_skip: {steeping_complete: true}
     messages:
       enter: Steep for {{ steep_duration_s | duration }}.
       complete: Steeping is complete. Remove the tea, then say next to finish.

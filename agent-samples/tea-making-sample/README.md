@@ -56,7 +56,7 @@ Edit `yaml/workflow.yaml`. Each step declares:
 - `voice`: a read-only policy and its NAT tools.
 - `complete_when` and `next`: readiness and the destination of an explicit
   voice advance.
-- `skip_state` and `messages`: deterministic management behavior.
+- `state_on_skip` and `messages`: deterministic management behavior.
 
 User-facing message templates support generic presentation filters:
 `{{ value | temperature_c }}` speaks a full “degrees Celsius” value and
