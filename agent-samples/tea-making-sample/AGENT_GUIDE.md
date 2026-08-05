@@ -26,12 +26,14 @@ changes.
 8. Package brewing values outrank RAG. Retrieval is step-scoped through the
    exact `rag_lookup` NAT function, and its source is committed with the values.
    Never retrieve without a specific visible tea name; return at most two
-   passages to the small model.
+   passages to the small model. RAG supplies brewing values, never tea identity.
 9. Step completion never transitions. Observation continues homogeneously;
-   only the top router may advance after an explicit user voice request.
+   only the top router may advance after an explicit user voice request. Next,
+   continue, advance, and skip always select the advance function, never the
+   step question function.
 10. VLM triggers return plain-text captions from focus-only questions. A
     YAML evidence gate, not the observation agent's interpretation alone,
-    authorizes every visual state write after repeated matching frames.
+    authorizes visual completion after repeated matching frames.
 11. Sessions are ephemeral: first join and app-start roster replay reset to
     idle, participant leave discards state, and duplicate roster events are
     idempotent.
@@ -43,6 +45,37 @@ changes.
 14. User-facing values are natural speech. Keep state numeric; use the shared
     voice rule and message render filters instead of step-specific display
     fields or preformatted state.
+15. Treat prompt failures as prompt-tuning work first. Confirm before changing
+    evidence thresholds, state semantics, transitions, or other runtime policy.
+16. When observations and state can use different units, make normalization
+    explicit in the step prompt before any comparison or state update. A
+    unit-bearing kettle reading establishes heating without establishing
+    temperature readiness.
+17. Observation agents receive `already_complete` as prior status plus a
+    generated contract containing writable field meanings and the YAML
+    completion condition. Prior status is never copied into writable state.
+18. Every observation turn calls `workflow__commit` exactly once. Completed or
+    unsupported observations commit empty updates and message; they never emit
+    free-form state or force a readiness field.
+19. Prompts state both positive evidence for each readiness write and its
+    negative stop condition. Identification commits all resolved fields and
+    `tea_ready` atomically; unrelated retrieval text never supplies a value.
+20. Observation `message` briefly announces a real, non-completing state change
+    or immediate danger. No-change, repeated, and completion commits leave it
+    empty; this rule stays in the shared agent prompt, not step YAML.
+21. Tea identification is literal OCR, not visual classification. The vision
+    focus excludes artwork and supplied words; RAG may provide brewing values
+    only when its passage contains the variety already visible in the caption.
+22. `models.omni.json` is the default deployment and reuses `model_servers
+    --omni-stack`. Keep the worker and RAG service model config aligned;
+    `models.split.json` is the explicit shared Nano/Cosmos alternative.
+23. Continuous Omni captions disable reasoning and have a small output cap.
+    Omni agent calls also disable reasoning so their token budget produces a
+    tool call. A bounded caption timeout is recoverable and must leave the
+    observation loop active; other model failures retain their traceback.
+24. Identification has no draft state. Its agent ignores prior incomplete
+    identity, derives the name from the fresh front-label caption, and either
+    commits every final field with `tea_ready: true` or commits no updates.
 
 ## Nested machines
 
@@ -92,10 +125,13 @@ For a new step:
   booleans, keys, or another output grammar.
 - Add `evidence.pattern` and `evidence.consecutive` when a visual completion
   needs protection from one-frame hallucination or ambiguity.
-- Calibrate thresholds to consequence: identification requires two readable
-  OCR captions, while physical milestones such as visible water can require
-  stronger repeated evidence.
+- Calibrate thresholds to consequence: identification can accept one readable
+  OCR caption, while physical milestones such as visible water need repeated
+  evidence.
 - Keep the step prompt focused on mapping the current observation to state.
+- State both the evidence required for a write and when to commit empty updates.
+- For derived readiness, require every comparison or supporting fact explicitly;
+  repetition, a target value, and a user report are not evidence.
 - List only tools the step may call.
 - Make completion deterministic through `complete_when`.
 - Use `next` only as the destination of explicit voice advancement.
@@ -115,6 +151,7 @@ Budgets are guardrails for the small local models:
 | Shared router prompt | 300 characters |
 | Shared observation prompt | 350 characters |
 | Shared voice prompt | 300 characters |
+| Generated state contract | 500 characters |
 | Step VLM question | 240 characters |
 | Step observation policy | 420 characters |
 | Step voice policy | 300 characters |
@@ -124,10 +161,11 @@ abbreviations and symbols, simplify quantities into familiar spoken forms,
 preserve meaning, and hide machine formats. Do not put domain-specific unit
 examples or repeat this rule in step prompts.
 
-The eval check enforces the step budgets. Requests use compact JSON with no
+The eval check enforces the budgets. Requests use compact JSON with no
 indentation. Router context is only `request`, `active`, and current step title.
-An observation or voice agent receives only its step projection. Do not add a
-whole-workflow dump, observations from previous frames, or assistant history.
+An observation or voice agent receives only its step projection. The generated
+contract includes only writable fields and their completion values. Do not add
+a whole-workflow dump, previous frames, or assistant history.
 
 ## Human-test loop
 
@@ -158,6 +196,8 @@ Prefer the narrowest fix:
 - Missing package fact: inspect the `rag_lookup` query, score, and source before
   changing retrieval text or thresholds.
 - Correct fact, wrong state: adjust only the step observation policy.
+- Correct identification, delayed readiness: inspect the retrieval passage and
+  verify that the first supported field commit also writes `tea_ready` true.
 - Wrong tool: reduce or clarify only that step's tool list/description.
 - Wrong route: tighten the shared router or management function description and
   add a routing eval; keep the task router prompt limited to domain identity.

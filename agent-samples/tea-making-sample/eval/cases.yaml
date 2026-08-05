@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 routes:
+  - utterance: Next.
+    expected_tool: workflow__advance
   - utterance: Walk me through brewing a cup.
     expected_tool: workflow__start
   - utterance: Move to the following stage.
@@ -15,6 +17,8 @@ routes:
   - utterance: Tell me what you learned about this tea.
     expected_tool: workflow__ask_step
   - utterance: I poured in the water.
+    expected_tool: workflow__ask_step
+  - utterance: The kettle has reached the target.
     expected_tool: workflow__ask_step
   - utterance: What should I do at this stage?
     expected_tool: workflow__ask_step
@@ -47,16 +51,96 @@ rag_fallback:
   expected_tools: [rag_lookup, workflow__commit]
   expected_top_k: 2
   expected_source: rag-documents/tea-brewing.md
+  expected_tea_ready: true
+  expected_atomic_updates: [tea_name, target_temperature_c, steep_duration_s, guidance_source, tea_ready]
+
+irrelevant_retrieval_guard:
+  observation: A package clearly reads Silver Needle White Tea.
+  retrieval: General advice says to use fresh filtered water but gives no variety-specific values.
+  forbidden_updates: [target_temperature_c, steep_duration_s, tea_ready]
+
+identity_retrieval_mismatch:
+  observation: A label reads Harbor Spice Black Tea; brewing values are absent.
+  retrieval: Breakfast Blend uses boiling water and steeps for 4 minutes.
+  expected_tools: [rag_lookup, workflow__commit]
+  expected_updates: {}
+  expected_tea_ready: false
 
 identification_guard:
   readable_ocr: NUMI ORGANIC BLACK TEA BREAKFAST BLEND
+  partial_ocr: CEDAR GROVE JASMINE GREEN
   unreadable_caption: Too dark to discern tea package text.
   empty_caption: There are no visible texts on any objects within this frame.
   none_caption: none
   expected_readable: true
+  expected_partial: true
   expected_unreadable: false
   expected_empty: false
   generic_rag_allowed: false
+  unreadable_expected_updates: {}
+  unreadable_expected_message: ""
+
+identification_atomic_guard:
+  observation: Pine Harbor Genmaicha; no brewing values are visible.
+  stale_state: {tea_name: Meadow Mint, tea_ready: false}
+  forbidden_draft_updates: [tea_name, target_temperature_c, steep_duration_s, guidance_source, tea_ready]
+  expected_unready_state: {}
+  current_observation_wins: true
+
+tea_identity_question:
+  step: identify
+  question: What tea is in the cup?
+  state: {tea_ready: true}
+  expected_tool: current_view
+  forbidden_tool: rag_lookup
+
+temperature_unit_guard:
+  step: heat_water
+  observation: A thermometer display reads 68°F.
+  state: {target_temperature_c: 95, heating_started: true, water_ready: false}
+  expected_updates: {heating_started: true}
+  expected_water_ready: false
+
+terse_temperature_caption:
+  step: heat_water
+  observation: 164F
+  expected_evidence: true
+  expected_updates: {heating_started: true}
+  expected_water_ready: false
+
+temperature_missing_unit_guard:
+  step: heat_water
+  observation: The kettle display visibly reads 91 with no unit shown.
+  state: {target_temperature_c: 91, heating_started: true, water_ready: false}
+  expected_updates: {}
+  expected_water_ready: false
+
+state_update_notice:
+  step: heat_water
+  observation: A kettle display reads 82 degrees Fahrenheit.
+  state: {target_temperature_c: 95, heating_started: false, water_ready: false}
+  expected_updates: {heating_started: true}
+  expected_message_intent: heating started
+  expected_complete: false
+
+routine_notice_guard:
+  step: heat_water
+  observation: The thermometer display repeatedly reads 77°F.
+  state: {target_temperature_c: 90, heating_started: true, water_ready: false}
+  repetitions: 3
+  expected_updates: {}
+  expected_messages: ["", "", ""]
+
+observation_context:
+  keys: [observation, already_complete, state]
+  prior_status_is_state_value: false
+  contract_includes: [field_descriptions, completion_condition]
+  writable_fields_are_goals: false
+
+retrieval_context:
+  chunk_size: 700
+  overlap: 100
+  query_suffix: water temperature steep time
 
 completed_step:
   step: fill_water
@@ -77,6 +161,27 @@ steeping_negative_guard:
     A cup with a tea bag is shown, but there is no visible evidence of the tea
     bag being immersed in water.
   expected_accepted: false
+
+timer_running_guard:
+  observation: {elapsed_s: 119, remaining_s: 61, expired: false}
+  expected_updates: {}
+  expected_steeping_complete: false
+
+voice_tool_guards:
+  fill_report:
+    question: I filled the kettle.
+    expected_tool: current_view
+    visual_confirmation: false
+  heat_reading:
+    question: Is the water hot enough now?
+    expected_tool: current_view
+  steep_report:
+    question: I put the infuser in the cup.
+    expected_tool: current_view
+    visual_confirmation: false
+  timer_question:
+    question: Is steeping finished?
+    expected_tool: clock__timer
 
 spoken_values:
   temperature_c: 100 degrees Celsius

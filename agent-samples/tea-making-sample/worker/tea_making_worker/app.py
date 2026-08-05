@@ -62,7 +62,10 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         vision_functions = await vision_group.get_all_functions()
         await builder.add_function(
             "current_view",
-            CurrentViewConfig(source=vision_functions["vision__look_at_current_frame"]),
+            CurrentViewConfig(
+                source=vision_functions["vision__look_at_current_frame"],
+                timeout_s=config.vlm_timeout_s,
+            ),
         )
         rag_group = await builder.add_function_group(
             "rag",

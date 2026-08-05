@@ -1,13 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Switch to models.omni.json to use one multimodal Nemotron-3-Omni service.
-models_config: models.split.json
+# Switch to models.split.json to reuse the shared Nano/Cosmos model servers.
+models_config: models.omni.json
 workflow_config: workflow.yaml
 voice_gate_config: voice_gate.yaml
 rag_endpoint: tcp://127.0.0.1:8340
 frame_max_age_s: 3
 frame_timeout_s: 5
+vlm_timeout_s: 15
 silence_duration: 0.8
 min_speech: 0.15
 silero_threshold: 0.3

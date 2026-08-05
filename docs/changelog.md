@@ -9,6 +9,33 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Tea guidance defaults to the Omni stack
+
+The tea-making sample reuses `model_servers --omni-stack` by default, using the
+same Nemotron-3-Omni service for vision and agent reasoning plus the shared STT
+and embedding services. Its split Cosmos and Nemotron-3-Nano profile remains an
+explicit shared-stack alternative. The sample disables hidden reasoning for
+both VLM captions and agent tool calls, and caps short caption output so neither
+path can consume Omni's large default reasoning budget without producing its
+required result. A bounded caption timeout is treated as a recoverable missed
+frame while other failures still propagate.
+
+Identification captioning focuses on front-label brand and tea/blend text and
+excludes slogans and package metadata that caused noisy identities. Incomplete
+identification is sparse rather than draft state: the agent must use the fresh
+caption and either commit every final field with readiness true or commit no
+updates, preventing an early OCR error from contaminating later frames.
+
+The generic observation contract preserves YAML field descriptions and
+completion values at the LLM boundary. Prior completion is named
+`already_complete` so it cannot be mistaken for writable readiness. Retrieval
+uses the visible tea name plus missing brewing facts and compact chunks to
+limit adjacent-variety contamination.
+
+The router gives explicit step-change commands precedence over task-question
+delegation. Next, continue, advance, and skip must call the workflow advance
+function and can never be rewritten into a step question.
+
 ### 2026-08-05 — Docker vLLM setup owns the image entrypoint
 
 The shared vLLM Docker launcher explicitly selects `/bin/bash` before installing
@@ -53,13 +80,15 @@ idle on a real join and app-start roster replay, are discarded on leave, and
 ignore duplicate roster replays so an active session is not reset by another
 endpoint's catch-up request.
 
-Identification uses a lower-latency form of the same gate: two consecutive
-readable OCR captions are required, while darkness, unreadability, and
-absent-text captions are rejected. Evidence gates every state write so a model
-cannot preserve generic retrieval from an unreadable frame. Its 1.5-second
-trigger never invokes generic retrieval without a specific visible tea name.
+Identification uses a lower-latency form of the same gate: one readable OCR
+caption is sufficient, while darkness, unreadability, and absent-text captions
+are rejected. Its focus guide asks for the exact visible product and variety
+rather than a generic tea family. Its 1.5-second trigger never invokes generic
+retrieval without a specific visible tea name. The observation policy commits
+all identification fields together, and the voice policy derives identity only
+from state or live vision; RAG is limited to brewing values for a known name.
 The sample-local RAG alias returns at most two passages and the corpus uses
-900-character overlapping chunks, keeping the agent context small while
+700-character overlapping chunks, keeping the agent context small while
 preserving a blend heading with its brewing values.
 
 The voice router now treats management as an explicit-command-only surface;
@@ -77,7 +106,26 @@ voice contract generically requires natural spoken language, expanded symbols
 and abbreviations, familiar quantities, preserved meaning, and no machine
 formats. Deterministic YAML messages use explicit `temperature_c` and
 `duration` render filters where guaranteed output is needed, while state and
-tool inputs remain compact numeric values.
+tool inputs remain compact numeric values. The heat-step policy converts
+Fahrenheit observations to Celsius before comparing them with the Celsius
+target, preventing unit-bearing readings from being compared as raw numbers.
+Observation prompts receive prior status as `already_complete` plus a generated
+contract with scoped field meanings and completion values. This separates prior
+status from writable state while keeping the semantics explicit enough for a
+small model to produce the intended patch. Each observation turn
+still calls the same commit function once, using an empty commit for completed
+or unsupported evidence. Step policies explicitly pair each readiness write
+with a negative stop condition; identification writes its supported brewing
+fields and readiness atomically, while unrelated retrieval passages, repeated
+captions, targets, and user action reports are not completion evidence. The
+shared observation prompt requests one short message for a real state change
+that does not complete the step, with no YAML-specific notification mapping.
+No-change, repeated, and completion commits stay silent, while immediate danger
+may still be announced.
+Identification vision is constrained to literal, ordered package text instead
+of classification from artwork. Its RAG tool description and step policy both
+require retrieved text to contain the visible variety, so generic or mismatched
+passages cannot complete a hallucinated identity.
 
 ### 2026-08-03 — Spoken text must carry terminal punctuation
 

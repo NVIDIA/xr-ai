@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from pathlib import Path
 
@@ -39,6 +40,22 @@ class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(source.request.participant_id, "actual-participant")
         self.assertEqual(source.request.question, "What is visible?")
 
+    async def test_current_view_timeout_is_a_recoverable_observation(self) -> None:
+        workflow = load_workflow(_WORKFLOW)
+        session = SessionStore(workflow).get("actual-participant")
+
+        class _Source:
+            async def ainvoke(self, _request, *, to_type):
+                await asyncio.sleep(1)
+                return to_type(answer="late answer")
+
+        async with current_view(CurrentViewConfig(source=_Source(), timeout_s=0.01), None) as info:
+            self.assertIsNotNone(info.single_fn)
+            with invocation_scope(session, "timeout-trace"):
+                result = await info.single_fn(CurrentViewRequest(question="What is visible?"))
+
+        self.assertIn("Unable to inspect", result.answer)
+
     async def test_workflow_nat_functions_are_the_only_mutation_surface(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         store = SessionStore(workflow)
@@ -55,12 +72,11 @@ class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
                 response = await start.ainvoke({}, to_type=str)
             self.assertEqual(response, workflow.step("identify").enter_message)
             self.assertEqual(session.step_id, "identify")
-            for index in range(2):
-                store.observe(
-                    session,
-                    "A tea package label reads Oolong, 88 C, steep 4 minutes.",
-                    f"identify-{index}",
-                )
+            store.observe(
+                session,
+                "A tea package label reads Oolong, 88 C, steep 4 minutes.",
+                "identify",
+            )
 
             with invocation_scope(session, "step-trace"):
                 response = await commit.ainvoke(

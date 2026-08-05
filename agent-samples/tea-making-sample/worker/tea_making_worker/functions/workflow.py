@@ -36,11 +36,17 @@ class AskStepRequest(_Request):
 
 
 class CommitRequest(_Request):
-    updates: dict[str, Any] = Field(default_factory=dict)
+    updates: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Supported active-step fields only; omit unchanged fields.",
+    )
     message: str = Field(
         default="",
         max_length=240,
-        description="Optional urgent or materially new guidance to speak; otherwise empty.",
+        description=(
+            "Brief natural spoken update for a real non-completing state change or immediate danger; "
+            "empty otherwise."
+        ),
     )
 
 
@@ -85,12 +91,21 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
         return await answer_step(call.session, request.question, call.trace_id)
 
     handlers: dict[str, tuple[Any, str]] = {
-        "commit": (commit, "Atomically update only the active step's writable state."),
+        "commit": (
+            commit,
+            "Atomically update supported active-step state according to the supplied state contract.",
+        ),
         "start": (start, "Use only for an explicit request to start guidance."),
-        "advance": (advance, "Use only for explicit next, continue, advance, or skip commands."),
+        "advance": (
+            advance,
+            "Handle explicit step changes: skip false for next/continue/advance; true only for skip.",
+        ),
         "reset": (reset, "Use only for explicit stop, cancel, or reset commands."),
         "status": (status, "Use only when asked which workflow step is active or whether guidance is running."),
-        "ask_step": (ask_step, "Use for every task question, action report, help request, or current fact."),
+        "ask_step": (
+            ask_step,
+            "Handle task questions, reports, help, or facts; never next, continue, advance, or skip.",
+        ),
     }
     handler, description = handlers[config.operation]
     yield FunctionInfo.from_fn(handler, description=description)

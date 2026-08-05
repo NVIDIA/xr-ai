@@ -3,6 +3,7 @@
 
 """Expose only current-frame vision as an individually selectable NAT tool."""
 
+import asyncio
 from typing import Any
 
 from nat.builder.function import Function
@@ -19,6 +20,7 @@ class CurrentViewConfig(FunctionBaseConfig, name="tea_guidance_current_view"):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     source: Any = Field(exclude=True, repr=False)
+    timeout_s: float = Field(default=15, gt=0)
 
 
 class CurrentViewRequest(BaseModel):
@@ -34,13 +36,14 @@ async def current_view(config: CurrentViewConfig, _builder: Builder):
     async def look(request: CurrentViewRequest) -> LiveVisionResult:
         call = current_invocation()
         try:
-            return await source.ainvoke(
-                LiveVisionRequest(
-                    participant_id=call.session.participant_id,
-                    question=request.question,
-                ),
-                to_type=LiveVisionResult,
-            )
+            async with asyncio.timeout(config.timeout_s):
+                return await source.ainvoke(
+                    LiveVisionRequest(
+                        participant_id=call.session.participant_id,
+                        question=request.question,
+                    ),
+                    to_type=LiveVisionResult,
+                )
         except FrameUnavailable as exc:
             emit(
                 "vision.unavailable",
@@ -49,7 +52,16 @@ async def current_view(config: CurrentViewConfig, _builder: Builder):
                 trace_id=call.trace_id,
                 reason=str(exc),
             )
-            return LiveVisionResult(answer=f"VISUAL_UNAVAILABLE: {exc}")
+            return LiveVisionResult(answer=f"Unable to inspect the current frame: {exc}")
+        except TimeoutError:
+            emit(
+                "vision.timeout",
+                participant_id=call.session.participant_id,
+                step=call.session.step_id,
+                trace_id=call.trace_id,
+                timeout_s=config.timeout_s,
+            )
+            return LiveVisionResult(answer="Unable to inspect the current frame before the vision timeout.")
 
     yield FunctionInfo.from_fn(
         look,

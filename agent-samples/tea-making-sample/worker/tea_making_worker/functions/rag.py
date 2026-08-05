@@ -51,7 +51,10 @@ async def rag_lookup(config: RAGLookupConfig, _builder: Builder):
 
     yield FunctionInfo.from_fn(
         retrieve,
-        description="Retrieve grounded tea brewing or hot-water safety guidance from local documents.",
+        description=(
+            "Retrieve missing brewing values after reading an exact tea name. Query for that name, water "
+            "temperature, and steep time. Results support values only, never identity; require the same variety."
+        ),
     )
 
 

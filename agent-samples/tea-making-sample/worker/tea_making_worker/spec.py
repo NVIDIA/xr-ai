@@ -66,6 +66,9 @@ class Step:
     def context_fields(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys((*self.reads, *self.writes)))
 
+    def is_complete(self, state: dict[str, Any]) -> bool:
+        return bool(self.complete_when) and all(state.get(name) == value for name, value in self.complete_when.items())
+
 
 @dataclass(frozen=True, slots=True)
 class Workflow:

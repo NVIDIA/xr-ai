@@ -53,7 +53,7 @@ class SessionStore:
         return tuple(session for session in self._sessions.values() if session.active)
 
     def step_complete(self, session: Session) -> bool:
-        return self._complete(self._active_step(session), session.state)
+        return self._active_step(session).is_complete(session.state)
 
     def release(self, participant_id: str) -> None:
         self._sessions.pop(participant_id, None)
@@ -97,12 +97,12 @@ class SessionStore:
         if not session.active or session.step_id is None:
             return f"{self.workflow.name} guidance is idle."
         step = self.workflow.step(session.step_id)
-        suffix = " Complete; say next when ready." if self._complete(step, session.state) else ""
+        suffix = " Complete; say next when ready." if step.is_complete(session.state) else ""
         return f"Current step: {step.title}.{suffix}"
 
     def advance(self, session: Session, *, skip: bool) -> str:
         step = self._active_step(session)
-        complete = self._complete(step, session.state)
+        complete = step.is_complete(session.state)
         if not complete and not skip:
             return f"{step.title} is not complete yet. Say skip if you want to move on anyway."
         if skip:
@@ -117,7 +117,7 @@ class SessionStore:
 
     def commit(self, session: Session, updates: dict[str, Any], message: str) -> CommitResult:
         step = self._active_step(session)
-        was_complete = self._complete(step, session.state)
+        was_complete = step.is_complete(session.state)
         invalid = self._invalid_patch(step, updates)
         if invalid:
             emit(
@@ -141,8 +141,13 @@ class SessionStore:
         changes = {
             name: value for name, value in updates.items() if name not in session.state or session.state[name] != value
         }
-        if step.evidence is not None and changes and session.evidence_hits < step.evidence.consecutive:
-            reason = f"visual evidence {session.evidence_hits}/{step.evidence.consecutive}"
+        candidate = {**session.state, **changes}
+        if (
+            step.evidence is not None
+            and step.is_complete(candidate)
+            and session.evidence_hits < step.evidence.consecutive
+        ):
+            reason = f"completion evidence {session.evidence_hits}/{step.evidence.consecutive}"
             emit(
                 "step.commit_rejected",
                 participant_id=session.participant_id,
@@ -164,7 +169,7 @@ class SessionStore:
         session.revision += 1
         if message.strip():
             session.notices.append(message.strip())
-        complete = self._complete(step, session.state)
+        complete = step.is_complete(session.state)
         emit(
             "step.commit",
             participant_id=session.participant_id,
@@ -227,10 +232,6 @@ class SessionStore:
             if not _valid_type(expected, value):
                 return f"{name} must be {expected.type}"
         return ""
-
-    @staticmethod
-    def _complete(step: Step, state: dict[str, Any]) -> bool:
-        return bool(step.complete_when) and all(state.get(name) == value for name, value in step.complete_when.items())
 
     @staticmethod
     def _render(text: str, session: Session) -> str:

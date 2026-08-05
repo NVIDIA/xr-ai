@@ -10,27 +10,26 @@ task:
 state:
   tea_name:
     type: string
-    description: Tea name read from the package.
+    description: Tea name from the current caption.
   target_temperature_c:
     type: number
-    description: Package water temperature in Celsius.
+    description: Brewing temperature in Celsius.
   steep_duration_s:
     type: integer
-    description: Package steep duration in seconds.
+    description: Steep duration in seconds.
   guidance_source:
     type: string
-    description: Package label or retrieved document used for brewing values.
+    description: Package or retrieved source.
   tea_ready:
     type: boolean
-    description: Whether the three tea details are known.
-    initial: false
+    description: True only when all preceding fields are supported.
   water_filled:
     type: boolean
     description: Whether water is visibly in the heating vessel.
     initial: false
   heating_started:
     type: boolean
-    description: Whether the heater is visibly active.
+    description: Whether a heater-on indicator or unit-bearing temperature was seen.
     initial: false
   water_ready:
     type: boolean
@@ -58,25 +57,30 @@ steps:
       interval_s: 1.5
       arguments:
         question: >-
-          Read visible text on any tea package, box, or tag. Include the tea
-          name, water temperature, and steep time when legible. Describe only
-          this frame; do not infer.
+          Read the front label brand and tea/blend name, plus visible brewing
+          temperature/time. Ignore slogans, claims, bag count, weight, and
+          badges. Transcribe exactly; never infer. If no brand or tea/blend is
+          legible, say label unreadable.
       result_field: answer
     evidence:
       pattern: "(?is)^(?!.*\\b(none|nothing|dark|blurry|blurred|unreadable|unclear|unknown|absent|obscured|unable|cannot|can't|discern)\\b)(?!.*\\b(no|not|without)\\b.{0,32}\\b(tea|package|box|label|tag|texts?)\\b)(?=.*[a-z]{3}).+$"
-      consecutive: 2
+      consecutive: 1
     agent:
       prompt: >-
-        Without a specific visible tea name, commit nothing and never retrieve.
-        Copy visible package facts. Retrieve only missing temperature or time
-        for that exact tea with top_k 2. Always replace conflicting retrieved
-        facts with visible package facts. Record the source; set tea_ready only
-        when name, temperature, and duration are known. Keep message empty.
+        Identify tea only from the current caption, never state or RAG.
+        If the tea name is unreadable, commit nothing; do not retrieve. Prefer
+        visible values. If temperature/time is missing,
+        call rag_lookup once with "<exact name> water temperature steep time",
+        top_k 2; accept only a section naming it. If every writable field is
+        supported, commit all with tea_ready true. Otherwise commit nothing;
+        never write tea_ready false.
       tools: [rag_lookup]
     voice:
       prompt: >-
-        Help only with tea identification and brewing values. Inspect visible
-        labels first; use rag_lookup when the package lacks the requested fact.
+        Tea identity comes only from state tea_name or current_view, never RAG.
+        If the exact name is unknown, inspect the current frame. Retrieve only
+        missing temperature or duration after the exact name is known. Never
+        replace package values. Answer only what was asked.
       tools: [current_view, rag_lookup]
     complete_when: {tea_ready: true}
     next: fill_water
@@ -100,22 +104,27 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Describe only visible evidence about the heating vessel and its
-          contents. Mention the visible interior and concrete water cues such
-          as a surface, level, reflections, or pouring. Never infer.
+          Describe visible heating vessel interior and contents. Report
+          concrete water cues: surface, level, reflections, or active
+          pouring into it. Water outside or beside it does not count. Say when
+          interior or water is not visible. Never infer.
       result_field: answer
     evidence:
       pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|empty|obscured|cannot|can't)\\b)(?!.*\\b(no|not)\\s+(visible\\s+)?water\\b)(?=.*\\b(kettle|pot|vessel|container)\\b)(?=.*\\bwater\\b)(?=.*\\b(surface|level|reflection|pouring|inside|contains)\\b).+$"
       consecutive: 3
     agent:
       prompt: >-
-        Set water_filled true only when the caption plainly describes a visible
-        vessel interior and a concrete visible water cue. Otherwise commit no update.
+        Set water_filled true only when this caption clearly shows the vessel
+        interior plus a water surface, level, reflection, or pouring into it.
+        Water nearby, a closed vessel, a user report, or unclear contents do
+        not count. Otherwise commit empty updates/message.
       tools: []
     voice:
       prompt: >-
-        Explain or verify this step: add fresh water to a stable, unpowered
-        kettle or pot within its safe fill line. Inspect the view for current facts.
+        Give instructions or verify with current_view. A user report is not
+        visual confirmation. Confirm filled only from state water_filled or a
+        current view showing the vessel interior and concrete water cues;
+        otherwise say it is not yet visually confirmed.
       tools: [current_view]
     complete_when: {water_filled: true}
     next: heat_water
@@ -134,23 +143,29 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Describe only visible heater activity, numeric temperature displays
-          or thermometer readings with units, and immediate hazards. Say when
-          a detail is not visible. Do not infer.
+          Describe visible heater-on indicators and transcribe the exact current
+          numeric kettle display or thermometer reading with its unit. Mention
+          immediate hazards. If missing, say what is not visible. Do not convert
+          or judge readiness.
       result_field: answer
     evidence:
-      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|cannot|can't)\\b)(?!.*\\b(no|not)\\s+visible\\b)(?=.*\\b(display|thermometer|reading)\\b)(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+$"
+      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|cannot|can't)\\b)(?!.*\\b(no|not)\\s+visible\\b)(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+$"
       consecutive: 2
     agent:
       prompt: >-
-        Preserve heating_started once visible. Set water_ready true only when a
-        fresh numeric reading is within 2 C below to 3 C above the target. Send
-        a message only for a hazard.
+        A heater-on indicator or temperature with unit sets heating_started
+        true; keep it true. Celsius stays; Fahrenheit = (F - 32) * 5 / 9. Set
+        water_ready true only if converted reading is between
+        target_temperature_c - 2 and target_temperature_c + 3. A target,
+        unitless number, or activity alone cannot set water_ready. Never store
+        readings/conversions or write flags false. Otherwise commit nothing.
       tools: []
     voice:
       prompt: >-
-        Explain or verify heating toward the target. Inspect the view for any
-        requested current reading; never claim readiness without a visible reading.
+        Explain the target when asked. For current heating, reading, or
+        readiness, call current_view. A heater indicator or numeric temperature
+        with unit confirms heating; only a unit-bearing reading can confirm
+        readiness after Fahrenheit conversion and target comparison.
       tools: [current_view]
     complete_when: {water_ready: true}
     next: start_steeping
@@ -169,22 +184,27 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Describe only visible evidence of a tea bag, infuser, or leaves being
-          outside, entering, or immersed in the water. Mention immediate
-          hazards and say when immersion is unclear. Do not infer.
+          Describe only whether a tea bag, infuser, or leaves are visibly
+          outside, entering, or immersed in water. Tea merely inside a cup is
+          not confirmed immersion. Mention hazards and say when water contact
+          is obscured or unclear.
       result_field: answer
     evidence:
       pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|outside|cannot|can't)\\b)(?!.*\\b(no|not)\\b.{0,80}\\b(immersed|submerged|in (the )?water)\\b)(?=.*\\b(tea bag|infuser|leaves)\\b)(?=.*\\b(immersed|submerged|in the water)\\b).+$"
       consecutive: 2
     agent:
       prompt: >-
-        On the first clear immersion, call clock__now and commit its epoch_us
-        with steeping_started true. Never invent or replace the start time.
+        On the first caption clearly showing tea in water, call clock__now once
+        and commit its epoch_us as steeping_started_at_us with steeping_started
+        true. If immersion is absent or unclear, do not call clock__now; commit
+        empty updates/message. Never invent or replace a start time.
       tools: [clock__now]
     voice:
       prompt: >-
-        Explain or verify this step: immerse the tea bag, infuser, or leaves in
-        the hot water. Inspect the view for current facts.
+        Give instructions or verify with current_view. A user report or tea
+        merely inside a cup is not visual confirmation; confirm only visible
+        immersion in water. The observation loop, not this answer, starts the
+        timer.
       tools: [current_view]
     complete_when: {steeping_started: true}
     next: steep_timer
@@ -205,10 +225,16 @@ steps:
         started_at_us: $state.steeping_started_at_us
         duration_s: $state.steep_duration_s
     agent:
-      prompt: Set steeping_complete to the fresh expired value. Keep message empty.
+      prompt: >-
+        Copy the fresh clock__timer expired boolean: set steeping_complete true
+        only when expired is true. While false, commit empty updates/message.
+        Never infer from elapsed text, wall time, or prior state.
       tools: []
     voice:
-      prompt: Answer timer questions with a fresh clock__timer result.
+      prompt: >-
+        Call clock__timer for every timer or completion question. Report only
+        its fresh remaining time or completion; never calculate from state,
+        prior answers, or wall-clock time.
       tools: [clock__timer]
     complete_when: {steeping_complete: true}
     next: null

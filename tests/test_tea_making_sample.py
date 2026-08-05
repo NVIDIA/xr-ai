@@ -18,7 +18,10 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from tea_making_worker.agents.prompts import ROUTER, STEP, VOICE  # noqa: E402
+from tea_making_worker.agents.registry import _state_contract  # noqa: E402
+from tea_making_worker.config import load_config  # noqa: E402
 from tea_making_worker.functions.vision import CurrentViewRequest  # noqa: E402
+from tea_making_worker.functions.workflow import CommitRequest  # noqa: E402
 from tea_making_worker.runtime.render import render_message  # noqa: E402
 from tea_making_worker.runtime.state import SessionStore  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
@@ -49,12 +52,17 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert "natural spoken language" in VOICE
     assert "temperature" not in VOICE.lower()
     assert "natural spoken language" in STEP
+    assert "already_complete is status, not state" in STEP
+    assert "briefly message real non-completing changes" in STEP
+    assert "Empty on no change/completion" in STEP
+    assert "Never route these to ask_step" in ROUTER
     for step in workflow.steps.values():
         assert step.trigger.function
         assert step.complete_when
         assert len(str(step.trigger.arguments.get("question", ""))) <= 240
         assert len(step.agent.prompt) <= 420
         assert len(step.voice.prompt) <= 300
+        assert len(_state_contract(workflow, step)) <= 500
         assert set((*step.reads, *step.writes)) <= workflow.state_fields.keys()
         assert "workflow__advance" not in (*step.agent.tools, *step.voice.tools)
         question = str(step.trigger.arguments.get("question", ""))
@@ -71,12 +79,11 @@ def test_state_commit_waits_for_explicit_advance() -> None:
     store = SessionStore(workflow)
     session = store.get("participant")
     assert store.start(session) == workflow.step("identify").enter_message
-    for index in range(2):
-        store.observe(
-            session,
-            "A tea package label reads Oolong, 88 C, steep 4 minutes.",
-            f"identify-{index}",
-        )
+    store.observe(
+        session,
+        "A tea package label reads Oolong, 88 C, steep 4 minutes.",
+        "identify",
+    )
 
     before = dict(session.state)
     rejected = store.commit(session, {"water_filled": True}, "")
@@ -102,17 +109,31 @@ def test_state_commit_waits_for_explicit_advance() -> None:
     assert workflow.project(workflow.step("fill_water"), session.state) == {"water_filled": False}
 
 
-def test_model_profiles_offer_split_reuse_and_managed_omni() -> None:
+def test_model_profiles_default_to_reused_omni_with_split_reuse() -> None:
     split = json.loads((_SAMPLE / "yaml" / "models.split.json").read_text(encoding="utf-8"))["models"]
     omni = json.loads((_SAMPLE / "yaml" / "models.omni.json").read_text(encoding="utf-8"))["models"]
     worker = yaml.safe_load((_SAMPLE / "yaml" / "tea_making_worker.yaml").read_text(encoding="utf-8"))
 
-    assert worker["models_config"] == "models.split.json"
+    rag = yaml.safe_load((_SAMPLE / "yaml" / "rag_service.yaml").read_text(encoding="utf-8"))
+
+    assert worker["models_config"] == "models.omni.json"
+    assert rag["models_config"] == "models.omni.json"
+    assert load_config(None).models_config == Path("models.omni.json")
     assert split["agent_llm"]["adapter"]["preset"] == "nemotron3_nano"
     assert split["vlm"]["adapter"]["preset"] == "cosmos_vlm"
     assert {split[role]["deployment"]["ownership"] for role in ("agent_llm", "vlm", "stt", "embedding")} == {"reused"}
     assert omni["agent_llm"]["adapter"]["preset"] == "nemotron_omni"
+    assert omni["agent_llm"]["adapter"]["default_extras"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
     assert omni["agent_llm"]["deployment"]["service"] == omni["vlm"]["deployment"]["service"] == "omni"
+    assert omni["vlm"]["adapter"]["default_extras"] == {
+        "max_tokens": 128,
+        "temperature": 0.0,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    omni_reused = {omni[role]["deployment"]["ownership"] for role in ("agent_llm", "vlm", "stt", "embedding")}
+    assert omni_reused == {"reused"}
 
 
 def test_identification_keeps_native_rag_fallback() -> None:
@@ -121,8 +142,20 @@ def test_identification_keeps_native_rag_fallback() -> None:
 
     assert identify.agent.tools == ("rag_lookup",)
     assert "rag_lookup" in identify.voice.tools
+    observation_prompt = identify.agent.prompt.lower()
+    assert "identify tea only from the current caption" in observation_prompt
+    assert "never state or rag" in observation_prompt
+    assert "commit all with tea_ready true" in observation_prompt
+    assert "never write tea_ready false" in observation_prompt
+    question = str(identify.trigger.arguments["question"])
+    assert "front label brand and tea/blend name" in question
+    assert "Ignore slogans, claims, bag count, weight" in question
+    assert "never RAG" in identify.voice.prompt
+    assert "after the exact name is known" in identify.voice.prompt
     assert rag["documents_dir"] == "../rag-documents"
     assert rag["embedding_role"] == "embedding"
+    assert rag["chunk_size"] == 700
+    assert rag["overlap"] == 100
     assert (_SAMPLE / "rag-documents" / "tea-brewing.md").is_file()
 
 
@@ -138,11 +171,25 @@ def test_visual_evidence_uses_plain_captions_and_rejects_absence() -> None:
     assert not re.fullmatch(fill.evidence.pattern, cases["false_positive_guard"]["observation"])
     identify = workflow.step("identify")
     assert identify.evidence is not None
-    assert identify.evidence.consecutive == 2
+    assert identify.evidence.consecutive == 1
     assert re.fullmatch(identify.evidence.pattern, "NUMI ORGANIC BLACK TEA BREAKFAST BLEND")
     assert not re.fullmatch(identify.evidence.pattern, "Too dark to discern tea package text.")
     assert not re.fullmatch(identify.evidence.pattern, "There are no visible texts in this frame.")
     assert not re.fullmatch(identify.evidence.pattern, "none")
+
+
+def test_heat_policy_converts_units_before_comparing() -> None:
+    step = _workflow().step("heat_water")
+    prompt = step.agent.prompt
+
+    assert "(F - 32) * 5 / 9" in prompt
+    assert "sets heating_started true" in prompt
+    assert "Never store readings/conversions" in prompt
+    assert step.evidence is not None
+    assert re.fullmatch(step.evidence.pattern, "164F")
+    message_description = CommitRequest.model_fields["message"].description
+    assert message_description is not None
+    assert "real non-completing state change" in message_description
 
 
 def test_user_facing_values_use_natural_units() -> None:
@@ -151,13 +198,12 @@ def test_user_facing_values_use_natural_units() -> None:
     assert render_message("{{ value | duration }}", {"value": 65}) == "1 minute and 5 seconds"
 
 
-def test_split_launcher_reuses_model_servers(monkeypatch) -> None:
+def test_default_launcher_reuses_omni_stack(monkeypatch) -> None:
     monkeypatch.setattr(sample_main, "detect_gpu_config", lambda: "96G_blackwell")
     processes = sample_main._build_processes()
     modes = {process.name: process.launch_mode for process in processes}
     assert modes == {
-        "agent-llm": "reuse",
-        "vlm": "reuse",
+        "omni": "reuse",
         "stt": "reuse",
         "embedding": "reuse",
         "tts": "own",
@@ -176,7 +222,35 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     }
     assert cases["rag_fallback"]["expected_tools"] == ["rag_lookup", "workflow__commit"]
     assert cases["rag_fallback"]["expected_top_k"] == 2
+    assert cases["rag_fallback"]["expected_tea_ready"] is True
+    assert cases["irrelevant_retrieval_guard"]["forbidden_updates"] == [
+        "target_temperature_c",
+        "steep_duration_s",
+        "tea_ready",
+    ]
+    assert cases["identity_retrieval_mismatch"]["expected_updates"] == {}
+    assert cases["identity_retrieval_mismatch"]["expected_tea_ready"] is False
+    assert cases["identification_guard"]["unreadable_expected_updates"] == {}
+    assert cases["identification_atomic_guard"]["expected_unready_state"] == {}
+    assert cases["identification_atomic_guard"]["current_observation_wins"] is True
+    assert cases["tea_identity_question"]["expected_tool"] == "current_view"
+    assert cases["tea_identity_question"]["forbidden_tool"] == "rag_lookup"
+    assert cases["temperature_unit_guard"]["expected_updates"] == {"heating_started": True}
+    assert cases["temperature_unit_guard"]["expected_water_ready"] is False
+    assert cases["temperature_missing_unit_guard"]["expected_water_ready"] is False
+    assert cases["state_update_notice"]["expected_updates"] == {"heating_started": True}
+    assert cases["state_update_notice"]["expected_message_intent"] == "heating started"
+    assert cases["state_update_notice"]["expected_complete"] is False
+    assert cases["routine_notice_guard"]["expected_messages"] == ["", "", ""]
+    assert cases["observation_context"]["keys"] == ["observation", "already_complete", "state"]
+    assert cases["observation_context"]["prior_status_is_state_value"] is False
+    assert cases["observation_context"]["contract_includes"] == [
+        "field_descriptions",
+        "completion_condition",
+    ]
     assert cases["completed_step"]["expected_updates"] == {}
     assert cases["completed_step"]["expected_transition"] is None
     assert cases["false_positive_guard"]["expected_accepted"] is False
     assert cases["steeping_negative_guard"]["expected_accepted"] is False
+    assert cases["timer_running_guard"]["expected_steeping_complete"] is False
+    assert cases["voice_tool_guards"]["timer_question"]["expected_tool"] == "clock__timer"

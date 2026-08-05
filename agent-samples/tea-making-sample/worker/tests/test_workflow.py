@@ -19,12 +19,11 @@ class WorkflowTest(unittest.TestCase):
         self.session = self.store.get("tester")
 
     def _observe_identification(self) -> None:
-        for index in range(2):
-            self.store.observe(
-                self.session,
-                "A tea package label reads Oolong, 88 C, steep 4 minutes.",
-                f"identify-{index}",
-            )
+        self.store.observe(
+            self.session,
+            "A tea package label reads Oolong, 88 C, steep 4 minutes.",
+            "identify",
+        )
 
     def test_all_steps_use_the_same_declarative_contract(self) -> None:
         self.assertEqual(self.workflow.start_step, "identify")
@@ -97,6 +96,26 @@ class WorkflowTest(unittest.TestCase):
             {"target_temperature_c": 80, "heating_started": False, "water_ready": False},
         )
 
+    def test_agent_message_announces_one_intermediate_change(self) -> None:
+        self.store.start(self.session)
+        self.store.advance(self.session, skip=True)
+        self.store.advance(self.session, skip=True)
+
+        result = self.store.commit(
+            self.session,
+            {"heating_started": True},
+            "The water is heating.",
+        )
+        self.assertTrue(result.accepted)
+        self.assertFalse(result.complete)
+        self.assertEqual(self.store.drain_notices(self.session), ("The water is heating.",))
+
+        revision = self.session.revision
+        repeated = self.store.commit(self.session, {"heating_started": True}, "")
+        self.assertTrue(repeated.accepted)
+        self.assertEqual(self.session.revision, revision)
+        self.assertFalse(self.store.drain_notices(self.session))
+
     def test_management_messages_render_natural_units(self) -> None:
         self.store.start(self.session)
         self.store.advance(self.session, skip=True)
@@ -152,24 +171,6 @@ class WorkflowTest(unittest.TestCase):
             "readable",
         )
         self.assertEqual(self.session.evidence_hits, 1)
-        blocked = self.store.commit(
-            self.session,
-            {
-                "tea_name": "black tea",
-                "target_temperature_c": 100,
-                "steep_duration_s": 300,
-                "guidance_source": "rag",
-            },
-            "",
-        )
-        self.assertFalse(blocked.accepted)
-        self.assertNotIn("tea_name", self.session.state)
-        self.store.observe(
-            self.session,
-            "NUMI ORGANIC BLACK TEA BREAKFAST BLEND",
-            "readable-again",
-        )
-        self.assertEqual(self.session.evidence_hits, 2)
         self.store.observe(
             self.session,
             "The image is too dark to discern tea package text.",

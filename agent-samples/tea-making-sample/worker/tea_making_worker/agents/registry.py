@@ -70,13 +70,11 @@ class AgentRegistry:
 
     async def observe(self, session: Session, observation: Any, trace_id: str) -> str:
         step = self._active_step(session)
-        context = {
-            "observation": observation,
-            "state": self.workflow.project(step, session.state),
-        }
-        if step.evidence is not None:
-            context["evidence"] = _evidence(step, session)
-        request = _json(**context)
+        request = _json(
+            observation=observation,
+            already_complete=step.is_complete(session.state),
+            state=self.workflow.project(step, session.state),
+        )
         emit(
             "agent.observe.request",
             participant_id=session.participant_id,
@@ -186,14 +184,12 @@ def _json(**value: Any) -> str:
 
 
 def _state_contract(workflow: Workflow, step: Step) -> str:
-    writes = ",".join(f"{name}:{workflow.state_fields[name].type}" for name in step.writes)
-    completion = json.dumps(step.complete_when, separators=(",", ":"))
-    return f"Writable state: {writes}. Completion: {completion}."
-
-
-def _evidence(step: Step, session: Session) -> str:
-    assert step.evidence is not None
-    return f"{session.evidence_hits}/{step.evidence.consecutive}"
+    writes = "; ".join(
+        f"{name}:{workflow.state_fields[name].type} — {workflow.state_fields[name].description.rstrip('.')}"
+        for name in step.writes
+    )
+    completion = ", ".join(f"{name}={json.dumps(value)}" for name, value in step.complete_when.items())
+    return f"Writable state: {writes}. Completion requires {completion}."
 
 
 __all__ = ["AgentRegistry"]

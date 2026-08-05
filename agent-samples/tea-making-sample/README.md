@@ -25,7 +25,16 @@ the active step's projected state and current input. The router reserves
 management functions for explicit start, next/continue/skip, stop/reset, and
 workflow-step status requests. Task questions, action reports, correctness
 checks, current readings, and timer questions always delegate to the active
-step voice agent.
+step voice agent. Explicit next/continue/advance/skip commands always select the
+advance function and are never delegated as task questions.
+
+Every observation agent calls the same commit function exactly once. Completed,
+unsupported, or unclear observations use an empty commit. Step prompts name the
+specific evidence required for each readiness write; a reported action, repeated
+caption, tool target, or unrelated retrieval passage is never completion by
+itself. The shared agent prompt asks for one short spoken message when a commit
+changes state without completing the step. No-op and completion commits remain
+silent, avoiding repeated progress and duplicate completion announcements.
 
 Each voice policy contains the minimum procedure needed to resolve references
 such as “how do I do that?” without conversation history. The `current_view`
@@ -65,10 +74,14 @@ clock timer.
 Visual trigger prompts are short focus guides, not output schemas. The VLM
 returns an ordinary plain-text caption describing only relevant visible facts.
 The configurable evidence gate must pass before the observation agent can
-write visual state. Identification requires two readable OCR captions and
-explicitly rejects dark, unreadable, or absent-text captions. Filling uses the
-stricter threshold: three consecutive captions must
+complete a visual step. Identification accepts one readable OCR caption for
+responsiveness and explicitly rejects dark, unreadable, or absent-text
+captions. Filling uses the stricter threshold: three consecutive captions must
 name the vessel, visible water, and a concrete cue such as its surface or level.
+Heating comparisons normalize a visible Fahrenheit reading to Celsius before
+checking it against the Celsius target; the raw numbers are never compared. An
+active-heater indicator or unit-bearing temperature display immediately records
+the durable heating-started milestone, even when the water is below target.
 
 The identify step prefers brewing values visible on the package. When the tea
 name is visible but its temperature or time is missing, its agent calls the
@@ -76,12 +89,30 @@ native `rag_lookup` tool over the sample's `rag-documents/` corpus. Retrieved
 guidance never overrides package instructions, and `guidance_source` records
 which source produced the values. A frame without a specific visible tea name
 never triggers generic retrieval, and the sample-local alias caps retrieval at
-two passages to keep the second agent call small.
+two passages to keep the second agent call small. Retrieval queries contain the
+exact visible name plus the missing brewing facts, and compact chunks reduce
+neighboring-variety contamination. Voice answers obtain tea
+identity only from committed state or live vision; RAG supplies brewing values
+for a known name and is never an identity source. Identification becomes ready
+in the same atomic commit that records an evidence-backed name, temperature,
+duration, and source; generic retrieval results cannot fill missing values.
+Vision transcribes only legible printed words in reading order and does not
+classify tea from package artwork. A retrieved passage must contain the visible
+variety before it can support missing brewing values.
+The identity frame focuses on front-label brand and tea/blend text while
+excluding slogans, package count, weight, and badges. Identification state has
+no draft form: an incomplete turn commits nothing, and a complete turn writes
+identity, brewing values, source, and readiness atomically from the fresh
+caption.
 
 State is sparse and typed. A step sees only its `reads + writes` projection and
 can update only `writes`. A commit is rejected atomically when a field or type
 is invalid. Completion is derived from `complete_when`; the model cannot assert
 completion separately.
+Observation calls label prior status as `already_complete` and pair the compact
+input with a generated contract containing each writable field's YAML meaning
+and completion condition. This keeps status distinct from writable state while
+giving a small model enough semantics to produce a supported patch.
 Completing a step never changes the active step. Observation continues through
 the same trigger-agent-commit loop; commits become revision-free no-ops while
 the completion predicate remains true. Only an explicit user “next,”
@@ -93,21 +124,27 @@ ignored so they cannot erase an active walkthrough.
 
 ## Model modes
 
-The default `models.split.json` uses the shared model-server convenience stack:
+The default `models.omni.json` reuses the shared model-server Omni stack:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers
+uv run --project agent-samples/model-servers model_servers --omni-stack
 uv run --project agent-samples/tea-making-sample tea_making_sample
 ```
 
-This reuses Cosmos Reason1 for vision, Nemotron-3-Nano for agents, Parakeet for
-STT, and Nemotron Embed for retrieval. The sample manages Piper TTS, the typed
-RAG service, the media hub, and its worker.
+This reuses Nemotron-3-Omni for both the `agent_llm` and `vlm` roles, Parakeet
+STT, and Nemotron Embed. The sample manages Piper TTS, the typed RAG service,
+the media hub, and its worker. The sample profile disables reasoning and caps
+generation only for short continuous captions; agent calls retain their own
+tool-loop budget but also disable hidden reasoning so that budget produces a
+tool call. A timed-out caption is logged as `vision.timeout` and the next frame
+continues the same observation loop.
 
-For one multimodal model, change `models_config` in
-`yaml/tea_making_worker.yaml` to `models.omni.json`, stop the shared model
-servers if they occupy the GPU, and launch the sample. Nemotron-3-Omni then
-serves both the `agent_llm` and `vlm` roles.
+To use the split stack instead, change `models_config` in both
+`yaml/tea_making_worker.yaml` and `yaml/rag_service.yaml` to
+`models.split.json`, start `agent-samples/model-servers` without
+`--omni-stack`, then launch the sample. This reuses Cosmos Reason1 for vision,
+Nemotron-3-Nano for agents, Parakeet STT, and Nemotron Embed; the sample
+continues to manage Piper TTS.
 
 Both modes use the embedding endpoint at port 8109. The RAG service reads
 `yaml/rag_service.yaml`, indexes the local Markdown corpus, and exposes only the

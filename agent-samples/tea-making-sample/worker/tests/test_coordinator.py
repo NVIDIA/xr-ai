@@ -40,12 +40,11 @@ class CoordinatorTest(unittest.IsolatedAsyncioTestCase):
         store = SessionStore(workflow)
         session = store.get("tester")
         store.start(session)
-        for index in range(2):
-            store.observe(
-                session,
-                "A tea package label reads Oolong, 88 C, steep 4 minutes.",
-                f"identify-{index}",
-            )
+        store.observe(
+            session,
+            "A tea package label reads Oolong, 88 C, steep 4 minutes.",
+            "identify",
+        )
         store.commit(
             session,
             {
