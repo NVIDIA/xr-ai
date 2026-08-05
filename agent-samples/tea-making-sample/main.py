@@ -1,124 +1,82 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""
-tea-making-sample orchestrator - YAML-driven guided workflow over voice.
+"""Launch the YAML-driven tea guidance sample."""
 
-How to run:
+from __future__ import annotations
 
-    uv run --project agent-samples/tea-making-sample tea_making_sample
-"""
-
-import socket
+from dataclasses import replace
 from pathlib import Path
 
-from xr_ai_launcher import Process, detect_gpu_config, run_stack, warn_if_missing
+from xr_ai_launcher import Process, detect_gpu_config, load_model_deployment, run_stack, warn_if_missing
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
-
 _WORKER_CONFIG = "yaml/tea_making_worker.yaml"
-_OMNI_PORT = 8108
-_EMBEDDING_PORT = 8109
-_PROFILE_ALIASES = {"spark": "96G_blackwell"}
-_SUPPORTED_PROFILES = {"96G_blackwell", "dual_48G_ada"}
-_LEGACY_MODEL_PORTS = {
-    8100: "VLM",
-    8106: "Llama-Nemotron",
-    8107: "Nemotron-Nano",
-}
 
 
-def _build_processes(profile: str | None = None) -> list[Process]:
-    detected_profile = profile or detect_gpu_config()
-    selected_profile = _PROFILE_ALIASES.get(detected_profile, detected_profile)
-    if selected_profile not in _SUPPORTED_PROFILES:
-        supported = ", ".join(sorted(_SUPPORTED_PROFILES))
-        raise RuntimeError(
-            f"Unsupported GPU profile {detected_profile!r}; expected one of: {supported}"
-        )
-    ai = f"yaml/{selected_profile}"
-
-    return [
-        Process(
-            "omni",
-            "../../ai-services/llm/nemotron_omni",
-            "nemotron_omni_llm_server",
-            config=f"{ai}/nemotron_omni_llm_server.yaml",
-            port=_OMNI_PORT,
+def _model_processes() -> dict[str, Process]:
+    detected = detect_gpu_config()
+    profile = {"spark": "96G_blackwell"}.get(detected, detected)
+    if profile not in {"96G_blackwell", "dual_48G_ada"}:
+        raise RuntimeError(f"unsupported local model profile: {profile}")
+    return {
+        "agent-llm": Process(
+            "agent-llm",
+            "../../ai-services/llm/nemotron3_nano",
+            "nemotron3_nano_llm_server",
         ),
-        Process(
-            "stt",
-            "../../ai-services/stt-server",
-            "stt_server",
-            config=f"{ai}/stt_server.yaml",
-            port=8103,
-        ),
-        Process(
+        "vlm": Process("vlm", "../../ai-services/vlm-server", "vlm_server"),
+        "embedding": Process(
             "embedding",
             "../../ai-services/embedding-server",
             "embedding_server",
-            config=f"{ai}/embedding_server.yaml",
-            port=_EMBEDDING_PORT,
+            config=f"yaml/{profile}/embedding_server.yaml",
         ),
-        Process(
-            "rag",
-            "../../services/rag-service",
-            "rag_service",
-            config="yaml/rag_service.yaml",
+        "stt": Process(
+            "stt",
+            "../../ai-services/stt-server",
+            "stt_server",
+            config=f"yaml/{profile}/stt_server.yaml",
         ),
-        Process(
-            "hub",
-            "../../server-runtime",
-            "xr_media_hub",
-            config="yaml/xr_media_hub.yaml",
+        "omni": Process(
+            "omni",
+            "../../ai-services/llm/nemotron_omni",
+            "nemotron_omni_llm_server",
+            config=f"yaml/{profile}/nemotron_omni_llm_server.yaml",
         ),
-        Process(
+        "tts": Process(
             "tts",
             "../../ai-services/tts/piper",
             "piper_tts_server",
             config="yaml/piper_tts_server.yaml",
-            port=8105,
         ),
-        Process(
-            "worker",
-            "worker",
-            "tea_making_worker",
-            config=_WORKER_CONFIG,
-        ),
+    }
+
+
+def _build_processes() -> list[Process]:
+    deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
+    available = _model_processes()
+    unknown = deployment.services.keys() - available.keys()
+    if unknown:
+        raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
+    processes = [
+        replace(available[name], launch_mode=mode)
+        for name, mode in deployment.services.items()
     ]
-
-
-def _port_open(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.2)
-        return sock.connect_ex(("127.0.0.1", port)) == 0
-
-
-def _check_model_ports() -> None:
-    if _port_open(_OMNI_PORT):
-        return
-    busy = [
-        f"{name} on {port}"
-        for port, name in _LEGACY_MODEL_PORTS.items()
-        if _port_open(port)
-    ]
-    if not busy:
-        return
-    raise SystemExit(
-        "tea-making-sample uses Nemotron-Omni on port 8108, but these local "
-        f"model services are already running and likely occupy GPU memory: {', '.join(busy)}.\n"
-        "Stop the shared model-server stack first:\n"
-        "  uv run --project agent-samples/model-servers model_servers --stop\n"
-        "Then rerun:\n"
-        "  uv run --project agent-samples/tea-making-sample tea_making_sample"
+    processes.extend(
+        [
+            Process("rag", "../../services/rag-service", "rag_service", config="yaml/rag_service.yaml"),
+            Process("hub", "../../server-runtime", "xr_media_hub", config="yaml/xr_media_hub.yaml"),
+            Process("worker", "worker", "tea_making_worker", config=_WORKER_CONFIG),
+        ]
     )
+    return processes
 
 
 def run() -> None:
     setup_logging("orchestrator", namespace="tea-making-sample")
     warn_if_missing("HF_TOKEN")
-    _check_model_ports()
     run_stack(_build_processes(), _BASE)
 
 

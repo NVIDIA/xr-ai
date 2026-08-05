@@ -14,7 +14,7 @@ dependencies = [
     "xr-ai-hub-client",
     "xr-ai-logging",
     "xr-ai-models",
-    "xr-ai-nat[vision]",
+    "xr-ai-nat[agents,services,vision]",
     "xr-ai-voice",
     "xr-ai-voicegate",
 ]

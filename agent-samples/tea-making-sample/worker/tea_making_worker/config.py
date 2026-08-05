@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed worker configuration for the tea-making guided workflow sample."""
+"""Worker configuration with paths resolved beside its YAML file."""
 
 from __future__ import annotations
 
@@ -14,63 +14,42 @@ import yaml
 
 @dataclass(frozen=True, slots=True)
 class WorkerConfig:
-    """Resolved runtime settings for one guided workflow worker."""
-
-    models_yaml: Path
-    voice_gate_yaml: Path
-    workflow_yaml: Path
+    models_config: Path
+    workflow_config: Path
+    voice_gate_config: Path
     rag_endpoint: str
-    answer_prompt: Path
     frame_max_age_s: float
     frame_timeout_s: float
-    vlm_timeout_s: float
     silence_duration: float
     min_speech: float
     silero_threshold: float
     idle_timeout_secs: float | None
 
 
-def _read_config(path: Path | None) -> dict[str, Any]:
-    if path is None or not path.exists():
-        return {}
-    with path.open(encoding="utf-8") as stream:
-        data = yaml.safe_load(stream) or {}
-    if not isinstance(data, dict):
-        raise ValueError(f"worker config must be a YAML mapping: {path}")
-    return data
+def _path(value: str, source: Path | None) -> Path:
+    path = Path(value)
+    return source.parent / path if source and not path.is_absolute() else path
 
 
-def _resolve(raw: str, config_path: Path | None) -> Path:
-    path = Path(raw)
-    if config_path is not None and not path.is_absolute():
-        return config_path.parent / path
-    return path
-
-
-def load_config(path: Path | None) -> WorkerConfig:
-    """Load worker YAML and resolve paths relative to that file."""
-
-    data = _read_config(path)
-    idle_timeout = data.get("idle_timeout_secs")
+def load_config(source: Path | None) -> WorkerConfig:
+    raw: dict[str, Any] = {}
+    if source is not None:
+        loaded = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict):
+            raise ValueError(f"worker config must be a mapping: {source}")
+        raw = loaded
+    idle = float(raw.get("idle_timeout_secs", 0))
     return WorkerConfig(
-        models_yaml=_resolve(str(data.get("models_yaml", "models.yaml")), path),
-        voice_gate_yaml=_resolve(
-            str(data.get("voice_gate_yaml", "voice_gate.yaml")),
-            path,
-        ),
-        workflow_yaml=_resolve(str(data.get("workflow_yaml", "workflow.yaml")), path),
-        rag_endpoint=str(data.get("rag_endpoint", "tcp://127.0.0.1:8340")),
-        answer_prompt=_resolve(
-            str(data.get("answer_prompt", "../worker/tea_making_worker/prompts/system.txt")),
-            path,
-        ),
-        frame_max_age_s=float(data.get("frame_max_age_s", 5.0)),
-        frame_timeout_s=float(data.get("frame_timeout_s", 5.0)),
-        vlm_timeout_s=float(data.get("vlm_timeout_s", 15.0)),
-        silence_duration=float(data.get("silence_duration", 0.8)),
-        min_speech=float(data.get("min_speech", 0.15)),
-        silero_threshold=float(data.get("silero_threshold", 0.3)),
-        idle_timeout_secs=float(idle_timeout) if idle_timeout else None,
+        models_config=_path(str(raw.get("models_config", "models.split.json")), source),
+        workflow_config=_path(str(raw.get("workflow_config", "workflow.yaml")), source),
+        voice_gate_config=_path(str(raw.get("voice_gate_config", "voice_gate.yaml")), source),
+        rag_endpoint=str(raw.get("rag_endpoint", "tcp://127.0.0.1:8340")),
+        frame_max_age_s=float(raw.get("frame_max_age_s", 3)),
+        frame_timeout_s=float(raw.get("frame_timeout_s", 5)),
+        silence_duration=float(raw.get("silence_duration", 0.8)),
+        min_speech=float(raw.get("min_speech", 0.15)),
+        silero_threshold=float(raw.get("silero_threshold", 0.3)),
+        idle_timeout_secs=idle or None,
     )
 
 
