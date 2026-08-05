@@ -17,7 +17,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker.agents.prompts import ROUTER, STEP, VOICE  # noqa: E402
+from tea_making_worker.agents.prompts import HUMAN, ROUTER, STEP, VOICE  # noqa: E402
 from tea_making_worker.agents.registry import _state_contract  # noqa: E402
 from tea_making_worker.config import load_config  # noqa: E402
 from tea_making_worker.functions.vision import CurrentViewRequest  # noqa: E402
@@ -47,11 +47,11 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
         "steep_timer",
     ]
     assert len(ROUTER) <= 300
-    assert len(STEP) <= 350
-    assert len(VOICE) <= 300
-    assert "natural spoken language" in VOICE
-    assert "temperature" not in VOICE.lower()
-    assert "natural spoken language" in STEP
+    assert len(f"{STEP}\n{HUMAN}") <= 350
+    assert len(f"{VOICE}\n{HUMAN}") <= 300
+    assert "natural spoken language" in HUMAN
+    assert "temperature" not in HUMAN.lower()
+    assert "Rewrite tool/state" in HUMAN
     assert "already_complete is status, not state" in STEP
     assert "briefly message real non-completing changes" in STEP
     assert "Empty on no change/completion" in STEP

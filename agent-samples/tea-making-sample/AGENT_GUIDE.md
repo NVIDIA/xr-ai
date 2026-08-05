@@ -156,10 +156,11 @@ Budgets are guardrails for the small local models:
 | Step observation policy | 420 characters |
 | Step voice policy | 300 characters |
 
-The shared voice prompt owns a generic presentation rule across steps: expand
-abbreviations and symbols, simplify quantities into familiar spoken forms,
-preserve meaning, and hide machine formats. Do not put domain-specific unit
-examples or repeat this rule in step prompts.
+The shared prompts own a generic final-output rule across steps: rewrite
+abbreviations, symbols, unit notation, machine formats, and compact tool or
+state text as complete spoken words and familiar quantities while preserving
+meaning. Do not put domain-specific examples or repeat this rule in step
+prompts.
 
 The eval check enforces the budgets. Requests use compact JSON with no
 indentation. Router context is only `request`, `active`, and current step title.

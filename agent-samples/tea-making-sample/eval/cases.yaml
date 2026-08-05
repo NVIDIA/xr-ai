@@ -187,3 +187,8 @@ spoken_values:
   temperature_c: 100 degrees Celsius
   duration_240_s: 4 minutes
   duration_65_s: 1 minute and 5 seconds
+
+spoken_style_guard:
+  compact_input: "Refill due in 90 sec; progress=62%."
+  expected_output: "The refill is due in 1 minute and 30 seconds, and progress is 62 percent."
+  forbidden_fragments: ["90 sec", "=", "%"]

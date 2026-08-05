@@ -14,7 +14,7 @@ import yaml
 _SAMPLE = Path(__file__).parents[1]
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker.agents.prompts import ROUTER, STEP, VOICE  # noqa: E402
+from tea_making_worker.agents.prompts import HUMAN, ROUTER, STEP, VOICE  # noqa: E402
 from tea_making_worker.agents.registry import _state_contract  # noqa: E402
 from tea_making_worker.runtime.render import render_message  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
@@ -24,17 +24,21 @@ def run() -> None:
     workflow = load_workflow(_SAMPLE / "yaml" / "workflow.yaml")
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     assert len(ROUTER) <= 300
-    assert len(STEP) <= 350
-    assert len(VOICE) <= 300
-    assert "natural spoken language" in VOICE
-    assert "temperature" not in VOICE.lower()
-    assert "natural spoken language" in STEP
+    assert len(f"{STEP}\n{HUMAN}") <= 350
+    assert len(f"{VOICE}\n{HUMAN}") <= 300
+    assert "natural spoken language" in HUMAN
+    assert "temperature" not in HUMAN.lower()
+    assert "Rewrite tool/state" in HUMAN
     assert "already_complete is status, not state" in STEP
     assert "Completion requires" not in STEP
     assert "briefly message real non-completing changes" in STEP
     assert "Empty on no change/completion" in STEP
     assert "if unavailable, say so" in VOICE
     assert "Never route these to ask_step" in ROUTER
+    style = cases["spoken_style_guard"]
+    assert all(fragment in style["compact_input"] for fragment in style["forbidden_fragments"])
+    assert all(fragment not in style["expected_output"] for fragment in style["forbidden_fragments"])
+    assert not {"tea", "temperature"} & set(style["compact_input"].lower().split())
     assert {case["expected_tool"] for case in cases["routes"]} == {
         f"workflow__{name}" for name in ("start", "advance", "reset", "status", "ask_step")
     }

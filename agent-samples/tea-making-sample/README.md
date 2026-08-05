@@ -63,9 +63,9 @@ User-facing message templates support generic presentation filters:
 `{{ value | duration }}` converts seconds to natural minutes and seconds.
 Internal state remains numeric for comparisons and tools. The shared voice
 contract gives both voice answers and background agent notices one
-workflow-independent rule: use natural spoken language, expand abbreviations
-and symbols, prefer familiar quantities without changing meaning, and hide
-machine formats.
+workflow-independent final-output rule: rewrite abbreviations, symbols, unit
+notation, machine formats, and compact tool or state text as complete spoken
+words and familiar quantities without changing meaning.
 
 The worker contains no tea-specific branch. The five supplied steps use the
 same engine even though four are triggered by live vision and one by the native

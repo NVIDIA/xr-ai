@@ -18,7 +18,7 @@ from xr_ai_nat.llm import ModelsLLMConfig
 from ..runtime.events import emit
 from ..runtime.state import Session
 from ..spec import Step, Workflow
-from .prompts import ROUTER, STEP, VOICE
+from .prompts import HUMAN, ROUTER, STEP, VOICE
 
 _COMMIT = FunctionRef("workflow__commit")
 _ROUTES = tuple(FunctionRef(f"workflow__{name}") for name in ("start", "advance", "reset", "status", "ask_step"))
@@ -48,7 +48,7 @@ class AgentRegistry:
                 builder,
                 name=f"observe_{step.id}",
                 llm_ref=llm_ref,
-                prompt=f"{STEP}\n{_state_contract(self.workflow, step)}\n{step.agent.prompt}",
+                prompt=f"{STEP}\n{_state_contract(self.workflow, step)}\n{step.agent.prompt}\n{HUMAN}",
                 tools=(_COMMIT, *map(FunctionRef, step.agent.tools)),
                 return_direct=(_COMMIT,),
             )
@@ -56,7 +56,7 @@ class AgentRegistry:
                 builder,
                 name=f"voice_{step.id}",
                 llm_ref=llm_ref,
-                prompt=f"{VOICE}\n{step.voice.prompt}",
+                prompt=f"{VOICE}\n{step.voice.prompt}\n{HUMAN}",
                 tools=tuple(map(FunctionRef, step.voice.tools)),
             )
         self._router = await self._agent(

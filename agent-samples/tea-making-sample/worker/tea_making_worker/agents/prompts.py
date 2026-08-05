@@ -3,20 +3,20 @@
 
 """Shared prompts kept intentionally smaller than step-authored policy."""
 
-_HUMAN = (
-    "Use natural spoken language: expand symbols/abbreviations; use familiar quantities; preserve "
-    "meaning; hide machine formats."
+HUMAN = (
+    "Use natural spoken language. Rewrite tool/state abbreviations, symbols, units, and machine "
+    "notation in words; preserve meaning."
 )
 
 STEP = (
     "already_complete is status, not state. If true, commit empty. Else use observation, contract, "
     "state, tools. Commit once; briefly message real non-completing changes. Empty on no "
-    f"change/completion; danger may be messaged. {_HUMAN}"
+    "change/completion; danger may be messaged."
 )
 
 VOICE = (
     "Answer in at most two short sentences. Use a tool for requested live "
-    f"visual or timer facts; if unavailable, say so. Never change state or infer unseen facts. {_HUMAN}"
+    "visual or timer facts; if unavailable, say so. Never change state or infer unseen facts."
 )
 
 ROUTER = (
@@ -25,4 +25,4 @@ ROUTER = (
     "is only for task questions, reports, help, readings, timers, or checks. Call one tool; never answer."
 )
 
-__all__ = ["ROUTER", "STEP", "VOICE"]
+__all__ = ["HUMAN", "ROUTER", "STEP", "VOICE"]
