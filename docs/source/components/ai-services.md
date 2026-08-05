@@ -265,10 +265,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 
 ### Cleanup
 
-`uv run xr_render_demo --stop` works for both modes. The cleanup path probes
-`/health` first; for docker mode it then runs `docker stop <container_name>`
-(escalating to `docker kill` after 20 s); for pip mode it falls back to the
-port → PID → SIGTERM/SIGKILL path. Same UX for both.
+`uv run xr_render_demo --stop` works for both modes. Cleanup locates labelled
+Docker containers before inspecting ports, then stops them with `docker stop`
+(escalating to `docker kill` after 20 s). Pip-mode processes carry an
+`xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort
+cleanup without sending a signal.
 
 ## Per-server notes
 

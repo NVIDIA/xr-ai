@@ -559,12 +559,12 @@ def container_on_port(port: int) -> str | None:
     return container
 
 
-def pid_on_port_checked(port: int) -> tuple[int | None, bool]:
-    """Return the listening PID and whether a listener inspection succeeded.
+def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
+    """Return the listening PID, inspection status, and listener presence.
 
     Tries `ss` first (always present on modern Linux), falls back to `lsof`.
-    A tool reporting no listener is a successful inspection; unavailable or
-    failing tools leave the result unknown.
+    A listener without a visible PID is still reported so callers fail closed
+    instead of mistaking an uninspectable listener for an unused port.
     """
     try:
         out = subprocess.check_output(
@@ -574,8 +574,8 @@ def pid_on_port_checked(port: int) -> tuple[int | None, bool]:
         )
         m = re.search(r"pid=(\d+)", out)
         if m:
-            return int(m.group(1)), True
-        return None, True
+            return int(m.group(1)), True, True
+        return None, True, bool(out.strip())
     except (FileNotFoundError, subprocess.CalledProcessError):
         pass
     try:
@@ -585,21 +585,21 @@ def pid_on_port_checked(port: int) -> tuple[int | None, bool]:
             stderr=subprocess.DEVNULL,
         ).strip()
         if out:
-            return int(out.splitlines()[0]), True
-        return None, True
+            return int(out.splitlines()[0]), True, True
+        return None, True, False
     except subprocess.CalledProcessError:
-        return None, True
+        return None, True, False
     except FileNotFoundError:
-        return None, False
+        return None, False, False
 
 
 def pid_on_port(port: int) -> int | None:
     """Return the pid listening on *port* (any v4/v6 socket), or None."""
-    pid, _ = pid_on_port_checked(port)
+    pid, _, _ = pid_on_port_checked(port)
     return pid
 
 
-def is_xr_ai_server_process(pid: int, label: str) -> bool:
+def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
     """Return whether *pid* has the expected xr-ai server command line."""
     try:
         command = Path(f"/proc/{pid}/cmdline").read_text(errors="replace")
@@ -607,4 +607,11 @@ def is_xr_ai_server_process(pid: int, label: str) -> bool:
         return False
     if label == "stt":
         return "stt_server" in command
-    return "vllm" in command
+    try:
+        environment = Path(f"/proc/{pid}/environ").read_bytes()
+    except OSError:
+        return False
+    return (
+        b"XR_AI_VLLM_MANAGED=1\0" in environment
+        and f"XR_AI_VLLM_PORT={port}\0".encode() in environment
+    )

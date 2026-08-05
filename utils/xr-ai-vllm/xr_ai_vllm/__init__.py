@@ -158,8 +158,8 @@ def stop_persistent_servers(
     2. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
        in-process servers (e.g. STT).
 
-    A missing listener is already stopped. Output is print-style with
-    ``[<label>] …`` prefixes. Discovery errors and listeners that are not
+    A missing container and listener is already stopped. Output is print-style
+    with ``[<label>] …`` prefixes. Discovery errors and listeners that are not
     identified as xr-ai services fail closed without sending a signal.
     """
     import signal
@@ -168,22 +168,14 @@ def stop_persistent_servers(
     success = True
     found = False
     for label, port in services:
-        pid, pid_checked = _docker.pid_on_port_checked(port)
-        if not pid_checked:
-            print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
-            success = False
-            continue
-        if pid is None:
-            continue
-
         container_name, container_checked = _docker.container_on_port_checked(port)
         if not container_checked:
             print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
             success = False
             continue
 
-        found = True
         if container_name:
+            found = True
             print(f"  [{label}] stopping container {container_name}…", flush=True)
             if _docker.stop_container(container_name):
                 # Remove the container so the next launch goes through a full
@@ -210,8 +202,17 @@ def stop_persistent_servers(
                 success = False
             continue
 
+        pid, pid_checked, listening = _docker.pid_on_port_checked(port)
+        if not pid_checked or (listening and pid is None):
+            print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
+            success = False
+            continue
+        if not listening:
+            continue
+
         assert pid is not None
-        if not _docker.is_xr_ai_server_process(pid, label):
+        found = True
+        if not _docker.is_xr_ai_server_process(pid, label, port):
             print(f"  [{label}] listener on :{port} is not an xr-ai server — not stopping",
                   flush=True)
             success = False
