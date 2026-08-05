@@ -23,6 +23,7 @@ Config keys
     port:           int   HTTP port (default: 8104)
     host:           str   Bind address (default: "0.0.0.0")
     sample_rate:    int   Output sample rate Hz (default: 22050)
+    speed:          float Speaking rate from 0.25 to 4.0 (default: 1.0)
     model_cache:    str   NeMo + HF weight cache.  Resolved relative to this YAML.
                           Default: ../models
 """
@@ -37,6 +38,8 @@ from pathlib import Path
 import yaml
 from loguru import logger
 from xr_ai_logging import setup_logging
+
+from .audio import change_speed
 
 _DEFAULT_PORT        = 8104
 _DEFAULT_SAMPLE_RATE = 22050  # NeMo FastPitch/VITS native rate
@@ -112,7 +115,7 @@ class _TtsBackend:
     def ready(self) -> bool:
         return self._model is not None
 
-    def synthesize(self, text: str) -> bytes:
+    def synthesize(self, text: str, speed: float = 1.0) -> bytes:
         """Synthesize text → WAV bytes. Synchronous — call from a thread pool."""
         import io as _io
         import soundfile as sf
@@ -128,6 +131,7 @@ class _TtsBackend:
 
         length   = int(audio_len[0].item())
         audio_np = audio[0, :length].cpu().float().numpy()
+        audio_np = change_speed(audio_np, speed)
         buf = _io.BytesIO()
         sf.write(buf, audio_np, self._sample_rate, format="WAV", subtype="PCM_16")
         return buf.getvalue()
@@ -136,12 +140,15 @@ class _TtsBackend:
 def _build_app(cfg: dict, model_cache: Path):
     from fastapi import FastAPI
     from fastapi.responses import Response
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
 
     model_name  = cfg["model"]
     device      = cfg.get("device", "auto")
     sample_rate = int(cfg.get("sample_rate", _DEFAULT_SAMPLE_RATE))
     revision    = cfg.get("model_revision") or None
+    default_speed = float(cfg.get("speed", 1.0))
+    if not 0.25 <= default_speed <= 4.0:
+        raise ValueError("speed must be between 0.25 and 4.0")
 
     backend = _TtsBackend(model_name, device, sample_rate, model_cache, revision=revision)
 
@@ -151,7 +158,7 @@ def _build_app(cfg: dict, model_cache: Path):
         model:           str   = model_name
         input:           str
         voice:           str   = "default"   # magpie is multilingual; voice ignored
-        speed:           float = 1.0         # speed not yet supported
+        speed:           float = Field(default=default_speed, ge=0.25, le=4.0)
         response_format: str   = "wav"
 
     @app.get("/health")
@@ -171,7 +178,7 @@ def _build_app(cfg: dict, model_cache: Path):
     @app.post("/v1/audio/speech")
     async def synthesize(req: SpeechRequest):
         loop = asyncio.get_running_loop()
-        wav_bytes = await loop.run_in_executor(None, backend.synthesize, req.input)
+        wav_bytes = await loop.run_in_executor(None, backend.synthesize, req.input, req.speed)
 
         if req.response_format == "pcm":
             import soundfile as sf

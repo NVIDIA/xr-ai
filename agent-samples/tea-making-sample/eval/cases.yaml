@@ -123,8 +123,16 @@ temperature_missing_unit_guard:
   step: heat_water
   observation: The kettle display visibly reads 91 with no unit shown.
   state: {target_temperature_c: 91, heating_started: true, water_ready: false}
+  forbidden_tool: temperature__verify
   expected_updates: {}
   expected_water_ready: false
+
+temperature_absent_guard:
+  step: heat_water
+  observation: Not visible.
+  state: {target_temperature_c: 90, heating_started: false, water_ready: false}
+  forbidden_tool: temperature__verify
+  expected_updates: {}
 
 temperature_repeated_below_target_guard:
   step: heat_water
@@ -159,7 +167,8 @@ routine_notice_guard:
   state: {target_temperature_c: 90, heating_started: true, water_ready: false}
   repetitions: 3
   expected_updates: {}
-  expected_messages: ["", "", ""]
+  attempted_messages: ["The heater is active.", "The display reads 77 degrees Fahrenheit."]
+  expected_spoken_messages: []
 
 observation_context:
   keys: [observation, already_complete, state]

@@ -156,20 +156,22 @@ class SessionStore:
             )
             return CommitResult(False, False, reason, session.revision)
         complete = False
-        if not changes and not message.strip():
+        if not changes:
             emit(
                 "step.commit_noop",
                 participant_id=session.participant_id,
                 step=step.id,
                 revision=session.revision,
                 complete=False,
+                attempted_notification=message.strip(),
             )
             return CommitResult(True, complete, "state unchanged", session.revision)
         session.state.update(copy.deepcopy(changes))
         session.revision += 1
-        if message.strip():
-            session.notices.append(message.strip())
         complete = step.is_complete(session.state)
+        notification = message.strip() if not complete else ""
+        if notification:
+            session.notices.append(notification)
         emit(
             "step.commit",
             participant_id=session.participant_id,
@@ -177,7 +179,8 @@ class SessionStore:
             revision=session.revision,
             updates=changes,
             complete=complete,
-            notification=message.strip(),
+            notification=notification,
+            ignored_notification=message.strip() if complete else "",
         )
         if complete and not was_complete:
             notice = self._render(step.complete_message, session)

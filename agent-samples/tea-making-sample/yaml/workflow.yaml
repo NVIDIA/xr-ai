@@ -153,12 +153,13 @@ steps:
       consecutive: 2
     agent:
       prompt: >-
-        For any unit reading call temperature__verify with its exact number/unit
-        and state target; never calculate. Then always call workflow__commit.
-        When ready is true, include water_ready=true. When ready is false, leave
-        water_ready out completely. Include heating_started=true only if input
-        state is false and a heater cue/unit reading is seen. Never include
-        false, readings, or conversions; never return JSON/text.
+        Only for a number with an explicit C/F unit, call
+        temperature__verify with its exact number/unit and state target; never
+        calculate. Without both, skip verification and commit empty. Always
+        finish with workflow__commit. If ready, set water_ready=true; otherwise
+        omit it. Set heating_started=true only when input is false and a heater
+        cue/unit reading is seen. Never include false/readings/conversions or
+        return text.
       tools: [temperature__verify]
     voice:
       prompt: >-

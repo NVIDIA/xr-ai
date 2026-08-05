@@ -50,13 +50,16 @@ class WorkflowTest(unittest.TestCase):
                 "guidance_source": "package",
                 "tea_ready": True,
             },
-            "",
+            "I found the tea instructions.",
         )
         self.assertTrue(result.accepted)
         self.assertTrue(result.complete)
         self.assertEqual(self.session.step_id, "identify")
         self.assertEqual(self.session.state["tea_name"], "oolong")
-        self.assertTrue(self.store.drain_notices(self.session))
+        self.assertEqual(
+            self.store.drain_notices(self.session),
+            (self.workflow.step("identify").complete_message,),
+        )
         revision = self.session.revision
         repeated = self.store.commit(
             self.session,
@@ -112,7 +115,11 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual(self.store.drain_notices(self.session), ("The water is heating.",))
 
         revision = self.session.revision
-        repeated = self.store.commit(self.session, {"heating_started": True}, "")
+        repeated = self.store.commit(
+            self.session,
+            {"heating_started": True},
+            "The heater is active and the display reads 77 degrees Fahrenheit.",
+        )
         self.assertTrue(repeated.accepted)
         self.assertEqual(self.session.revision, revision)
         self.assertFalse(self.store.drain_notices(self.session))

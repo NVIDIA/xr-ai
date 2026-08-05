@@ -84,11 +84,12 @@ async def _wait_for_port(port: int, *, proc: subprocess.Popen, timeout: float) -
     raise TimeoutError(f"magpie_tts_server did not open port {port} within {timeout}s")
 
 
-def _post_speech(port: int, model: str, text: str) -> bytes:
+def _post_speech(port: int, model: str, text: str, speed: float = 1.0) -> bytes:
     payload = json.dumps({
         "model":           model,
         "input":           text,
         "voice":           "default",
+        "speed":           speed,
         "response_format": "wav",
     }).encode("utf-8")
     req = urllib.request.Request(
@@ -149,7 +150,7 @@ async def test_magpie_tts_smoke(tmp_path: Path) -> None:
         # while; budget for a full ~1 GB pull on a fresh machine.
         await _wait_for_port(port, proc=proc, timeout=900.0)
         body = await asyncio.get_running_loop().run_in_executor(
-            None, _post_speech, port, model_name, "Hello, world.",
+            None, _post_speech, port, model_name, "Hello, world.", 1.1,
         )
     finally:
         if proc.poll() is None:

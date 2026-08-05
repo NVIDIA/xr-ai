@@ -44,8 +44,7 @@ class CommitRequest(_Request):
         default="",
         max_length=240,
         description=(
-            "Brief natural spoken update for a real non-completing state change or immediate danger; "
-            "empty otherwise."
+            "Brief natural spoken update for a real non-completing state change; empty otherwise."
         ),
     )
 

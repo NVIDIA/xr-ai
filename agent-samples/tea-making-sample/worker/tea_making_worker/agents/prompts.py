@@ -10,8 +10,8 @@ HUMAN = (
 
 STEP = (
     "already_complete is status, not state. If true, commit empty. Else use observation, contract, "
-    "state, tools. Commit once; briefly message real non-completing changes. Empty on no "
-    "change/completion; danger may be messaged."
+    "state, tools. Commit once; message only with a real non-completing state change. Empty on no "
+    "change or completion."
 )
 
 VOICE = (

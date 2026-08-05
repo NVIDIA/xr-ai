@@ -31,8 +31,8 @@ def run() -> None:
     assert "Rewrite tool/state" in HUMAN
     assert "already_complete is status, not state" in STEP
     assert "Completion requires" not in STEP
-    assert "briefly message real non-completing changes" in STEP
-    assert "Empty on no change/completion" in STEP
+    assert "message only with a real non-completing state change" in STEP
+    assert "Empty on no change or completion" in STEP
     assert "if unavailable, say so" in VOICE
     assert "Never route these to ask_step" in ROUTER
     style = cases["spoken_style_guard"]
@@ -127,8 +127,13 @@ def run() -> None:
     assert all(re.fullmatch(heat.evidence.pattern, item) for item in split_captions["accepted"])
     assert not any(re.fullmatch(heat.evidence.pattern, item) for item in split_captions["rejected"])
     missing_unit = cases["temperature_missing_unit_guard"]
+    assert missing_unit["forbidden_tool"] == "temperature__verify"
     assert missing_unit["expected_updates"] == {}
     assert missing_unit["expected_water_ready"] is False
+    absent = cases["temperature_absent_guard"]
+    assert absent["observation"] == "Not visible."
+    assert absent["forbidden_tool"] == "temperature__verify"
+    assert absent["expected_updates"] == {}
     below_target = cases["temperature_repeated_below_target_guard"]
     assert all(re.fullmatch(heat.evidence.pattern, item) for item in below_target["observations"])
     assert below_target["expected_updates"] == [{}, {}]
@@ -146,19 +151,20 @@ def run() -> None:
     assert state_notice["expected_complete"] is False
     routine_notice = cases["routine_notice_guard"]
     assert routine_notice["expected_updates"] == {}
-    assert routine_notice["expected_messages"] == ["", "", ""]
+    assert routine_notice["attempted_messages"]
+    assert routine_notice["expected_spoken_messages"] == []
     fill = workflow.step("fill_water")
     assert "closed vessel" in fill.agent.prompt
     assert "user report is not" in fill.voice.prompt
     assert heat.agent.tools == ("temperature__verify",)
     assert "call temperature__verify" in heat.agent.prompt
     assert "exact number/unit and state target" in heat.agent.prompt
+    assert "Without both, skip verification and commit empty" in heat.agent.prompt
     assert "never calculate" in heat.agent.prompt
-    assert "always call workflow__commit" in heat.agent.prompt
-    assert "When ready is true, include water_ready=true" in heat.agent.prompt
-    assert "When ready is false, leave water_ready out completely" in heat.agent.prompt
-    assert "heating_started=true only if input state is false" in heat.agent.prompt
-    assert "never return JSON/text" in heat.agent.prompt
+    assert "Always finish with workflow__commit" in heat.agent.prompt
+    assert "If ready, set water_ready=true; otherwise omit it" in heat.agent.prompt
+    assert "Set heating_started=true only when input is false" in heat.agent.prompt
+    assert "Never include false/readings/conversions or return text" in heat.agent.prompt
     assert "current heating, reading, or readiness" in heat.voice.prompt
     context = cases["observation_context"]
     assert context["keys"] == ["observation", "already_complete", "state"]

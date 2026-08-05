@@ -395,6 +395,7 @@ magpie-tts-server  (ai-services/tts/magpie/)
     └── nemo_toolkit[tts] >=2.5
     └── lightning >2.2.1,<=2.4.0    # routed to github.com/Lightning-AI/pytorch-lightning
     └── soundfile >=0.12
+    └── librosa >=0.11
     └── numpy >=1.24
     └── fastapi >=0.111
     └── uvicorn[standard] >=0.29

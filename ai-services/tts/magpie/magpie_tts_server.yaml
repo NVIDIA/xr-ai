@@ -26,5 +26,8 @@ host: "0.0.0.0"
 # NeMo FastPitch/VITS native output sample rate.
 sample_rate: 22050
 
+# OpenAI-compatible speaking rate. 1.0 preserves the model's native delivery.
+speed: 1.0
+
 # NeMo + HuggingFace weight cache — resolved relative to this YAML file.
 model_cache: ../models

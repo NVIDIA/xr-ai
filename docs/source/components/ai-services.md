@@ -318,6 +318,8 @@ cleanup.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; the `language` and `temperature` form fields are accepted but ignored.
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
+  Set YAML `speed` or the OpenAI speech request's `speed` field from 0.25 to
+  4.0; values above 1.0 shorten playback with pitch-preserving time stretching.
 - **tts/piper** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
 - **transcript-mcp-server** is pure FastMCP at `/mcp` on port 8200.

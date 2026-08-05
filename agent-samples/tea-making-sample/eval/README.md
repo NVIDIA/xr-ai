@@ -15,7 +15,7 @@ Routing cases distinguish explicit workflow management from task questions,
 action reports, current readings, and timer questions.
 
 Corner-case probes cover atomic identification readiness, irrelevant retrieval
-results, missing temperature units, unconfirmed immersion, a running timer, and
+results, absent or unitless temperature readings, unconfirmed immersion, a running timer, and
 voice questions that require fresh vision or timer tools. These fixtures use
 different labels and readings from the prompt rules so they remain behavioral
 checks rather than worked-example recall. A repeated below-target reading also
@@ -25,5 +25,6 @@ retrieved variety; that mismatch must remain unready and commit no values.
 The contract probe checks that prior completion status has a distinct name and
 that field meanings and completion values remain visible to the small model.
 The progress probe requires a brief message for a real non-completing state
-change while the repeated-reading probe remains silent. Retrieval chunk
+change while the repeated-reading probe suppresses even attempted narration.
+Retrieval chunk
 settings are pinned to the compact original configuration.

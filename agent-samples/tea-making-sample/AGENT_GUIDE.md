@@ -61,9 +61,9 @@ changes.
 19. Prompts state both positive evidence for each readiness write and its
     negative stop condition. Identification commits all resolved fields and
     `tea_ready` atomically; unrelated retrieval text never supplies a value.
-20. Observation `message` briefly announces a real, non-completing state change
-    or immediate danger. No-change, repeated, and completion commits leave it
-    empty; this rule stays in the shared agent prompt, not step YAML.
+20. Observation `message` briefly announces a real, non-completing state
+    change. The store deterministically discards messages on no-change,
+    repeated, and completion commits; this rule stays generic, not step YAML.
 21. Tea identification is literal OCR, not visual classification. The vision
     focus excludes artwork and supplied words; RAG may provide brewing values
     only when its passage contains the variety already visible in the caption.
@@ -94,6 +94,9 @@ changes.
 30. A model-generated tool argument validation error gets one immediate retry.
     If it repeats, skip that observation frame and continue; service,
     configuration, and application errors still propagate.
+31. Temperature verification requires a visible numeric reading and explicit
+    Celsius or Fahrenheit unit. Missing either bypasses the verification tool
+    and commits no state change.
 
 ## Nested machines
 

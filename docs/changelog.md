@@ -9,6 +9,25 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Background speech requires a state transition
+
+Observation commits can no longer enqueue agent-authored speech unless they
+actually change state and leave the step incomplete. Repeated readings and
+message-only commits are revision-free no-ops, while completing changes emit
+only the step's canonical completion notice. This deterministically prevents
+continuous narration without adding step-specific throttles or YAML fields.
+
+### 2026-08-05 — Magpie speaking rate and absent readings are explicit
+
+Magpie TTS now honors the OpenAI-compatible `speed` request field and a YAML
+default from 0.25 to 4.0 using pitch-preserving time stretching. The tea sample
+sets a modest 1.1-times default while the service default remains unchanged.
+
+The heat observation prompt now bypasses temperature verification unless the
+caption contains both a number and an explicit unit. This prevents absence
+captions from being passed into the numeric verifier; strict schema validation
+and bounded recovery remain in place for malformed model calls.
+
 ### 2026-08-05 — Tea speech selection and malformed tool calls are recoverable
 
 The tea-making launcher now requires `--tts-mode piper` or `--tts-mode magpie`

@@ -7,4 +7,5 @@ device: auto
 port: 8104
 host: "0.0.0.0"
 sample_rate: 22050
+speed: 1.1
 model_cache: ../../../models

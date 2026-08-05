@@ -56,8 +56,8 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert "temperature" not in HUMAN.lower()
     assert "Rewrite tool/state" in HUMAN
     assert "already_complete is status, not state" in STEP
-    assert "briefly message real non-completing changes" in STEP
-    assert "Empty on no change/completion" in STEP
+    assert "message only with a real non-completing state change" in STEP
+    assert "Empty on no change or completion" in STEP
     assert "Never route these to ask_step" in ROUTER
     for step, source in zip(workflow.steps.values(), raw["steps"], strict=True):
         assert step.trigger.function
@@ -189,12 +189,12 @@ def test_heat_policy_converts_units_before_comparing() -> None:
     assert step.agent.tools == ("temperature__verify",)
     assert "call temperature__verify" in prompt
     assert "exact number/unit and state target" in prompt
+    assert "Without both, skip verification and commit empty" in prompt
     assert "never calculate" in prompt
-    assert "always call workflow__commit" in prompt
-    assert "When ready is true, include water_ready=true" in prompt
-    assert "When ready is false, leave water_ready out completely" in prompt
-    assert "heating_started=true only if input state is false" in prompt
-    assert "never return JSON/text" in prompt
+    assert "Always finish with workflow__commit" in prompt
+    assert "If ready, set water_ready=true; otherwise omit it" in prompt
+    assert "Set heating_started=true only when input is false" in prompt
+    assert "Never include false/readings/conversions or return text" in prompt
     assert step.evidence is not None
     assert re.fullmatch(step.evidence.pattern, "164F")
     message_description = CommitRequest.model_fields["message"].description
@@ -303,6 +303,9 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     assert cases["temperature_unit_guard"]["expected_tool"] == "temperature__verify"
     assert cases["temperature_unit_guard"]["expected_water_ready"] is False
     assert cases["temperature_missing_unit_guard"]["expected_water_ready"] is False
+    assert cases["temperature_missing_unit_guard"]["forbidden_tool"] == "temperature__verify"
+    assert cases["temperature_absent_guard"]["forbidden_tool"] == "temperature__verify"
+    assert cases["temperature_absent_guard"]["expected_updates"] == {}
     assert cases["temperature_repeated_below_target_guard"]["expected_updates"] == [{}, {}]
     assert cases["temperature_repeated_below_target_guard"]["expected_tool"] == "temperature__verify"
     assert cases["temperature_repeated_below_target_guard"]["expected_water_ready"] is False
@@ -312,7 +315,8 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     assert cases["state_update_notice"]["expected_updates"] == {"heating_started": True}
     assert cases["state_update_notice"]["expected_message_intent"] == "heating started"
     assert cases["state_update_notice"]["expected_complete"] is False
-    assert cases["routine_notice_guard"]["expected_messages"] == ["", "", ""]
+    assert cases["routine_notice_guard"]["attempted_messages"]
+    assert cases["routine_notice_guard"]["expected_spoken_messages"] == []
     assert cases["observation_context"]["keys"] == ["observation", "already_complete", "state"]
     assert cases["observation_context"]["prior_status_is_state_value"] is False
     assert cases["observation_context"]["contract_includes"] == [
