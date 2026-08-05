@@ -115,25 +115,29 @@ def test_state_commit_waits_for_explicit_advance() -> None:
     assert workflow.project(workflow.step("fill_water"), session.state) == {"water_filled": False}
 
 
-def test_model_profiles_define_reused_omni_and_split_stacks() -> None:
-    split = json.loads((_SAMPLE / "yaml" / "models.split.json").read_text(encoding="utf-8"))["models"]
+def test_model_profiles_always_use_omni_for_agents() -> None:
+    cosmos = json.loads((_SAMPLE / "yaml" / "models.cosmos.json").read_text(encoding="utf-8"))["models"]
     omni = json.loads((_SAMPLE / "yaml" / "models.omni.json").read_text(encoding="utf-8"))["models"]
 
-    assert split["agent_llm"]["adapter"]["preset"] == "nemotron3_nano"
-    assert split["vlm"]["adapter"]["preset"] == "cosmos_vlm"
-    assert {split[role]["deployment"]["ownership"] for role in ("agent_llm", "vlm", "stt", "embedding")} == {"reused"}
-    assert omni["agent_llm"]["adapter"]["preset"] == "nemotron_omni"
-    assert omni["agent_llm"]["adapter"]["default_extras"] == {
-        "chat_template_kwargs": {"enable_thinking": False},
-    }
+    for models in (cosmos, omni):
+        assert models["agent_llm"]["adapter"]["preset"] == "nemotron_omni"
+        assert models["agent_llm"]["adapter"]["default_extras"] == {
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        reused = {
+            models[role]["deployment"]["ownership"]
+            for role in ("agent_llm", "vlm", "stt", "embedding")
+        }
+        assert reused == {"reused"}
+    assert cosmos["agent_llm"]["deployment"]["service"] == "omni"
+    assert cosmos["vlm"]["adapter"]["preset"] == "cosmos_vlm"
+    assert cosmos["vlm"]["deployment"]["service"] == "vlm"
     assert omni["agent_llm"]["deployment"]["service"] == omni["vlm"]["deployment"]["service"] == "omni"
     assert omni["vlm"]["adapter"]["default_extras"] == {
         "max_tokens": 128,
         "temperature": 0.0,
         "chat_template_kwargs": {"enable_thinking": False},
     }
-    omni_reused = {omni[role]["deployment"]["ownership"] for role in ("agent_llm", "vlm", "stt", "embedding")}
-    assert omni_reused == {"reused"}
 
 
 def test_identification_keeps_native_rag_fallback() -> None:
@@ -182,9 +186,15 @@ def test_heat_policy_converts_units_before_comparing() -> None:
     step = _workflow().step("heat_water")
     prompt = step.agent.prompt
 
-    assert "(F - 32) * 5 / 9" in prompt
-    assert "sets heating_started true" in prompt
-    assert "Never store readings/conversions" in prompt
+    assert step.agent.tools == ("temperature__verify",)
+    assert "call temperature__verify" in prompt
+    assert "exact number/unit and state target" in prompt
+    assert "never calculate" in prompt
+    assert "always call workflow__commit" in prompt
+    assert "When ready is true, include water_ready=true" in prompt
+    assert "When ready is false, leave water_ready out completely" in prompt
+    assert "heating_started=true only if input state is false" in prompt
+    assert "never return JSON/text" in prompt
     assert step.evidence is not None
     assert re.fullmatch(step.evidence.pattern, "164F")
     message_description = CommitRequest.model_fields["message"].description
@@ -203,7 +213,7 @@ def test_launcher_requires_explicit_model_and_voice_modes() -> None:
     with contextlib.redirect_stdout(output):
         sample_main.run([])
     help_text = output.getvalue()
-    assert "--model-mode {omni,vlm-llm}" in help_text
+    assert "--model-mode {omni,cosmos}" in help_text
     assert "--voice-mode {wake-word,always-on}" in help_text
 
     args = sample_main._parse_args(["--model-mode", "omni", "--voice-mode", "always-on"])
@@ -214,7 +224,7 @@ def test_launcher_requires_explicit_model_and_voice_modes() -> None:
 def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
     expected_services = {
         "omni": {"omni", "stt", "embedding", "tts", "rag", "hub", "worker"},
-        "vlm-llm": {"agent-llm", "vlm", "stt", "embedding", "tts", "rag", "hub", "worker"},
+        "cosmos": {"omni", "vlm", "stt", "embedding", "tts", "rag", "hub", "worker"},
     }
     original_detect = sample_main.detect_gpu_config
     sample_main.detect_gpu_config = lambda: "96G_blackwell"
@@ -274,8 +284,15 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     assert cases["tea_identity_question"]["expected_tool"] == "current_view"
     assert cases["tea_identity_question"]["forbidden_tool"] == "rag_lookup"
     assert cases["temperature_unit_guard"]["expected_updates"] == {"heating_started": True}
+    assert cases["temperature_unit_guard"]["expected_tool"] == "temperature__verify"
     assert cases["temperature_unit_guard"]["expected_water_ready"] is False
     assert cases["temperature_missing_unit_guard"]["expected_water_ready"] is False
+    assert cases["temperature_repeated_below_target_guard"]["expected_updates"] == [{}, {}]
+    assert cases["temperature_repeated_below_target_guard"]["expected_tool"] == "temperature__verify"
+    assert cases["temperature_repeated_below_target_guard"]["expected_water_ready"] is False
+    assert cases["temperature_above_target_ready"]["expected_updates"] == {"water_ready": True}
+    assert cases["temperature_above_target_ready"]["expected_tool"] == "temperature__verify"
+    assert cases["temperature_above_target_ready"]["expected_water_ready"] is True
     assert cases["state_update_notice"]["expected_updates"] == {"heating_started": True}
     assert cases["state_update_notice"]["expected_message_intent"] == "heating started"
     assert cases["state_update_notice"]["expected_complete"] is False

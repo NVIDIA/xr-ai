@@ -12,6 +12,7 @@ from tea_making_worker.functions import (
     CurrentViewConfig,
     RAGLookupConfig,
     add_clock_functions,
+    add_temperature_functions,
     add_workflow_functions,
 )
 from tea_making_worker.runtime.state import SessionStore
@@ -74,6 +75,7 @@ class NatBuildTest(unittest.IsolatedAsyncioTestCase):
                 RAGLookupConfig(source=rag_functions["rag__retrieve"]),
             )
             await add_clock_functions(builder)
+            await add_temperature_functions(builder)
             await add_workflow_functions(builder, store=store, answer_step=agents.answer)
             await agents.build(builder, llm)
 

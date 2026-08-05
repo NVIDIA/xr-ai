@@ -115,6 +115,7 @@ def run() -> None:
     assert heat.evidence is not None
     temperature = cases["temperature_unit_guard"]
     assert temperature["step"] == "heat_water"
+    assert temperature["expected_tool"] == "temperature__verify"
     assert temperature["expected_updates"] == {"heating_started": True}
     assert temperature["expected_water_ready"] is False
     terse = cases["terse_temperature_caption"]
@@ -122,9 +123,23 @@ def run() -> None:
     assert terse["expected_evidence"] is True
     assert terse["expected_updates"] == {"heating_started": True}
     assert terse["expected_water_ready"] is False
+    split_captions = cases["split_temperature_caption_guard"]
+    assert all(re.fullmatch(heat.evidence.pattern, item) for item in split_captions["accepted"])
+    assert not any(re.fullmatch(heat.evidence.pattern, item) for item in split_captions["rejected"])
     missing_unit = cases["temperature_missing_unit_guard"]
     assert missing_unit["expected_updates"] == {}
     assert missing_unit["expected_water_ready"] is False
+    below_target = cases["temperature_repeated_below_target_guard"]
+    assert all(re.fullmatch(heat.evidence.pattern, item) for item in below_target["observations"])
+    assert below_target["expected_updates"] == [{}, {}]
+    assert below_target["expected_tool"] == "temperature__verify"
+    assert below_target["expected_evidence_count"] == heat.evidence.consecutive
+    assert below_target["expected_water_ready"] is False
+    above_target = cases["temperature_above_target_ready"]
+    assert re.fullmatch(heat.evidence.pattern, above_target["observation"])
+    assert above_target["expected_updates"] == {"water_ready": True}
+    assert above_target["expected_tool"] == "temperature__verify"
+    assert above_target["expected_water_ready"] is True
     state_notice = cases["state_update_notice"]
     assert state_notice["expected_updates"] == {"heating_started": True}
     assert state_notice["expected_message_intent"] == "heating started"
@@ -135,8 +150,15 @@ def run() -> None:
     fill = workflow.step("fill_water")
     assert "closed vessel" in fill.agent.prompt
     assert "user report is not" in fill.voice.prompt
-    assert "sets heating_started true" in heat.agent.prompt
-    assert "Never store readings/conversions" in heat.agent.prompt
+    assert heat.agent.tools == ("temperature__verify",)
+    assert "call temperature__verify" in heat.agent.prompt
+    assert "exact number/unit and state target" in heat.agent.prompt
+    assert "never calculate" in heat.agent.prompt
+    assert "always call workflow__commit" in heat.agent.prompt
+    assert "When ready is true, include water_ready=true" in heat.agent.prompt
+    assert "When ready is false, leave water_ready out completely" in heat.agent.prompt
+    assert "heating_started=true only if input state is false" in heat.agent.prompt
+    assert "never return JSON/text" in heat.agent.prompt
     assert "current heating, reading, or readiness" in heat.voice.prompt
     context = cases["observation_context"]
     assert context["keys"] == ["observation", "already_complete", "state"]
@@ -155,8 +177,15 @@ def run() -> None:
         cases["steeping_negative_guard"]["observation"],
     )
     assert cases["steeping_negative_guard"]["expected_accepted"] is False
+    no_water = cases["steeping_no_water_guard"]
+    assert not re.fullmatch(steeping.evidence.pattern, no_water["observation"])
+    assert no_water["expected_accepted"] is False
+    assert no_water["expected_updates"] == {}
+    assert no_water["forbidden_tool"] == "clock__now"
+    assert "two separately visible facts" in str(steeping.trigger.arguments["question"])
+    assert "both visible water" in steeping.agent.prompt
     assert "do not call clock__now" in steeping.agent.prompt
-    assert "not visual confirmation" in steeping.voice.prompt
+    assert "Require both visible water" in steeping.voice.prompt
     timer = workflow.step("steep_timer")
     assert "While false, commit empty" in timer.agent.prompt
     assert "for every timer or completion question" in timer.voice.prompt

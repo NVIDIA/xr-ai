@@ -9,22 +9,34 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Shared model servers combine Cosmos and Omni
+
+`model_servers` now starts one persistent service set containing Nemotron-3
+Omni, Cosmos, STT, and embeddings. Agent reasoning always targets Omni;
+applications may use Cosmos for vision or reuse Omni for both roles without
+restarting the model stack. Dual 48 GB profiles keep Cosmos and embeddings on
+GPU 0 and replace the legacy Nano allocation on GPU 1 with Omni; STT also uses
+GPU 1. Startup stops the removed Nano service so a persisted legacy process
+cannot overcommit GPU memory. Blackwell profiles leave the MoE backend unset so
+vLLM selects a compatible implementation instead of forcing unsupported
+Triton kernels.
+
 ### 2026-08-05 — Tea launch modes are explicit and source-free
 
 The tea-making launcher requires a model mode and voice mode on every run;
 invoking it without arguments prints its choices and starts nothing. Model
-selection switches between the shared Nemotron-3-Omni stack and the split
-Cosmos/Nemotron-3-Nano stack. Voice selection switches between dedicated
+selection switches vision between Nemotron-3-Omni and Cosmos while agent
+reasoning remains on Omni. Voice selection switches between dedicated
 wake-word and always-on gate profiles. The launcher materializes temporary
 worker and RAG configs with aligned absolute paths, avoiding source edits and
 duplicated configuration combinations.
 
 ### 2026-08-05 — Tea guidance defaults to the Omni stack
 
-The tea-making sample reuses `model_servers --omni-stack` by default, using the
+The tea-making sample reuses the shared Omni service, using the
 same Nemotron-3-Omni service for vision and agent reasoning plus the shared STT
-and embedding services. Its split Cosmos and Nemotron-3-Nano profile remains an
-explicit shared-stack alternative. The sample disables hidden reasoning for
+and embedding services. Cosmos remains an explicit vision alternative while
+agent reasoning still uses Omni. The sample disables hidden reasoning for
 both VLM captions and agent tool calls, and caps short caption output so neither
 path can consume Omni's large default reasoning budget without producing its
 required result. A bounded caption timeout is treated as a recoverable missed

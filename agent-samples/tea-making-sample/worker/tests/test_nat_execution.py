@@ -8,7 +8,14 @@ import unittest
 from pathlib import Path
 
 from nat.builder.workflow_builder import WorkflowBuilder
-from tea_making_worker.functions import CurrentViewConfig, CurrentViewRequest, add_workflow_functions
+from tea_making_worker.functions import (
+    CurrentViewConfig,
+    CurrentViewRequest,
+    TemperatureVerifyConfig,
+    TemperatureVerifyRequest,
+    add_workflow_functions,
+)
+from tea_making_worker.functions.temperature import temperature_verify
 from tea_making_worker.functions.vision import current_view
 from tea_making_worker.runtime.scope import invocation_scope
 from tea_making_worker.runtime.state import SessionStore
@@ -19,6 +26,23 @@ _WORKFLOW = Path(__file__).parents[2] / "yaml" / "workflow.yaml"
 
 
 class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
+    async def test_temperature_verification_converts_and_compares(self) -> None:
+        workflow = load_workflow(_WORKFLOW)
+        session = SessionStore(workflow).get("temperature-test")
+        cases = (
+            (TemperatureVerifyRequest(reading=73, unit="fahrenheit", target_c=100), False),
+            (TemperatureVerifyRequest(reading=212, unit="fahrenheit", target_c=100), True),
+            (TemperatureVerifyRequest(reading=82, unit="celsius", target_c=98), False),
+            (TemperatureVerifyRequest(reading=100, unit="celsius", target_c=82), True),
+        )
+
+        async with temperature_verify(TemperatureVerifyConfig(), None) as info:
+            self.assertIsNotNone(info.single_fn)
+            with invocation_scope(session, "temperature-trace"):
+                for request, expected in cases:
+                    result = await info.single_fn(request)
+                    self.assertIs(result.ready, expected)
+
     async def test_current_view_injects_the_active_participant(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         session = SessionStore(workflow).get("actual-participant")

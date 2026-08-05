@@ -20,7 +20,13 @@ from xr_ai_voicegate import load_voice_gate_config
 from .agents import AgentRegistry
 from .config import WorkerConfig
 from .engine import Coordinator, NoticeBridge, TriggerRegistry
-from .functions import CurrentViewConfig, RAGLookupConfig, add_clock_functions, add_workflow_functions
+from .functions import (
+    CurrentViewConfig,
+    RAGLookupConfig,
+    add_clock_functions,
+    add_temperature_functions,
+    add_workflow_functions,
+)
 from .runtime.state import SessionStore
 from .spec import load_workflow
 
@@ -77,6 +83,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             RAGLookupConfig(source=rag_functions["rag__retrieve"]),
         )
         await add_clock_functions(builder)
+        await add_temperature_functions(builder)
         await add_workflow_functions(builder, store=store, answer_step=agents.answer)
         await agents.build(builder, llm)
         triggers = TriggerRegistry(workflow)

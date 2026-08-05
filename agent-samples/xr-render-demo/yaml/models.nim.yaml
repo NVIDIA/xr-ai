@@ -9,7 +9,7 @@
 # The worker loads this file for its native model-backed functions. Provide an
 # NGC API key (env NGC_API_KEY, or
 # the launcher credential prompt) — see docs/credentials.md. Then run the
-# demo without the local agent-llm / vlm model-servers. STT/TTS stay
+# demo without the local omni / vlm model-servers. STT/TTS stay
 # local. Full guide: docs/ai-services.md "Hosting models on NVIDIA NIM".
 #
 # Model ids below are examples — confirm the exact slugs for your account at

@@ -3,7 +3,7 @@
 
 # Nemotron-3-Nano-Omni — DGX Spark (GB10).
 # The NVFP4 model shares physical HBM with STT and the runtime, so retain the
-# conservative allocation used by the standard Nano stack.
+# conservative allocation needed by the full shared stack.
 
 host: "0.0.0.0"
 port: 8108

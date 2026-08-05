@@ -18,7 +18,8 @@ hf_token: ""
 
 port: 8100
 host: "0.0.0.0"
-cuda_visible_devices: "0"   # share GPU 0 with STT; Nemotron-3-Nano on GPU 1
+# Cosmos shares GPU 0 with embeddings; Omni and STT use GPU 1.
+cuda_visible_devices: "0"
 
 model_cache: ../../../../models
 

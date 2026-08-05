@@ -5,6 +5,12 @@
 
 from .clock import add_clock_functions
 from .rag import RAGLookupConfig
+from .temperature import (
+    TemperatureVerifyConfig,
+    TemperatureVerifyRequest,
+    TemperatureVerifyResult,
+    add_temperature_functions,
+)
 from .vision import CurrentViewConfig, CurrentViewRequest
 from .workflow import add_workflow_functions
 
@@ -12,6 +18,10 @@ __all__ = [
     "CurrentViewConfig",
     "CurrentViewRequest",
     "RAGLookupConfig",
+    "TemperatureVerifyConfig",
+    "TemperatureVerifyRequest",
+    "TemperatureVerifyResult",
     "add_clock_functions",
+    "add_temperature_functions",
     "add_workflow_functions",
 ]

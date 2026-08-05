@@ -79,9 +79,17 @@ responsiveness and explicitly rejects dark, unreadable, or absent-text
 captions. Filling uses the stricter threshold: three consecutive captions must
 name the vessel, visible water, and a concrete cue such as its surface or level.
 Heating comparisons normalize a visible Fahrenheit reading to Celsius before
-checking it against the Celsius target; the raw numbers are never compared. An
-active-heater indicator or unit-bearing temperature display immediately records
-the durable heating-started milestone, even when the water is below target.
+checking whether it meets or exceeds the Celsius target; the raw numbers are
+never compared, and a target is never reused as the current reading. A reading
+below target leaves readiness unchanged. An active-heater indicator or
+unit-bearing temperature display immediately records the durable
+heating-started milestone, even when the water is below target.
+The observation agent delegates conversion and comparison to the deterministic
+`temperature__verify` NAT tool and follows its boolean result.
+Statements that hazards or heater indicators are not visible do not invalidate
+an otherwise clear, unit-bearing temperature reading.
+Steeping starts only after the same vessel shows both water and tea-water
+contact; a tea bag in a dry or visually ambiguous cup is not enough.
 
 The identify step prefers brewing values visible on the package. When the tea
 name is visible but its temperature or time is missing, its agent calls the
@@ -131,20 +139,24 @@ arguments it prints the available choices and exits without starting services:
 uv run --project agent-samples/tea-making-sample tea_making_sample
 ```
 
+Start the shared model servers once:
+
+```bash
+uv run --project agent-samples/model-servers model_servers
+```
+
 Select Nemotron-3-Omni for both vision and agent reasoning with:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --omni-stack
 uv run --project agent-samples/tea-making-sample tea_making_sample \
   --model-mode omni --voice-mode always-on
 ```
 
-Select Cosmos Reason1 for vision and Nemotron-3-Nano for agents with:
+Select Cosmos Reason1 for vision and Nemotron-3-Omni for agents with:
 
 ```bash
-uv run --project agent-samples/model-servers model_servers --vlm-llm-stack
 uv run --project agent-samples/tea-making-sample tea_making_sample \
-  --model-mode vlm-llm --voice-mode wake-word
+  --model-mode cosmos --voice-mode wake-word
 ```
 
 `--voice-mode always-on` accepts every transcribed utterance.
@@ -154,8 +166,9 @@ launcher selects dedicated gate profiles and writes temporary worker and RAG
 configs, so switching modes never edits source YAML and both processes always
 use the same model profile.
 
-The Omni profile disables hidden reasoning and caps only continuous caption
-generation; agent calls retain their tool-loop budget. A timed-out caption is
+Both profiles disable hidden reasoning for Omni agent calls. The Omni vision
+profile also caps continuous caption generation; agent calls retain their
+tool-loop budget. A timed-out caption is
 logged as `vision.timeout` and the next frame continues the same observation
 loop. Both model modes reuse Parakeet STT and Nemotron Embed while the sample
 manages Piper TTS, the typed RAG service, the media hub, and its worker.

@@ -1,9 +1,12 @@
 {
   "models": {
     "agent_llm": {
-      "adapter": {"preset": "nemotron3_nano"},
-      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "agent-llm"}
+      "adapter": {
+        "preset": "nemotron_omni",
+        "default_extras": {"chat_template_kwargs": {"enable_thinking": false}}
+      },
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "omni"}
     },
     "vlm": {
       "adapter": {"preset": "cosmos_vlm"},

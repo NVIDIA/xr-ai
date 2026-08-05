@@ -20,7 +20,7 @@ from xr_ai_logging import setup_logging
 _BASE = Path(__file__).resolve().parent
 _MODEL_CONFIGS = {
     "omni": "models.omni.json",
-    "vlm-llm": "models.split.json",
+    "cosmos": "models.cosmos.json",
 }
 _VOICE_CONFIGS = {
     "wake-word": "voice_gate.wake-word.yaml",
@@ -34,17 +34,16 @@ def _parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""examples:
   tea_making_sample --model-mode omni --voice-mode wake-word
-  tea_making_sample --model-mode vlm-llm --voice-mode always-on
+  tea_making_sample --model-mode cosmos --voice-mode always-on
 
-matching model-server stacks:
-  model_servers --omni-stack
-  model_servers --vlm-llm-stack""",
+shared model servers:
+  model_servers""",
     )
     parser.add_argument(
         "--model-mode",
         required=True,
         choices=tuple(_MODEL_CONFIGS),
-        help="omni: Nemotron-3-Omni for vision and agents; vlm-llm: Cosmos VLM plus Nemotron-3-Nano",
+        help="omni: Omni for vision and agents; cosmos: Cosmos vision with Omni agents",
     )
     parser.add_argument(
         "--voice-mode",
@@ -70,11 +69,6 @@ def _model_processes() -> dict[str, Process]:
     if profile not in {"96G_blackwell", "dual_48G_ada"}:
         raise RuntimeError(f"unsupported local model profile: {profile}")
     return {
-        "agent-llm": Process(
-            "agent-llm",
-            "../../ai-services/llm/nemotron3_nano",
-            "nemotron3_nano_llm_server",
-        ),
         "vlm": Process("vlm", "../../ai-services/vlm-server", "vlm_server"),
         "embedding": Process(
             "embedding",

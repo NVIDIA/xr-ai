@@ -2209,7 +2209,7 @@ async def main() -> None:
                         "system prompt's worked examples — turn on in CI to "
                         "guard against silent train-on-test drift")
     # agent-LLM endpoint overrides — default to whatever the worker yaml
-    # points at (local vLLM on 8107 in dev); set to point at
+    # points at (local vLLM on 8108 in dev); set to point at
     # build.nvidia.com etc. when scoring against a hosted model.
     p.add_argument("--agent-llm", default=os.environ.get("AGENT_LLM_URL", AGENT_LLM),
                    help="full /v1/chat/completions URL for the agent LLM")

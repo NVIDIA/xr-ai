@@ -47,10 +47,11 @@ changes.
     fields or preformatted state.
 15. Treat prompt failures as prompt-tuning work first. Confirm before changing
     evidence thresholds, state semantics, transitions, or other runtime policy.
-16. When observations and state can use different units, make normalization
-    explicit in the step prompt before any comparison or state update. A
-    unit-bearing kettle reading establishes heating without establishing
-    temperature readiness.
+16. When observations and state can use different units, delegate normalization
+    and comparison to a typed NAT tool. The heat agent transcribes the fresh
+    number and unit, passes the state target to `temperature__verify`, and
+    follows its boolean result; it never performs arithmetic or substitutes the
+    target for the reading.
 17. Observation agents receive `already_complete` as prior status plus a
     generated contract containing writable field meanings and the YAML
     completion condition. Prior status is never copied into writable state.
@@ -76,8 +77,17 @@ changes.
 24. Identification has no draft state. Its agent ignores prior incomplete
     identity, derives the name from the fresh front-label caption, and either
     commits every final field with `tea_ready: true` or commits no updates.
-25. Wake-word and always-on behavior are separate voice-gate profiles selected
+25. Starting steeping requires two separately visible facts in one vessel:
+    water and tea-water contact. A tea item alone or an obscured water surface
+    never starts the clock.
+26. Wake-word and always-on behavior are separate voice-gate profiles selected
     by `--voice-mode`; do not make operators edit a shared gate file to switch.
+27. Evidence negatives apply to the required fact, not unrelated caption text.
+    Missing hazards or heater indicators do not veto a clear temperature with
+    its unit.
+28. Agent reasoning always uses the shared Omni service. `--model-mode` selects
+    only whether continuous vision uses Cosmos or that same Omni service; it
+    never selects a second text model or requires a model-server restart.
 
 ## Nested machines
 
@@ -231,6 +241,7 @@ them:
 - Typed sparse `SessionStore` with YAML write boundaries and completion rules.
 - Workflow management NAT functions and compact agent factory.
 - Background notice bridge into `VoiceSession`.
+- Deterministic temperature normalization and threshold verification.
 
 The retrieval service and `xr_rag` group are already shared library
 capabilities. Only the exact-tool alias and tea corpus belong to this sample.

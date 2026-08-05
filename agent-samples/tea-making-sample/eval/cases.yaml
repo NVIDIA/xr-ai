@@ -98,6 +98,7 @@ temperature_unit_guard:
   step: heat_water
   observation: A thermometer display reads 68°F.
   state: {target_temperature_c: 95, heating_started: true, water_ready: false}
+  expected_tool: temperature__verify
   expected_updates: {heating_started: true}
   expected_water_ready: false
 
@@ -108,12 +109,41 @@ terse_temperature_caption:
   expected_updates: {heating_started: true}
   expected_water_ready: false
 
+split_temperature_caption_guard:
+  accepted:
+    - >-
+      The digital display shows 100°C. There are no visible hazards.
+    - >-
+      Heater-on indicators are not visible. The kettle display shows 100
+      degrees Celsius.
+  rejected:
+    - No numeric display or thermometer reading is visible.
+
 temperature_missing_unit_guard:
   step: heat_water
   observation: The kettle display visibly reads 91 with no unit shown.
   state: {target_temperature_c: 91, heating_started: true, water_ready: false}
   expected_updates: {}
   expected_water_ready: false
+
+temperature_repeated_below_target_guard:
+  step: heat_water
+  observations:
+    - The kettle display reads 20°C.
+    - The kettle display reads 25°C.
+  state: {target_temperature_c: 98, heating_started: true, water_ready: false}
+  expected_tool: temperature__verify
+  expected_updates: [{}, {}]
+  expected_evidence_count: 2
+  expected_water_ready: false
+
+temperature_above_target_ready:
+  step: heat_water
+  observation: The kettle display reads 100°C.
+  state: {target_temperature_c: 82, heating_started: true, water_ready: false}
+  expected_tool: temperature__verify
+  expected_updates: {water_ready: true}
+  expected_water_ready: true
 
 state_update_notice:
   step: heat_water
@@ -161,6 +191,14 @@ steeping_negative_guard:
     A cup with a tea bag is shown, but there is no visible evidence of the tea
     bag being immersed in water.
   expected_accepted: false
+
+steeping_no_water_guard:
+  observation: >-
+    A dry tea bag rests inside an empty cup. No water surface or level and no
+    tea-water contact are visible.
+  expected_accepted: false
+  expected_updates: {}
+  forbidden_tool: clock__now
 
 timer_running_guard:
   observation: {elapsed_s: 119, remaining_s: 61, expired: false}

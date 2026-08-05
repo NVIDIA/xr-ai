@@ -26,18 +26,13 @@ uv run model_servers
 GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). These
 are presets for common configurations; to run on a different GPU, refer to
 {doc}`Running on other GPUs </getting_started/requirements>`.
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (this can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
-The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
-STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
-Switching stacks stops the incompatible persistent models first and aborts if
-they cannot be stopped, avoiding GPU overcommit.
-
-```bash
-uv run model_servers --omni-stack
-```
+The shared stack starts Nemotron-3 Omni (8108), Cosmos (8100), STT (8103), and
+embeddings (8109). Samples can use Cosmos for vision or send both vision and
+agent calls to Omni without restarting model servers. On dual 48 GB systems,
+Cosmos and embeddings use GPU 0 while Omni and STT use GPU 1.
 
 The default models are public, so no HuggingFace token is required. Set
 `HF_TOKEN` to lift download rate limits and speed, or to use a gated model: refer
@@ -50,7 +45,7 @@ To stop all model servers when done:
 uv run model_servers --stop
 ```
 
-`--stop` always stops both stack variants, so it takes no stack-selection flag.
+`--stop` stops the shared stack and any persisted legacy Nano service.
 
 ## Simple VLM example (vision Q&A over voice + text)
 
@@ -244,7 +239,7 @@ model_backend: nim     # default is "local"
 The worker loads `yaml/models.nim.yaml` for native model-backed Functions.
 Provide an
 `NGC_API_KEY` as an **environment variable** (or via the launcher credential
-prompt — not in YAML) and just don't start the local `agent-llm` / `vlm`
+prompt — not in YAML) and just don't start the local `omni` / `vlm`
 model-servers. Refer to the AI-services guide.
 
 ## Hub only (server-runtime standalone)

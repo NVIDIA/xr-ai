@@ -149,17 +149,17 @@ steps:
           or judge readiness.
       result_field: answer
     evidence:
-      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|cannot|can't)\\b)(?!.*\\b(no|not)\\s+visible\\b)(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+$"
+      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|cannot|can't)\\b)(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+$"
       consecutive: 2
     agent:
       prompt: >-
-        A heater-on indicator or temperature with unit sets heating_started
-        true; keep it true. Celsius stays; Fahrenheit = (F - 32) * 5 / 9. Set
-        water_ready true only if converted reading is between
-        target_temperature_c - 2 and target_temperature_c + 3. A target,
-        unitless number, or activity alone cannot set water_ready. Never store
-        readings/conversions or write flags false. Otherwise commit nothing.
-      tools: []
+        For any unit reading call temperature__verify with its exact number/unit
+        and state target; never calculate. Then always call workflow__commit.
+        When ready is true, include water_ready=true. When ready is false, leave
+        water_ready out completely. Include heating_started=true only if input
+        state is false and a heater cue/unit reading is seen. Never include
+        false, readings, or conversions; never return JSON/text.
+      tools: [temperature__verify]
     voice:
       prompt: >-
         Explain the target when asked. For current heating, reading, or
@@ -184,26 +184,28 @@ steps:
       interval_s: 2
       arguments:
         question: >-
-          Describe only whether a tea bag, infuser, or leaves are visibly
-          outside, entering, or immersed in water. Tea merely inside a cup is
-          not confirmed immersion. Mention hazards and say when water contact
-          is obscured or unclear.
+          Look for two separately visible facts in one vessel: a water surface
+          or level; and a tea bag, infuser, or leaves entering or immersed in
+          that water. If either water or tea-water contact is not visible, say
+          it is unconfirmed. Note hazards.
       result_field: answer
     evidence:
       pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|outside|cannot|can't)\\b)(?!.*\\b(no|not)\\b.{0,80}\\b(immersed|submerged|in (the )?water)\\b)(?=.*\\b(tea bag|infuser|leaves)\\b)(?=.*\\b(immersed|submerged|in the water)\\b).+$"
       consecutive: 2
     agent:
       prompt: >-
-        On the first caption clearly showing tea in water, call clock__now once
-        and commit its epoch_us as steeping_started_at_us with steeping_started
-        true. If immersion is absent or unclear, do not call clock__now; commit
-        empty updates/message. Never invent or replace a start time.
+        Only when the caption explicitly confirms both visible water and a tea
+        bag, infuser, or leaves entering or immersed in it, call clock__now once
+        and commit epoch_us as steeping_started_at_us with steeping_started true.
+        A tea item in an empty vessel or without visible water contact is no
+        start: do not call clock__now; commit empty updates/message. Never
+        replace a start time.
       tools: [clock__now]
     voice:
       prompt: >-
-        Give instructions or verify with current_view. A user report or tea
-        merely inside a cup is not visual confirmation; confirm only visible
-        immersion in water. The observation loop, not this answer, starts the
+        Give instructions or verify with current_view. A report or tea item in
+        a vessel is not confirmation. Require both visible water and visible
+        tea-water contact. The observation loop, not this answer, starts the
         timer.
       tools: [current_view]
     complete_when: {steeping_started: true}

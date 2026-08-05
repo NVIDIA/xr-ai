@@ -152,20 +152,14 @@ uv run model_servers
 ```
 
 GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (this can take
 tens of minutes).  On subsequent runs the containers restart in under a minute.
 
-The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
-STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
-On `dual_48G_ada`, the default stack places Cosmos and embeddings on GPU 0;
-the Omni stack places Omni on GPU 0 and embeddings on GPU 1.
-Switching stacks stops the incompatible persistent models first and aborts if
-they cannot be stopped, avoiding GPU overcommit.
-
-```bash
-uv run model_servers --omni-stack
-```
+The single shared stack starts Nemotron-3 Omni (8108), Cosmos (8100), STT
+(8103), and embeddings (8109). Samples can use Cosmos for vision or send both
+vision and agent calls to Omni without restarting model servers. On
+`dual_48G_ada`, Cosmos and embeddings run on GPU 0 while Omni and STT share GPU
+1. Startup removes any persisted legacy Nano server before loading this stack.
 
 The default models are public, so no HuggingFace token is required.  Set
 `HF_TOKEN` to lift download rate limits / speed, or to use a gated model — see
@@ -311,8 +305,9 @@ Vision prompts are focus-only guides and return plain captions; YAML evidence
 gates apply per-step grounding thresholds before visual completion. Guidance
 also resets to idle for every new connection and after an app restart.
 
-The required launch options select either Nemotron-3-Omni or the shared Cosmos
-and Nemotron-3-Nano stack, plus wake-word or always-on speech. A local typed RAG
+The required launch options select Omni or Cosmos vision; agent reasoning
+always uses Omni. Voice mode independently selects wake-word or always-on
+speech. A local typed RAG
 service grounds missing package instructions in the sample's tea corpus. See
 the [sample README](agent-samples/tea-making-sample/README.md) for all launch
 combinations, workflow format, observability events, and adaptation guide.
@@ -320,7 +315,7 @@ combinations, workflow format, observability events, and adaptation guide.
 ```bash
 cd agent-samples/tea-making-sample
 uv sync
-uv run --project ../model-servers model_servers --omni-stack
+uv run --project ../model-servers model_servers
 uv run tea_making_sample --model-mode omni --voice-mode always-on
 ```
 
@@ -418,7 +413,7 @@ The worker loads `yaml/models.nim.yaml` for the native model-backed functions �
 no `main.py` edits. Provide
 an `NGC_API_KEY` as an **environment variable** (or via the launcher
 credential prompt — not in YAML) and just don't start the local
-`agent-llm` / `vlm` model-servers. See
+`omni` / `vlm` model-servers. See
 [`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
 
 ---

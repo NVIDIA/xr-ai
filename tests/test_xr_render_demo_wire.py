@@ -90,18 +90,18 @@ def test_models_yaml_loads() -> None:
     tts_spec      = cfg.tts("tts")
     vlm_spec      = cfg.vlm("vlm")
 
-    assert llm_spec.base_url       == "http://localhost:8107"
-    assert agent_llm_spec.base_url == "http://localhost:8107"
+    assert llm_spec.base_url       == "http://localhost:8108"
+    assert agent_llm_spec.base_url == "http://localhost:8108"
     assert stt_spec.base_url       == "http://localhost:8103"
     assert tts_spec.base_url       == "http://localhost:8105"
     assert vlm_spec.base_url       == "http://localhost:8100"
 
-    # nemotron3_nano preset must set reasoning_field so ChatResponse.reasoning
+    # nemotron_omni preset must set reasoning_field so ChatResponse.reasoning
     # is populated from the server's "reasoning" field.
-    assert agent_llm_spec.reasoning_field == "reasoning"
+    assert agent_llm_spec.reasoning_field == "reasoning_content"
 
-    # Both logical models share the nemotron3_nano server. The preset must pin
-    # thinking off at the wire level: Nemotron-3-Nano's template defaults
+    # Both logical models share the Nemotron-3-Omni server. The profile pins
+    # thinking off at the wire level: the model template defaults
     # thinking-on, which would burn the quick-ack's 40-token budget on hidden
     # reasoning and return empty content with finish_reason="length".
     for spec in (llm_spec, agent_llm_spec):
@@ -240,7 +240,7 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
 
     body = stub.last_json()
 
-    # Model name from nemotron3_nano preset.
+    # Model name from the Nemotron-3-Omni preset.
     assert body["model"]       == "llm"
     assert body["max_tokens"]  == 2048
     assert body["temperature"] == 0.0
@@ -293,7 +293,7 @@ async def test_agentic_loop_wire_golden_thinking_off() -> None:
 
 
 async def test_agentic_loop_reasoning_field_normalized() -> None:
-    """nemotron3_nano preset uses reasoning_field='reasoning'; SDK exposes it as ChatResponse.reasoning."""
+    """The configured reasoning field is exposed as ChatResponse.reasoning."""
     stub = StubOpenAI()
     stub.set_chat_message(
         content="I placed the sphere ahead of you.",
