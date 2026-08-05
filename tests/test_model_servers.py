@@ -47,6 +47,28 @@ def test_omni_stack_replaces_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) ->
     assert str(processes[1].config) == "yaml/dual_48G_ada/nemotron_omni_llm_server.yaml"
 
 
+@pytest.mark.parametrize(
+    ("stack", "config_name", "gpu"),
+    [
+        ("vlm-llm", "embedding_server.yaml", "0"),
+        ("omni", "embedding_server_omni.yaml", "1"),
+    ],
+)
+def test_dual_ada_embedding_follows_stack_gpu_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    stack: str,
+    config_name: str,
+    gpu: str,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+
+    process = next(p for p in _model_servers._build_processes(stack) if p.name == "embedding")
+    config_path = _REPO_ROOT / "agent-samples/model-servers" / str(process.config)
+
+    assert config_path.name == config_name
+    assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == gpu
+
+
 @pytest.mark.parametrize("profile", ["96G_blackwell", "dual_48G_ada", "spark"])
 def test_omni_profiles_select_supported_vllm_images(profile: str) -> None:
     profile_path = (

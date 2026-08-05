@@ -53,6 +53,9 @@ _INCOMPATIBLE_STACK_SERVICES = {
 def _build_processes(stack: str = "vlm-llm") -> list[Process]:
     """Return the selected shared model stack for the detected GPU profile."""
     ai = f"yaml/{detect_gpu_config()}"
+    embedding_config = f"{ai}/embedding_server_{stack.replace('-', '_')}.yaml"
+    if not (_BASE / embedding_config).exists():
+        embedding_config = f"{ai}/embedding_server.yaml"
     stt = Process(
         "stt", "../../ai-services/stt-server", "stt_server",
         config=f"{ai}/stt_server.yaml",
@@ -60,7 +63,7 @@ def _build_processes(stack: str = "vlm-llm") -> list[Process]:
     )
     embedding = Process(
         "embedding", "../../ai-services/embedding-server", "embedding_server",
-        config=f"{ai}/embedding_server.yaml",
+        config=embedding_config,
         launch_mode="persist", port=8109,
     )
     if stack == "omni":

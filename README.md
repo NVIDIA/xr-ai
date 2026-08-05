@@ -158,6 +158,8 @@ tens of minutes).  On subsequent runs the containers restart in under a minute.
 The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
 STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
 Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
+On `dual_48G_ada`, the default stack places Cosmos and embeddings on GPU 0;
+the Omni stack places Omni on GPU 0 and embeddings on GPU 1.
 Switching stacks stops the incompatible persistent models first and aborts if
 they cannot be stopped, avoiding GPU overcommit.
 
