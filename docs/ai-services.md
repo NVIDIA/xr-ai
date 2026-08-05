@@ -209,11 +209,12 @@ vLLM keeps running.
 uv run xr_render_demo --stop
 ```
 
-This hits each model server's `/health` endpoint, then either runs
-`docker stop <container_name>` (docker-mode servers) or finds the listening
-PID via `ss`/`lsof` and sends `SIGTERM` (pip-mode), escalating to
-`docker kill` / `SIGKILL` after 20 s. It is safe to run while the stack is
-down — processes/containers that are not running are silently skipped.
+Cleanup locates labelled Docker containers before inspecting ports, then
+stops them with `docker stop` (escalating to `docker kill` after 20 s).
+Pip-mode processes must carry the `XR_AI_VLLM_MANAGED` and
+`XR_AI_VLLM_PORT` ownership markers before cleanup sends `SIGTERM` or
+`SIGKILL`. Unknown listeners and failed inspection abort cleanup without
+sending a signal; absent servers are silently skipped.
 
 The target ports and container names are defined in `_PERSISTENT_SERVERS` in
 `main.py` and match the defaults in the per-profile YAML files. Update that
@@ -284,6 +285,11 @@ Docker containers before inspecting ports, then stops them with `docker stop`
 (escalating to `docker kill` after 20 s). Pip-mode processes carry an
 `xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort
 cleanup without sending a signal.
+
+Pip-mode vLLM processes started before the ownership markers were introduced
+cannot be identified safely. After upgrading, stop each unmarked process
+manually once; subsequent launches include the markers and support managed
+cleanup.
 
 ## Per-server notes
 
