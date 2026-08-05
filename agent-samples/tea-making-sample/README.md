@@ -34,6 +34,20 @@ needs a `mechanism` key when it overrides that default:
 6. The guide waits for a semantic proceed command before moving to the next
    step. If incomplete, it applies that step's `skip_defaults` first.
 
+The selected mechanism receives both kinds of active-step trigger:
+
+- A `periodic` event may run the step VLM prompt and return a writable context
+  patch.
+- A `voice` event receives the same projected context and step procedure, but
+  has a read-only response contract. It can inspect a fresh frame, query RAG,
+  read timers, and read the observation log, but it cannot update context or
+  complete a step. Navigation is classified before either path.
+
+This capability split is enforced in code: voice events are offered only tools
+marked `read_only`, return no state schema, and any context patch returned by a
+custom mechanism is discarded by the guide. This keeps one mechanism and one
+tool-calling loop without allowing an answer to mutate workflow state.
+
 The guide gives `on_enter_message` once. Periodic mechanism iterations silently
 update context. If information is still missing after
 `runtime.reminder_interval_s`, it sends one delayed reminder by default.
@@ -49,16 +63,33 @@ agent_prompt: "Replace measured_value with the newest visible reading."
 writes: [measured_value]
 ```
 
-Time is handled like other external information. Step 4 enables
-`get_current_time` so the agent can record when steeping starts. Step 5 has no
-`vlm_prompt`; its periodic agent iteration calls `get_timer_status` and sets
-`steeping_complete` when the tool reports expiration. User timer questions use
-the same tool through the answer agent.
+Time is handled like other external information. The final steeping step enables
+`get_current_time` and `get_timer_status`. It uses `vlm_stop_when` to caption
+frames only until the steeping start timestamp exists; later periodic iterations
+are tool-only until the timer expires. `suppress_reminders_when` prevents the
+missing-immersion reminder after the timestamp is recorded. These conditions
+are generic YAML rules and can be used by other workflows.
 
 `CaptionAgentStepMechanism` is separate from `WorkflowGuide` in
 `step_mechanism.py`. Another workflow can implement the small `StepMechanism`
 protocol, register it in `StepMechanisms`, and select it by name for any YAML
 step. Session, reminder, completion, and navigation lifecycle stays shared.
+`StepEvent` and `StepIteration` are task-neutral trigger and result contracts,
+so a future mechanism can use a sensor, deterministic service, or different
+agent while preserving the same guide lifecycle.
+
+Agent tools use `AgentTool` and `ToolCatalog` from `tools.py`. A tool pairs its
+model-facing schema with an async handler and a `read_only` capability. Tools
+created for one request, such as `inspect_current_view`, use the same contract
+as long-lived tools such as RAG and timers. This removes tool-name branches from
+the generic LLM loop and gives future agents one place to select tools by name
+and capability.
+
+Voice prompts include only the current step projection and the previous user
+request, not prior assistant measurements. Repeated timer questions therefore
+call `get_timer_status` again instead of anchoring on an earlier spoken value.
+Future-step details are absent from ordinary answer prompts; an explicit request
+uses the read-only `get_next_workflow_step` tool to retrieve the exact YAML step.
 
 Workflow state is persistent and sparse. Declare reusable fields once under
 `context.fields`; then give each step a `reads` list and a `writes` list:
@@ -87,7 +118,9 @@ per-step `context_output.fields` format remains supported.
 
 Completing or skipping the final step ends the session and resets it to idle.
 The guide does not continue from the completed context; a phrase such as
-"start making tea" creates a fresh workflow at step 1.
+"Agent, start making tea" creates a fresh workflow at step 1. Canceling in
+the middle uses the same reset path and clears context, observations, reminders,
+and conversation history.
 
 Navigation commands use a short LLM classifier, with a YAML-backed local
 fast path for obvious start, stop, status, and proceed commands. The classifier
@@ -98,9 +131,15 @@ The worker logs guide decisions to `worker.log`: user query text, classifier
 intent, mechanism iterations, step transitions, VLM observations, agent context
 patch keys, tool calls/results, reminders, notices, and final response text.
 
-Transient web-client disconnects pause visual monitoring without clearing the
-active step or accumulated context. Monitoring resumes when the same
-participant ID reconnects.
+Disconnecting clears the participant's active workflow and removes the session.
+Reconnecting starts from a fresh idle state; unfinished context and visual
+observations are never resumed.
+
+`yaml/voice_gate.yaml` requires every spoken command to begin with "Agent"
+or "Hey agent". The follow-up grace window is disabled, so an ungated second
+utterance is ignored. On connection, the shared voice gate speaks the configured
+welcome message explaining that the user should say "Agent, help me make
+tea." Worker-generated reminders and completion notices bypass the wake gate.
 
 VLM captions are internal evidence. They are stored in the per-participant
 observation log and returned to the LLM through `get_recent_vlm_observations`
@@ -118,15 +157,14 @@ The included tea workflow has these steps:
 
 - `0` Idle
 - `1` Identify tea information
-- `2` Fill water and start heating
-- `3` Wait for water to boil
-- `4` Steeping the tea
-- `5` Wait for steeping to finish (agent tool only; no VLM captions)
+- `2` Fill water
+- `3` Start heating and reach the target temperature
+- `4` Steep the tea (VLM until immersion, then timer tool only)
 
-After steeping starts, advance to step 5 with wording such as "next", "let's
-proceed", or "carry on". While the timer is active, questions such as "how much
-time has passed?" and "how long do I still need to wait?" return elapsed and
-remaining time. The guide announces when the steeping time is up.
+While the final timer is active, questions such as "Agent, how much time has
+passed?" and "Agent, how long do I still need to wait?" return a fresh
+elapsed or remaining value. The guide announces when the steeping time is up and
+returns to idle.
 
 ## Run
 
@@ -155,7 +193,8 @@ so vLLM profiles its reservation on an otherwise empty GPU. It pins
 `vllm/vllm-openai:v0.20.0`, the minimum release that registers the model
 architecture, and limits Omni to 8 sequences and a 32K context because this
 interactive workflow does not need the model card's server-scale defaults.
-Open the web client served by the media hub and say "help me make tea".
+Open the web client served by the media hub. After the welcome message, say
+"Agent, help me make tea".
 
 `yaml/tea_making_worker.yaml` bounds camera acquisition with
 `frame_timeout_s` and each Omni caption request with `vlm_timeout_s`. The
@@ -180,4 +219,7 @@ not know about tea-specific fields; it loads the YAML, generates write schemas,
 runs the selected step mechanism, applies `skip_defaults`, and evaluates
 `advance_when`. Keep task-specific behavior in `vlm_prompt`, `agent_prompt`, and
 the plain `agent_tools` list. Add a new `StepMechanism` only when a workflow
-step genuinely needs a different execution strategy.
+step genuinely needs a different execution strategy. The event, mechanism, and
+tool-catalog contracts are deliberately sample-local for now; move them into a
+shared SDK package after a second workflow validates that their APIs cover more
+than this example.

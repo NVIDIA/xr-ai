@@ -113,7 +113,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             await guide.release(participant_id)
 
         async def participant_joined(participant_id: str) -> None:
-            await guide.resume(participant_id)
+            await guide.reset(participant_id)
 
         monitor_task: asyncio.Task[None] | None = None
         async with session:

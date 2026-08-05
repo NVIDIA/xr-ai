@@ -14,7 +14,7 @@ from typing import Any
 from loguru import logger
 
 from .agent import NavigationIntent, WorkflowAgent
-from .step_mechanism import CaptionAgentStepMechanism, StepMechanisms
+from .step_mechanism import CaptionAgentStepMechanism, StepEvent, StepMechanisms
 from .vision import FrameUnavailable, StepVision
 from .workflow import (
     WorkflowDefinition,
@@ -135,52 +135,17 @@ class WorkflowGuide:
                     manual=intent.skip_requested,
                 )
             else:
-                logger.debug("guide answer_user dispatch pid={} step={}", participant_id, step.id)
-
-                async def inspect_current_view(question: str) -> dict[str, Any]:
-                    if not hasattr(self._vision, "inspect"):
-                        return {"error": "A live camera view is not available."}
-                    observation = await self._vision.inspect(
-                        participant_id,
-                        question,
-                        step=step,
-                        context=dict(session.context) if session is not None else {},
-                        task=self._workflow.task,
-                    )
-                    observed_at_us = _now_us()
-                    if session is not None:
-                        async with session.lock:
-                            if session.active and session.step_id == step.id:
-                                self._store_observation(
-                                    session,
-                                    step,
-                                    observation.text,
-                                    observation.frame_pts_us,
-                                    kind="visual_question",
-                                    question=question,
-                                )
-                    result = {
-                        "question": question,
-                        "visual_evidence": observation.text,
-                        "frame_pts_us": observation.frame_pts_us,
-                        "observed_at_us": observed_at_us,
-                    }
-                    logger.info(
-                        "guide visual question pid={} step={} question={!r} answer={!r}",
-                        participant_id,
-                        step.id,
-                        question,
-                        observation.text[:500],
-                    )
-                    return result
-
-                response = await self._agent.answer_user(
+                logger.debug(
+                    "guide voice event dispatch pid={} step={} mechanism={}",
+                    participant_id,
+                    step.id,
+                    step.mechanism,
+                )
+                response = await self._handle_voice_event(
+                    participant_id=participant_id,
                     transcript=clean,
                     session=session,
-                    current_step=step,
-                    observation_log=session.observation_log if session is not None else [],
-                    recent_turns=self._history.get(participant_id, []),
-                    visual_query=inspect_current_view,
+                    step=step,
                 )
         finally:
             if session is not None:
@@ -189,7 +154,10 @@ class WorkflowGuide:
                 session.deferred_notice = ""
 
         response = speech_text(response)
-        self._record(participant_id, clean, response)
+        if intent.intent == "answer":
+            self._record(participant_id, clean, response)
+        elif intent.intent in {"start", "advance", "stop"}:
+            self._history.pop(participant_id, None)
         logger.info(
             "guide response pid={} intent={} text={!r}",
             participant_id,
@@ -312,29 +280,28 @@ class WorkflowGuide:
 
     async def release(self, participant_id: str) -> None:
         self._vision.release(participant_id)
-        session = self._sessions.get(participant_id)
+        session = self._sessions.pop(participant_id, None)
+        self._history.pop(participant_id, None)
         if session is not None:
+            previous_step = session.step_id
+            self._set_idle(session)
             session.connected = False
-            session.deferred_notice = ""
             logger.info(
-                "guide participant disconnected pid={} active={} step={} state={}",
+                "guide participant disconnected and cleared pid={} previous_step={}",
                 participant_id,
-                session.active,
-                session.step_id,
-                session.step_state,
+                previous_step,
             )
 
-    async def resume(self, participant_id: str) -> None:
-        session = self._sessions.get(participant_id)
-        if session is None:
-            return
-        session.connected = True
+    async def reset(self, participant_id: str) -> None:
+        """Discard any stale participant state before a new connection."""
+
+        session = self._sessions.pop(participant_id, None)
+        self._history.pop(participant_id, None)
+        if session is not None:
+            self._set_idle(session)
         logger.info(
-            "guide participant resumed pid={} active={} step={} state={}",
+            "guide participant connected with fresh state pid={}",
             participant_id,
-            session.active,
-            session.step_id,
-            session.step_state,
         )
 
     async def close(self) -> None:
@@ -372,6 +339,7 @@ class WorkflowGuide:
                     context=context_snapshot,
                     observation_log=observation_log,
                     last_frame_pts_us=last_frame_pts_us,
+                    event=StepEvent.periodic(step_state=session.step_state),
                 )
             except FrameUnavailable:
                 logger.debug("no fresh frame for participant {}", session.participant_id)
@@ -390,15 +358,18 @@ class WorkflowGuide:
             async with session.lock:
                 if not session.active or not session.connected or session.step_id != step.id:
                     return
-                if iteration.frame_pts_us is not None:
-                    if iteration.frame_pts_us <= session.last_frame_pts_us:
+                monitor_observations = [
+                    observation for observation in iteration.observations if observation.kind == "step_monitor"
+                ]
+                for observation in monitor_observations:
+                    if observation.frame_pts_us <= session.last_frame_pts_us:
                         return
-                    session.last_frame_pts_us = iteration.frame_pts_us
+                    session.last_frame_pts_us = observation.frame_pts_us
                     self._store_observation(
                         session,
                         step,
-                        iteration.caption,
-                        iteration.frame_pts_us,
+                        observation.text,
+                        observation.frame_pts_us,
                     )
                 self._merge_context(
                     session.context,
@@ -439,6 +410,71 @@ class WorkflowGuide:
         finally:
             async with session.lock:
                 session.evaluation_active = False
+
+    async def _handle_voice_event(
+        self,
+        *,
+        participant_id: str,
+        transcript: str,
+        session: WorkflowSession | None,
+        step: WorkflowStep,
+    ) -> str:
+        if session is not None:
+            async with session.lock:
+                context = dict(session.context)
+                observation_log = list(session.observation_log)
+                step_state = session.step_state
+                ready = session.ready_step_id == step.id
+                workflow_active = session.active
+        else:
+            context = self._workflow.initial_context()
+            observation_log = []
+            step_state = "idle"
+            ready = False
+            workflow_active = False
+
+        try:
+            iteration = await self._step_mechanisms.run(
+                participant_id=participant_id,
+                step=step,
+                context=context,
+                observation_log=observation_log,
+                last_frame_pts_us=session.last_frame_pts_us if session is not None else 0,
+                event=StepEvent.voice(
+                    transcript,
+                    recent_turns=self._history.get(participant_id, []),
+                    step_state=step_state,
+                    ready=ready,
+                    workflow_active=workflow_active,
+                ),
+            )
+        except Exception:
+            logger.exception("step mechanism voice event failed")
+            return "I could not answer that just now. Please try again."
+
+        if iteration is None:
+            return "I could not answer that just now. Please try again."
+        if iteration.result.context_patch:
+            logger.warning(
+                "discarding context patch from read-only voice event pid={} step={} keys={}",
+                participant_id,
+                step.id,
+                sorted(iteration.result.context_patch),
+            )
+
+        if session is not None and workflow_active and iteration.observations:
+            async with session.lock:
+                if session.active == workflow_active and session.step_id == step.id:
+                    for observation in iteration.observations:
+                        self._store_observation(
+                            session,
+                            step,
+                            observation.text,
+                            observation.frame_pts_us,
+                            kind=observation.kind,
+                            question=observation.question,
+                        )
+        return iteration.result.assistant_message.strip() or "Done."
 
     def _merge_context(
         self,
@@ -543,6 +579,8 @@ class WorkflowGuide:
 
     def _reminder_due(self, session: WorkflowSession, step: WorkflowStep) -> str:
         if session.ready_step_id == step.id:
+            return ""
+        if self._workflow.condition_met(step.suppress_reminders_when, session.context):
             return ""
         if session.reminder_count >= self._workflow.max_reminders_per_step:
             return ""
