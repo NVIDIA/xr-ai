@@ -12,10 +12,11 @@ preserved and not re-litigated.
 ### 2026-08-05 — Docker vLLM setup owns the image entrypoint
 
 The shared vLLM Docker launcher explicitly selects `/bin/bash` before installing
-model-specific wheels and executing `vllm serve`. NGC vLLM images otherwise
-interpret the setup command through their default `vllm serve` entrypoint.
-Failed stopped containers are recreated rather than restarted because Docker
-cannot update their recorded entrypoint or command.
+model-specific wheels and executing `vllm serve`. The Omni profile's
+`vllm/vllm-openai:v0.20.0` image otherwise interprets the setup command through
+its default `vllm serve` entrypoint. Failed stopped containers are recreated
+rather than restarted because Docker cannot update their recorded entrypoint or
+command.
 
 ### 2026-08-04 — Model servers select one multimodal stack
 

@@ -246,7 +246,7 @@ another tag, an internal mirror, or a custom build.
 
 - **Docker Engine** with the user in the `docker` group (`docker version`
   must succeed without `sudo`).
-- **NVIDIA Container Toolkit** so `--gpus` works:
+- **NVIDIA Container Toolkit** so the `nvidia` runtime can expose GPUs:
   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 - **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by

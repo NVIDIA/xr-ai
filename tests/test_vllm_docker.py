@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from xr_ai_vllm._docker import (
     _already_logged_in,
@@ -15,6 +15,7 @@ from xr_ai_vllm._docker import (
     container_exists,
     container_running,
     pid_on_port,
+    run,
 )
 
 
@@ -153,8 +154,10 @@ class TestBuildRunArgv:
         assert "nvcr.io/nvidia/vllm:26.04-py3" in argv
 
     def test_shell_overrides_image_entrypoint(self, tmp_path):
-        argv = build_run_argv(**self._base_kwargs(tmp_path))
-        image = "nvcr.io/nvidia/vllm:26.04-py3"
+        kwargs = self._base_kwargs(tmp_path)
+        image = "vllm/vllm-openai:v0.20.0"
+        kwargs["image"] = image
+        argv = build_run_argv(**kwargs)
         image_index = argv.index(image)
         assert argv[image_index - 2 : image_index] == ["--entrypoint", "/bin/bash"]
         assert argv[image_index + 1] == "-c"
@@ -202,3 +205,43 @@ class TestContainerHelpers:
             side_effect=FileNotFoundError,
         ):
             assert pid_on_port(8100) is None
+
+
+class TestRun:
+    def test_stopped_container_is_removed_and_relaunched(self, tmp_path):
+        argv = ["docker", "run", "fresh-container"]
+        process = MagicMock()
+        process.poll.return_value = None
+
+        with (
+            patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
+            patch("xr_ai_vllm._docker.container_exists", return_value=True),
+            patch("xr_ai_vllm._docker.container_running", return_value=False),
+            patch("xr_ai_vllm._docker.remove_container", return_value=True) as remove,
+            patch("xr_ai_vllm._docker._maybe_ngc_login"),
+            patch("xr_ai_vllm._docker.build_run_argv", return_value=argv),
+            patch("xr_ai_vllm._docker.subprocess.Popen", return_value=process) as popen,
+            patch("xr_ai_vllm._docker._start_log_streamer", return_value=(None, None)),
+            patch("xr_ai_vllm._docker._lifecycle.wait_until_healthy"),
+            patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped"),
+            patch("xr_ai_vllm._docker.signal.getsignal", return_value=None),
+            patch("xr_ai_vllm._docker.signal.signal"),
+        ):
+            run(
+                image="vllm/vllm-openai:v0.20.0",
+                container_name="xr-ai-vllm-omni",
+                log_prefix="omni",
+                vllm_argv=["vllm", "serve", "model"],
+                host="0.0.0.0",
+                port=8108,
+                model_cache=tmp_path,
+                hf_token=None,
+                cuda_visible_devices="0",
+                extra_env=None,
+                extra_pip=["mamba-ssm"],
+                ready_file=None,
+            )
+
+        remove.assert_called_once_with("xr-ai-vllm-omni")
+        popen.assert_called_once_with(argv, start_new_session=True)

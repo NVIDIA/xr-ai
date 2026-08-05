@@ -98,8 +98,8 @@ def build_run_argv(
 
     argv += ["-v", f"{model_cache}:{model_cache}"]
 
-    # NGC vLLM images default to `vllm serve`; override it because the setup
-    # installs must run in a shell before the server starts.
+    # Some vLLM images default to `vllm serve`; override the entrypoint so
+    # setup installs run in a shell before the server starts.
     argv += ["--entrypoint", "/bin/bash", image]
     # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
     # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
