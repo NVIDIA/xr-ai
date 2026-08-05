@@ -13,8 +13,8 @@ http_port: 8100
 nim_cache: ../../../models/nim
 
 # GPU 0 with CloudXR + LOVR + local speech (~6 GB): Cosmos does not fit
-# next to the llama NIM on one 48 GB GPU (llama's weights + KV pool leave
-# ~10 GB; Cosmos needs ~16 GB of weights before KV). If GPU 0 hosts speech
+# next to the LLM NIM on one 48 GB GPU (nemotron's weights + KV pool leave
+# no room; Cosmos needs ~16 GB of weights before KV). If GPU 0 hosts speech
 # NIMs instead, move this to GPU 1 and shrink both KV bounds. Adjust per
 # box; see docs/ai-services.md.
 cuda_visible_devices: "0"
