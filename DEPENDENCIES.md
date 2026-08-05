@@ -552,21 +552,22 @@ external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
 
 ### tea-making-sample  (agent-samples/tea-making-sample/)
 
-YAML-defined visual guide: step-specific VLM captions feed a constrained agent
-loop, while participant-local context, manual navigation, reminders, and timer
-steps are managed by the generic worker.
+YAML-defined visual guide: each step selects a native trigger, a NAT
+tool-calling observation agent, a read-only voice agent, typed state, and a
+transition. A separate NAT router handles workflow-level voice commands.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `tea-making-sample` | `xr-ai-launcher`, `xr-ai-logging` | - |
-| Worker | `tea-making-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | pyyaml >=6.0 |
+| Worker | `tea-making-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[agents,services,vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | pyyaml >=6.0 |
 
-The launcher starts STT (8103), Nemotron-Omni (8108), the embedding server
-(8109), RAG service (8340), hub, Piper TTS (8105), and the worker. Nemotron-Omni
-serves both `agent_llm` and `vlm`; there is no Llama-Nemotron chat model. The
-worker registers `RAGFunctionsConfig` in-process and calls the native RAG
-service through its typed retrieve function. The final steeping step uses the
-VLM until immersion is detected, then switches to timer-tool polling.
+The default split profile reuses STT, embedding, Nemotron-3-Nano, and Cosmos
+services from `agent-samples/model-servers`, while the sample owns Piper TTS
+and its typed RAG service. The alternate Omni profile manages one
+Nemotron-3-Omni service for both `agent_llm` and `vlm`, plus local STT,
+embedding, and TTS. The worker registers sample-local clock and workflow
+functions, the shared native vision and RAG groups, and an exact `rag_lookup`
+adapter in-process.
 
 ### model-servers  (agent-samples/model-servers/)
 

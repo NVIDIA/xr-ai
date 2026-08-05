@@ -1,19 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Tea-making guided workflow worker configuration.
-# Paths resolve relative to this file's directory.
-
-models_yaml: models.yaml
-voice_gate_yaml: voice_gate.yaml
-workflow_yaml: workflow.yaml
+# Switch to models.omni.json to use one multimodal Nemotron-3-Omni service.
+models_config: models.split.json
+workflow_config: workflow.yaml
+voice_gate_config: voice_gate.yaml
 rag_endpoint: tcp://127.0.0.1:8340
-answer_prompt: ../worker/tea_making_worker/prompts/system.txt
-
-frame_max_age_s: 5.0
-frame_timeout_s: 5.0
-vlm_timeout_s: 15.0
-
+frame_max_age_s: 3
+frame_timeout_s: 5
 silence_duration: 0.8
 min_speech: 0.15
 silero_threshold: 0.3

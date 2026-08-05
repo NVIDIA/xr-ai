@@ -301,26 +301,29 @@ for the full option list.
 
 ### Tea-making guide (YAML-driven visual workflow)
 
-The tea-making sample demonstrates a reusable guided-task engine. Each YAML
-step supplies its own VLM prompt, agent prompt, context schema, tools,
-completion rule, and skip defaults. The guide updates context silently from
-live frames, waits for the user to request the next step, and answers questions
-from current state or native RAG at any point.
+The tea-making sample demonstrates nested, YAML-driven guidance state machines.
+Each step selects a native NAT trigger, observation agent, read-only voice
+agent, projected state, tools, completion rule, and transition. A small NAT
+router handles top-level voice management, while every state change goes
+through one typed commit function. Completed steps keep observing but remain
+active until the user explicitly says next, continue, or skip.
+Vision prompts are focus-only guides and return plain captions; YAML evidence
+gates apply per-step grounding thresholds before visual completion. Guidance
+also resets to idle for every new connection and after an app restart.
 
-Nemotron-Omni provides both vision and agent reasoning. The final steeping step
-uses vision to detect immersion, then switches to a wall-clock timer, answers
-elapsed/remaining-time questions, and announces when steeping is complete. See the
-[sample README](agent-samples/tea-making-sample/README.md) for the workflow and
-customization format.
+The default profile reuses Cosmos Reason1, Nemotron-3-Nano, and the embedding
+server from the shared model-server stack. A local typed RAG service grounds
+missing package instructions in the sample's tea corpus. An alternate profile
+uses Nemotron-3-Omni for both vision and agent reasoning. See the
+[sample README](agent-samples/tea-making-sample/README.md) for the workflow
+format, model selection, observability events, and adaptation guide.
 
 ```bash
 cd agent-samples/tea-making-sample
 uv sync
+uv run --project ../model-servers model_servers
 uv run tea_making_sample
 ```
-
-The sample owns its model processes. Stop the shared `model-servers` stack
-first so Nemotron-Omni has enough free GPU memory.
 
 ---
 
