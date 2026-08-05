@@ -612,7 +612,7 @@ deployment profile selected by `models_config` (`yaml/models.local.json` /
 Whether `model-servers` must run first depends on the selected profile's
 deployment ownership, not its name: `reused` entries resolve to
 `launch_mode="reuse"`, so the launcher skips spawning them and expects them
-already healthy (in `models.local.json` that covers stt/llm/agent-llm/vlm,
+already healthy (in `models.local.json` that covers stt/agent-llm/vlm,
 all served by `model-servers`); `managed` entries are launched and owned by
 the demo itself; `external` entries need no local process. The shipped
 hosted and nim_local profiles contain no `reused` entries.
