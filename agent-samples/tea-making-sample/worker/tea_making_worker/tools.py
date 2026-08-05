@@ -6,13 +6,64 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from nat.builder.function import Function
 from pydantic import BaseModel
 from xr_ai_models import ToolDef
+
+ToolHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+
+
+@dataclass(frozen=True, slots=True)
+class AgentTool:
+    """A tool definition paired with its handler and effect capability."""
+
+    definition: ToolDef
+    handler: ToolHandler
+    read_only: bool = False
+
+    @property
+    def name(self) -> str:
+        return self.definition.name
+
+
+class ToolCatalog:
+    """Select and invoke tools without embedding tool names in an agent loop."""
+
+    def __init__(self, tools: Iterable[AgentTool] = ()) -> None:
+        self._tools: dict[str, AgentTool] = {}
+        for tool in tools:
+            if tool.name in self._tools:
+                raise ValueError(f"duplicate agent tool: {tool.name}")
+            self._tools[tool.name] = tool
+
+    def select(
+        self,
+        names: Iterable[str] | None = None,
+        *,
+        read_only_only: bool = False,
+    ) -> list[AgentTool]:
+        selected = (
+            list(self._tools.values())
+            if names is None
+            else [self._tools[name] for name in names if name in self._tools]
+        )
+        if read_only_only:
+            selected = [tool for tool in selected if tool.read_only]
+        return selected
+
+    def missing(self, names: Iterable[str]) -> set[str]:
+        return set(names) - self._tools.keys()
+
+    async def invoke(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        tool = self._tools.get(name)
+        if tool is None:
+            return {"error": f"unknown tool: {name}"}
+        return await tool.handler(arguments)
 
 
 class GuideTools:
@@ -24,15 +75,21 @@ class GuideTools:
         *,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
-        matches = [
-            function
-            for function in rag_functions.values()
-            if function.instance_name.endswith("__retrieve")
-        ]
+        matches = [function for function in rag_functions.values() if function.instance_name.endswith("__retrieve")]
         if len(matches) != 1:
             raise ValueError("native RAG group must expose exactly one retrieve function")
         self._rag_retrieve = matches[0]
         self._clock = clock or (lambda: datetime.now().astimezone())
+
+    def agent_tools(self) -> list[AgentTool]:
+        """Return reusable tools with explicit side-effect capabilities."""
+
+        definitions = {tool.name: tool for tool in self.definitions()}
+        return [
+            AgentTool(definitions["rag_lookup"], self._rag_lookup, read_only=True),
+            AgentTool(definitions["get_current_time"], self._get_current_time, read_only=True),
+            AgentTool(definitions["get_timer_status"], self._get_timer_status, read_only=True),
+        ]
 
     def definitions(self) -> list[ToolDef]:
         return [
@@ -44,8 +101,7 @@ class GuideTools:
             ToolDef(
                 name="get_current_time",
                 description=(
-                    "Return the current wall-clock time. Use this before writing a "
-                    "timestamp into workflow context."
+                    "Return the current wall-clock time. Use this before writing a timestamp into workflow context."
                 ),
                 parameters={
                     "type": "object",
@@ -57,8 +113,9 @@ class GuideTools:
                 name="get_timer_status",
                 description=(
                     "Calculate elapsed and remaining wall-clock time from a recorded "
-                    "start timestamp and duration. Use this for timer completion and "
-                    "for user questions about elapsed or remaining time."
+                    "start timestamp and duration. Call this for every timer completion "
+                    "check and every user question about elapsed or remaining time, "
+                    "including repeated questions. Never reuse an earlier result."
                 ),
                 parameters={
                     "type": "object",
@@ -83,18 +140,29 @@ class GuideTools:
         ]
 
     async def invoke(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if name == "rag_lookup":
-            return _plain(await self._rag_retrieve.ainvoke(arguments))
-        if name == "get_current_time":
-            now = self._clock()
-            return {
-                "epoch_us": int(now.timestamp() * 1_000_000),
-                "iso": now.isoformat(timespec="seconds"),
-                "timezone": now.tzname(),
-            }
-        if name == "get_timer_status":
-            return _timer_status(arguments, now=self._clock())
-        return {"error": f"unknown tool: {name}"}
+        handlers: dict[str, ToolHandler] = {
+            "rag_lookup": self._rag_lookup,
+            "get_current_time": self._get_current_time,
+            "get_timer_status": self._get_timer_status,
+        }
+        handler = handlers.get(name)
+        if handler is None:
+            return {"error": f"unknown tool: {name}"}
+        return await handler(arguments)
+
+    async def _rag_lookup(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return _plain(await self._rag_retrieve.ainvoke(arguments))
+
+    async def _get_current_time(self, _arguments: dict[str, Any]) -> dict[str, Any]:
+        now = self._clock()
+        return {
+            "epoch_us": int(now.timestamp() * 1_000_000),
+            "iso": now.isoformat(timespec="seconds"),
+            "timezone": now.tzname(),
+        }
+
+    async def _get_timer_status(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return _timer_status(arguments, now=self._clock())
 
 
 def _timer_status(arguments: dict[str, Any], *, now: datetime) -> dict[str, Any]:
@@ -145,4 +213,4 @@ def _plain(value: Any) -> Any:
     return value
 
 
-__all__ = ["GuideTools"]
+__all__ = ["AgentTool", "GuideTools", "ToolCatalog"]

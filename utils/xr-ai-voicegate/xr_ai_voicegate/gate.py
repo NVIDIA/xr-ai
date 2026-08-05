@@ -304,9 +304,12 @@ class VoiceGate:
 
     def format_phrase_help(self) -> str | None:
         """Return a sentence fragment telling the user how to address the
-        agent given the configured phrases. ``None`` when no phrases are
-        configured (the caller picks a generic greeting). The wording
+        agent. An explicit welcome message takes precedence. ``None`` when
+        neither a welcome nor phrases are configured. The generated wording
         carries over from the original ``_greet`` implementation."""
+        welcome = self._cfg.welcome_message.strip()
+        if welcome:
+            return welcome
         phrases = list(self._cfg.magic_phrases)
         if not phrases:
             return None

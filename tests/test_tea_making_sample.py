@@ -12,7 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import yaml
-from xr_ai_models import ToolCall
+from xr_ai_models import ToolCall, ToolDef
+from xr_ai_voicegate import VoiceGate, load_voice_gate_config
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE_DIR = _REPO_ROOT / "agent-samples" / "tea-making-sample"
@@ -31,7 +32,11 @@ from tea_making_worker.agent import (  # noqa: E402
     WorkflowAgent,
 )
 from tea_making_worker.guide import WorkflowGuide  # noqa: E402
-from tea_making_worker.step_mechanism import StepIteration, StepMechanisms  # noqa: E402
+from tea_making_worker.step_mechanism import (  # noqa: E402
+    StepEvent,
+    StepIteration,
+    StepMechanisms,
+)
 from tea_making_worker.workflow import (  # noqa: E402
     WorkflowDefinition,
     WorkflowSession,
@@ -56,7 +61,7 @@ def test_shipped_workflow_uses_omni_native_rag_and_one_step_mechanism() -> None:
     workflow = _workflow()
     models = yaml.safe_load((_SAMPLE_DIR / "yaml" / "models.yaml").read_text())
     worker = yaml.safe_load((_SAMPLE_DIR / "yaml" / "tea_making_worker.yaml").read_text())
-    step_five = workflow.step_by_id(5)
+    final_step = workflow.step_by_id(4)
 
     assert models["agent_llm"]["kind"] == "preset:nemotron_omni"
     assert models["embedding"]["kind"] == "preset:nemotron_embedding"
@@ -102,19 +107,81 @@ def test_shipped_workflow_uses_omni_native_rag_and_one_step_mechanism() -> None:
     assert {step.mechanism for step in workflow.steps if not step.is_idle} == {
         "caption_agent"
     }
-    assert step_five.vlm_prompt == ""
-    assert step_five.agent_tools == ("get_timer_status",)
-    assert workflow.step_by_id(4).agent_tools == ("get_current_time",)
+    assert final_step.vlm_prompt
+    assert final_step.agent_tools == ("get_current_time", "get_timer_status")
+    assert final_step.vlm_stop_when == {
+        "field": "steeping_started_at_us",
+        "gt": 0,
+    }
+    assert final_step.suppress_reminders_when == final_step.vlm_stop_when
+    assert workflow.next_step(final_step.id) is None
+    assert workflow.step_by_id(2).writable_fields == {"water_filled"}
     step_three = workflow.step_by_id(3)
     assert step_three.agent_tools == ()
     assert "water_temperature_current" in {field.name for field in step_three.context_fields}
+    assert "water_heating_started" in step_three.writable_fields
     assert workflow.sparse_context is True
     assert workflow.initial_context() == {}
     assert step_three.read_fields == (
         "tea_name",
         "tea_temperature",
         "target_temperature_c",
+        "water_filled",
     )
+    full_context = {
+        "tea_name": "green tea",
+        "water_filled": True,
+        "water_temperature_current": "80 C",
+        "steeping_started_at_us": 123,
+        "steeping_complete": False,
+    }
+    assert set(workflow.context_for_step(workflow.step_by_id(2), full_context)) == {
+        "water_filled"
+    }
+    assert "steeping_started_at_us" not in workflow.context_for_step(step_three, full_context)
+    assert "water_temperature_current" not in workflow.context_for_step(final_step, full_context)
+
+
+async def test_tea_voice_gate_requires_a_wake_phrase_on_every_utterance() -> None:
+    config = load_voice_gate_config(_SAMPLE_DIR / "yaml" / "voice_gate.yaml")
+    queries: list[tuple[str, str, bool]] = []
+    dropped: list[tuple[str, str]] = []
+
+    async def on_query(participant_id: str, text: str, fresh_match: bool) -> None:
+        queries.append((participant_id, text, fresh_match))
+
+    async def on_stop(_participant_id: str) -> None:
+        return None
+
+    async def on_drop(participant_id: str, text: str) -> None:
+        dropped.append((participant_id, text))
+
+    gate = VoiceGate(
+        config,
+        audio_sink=SimpleNamespace(),
+        tts=SimpleNamespace(),
+    )
+    gate.bind(on_query=on_query, on_stop=on_stop, on_drop=on_drop)
+
+    await gate.feed("alice", "help me make tea")
+    await gate.feed("alice", "Agent, help me make tea")
+    await gate.feed("alice", "next")
+    await gate.feed("alice", "Hey agent, next")
+    await gate.feed("alice", "Agent, cancel tea")
+
+    assert config.magic_phrases == ("agent", "hey agent")
+    assert config.followup_grace_s == 0.0
+    assert "Agent, help me make tea" in config.welcome_message
+    assert gate.format_phrase_help() == config.welcome_message
+    assert queries == [
+        ("alice", "help me make tea", True),
+        ("alice", "next", True),
+        ("alice", "cancel tea", True),
+    ]
+    assert dropped == [
+        ("alice", "help me make tea"),
+        ("alice", "next"),
+    ]
 
 
 def test_launcher_selects_hardware_specific_model_configs() -> None:
@@ -478,7 +545,7 @@ def test_templates_and_response_normalization_are_speech_friendly() -> None:
 
 async def test_answer_agent_can_inspect_a_fresh_view_for_visual_questions() -> None:
     workflow = _workflow()
-    step = workflow.step_by_id(5)
+    step = workflow.step_by_id(4)
     model_calls: list[list] = []
     visual_questions: list[str] = []
 
@@ -523,7 +590,7 @@ async def test_answer_agent_can_inspect_a_fresh_view_for_visual_questions() -> N
     )
     session = WorkflowSession(
         participant_id="alice",
-        step_id=5,
+        step_id=4,
         context={"steeping_started_at_us": 1, "steep_duration_seconds": 180},
     )
 
@@ -581,7 +648,7 @@ async def test_guide_logs_fresh_visual_answers_and_normalizes_them_for_speech() 
         async def classify_intent(self, **_kwargs):
             return NavigationIntent(intent="answer", confidence=0.99)
 
-        async def answer_user(self, *, transcript, visual_query, **_kwargs):
+        async def answer_step(self, *, transcript, visual_query, **_kwargs):
             evidence = await visual_query(transcript)
             assert evidence["visual_evidence"] == "The kettle display reads 82 C."
             return "It reads 82 C."
@@ -597,7 +664,7 @@ async def test_guide_logs_fresh_visual_answers_and_normalizes_them_for_speech() 
     )
     session = WorkflowSession(
         participant_id="alice",
-        step_id=5,
+        step_id=4,
         context={"steeping_started_at_us": 1, "steep_duration_seconds": 180},
     )
     guide._sessions["alice"] = session  # noqa: SLF001
@@ -611,6 +678,206 @@ async def test_guide_logs_fresh_visual_answers_and_normalizes_them_for_speech() 
     assert response == "It reads 82 degrees Celsius."
     assert session.observation_log[-1]["kind"] == "visual_question"
     assert session.observation_log[-1]["question"] == ("What does the kettle display show now?")
+
+
+async def test_voice_event_runs_through_mechanism_without_mutating_state() -> None:
+    workflow = _workflow()
+    events: list[StepEvent] = []
+
+    class _Mechanism:
+        name = "caption_agent"
+
+        async def run(self, *, event, **_kwargs):
+            events.append(event)
+            return StepIteration(
+                result=StepAgentResult(
+                    context_patch={"tea_name": "incorrect mutation"},
+                    assistant_message="Hold the label closer to the camera.",
+                )
+            )
+
+    class _Agent:
+        async def classify_intent(self, **_kwargs):
+            return NavigationIntent(intent="answer", confidence=0.99)
+
+    async def notice(_participant_id: str, _text: str) -> None:
+        return None
+
+    guide = WorkflowGuide(
+        workflow=workflow,
+        vision=SimpleNamespace(release=lambda _participant_id: None),
+        agent=_Agent(),
+        notice=notice,
+        step_mechanisms=StepMechanisms([_Mechanism()]),
+    )
+    session = WorkflowSession(
+        participant_id="alice",
+        step_id=1,
+        context=workflow.initial_context(),
+    )
+    guide._sessions["alice"] = session  # noqa: SLF001
+
+    response = await guide.handle_query(
+        participant_id="alice",
+        text="Can you read this label?",
+    )
+
+    assert response == "Hold the label closer to the camera."
+    assert len(events) == 1
+    assert events[0].kind == "voice"
+    assert events[0].transcript == "Can you read this label?"
+    assert "tea_name" not in session.context
+
+
+async def test_answer_prompt_is_scoped_without_future_step_state() -> None:
+    workflow = _workflow()
+    step = workflow.step_by_id(1)
+    captured: list = []
+
+    class _Llm:
+        async def chat(self, messages, **_kwargs):
+            captured.extend(messages)
+            return SimpleNamespace(content="Show me the tea label.", tool_calls=[])
+
+    class _Tools:
+        def definitions(self):
+            return []
+
+    agent = WorkflowAgent(
+        llm=_Llm(),
+        tools=_Tools(),
+        workflow=workflow,
+        answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
+    )
+    session = WorkflowSession(
+        participant_id="alice",
+        step_id=1,
+        context={
+            "tea_name": "green tea",
+            "steeping_started_at_us": 1_785_798_780_000_000,
+            "steeping_complete": True,
+        },
+    )
+
+    await agent.answer_user(
+        transcript="What should I do now?",
+        session=session,
+        current_step=step,
+        observation_log=[],
+        recent_turns=[],
+    )
+
+    prompt = captured[-1].content
+    assert "[Current-step context only]" in prompt
+    assert '"tea_name": "green tea"' in prompt
+    assert "steeping_started_at_us" not in prompt
+    assert "steeping_complete" not in prompt
+    assert "navigation_examples" not in prompt
+    assert "name=Fill water" not in prompt
+    assert "name=Steep the tea" not in prompt
+
+
+async def test_answer_next_step_tool_is_grounded_in_workflow_yaml() -> None:
+    workflow = _workflow()
+    step = workflow.step_by_id(1)
+    model_calls: list[list] = []
+
+    class _Llm:
+        async def chat(self, messages, **_kwargs):
+            model_calls.append(list(messages))
+            if len(model_calls) == 1:
+                return SimpleNamespace(
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id="next-1",
+                            name="get_next_workflow_step",
+                            arguments="{}",
+                        )
+                    ],
+                )
+            return SimpleNamespace(
+                content="Next, fill the kettle or pot with water.",
+                tool_calls=[],
+            )
+
+    class _Tools:
+        def definitions(self):
+            return []
+
+    agent = WorkflowAgent(
+        llm=_Llm(),
+        tools=_Tools(),
+        workflow=workflow,
+        answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
+    )
+    session = WorkflowSession(
+        participant_id="alice",
+        step_id=1,
+        context={"tea_name": "green tea"},
+    )
+
+    answer = await agent.answer_user(
+        transcript="What comes next?",
+        session=session,
+        current_step=step,
+        observation_log=[],
+        recent_turns=[],
+    )
+
+    assert answer == "Next, fill the kettle or pot with water."
+    tool_result = model_calls[1][-1].content
+    assert '"name": "Fill water"' in tool_result
+    assert "Steep the tea" not in tool_result
+
+
+async def test_answer_agent_receives_only_read_only_tools() -> None:
+    workflow = _workflow()
+    offered: list[str] = []
+
+    async def invoke(_arguments):
+        return {"ok": True}
+
+    class _Tools:
+        def agent_tools(self):
+            return [
+                tools_module.AgentTool(
+                    ToolDef(name="read_sensor", description="Read.", parameters={}),
+                    invoke,
+                    read_only=True,
+                ),
+                tools_module.AgentTool(
+                    ToolDef(name="change_device", description="Write.", parameters={}),
+                    invoke,
+                    read_only=False,
+                ),
+            ]
+
+    class _Llm:
+        async def chat(self, _messages, **kwargs):
+            offered.extend(tool.name for tool in kwargs["tools"])
+            return SimpleNamespace(content="The sensor is available.", tool_calls=[])
+
+    agent = WorkflowAgent(
+        llm=_Llm(),
+        tools=_Tools(),
+        workflow=workflow,
+        answer_prompt=(_WORKER_DIR / "tea_making_worker" / "prompts" / "system.txt"),
+    )
+
+    await agent.answer_user(
+        transcript="Can you check the sensor?",
+        session=None,
+        current_step=workflow.step_by_id(0),
+        observation_log=[],
+        recent_turns=[],
+    )
+
+    assert "read_sensor" in offered
+    assert "change_device" not in offered
+    assert "get_recent_vlm_observations" in offered
+    assert "inspect_current_view" in offered
+    assert "get_next_workflow_step" in offered
 
 
 def test_yaml_completion_rule_cannot_be_bypassed_by_model_readiness() -> None:
@@ -630,16 +897,16 @@ def test_yaml_completion_rule_cannot_be_bypassed_by_model_readiness() -> None:
     assert workflow.advance_when_met(step, context)
 
 
-def test_step_four_skip_replaces_zero_timestamp_with_current_time() -> None:
+def test_final_step_skip_completes_without_inventing_a_start_time() -> None:
     workflow = _workflow()
     step = workflow.step_by_id(4)
     context = workflow.initial_context()
 
     applied = workflow.apply_skip_defaults(step, context)
 
-    assert applied.keys() == {"steeping_started_at_us", "steeping_started_at_iso"}
-    assert context["steeping_started_at_us"] > 0
-    assert context["steeping_started_at_iso"]
+    assert applied == {"steeping_complete": True}
+    assert "steeping_started_at_us" not in context
+    assert "steeping_started_at_iso" not in context
 
 
 async def test_step_agent_calls_time_tool_to_capture_steeping_start() -> None:
@@ -666,7 +933,7 @@ async def test_step_agent_calls_time_tool_to_capture_steeping_start() -> None:
                 content=(
                     '{"context":{"steeping_started_at_us":1785798780376000,'
                     '"steeping_started_at_iso":"2026-08-03T16:13:00-07:00"},'
-                    '"ready_to_advance":true,"step_state":"complete",'
+                    '"ready_to_advance":false,"step_state":"started",'
                     '"assistant_message":"","speak":false}'
                 ),
                 tool_calls=[],
@@ -674,7 +941,10 @@ async def test_step_agent_calls_time_tool_to_capture_steeping_start() -> None:
 
     class _Tools:
         def definitions(self):
-            return [SimpleNamespace(name="get_current_time")]
+            return [
+                SimpleNamespace(name="get_current_time"),
+                SimpleNamespace(name="get_timer_status"),
+            ]
 
         async def invoke(self, name, arguments):
             tool_calls.append((name, arguments))
@@ -701,6 +971,7 @@ async def test_step_agent_calls_time_tool_to_capture_steeping_start() -> None:
     assert tool_calls == [("get_current_time", {})]
     assert result.context_patch["steeping_started_at_us"] == 1_785_798_780_376_000
     assert result.context_patch["steeping_started_at_iso"] == ("2026-08-03T16:13:00-07:00")
+    assert result.ready_to_advance is False
     assert '"epoch_us": 1785798780376000' in model_calls[1][-1].content
 
 
@@ -771,7 +1042,7 @@ async def test_timer_tool_rejects_a_missing_start_time() -> None:
 
 async def test_step_agent_uses_timer_tool_to_complete_no_caption_step() -> None:
     workflow = _workflow()
-    step = workflow.step_by_id(5)
+    step = workflow.step_by_id(4)
     model_calls: list[list] = []
     tool_calls: list[tuple[str, dict]] = []
 
@@ -842,13 +1113,15 @@ async def test_step_agent_uses_timer_tool_to_complete_no_caption_step() -> None:
 
 async def test_answer_agent_uses_timer_tool_for_remaining_time_question() -> None:
     workflow = _workflow()
-    step = workflow.step_by_id(5)
+    step = workflow.step_by_id(4)
     calls = 0
+    model_calls: list[list] = []
 
     class _Llm:
-        async def chat(self, _messages, **_kwargs):
+        async def chat(self, messages, **_kwargs):
             nonlocal calls
             calls += 1
+            model_calls.append(list(messages))
             if calls == 1:
                 return SimpleNamespace(
                     content="",
@@ -869,15 +1142,25 @@ async def test_answer_agent_uses_timer_tool_for_remaining_time_question() -> Non
             )
 
     class _Tools:
-        def definitions(self):
-            return [SimpleNamespace(name="get_timer_status")]
-
-        async def invoke(self, _name, _arguments):
+        async def timer_status(self, _arguments):
             return {
                 "elapsed_seconds": 65,
                 "remaining_seconds": 115,
                 "expired": False,
             }
+
+        def agent_tools(self):
+            return [
+                tools_module.AgentTool(
+                    ToolDef(
+                        name="get_timer_status",
+                        description="Read timer status.",
+                        parameters={},
+                    ),
+                    self.timer_status,
+                    read_only=True,
+                )
+            ]
 
     agent = WorkflowAgent(
         llm=_Llm(),
@@ -890,21 +1173,26 @@ async def test_answer_agent_uses_timer_tool_for_remaining_time_question() -> Non
         steeping_started_at_us=1_785_798_780_000_000,
         steep_duration_seconds=180,
     )
-    session = WorkflowSession(participant_id="alice", step_id=5, context=context)
+    session = WorkflowSession(participant_id="alice", step_id=4, context=context)
 
     answer = await agent.answer_user(
         transcript="How long do I still need to wait?",
         session=session,
         current_step=step,
         observation_log=[],
-        recent_turns=[],
+        recent_turns=[
+            ("How much time has elapsed?", "One minute and five seconds have elapsed."),
+        ],
     )
 
     assert calls == 2
     assert answer == "About one minute and fifty-five seconds remain."
+    prompt = model_calls[0][-1].content
+    assert "How much time has elapsed?" in prompt
+    assert "One minute and five seconds" not in prompt
 
 
-async def test_no_caption_timer_step_runs_agent_and_finishes_workflow() -> None:
+async def test_merged_steeping_step_stops_vision_and_finishes_workflow() -> None:
     workflow = _workflow()
     now_us = guide_module._now_us()  # noqa: SLF001
     context = workflow.initial_context()
@@ -917,7 +1205,7 @@ async def test_no_caption_timer_step_runs_agent_and_finishes_workflow() -> None:
 
     class _Vision:
         async def observe(self, *_args, **_kwargs):
-            raise AssertionError("timer-only step must not invoke the VLM")
+            raise AssertionError("merged timer phase must not invoke the VLM")
 
         def release(self, _participant_id: str) -> None:
             return None
@@ -940,7 +1228,12 @@ async def test_no_caption_timer_step_runs_agent_and_finishes_workflow() -> None:
         agent=_Agent(),
         notice=notice,
     )
-    session = WorkflowSession(participant_id="alice", step_id=5, context=context)
+    session = WorkflowSession(participant_id="alice", step_id=4, context=context)
+    step = workflow.step_by_id(4)
+
+    assert workflow.condition_met(step.vlm_stop_when, context)
+    assert guide._reminder_due(session, step) == ""  # noqa: SLF001
+    assert session.reminder_count == 0
 
     await guide._evaluate(session)  # noqa: SLF001
 
@@ -951,6 +1244,57 @@ async def test_no_caption_timer_step_runs_agent_and_finishes_workflow() -> None:
     assert session.ready_step_id is None
     assert "steeping_complete" not in session.context
     assert notices == [("alice", "The steeping time is up. Remove the tea bag, infuser, or leaves now.")]
+
+
+async def test_merged_steeping_step_observes_until_start_is_recorded() -> None:
+    workflow = _workflow()
+    captions: list[str] = []
+    notices: list[str] = []
+
+    class _Vision:
+        async def observe(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                text="The tea bag is immersed.\nSTEEPING_STARTED: yes",
+                frame_pts_us=10,
+            )
+
+        def release(self, _participant_id: str) -> None:
+            return None
+
+    class _Agent:
+        async def run_step(self, *, vlm_observation, **_kwargs):
+            captions.append(vlm_observation)
+            return StepAgentResult(
+                context_patch={
+                    "steeping_started_at_us": 1_785_798_780_376_000,
+                    "steeping_started_at_iso": "2026-08-03T16:13:00-07:00",
+                },
+                step_state="started",
+            )
+
+    async def notice(_participant_id: str, text: str) -> None:
+        notices.append(text)
+
+    guide = WorkflowGuide(
+        workflow=workflow,
+        vision=_Vision(),
+        agent=_Agent(),
+        notice=notice,
+    )
+    session = WorkflowSession(
+        participant_id="alice",
+        step_id=4,
+        context={"steep_duration_seconds": 180},
+        last_reminder_us=0,
+    )
+
+    await guide._evaluate(session)  # noqa: SLF001
+
+    assert captions == ["The tea bag is immersed.\nSTEEPING_STARTED: yes"]
+    assert session.context["steeping_started_at_us"] == 1_785_798_780_376_000
+    assert session.ready_step_id is None
+    assert session.reminder_count == 0
+    assert notices == []
 
 
 async def test_completed_step_does_not_repeat_guidance_or_recheck_vision() -> None:
@@ -991,7 +1335,7 @@ async def test_completed_step_does_not_repeat_guidance_or_recheck_vision() -> No
     assert notices == []
 
 
-async def test_participant_reconnect_preserves_active_workflow_state() -> None:
+async def test_disconnect_and_reconnect_clear_workflow_state() -> None:
     workflow = _workflow()
 
     class _Vision:
@@ -1015,22 +1359,30 @@ async def test_participant_reconnect_preserves_active_workflow_state() -> None:
     session.context["tea_name"] = "green tea"
     session.step_id = 4
     session.step_state = "needs_input"
+    session.observation_log.append({"caption": "old evidence"})
+    guide._history["alice"] = [("old request", "old answer")]  # noqa: SLF001
 
     await guide.release("alice")
 
-    assert session.active is True
+    assert "alice" not in guide._sessions  # noqa: SLF001
+    assert "alice" not in guide._history  # noqa: SLF001
+    assert session.active is False
     assert session.connected is False
-    assert session.step_id == 4
-    assert session.context["tea_name"] == "green tea"
+    assert session.step_id == 0
+    assert session.context == workflow.initial_context()
+    assert session.observation_log == []
 
-    await guide.resume("alice")
+    await guide.reset("alice")
+    restarted_message = await guide.start("alice")
+    restarted = guide._sessions["alice"]  # noqa: SLF001
 
-    assert session.active is True
-    assert session.connected is True
-    assert session.step_id == 4
+    assert "show me the tea label" in restarted_message.lower()
+    assert restarted is not session
+    assert restarted.step_id == 1
+    assert restarted.context == workflow.initial_context()
 
 
-async def test_final_advance_resets_to_idle_and_restart_uses_fresh_context() -> None:
+async def test_next_on_incomplete_final_step_resets_and_restarts_fresh() -> None:
     workflow = _workflow()
 
     class _Vision:
@@ -1050,21 +1402,20 @@ async def test_final_advance_resets_to_idle_and_restart_uses_fresh_context() -> 
     context.update(
         tea_name="green tea",
         steeping_started_at_us=123,
-        steeping_complete=True,
     )
     session = WorkflowSession(
         participant_id="alice",
-        step_id=5,
+        step_id=4,
         context=context,
-        ready_step_id=5,
-        step_state="complete",
+        step_state="started",
         observation_log=[{"caption": "old evidence"}],
     )
     guide._sessions["alice"] = session  # noqa: SLF001
 
     response = await guide.advance("alice")
 
-    assert "steeping time is up" in response.lower()
+    assert "using reasonable defaults" in response.lower()
+    assert "timer skipped" in response.lower()
     assert session.active is False
     assert session.step_id == 0
     assert session.step_state == "idle"
@@ -1078,6 +1429,49 @@ async def test_final_advance_resets_to_idle_and_restart_uses_fresh_context() -> 
     assert restarted.active is True
     assert restarted.step_id == 1
     assert "tea_name" not in restarted.context
+
+
+async def test_cancel_clears_active_state_before_a_fresh_restart() -> None:
+    workflow = _workflow()
+
+    class _Vision:
+        def release(self, _participant_id: str) -> None:
+            return None
+
+    async def notice(_participant_id: str, _text: str) -> None:
+        return None
+
+    guide = WorkflowGuide(
+        workflow=workflow,
+        vision=_Vision(),
+        agent=SimpleNamespace(),
+        notice=notice,
+    )
+    await guide.start("alice")
+    old_session = guide._sessions["alice"]  # noqa: SLF001
+    old_session.step_id = 3
+    old_session.context.update(
+        tea_name="black tea",
+        water_filled=True,
+        water_temperature_current="90 C",
+    )
+    old_session.observation_log.append({"caption": "old evidence"})
+    guide._history["alice"] = [("old request", "old answer")]  # noqa: SLF001
+
+    response = await guide.handle_query(participant_id="alice", text="cancel tea")
+
+    assert response == "Guidance stopped."
+    assert old_session.active is False
+    assert old_session.step_id == 0
+    assert old_session.context == workflow.initial_context()
+    assert old_session.observation_log == []
+    assert "alice" not in guide._history  # noqa: SLF001
+
+    await guide.start("alice")
+    restarted = guide._sessions["alice"]  # noqa: SLF001
+    assert restarted is not old_session
+    assert restarted.step_id == 1
+    assert restarted.context == workflow.initial_context()
 
 
 def test_start_making_tea_trigger_starts_only_while_idle() -> None:
@@ -1183,7 +1577,7 @@ async def test_answer_agent_receives_completed_step_state_and_yaml_procedure() -
     assert "ready=True" in prompt
 
 
-async def test_answer_agent_prioritizes_latest_step_monitor_over_old_turns() -> None:
+async def test_answer_prompt_omits_old_assistant_measurements() -> None:
     workflow = _workflow()
     step = workflow.step_by_id(3)
     captured: list = []
@@ -1235,7 +1629,8 @@ async def test_answer_agent_prioritizes_latest_step_monitor_over_old_turns() -> 
     )
 
     prompt = captured[-1].content
-    assert prompt.index("The water is currently 59 C.") < prompt.index("[Workflow snapshot]")
+    assert "The water is currently 59 C." not in prompt
+    assert "What is the temperature?" in prompt
     assert '"water_temperature_current": "100 C"' in prompt
     assert "TEMPERATURE_READING: 100 C" in prompt
     assert (
