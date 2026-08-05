@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Launch the tea guide with explicit model and voice modes."""
+"""Launch the tea guide with explicit model, voice, and speech modes."""
 
 from __future__ import annotations
 
@@ -26,15 +26,19 @@ _VOICE_CONFIGS = {
     "wake-word": "voice_gate.wake-word.yaml",
     "always-on": "voice_gate.always-on.yaml",
 }
+_TTS_CONFIGS = {
+    "piper": ("piper_tts", "http://localhost:8105"),
+    "magpie": ("magpie_tts", "http://localhost:8104"),
+}
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Tea-making guidance sample. Both launch modes must be selected explicitly.",
+        description="Tea-making guidance sample. All launch modes must be selected explicitly.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""examples:
-  tea_making_sample --model-mode omni --voice-mode wake-word
-  tea_making_sample --model-mode cosmos --voice-mode always-on
+  tea_making_sample --model-mode omni --voice-mode wake-word --tts-mode piper
+  tea_making_sample --model-mode cosmos --voice-mode always-on --tts-mode magpie
 
 shared model servers:
   model_servers""",
@@ -51,6 +55,12 @@ shared model servers:
         choices=tuple(_VOICE_CONFIGS),
         help="wake-word: require Agent/Hey Agent; always-on: accept every utterance",
     )
+    parser.add_argument(
+        "--tts-mode",
+        required=True,
+        choices=tuple(_TTS_CONFIGS),
+        help="piper: lightweight CPU speech; magpie: NeMo speech on CUDA when available",
+    )
     return parser
 
 
@@ -63,7 +73,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace | None:
     return parser.parse_args(arguments)
 
 
-def _model_processes() -> dict[str, Process]:
+def _model_processes(tts_mode: str) -> dict[str, Process]:
     detected = detect_gpu_config()
     profile = {"spark": "96G_blackwell"}.get(detected, detected)
     if profile not in {"96G_blackwell", "dual_48G_ada"}:
@@ -88,18 +98,31 @@ def _model_processes() -> dict[str, Process]:
             "nemotron_omni_llm_server",
             config=f"yaml/{profile}/nemotron_omni_llm_server.yaml",
         ),
-        "tts": Process(
+        "tts": _tts_process(tts_mode),
+    }
+
+
+def _tts_process(tts_mode: str) -> Process:
+    if tts_mode == "piper":
+        return Process(
             "tts",
             "../../ai-services/tts/piper",
             "piper_tts_server",
             config="yaml/piper_tts_server.yaml",
-        ),
-    }
+        )
+    if tts_mode == "magpie":
+        return Process(
+            "tts",
+            "../../ai-services/tts/magpie",
+            "magpie_tts_server",
+            config="yaml/magpie_tts_server.yaml",
+        )
+    raise ValueError(f"unknown TTS mode: {tts_mode!r}")
 
 
-def _build_processes(worker_config: Path, rag_config: Path) -> list[Process]:
+def _build_processes(worker_config: Path, rag_config: Path, tts_mode: str) -> list[Process]:
     deployment = load_model_deployment(worker_config)
-    available = _model_processes()
+    available = _model_processes(tts_mode)
     unknown = deployment.services.keys() - available.keys()
     if unknown:
         raise ValueError(f"model profile declares unknown services: {sorted(unknown)}")
@@ -129,9 +152,15 @@ def _write_config(source: Path, target: Path, overrides: Mapping[str, Path]) -> 
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _materialize_configs(runtime_dir: Path, model_mode: str, voice_mode: str) -> tuple[Path, Path]:
+def _materialize_configs(
+    runtime_dir: Path,
+    model_mode: str,
+    voice_mode: str,
+    tts_mode: str,
+) -> tuple[Path, Path]:
     yaml_dir = _BASE / "yaml"
-    models = (yaml_dir / _MODEL_CONFIGS[model_mode]).resolve()
+    models = runtime_dir / "models.json"
+    _write_models_config(yaml_dir / _MODEL_CONFIGS[model_mode], models, tts_mode)
     voice_gate = (yaml_dir / _VOICE_CONFIGS[voice_mode]).resolve()
     worker_config = runtime_dir / "tea_making_worker.yaml"
     rag_config = runtime_dir / "rag_service.yaml"
@@ -156,6 +185,15 @@ def _materialize_configs(runtime_dir: Path, model_mode: str, voice_mode: str) ->
     return worker_config, rag_config
 
 
+def _write_models_config(source: Path, target: Path, tts_mode: str) -> None:
+    preset, base_url = _TTS_CONFIGS[tts_mode]
+    config = json.loads(source.read_text(encoding="utf-8"))
+    tts = config["models"]["tts"]
+    tts["adapter"] = {"preset": preset}
+    tts["endpoint"]["base_url"] = base_url
+    target.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
 def run(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     if args is None:
@@ -163,17 +201,19 @@ def run(argv: Sequence[str] | None = None) -> None:
     setup_logging("orchestrator", namespace="tea-making-sample")
     warn_if_missing("HF_TOKEN")
     logging.getLogger(__name__).info(
-        "launch selection model_mode=%s voice_mode=%s",
+        "launch selection model_mode=%s voice_mode=%s tts_mode=%s",
         args.model_mode,
         args.voice_mode,
+        args.tts_mode,
     )
     with tempfile.TemporaryDirectory(prefix="tea-making-config-") as directory:
         worker_config, rag_config = _materialize_configs(
             Path(directory),
             args.model_mode,
             args.voice_mode,
+            args.tts_mode,
         )
-        run_stack(_build_processes(worker_config, rag_config), _BASE)
+        run_stack(_build_processes(worker_config, rag_config, args.tts_mode), _BASE)
 
 
 if __name__ == "__main__":

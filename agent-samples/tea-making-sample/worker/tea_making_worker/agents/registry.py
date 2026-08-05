@@ -12,6 +12,7 @@ from nat.builder.function import Function
 from nat.builder.workflow_builder import WorkflowBuilder
 from nat.plugin_api import FunctionRef, LLMRef
 from nat.plugins.langchain.agent.tool_calling_agent.register import ToolCallAgentWorkflowConfig
+from pydantic import ValidationError
 from xr_ai_models import LLMService
 from xr_ai_nat.llm import ModelsLLMConfig
 
@@ -83,7 +84,26 @@ class AgentRegistry:
             chars=len(request),
             input=request,
         )
-        result = await self._step[step.id].ainvoke(request, to_type=str)
+        agent = self._step[step.id]
+        for attempt in range(2):
+            try:
+                result = await agent.ainvoke(request, to_type=str)
+                break
+            except Exception as exc:
+                if not _is_tool_schema_error(exc):
+                    raise
+                final = attempt == 1
+                emit(
+                    "agent.observe.skipped" if final else "agent.observe.retry",
+                    participant_id=session.participant_id,
+                    step=step.id,
+                    trace_id=trace_id,
+                    tool=getattr(exc, "tool_name", None),
+                    reason="invalid_tool_arguments",
+                )
+                if final:
+                    return ""
+                request = f"{request}\nRetry tool arguments: {_schema_feedback(exc)}"
         emit(
             "agent.observe.response",
             participant_id=session.participant_id,
@@ -177,6 +197,18 @@ class AgentRegistry:
         if not session.active or session.step_id is None:
             raise ValueError("workflow is idle")
         return self.workflow.step(session.step_id)
+
+
+def _is_tool_schema_error(exc: Exception) -> bool:
+    return isinstance(getattr(exc, "source", None), ValidationError)
+
+
+def _schema_feedback(exc: Exception) -> str:
+    source: ValidationError = getattr(exc, "source")
+    return "; ".join(
+        f"{'.'.join(map(str, error['loc']))}: {error['msg']}"
+        for error in source.errors(include_url=False, include_input=False)
+    )
 
 
 def _json(**value: Any) -> str:

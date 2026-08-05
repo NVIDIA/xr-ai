@@ -208,17 +208,20 @@ def test_user_facing_values_use_natural_units() -> None:
     assert render_message("{{ value | duration }}", {"value": 65}) == "1 minute and 5 seconds"
 
 
-def test_launcher_requires_explicit_model_and_voice_modes() -> None:
+def test_launcher_requires_explicit_launch_modes() -> None:
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
         sample_main.run([])
     help_text = output.getvalue()
     assert "--model-mode {omni,cosmos}" in help_text
     assert "--voice-mode {wake-word,always-on}" in help_text
+    assert "--tts-mode {piper,magpie}" in help_text
 
-    args = sample_main._parse_args(["--model-mode", "omni", "--voice-mode", "always-on"])
+    args = sample_main._parse_args(
+        ["--model-mode", "omni", "--voice-mode", "always-on", "--tts-mode", "magpie"]
+    )
     assert args is not None
-    assert (args.model_mode, args.voice_mode) == ("omni", "always-on")
+    assert (args.model_mode, args.voice_mode, args.tts_mode) == ("omni", "always-on", "magpie")
 
 
 def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
@@ -233,30 +236,43 @@ def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
             runtime_dir = Path(directory)
             for model_mode, model_file in sample_main._MODEL_CONFIGS.items():
                 for voice_mode, voice_file in sample_main._VOICE_CONFIGS.items():
-                    worker_path, rag_path = sample_main._materialize_configs(
-                        runtime_dir,
-                        model_mode,
-                        voice_mode,
-                    )
-                    worker = load_config(worker_path)
-                    rag = yaml.safe_load(rag_path.read_text(encoding="utf-8"))
-                    assert worker.models_config == (_SAMPLE / "yaml" / model_file).resolve()
-                    assert worker.voice_gate_config == (_SAMPLE / "yaml" / voice_file).resolve()
-                    gate = yaml.safe_load(worker.voice_gate_config.read_text(encoding="utf-8"))
-                    if voice_mode == "wake-word":
-                        assert gate["magic_phrases"] == ["agent", "hey agent"]
-                        assert gate["followup_grace_s"] == 5.0
-                    else:
-                        assert gate["magic_phrases"] == []
-                    assert Path(rag["models_config"]) == worker.models_config
-                    assert Path(rag["documents_dir"]) == (_SAMPLE / "rag-documents").resolve()
+                    for tts_mode, (tts_preset, tts_url) in sample_main._TTS_CONFIGS.items():
+                        worker_path, rag_path = sample_main._materialize_configs(
+                            runtime_dir,
+                            model_mode,
+                            voice_mode,
+                            tts_mode,
+                        )
+                        worker = load_config(worker_path)
+                        rag = yaml.safe_load(rag_path.read_text(encoding="utf-8"))
+                        models = json.loads(worker.models_config.read_text(encoding="utf-8"))
+                        expected_models = json.loads(
+                            (_SAMPLE / "yaml" / model_file).read_text(encoding="utf-8")
+                        )
+                        expected_models["models"]["tts"]["adapter"] = {"preset": tts_preset}
+                        expected_models["models"]["tts"]["endpoint"]["base_url"] = tts_url
+                        assert models == expected_models
+                        assert worker.voice_gate_config == (_SAMPLE / "yaml" / voice_file).resolve()
+                        gate = yaml.safe_load(worker.voice_gate_config.read_text(encoding="utf-8"))
+                        if voice_mode == "wake-word":
+                            assert gate["magic_phrases"] == ["agent", "hey agent"]
+                            assert gate["followup_grace_s"] == 5.0
+                        else:
+                            assert gate["magic_phrases"] == []
+                        assert Path(rag["models_config"]) == worker.models_config
+                        assert Path(rag["documents_dir"]) == (_SAMPLE / "rag-documents").resolve()
 
-                processes = sample_main._build_processes(worker_path, rag_path)
-                assert {process.name for process in processes} == expected_services[model_mode]
-                assert all(
-                    process.launch_mode == ("own" if process.name in {"tts", "rag", "hub", "worker"} else "reuse")
-                    for process in processes
-                )
+                        processes = sample_main._build_processes(worker_path, rag_path, tts_mode)
+                        assert {process.name for process in processes} == expected_services[model_mode]
+                        assert all(
+                            process.launch_mode
+                            == ("own" if process.name in {"tts", "rag", "hub", "worker"} else "reuse")
+                            for process in processes
+                        )
+                        tts_process = next(process for process in processes if process.name == "tts")
+                        assert tts_process.project == f"../../ai-services/tts/{tts_mode}"
+                        assert tts_process.command == f"{tts_mode}_tts_server"
+                        assert tts_process.config == f"yaml/{tts_mode}_tts_server.yaml"
     finally:
         sample_main.detect_gpu_config = original_detect
 

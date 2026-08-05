@@ -67,9 +67,9 @@ changes.
 21. Tea identification is literal OCR, not visual classification. The vision
     focus excludes artwork and supplied words; RAG may provide brewing values
     only when its passage contains the variety already visible in the caption.
-22. Launching requires explicit model and voice modes. The orchestrator writes
-    temporary worker and RAG configs from those selections so their model
-    profiles cannot diverge; never restore an implicit launch default.
+22. Launching requires explicit model, voice, and TTS modes. The orchestrator
+    writes temporary model, worker, and RAG configs from those selections so
+    their profiles cannot diverge; never restore an implicit launch default.
 23. Continuous Omni captions disable reasoning and have a small output cap.
     Omni agent calls also disable reasoning so their token budget produces a
     tool call. A bounded caption timeout is recoverable and must leave the
@@ -88,6 +88,12 @@ changes.
 28. Agent reasoning always uses the shared Omni service. `--model-mode` selects
     only whether continuous vision uses Cosmos or that same Omni service; it
     never selects a second text model or requires a model-server restart.
+29. `--tts-mode` selects the managed Piper or Magpie process and rewrites only
+    the temporary TTS preset and endpoint. The launched process and model
+    profile must always agree.
+30. A model-generated tool argument validation error gets one immediate retry.
+    If it repeats, skip that observation frame and continue; service,
+    configuration, and application errors still propagate.
 
 ## Nested machines
 

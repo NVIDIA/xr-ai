@@ -132,7 +132,7 @@ ignored so they cannot erase an active walkthrough.
 
 ## Model modes
 
-The launcher requires both model and voice behavior explicitly. With no
+The launcher requires model, voice, and speech behavior explicitly. With no
 arguments it prints the available choices and exits without starting services:
 
 ```bash
@@ -149,29 +149,32 @@ Select Nemotron-3-Omni for both vision and agent reasoning with:
 
 ```bash
 uv run --project agent-samples/tea-making-sample tea_making_sample \
-  --model-mode omni --voice-mode always-on
+  --model-mode omni --voice-mode always-on --tts-mode piper
 ```
 
 Select Cosmos Reason1 for vision and Nemotron-3-Omni for agents with:
 
 ```bash
 uv run --project agent-samples/tea-making-sample tea_making_sample \
-  --model-mode cosmos --voice-mode wake-word
+  --model-mode cosmos --voice-mode wake-word --tts-mode magpie
 ```
 
 `--voice-mode always-on` accepts every transcribed utterance.
 `--voice-mode wake-word` requires each command to start with “Agent” or “Hey
 Agent”; saying only the wake phrase opens a five-second follow-up window. The
-launcher selects dedicated gate profiles and writes temporary worker and RAG
-configs, so switching modes never edits source YAML and both processes always
-use the same model profile.
+`--tts-mode piper` selects lightweight CPU speech on port 8105;
+`--tts-mode magpie` selects NeMo Magpie speech on port 8104 and uses CUDA when
+available. The launcher writes temporary model, worker, and RAG configs, so
+switching modes never edits source files and every process uses the selected
+profile.
 
 Both profiles disable hidden reasoning for Omni agent calls. The Omni vision
 profile also caps continuous caption generation; agent calls retain their
 tool-loop budget. A timed-out caption is
 logged as `vision.timeout` and the next frame continues the same observation
 loop. Both model modes reuse Parakeet STT and Nemotron Embed while the sample
-manages Piper TTS, the typed RAG service, the media hub, and its worker.
+manages the selected Piper or Magpie TTS service, the typed RAG service, the
+media hub, and its worker.
 
 Both modes use the embedding endpoint at port 8109. The RAG service reads
 `yaml/rag_service.yaml`, indexes the local Markdown corpus, and exposes only the
@@ -188,6 +191,8 @@ The most useful event names are:
 
 - `trigger.request` / `trigger.response`: exact NAT function inputs, outputs,
   and latency.
+- `agent.observe.retry` / `agent.observe.skipped`: malformed model-generated
+  tool arguments retried once or deferred to the next observation frame.
 - `step.evidence`: caption, match decision, consecutive count, and threshold.
 - `rag.lookup.request` / `rag.lookup.response`: exact retrieval query, latency,
   scores, sources, and returned passages when package instructions are incomplete.

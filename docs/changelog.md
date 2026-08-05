@@ -9,6 +9,18 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Tea speech selection and malformed tool calls are recoverable
+
+The tea-making launcher now requires `--tts-mode piper` or `--tts-mode magpie`
+alongside its model and voice selections. It materializes one temporary model
+profile with the matching TTS preset and endpoint, then launches that managed
+service, avoiding a duplicated model-profile matrix.
+
+Observation agents retry a model-generated tool argument validation error once.
+A second malformed call skips only that frame so continuous observation can
+recover on the next one; non-schema tool failures and other unexpected errors
+continue to propagate.
+
 ### 2026-08-05 — Shared model servers combine Cosmos and Omni
 
 `model_servers` now starts one persistent service set containing Nemotron-3

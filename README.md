@@ -307,7 +307,7 @@ also resets to idle for every new connection and after an app restart.
 
 The required launch options select Omni or Cosmos vision; agent reasoning
 always uses Omni. Voice mode independently selects wake-word or always-on
-speech. A local typed RAG
+input, while TTS mode selects Piper or Magpie speech. A local typed RAG
 service grounds missing package instructions in the sample's tea corpus. See
 the [sample README](agent-samples/tea-making-sample/README.md) for all launch
 combinations, workflow format, observability events, and adaptation guide.
@@ -316,7 +316,7 @@ combinations, workflow format, observability events, and adaptation guide.
 cd agent-samples/tea-making-sample
 uv sync
 uv run --project ../model-servers model_servers
-uv run tea_making_sample --model-mode omni --voice-mode always-on
+uv run tea_making_sample --model-mode omni --voice-mode always-on --tts-mode piper
 ```
 
 ---
