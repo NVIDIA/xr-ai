@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Strict-prefix wake phrases. The matched phrase is removed before the workflow
+# receives the command, so "Agent, help me make tea" becomes
+# "help me make tea".
+magic_phrases:
+  - "agent"
+  - "hey agent"
+listening_chime: false
+
+# Require a wake phrase on every utterance; do not accept an ungated follow-up.
+followup_grace_s: 0.0
+
+# Spoken automatically by the shared voice gate when a participant connects.
+welcome_message: >-
+  Welcome to the tea-making guide. To begin, say, "Agent, help me make tea."
+  Start every command with "Agent."

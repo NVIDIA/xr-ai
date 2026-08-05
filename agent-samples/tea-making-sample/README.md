@@ -1,0 +1,165 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+# Tea-making guidance sample
+
+This sample is a configuration-driven physical-task guide. A participant has
+one outer workflow state machine; its active step runs one repeated inner loop:
+
+```text
+    YAML NAT trigger -> plain caption -> step NAT agent -> workflow__commit
+```
+
+Voice uses a separate hierarchy:
+
+```text
+utterance -> router NAT agent -> management function OR current step voice agent
+```
+
+There is no custom tool-call loop. NeMo Agent Toolkit builds the router, every
+step agent, every voice agent, and their step-specific tool lists. Current and
+historical conversation turns are not added to prompts. Each call receives only
+the active step's projected state and current input. The router reserves
+management functions for explicit start, next/continue/skip, stop/reset, and
+workflow-step status requests. Task questions, action reports, correctness
+checks, current readings, and timer questions always delegate to the active
+step voice agent.
+
+Each voice policy contains the minimum procedure needed to resolve references
+such as “how do I do that?” without conversation history. The `current_view`
+tool exposes only a question to the model; participant identity is injected
+from the active invocation, preventing a small model from inventing an ID and
+looking at the wrong camera stream.
+
+## Configure a workflow
+
+Edit `yaml/workflow.yaml`. Each step declares:
+
+- `reads` and `writes`: its complete state boundary.
+- `trigger`: any registered NAT function, interval, arguments, and optional
+  result field. `$participant_id` and `$state.<field>` resolve at invocation.
+- `evidence`: an optional caption pattern and required consecutive match count
+  that must hold before a completion commit is accepted.
+- `agent`: the observation policy and additional NAT tools. The state commit
+  function is always present.
+- `voice`: a read-only policy and its NAT tools.
+- `complete_when` and `next`: readiness and the destination of an explicit
+  voice advance.
+- `skip_state` and `messages`: deterministic management behavior.
+
+User-facing message templates support generic presentation filters:
+`{{ value | temperature_c }}` speaks a full “degrees Celsius” value and
+`{{ value | duration }}` converts seconds to natural minutes and seconds.
+Internal state remains numeric for comparisons and tools. The shared voice
+contract gives both voice answers and background agent notices one
+workflow-independent rule: use natural spoken language, expand abbreviations
+and symbols, prefer familiar quantities without changing meaning, and hide
+machine formats.
+
+The worker contains no tea-specific branch. The five supplied steps use the
+same engine even though four are triggered by live vision and one by the native
+clock timer.
+
+Visual trigger prompts are short focus guides, not output schemas. The VLM
+returns an ordinary plain-text caption describing only relevant visible facts.
+The configurable evidence gate must pass before the observation agent can
+write visual state. Identification requires two readable OCR captions and
+explicitly rejects dark, unreadable, or absent-text captions. Filling uses the
+stricter threshold: three consecutive captions must
+name the vessel, visible water, and a concrete cue such as its surface or level.
+
+The identify step prefers brewing values visible on the package. When the tea
+name is visible but its temperature or time is missing, its agent calls the
+native `rag_lookup` tool over the sample's `rag-documents/` corpus. Retrieved
+guidance never overrides package instructions, and `guidance_source` records
+which source produced the values. A frame without a specific visible tea name
+never triggers generic retrieval, and the sample-local alias caps retrieval at
+two passages to keep the second agent call small.
+
+State is sparse and typed. A step sees only its `reads + writes` projection and
+can update only `writes`. A commit is rejected atomically when a field or type
+is invalid. Completion is derived from `complete_when`; the model cannot assert
+completion separately.
+Completing a step never changes the active step. Observation continues through
+the same trigger-agent-commit loop; commits become revision-free no-ops while
+the completion predicate remains true. Only an explicit user “next,”
+“continue,” or “skip” request lets the top-level router advance it.
+Participant state is ephemeral. A real client join, including the roster replay
+after an app restart, resets guidance to idle; leaving and reconnecting creates
+a fresh session. Duplicate roster replays for an already-known connection are
+ignored so they cannot erase an active walkthrough.
+
+## Model modes
+
+The default `models.split.json` uses the shared model-server convenience stack:
+
+```bash
+uv run --project agent-samples/model-servers model_servers
+uv run --project agent-samples/tea-making-sample tea_making_sample
+```
+
+This reuses Cosmos Reason1 for vision, Nemotron-3-Nano for agents, Parakeet for
+STT, and Nemotron Embed for retrieval. The sample manages Piper TTS, the typed
+RAG service, the media hub, and its worker.
+
+For one multimodal model, change `models_config` in
+`yaml/tea_making_worker.yaml` to `models.omni.json`, stop the shared model
+servers if they occupy the GPU, and launch the sample. Nemotron-3-Omni then
+serves both the `agent_llm` and `vlm` roles.
+
+Both modes use the embedding endpoint at port 8109. The RAG service reads
+`yaml/rag_service.yaml`, indexes the local Markdown corpus, and exposes only the
+shared `rag__retrieve` capability; the worker narrows it to the step-selectable
+`rag_lookup` NAT function.
+
+Open the web client shown by the hub and say, “Agent, help me make tea.” The
+voice gate is configured in `yaml/voice_gate.yaml`.
+
+## Observability
+
+All decisions use structured `event {...}` records in the standard worker log.
+The most useful event names are:
+
+- `trigger.request` / `trigger.response`: exact NAT function inputs, outputs,
+  and latency.
+- `step.evidence`: caption, match decision, consecutive count, and threshold.
+- `rag.lookup.request` / `rag.lookup.response`: exact retrieval query, latency,
+  scores, sources, and returned passages when package instructions are incomplete.
+- `agent.observe.request` / `agent.observe.response`: the complete compact
+  state-agent context and result.
+- `step.commit`, `step.commit_noop`, and `step.commit_rejected`: state deltas,
+  completed-step no-ops, or validation failures.
+- `agent.router.*`, `voice.delegate`, and `agent.voice.*`: voice routing and
+  step answer traces.
+- `step.ready`, `step.enter`, `workflow.reset`, `workflow.complete`, and
+  `notice.queued`: readiness, lifecycle resets, explicit transitions, and speech.
+
+Use the log directory printed at startup, then filter a human test with:
+
+```bash
+rg '"participant_id":"<id>"' <worker.log>
+rg '"trace_id":"<trace>"|step.commit' <worker.log>
+rg 'step.evidence|commit_rejected|vision.unavailable' <worker.log>
+```
+
+Unexpected failures propagate out of the monitor or voice task and stop the
+worker with their traceback. Missing live frames and invalid model patches are
+handled because another observation can repair them.
+
+## Development
+
+Read [AGENT_GUIDE.md](AGENT_GUIDE.md) before changing behavior. It records the
+state-machine invariants, prompt budgets, log-driven human-test loop, and the
+sample-local pieces that should move to `xr-ai-nat` after a second application
+proves their reusable contract.
+
+Run the lightweight checks without models:
+
+```bash
+uv run --project agent-samples/tea-making-sample/worker \
+  python -m unittest discover -s agent-samples/tea-making-sample/worker/tests -v
+uv run --project agent-samples/tea-making-sample/worker \
+  python agent-samples/tea-making-sample/eval/check.py
+```

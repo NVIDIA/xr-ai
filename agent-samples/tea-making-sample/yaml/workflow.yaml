@@ -1,0 +1,219 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+task:
+  name: tea making
+  start_step: identify
+  router_prompt: This workflow guides tea making.
+  complete_message: Tea guidance complete. Enjoy your tea.
+
+state:
+  tea_name:
+    type: string
+    description: Tea name read from the package.
+  target_temperature_c:
+    type: number
+    description: Package water temperature in Celsius.
+  steep_duration_s:
+    type: integer
+    description: Package steep duration in seconds.
+  guidance_source:
+    type: string
+    description: Package label or retrieved document used for brewing values.
+  tea_ready:
+    type: boolean
+    description: Whether the three tea details are known.
+    initial: false
+  water_filled:
+    type: boolean
+    description: Whether water is visibly in the heating vessel.
+    initial: false
+  heating_started:
+    type: boolean
+    description: Whether the heater is visibly active.
+    initial: false
+  water_ready:
+    type: boolean
+    description: Whether the current water temperature matches the target.
+    initial: false
+  steeping_started_at_us:
+    type: integer
+    description: Start time returned by clock__now.
+  steeping_started:
+    type: boolean
+    description: Whether tea is immersed and its start time is recorded.
+    initial: false
+  steeping_complete:
+    type: boolean
+    description: Whether the fresh timer result is expired.
+    initial: false
+
+steps:
+  - id: identify
+    title: Identify the tea
+    reads: []
+    writes: [tea_name, target_temperature_c, steep_duration_s, guidance_source, tea_ready]
+    trigger:
+      function: current_view
+      interval_s: 1.5
+      arguments:
+        question: >-
+          Read visible text on any tea package, box, or tag. Include the tea
+          name, water temperature, and steep time when legible. Describe only
+          this frame; do not infer.
+      result_field: answer
+    evidence:
+      pattern: "(?is)^(?!.*\\b(none|nothing|dark|blurry|blurred|unreadable|unclear|unknown|absent|obscured|unable|cannot|can't|discern)\\b)(?!.*\\b(no|not|without)\\b.{0,32}\\b(tea|package|box|label|tag|texts?)\\b)(?=.*[a-z]{3}).+$"
+      consecutive: 2
+    agent:
+      prompt: >-
+        Without a specific visible tea name, commit nothing and never retrieve.
+        Copy visible package facts. Retrieve only missing temperature or time
+        for that exact tea with top_k 2. Always replace conflicting retrieved
+        facts with visible package facts. Record the source; set tea_ready only
+        when name, temperature, and duration are known. Keep message empty.
+      tools: [rag_lookup]
+    voice:
+      prompt: >-
+        Help only with tea identification and brewing values. Inspect visible
+        labels first; use rag_lookup when the package lacks the requested fact.
+      tools: [current_view, rag_lookup]
+    complete_when: {tea_ready: true}
+    next: fill_water
+    skip_state:
+      tea_name: generic tea
+      target_temperature_c: 93
+      steep_duration_s: 180
+      guidance_source: generic fallback
+      tea_ready: true
+    messages:
+      enter: Hold the tea package or tag in view so I can read it.
+      complete: I found the tea instructions. Say next when ready.
+      skip: I will use generic tea defaults.
+
+  - id: fill_water
+    title: Fill the heating vessel
+    reads: []
+    writes: [water_filled]
+    trigger:
+      function: current_view
+      interval_s: 2
+      arguments:
+        question: >-
+          Describe only visible evidence about the heating vessel and its
+          contents. Mention the visible interior and concrete water cues such
+          as a surface, level, reflections, or pouring. Never infer.
+      result_field: answer
+    evidence:
+      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|empty|obscured|cannot|can't)\\b)(?!.*\\b(no|not)\\s+(visible\\s+)?water\\b)(?=.*\\b(kettle|pot|vessel|container)\\b)(?=.*\\bwater\\b)(?=.*\\b(surface|level|reflection|pouring|inside|contains)\\b).+$"
+      consecutive: 3
+    agent:
+      prompt: >-
+        Set water_filled true only when the caption plainly describes a visible
+        vessel interior and a concrete visible water cue. Otherwise commit no update.
+      tools: []
+    voice:
+      prompt: >-
+        Explain or verify this step: add fresh water to a stable, unpowered
+        kettle or pot within its safe fill line. Inspect the view for current facts.
+      tools: [current_view]
+    complete_when: {water_filled: true}
+    next: heat_water
+    skip_state: {water_filled: true}
+    messages:
+      enter: Fill a kettle or pot with fresh water and keep it in view.
+      complete: The vessel has water. Say next when ready.
+      skip: I will assume the vessel is filled.
+
+  - id: heat_water
+    title: Heat the water
+    reads: [target_temperature_c]
+    writes: [heating_started, water_ready]
+    trigger:
+      function: current_view
+      interval_s: 2
+      arguments:
+        question: >-
+          Describe only visible heater activity, numeric temperature displays
+          or thermometer readings with units, and immediate hazards. Say when
+          a detail is not visible. Do not infer.
+      result_field: answer
+    evidence:
+      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|cannot|can't)\\b)(?!.*\\b(no|not)\\s+visible\\b)(?=.*\\b(display|thermometer|reading)\\b)(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+$"
+      consecutive: 2
+    agent:
+      prompt: >-
+        Preserve heating_started once visible. Set water_ready true only when a
+        fresh numeric reading is within 2 C below to 3 C above the target. Send
+        a message only for a hazard.
+      tools: []
+    voice:
+      prompt: >-
+        Explain or verify heating toward the target. Inspect the view for any
+        requested current reading; never claim readiness without a visible reading.
+      tools: [current_view]
+    complete_when: {water_ready: true}
+    next: start_steeping
+    skip_state: {heating_started: true, water_ready: true}
+    messages:
+      enter: Heat the water to {{ target_temperature_c | temperature_c }}.
+      complete: The water is ready. Say next when ready.
+      skip: I will assume the water is ready.
+
+  - id: start_steeping
+    title: Start steeping
+    reads: [steep_duration_s]
+    writes: [steeping_started_at_us, steeping_started]
+    trigger:
+      function: current_view
+      interval_s: 2
+      arguments:
+        question: >-
+          Describe only visible evidence of a tea bag, infuser, or leaves being
+          outside, entering, or immersed in the water. Mention immediate
+          hazards and say when immersion is unclear. Do not infer.
+      result_field: answer
+    evidence:
+      pattern: "(?is)^(?!.*\\b(unreadable|unclear|unknown|absent|outside|cannot|can't)\\b)(?!.*\\b(no|not)\\b.{0,80}\\b(immersed|submerged|in (the )?water)\\b)(?=.*\\b(tea bag|infuser|leaves)\\b)(?=.*\\b(immersed|submerged|in the water)\\b).+$"
+      consecutive: 2
+    agent:
+      prompt: >-
+        On the first clear immersion, call clock__now and commit its epoch_us
+        with steeping_started true. Never invent or replace the start time.
+      tools: [clock__now]
+    voice:
+      prompt: >-
+        Explain or verify this step: immerse the tea bag, infuser, or leaves in
+        the hot water. Inspect the view for current facts.
+      tools: [current_view]
+    complete_when: {steeping_started: true}
+    next: steep_timer
+    skip_state: {steeping_started_at_us: 1, steeping_started: true}
+    messages:
+      enter: Put the tea in the water; I will start the timer when I see it immersed.
+      complete: Steeping timer started. Say next to monitor it.
+      skip: Steeping detection skipped.
+
+  - id: steep_timer
+    title: Wait for steeping
+    reads: [steeping_started_at_us, steep_duration_s]
+    writes: [steeping_complete]
+    trigger:
+      function: clock__timer
+      interval_s: 1
+      arguments:
+        started_at_us: $state.steeping_started_at_us
+        duration_s: $state.steep_duration_s
+    agent:
+      prompt: Set steeping_complete to the fresh expired value. Keep message empty.
+      tools: []
+    voice:
+      prompt: Answer timer questions with a fresh clock__timer result.
+      tools: [clock__timer]
+    complete_when: {steeping_complete: true}
+    next: null
+    skip_state: {steeping_complete: true}
+    messages:
+      enter: Steep for {{ steep_duration_s | duration }}.
+      complete: Steeping is complete. Remove the tea, then say next to finish.
+      skip: Timer skipped; remove the tea when it tastes right.

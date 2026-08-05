@@ -299,6 +299,34 @@ for the full option list.
 
 ---
 
+### Tea-making guide (YAML-driven visual workflow)
+
+The tea-making sample demonstrates nested, YAML-driven guidance state machines.
+Each step selects a native NAT trigger, observation agent, read-only voice
+agent, projected state, tools, completion rule, and transition. A small NAT
+router handles top-level voice management, while every state change goes
+through one typed commit function. Completed steps keep observing but remain
+active until the user explicitly says next, continue, or skip.
+Vision prompts are focus-only guides and return plain captions; YAML evidence
+gates apply per-step grounding thresholds before visual completion. Guidance
+also resets to idle for every new connection and after an app restart.
+
+The default profile reuses Cosmos Reason1, Nemotron-3-Nano, and the embedding
+server from the shared model-server stack. A local typed RAG service grounds
+missing package instructions in the sample's tea corpus. An alternate profile
+uses Nemotron-3-Omni for both vision and agent reasoning. See the
+[sample README](agent-samples/tea-making-sample/README.md) for the workflow
+format, model selection, observability events, and adaptation guide.
+
+```bash
+cd agent-samples/tea-making-sample
+uv sync
+uv run --project ../model-servers model_servers
+uv run tea_making_sample
+```
+
+---
+
 ### XR render demo (voice-driven sphere in CloudXR)
 
 Speak to the web client and a sphere in the streamed scene tracks your

@@ -550,6 +550,25 @@ in-process. The `models_config` key selects a structured deployment profile:
 external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
 8108. Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
+### tea-making-sample  (agent-samples/tea-making-sample/)
+
+YAML-defined visual guide: each step selects a native trigger, a NAT
+tool-calling observation agent, a read-only voice agent, typed state, and a
+transition. A separate NAT router handles workflow-level voice commands.
+
+| Sub-project | Package | Internal deps | External deps |
+|---|---|---|---|
+| Orchestrator | `tea-making-sample` | `xr-ai-launcher`, `xr-ai-logging` | - |
+| Worker | `tea-making-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[agents,services,vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | pyyaml >=6.0 |
+
+The default split profile reuses STT, embedding, Nemotron-3-Nano, and Cosmos
+services from `agent-samples/model-servers`, while the sample owns Piper TTS
+and its typed RAG service. The alternate Omni profile manages one
+Nemotron-3-Omni service for both `agent_llm` and `vlm`, plus local STT,
+embedding, and TTS. The worker registers sample-local clock and workflow
+functions, the shared native vision and RAG groups, and an exact `rag_lookup`
+adapter in-process.
+
 ### model-servers  (agent-samples/model-servers/)
 
 Standalone launcher that starts the shared AI inference servers and keeps

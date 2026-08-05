@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# GPU 1 hosts only the small embedding and STT services.
+model: nvidia/llama-nemotron-embed-1b-v2
+host: "0.0.0.0"
+port: 8109
+served_model_name: embed
+hf_token: ""
+model_cache: ../../../../models
+cuda_visible_devices: "1"
+max_num_seqs: 32
+tensor_parallel_size: 1
+max_model_len: 8192
+# 0.10 x 48 GiB = 4.8 GiB for the 1B pooling model.
+gpu_memory_utilization: 0.10
+enforce_eager: true
+vllm_backend: docker
+vllm_image: nvcr.io/nvidia/vllm:26.04-py3

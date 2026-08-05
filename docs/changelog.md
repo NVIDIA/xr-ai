@@ -18,6 +18,59 @@ vLLM services, so the launcher can exit after readiness without unloading
 weights. `--stop` cleans every stack-specific port without requiring the
 original selection.
 
+### 2026-08-04 — Guidance workflows compose uniform NAT state loops
+
+The tea-making sample now treats each step as the same YAML-selected loop: a
+native NAT trigger produces one compact observation, a built-in NAT
+tool-calling agent gathers optional evidence, and one typed commit function
+updates the step's bounded state. The identify step uses the shared typed RAG
+service only when package temperature or duration is absent, records the
+retrieval source, and never lets retrieval override package values. A separate
+NAT router delegates ordinary
+voice requests to read-only per-step agents or invokes deterministic workflow
+management functions. Conversation history is absent by default, completion is
+derived from YAML state predicates, and only an explicit user voice request can
+advance a step. Completed steps keep the identical observation loop and produce
+revision-free commit no-ops until that request arrives. Structured trace events
+expose every trigger, agent input, commit, route, and transition. Trigger
+resolution, the session store, and workflow functions remain sample-local until
+a second guided application proves the reusable API.
+
+Visual triggers use short focus guides and return plain-text captions instead
+of schema-shaped answers. Step-local regex and consecutive-frame thresholds in
+YAML independently gate visual completion, preventing one hallucinated caption
+or an observation-agent inversion from updating readiness. The gate's caption,
+match, and count are logged on every observation. Participant sessions reset to
+idle on a real join and app-start roster replay, are discarded on leave, and
+ignore duplicate roster replays so an active session is not reset by another
+endpoint's catch-up request.
+
+Identification uses a lower-latency form of the same gate: two consecutive
+readable OCR captions are required, while darkness, unreadability, and
+absent-text captions are rejected. Evidence gates every state write so a model
+cannot preserve generic retrieval from an unreadable frame. Its 1.5-second
+trigger never invokes generic retrieval without a specific visible tea name.
+The sample-local RAG alias returns at most two passages and the corpus uses
+900-character overlapping chunks, keeping the agent context small while
+preserving a blend heading with its brewing values.
+
+The voice router now treats management as an explicit-command-only surface;
+all task questions, action reports, correctness checks, readings, and timer
+queries delegate to the active step. Step voice policies carry only their
+current procedure, enough to resolve references without conversational
+history. The sample-local `current_view` NAT function removes participant ID
+from the model-visible request and injects it from invocation scope, preventing
+fabricated IDs from sending live vision to a nonexistent participant. Negative
+caption guards also cover `none`, plural `texts`, and negation separated from
+the immersion verb.
+
+User-facing presentation is centralized above individual workflows. The shared
+voice contract generically requires natural spoken language, expanded symbols
+and abbreviations, familiar quantities, preserved meaning, and no machine
+formats. Deterministic YAML messages use explicit `temperature_c` and
+`duration` render filters where guaranteed output is needed, while state and
+tool inputs remain compact numeric values.
+
 ### 2026-08-03 — Spoken text must carry terminal punctuation
 
 The TTS stage batches on sentence-final punctuation and flushes trailing
@@ -47,6 +100,36 @@ points at the same server as `agent_llm` (port 8107) and the ~16 GiB of VRAM
 the 8B held is freed. The standalone `ai-services/llm/llama_nemotron` server
 and its `xr-ai-models` preset remain available for samples that want a small
 dedicated model.
+
+### 2026-08-03 — Tea making selects a hardware-specific GPU layout
+
+The tea-making launcher now uses the shared GPU detector to select explicit
+single-96-GiB-Blackwell or dual-48-GiB-Ada service YAMLs. On Blackwell, NVFP4
+Omni starts first with bounded room for colocated STT and embedding, and the
+RTX Pro profile selects Triton for the current MoE compatibility requirement.
+On dual L40/L40S, FP8 Omni owns GPU 0 while STT and embedding use GPU 1. This
+prevents independently launched vLLM services from reserving the same L40 and
+preserves the sample's one-command startup on both target systems.
+
+### 2026-08-03 — Nemotron Omni pins its minimum supported vLLM runtime
+
+Nemotron-3-Nano-Omni declares the `NemotronH_Nano_Omni_Reasoning_V3`
+architecture, which vLLM 0.19 rejects before remote model code can load. The
+Omni service now pins `vllm/vllm-openai:v0.20.0`, removes the obsolete
+model-side Mamba package installation, and requires vLLM 0.20 for pip mode.
+The shared Docker runner explicitly selects `/bin/bash` so images with their
+own `vllm serve` entrypoint can execute setup commands correctly. Its container
+fingerprint version changed so stopped containers created with the old command
+are recreated instead of reused. The GPU smoke test is required to pass rather
+than treating the architecture failure as expected.
+
+### 2026-08-03 — Persistent vLLM containers track launch configuration
+
+Docker-backed vLLM containers carry a fingerprint of their image, model
+arguments, environment, GPU selection, and cache mount. A stopped container is
+reused only when that fingerprint matches the current request; otherwise it is
+recreated so YAML changes such as GPU memory utilization take effect. Healthy
+running containers remain reusable to preserve hot model weights.
 
 ### 2026-08-03 — Native RAG uses a typed service boundary
 

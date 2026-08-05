@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+routes:
+  - utterance: Walk me through brewing a cup.
+    expected_tool: workflow__start
+  - utterance: Move to the following stage.
+    expected_tool: workflow__advance
+  - utterance: Cancel the walkthrough.
+    expected_tool: workflow__reset
+  - utterance: Which stage are we on?
+    expected_tool: workflow__status
+  - utterance: Is that enough water right now?
+    expected_tool: workflow__ask_step
+  - utterance: Tell me what you learned about this tea.
+    expected_tool: workflow__ask_step
+  - utterance: I poured in the water.
+    expected_tool: workflow__ask_step
+  - utterance: What should I do at this stage?
+    expected_tool: workflow__ask_step
+  - utterance: What is the current reading?
+    expected_tool: workflow__ask_step
+  - utterance: How much steeping time remains?
+    expected_tool: workflow__ask_step
+
+steps:
+  identify:
+    observation: A tea package label reads Oolong, 88 C, steep 4 minutes.
+    expected_updates: [tea_name, target_temperature_c, steep_duration_s, guidance_source, tea_ready]
+  fill_water:
+    observation: The kettle interior is visible with a clear water surface and level inside.
+    expected_updates: [water_filled]
+  heat_water:
+    observation: The active kettle display shows a numeric reading of 86 C.
+    state: {target_temperature_c: 88}
+    expected_updates: [heating_started, water_ready]
+  start_steeping:
+    observation: A tea bag is visibly immersed in the water.
+    expected_tools: [clock__now, workflow__commit]
+  steep_timer:
+    observation: {elapsed_s: 241, remaining_s: 0, expired: true}
+    expected_updates: [steeping_complete]
+
+rag_fallback:
+  step: identify
+  observation: A tea package label clearly reads Sencha; no brewing values are printed.
+  expected_tools: [rag_lookup, workflow__commit]
+  expected_top_k: 2
+  expected_source: rag-documents/tea-brewing.md
+
+identification_guard:
+  readable_ocr: NUMI ORGANIC BLACK TEA BREAKFAST BLEND
+  unreadable_caption: Too dark to discern tea package text.
+  empty_caption: There are no visible texts on any objects within this frame.
+  none_caption: none
+  expected_readable: true
+  expected_unreadable: false
+  expected_empty: false
+  generic_rag_allowed: false
+
+completed_step:
+  step: fill_water
+  observation: The kettle interior is visible with a clear water surface and level inside.
+  state: {water_filled: true}
+  expected_tools: [workflow__commit]
+  expected_updates: {}
+  expected_transition: null
+
+false_positive_guard:
+  step: fill_water
+  observation: No vessel interior or water is visible.
+  proposed_updates: {water_filled: true}
+  expected_accepted: false
+
+steeping_negative_guard:
+  observation: >-
+    A cup with a tea bag is shown, but there is no visible evidence of the tea
+    bag being immersed in water.
+  expected_accepted: false
+
+spoken_values:
+  temperature_c: 100 degrees Celsius
+  duration_240_s: 4 minutes
+  duration_65_s: 1 minute and 5 seconds
