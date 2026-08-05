@@ -294,8 +294,8 @@ live frames, waits for the user to request the next step, and answers questions
 from current state or native RAG at any point.
 
 Nemotron-Omni provides both vision and agent reasoning. The final steeping step
-uses a wall-clock timer without running the VLM, answers elapsed/remaining-time
-questions, and announces when steeping is complete. See the
+uses vision to detect immersion, then switches to a wall-clock timer, answers
+elapsed/remaining-time questions, and announces when steeping is complete. See the
 [sample README](agent-samples/tea-making-sample/README.md) for the workflow and
 customization format.
 
