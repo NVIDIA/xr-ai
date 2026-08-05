@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
+from xr_ai_models import ChatMessage, LLMService, ToolDef
 
-from .tools import GuideTools
+from .tools import AgentTool, GuideTools, ToolCatalog
 from .workflow import (
     WorkflowDefinition,
     WorkflowSession,
@@ -24,7 +24,16 @@ from .workflow import (
 
 _OBSERVATION_LOG_TOOL = "get_recent_vlm_observations"
 _VISUAL_INSPECTION_TOOL = "inspect_current_view"
+_NEXT_STEP_TOOL = "get_next_workflow_step"
+_TASK_CONTROL_KEYS = {
+    "navigation_examples",
+    "start_triggers",
+    "status_triggers",
+    "stop_triggers",
+}
 VisualQueryFn = Callable[[str], Awaitable[dict[str, Any]]]
+
+
 @dataclass(frozen=True, slots=True)
 class StepAgentResult:
     """Structured output from one step-agent iteration."""
@@ -58,13 +67,8 @@ class WorkflowAgent:
         answer_prompt: Path,
     ) -> None:
         self._llm = llm
-        self._tools = tools
         self._workflow = workflow
-        self._tool_defs = [
-            *tools.definitions(),
-            _observation_log_tool_def(),
-            _visual_inspection_tool_def(),
-        ]
+        self._tool_catalog = ToolCatalog(_agent_tools(tools))
         self._answer_prompt_path = answer_prompt
         self._answer_prompt_cache = answer_prompt.read_text(encoding="utf-8").strip()
 
@@ -91,8 +95,7 @@ class WorkflowAgent:
         raw = await self._run_tool_loop(
             messages,
             max_tokens=1536,
-            observation_log=observation_log,
-            tool_defs=self._step_tool_defs(step),
+            tools=self._step_tools(step),
         )
         logger.debug(
             "step agent raw pid={} step={} text={!r}",
@@ -127,9 +130,7 @@ class WorkflowAgent:
     ) -> NavigationIntent:
         full_context = session.context if session is not None else self._workflow.initial_context()
         context = self._workflow.context_for_step(current_step, full_context)
-        history = (
-            "\n".join(f"User: {user}\nAssistant: {assistant}" for user, assistant in recent_turns[-2:]) or "(none)"
-        )
+        prior_user_request = recent_turns[-1][0] if recent_turns else "(none)"
         messages = [
             ChatMessage(role="system", content=_NAVIGATION_SYSTEM_PROMPT),
             ChatMessage(
@@ -146,7 +147,9 @@ class WorkflowAgent:
                     f"ready={bool(session and session.ready_step_id == current_step.id)}\n"
                     f"workflow_active={bool(session and session.active)}\n\n"
                     f"[Workflow context]\n{context_for_prompt(context)}\n\n"
-                    f"[Recent conversation]\n{history}\n\n"
+                    f"[Prior user request for follow-up reference]\n"
+                    f"{prior_user_request}\n"
+                    f"Do not reuse any earlier answer or measured value.\n\n"
                     f"[User utterance]\n{transcript}"
                 ),
             ),
@@ -193,11 +196,37 @@ class WorkflowAgent:
         recent_turns: list[tuple[str, str]],
         visual_query: VisualQueryFn | None = None,
     ) -> str:
-        system = self._read_answer_prompt()
         context = session.context if session is not None else self._workflow.initial_context()
-        history = (
-            "\n".join(f"User: {user}\nAssistant: {assistant}" for user, assistant in recent_turns[-4:]) or "(none)"
+        return await self.answer_step(
+            transcript=transcript,
+            context=context,
+            current_step=current_step,
+            step_state=session.step_state if session is not None else "idle",
+            ready=bool(session and session.ready_step_id == current_step.id),
+            workflow_active=bool(session and session.active),
+            observation_log=observation_log,
+            recent_turns=recent_turns,
+            visual_query=visual_query,
         )
+
+    async def answer_step(
+        self,
+        *,
+        transcript: str,
+        context: dict[str, Any],
+        current_step: WorkflowStep,
+        step_state: str,
+        ready: bool,
+        workflow_active: bool,
+        observation_log: list[dict[str, Any]],
+        recent_turns: list[tuple[str, str]],
+        visual_query: VisualQueryFn | None = None,
+    ) -> str:
+        """Answer one read-only voice event in the current step's scope."""
+
+        system = self._read_answer_prompt()
+        prompt_context = self._workflow.context_for_step(current_step, context)
+        prior_user_request = recent_turns[-1][0] if recent_turns else "(none)"
         latest_observation = _latest_step_observation(
             observation_log,
             current_step.id,
@@ -207,22 +236,24 @@ class WorkflowAgent:
             ChatMessage(
                 role="user",
                 content=(
-                    f"[Task]\n{json.dumps(self._workflow.task, ensure_ascii=True)}\n\n"
+                    f"[Task]\n{json.dumps(_task_context(self._workflow.task), ensure_ascii=True)}\n\n"
                     f"[Current step]\n"
                     f"id={current_step.id}\n"
                     f"name={current_step.name}\n"
                     f"description={current_step.description}\n\n"
                     f"[Step procedure]\n{current_step.agent_prompt}\n\n"
-                    f"[Recent conversation]\n{history}\n\n"
+                    f"[Prior user request for follow-up reference]\n"
+                    f"{prior_user_request}\n"
+                    f"Do not reuse any earlier answer or measured value.\n\n"
                     f"[Workflow snapshot]\n"
-                    f"The workflow context and latest step-monitor observation below "
+                    f"The current-step context and latest step-monitor observation below "
                     f"supersede older workflow observations, but they are not a fresh "
                     f"camera inspection for the current request.\n\n"
                     f"[Step state]\n"
-                    f"state={session.step_state if session is not None else 'idle'}\n"
-                    f"ready={bool(session and session.ready_step_id == current_step.id)}\n"
-                    f"workflow_active={bool(session and session.active)}\n\n"
-                    f"[Workflow context]\n{context_for_prompt(context)}\n\n"
+                    f"state={step_state}\n"
+                    f"ready={ready}\n"
+                    f"workflow_active={workflow_active}\n\n"
+                    f"[Current-step context only]\n{context_for_prompt(prompt_context)}\n\n"
                     f"[Latest step-monitor observation]\n{latest_observation}\n\n"
                     f"[VLM observation log]\n"
                     f"A rolling internal log is available through "
@@ -234,17 +265,20 @@ class WorkflowAgent:
         ]
         response = await self._run_tool_loop(
             messages,
-            max_tokens=1024,
-            observation_log=observation_log,
-            visual_query=visual_query,
+            max_tokens=256,
+            tools=self._answer_tools(
+                current_step=current_step,
+                observation_log=observation_log,
+                visual_query=visual_query,
+            ),
         )
         logger.info(
             "answer agent response active={} step={} text={!r}",
-            session is not None and session.active,
+            workflow_active,
             current_step.id,
             response[:1000],
         )
-        return response.strip() or "Done."
+        return response.strip() or "I could not determine that from the available information."
 
     def _step_user_prompt(
         self,
@@ -265,15 +299,15 @@ class WorkflowAgent:
             },
             "assistant_message": {
                 "type": "string",
-                "description": ("Optional short guidance, correction, or missing-info request."),
+                "description": ("Empty unless an immediate visible safety correction is required."),
             },
             "speak": {
                 "type": "boolean",
-                "description": ("Reserved for urgent notices; false for ordinary missing information."),
+                "description": ("True only for an immediate visible safety correction."),
             },
         }
         return (
-            f"[Task]\n{json.dumps(self._workflow.task, ensure_ascii=True)}\n\n"
+            f"[Task]\n{json.dumps(_task_context(self._workflow.task), ensure_ascii=True)}\n\n"
             f"[Step]\n"
             f"id={step.id}\n"
             f"name={step.name}\n"
@@ -290,16 +324,16 @@ class WorkflowAgent:
         messages: list[ChatMessage],
         *,
         max_tokens: int,
-        observation_log: list[dict[str, Any]] | None = None,
-        tool_defs: list[ToolDef] | None = None,
-        visual_query: VisualQueryFn | None = None,
+        tools: list[AgentTool] | None = None,
     ) -> str:
-        available_tools = self._tool_defs if tool_defs is None else tool_defs
+        available_tools = tools or []
+        definitions = [tool.definition for tool in available_tools]
+        catalog = ToolCatalog(available_tools)
         for iteration in range(self._workflow.max_agent_iterations):
             try:
                 response = await self._llm.chat(
                     messages,
-                    tools=available_tools,
+                    tools=definitions,
                     max_tokens=max_tokens,
                     temperature=0.0,
                     enable_thinking=False,
@@ -321,11 +355,26 @@ class WorkflowAgent:
                 )
             )
             for call in tool_calls:
-                result = await self._execute_tool(
-                    call,
-                    iteration=iteration,
-                    observation_log=observation_log or [],
-                    visual_query=visual_query,
+                try:
+                    arguments = json.loads(call.arguments or "{}")
+                except json.JSONDecodeError:
+                    arguments = {}
+                logger.debug(
+                    "guide tool call iter={} tool={} args={}",
+                    iteration,
+                    call.name,
+                    arguments,
+                )
+                try:
+                    result = await catalog.invoke(call.name, arguments)
+                except Exception as exc:
+                    logger.exception("guide tool failed: {}", call.name)
+                    result = {"error": str(exc)}
+                logger.debug(
+                    "guide tool result iter={} tool={} result={}",
+                    iteration,
+                    call.name,
+                    result,
                 )
                 messages.append(
                     ChatMessage(
@@ -336,20 +385,16 @@ class WorkflowAgent:
                 )
         return ""
 
-    def _step_tool_defs(
+    def _step_tools(
         self,
         step: WorkflowStep,
-    ) -> list[ToolDef]:
+    ) -> list[AgentTool]:
         if not step.agent_tools:
             return []
-        definitions = {tool.name: tool for tool in self._tool_defs}
-        enabled: list[ToolDef] = []
-        for name in step.agent_tools:
-            tool = definitions.get(name)
-            if tool is None:
-                logger.warning("step {} references unknown agent tool {}", step.id, name)
-                continue
-            enabled.append(tool)
+        missing = self._tool_catalog.missing(step.agent_tools)
+        for name in sorted(missing):
+            logger.warning("step {} references unknown agent tool {}", step.id, name)
+        enabled = self._tool_catalog.select(step.agent_tools)
         logger.debug(
             "step agent tools step={} enabled={}",
             step.id,
@@ -357,58 +402,49 @@ class WorkflowAgent:
         )
         return enabled
 
-    async def _execute_tool(
+    def _answer_tools(
         self,
-        call: ToolCall,
         *,
-        iteration: int,
+        current_step: WorkflowStep,
         observation_log: list[dict[str, Any]],
         visual_query: VisualQueryFn | None = None,
-    ) -> dict[str, Any]:
-        try:
-            arguments = json.loads(call.arguments or "{}")
-        except json.JSONDecodeError:
-            arguments = {}
-        logger.debug("guide tool call iter={} tool={} args={}", iteration, call.name, arguments)
-        if call.name == _OBSERVATION_LOG_TOOL:
-            result = _recent_observations(observation_log, arguments)
-            logger.debug(
-                "guide tool result iter={} tool={} result={}",
-                iteration,
-                call.name,
-                result,
-            )
-            return result
-        if call.name == _VISUAL_INSPECTION_TOOL:
+    ) -> list[AgentTool]:
+        async def recent(arguments: dict[str, Any]) -> dict[str, Any]:
+            return _recent_observations(observation_log, arguments)
+
+        async def inspect(arguments: dict[str, Any]) -> dict[str, Any]:
             question = str(arguments.get("question") or "").strip()
             if visual_query is None:
                 return {"error": "A live camera view is not available."}
             if not question:
                 return {"error": "question is required"}
-            try:
-                result = await visual_query(question)
-                logger.debug(
-                    "guide tool result iter={} tool={} result={}",
-                    iteration,
-                    call.name,
-                    result,
-                )
-                return result
-            except Exception as exc:
-                logger.exception("live visual inspection failed")
-                return {"error": str(exc)}
-        try:
-            result = await self._tools.invoke(call.name, arguments)
-            logger.debug(
-                "guide tool result iter={} tool={} result={}",
-                iteration,
-                call.name,
-                result,
+            return await visual_query(question)
+
+        async def next_step(_arguments: dict[str, Any]) -> dict[str, Any]:
+            following = (
+                self._workflow.first_active_step()
+                if current_step.is_idle
+                else self._workflow.next_step(current_step.id)
             )
-            return result
-        except Exception as exc:
-            logger.exception("guide tool failed: {}", call.name)
-            return {"error": str(exc)}
+            if following is None:
+                return {"has_next_step": False}
+            return {
+                "has_next_step": True,
+                "id": following.id,
+                "name": following.name,
+                "description": following.description,
+                "on_enter_message": following.on_enter_message,
+            }
+
+        scoped = [
+            AgentTool(_observation_log_tool_def(), recent, read_only=True),
+            AgentTool(_visual_inspection_tool_def(), inspect, read_only=True),
+            AgentTool(_next_step_tool_def(), next_step, read_only=True),
+        ]
+        return [
+            *self._tool_catalog.select(read_only_only=True),
+            *scoped,
+        ]
 
     def _read_answer_prompt(self) -> str:
         try:
@@ -426,20 +462,29 @@ step-specific procedure. Interpret the caption and perform every state update
 through the returned context patch. Call the step's enabled tools whenever its
 procedure requires current time, timer status, RAG, or other external data.
 
+Stay inside this step. Do not discuss, prepare, summarize, or give instructions
+for any future step. The latest VLM caption is the only authority for fields that
+describe what is visible now. Current context is prior state, not current visual
+evidence. When the procedure declares a field mutable, update it from every new
+caption and never substitute an older value. Derive readiness only from the
+latest caption, the projected context, enabled tool results, and the explicit
+advance condition.
+
 Return only valid JSON. The top-level object must contain:
 - context: a partial patch containing only fields this step can write and only
   values supported by the latest VLM observation, RAG, tools, or context.
 - ready_to_advance: whether this step is complete.
 - step_state: started, needs_input, or complete for this step's internal state.
 - assistant_message: optional concise high-level guidance or a missing-info
-  request. The worker controls reminder timing, so do not repeat yourself.
-- speak: false for ordinary missing information. The worker controls when to
-  speak delayed reminders and ready notices.
+  request. Leave it empty unless the latest evidence shows an immediate safety
+  problem requiring a correction.
+- speak: true only for that immediate safety correction; otherwise false. The
+  worker owns entry instructions, reminders, completion, and navigation speech.
 
 Never copy, summarize, or narrate the VLM observation as assistant_message.
 The VLM observation is internal evidence. assistant_message is only for a short
-actionable correction, missing-info request, or useful "ready for next" style
-notice.
+urgent safety correction. Do not announce status, readiness, tea details, the
+current step, or any next action from this loop.
 
 Do not change the workflow step number. Do not invent visible facts. A writable
 observation may change more than once within one step; prefer newer evidence to
@@ -493,6 +538,33 @@ def _observation_log_tool_def() -> ToolDef:
     )
 
 
+def _agent_tools(tools: GuideTools) -> list[AgentTool]:
+    """Adapt old tool providers while preferring capability-aware providers."""
+
+    provider = getattr(tools, "agent_tools", None)
+    if callable(provider):
+        return list(provider())
+
+    adapted: list[AgentTool] = []
+    for definition in tools.definitions():
+
+        async def invoke(
+            arguments: dict[str, Any],
+            *,
+            name: str = definition.name,
+        ) -> dict[str, Any]:
+            return await tools.invoke(name, arguments)
+
+        adapted.append(AgentTool(definition, invoke, read_only=False))
+    return adapted
+
+
+def _task_context(task: dict[str, Any]) -> dict[str, Any]:
+    """Remove navigation configuration from non-navigation model prompts."""
+
+    return {key: value for key, value in task.items() if key not in _TASK_CONTROL_KEYS}
+
+
 def _visual_inspection_tool_def() -> ToolDef:
     return ToolDef(
         name=_VISUAL_INSPECTION_TOOL,
@@ -515,6 +587,22 @@ def _visual_inspection_tool_def() -> ToolDef:
                 },
             },
             "required": ["question"],
+            "additionalProperties": False,
+        },
+    )
+
+
+def _next_step_tool_def() -> ToolDef:
+    return ToolDef(
+        name=_NEXT_STEP_TOOL,
+        description=(
+            "Return the exact next YAML-defined workflow step. Use only when the "
+            "wearer explicitly asks what comes next; never call it for an ordinary "
+            "current-step question or progress report."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {},
             "additionalProperties": False,
         },
     )
@@ -552,8 +640,7 @@ def _latest_step_observation(
         (
             entry
             for entry in reversed(observation_log)
-            if entry.get("step_id") == step_id
-            and entry.get("kind", "step_monitor") == "step_monitor"
+            if entry.get("step_id") == step_id and entry.get("kind", "step_monitor") == "step_monitor"
         ),
         None,
     )

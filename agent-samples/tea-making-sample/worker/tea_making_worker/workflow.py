@@ -75,6 +75,8 @@ class WorkflowStep:
     read_fields: tuple[str, ...] = ()
     partial_context: bool = False
     advance_when: dict[str, Any] = field(default_factory=dict)
+    vlm_stop_when: dict[str, Any] = field(default_factory=dict)
+    suppress_reminders_when: dict[str, Any] = field(default_factory=dict)
     skip_defaults: dict[str, Any] = field(default_factory=dict)
     agent_tools: tuple[str, ...] = ()
     on_enter_message: str = ""
@@ -298,6 +300,16 @@ class WorkflowDefinition:
         rule = step.advance_when or {}
         return _rule_met(rule, context) if rule else ready_to_advance
 
+    def condition_met(
+        self,
+        rule: dict[str, Any],
+        context: dict[str, Any],
+    ) -> bool:
+        """Evaluate an optional YAML condition against workflow context."""
+
+        return bool(rule) and _rule_met(rule, context)
+
+
 def _rule_met(rule: dict[str, Any], context: dict[str, Any]) -> bool:
     all_rules = rule.get("all")
     if isinstance(all_rules, list):
@@ -463,6 +475,8 @@ def _parse_step(
         read_fields=read_fields,
         partial_context=registry_enabled,
         advance_when=dict(raw.get("advance_when") or {}),
+        vlm_stop_when=dict(raw.get("vlm_stop_when") or {}),
+        suppress_reminders_when=dict(raw.get("suppress_reminders_when") or {}),
         skip_defaults=dict(raw.get("skip_defaults") or {}),
         agent_tools=_parse_agent_tools(raw.get("agent_tools") or []),
         on_enter_message=str(raw.get("on_enter_message") or ""),

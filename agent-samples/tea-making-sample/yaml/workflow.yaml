@@ -132,7 +132,8 @@ steps:
     description: Wait for the wearer to ask for guided tea making.
     reads: []
     writes: []
-    on_enter_message: "Say 'help me make tea' when you want to start."
+    on_enter_message: >-
+      Say "Agent, help me make tea" when you want to start a fresh session.
 
   - id: 1
     name: Identify tea information
@@ -158,6 +159,7 @@ steps:
       If no useful label or instructions are visible now, state what is missing.
       Do not guess the tea type from a cup, kettle, or background.
     agent_prompt: |
+      Work only on identifying the tea and its brewing values for this step.
       Extract visible package details first. When the tea type is specific enough,
       call rag_lookup with the tea type plus "water temperature and steep time".
       Prefer package instructions over RAG and record the source briefly.
@@ -167,8 +169,9 @@ steps:
       package value when needed. Set steep_duration_seconds to one timer target;
       for a range, use its lower bound so the wearer can taste before over-steeping.
       Set context_ready only when the tea name, spoken guidance, numeric target,
-      and timer duration are known. Otherwise request a clearer label once the
-      worker's reminder interval is reached.
+      and timer duration are known. Do not describe later physical actions and do
+      not put label-reading status or brewing guidance in assistant_message; the
+      worker owns all ordinary speech.
     agent_tools: [rag_lookup]
     advance_when:
       all:
@@ -201,117 +204,124 @@ steps:
       I still need the tea label or tea bag tag. Hold it in view, or say next if
       you want me to use generic tea defaults.
     on_complete_message: >-
-      I have the details for {{tea_name}}. Use {{tea_temperature | spoken}} and
-      steep it for {{steep_duration_seconds | duration}}. Next, fill the kettle
-      or pot with water.
+      I have the brewing details for {{tea_name}}.
 
   - id: 2
-    name: Fill water and start heating
-    description: Guide the wearer through adding water and starting the heater.
-    reads:
-      - tea_name
-      - tea_temperature
-      - target_temperature_c
+    name: Fill water
+    description: Guide the wearer through adding water to the heating vessel.
+    reads: []
     writes:
       - water_filled
-      - heating_apparatus
-      - water_heating_started
     vlm_prompt: |
-      Monitor the current water-heating setup. Caption only visible evidence:
-      - kettle, pot, cup, faucet, or water container
+      Inspect only whether the heating vessel contains water. Caption current
+      visible evidence:
+      - kettle, pot, or other heating vessel
       - whether water is being added or is visibly present
-      - whether a kettle, stove, hot plate, or electric base appears to be on
-      - unsafe, overfilled, empty, or unstable conditions
+      - unsafe overfilling, an empty vessel, or an unstable vessel
 
       End with:
       WATER_FILLED: yes/no/unclear
-      HEATING_STARTED: yes/no/unclear
     agent_prompt: |
-      Treat water_filled and water_heating_started as action milestones. Set them
-      true only from clear current evidence, and do not erase a completed milestone
-      merely because the vessel later moves out of view. Update heating_apparatus
-      when a more specific current observation is available. If the setup is
-      visibly unsafe, request one brief correction and keep the step incomplete.
-      Mark complete after both milestones are established.
+      Work only on whether water has been added. Do not discuss heating,
+      temperature, tea, or later actions. Set water_filled true only when the
+      latest caption clearly shows water being added or present. Keep the
+      milestone true after it is established. If the vessel is visibly unsafe,
+      return one brief safety correction and keep the step incomplete. Otherwise
+      leave assistant_message empty.
     agent_tools: []
     advance_when:
-      all:
-        - field: water_filled
-          equals: true
-        - field: water_heating_started
-          equals: true
+      field: water_filled
+      equals: true
     skip_defaults:
       water_filled: true
-      heating_apparatus: "assumed kettle or pot"
-      water_heating_started: true
-    on_enter_message: "Fill the kettle or pot with fresh water, then start heating it."
+    on_enter_message: "Fill the kettle or pot with fresh water."
     on_reminder_message: >-
-      I still need to see water in the heating vessel and the heater started.
-      Fill it and turn it on, or say next to continue with that assumed.
-    on_complete_message: >-
-      Water is heating. Wait until it reaches {{tea_temperature | spoken}}.
+      I still need to see water in the kettle or pot. Fill it, or say next to
+      continue with that assumed.
+    on_complete_message: "The heating vessel has water in it."
 
   - id: 3
-    name: Heat water to the target
-    description: Monitor the latest visible reading and boil cues until the water is ready.
+    name: Start heating and reach the target temperature
+    description: Start the heater and monitor current readings until the water reaches the tea target.
     reads:
       - tea_name
       - tea_temperature
       - target_temperature_c
+      - water_filled
     writes:
+      - heating_apparatus
+      - water_heating_started
       - water_temperature_current
       - water_boil_cue
       - water_ready
     vlm_prompt: |
-      Inspect the current water-heating apparatus and any temperature display.
-      Caption only current visible evidence:
+      Inspect only the current water-heating setup. Caption current visible evidence:
+      - kettle, pot, stove, hot plate, or electric base
+      - whether the heater appears to be on
       - exact numeric thermometer, kettle display, or appliance reading
       - steam, rolling boil, small bubbles, or automatic kettle shutoff
+      - immediate safety concerns
 
       Do not decide whether the water suits the tea. Include numbers and units
       exactly as visible. End with:
+      HEATING_STARTED: yes/no/unclear
       TEMPERATURE_READING: <exact current value with units, or not_visible>
       BOIL_CUE: yes/no/unclear
     agent_prompt: |
-      Compare the latest visible reading with target_temperature_c. Replace
-      water_temperature_current on every pass, including with "not visible";
-      it is a live observation, not historical memory. Treat water_boil_cue the
-      same way. Convert a visible Fahrenheit reading for comparison when needed.
+      Work only on starting heat and evaluating the newest temperature caption.
+      Set water_heating_started true only from clear current evidence and keep
+      that action milestone true once established. Update heating_apparatus when
+      the latest caption provides a more specific value.
 
-      Set water_ready true when the current reading reaches the target within a
-      practical brewing tolerance. A clear boil cue is enough only for a target
-      near boiling. For a lower target, a rolling boil means the water needs to
-      cool. Do not use an older reading after a newer one arrives. Once readiness
-      has completed the step, keep that milestone latched while live observation
-      fields may continue changing until the wearer proceeds.
+      Copy
+      TEMPERATURE_READING from the latest caption into
+      water_temperature_current on every pass, including "not visible". Copy
+      BOIL_CUE into water_boil_cue on every pass. Never use either value from
+      current context as evidence for this pass.
+
+      If the latest caption has an exact numeric reading, convert it to Celsius
+      for comparison. Set water_ready true only when that current reading is from
+      2 degrees below through 3 degrees above target_temperature_c. A BOIL_CUE of
+      yes without a numeric reading is enough only when target_temperature_c is
+      at least 98 degrees Celsius. Otherwise leave water_ready unchanged or false.
+      A reading such as 100 degrees Celsius is not ready for an 80-degree target.
+      Do not announce a reading or readiness in assistant_message; the worker
+      owns ordinary speech.
     agent_tools: []
     advance_when:
-      field: water_ready
-      equals: true
+      all:
+        - field: water_heating_started
+          equals: true
+        - field: water_ready
+          equals: true
     skip_defaults:
+      heating_apparatus: "assumed kettle or pot"
+      water_heating_started: true
       water_temperature_current: "assumed ready by wearer request"
       water_boil_cue: "unclear"
       water_ready: true
     on_enter_message: >-
-      Wait for the water. I will watch the current reading and boil cues for the
-      right temperature.
+      Start heating the water and keep the temperature display or kettle in view.
+      The target is {{tea_temperature | spoken}}.
     on_reminder_message: >-
-      I still need a clear boil cue or temperature reading. Keep the kettle or
-      thermometer in view, or say next if the water is ready.
+      I still need to see the heater started and a current temperature reading or
+      boil cue. Keep the setup in view, or say next if the water is ready.
     on_complete_message: >-
-      The water is ready at {{water_temperature_current | spoken}}. Put the tea
-      bag, infuser, or leaves into the water.
+      The water has reached the target temperature.
 
   - id: 4
-    name: Start steeping the tea
-    description: Detect the first moment the tea enters the hot water.
+    name: Steep the tea
+    description: Detect when steeping starts, record the time, and wait for the configured duration.
     reads:
       - tea_name
       - steep_time
       - steep_duration_seconds
+      - steeping_started_at_us
+      - steeping_started_at_iso
     writes:
       - steeping_started_at_us
       - steeping_started_at_iso
+      - steeping_complete
     vlm_prompt: |
       Monitor whether tea leaves, a tea bag, or an infuser enter the hot water.
       Caption only current visible evidence, including whether the tea is outside
@@ -319,57 +329,38 @@ steps:
 
       End with:
       STEEPING_STARTED: yes/no/unclear
-    agent_prompt: |
-      When the latest caption says the tea has entered the hot water and
-      no start timestamp exists, call get_current_time. Copy the tool's epoch_us
-      to steeping_started_at_us and iso to steeping_started_at_iso in the context
-      patch. Never overwrite an existing steeping start timestamp. If steeping
-      has not started, request that the tea be placed in the water only when the
-      worker asks for a delayed reminder.
-    agent_tools: [get_current_time]
-    advance_when:
+    vlm_stop_when:
       field: steeping_started_at_us
       gt: 0
-    skip_defaults:
-      steeping_started_at_us: "{{now_us}}"
-      steeping_started_at_iso: "{{now_iso}}"
-    on_enter_message: "Place the tea bag, infuser, or loose leaves into the hot water."
-    on_reminder_message: >-
-      I still need to see the tea enter the hot water. Put it in now, or say next
-      if steeping has already started.
-    on_complete_message: >-
-      Steeping started at {{steeping_started_at_us | local_time}}. Let {{tea_name}}
-      steep for {{steep_duration_seconds | duration}}.
-
-  - id: 5
-    name: Wait for steeping to finish
-    description: Track elapsed steeping time through an agent tool without VLM captions.
-    reads:
-      - tea_name
-      - steep_time
-      - steep_duration_seconds
-      - steeping_started_at_us
-      - steeping_started_at_iso
-    writes:
-      - steeping_complete
+    suppress_reminders_when:
+      field: steeping_started_at_us
+      gt: 0
     agent_prompt: |
-      On every iteration, call get_timer_status with steeping_started_at_us,
-      steep_duration_seconds, and the label "steeping". Set steeping_complete
-      true only when the tool returns expired true. Otherwise leave it unset and
-      keep the step started. Do not ask the wearer to show the tea or repeat a
-      completed action.
-    agent_tools: [get_timer_status]
+      This step has two focused phases.
+
+      Before steeping_started_at_us exists, use only the latest caption to detect
+      the first immersion. When it clearly says the tea entered the water, call
+      get_current_time and copy epoch_us and iso into the two start fields. Never
+      overwrite an existing start timestamp. Do not start from an unclear caption.
+
+      After steeping_started_at_us exists, call get_timer_status on every
+      iteration with that timestamp, steep_duration_seconds, and label
+      "steeping". Set steeping_complete true only when the fresh tool result says
+      expired true. Otherwise keep it incomplete. Never reuse an earlier timer
+      result. Leave assistant_message empty; the worker owns reminders and the
+      time-up notice.
+    agent_tools: [get_current_time, get_timer_status]
     advance_when:
       field: steeping_complete
       equals: true
     skip_defaults:
       steeping_complete: true
     on_enter_message: >-
-      The tea is steeping. I will tell you when
-      {{steep_duration_seconds | duration}} has elapsed.
+      Place the tea bag, infuser, or loose leaves into the hot water. I will start
+      the {{steep_duration_seconds | duration}} timer when steeping begins.
     on_reminder_message: >-
-      I cannot start the timer without a steeping start time and duration. Say
-      next to skip the timer, or restart guidance to capture them.
+      I still need to see the tea enter the hot water. Put it in now, or say next
+      to skip steeping guidance.
     on_complete_message: >-
       The steeping time is up. Remove the tea bag, infuser, or leaves now.
     on_skip_message: >-

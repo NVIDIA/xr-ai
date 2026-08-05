@@ -28,17 +28,21 @@ class VoiceGateConfig:
                            because the chime is an audible "I heard you"
                            cue that most consumers want by default;
                            opt out explicitly with ``listening_chime: false``.
+    ``welcome_message``  — optional participant-joined speech. When empty, the
+                           gate generates its standard wake-phrase help.
     """
     magic_phrases:    tuple[str, ...] = ()
     followup_grace_s: float           = 5.0
     listening_chime:  bool            = True
+    welcome_message:  str             = ""
 
 
 def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
     """Load + parse a voice_gate YAML file into a :class:`VoiceGateConfig`.
 
     Schema: a top-level mapping with keys ``magic_phrases`` (list[str] or
-    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float).
+    bare str), ``listening_chime`` (bool), ``followup_grace_s`` (float), and
+    optional ``welcome_message`` (str).
     Missing file or empty file → returns the dataclass defaults (gate
     disabled / always-on). ``magic_phrases: null`` and trailing whitespace
     in phrases are normalized the same way the inline-block parser did.
@@ -58,6 +62,7 @@ def load_voice_gate_config(path: pathlib.Path) -> VoiceGateConfig:
         magic_phrases    = phrases,
         followup_grace_s = float(raw.get("followup_grace_s", 5.0)),
         listening_chime  = bool(raw.get("listening_chime", True)),
+        welcome_message  = str(raw.get("welcome_message") or "").strip(),
     )
 
 
