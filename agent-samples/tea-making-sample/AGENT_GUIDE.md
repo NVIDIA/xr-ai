@@ -100,6 +100,9 @@ changes.
     with an explicit Celsius or Fahrenheit unit. Neither path mutates state.
 32. Heating detection announces that heating is underway and tells the user to
     wait for the target. It never describes the following step as ready.
+33. The router separates explicit lifecycle intent, active-step questions, and
+    general knowledge or vision. The general delegate works while idle and has
+    no workflow mutation tools.
 
 ## Nested machines
 

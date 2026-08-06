@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — General assistance is a non-mutating router branch
+
+The tea voice router now separates explicit lifecycle intent, active-step
+questions, and general requests. A single general delegate uses current vision
+and tea RAG while idle or active but receives no workflow mutation tools.
+Lifecycle words embedded in questions do not count as transition commands;
+step agents and their existing tool policies remain unchanged.
+
 ### 2026-08-05 — Listening chimes belong to wake recognition, not response start
 
 Wake-word probes run on an absolute cadence and append a short silent tail so

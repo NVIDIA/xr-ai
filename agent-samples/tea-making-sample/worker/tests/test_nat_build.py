@@ -76,7 +76,12 @@ class NatBuildTest(unittest.IsolatedAsyncioTestCase):
             )
             await add_clock_functions(builder)
             await add_temperature_functions(builder)
-            await add_workflow_functions(builder, store=store, answer_step=agents.answer)
+            await add_workflow_functions(
+                builder,
+                store=store,
+                answer_step=agents.answer,
+                answer_general=agents.answer_general,
+            )
             await agents.build(builder, llm)
 
 

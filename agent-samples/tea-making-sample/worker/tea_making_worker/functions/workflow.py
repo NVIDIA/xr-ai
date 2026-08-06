@@ -15,8 +15,8 @@ from ..runtime.events import emit
 from ..runtime.scope import current_invocation
 from ..runtime.state import Session, SessionStore
 
-StepAnswer = Callable[[Session, str, str], Awaitable[str]]
-Operation = Literal["commit", "start", "advance", "reset", "status", "ask_step"]
+VoiceAnswer = Callable[[Session, str, str], Awaitable[str]]
+Operation = Literal["commit", "start", "advance", "reset", "status", "ask_step", "ask_general"]
 
 
 class _Request(BaseModel):
@@ -55,12 +55,14 @@ class WorkflowFunctionConfig(FunctionBaseConfig, name="tea_guidance_workflow_fun
     operation: Operation
     store: Any = Field(exclude=True, repr=False)
     answer_step: Any = Field(exclude=True, repr=False)
+    answer_general: Any = Field(exclude=True, repr=False)
 
 
 @register_function(config_type=WorkflowFunctionConfig)
 async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
     store: SessionStore = config.store
-    answer_step: StepAnswer = config.answer_step
+    answer_step: VoiceAnswer = config.answer_step
+    answer_general: VoiceAnswer = config.answer_general
 
     async def commit(request: CommitRequest) -> str:
         call = current_invocation()
@@ -85,9 +87,22 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
             participant_id=call.session.participant_id,
             step=call.session.step_id,
             trace_id=call.trace_id,
+            target="step",
             question=request.question,
         )
         return await answer_step(call.session, request.question, call.trace_id)
+
+    async def ask_general(request: AskStepRequest) -> str:
+        call = current_invocation()
+        emit(
+            "voice.delegate",
+            participant_id=call.session.participant_id,
+            step=call.session.step_id,
+            trace_id=call.trace_id,
+            target="general",
+            question=request.question,
+        )
+        return await answer_general(call.session, request.question, call.trace_id)
 
     handlers: dict[str, tuple[Any, str]] = {
         "commit": (
@@ -103,7 +118,11 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
         "status": (status, "Use only when asked which workflow step is active or whether guidance is running."),
         "ask_step": (
             ask_step,
-            "Handle task questions, reports, help, or facts; never next, continue, advance, or skip.",
+            "Active workflow only: current-step questions, readings, timers, help, or action reports.",
+        ),
+        "ask_general": (
+            ask_general,
+            "General tea knowledge or visual questions; works while idle or active and never manages workflow.",
         ),
     }
     handler, description = handlers[config.operation]
@@ -114,12 +133,18 @@ async def add_workflow_functions(
     builder: Builder,
     *,
     store: SessionStore,
-    answer_step: StepAnswer,
+    answer_step: VoiceAnswer,
+    answer_general: VoiceAnswer,
 ) -> None:
-    for operation in ("commit", "start", "advance", "reset", "status", "ask_step"):
+    for operation in ("commit", "start", "advance", "reset", "status", "ask_step", "ask_general"):
         await builder.add_function(
             f"workflow__{operation}",
-            WorkflowFunctionConfig(operation=operation, store=store, answer_step=answer_step),
+            WorkflowFunctionConfig(
+                operation=operation,
+                store=store,
+                answer_step=answer_step,
+                answer_general=answer_general,
+            ),
         )
 
 

@@ -8,6 +8,11 @@ HUMAN = (
     "notation in words; preserve meaning."
 )
 
+GENERAL = (
+    "Answer in at most two short sentences. Use current_view for visible facts and rag_lookup for tea "
+    "or brewing knowledge; use both only when needed. Never let retrieval identify visible objects."
+)
+
 STEP = (
     "already_complete is status, not state. If true, commit empty. Else use observation, contract, "
     "state, tools. Commit once; message only with a real non-completing state change. Empty on no "
@@ -20,9 +25,10 @@ VOICE = (
 )
 
 ROUTER = (
-    "Next, continue, go on, or advance: call workflow__advance with skip false. Skip: call it with skip "
-    "true. Never route these to ask_step. Start/reset/status require explicit workflow requests. ask_step "
-    "is only for task questions, reports, help, readings, timers, or checks. Call one tool; never answer."
+    "Explicit next/continue/advance calls workflow__advance; skip sets skip true. Explicit "
+    "start/reset/status calls its tool. Mentions are not commands. Current-step/item questions or reports "
+    "call ask_step. General knowledge, including tea, or visual requests call ask_general. One tool; "
+    "never answer."
 )
 
-__all__ = ["HUMAN", "ROUTER", "STEP", "VOICE"]
+__all__ = ["GENERAL", "HUMAN", "ROUTER", "STEP", "VOICE"]

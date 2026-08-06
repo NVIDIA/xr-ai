@@ -20,7 +20,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker.agents.prompts import HUMAN, ROUTER, STEP, VOICE  # noqa: E402
+from tea_making_worker.agents.prompts import GENERAL, HUMAN, ROUTER, STEP, VOICE  # noqa: E402
 from tea_making_worker.agents.registry import _state_contract  # noqa: E402
 from tea_making_worker.config import load_config  # noqa: E402
 from tea_making_worker.functions.vision import CurrentViewRequest  # noqa: E402
@@ -50,6 +50,7 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
         "steep_timer",
     ]
     assert len(ROUTER) <= 300
+    assert len(f"{GENERAL}\n{HUMAN}") <= 320
     assert len(f"{STEP}\n{HUMAN}") <= 350
     assert len(f"{VOICE}\n{HUMAN}") <= 300
     assert "natural spoken language" in HUMAN
@@ -58,7 +59,8 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert "already_complete is status, not state" in STEP
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
-    assert "Never route these to ask_step" in ROUTER
+    assert "Mentions are not commands" in ROUTER
+    assert "ask_general" in ROUTER
     for step, source in zip(workflow.steps.values(), raw["steps"], strict=True):
         assert step.trigger.function
         assert step.complete_when
@@ -188,19 +190,15 @@ def test_visual_evidence_uses_plain_captions_and_rejects_absence() -> None:
     assert not re.fullmatch(identify.evidence.pattern, "none")
 
 
-def test_heat_policy_converts_units_before_comparing() -> None:
+def test_heat_policy_tracks_start_without_readiness() -> None:
     step = _workflow().step("heat_water")
     prompt = step.agent.prompt
 
-    assert step.agent.tools == ("temperature__verify",)
-    assert "call temperature__verify" in prompt
-    assert "exact number/unit and state target" in prompt
-    assert "Without both, skip verification and commit empty" in prompt
-    assert "never calculate" in prompt
-    assert "Always finish with workflow__commit" in prompt
-    assert "If ready, set water_ready=true; otherwise omit it" in prompt
-    assert "Set heating_started=true only when input is false" in prompt
-    assert "Never include false/readings/conversions or return text" in prompt
+    assert step.agent.tools == ()
+    assert "Set heating_started true only when input is false" in prompt
+    assert "Celsius or Fahrenheit" in prompt
+    assert "Do not compare temperatures or track whether the water is ready" in prompt
+    assert step.complete_when == {"heating_started": True}
     assert step.evidence is not None
     assert re.fullmatch(step.evidence.pattern, "164F")
     message_description = CommitRequest.model_fields["message"].description
@@ -288,7 +286,14 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     assert set(cases["steps"]) == set(workflow.steps)
     assert {case["expected_tool"] for case in cases["routes"]} == {
-        f"workflow__{name}" for name in ("start", "advance", "reset", "status", "ask_step")
+        f"workflow__{name}"
+        for name in ("start", "advance", "reset", "status", "ask_step", "ask_general")
+    }
+    assert cases["general_queries"]["tea_knowledge"]["expected_tools"] == ["rag_lookup"]
+    assert cases["general_queries"]["visible_scene"]["expected_tools"] == ["current_view"]
+    assert cases["general_queries"]["safety"] == {
+        "state_updates": False,
+        "lifecycle_tools": False,
     }
     assert cases["rag_fallback"]["expected_tools"] == ["rag_lookup", "workflow__commit"]
     assert cases["rag_fallback"]["expected_top_k"] == 2
@@ -306,21 +311,21 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     assert cases["tea_identity_question"]["expected_tool"] == "current_view"
     assert cases["tea_identity_question"]["forbidden_tool"] == "rag_lookup"
     assert cases["temperature_unit_guard"]["expected_updates"] == {"heating_started": True}
-    assert cases["temperature_unit_guard"]["expected_tool"] == "temperature__verify"
-    assert cases["temperature_unit_guard"]["expected_water_ready"] is False
-    assert cases["temperature_missing_unit_guard"]["expected_water_ready"] is False
+    assert cases["temperature_unit_guard"]["forbidden_tool"] == "temperature__verify"
     assert cases["temperature_missing_unit_guard"]["forbidden_tool"] == "temperature__verify"
+    assert cases["temperature_missing_unit_guard"]["expected_updates"] == {}
     assert cases["temperature_absent_guard"]["forbidden_tool"] == "temperature__verify"
     assert cases["temperature_absent_guard"]["expected_updates"] == {}
-    assert cases["temperature_repeated_below_target_guard"]["expected_updates"] == [{}, {}]
-    assert cases["temperature_repeated_below_target_guard"]["expected_tool"] == "temperature__verify"
-    assert cases["temperature_repeated_below_target_guard"]["expected_water_ready"] is False
-    assert cases["temperature_above_target_ready"]["expected_updates"] == {"water_ready": True}
-    assert cases["temperature_above_target_ready"]["expected_tool"] == "temperature__verify"
-    assert cases["temperature_above_target_ready"]["expected_water_ready"] is True
-    assert cases["state_update_notice"]["expected_updates"] == {"heating_started": True}
-    assert cases["state_update_notice"]["expected_message_intent"] == "heating started"
-    assert cases["state_update_notice"]["expected_complete"] is False
+    assert cases["heating_detection_guard"]["expected_updates"] == {"heating_started": True}
+    assert cases["heating_detection_guard"]["forbidden_tool"] == "temperature__verify"
+    assert cases["temperature_voice_check"]["expected_tools"] == [
+        "current_view",
+        "temperature__verify",
+    ]
+    assert cases["temperature_voice_check"]["expected_ready"] is False
+    assert cases["temperature_readout"]["expected_tool"] == "current_view"
+    assert cases["temperature_readout"]["forbidden_tool"] == "temperature__verify"
+    assert cases["heating_completion_notice"]["expected_updates"] == {"heating_started": True}
     assert cases["routine_notice_guard"]["attempted_messages"]
     assert cases["routine_notice_guard"]["expected_spoken_messages"] == []
     assert cases["observation_context"]["keys"] == ["observation", "already_complete", "state"]

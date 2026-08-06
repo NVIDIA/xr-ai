@@ -19,10 +19,13 @@ from xr_ai_nat.llm import ModelsLLMConfig
 from ..runtime.events import emit
 from ..runtime.state import Session
 from ..spec import Step, Workflow
-from .prompts import HUMAN, ROUTER, STEP, VOICE
+from .prompts import GENERAL, HUMAN, ROUTER, STEP, VOICE
 
 _COMMIT = FunctionRef("workflow__commit")
-_ROUTES = tuple(FunctionRef(f"workflow__{name}") for name in ("start", "advance", "reset", "status", "ask_step"))
+_ROUTES = tuple(
+    FunctionRef(f"workflow__{name}")
+    for name in ("start", "advance", "reset", "status", "ask_step", "ask_general")
+)
 
 
 class AgentRegistry:
@@ -30,6 +33,7 @@ class AgentRegistry:
         self.workflow = workflow
         self._step: dict[str, Function] = {}
         self._voice: dict[str, Function] = {}
+        self._general: Function | None = None
         self._router: Function | None = None
 
     async def build(self, builder: WorkflowBuilder, llm: LLMService) -> None:
@@ -60,6 +64,13 @@ class AgentRegistry:
                 prompt=f"{VOICE}\n{step.voice.prompt}\n{HUMAN}",
                 tools=tuple(map(FunctionRef, step.voice.tools)),
             )
+        self._general = await self._agent(
+            builder,
+            name="guide_general",
+            llm_ref=llm_ref,
+            prompt=f"{GENERAL}\n{HUMAN}",
+            tools=(FunctionRef("current_view"), FunctionRef("rag_lookup")),
+        )
         self._router = await self._agent(
             builder,
             name="guide_router",
@@ -135,6 +146,28 @@ class AgentRegistry:
             "agent.voice.response",
             participant_id=session.participant_id,
             step=step.id,
+            trace_id=trace_id,
+            output=result,
+        )
+        return result.strip()
+
+    async def answer_general(self, session: Session, question: str, trace_id: str) -> str:
+        if self._general is None:
+            raise RuntimeError("agent registry has not been built")
+        request = _json(question=question)
+        emit(
+            "agent.general.request",
+            participant_id=session.participant_id,
+            step=session.step_id,
+            trace_id=trace_id,
+            chars=len(request),
+            input=request,
+        )
+        result = await self._general.ainvoke(request, to_type=str)
+        emit(
+            "agent.general.response",
+            participant_id=session.participant_id,
+            step=session.step_id,
             trace_id=trace_id,
             output=result,
         )

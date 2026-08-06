@@ -14,7 +14,7 @@ import yaml
 _SAMPLE = Path(__file__).parents[1]
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker.agents.prompts import HUMAN, ROUTER, STEP, VOICE  # noqa: E402
+from tea_making_worker.agents.prompts import GENERAL, HUMAN, ROUTER, STEP, VOICE  # noqa: E402
 from tea_making_worker.agents.registry import _state_contract  # noqa: E402
 from tea_making_worker.runtime.render import render_message  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
@@ -24,6 +24,7 @@ def run() -> None:
     workflow = load_workflow(_SAMPLE / "yaml" / "workflow.yaml")
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     assert len(ROUTER) <= 300
+    assert len(f"{GENERAL}\n{HUMAN}") <= 320
     assert len(f"{STEP}\n{HUMAN}") <= 350
     assert len(f"{VOICE}\n{HUMAN}") <= 300
     assert "natural spoken language" in HUMAN
@@ -34,14 +35,20 @@ def run() -> None:
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
     assert "if unavailable, say so" in VOICE
-    assert "Never route these to ask_step" in ROUTER
+    assert "Mentions are not commands" in ROUTER
+    assert "ask_general" in ROUTER
     style = cases["spoken_style_guard"]
     assert all(fragment in style["compact_input"] for fragment in style["forbidden_fragments"])
     assert all(fragment not in style["expected_output"] for fragment in style["forbidden_fragments"])
     assert not {"tea", "temperature"} & set(style["compact_input"].lower().split())
     assert {case["expected_tool"] for case in cases["routes"]} == {
-        f"workflow__{name}" for name in ("start", "advance", "reset", "status", "ask_step")
+        f"workflow__{name}"
+        for name in ("start", "advance", "reset", "status", "ask_step", "ask_general")
     }
+    general = cases["general_queries"]
+    assert general["tea_knowledge"]["expected_tools"] == ["rag_lookup"]
+    assert general["visible_scene"]["expected_tools"] == ["current_view"]
+    assert general["safety"] == {"state_updates": False, "lifecycle_tools": False}
     assert set(cases["steps"]) == set(workflow.steps)
     assert cases["rag_fallback"]["expected_tools"] == ["rag_lookup", "workflow__commit"]
     assert cases["rag_fallback"]["expected_top_k"] == 2

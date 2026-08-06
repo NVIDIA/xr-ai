@@ -168,6 +168,11 @@ quality. The launcher writes temporary model, worker, and RAG configs, so
 switching modes never edits source files and every process uses the selected
 profile.
 
+The voice router keeps explicit start, next, skip, reset, and status requests
+on workflow tools. Questions about the active step go to its step agent; other
+tea-knowledge or scene questions go to a general vision-and-RAG agent that also
+works before guidance starts. The general path has no workflow mutation tools.
+
 Both profiles disable hidden reasoning for Omni agent calls. The Omni vision
 profile also caps continuous caption generation; agent calls retain their
 tool-loop budget. A timed-out caption is

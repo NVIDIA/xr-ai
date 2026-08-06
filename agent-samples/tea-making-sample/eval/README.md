@@ -12,7 +12,10 @@ test, use the same cases as probes and compare the logged tool call or commit to
 the expected fields. Visual fixtures are ordinary captions, including one
 negative water-visibility case that must fail the deterministic evidence gate.
 Routing cases distinguish explicit workflow management from task questions,
-action reports, current readings, and timer questions.
+action reports, current readings, timer questions, and general requests. They
+also guard mentions such as “before we continue” from becoming accidental step
+transitions. General tea knowledge must use RAG, general scene questions must
+use current vision, and both remain available while guidance is idle.
 
 Corner-case probes cover atomic identification readiness, irrelevant retrieval
 results, absent or unitless temperature readings, unconfirmed immersion, a running timer, and

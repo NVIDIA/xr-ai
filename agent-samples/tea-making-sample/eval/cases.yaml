@@ -26,6 +26,33 @@ routes:
     expected_tool: workflow__ask_step
   - utterance: How much steeping time remains?
     expected_tool: workflow__ask_step
+  - utterance: Before we continue, is the kettle hot enough?
+    expected_tool: workflow__ask_step
+  - utterance: How should I brew white tea?
+    active: true
+    step: identify
+    tea_detected: false
+    expected_tool: workflow__ask_general
+  - utterance: What objects can you see on the counter?
+    active: false
+    expected_tool: workflow__ask_general
+  - utterance: Why might someone reset a kitchen timer?
+    expected_tool: workflow__ask_general
+
+general_queries:
+  tea_knowledge:
+    question: How should I brew white tea?
+    active: true
+    step: identify
+    tea_detected: false
+    expected_tools: [rag_lookup]
+  visible_scene:
+    question: What objects can you see on the counter?
+    active: false
+    expected_tools: [current_view]
+  safety:
+    state_updates: false
+    lifecycle_tools: false
 
 steps:
   identify:

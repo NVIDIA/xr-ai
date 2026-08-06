@@ -93,8 +93,22 @@ class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
         async def answer_step(*_args) -> str:
             return "step answer"
 
+        async def answer_general(*_args) -> str:
+            return "general answer"
+
         async with WorkflowBuilder() as builder:
-            await add_workflow_functions(builder, store=store, answer_step=answer_step)
+            await add_workflow_functions(
+                builder,
+                store=store,
+                answer_step=answer_step,
+                answer_general=answer_general,
+            )
+            ask_general = await builder.get_function("workflow__ask_general")
+            with invocation_scope(session, "general-trace"):
+                response = await ask_general.ainvoke({"question": "How is white tea brewed?"}, to_type=str)
+            self.assertEqual(response, "general answer")
+            self.assertFalse(session.active)
+
             start = await builder.get_function("workflow__start")
             commit = await builder.get_function("workflow__commit")
             with invocation_scope(session, "route-trace"):
