@@ -113,42 +113,42 @@ def run() -> None:
     assert identity["forbidden_tool"] == "rag_lookup"
     heat = workflow.step("heat_water")
     assert heat.evidence is not None
+    assert "water_ready" not in workflow.state_fields
     temperature = cases["temperature_unit_guard"]
     assert temperature["step"] == "heat_water"
-    assert temperature["expected_tool"] == "temperature__verify"
+    assert temperature["forbidden_tool"] == "temperature__verify"
     assert temperature["expected_updates"] == {"heating_started": True}
-    assert temperature["expected_water_ready"] is False
+    assert temperature["expected_complete"] is True
     terse = cases["terse_temperature_caption"]
     assert re.fullmatch(heat.evidence.pattern, terse["observation"])
     assert terse["expected_evidence"] is True
     assert terse["expected_updates"] == {"heating_started": True}
-    assert terse["expected_water_ready"] is False
+    assert terse["expected_complete"] is True
     split_captions = cases["split_temperature_caption_guard"]
     assert all(re.fullmatch(heat.evidence.pattern, item) for item in split_captions["accepted"])
     assert not any(re.fullmatch(heat.evidence.pattern, item) for item in split_captions["rejected"])
     missing_unit = cases["temperature_missing_unit_guard"]
     assert missing_unit["forbidden_tool"] == "temperature__verify"
     assert missing_unit["expected_updates"] == {}
-    assert missing_unit["expected_water_ready"] is False
+    assert missing_unit["expected_complete"] is False
     absent = cases["temperature_absent_guard"]
     assert absent["observation"] == "Not visible."
     assert absent["forbidden_tool"] == "temperature__verify"
     assert absent["expected_updates"] == {}
-    below_target = cases["temperature_repeated_below_target_guard"]
-    assert all(re.fullmatch(heat.evidence.pattern, item) for item in below_target["observations"])
-    assert below_target["expected_updates"] == [{}, {}]
-    assert below_target["expected_tool"] == "temperature__verify"
-    assert below_target["expected_evidence_count"] == heat.evidence.consecutive
-    assert below_target["expected_water_ready"] is False
-    above_target = cases["temperature_above_target_ready"]
-    assert re.fullmatch(heat.evidence.pattern, above_target["observation"])
-    assert above_target["expected_updates"] == {"water_ready": True}
-    assert above_target["expected_tool"] == "temperature__verify"
-    assert above_target["expected_water_ready"] is True
-    state_notice = cases["state_update_notice"]
-    assert state_notice["expected_updates"] == {"heating_started": True}
-    assert state_notice["expected_message_intent"] == "heating started"
-    assert state_notice["expected_complete"] is False
+    detection = cases["heating_detection_guard"]
+    assert all(re.fullmatch(heat.evidence.pattern, item) for item in detection["accepted"])
+    assert not any(re.fullmatch(heat.evidence.pattern, item) for item in detection["rejected"])
+    assert detection["expected_updates"] == {"heating_started": True}
+    assert detection["forbidden_tool"] == "temperature__verify"
+    voice_check = cases["temperature_voice_check"]
+    assert voice_check["expected_tools"] == ["current_view", "temperature__verify"]
+    assert voice_check["expected_verify_request"] == {"reading": 70, "unit": "celsius"}
+    assert voice_check["expected_ready"] is False
+    assert voice_check["expected_state_updates"] == {}
+    completion_notice = cases["heating_completion_notice"]
+    assert completion_notice["expected_updates"] == {"heating_started": True}
+    assert completion_notice["expected_message"] == heat.complete_message
+    assert completion_notice["expected_complete"] is True
     routine_notice = cases["routine_notice_guard"]
     assert routine_notice["expected_updates"] == {}
     assert routine_notice["attempted_messages"]
@@ -156,16 +156,13 @@ def run() -> None:
     fill = workflow.step("fill_water")
     assert "closed vessel" in fill.agent.prompt
     assert "user report is not" in fill.voice.prompt
-    assert heat.agent.tools == ("temperature__verify",)
-    assert "call temperature__verify" in heat.agent.prompt
-    assert "exact number/unit and state target" in heat.agent.prompt
-    assert "Without both, skip verification and commit empty" in heat.agent.prompt
-    assert "never calculate" in heat.agent.prompt
-    assert "Always finish with workflow__commit" in heat.agent.prompt
-    assert "If ready, set water_ready=true; otherwise omit it" in heat.agent.prompt
-    assert "Set heating_started=true only when input is false" in heat.agent.prompt
-    assert "Never include false/readings/conversions or return text" in heat.agent.prompt
-    assert "current heating, reading, or readiness" in heat.voice.prompt
+    assert heat.agent.tools == ()
+    assert "Set heating_started true only when input is false" in heat.agent.prompt
+    assert "Do not compare temperatures" in heat.agent.prompt
+    assert heat.voice.tools == ("current_view", "temperature__verify")
+    assert "call temperature__verify using that number and unit" in heat.voice.prompt
+    assert "readiness cannot be checked" in heat.voice.prompt
+    assert heat.complete_when == {"heating_started": True}
     context = cases["observation_context"]
     assert context["keys"] == ["observation", "already_complete", "state"]
     assert context["prior_status_is_state_value"] is False

@@ -78,14 +78,13 @@ complete a visual step. Identification accepts one readable OCR caption for
 responsiveness and explicitly rejects dark, unreadable, or absent-text
 captions. Filling uses the stricter threshold: three consecutive captions must
 name the vessel, visible water, and a concrete cue such as its surface or level.
-Heating comparisons normalize a visible Fahrenheit reading to Celsius before
-checking whether it meets or exceeds the Celsius target; the raw numbers are
-never compared, and a target is never reused as the current reading. A reading
-below target leaves readiness unchanged. An active-heater indicator or
-unit-bearing temperature display immediately records the durable
-heating-started milestone, even when the water is below target.
-The observation agent delegates conversion and comparison to the deterministic
-`temperature__verify` NAT tool and follows its boolean result.
+An active-heater indicator or unit-bearing temperature display records the
+durable heating-started milestone; automatic observation does not track water
+readiness. Once heating is detected, the user may advance manually or ask
+whether the water is hot enough. For that question, the voice agent reads the
+current display and calls `temperature__verify`. The tool obtains the target
+from session state, converts Fahrenheit when needed, and returns the observed
+and target values with the comparison result without changing workflow state.
 Statements that hazards or heater indicators are not visible do not invalidate
 an otherwise clear, unit-bearing temperature reading.
 Steeping starts only after the same vessel shows both water and tea-water

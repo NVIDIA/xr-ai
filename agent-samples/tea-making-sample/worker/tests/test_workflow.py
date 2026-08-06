@@ -97,32 +97,35 @@ class WorkflowTest(unittest.TestCase):
         self.session.state.update({"target_temperature_c": 80, "tea_name": "green"})
         self.assertEqual(
             self.workflow.project(step, self.session.state),
-            {"target_temperature_c": 80, "heating_started": False, "water_ready": False},
+            {"target_temperature_c": 80, "heating_started": False},
         )
 
-    def test_agent_message_announces_one_intermediate_change(self) -> None:
+    def test_heating_detection_completes_step_and_allows_manual_advance(self) -> None:
         self.store.start(self.session)
         self.store.advance(self.session, skip=True)
         self.store.advance(self.session, skip=True)
 
+        observation = "The kettle display reads 70 degrees Celsius."
+        self.store.observe(self.session, observation, "heat-1")
+        rejected = self.store.commit(self.session, {"heating_started": True}, "Heating detected.")
+        self.assertFalse(rejected.accepted)
+
+        self.store.observe(self.session, observation, "heat-2")
         result = self.store.commit(
             self.session,
             {"heating_started": True},
-            "The water is heating.",
+            "Heating detected.",
         )
         self.assertTrue(result.accepted)
-        self.assertFalse(result.complete)
-        self.assertEqual(self.store.drain_notices(self.session), ("The water is heating.",))
-
-        revision = self.session.revision
-        repeated = self.store.commit(
-            self.session,
-            {"heating_started": True},
-            "The heater is active and the display reads 77 degrees Fahrenheit.",
+        self.assertTrue(result.complete)
+        self.assertNotIn("water_ready", self.session.state)
+        self.assertEqual(
+            self.store.drain_notices(self.session),
+            (self.workflow.step("heat_water").complete_message,),
         )
-        self.assertTrue(repeated.accepted)
-        self.assertEqual(self.session.revision, revision)
-        self.assertFalse(self.store.drain_notices(self.session))
+        response = self.store.advance(self.session, skip=False)
+        self.assertEqual(self.session.step_id, "start_steeping")
+        self.assertEqual(response, self.workflow.step("start_steeping").enter_message)
 
     def test_management_messages_render_natural_units(self) -> None:
         self.store.start(self.session)

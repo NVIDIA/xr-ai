@@ -37,7 +37,7 @@ steps:
   heat_water:
     observation: The active kettle display shows a numeric reading of 86 C.
     state: {target_temperature_c: 88}
-    expected_updates: [heating_started, water_ready]
+    expected_updates: [heating_started]
   start_steeping:
     observation: A tea bag is visibly immersed in the water.
     expected_tools: [clock__now, workflow__commit]
@@ -97,17 +97,17 @@ tea_identity_question:
 temperature_unit_guard:
   step: heat_water
   observation: A thermometer display reads 68°F.
-  state: {target_temperature_c: 95, heating_started: true, water_ready: false}
-  expected_tool: temperature__verify
+  state: {target_temperature_c: 95, heating_started: false}
+  forbidden_tool: temperature__verify
   expected_updates: {heating_started: true}
-  expected_water_ready: false
+  expected_complete: true
 
 terse_temperature_caption:
   step: heat_water
   observation: 164F
   expected_evidence: true
   expected_updates: {heating_started: true}
-  expected_water_ready: false
+  expected_complete: true
 
 split_temperature_caption_guard:
   accepted:
@@ -122,49 +122,51 @@ split_temperature_caption_guard:
 temperature_missing_unit_guard:
   step: heat_water
   observation: The kettle display visibly reads 91 with no unit shown.
-  state: {target_temperature_c: 91, heating_started: true, water_ready: false}
+  state: {target_temperature_c: 91, heating_started: false}
   forbidden_tool: temperature__verify
   expected_updates: {}
-  expected_water_ready: false
+  expected_complete: false
 
 temperature_absent_guard:
   step: heat_water
   observation: Not visible.
-  state: {target_temperature_c: 90, heating_started: false, water_ready: false}
+  state: {target_temperature_c: 90, heating_started: false}
   forbidden_tool: temperature__verify
   expected_updates: {}
 
-temperature_repeated_below_target_guard:
+heating_detection_guard:
   step: heat_water
-  observations:
+  accepted:
     - The kettle display reads 20°C.
-    - The kettle display reads 25°C.
-  state: {target_temperature_c: 98, heating_started: true, water_ready: false}
-  expected_tool: temperature__verify
-  expected_updates: [{}, {}]
-  expected_evidence_count: 2
-  expected_water_ready: false
+    - The heater power indicator is illuminated.
+  rejected:
+    - The kettle is off and its display is dark.
+    - No heater indicator or temperature display is visible.
+  expected_updates: {heating_started: true}
+  forbidden_tool: temperature__verify
 
-temperature_above_target_ready:
+temperature_voice_check:
   step: heat_water
-  observation: The kettle display reads 100°C.
-  state: {target_temperature_c: 82, heating_started: true, water_ready: false}
-  expected_tool: temperature__verify
-  expected_updates: {water_ready: true}
-  expected_water_ready: true
+  question: Is the water hot enough?
+  current_view_result: The kettle display reads 70°C.
+  state: {target_temperature_c: 98, heating_started: true}
+  expected_tools: [current_view, temperature__verify]
+  expected_verify_request: {reading: 70, unit: celsius}
+  expected_ready: false
+  expected_state_updates: {}
 
-state_update_notice:
+heating_completion_notice:
   step: heat_water
   observation: A kettle display reads 82 degrees Fahrenheit.
-  state: {target_temperature_c: 95, heating_started: false, water_ready: false}
+  state: {target_temperature_c: 95, heating_started: false}
   expected_updates: {heating_started: true}
-  expected_message_intent: heating started
-  expected_complete: false
+  expected_message: Heating is underway. Ask if it is hot enough, or say next when ready.
+  expected_complete: true
 
 routine_notice_guard:
   step: heat_water
   observation: The thermometer display repeatedly reads 77°F.
-  state: {target_temperature_c: 90, heating_started: true, water_ready: false}
+  state: {target_temperature_c: 90, heating_started: true}
   repetitions: 3
   expected_updates: {}
   attempted_messages: ["The heater is active.", "The display reads 77 degrees Fahrenheit."]

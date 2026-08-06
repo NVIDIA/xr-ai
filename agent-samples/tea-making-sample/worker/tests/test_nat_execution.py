@@ -30,18 +30,23 @@ class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
         workflow = load_workflow(_WORKFLOW)
         session = SessionStore(workflow).get("temperature-test")
         cases = (
-            (TemperatureVerifyRequest(reading=73, unit="fahrenheit", target_c=100), False),
-            (TemperatureVerifyRequest(reading=212, unit="fahrenheit", target_c=100), True),
-            (TemperatureVerifyRequest(reading=82, unit="celsius", target_c=98), False),
-            (TemperatureVerifyRequest(reading=100, unit="celsius", target_c=82), True),
+            (100, TemperatureVerifyRequest(reading=73, unit="fahrenheit"), False),
+            (100, TemperatureVerifyRequest(reading=212, unit="fahrenheit"), True),
+            (98, TemperatureVerifyRequest(reading=70, unit="celsius"), False),
+            (82, TemperatureVerifyRequest(reading=100, unit="celsius"), True),
         )
 
         async with temperature_verify(TemperatureVerifyConfig(), None) as info:
             self.assertIsNotNone(info.single_fn)
+            self.assertEqual(set(TemperatureVerifyRequest.model_fields), {"reading", "unit"})
             with invocation_scope(session, "temperature-trace"):
-                for request, expected in cases:
+                for target_c, request, expected in cases:
+                    session.state["target_temperature_c"] = target_c
+                    state = dict(session.state)
                     result = await info.single_fn(request)
                     self.assertIs(result.ready, expected)
+                    self.assertEqual(result.target_c, target_c)
+                    self.assertEqual(session.state, state)
 
     async def test_current_view_injects_the_active_participant(self) -> None:
         workflow = load_workflow(_WORKFLOW)

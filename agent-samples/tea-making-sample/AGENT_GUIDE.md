@@ -47,11 +47,11 @@ changes.
     fields or preformatted state.
 15. Treat prompt failures as prompt-tuning work first. Confirm before changing
     evidence thresholds, state semantics, transitions, or other runtime policy.
-16. When observations and state can use different units, delegate normalization
-    and comparison to a typed NAT tool. The heat agent transcribes the fresh
-    number and unit, passes the state target to `temperature__verify`, and
-    follows its boolean result; it never performs arithmetic or substitutes the
-    target for the reading.
+16. Automatic heating observation records only `heating_started`; it never
+    tracks readiness or compares temperatures. On a user hot-enough question,
+    the voice agent passes the fresh number and unit to `temperature__verify`.
+    The tool reads the target from session state, performs normalization and
+    comparison, and never changes workflow state.
 17. Observation agents receive `already_complete` as prior status plus a
     generated contract containing writable field meanings and the YAML
     completion condition. Prior status is never copied into writable state.
@@ -94,9 +94,9 @@ changes.
 30. A model-generated tool argument validation error gets one immediate retry.
     If it repeats, skip that observation frame and continue; service,
     configuration, and application errors still propagate.
-31. Temperature verification requires a visible numeric reading and explicit
-    Celsius or Fahrenheit unit. Missing either bypasses the verification tool
-    and commits no state change.
+31. Temperature verification requires a fresh visible numeric reading and
+    explicit Celsius or Fahrenheit unit. Missing either produces an unavailable
+    voice answer; no temperature result can complete or mutate the heating step.
 
 ## Nested machines
 

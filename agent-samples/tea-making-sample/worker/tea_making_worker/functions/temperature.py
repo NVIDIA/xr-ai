@@ -17,10 +17,11 @@ class TemperatureVerifyRequest(BaseModel):
 
     reading: float = Field(description="Exact observed numeric temperature.")
     unit: Literal["celsius", "fahrenheit"] = Field(description="Unit shown with the observed reading.")
-    target_c: float = Field(description="Target temperature from state, in Celsius.")
 
 
 class TemperatureVerifyResult(BaseModel):
+    reading_c: float
+    target_c: float
     ready: bool
 
 
@@ -31,9 +32,14 @@ class TemperatureVerifyConfig(FunctionBaseConfig, name="tea_guidance_temperature
 @register_function(config_type=TemperatureVerifyConfig)
 async def temperature_verify(_config: TemperatureVerifyConfig, _builder: Builder):
     async def verify(request: TemperatureVerifyRequest) -> TemperatureVerifyResult:
-        reading_c = request.reading if request.unit == "celsius" else (request.reading - 32) * 5 / 9
-        result = TemperatureVerifyResult(ready=reading_c >= request.target_c)
         call = current_invocation()
+        target_c = float(call.session.state["target_temperature_c"])
+        reading_c = request.reading if request.unit == "celsius" else (request.reading - 32) * 5 / 9
+        result = TemperatureVerifyResult(
+            reading_c=reading_c,
+            target_c=target_c,
+            ready=reading_c >= target_c,
+        )
         emit(
             "temperature.verify",
             participant_id=call.session.participant_id,
@@ -41,7 +47,7 @@ async def temperature_verify(_config: TemperatureVerifyConfig, _builder: Builder
             trace_id=call.trace_id,
             reading=request.reading,
             unit=request.unit,
-            target_c=request.target_c,
+            target_c=target_c,
             reading_c=reading_c,
             ready=result.ready,
         )
@@ -49,7 +55,7 @@ async def temperature_verify(_config: TemperatureVerifyConfig, _builder: Builder
 
     yield FunctionInfo.from_fn(
         verify,
-        description="Convert an observed Celsius or Fahrenheit reading and report whether it meets the Celsius target.",
+        description="Compare an exact observed Celsius or Fahrenheit reading with the active tea target.",
     )
 
 
