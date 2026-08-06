@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+from xr_ai_vllm import _docker
 from xr_ai_vllm._docker import (
     _already_logged_in,
     _registry_for,
@@ -121,17 +122,21 @@ class TestBuildRunArgv:
         env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
         assert "NVIDIA_VISIBLE_DEVICES=0,1" in env_flags
 
-    def test_hf_token_in_env(self, tmp_path):
+    def test_hf_token_passed_by_name_only(self, tmp_path):
+        # The token value must stay off the ps-visible argv; docker resolves
+        # a name-only -e from the wrapper process's environment.
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
-        assert any(f.startswith("HF_TOKEN=") for f in env_flags)
+        assert "HF_TOKEN" in env_flags
+        assert not any(f.startswith("HF_TOKEN=") for f in env_flags)
+        assert "tok123" not in " ".join(argv)
 
     def test_no_hf_token_when_none(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
         kwargs["hf_token"] = None
         argv = build_run_argv(**kwargs)
         env_flags = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
-        assert not any(f.startswith("HF_TOKEN=") for f in env_flags)
+        assert not any(f.startswith("HF_TOKEN") for f in env_flags)
 
     def test_extra_env_included(self, tmp_path):
         kwargs = self._base_kwargs(tmp_path)
@@ -172,6 +177,93 @@ class TestBuildRunArgv:
         bash_cmd = argv[-1]
         assert "pip install -q hf_transfer" in bash_cmd
         assert "pip install -q --no-build-isolation mamba-ssm causal-conv1d" in bash_cmd
+
+
+class TestRunContainer:
+    """Lifecycle branches of the shared run_container flow (no docker daemon)."""
+
+    def _kwargs(self, tmp_path: Path) -> dict:
+        return dict(
+            argv=["docker", "run", "some-image"],
+            image="some-image",
+            container_name="xr-ai-test-ctr",
+            log_prefix="test",
+            health_url="http://127.0.0.1:1/health",
+            launch_banner="launching",
+            reuse_banner="reusing",
+            ready_banner="ready",
+            ready_file=tmp_path / "ready",
+        )
+
+    def _common_stubs(self, monkeypatch, d) -> dict:
+        captured: dict = {}
+        monkeypatch.setattr(d, "_docker_available", lambda: True)
+        monkeypatch.setattr(d, "_start_log_streamer", lambda name: (None, None))
+        monkeypatch.setattr(d, "_stop_log_streamer", lambda proc: None)
+        monkeypatch.setattr(d._lifecycle, "idle_until_stopped", lambda *a, **k: None)
+
+        def _wait(url, *, is_alive, **kw):
+            captured["is_alive"] = is_alive
+
+        monkeypatch.setattr(d._lifecycle, "wait_until_healthy", _wait)
+        return captured
+
+    def test_reuse_healthy_touches_ready_file_without_popen(self, monkeypatch, tmp_path):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: True)
+
+        def _no_popen(*a, **kw):
+            raise AssertionError("Popen must not be called on healthy reuse")
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", _no_popen)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert kwargs["ready_file"].exists()
+
+    def test_adopt_running_container_aliveness_follows_container(
+        self, monkeypatch, tmp_path,
+    ):
+        captured = self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        running = {"v": True}
+        monkeypatch.setattr(_docker, "container_running", lambda name: running["v"])
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+
+        def _no_popen(*a, **kw):
+            raise AssertionError("adopting a running container must not docker run/start")
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", _no_popen)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert kwargs["ready_file"].exists()
+        is_alive = captured["is_alive"]
+        assert is_alive() is True
+        running["v"] = False
+        assert is_alive() is False
+
+    def test_stopped_container_restarted_via_docker_start(self, monkeypatch, tmp_path):
+        self._common_stubs(monkeypatch, _docker)
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: False)
+        monkeypatch.setattr(_docker, "container_running", lambda name: False)
+        monkeypatch.setattr(_docker, "container_exists", lambda name: True)
+        popen_argvs: list[list[str]] = []
+
+        class _FakeProc:
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+        def _popen(argv, **kw):
+            popen_argvs.append(list(argv))
+            return _FakeProc()
+
+        monkeypatch.setattr(_docker.subprocess, "Popen", _popen)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert popen_argvs == [["docker", "start", "-a", "xr-ai-test-ctr"]]
+        assert kwargs["ready_file"].exists()
 
 
 class TestContainerHelpers:

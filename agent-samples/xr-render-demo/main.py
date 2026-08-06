@@ -17,9 +17,16 @@ its own stream — neither stack passes through the other.
 
 Prerequisites
 -------------
-The shared AI inference servers must be running before this demo starts:
+Model entries the selected profile marks `reused` must already be served
+before this demo starts; everything marked `managed` is launched by this
+orchestrator itself, and `external` entries need no local process. The
+shipped models.local.json reuses the shared AI inference servers from:
 
     uv run --project agent-samples/model-servers model_servers
+
+The shipped hosted and nim_local profiles have no `reused` entries, so
+nothing must be pre-started for them (they still need NGC_API_KEY, and
+nim_local needs docker; see yaml/xr_render_demo_worker.yaml).
 
 How to run (from the repo root or any directory):
     uv run --project agent-samples/xr-render-demo xr_render_demo
@@ -45,6 +52,7 @@ import shutil
 import subprocess
 import sys
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 
 from loguru import logger
@@ -52,6 +60,7 @@ from xr_ai_launcher import (
     Process,
     ensure_credentials,
     is_native_profile,
+    load_model_deployment,
     read_device_profile,
     run_stack,
 )
@@ -62,47 +71,73 @@ _BASE = Path(__file__).resolve().parent
 _WORKER_CONFIG = "yaml/xr_render_demo_worker.yaml"
 _CLOUDXR_CONFIG = "yaml/cloudxr_runtime.yaml"
 
-# Read the model_backend scalar from the worker YAML without pyyaml — the
-# orchestrator is stdlib-only (mirrors the lovr_bin regex read below).
-_BACKEND_RE = re.compile(r"^\s*model_backend\s*:\s*[\"']?(\w+)[\"']?", re.MULTILINE)
-
 # Must match _config_loader.NO_WEB_CLIENT_ENV.
 _NO_WEB_CLIENT_ENV = "XR_MEDIA_HUB_NO_WEB_CLIENT"
 
 
-def _model_backend() -> str:
-    try:
-        m = _BACKEND_RE.search((_BASE / _WORKER_CONFIG).read_text())
-    except OSError:
-        return "local"
-    return m.group(1).lower() if m else "local"
-
-
 # ── Process stack ─────────────────────────────────────────────────────────────
 #
-# Model servers are launch_mode="reuse" — they are started and owned by
-# model-servers, not this demo.  The entries document the dependency and
-# the launcher skips spawning them; start them first with:
+# The deployment profile selected by models_config in the worker YAML decides
+# which of these launch. Local model servers resolve to launch_mode="reuse";
+# they are started and owned by model-servers, not this demo; start them
+# first with:
 #   uv run --project agent-samples/model-servers model_servers
 #
-# With model_backend: nim (in xr_render_demo_worker.yaml) the worker loads
-# models.nim.yaml automatically — run LLM/VLM on hosted NIM and just don't start the local
-# agent-llm / vlm model-servers. STT/TTS stay local. See
-# docs/ai-services.md "Hosting models on NVIDIA NIM".
-def _build_processes() -> list[Process]:
-    return [
-        Process("stt",       "../../ai-services/stt-server",         "stt_server",
-                launch_mode="reuse"),
-        Process("agent-llm", "../../ai-services/llm/nemotron3_nano", "nemotron3_nano_llm_server",
-                launch_mode="reuse"),
-        Process("vlm",       "../../ai-services/vlm-server",         "vlm_server",
-                launch_mode="reuse"),
+# NIM containers precede the local servers: speech NIMs allocate fixed VRAM,
+# while the LLM/VLM NIMs grab most of the free VRAM on their GPU at startup
+# for KV cache. The one llm-nim container serves both llm and agent_llm.
+_MODEL_PROCESSES = {
+    "stt-nim": Process(
+        "stt-nim", "../../ai-services/nim-server", "nim_server",
+        config="yaml/nim_stt_server.yaml",
+    ),
+    "tts-nim": Process(
+        "tts-nim", "../../ai-services/nim-server", "nim_server",
+        config="yaml/nim_tts_server.yaml",
+    ),
+    "llm-nim": Process(
+        "llm-nim", "../../ai-services/nim-server", "nim_server",
+        config="yaml/nim_llm_server.yaml",
+    ),
+    "vlm-nim": Process(
+        "vlm-nim", "../../ai-services/nim-server", "nim_server",
+        config="yaml/nim_vlm_server.yaml",
+    ),
+    "stt": Process(
+        "stt", "../../ai-services/stt-server", "stt_server",
+        config="yaml/stt_server.yaml",
+    ),
+    "agent-llm": Process(
+        "agent-llm", "../../ai-services/llm/nemotron3_nano",
+        "nemotron3_nano_llm_server",
+    ),
+    "vlm": Process(
+        "vlm", "../../ai-services/vlm-server", "vlm_server",
+    ),
+    "tts": Process(
+        "tts", "../../ai-services/tts/piper", "piper_tts_server",
+        config="yaml/piper_tts_server.yaml",
+    ),
+}
+
+
+def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
+    deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
+    unknown_services = deployment.services.keys() - _MODEL_PROCESSES.keys()
+    if unknown_services:
+        raise ValueError(
+            f"model profile declares unknown services: {sorted(unknown_services)}"
+        )
+    procs = []
+    for service, process in _MODEL_PROCESSES.items():
+        launch_mode = deployment.launch_mode(service)
+        if launch_mode is not None:
+            procs.append(replace(process, launch_mode=launch_mode))
+    procs += [
         Process("hub",        "../../server-runtime",                "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),
         Process("cloudxr",    "../../cloudxr-runtime",               "cloudxr_runtime",
                 config="yaml/cloudxr_runtime.yaml"),
-        Process("tts",        "../../ai-services/tts/piper",         "piper_tts_server",
-                config="yaml/piper_tts_server.yaml"),
         Process("video-memory", "../../services/video-memory-service", "video_memory_service",
                 config="yaml/video_memory_service.yaml"),
         Process("scene",      "scene",                                "xr_render_scene",
@@ -113,6 +148,7 @@ def _build_processes() -> list[Process]:
         Process("worker",     "worker",                              "xr_render_demo_worker",
                 config=_WORKER_CONFIG),
     ]
+    return procs, deployment.required_credentials
 
 
 # Match an uncommented `lovr_bin:` line with a non-empty value.
@@ -246,10 +282,10 @@ def run() -> None:
     else:
         _ensure_web_vendor()
     _ensure_lovr_bin()
-    backend = _model_backend()
-    if backend == "nim":
-        ensure_credentials("NGC_API_KEY")
-    run_stack(_build_processes(), _BASE)
+    processes, credentials = _build_processes()
+    for credential in credentials:
+        ensure_credentials(credential)
+    run_stack(processes, _BASE)
 
 
 if __name__ == "__main__":

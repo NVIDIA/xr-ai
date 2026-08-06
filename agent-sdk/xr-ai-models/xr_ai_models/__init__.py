@@ -46,6 +46,7 @@ from ._config import (
     load_models_config_from_dict,
 )
 from ._factory import make_embedding, make_llm, make_stt, make_tts, make_vlm
+from ._riva_grpc import RivaSTT, RivaTTS
 
 __all__ = [
     "Capabilities",
@@ -71,6 +72,8 @@ __all__ = [
     "OpenAICompatVLM",
     "DeploymentSpec",
     "EmbeddingSpec",
+    "RivaSTT",
+    "RivaTTS",
     "LLMSpec",
     "ModelsConfig",
     "STTSpec",

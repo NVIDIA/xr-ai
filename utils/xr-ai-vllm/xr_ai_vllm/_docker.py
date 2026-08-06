@@ -85,12 +85,16 @@ def build_run_argv(
     # non-NGC image (or one with a narrower default) still gets CUDA compute.
     argv += ["-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility"]
 
+    if hf_token:
+        # Name-only passthrough keeps the token off the ps-visible argv;
+        # docker reads the value from this process's environment (run()
+        # exports it before spawning).
+        argv += ["-e", "HF_TOKEN"]
+
     env_vars: dict[str, str] = {
         "HF_HOME": str(model_cache),
         "HF_HUB_ENABLE_HF_TRANSFER": "1",
     }
-    if hf_token:
-        env_vars["HF_TOKEN"] = hf_token
     if extra_env:
         env_vars.update(extra_env)
     for key, val in env_vars.items():
@@ -390,15 +394,63 @@ def run(
     extra_pip: list[str] | None,
     ready_file: Path | None,
 ) -> None:
+    if hf_token:
+        # build_run_argv passes HF_TOKEN by name only; docker resolves it
+        # from the environment inherited by the `docker run` subprocess.
+        os.environ["HF_TOKEN"] = hf_token
+    argv = build_run_argv(
+        image=image,
+        container_name=container_name,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+    )
+    run_container(
+        argv=argv,
+        image=image,
+        container_name=container_name,
+        log_prefix=log_prefix,
+        health_url=_lifecycle.health_url(host, port),
+        launch_banner=(
+            f"Launching vLLM (docker)  image={image}  "
+            f"container={container_name}  http://{host}:{port}/v1"
+        ),
+        reuse_banner=f"vLLM already running on port {port} — reusing",
+        ready_banner=f"Ready  →  http://localhost:{port}/v1  (docker: {container_name})",
+        ready_file=ready_file,
+    )
+
+
+def run_container(
+    *,
+    argv: list[str],
+    image: str,
+    container_name: str,
+    log_prefix: str,
+    health_url: str,
+    launch_banner: str,
+    reuse_banner: str,
+    ready_banner: str,
+    ready_file: Path | None,
+) -> None:
+    """Generic docker-container lifecycle shared by the vLLM and NIM wrappers.
+
+    *argv* is the complete foreground ``docker run …`` command. Readiness is
+    a 200 from *health_url*; reuse, stopped-container restart, signal
+    cleanup, log streaming, and post-mortem capture behave identically for
+    every container kind.
+    """
     if not _docker_available():
         log.error(
-            "vllm_backend: docker requires docker on PATH and a running daemon "
+            "docker backend requires docker on PATH and a running daemon "
             "(`docker version` failed). Install Docker Engine and the NVIDIA "
             "Container Toolkit, then retry."
         )
         sys.exit(2)
-
-    health_url = _lifecycle.health_url(host, port)
 
     # On abort (Ctrl-C during model-servers startup) the launcher passes
     # no_kill=set() and SIGTERMs every wrapper's process group. Without a
@@ -439,10 +491,7 @@ def run(
 
     # Reuse a container that survived a wrapper restart (weight persistence).
     if _lifecycle.health_ok(health_url):
-        print(
-            f"[{log_prefix}] vLLM already running on port {port} — reusing",
-            flush=True,
-        )
+        print(f"[{log_prefix}] {reuse_banner}", flush=True)
         if ready_file:
             ready_file.touch()
         signal.signal(signal.SIGINT,  orig_int)
@@ -450,9 +499,19 @@ def run(
         _lifecycle.idle_until_stopped(health_url, log_prefix)
         return
 
-    if container_exists(container_name) and not container_running(container_name):
-        # Stopped container already has hf_transfer installed — restart it
-        # rather than running a fresh image (avoids reinstalling every time).
+    proc: subprocess.Popen | None = None
+    if container_running(container_name):
+        # Running but not yet healthy — e.g. started by a wrapper that died,
+        # or mid engine-download. Adopt it instead of a doomed `docker run`
+        # (the name is taken).
+        print(
+            f"[{log_prefix}] container {container_name} already running — "
+            f"waiting for readiness",
+            flush=True,
+        )
+    elif container_exists(container_name):
+        # A stopped container keeps its baked-in setup (installed pip deps,
+        # downloaded engines) — restart it rather than running a fresh image.
         print(
             f"[{log_prefix}] Restarting stopped container {container_name}",
             flush=True,
@@ -464,31 +523,23 @@ def run(
         _state["proc"] = proc
     else:
         _maybe_ngc_login(image)
-        argv = build_run_argv(
-            image=image,
-            container_name=container_name,
-            port=port,
-            model_cache=model_cache,
-            hf_token=hf_token,
-            cuda_visible_devices=cuda_visible_devices,
-            extra_env=extra_env,
-            extra_pip=extra_pip,
-            vllm_argv=vllm_argv,
-        )
-        print(
-            f"[{log_prefix}] Launching vLLM (docker)  image={image}  "
-            f"container={container_name}  http://{host}:{port}/v1",
-            flush=True,
-        )
+        print(f"[{log_prefix}] {launch_banner}", flush=True)
         proc = subprocess.Popen(argv, start_new_session=True)
         _state["proc"] = proc
+
+    if proc is None:
+        def _is_alive() -> bool:
+            return container_running(container_name)
+    else:
+        def _is_alive() -> bool:
+            return proc.poll() is None
 
     streamer_proc, log_path = _start_log_streamer(container_name)
     _state["streamer"] = streamer_proc
     try:
         _lifecycle.wait_until_healthy(
             health_url,
-            is_alive=lambda: proc.poll() is None,
+            is_alive=_is_alive,
         )
     except SystemExit:
         # Two ways to land here: (a) wait_until_healthy raised SystemExit(1)
@@ -503,10 +554,10 @@ def run(
         _append_post_mortem(container_name, log_path)
         _stop_log_streamer(streamer_proc)
         if log_path is not None:
-            log.error("vLLM container failed — see %s", log_path)
+            log.error("container %s failed — see %s", container_name, log_path)
         raise
 
-    log.info("Ready  →  http://localhost:%d/v1  (docker: %s)", port, container_name)
+    log.info("%s", ready_banner)
     if ready_file:
         ready_file.touch()
 

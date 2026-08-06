@@ -48,9 +48,9 @@ from xr_ai_nat.functions.vision import VisionToolsConfig
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-_MODELS_YAML = (
+_MODELS_PROFILE = (
     Path(__file__).resolve().parent.parent
-    / "agent-samples" / "xr-render-demo" / "yaml" / "models.yaml"
+    / "agent-samples" / "xr-render-demo" / "yaml" / "models.local.json"
 )
 
 
@@ -68,8 +68,8 @@ def _make_llm(stub: StubOpenAI, *, model_name: str = "llm",
 
 
 def _make_spec_llm(stub: StubOpenAI, name: str) -> OpenAICompatLLM:
-    """Build an LLM client from the shipped models.yaml spec for *name*."""
-    spec = load_models_config(_MODELS_YAML).llm(name)
+    """Build an LLM client from the shipped local profile spec for *name*."""
+    spec = load_models_config(_MODELS_PROFILE).llm(name)
     return _make_llm(
         stub,
         model_name=spec.model_name,
@@ -78,12 +78,12 @@ def _make_spec_llm(stub: StubOpenAI, name: str) -> OpenAICompatLLM:
     )
 
 
-# ── models.yaml round-trip ────────────────────────────────────────────────────
+# ── models profile round-trip ─────────────────────────────────────────────────
 
 
-def test_models_yaml_loads() -> None:
-    """The bundled models.yaml parses without error and exposes expected names."""
-    cfg = load_models_config(_MODELS_YAML)
+def test_models_profile_loads() -> None:
+    """The bundled local profile parses without error and exposes expected names."""
+    cfg = load_models_config(_MODELS_PROFILE)
     llm_spec      = cfg.llm("llm")
     agent_llm_spec = cfg.llm("agent_llm")
     stt_spec      = cfg.stt("stt")

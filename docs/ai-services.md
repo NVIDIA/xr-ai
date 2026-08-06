@@ -150,7 +150,8 @@ not change.  Full protocol surface, the preset table, and the explicit
 The LLM and VLM can run on [NVIDIA NIM](https://build.nvidia.com) instead of
 local vLLM — NIM exposes the same OpenAI-compatible `/v1/chat/completions`
 API, so this is a `models.yaml` change with no worker code edits. STT and TTS
-stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
+stay local with hosted NIM: hosted NIM speech (Riva) is not OpenAI
+`/v1/audio`-compatible. Self-hosted speech NIMs are covered below.
 
 A NIM model entry differs from a local one in three fields:
 
@@ -173,18 +174,76 @@ vlm:
   (Default is `true` for local servers.)
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
-For `simple-vlm-example`, set `models_config: models.hosted.json` in the worker
-YAML. The structured profile is consumed by both the worker and orchestrator,
-so the local VLM process is omitted and `NGC_API_KEY` is requested
-automatically. Select `models.local.json` to switch back.
+Set `models_config: models.hosted.json` in the worker YAML. The structured
+profile is consumed by both the worker and orchestrator, so the local VLM
+process is omitted and `NGC_API_KEY` is requested automatically. Select
+`models.local.json` to switch back. The hosted profiles keep `stt` and `tts`
+local, because hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
 
-`xr-render-demo` retains its `model_backend: nim` selector and
-`models.nim.yaml` overlay. Run it without the local `agent-llm` / `vlm`
-model-servers and provide `NGC_API_KEY`.
+### Self-hosted NIM containers (`models.nim_local.json`)
 
-**Self-hosted NIM containers** work the same way — point `base_url` at the
-container (e.g. `http://localhost:8000`) and set `health_check: true` if it
-exposes `/v1/health`.
+The same models can be pulled from NGC and served as **optimized NIM
+containers on your own GPUs**: same APIs as hosted NIM, no network hop, and
+speech included. Self-hosted Riva speech NIMs are reached through the
+`riva_grpc` model kind (requires the `xr-ai-models[riva]` extra, already a
+dependency of the sample workers).
+
+Select the profile with `models_config: models.nim_local.json` in the worker
+YAML. Each entry in that profile deploys as a `nim_server` process
+(`ai-services/nim-server`, a generic wrapper; the sample's
+`yaml/nim_<role>_server.yaml` picks the image and ports) in place of its
+local server, and the worker reads the role's entry from the same profile
+(`openai_compat` for LLM/VLM, `riva_grpc` with no `function_id` for speech).
+Both files ship ready-made in each sample. The container `image:` is the
+model, so swapping models is a `nim_<role>_server.yaml` edit plus the
+matching profile entry.
+
+Selection is per entry, not per profile: each model role independently picks
+a local server, a self-hosted NIM container, or a hosted endpoint through
+its own `adapter`/`endpoint`/`deployment` sections. The shipped profiles are
+presets, not a closed set; a mixed setup (say, local speech, hosted LLMs,
+and only the VLM as a NIM container) is a copy of a shipped profile with the
+relevant entries changed, saved under any name and selected with
+`models_config`. When mixing with entries `reused` from the
+model-servers stack, mind port overlaps: model-servers always starts all
+four servers, so give a NIM container a free port or drop the overlapping
+local server from the mix. Profiles size to the box: simple-vlm-example hosts
+speech as Riva NIM containers, while xr-render-demo's profile keeps speech
+local: Riva speech NIMs don't fit next to CloudXR + LOVR + the LLM/VLM
+NIMs on 2x48 GB.
+
+A self-hosted speech entry uses the Riva gRPC kind:
+
+```yaml
+stt:
+  kind:      riva_grpc
+  category:  stt
+  base_url:  localhost:50051   # the container's gRPC port
+  language:  en-US
+```
+
+TTS additionally takes `voice:` (a Riva voice name) and `sample_rate:`
+(default 44100). `health_check: true` (the default) runs a gRPC
+channel-ready probe.
+
+Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
+`nvcr.io` image pull *and* by the container itself to download the
+GPU-matched optimized engine from NGC on first start; multi-GB, cached
+under `models/nim/` for later runs), and GPU capacity for every container.
+Set `cuda_visible_devices` in the `nim_*_server.yaml` files to spread
+containers across GPUs. Readiness gates on each container's
+`/v1/health/ready`.
+
+A NIM container serving something the samples don't ship is the same
+mechanism by hand: point an `openai_compat` entry's `base_url` at its port
+(its health route is `/v1/health/ready`, so keep `health_check: false` and
+let the container gate readiness), or a `riva_grpc` entry at its gRPC port.
+With `ownership: external` (you run the container yourself) that is the
+whole change. For the orchestrator to launch or expect it, the entry's
+`deployment.service` must name a process row in the sample's `main.py`
+(`_MODEL_PROCESSES`); a service name with no row fails fast at startup, and
+adding one row plus its config YAML is the only `main.py` edit the profile
+system ever needs.
 
 ## vLLM model persistence
 
@@ -203,10 +262,10 @@ launched detached (`docker run -d --name xr-ai-vllm-<service>`) so it
 similarly outlives the wrapper. Either way the wrapper exits cleanly and
 vLLM keeps running.
 
-**Stopping the persisted servers** — run from the sample directory:
+**Stopping the persisted servers**, from the repo root:
 
 ```bash
-uv run xr_render_demo --stop
+uv run --project agent-samples/model-servers model_servers --stop
 ```
 
 Cleanup locates labelled Docker containers before inspecting ports, then
@@ -280,7 +339,7 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 
 ### Cleanup
 
-`uv run xr_render_demo --stop` works for both modes. Cleanup locates labelled
+`model_servers --stop` works for both modes. Cleanup locates labelled
 Docker containers before inspecting ports, then stops them with `docker stop`
 (escalating to `docker kill` after 20 s). Pip-mode processes carry an
 `xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort

@@ -4,7 +4,7 @@
 """``make_*`` constructors that dispatch a :class:`Spec` to a concrete client."""
 from __future__ import annotations
 
-from ._config import KIND_OPENAI_COMPAT, ModelsConfig
+from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, ModelsConfig
 from ._openai_compat import (
     OpenAICompatEmbedding,
     OpenAICompatLLM,
@@ -68,6 +68,18 @@ def make_stt(config: ModelsConfig, name: str) -> STTService:
             timeout=spec.timeout,
             health_check=spec.health_check,
         )
+    if spec.kind == KIND_RIVA_GRPC:
+        # Deferred: RivaSTT needs the optional nvidia-riva-client (riva extra).
+        from ._riva_grpc import RivaSTT
+        return RivaSTT(
+            base_url=spec.base_url,
+            api_key_env=spec.api_key_env,
+            function_id=spec.function_id,
+            use_ssl=spec.use_ssl,
+            language=spec.language,
+            timeout=spec.timeout,
+            health_check=spec.health_check,
+        )
     raise ValueError(f"unsupported STT kind: {spec.kind!r}")
 
 
@@ -77,6 +89,19 @@ def make_tts(config: ModelsConfig, name: str) -> TTSService:
         return OpenAICompatTTS(
             base_url=spec.base_url,
             api_key_env=spec.api_key_env,
+            timeout=spec.timeout,
+            health_check=spec.health_check,
+        )
+    if spec.kind == KIND_RIVA_GRPC:
+        from ._riva_grpc import RivaTTS
+        return RivaTTS(
+            base_url=spec.base_url,
+            api_key_env=spec.api_key_env,
+            function_id=spec.function_id,
+            use_ssl=spec.use_ssl,
+            voice=spec.voice,
+            language=spec.language,
+            sample_rate=spec.sample_rate,
             timeout=spec.timeout,
             health_check=spec.health_check,
         )

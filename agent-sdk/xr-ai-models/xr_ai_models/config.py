@@ -7,7 +7,8 @@ The models-config models and loaders moved to the private
 :mod:`xr_ai_models._config`. Import the public names from the package root
 (``from xr_ai_models import load_models_config``) instead; this alias will be
 removed in a future version. Names not re-exported at the package root —
-``KIND_OPENAI_COMPAT``, ``ModelKind``, ``Category``, and ``Spec`` — remain
+``KIND_OPENAI_COMPAT``, ``KIND_RIVA_GRPC``, ``ModelKind``, ``Category``, and
+``Spec`` — remain
 importable from here for existing callers.
 """
 
@@ -17,6 +18,7 @@ import warnings
 
 from ._config import (
     KIND_OPENAI_COMPAT,
+    KIND_RIVA_GRPC,
     Category,
     EmbeddingSpec,
     LLMSpec,
@@ -39,6 +41,7 @@ warnings.warn(
 
 __all__ = [
     "KIND_OPENAI_COMPAT",
+    "KIND_RIVA_GRPC",
     "Category",
     "EmbeddingSpec",
     "LLMSpec",

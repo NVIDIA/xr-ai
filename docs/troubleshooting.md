@@ -366,8 +366,8 @@ persistence*.
 **Fix:** to fully release VRAM:
 
 ```bash
-cd xr-ai/agent-samples/xr-render-demo
-uv run xr_render_demo --stop
+cd xr-ai
+uv run --project agent-samples/model-servers model_servers --stop
 ```
 
 For pip-mode servers this sends `SIGTERM` to each persisted process, waits up

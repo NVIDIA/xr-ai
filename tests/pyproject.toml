@@ -13,7 +13,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-hub-client",
-    "xr-ai-models",
+    "xr-ai-models[riva]",
     "xr-ai-nat[agents,services,vision]",
     "xr-ai-pipecat",
     "xr-ai-voice",

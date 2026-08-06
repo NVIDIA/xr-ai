@@ -11,7 +11,7 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-hub-client",
-    "xr-ai-models",
+    "xr-ai-models[riva]",
     "xr-ai-nat[services,vision]",
     "xr-ai-pipecat",
     "xr-ai-voicegate",

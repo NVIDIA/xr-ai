@@ -27,7 +27,6 @@ import time
 from pathlib import Path
 
 import httpx
-import yaml
 from nat.builder.workflow_builder import WorkflowBuilder
 
 _HERE       = Path(__file__).resolve().parent
@@ -37,24 +36,18 @@ SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
 # the same model-facing function schemas as the live worker.
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
 from capabilities import build_native_toolbox  # noqa: E402
-from config import load_config  # noqa: E402  — must follow sys.path tweak
+from config import load_config, load_models  # noqa: E402  — must follow sys.path tweak
 from processors import (  # noqa: E402  — must follow sys.path tweak
     _LIVE_PERCEPTION_TOOL,
     _PAST_PERCEPTION_TOOL,
     _PERCEPTION_TOOL_DEFS,
 )
-_WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
+_WORKER_YAML = (_HERE / "../yaml/xr_render_demo_worker.yaml").resolve()
+_WORKER_CFG = load_config(_WORKER_YAML)
 
 def _agent_llm_base_url() -> str:
-    """Read agent_llm.base_url from models.yaml."""
-    # WorkerConfig.models_yaml is resolved relative to the live launcher's
-    # cwd (the sample root); eval runs from eval/, so anchor it ourselves.
-    p = Path(_WORKER_CFG.models_yaml)
-    if not p.is_absolute():
-        p = (_HERE / ".." / p).resolve()
-    with open(p) as f:
-        models = yaml.safe_load(f) or {}
-    return str(models["agent_llm"]["base_url"]).rstrip("/")
+    """agent_llm.base_url from the worker's composed models config."""
+    return load_models(_WORKER_YAML).llm("agent_llm").base_url.rstrip("/")
 
 
 AGENT_LLM   = f"{_agent_llm_base_url()}/v1/chat/completions"  # overridable via --agent-llm
