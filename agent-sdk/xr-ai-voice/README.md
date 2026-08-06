@@ -55,6 +55,10 @@ the callable with `xr_ai_nat.adapters.as_voice_handler`; transcript recording
 is a separate observer rather than a side effect of function invocation.
 
 When wake phrases and the listening chime are enabled, the VAD/STT stage probes
-the opening audio while the user is still speaking. A recognized phrase emits
-the chime immediately, while only the final transcript enters the voice gate as
-a query. STOP commands use the same early-probe path for immediate interruption.
+the opening audio on a fixed cadence while the user is still speaking. Probe
+audio includes a short silent tail so offline STT can finalize the wake word. A
+recognized phrase emits the chime immediately, while only the final transcript
+enters the voice gate as a query. An in-flight probe gets a short grace period
+before final STT and is then cancelled, so a slow probe cannot stall the audio
+pipeline. A missed probe never inserts a late chime in front of response speech.
+STOP commands use the same early-probe path for immediate interruption.

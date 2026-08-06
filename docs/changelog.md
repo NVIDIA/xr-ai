@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Listening chimes belong to wake recognition, not response start
+
+Wake-word probes run on an absolute cadence and append a short silent tail so
+the offline STT model can finalize the leading phrase. VAD finalization gives an
+active probe a short grace period before cancellation, preserving near-complete
+work without letting a slow STT request stall microphone processing. Spoken
+queries never fall back to a final-transcript chime: if early recognition
+misses, silence is less confusing than a chime attached to the assistant
+response. Phrase-only and synthetic transcript paths retain their final-match
+acknowledgment.
+
 ### 2026-08-05 — Docker vLLM setup owns the image entrypoint
 
 The shared vLLM Docker launcher explicitly selects `/bin/bash` before installing

@@ -48,6 +48,8 @@ from .._frames import ParticipantLeftFrame
 # the prefix so ordinary ambient speech does not consume all probe attempts.
 PartialTranscriptHandler = Callable[[str, str], Awaitable[bool | None]]
 _MAX_PARTIAL_PROBES = 3
+_PARTIAL_PROBE_TAIL_S = 0.12
+_PARTIAL_PROBE_FINISH_GRACE_S = 0.15
 
 
 @dataclass(frozen=True)
@@ -57,15 +59,15 @@ class VadConfig:
     Mirrors the constructor of :class:`xr_ai_vad.VadDetector`. Default
     values match the in-tree samples' current behavior.
 
-    ``stop_probe_after_s`` — seconds after ``on_speech_start`` to run an
-    extra STT pass on the partial audio buffer. This gives STOP commands a
-    fast interrupt path and lets a configured wake phrase be acknowledged
-    before the utterance ends. Set to ``0`` or negative to disable probes.
+    ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
+    the partial audio buffer. This gives STOP commands a fast interrupt path
+    and lets a configured wake phrase be acknowledged before the utterance
+    ends. Set to ``0`` or negative to disable probes.
     """
     silence_duration:   float = 0.8
     min_speech:         float = 0.15
     silero_threshold:   float = 0.5
-    stop_probe_after_s: float = 0.4
+    stop_probe_after_s: float = 0.25
 
 
 class VadSttProcessor(FrameProcessor):
@@ -107,6 +109,7 @@ class VadSttProcessor(FrameProcessor):
         # One probe task per pid, so a fresh speech_start can cancel a
         # lingering task before scheduling the next.
         self._probe_task:     dict[str, asyncio.Task] = {}
+        self._probe_inflight: set[str] = set()
         # Pids whose probe has already pushed a STOP for the current
         # utterance — suppresses the duplicate that would fire when VAD
         # eventually finalizes the same speech run. Cleared on the next
@@ -190,14 +193,9 @@ class VadSttProcessor(FrameProcessor):
             await self.push_frame(f)
 
         async def on_utterance(audio_bytes: bytes, sample_rate: int) -> None:
-            # Probe ran-or-not, the utterance has finalized. Close the
-            # probe buffer entry and cancel any pending probe (e.g.
-            # silence_duration < stop_probe_after_s). Await the
-            # cancellation so the probe task is fully torn down — see
-            # the comment in ``on_speech_start`` for why this matters.
-            await self._cancel_probe_task(pid)
             self._probe_buffer.pop(pid, None)
             self._probe_sr.pop(pid, None)
+            await self._finish_probe_for_utterance(pid)
 
             dur_s = (len(audio_bytes) // 2) / max(sample_rate, 1)
             logger.info("utterance finalize pid={!r} dur={:.2f}s", pid, dur_s)
@@ -292,9 +290,11 @@ class VadSttProcessor(FrameProcessor):
     async def _run_partial_probes(self, pid: str) -> None:
         """Probe partial audio for STOP and an optional wake acknowledgement."""
         attempts = _MAX_PARTIAL_PROBES if self._on_partial_transcript else 1
+        started = time.monotonic()
         for attempt in range(1, attempts + 1):
             try:
-                await asyncio.sleep(self._vad_cfg.stop_probe_after_s)
+                due = started + attempt * self._vad_cfg.stop_probe_after_s
+                await asyncio.sleep(max(0.0, due - time.monotonic()))
             except asyncio.CancelledError:
                 return
 
@@ -303,36 +303,46 @@ class VadSttProcessor(FrameProcessor):
             if not buf or sr <= 0:
                 return
 
+            audio = bytes(buf) + bytes(round(sr * _PARTIAL_PROBE_TAIL_S) * 2)
+            before = time.monotonic()
+            self._probe_inflight.add(pid)
             try:
-                text = await self._stt.transcribe(bytes(buf), sample_rate=sr)
-            except asyncio.CancelledError:
-                return
-            except Exception:
-                logger.exception("partial-probe stt transcribe failed pid={!r}", pid)
-                return
-
-            stop_matched = bool(text and STOP_RE.match(text))
-            logger.info(
-                "early transcript probe fired pid={!r} attempt={} stop_matched={}",
-                pid, attempt, stop_matched,
-            )
-            if stop_matched:
-                await self._emit_early_stop(pid, text)
-                return
-
-            if text and self._on_partial_transcript is not None:
                 try:
-                    decision = await self._on_partial_transcript(pid, text)
+                    text = await self._stt.transcribe(audio, sample_rate=sr)
                 except asyncio.CancelledError:
                     return
                 except Exception:
-                    logger.exception("partial-transcript handler failed pid={!r}", pid)
+                    logger.exception("partial-probe stt transcribe failed pid={!r}", pid)
                     return
-                if decision is True:
-                    logger.info("early wake phrase acknowledged pid={!r}", pid)
+
+                stop_matched = bool(text and STOP_RE.match(text))
+                logger.info(
+                    "early transcript probe fired pid={!r} attempt={} latency_ms={} "
+                    "stop_matched={} text={!r}",
+                    pid, attempt, round((time.monotonic() - before) * 1000),
+                    stop_matched, text,
+                )
+                if stop_matched:
+                    await self._emit_early_stop(pid, text)
                     return
-                if decision is None:
-                    return
+
+                if text and self._on_partial_transcript is not None:
+                    try:
+                        decision = await self._on_partial_transcript(pid, text)
+                    except asyncio.CancelledError:
+                        return
+                    except Exception:
+                        logger.exception("partial-transcript handler failed pid={!r}", pid)
+                        return
+                    if decision is True:
+                        logger.info("early wake phrase acknowledged pid={!r}", pid)
+                        return
+                    if decision is None:
+                        return
+            finally:
+                self._probe_inflight.discard(pid)
+            if pid not in self._probe_buffer:
+                return
 
     async def _emit_early_stop(self, pid: str, text: str) -> None:
         """Emit the interrupt sequence for a STOP matched by a partial probe."""
@@ -403,6 +413,22 @@ class VadSttProcessor(FrameProcessor):
         if self._current_pid == pid:
             self._current_pid = None
         logger.info("evicted per-participant VAD state pid={!r}", pid)
+
+    async def _finish_probe_for_utterance(self, pid: str) -> None:
+        """Give active STT a short grace period; cancel all other probes."""
+        task = self._probe_task.get(pid)
+        if task is None or task.done() or pid not in self._probe_inflight:
+            await self._cancel_probe_task(pid)
+            return
+        self._probe_task.pop(pid, None)
+        try:
+            await asyncio.wait_for(task, timeout=_PARTIAL_PROBE_FINISH_GRACE_S)
+        except TimeoutError:
+            logger.info("partial probe grace expired pid={!r}", pid)
+        except asyncio.CancelledError:
+            logger.debug("partial probe cancelled during finalization pid={!r}", pid)
+        except Exception:
+            logger.exception("partial probe completion raised pid={!r}", pid)
 
     async def _cancel_probe_task(self, pid: str) -> None:
         """Cancel a pending probe task and await its teardown.
