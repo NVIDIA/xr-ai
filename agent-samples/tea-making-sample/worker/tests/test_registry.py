@@ -51,15 +51,25 @@ class _Broken:
 
 
 class _RouteAgent:
-    def __init__(self, *, select_on: int | None) -> None:
+    def __init__(
+        self,
+        *,
+        select_on: int | None,
+        operation: str = "ask_general",
+        operation_field: str = "outer_route_operation",
+    ) -> None:
         self.select_on = select_on
+        self.operation = operation
+        self.operation_field = operation_field
         self.requests: list[str] = []
 
     async def ainvoke(self, request, *, to_type):
         self.requests.append(request)
         if self.select_on == len(self.requests):
-            current_invocation().route_operation = "ask_general"
-            return "general answer"
+            call = current_invocation()
+            setattr(call, self.operation_field, self.operation)
+            call.route_operation = self.operation
+            return f"{self.operation} answer"
         return "unrouted answer"
 
 
@@ -136,12 +146,12 @@ class RegistryTest(unittest.IsolatedAsyncioTestCase):
         session = SessionStore(workflow).get("tester")
         agent = _RouteAgent(select_on=2)
         registry = AgentRegistry(workflow)
-        registry._router = agent
+        registry._router_outside = agent
 
         with invocation_scope(session, "trace"):
             result = await registry.route(session, "What tea is this?", "trace")
 
-        self.assertEqual(result, "general answer")
+        self.assertEqual(result, "ask_general answer")
         self.assertEqual(len(agent.requests), 2)
         self.assertIn("Call exactly one route tool.", agent.requests[1])
 
@@ -150,13 +160,45 @@ class RegistryTest(unittest.IsolatedAsyncioTestCase):
         session = SessionStore(workflow).get("tester")
         agent = _RouteAgent(select_on=None)
         registry = AgentRegistry(workflow)
-        registry._router = agent
+        registry._router_outside = agent
 
         with invocation_scope(session, "trace"):
             result = await registry.route(session, "ambiguous request", "trace")
 
         self.assertEqual(result, "I could not determine the request. Please rephrase it.")
         self.assertEqual(len(agent.requests), 2)
+
+    async def test_active_session_uses_only_the_inside_router(self) -> None:
+        workflow = load_workflow(_WORKFLOW)
+        store = SessionStore(workflow)
+        session = store.get("tester")
+        store.start(session)
+        registry = AgentRegistry(workflow)
+        registry._router_outside = _Broken()
+        registry._router_inside = _RouteAgent(select_on=1, operation="reset")
+
+        with invocation_scope(session, "trace"):
+            result = await registry.route(session, "Exit tea guidance", "trace")
+
+        self.assertEqual(result, "reset answer")
+
+    async def test_tea_router_tracks_its_leaf_operation(self) -> None:
+        workflow = load_workflow(_WORKFLOW)
+        store = SessionStore(workflow)
+        session = store.get("tester")
+        store.start(session)
+        registry = AgentRegistry(workflow)
+        registry._tea_router = _RouteAgent(
+            select_on=1,
+            operation="advance",
+            operation_field="tea_route_operation",
+        )
+
+        with invocation_scope(session, "trace"):
+            result = await registry.route_tea(session, "Next", "trace")
+
+        self.assertEqual(result, "advance answer")
+        self.assertEqual(json.loads(registry._tea_router.requests[0]), {"request": "Next"})
 
 
 if __name__ == "__main__":

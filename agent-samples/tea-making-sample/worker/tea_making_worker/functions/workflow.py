@@ -23,6 +23,7 @@ Operation = Literal[
     "reset",
     "restart",
     "status",
+    "ask_tea",
     "ask_step",
     "ask_general",
 ]
@@ -70,6 +71,7 @@ class WorkflowFunctionConfig(FunctionBaseConfig, name="tea_guidance_workflow_fun
     operation: Operation
     store: Any = Field(exclude=True, repr=False)
     answer_step: Any = Field(exclude=True, repr=False)
+    answer_tea: Any = Field(exclude=True, repr=False)
     answer_general: Any = Field(exclude=True, repr=False)
 
 
@@ -77,6 +79,7 @@ class WorkflowFunctionConfig(FunctionBaseConfig, name="tea_guidance_workflow_fun
 async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
     store: SessionStore = config.store
     answer_step: VoiceAnswer = config.answer_step
+    answer_tea: VoiceAnswer = config.answer_tea
     answer_general: VoiceAnswer = config.answer_general
 
     async def commit(request: CommitRequest) -> str:
@@ -85,31 +88,52 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
 
     async def start(request: GuideRequest) -> str:
         call = current_invocation()
+        call.outer_route_operation = "start"
         call.route_operation = "start"
         return store.start(call.session)
 
     async def advance(request: AdvanceRequest) -> str:
         call = current_invocation()
+        call.tea_route_operation = "advance"
         call.route_operation = "advance"
         return store.advance(call.session, skip=request.skip)
 
     async def reset(request: GuideRequest) -> str:
         call = current_invocation()
+        call.outer_route_operation = "reset"
         call.route_operation = "reset"
         return store.reset(call.session)
 
     async def restart(request: GuideRequest) -> str:
         call = current_invocation()
+        call.tea_route_operation = "restart"
         call.route_operation = "restart"
         return store.restart(call.session)
 
     async def status(request: EmptyRequest) -> str:
         call = current_invocation()
+        call.tea_route_operation = "status"
         call.route_operation = "status"
         return store.status(call.session)
 
+    async def ask_tea(request: EmptyRequest) -> str:
+        call = current_invocation()
+        if call.request is None:
+            raise RuntimeError("tea routing requires the original voice request")
+        call.outer_route_operation = "tea"
+        emit(
+            "voice.delegate",
+            participant_id=call.session.participant_id,
+            step=call.session.step_id,
+            trace_id=call.trace_id,
+            target="tea_router",
+            question=call.request,
+        )
+        return await answer_tea(call.session, call.request, call.trace_id)
+
     async def ask_step(request: AskStepRequest) -> str:
         call = current_invocation()
+        call.tea_route_operation = "ask_step"
         call.route_operation = "ask_step"
         emit(
             "voice.delegate",
@@ -123,6 +147,7 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
 
     async def ask_general(request: AskStepRequest) -> str:
         call = current_invocation()
+        call.outer_route_operation = "ask_general"
         call.route_operation = "ask_general"
         emit(
             "voice.delegate",
@@ -150,9 +175,13 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
             "Explicitly start this tea guide over from its first step; not an appliance or timer.",
         ),
         "status": (status, "Report whether this guide is active and its current step."),
+        "ask_tea": (
+            ask_tea,
+            "Active tea guide: delegate every request except an explicit guide exit.",
+        ),
         "ask_step": (
             ask_step,
-            "Active guide only: current-step/item help, readings, timers, or action reports.",
+            "Current-step questions, reports, help, readings, timers, or checks; never next, continue, advance, or skip.",
         ),
         "ask_general": (
             ask_general,
@@ -168,6 +197,7 @@ async def add_workflow_functions(
     *,
     store: SessionStore,
     answer_step: VoiceAnswer,
+    answer_tea: VoiceAnswer,
     answer_general: VoiceAnswer,
 ) -> None:
     for operation in (
@@ -177,6 +207,7 @@ async def add_workflow_functions(
         "reset",
         "restart",
         "status",
+        "ask_tea",
         "ask_step",
         "ask_general",
     ):
@@ -186,6 +217,7 @@ async def add_workflow_functions(
                 operation=operation,
                 store=store,
                 answer_step=answer_step,
+                answer_tea=answer_tea,
                 answer_general=answer_general,
             ),
         )

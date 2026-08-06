@@ -18,7 +18,8 @@ changes.
 4. Every LLM loop is a built-in NAT tool-calling agent. Do not add a hand-rolled
    `while tool_calls` loop.
 5. Observation agents can write only the active step's `writes`. Voice agents
-   are read-only. The top router alone chooses management versus delegation.
+   are read-only. State selects the outside or inside router; each router sees
+   only its valid management and delegation functions.
 6. No conversation transcript is included. Add memory only for a named case
    that cannot be solved with the current question and step projection.
 7. Recover only errors that a later frame or corrected model call can repair.
@@ -28,18 +29,19 @@ changes.
    Never retrieve without a specific visible tea name; return at most two
    passages to the small model. RAG supplies brewing values, never tea identity.
 9. Step completion never transitions. Observation continues homogeneously;
-   only the top router may advance after an explicit user voice request. Next,
-   continue, advance, and skip always select the advance function, never the
-   step question function.
+   only the nested tea router may advance after an explicit user voice request.
+   Imperative next, continue, advance, and skip select the advance function;
+   questions containing those words remain step questions.
 10. VLM triggers return plain-text captions from focus-only questions. A
     YAML evidence gate, not the observation agent's interpretation alone,
     authorizes visual completion after repeated matching frames.
 11. Sessions are ephemeral: first join and app-start roster replay reset to
     idle, participant leave discards state, and duplicate roster events are
     idempotent.
-12. Router management is literal. Reports of physical actions and all questions
-    delegate to the step agent; only explicit management language selects a
-    management function.
+12. Router management is literal. While active, every request except an
+    explicit guide exit enters the tea router. Reports, questions, timers, and
+    appliance commands then delegate to the step agent unless they are explicit
+    tea workflow management.
 13. Model-visible vision requests contain only a question. `current_view`
     injects participant identity from invocation scope.
 14. User-facing values are natural speech. Keep state numeric; use the shared
@@ -101,15 +103,19 @@ changes.
 32. Heating detection announces that heating is underway and tells the user to
     wait for the target. It never describes the following step as ready.
 33. The router separates explicit lifecycle intent, active-step questions, and
-    general knowledge or vision. The general delegate works while idle and has
-    no workflow mutation tools. Deictic requests inspect vision before RAG.
-35. An accepted route must execute exactly one constrained workflow tool. Retry
+    general knowledge or vision. The general delegate works only while idle and
+    has no workflow mutation tools. Deictic requests inspect vision before RAG.
+34. An accepted route must execute exactly one constrained workflow tool. Retry
     a direct router answer once, then return a recoverable rephrase request;
     never treat unconstrained model prose as a routing result.
-36. Starting is valid only from idle and is idempotent while active. Reset
+35. Starting is valid only from idle and is idempotent while active. Reset
     returns to idle; restart alone clears state and enters the first step.
     Lifecycle mutation tools name the `tea_guide` scope, while timer and
     appliance requests remain step-agent work regardless of lifecycle words.
+36. Voice routing is nested by application state. Idle exposes only start and
+    general assistance. Active exposes only exit and tea delegation. The tea
+    router owns step management and step-agent delegation; it never exposes the
+    general assistant.
 
 ## Nested machines
 
@@ -132,9 +138,11 @@ commit no updates or message. `SessionStore` records every such call as
 The voice machine is independent of monitoring:
 
 ```text
-request -> router -> {start | advance | reset | restart | status | ask_step | ask_general}
+idle request -> outside router -> {start | ask_general}
+active request -> inside router -> {reset | ask_tea}
+ask_tea -> tea router -> {advance | restart | status | ask_step}
 ask_step -> current read-only voice agent -> optional read-only tools -> answer
-ask_general -> vision/RAG agent -> optional read-only tools -> answer
+ask_general -> idle-only vision/RAG agent -> optional read-only tools -> answer
 ```
 
 Step voice prompts include a compact procedure so references to the current
@@ -142,9 +150,12 @@ action can be answered without storing the previous conversation turn.
 
 `runtime/scope.py` carries participant and trace identity into workflow NAT
 functions without putting those repeated values in every tool schema. It also
-records which route tool actually executed so direct model prose cannot bypass
-the constrained router. The scope exists only during one locked participant
-turn or observation.
+records the outer, tea, and final route tools so direct model prose cannot
+bypass either constrained router level. The scope exists only during one locked
+participant turn or observation. During voice turns it also carries the exact
+user request across router levels, so a delegating model cannot paraphrase a
+command into a question. The tea router sees only that request; the current
+step title is unnecessary classification context and is kept out of the call.
 
 ## YAML review checklist
 
@@ -185,7 +196,7 @@ Budgets are guardrails for the small local models:
 
 | Input | Budget |
 |---|---:|
-| Shared router prompt | 300 characters |
+| Each router prompt | 240 characters |
 | Shared observation prompt | 350 characters |
 | Shared voice prompt | 300 characters |
 | Generated state contract | 500 characters |
@@ -200,7 +211,8 @@ meaning. Do not put domain-specific examples or repeat this rule in step
 prompts.
 
 The eval check enforces the budgets. Requests use compact JSON with no
-indentation. Router context is only `request`, `active`, and current step title.
+indentation. Outside and inside router context is only `request`; tea-router
+context adds only the current step title.
 An observation or voice agent receives only its step projection. The generated
 contract includes only writable fields and their completion values. Do not add
 a whole-workflow dump, previous frames, or assistant history.
@@ -218,8 +230,8 @@ expected versus observed behavior:
 
 Then inspect in this order:
 
-1. `agent.router.request/response` for the selected outer function; inspect
-   `agent.router.retry/skipped` when no route tool was produced.
+1. `agent.router.request/response` for `level=outside`, `inside`, then `tea`;
+   inspect `agent.router.retry/skipped` when no route tool was produced.
 2. `trigger.request/response` for the exact fresh caption and latency.
 3. `step.evidence` for the deterministic match and consecutive count.
 4. `rag.lookup.request/response` when identification needs missing brew facts.
@@ -238,8 +250,8 @@ Prefer the narrowest fix:
 - Correct identification, delayed readiness: inspect the retrieval passage and
   verify that the first supported field commit also writes `tea_ready` true.
 - Wrong tool: reduce or clarify only that step's tool list/description.
-- Wrong route: tighten the shared router or management function description and
-  add a routing eval; keep the task router prompt limited to domain identity.
+- Wrong route: tighten only the failing router level or function description
+  and add a routing eval; keep the YAML router prompt limited to domain identity.
 - Wrong live answer with a fabricated participant ID: the model-visible vision
   schema has regressed; participant identity must remain invocation-scoped.
 - Runtime invariant failure: fix Python and add a unit test.

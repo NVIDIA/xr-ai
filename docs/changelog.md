@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Tea voice routing follows application state
+
+Voice routing is now a nested NAT-agent hierarchy. Idle sessions expose only
+start and general assistance; active sessions expose only exit and delegation
+to a tea router. That tea router owns step transitions, restart, status, and
+the current-step delegate. General tools cannot compete with tea workflow
+commands while guidance is active, and each router receives only the request
+it needs. The original utterance crosses the inside-to-tea boundary through
+invocation scope, preventing delegation from turning an imperative into a
+question; the tea router receives no step content that could bias classification.
+
 ### 2026-08-05 — Guide start cannot reset active progress
 
 Tea guidance lifecycle operations are state-safe at the function boundary.

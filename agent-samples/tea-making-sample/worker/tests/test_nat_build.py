@@ -80,6 +80,7 @@ class NatBuildTest(unittest.IsolatedAsyncioTestCase):
                 builder,
                 store=store,
                 answer_step=agents.answer,
+                answer_tea=agents.route_tea,
                 answer_general=agents.answer_general,
             )
             await agents.build(builder, llm)

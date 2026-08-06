@@ -20,8 +20,21 @@ _ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker.agents.prompts import GENERAL, HUMAN, ROUTER, STEP, VOICE  # noqa: E402
-from tea_making_worker.agents.registry import _state_contract  # noqa: E402
+from tea_making_worker.agents.prompts import (  # noqa: E402
+    GENERAL,
+    HUMAN,
+    INSIDE_ROUTER,
+    OUTSIDE_ROUTER,
+    STEP,
+    TEA_ROUTER,
+    VOICE,
+)
+from tea_making_worker.agents.registry import (  # noqa: E402
+    _INSIDE_ROUTES,
+    _OUTSIDE_ROUTES,
+    _TEA_ROUTES,
+    _state_contract,
+)
 from tea_making_worker.config import load_config  # noqa: E402
 from tea_making_worker.functions.vision import CurrentViewRequest  # noqa: E402
 from tea_making_worker.functions.workflow import CommitRequest  # noqa: E402
@@ -49,7 +62,7 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
         "start_steeping",
         "steep_timer",
     ]
-    assert len(ROUTER) <= 300
+    assert all(len(prompt) <= 240 for prompt in (OUTSIDE_ROUTER, INSIDE_ROUTER, TEA_ROUTER))
     assert len(f"{GENERAL}\n{HUMAN}") <= 320
     assert len(f"{STEP}\n{HUMAN}") <= 350
     assert len(f"{VOICE}\n{HUMAN}") <= 300
@@ -59,9 +72,18 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert "already_complete is status, not state" in STEP
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
-    assert "explicit guide intent" in ROUTER
-    assert "another question is not intent" in ROUTER
-    assert "ask_general" in ROUTER
+    assert "Everything else: ask_general" in OUTSIDE_ROUTER
+    assert "Everything else: ask_tea" in INSIDE_ROUTER
+    assert "Imperative next/continue/advance" in TEA_ROUTER
+    assert "Otherwise ask_step" in TEA_ROUTER
+    assert tuple(map(str, _OUTSIDE_ROUTES)) == ("workflow__start", "workflow__ask_general")
+    assert tuple(map(str, _INSIDE_ROUTES)) == ("workflow__reset", "workflow__ask_tea")
+    assert tuple(map(str, _TEA_ROUTES)) == (
+        "workflow__advance",
+        "workflow__restart",
+        "workflow__status",
+        "workflow__ask_step",
+    )
     for step, source in zip(workflow.steps.values(), raw["steps"], strict=True):
         assert step.trigger.function
         assert step.complete_when

@@ -44,6 +44,7 @@ async def evaluate(models_path: Path, cases_path: Path) -> int:
                 builder,
                 store=store,
                 answer_step=answer_step,
+                answer_tea=registry.route_tea,
                 answer_general=answer_general,
             )
             await registry.build_router(builder, llm)

@@ -20,12 +20,13 @@ from ..runtime.events import emit
 from ..runtime.scope import current_invocation
 from ..runtime.state import Session
 from ..spec import Step, Workflow
-from .prompts import GENERAL, HUMAN, ROUTER, STEP, VOICE
+from .prompts import GENERAL, HUMAN, INSIDE_ROUTER, OUTSIDE_ROUTER, STEP, TEA_ROUTER, VOICE
 
 _COMMIT = FunctionRef("workflow__commit")
-_ROUTES = tuple(
-    FunctionRef(f"workflow__{name}")
-    for name in ("start", "advance", "reset", "restart", "status", "ask_step", "ask_general")
+_OUTSIDE_ROUTES = tuple(FunctionRef(f"workflow__{name}") for name in ("start", "ask_general"))
+_INSIDE_ROUTES = tuple(FunctionRef(f"workflow__{name}") for name in ("reset", "ask_tea"))
+_TEA_ROUTES = tuple(
+    FunctionRef(f"workflow__{name}") for name in ("advance", "restart", "status", "ask_step")
 )
 
 
@@ -35,7 +36,9 @@ class AgentRegistry:
         self._step: dict[str, Function] = {}
         self._voice: dict[str, Function] = {}
         self._general: Function | None = None
-        self._router: Function | None = None
+        self._router_outside: Function | None = None
+        self._router_inside: Function | None = None
+        self._tea_router: Function | None = None
 
     async def build(self, builder: WorkflowBuilder, llm: LLMService) -> None:
         llm_ref = await self._add_llm(builder, llm)
@@ -62,20 +65,37 @@ class AgentRegistry:
             prompt=f"{GENERAL}\n{HUMAN}",
             tools=(FunctionRef("current_view"), FunctionRef("rag_lookup")),
         )
-        self._router = await self._build_router(builder, llm_ref)
+        await self._build_routers(builder, llm_ref)
 
     async def build_router(self, builder: WorkflowBuilder, llm: LLMService) -> None:
-        """Build only the production router for model-backed route evals."""
-        self._router = await self._build_router(builder, await self._add_llm(builder, llm))
+        """Build only the production router hierarchy for model-backed route evals."""
+        await self._build_routers(builder, await self._add_llm(builder, llm))
 
-    async def _build_router(self, builder: WorkflowBuilder, llm_ref: LLMRef) -> Function:
-        return await self._agent(
+    async def _build_routers(self, builder: WorkflowBuilder, llm_ref: LLMRef) -> None:
+        context = self.workflow.router_prompt
+        self._router_outside = await self._agent(
             builder,
-            name="guide_router",
+            name="guide_router_outside",
             llm_ref=llm_ref,
-            prompt=f"{ROUTER}\n{self.workflow.router_prompt}".strip(),
-            tools=_ROUTES,
-            return_direct=_ROUTES,
+            prompt=f"{OUTSIDE_ROUTER}\n{context}".strip(),
+            tools=_OUTSIDE_ROUTES,
+            return_direct=_OUTSIDE_ROUTES,
+        )
+        self._router_inside = await self._agent(
+            builder,
+            name="guide_router_inside",
+            llm_ref=llm_ref,
+            prompt=f"{INSIDE_ROUTER}\n{context}".strip(),
+            tools=_INSIDE_ROUTES,
+            return_direct=_INSIDE_ROUTES,
+        )
+        self._tea_router = await self._agent(
+            builder,
+            name="guide_router_tea",
+            llm_ref=llm_ref,
+            prompt=f"{TEA_ROUTER}\n{context}".strip(),
+            tools=_TEA_ROUTES,
+            return_direct=_TEA_ROUTES,
         )
 
     @staticmethod
@@ -187,50 +207,90 @@ class AgentRegistry:
         return result.strip()
 
     async def route(self, session: Session, request: str, trace_id: str) -> str:
-        if self._router is None:
+        current_invocation().request = request
+        agent = self._router_inside if session.active else self._router_outside
+        if agent is None:
             raise RuntimeError("agent registry has not been built")
-        step = self.workflow.step(session.step_id) if session.active and session.step_id else None
-        payload = _json(
-            request=request,
-            active=session.active,
-            step=step.title if step else None,
+        return await self._route_with(
+            agent,
+            session,
+            _json(request=request),
+            trace_id,
+            level="inside" if session.active else "outside",
+            operation_field="outer_route_operation",
         )
+
+    async def route_tea(self, session: Session, request: str, trace_id: str) -> str:
+        if self._tea_router is None:
+            raise RuntimeError("agent registry has not been built")
+        self._active_step(session)
+        return await self._route_with(
+            self._tea_router,
+            session,
+            _json(request=request),
+            trace_id,
+            level="tea",
+            operation_field="tea_route_operation",
+        )
+
+    async def _route_with(
+        self,
+        agent: Function,
+        session: Session,
+        payload: str,
+        trace_id: str,
+        *,
+        level: str,
+        operation_field: str,
+    ) -> str:
         emit(
             "agent.router.request",
             participant_id=session.participant_id,
+            step=session.step_id,
             trace_id=trace_id,
+            level=level,
             chars=len(payload),
             input=payload,
         )
         call = current_invocation()
         for attempt in range(2):
-            call.route_operation = None
+            setattr(call, operation_field, None)
+            if level == "tea":
+                call.route_operation = None
             try:
-                result = await self._router.ainvoke(payload, to_type=str)
+                result = await agent.ainvoke(payload, to_type=str)
             except Exception as exc:
                 if not _is_tool_schema_error(exc) or attempt == 1:
                     raise
                 emit(
                     "agent.router.retry",
                     participant_id=session.participant_id,
+                    step=session.step_id,
                     trace_id=trace_id,
+                    level=level,
                     reason="invalid_tool_arguments",
                 )
                 payload = f"{payload}\nRetry tool arguments: {_schema_feedback(exc)}"
                 continue
-            if call.route_operation is not None:
+            operation = getattr(call, operation_field)
+            if operation is not None:
                 emit(
                     "agent.router.response",
                     participant_id=session.participant_id,
+                    step=session.step_id,
                     trace_id=trace_id,
-                    route=call.route_operation,
+                    level=level,
+                    route=operation,
+                    leaf_route=call.route_operation,
                     output=result,
                 )
                 return result.strip()
             emit(
                 "agent.router.retry",
                 participant_id=session.participant_id,
+                step=session.step_id,
                 trace_id=trace_id,
+                level=level,
                 reason="missing_route_tool",
                 output=result,
             )
@@ -238,7 +298,9 @@ class AgentRegistry:
         emit(
             "agent.router.skipped",
             participant_id=session.participant_id,
+            step=session.step_id,
             trace_id=trace_id,
+            level=level,
             reason="missing_route_tool",
         )
         return "I could not determine the request. Please rephrase it."

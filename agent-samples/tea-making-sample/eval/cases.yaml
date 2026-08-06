@@ -4,6 +4,10 @@
 routes:
   - utterance: Next.
     expected_tool: workflow__advance
+  - utterance: Next step.
+    active: true
+    step: identify
+    expected_tool: workflow__advance
   - utterance: Walk me through brewing a cup.
     active: false
     expected_tool: workflow__start
@@ -77,12 +81,17 @@ routes:
     active: true
     step: identify
     tea_detected: false
-    expected_tool: workflow__ask_general
+    expected_tool: workflow__ask_step
   - utterance: What objects can you see on the counter?
     active: false
     expected_tool: workflow__ask_general
   - utterance: Why might someone reset a kitchen timer?
+    active: false
     expected_tool: workflow__ask_general
+  - utterance: Why might someone reset a kitchen timer?
+    active: true
+    step: steep_timer
+    expected_tool: workflow__ask_step
 
 general_queries:
   tea_knowledge:

@@ -14,8 +14,21 @@ import yaml
 _SAMPLE = Path(__file__).parents[1]
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
-from tea_making_worker.agents.prompts import GENERAL, HUMAN, ROUTER, STEP, VOICE  # noqa: E402
-from tea_making_worker.agents.registry import _state_contract  # noqa: E402
+from tea_making_worker.agents.prompts import (  # noqa: E402
+    GENERAL,
+    HUMAN,
+    INSIDE_ROUTER,
+    OUTSIDE_ROUTER,
+    STEP,
+    TEA_ROUTER,
+    VOICE,
+)
+from tea_making_worker.agents.registry import (  # noqa: E402
+    _INSIDE_ROUTES,
+    _OUTSIDE_ROUTES,
+    _TEA_ROUTES,
+    _state_contract,
+)
 from tea_making_worker.runtime.render import render_message  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
 
@@ -23,7 +36,7 @@ from tea_making_worker.spec import load_workflow  # noqa: E402
 def run() -> None:
     workflow = load_workflow(_SAMPLE / "yaml" / "workflow.yaml")
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
-    assert len(ROUTER) <= 300
+    assert all(len(prompt) <= 240 for prompt in (OUTSIDE_ROUTER, INSIDE_ROUTER, TEA_ROUTER))
     assert len(f"{GENERAL}\n{HUMAN}") <= 320
     assert len(f"{STEP}\n{HUMAN}") <= 350
     assert len(f"{VOICE}\n{HUMAN}") <= 300
@@ -35,9 +48,19 @@ def run() -> None:
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
     assert "if unavailable, say so" in VOICE
-    assert "Guide lifecycle only" in ROUTER
-    assert "Timer/appliance uses ask_step" in ROUTER
-    assert "ask_general" in ROUTER
+    assert "Everything else: ask_general" in OUTSIDE_ROUTER
+    assert "Everything else: ask_tea" in INSIDE_ROUTER
+    assert "Next/next step/continue/advance" in TEA_ROUTER
+    assert "Never use workflow__ask_step for these" in TEA_ROUTER
+    assert "Otherwise: ask_step" in TEA_ROUTER
+    assert tuple(map(str, _OUTSIDE_ROUTES)) == ("workflow__start", "workflow__ask_general")
+    assert tuple(map(str, _INSIDE_ROUTES)) == ("workflow__reset", "workflow__ask_tea")
+    assert tuple(map(str, _TEA_ROUTES)) == (
+        "workflow__advance",
+        "workflow__restart",
+        "workflow__status",
+        "workflow__ask_step",
+    )
     style = cases["spoken_style_guard"]
     assert all(fragment in style["compact_input"] for fragment in style["forbidden_fragments"])
     assert all(fragment not in style["expected_output"] for fragment in style["forbidden_fragments"])

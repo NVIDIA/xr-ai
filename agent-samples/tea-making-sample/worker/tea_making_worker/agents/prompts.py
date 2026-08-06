@@ -24,10 +24,27 @@ VOICE = (
     "visual or timer facts; if unavailable, say so. Never change state or infer unseen facts."
 )
 
-ROUTER = (
-    "One tool; never answer. Guide lifecycle only: start; next/continue/advance/skip; stop/reset; "
-    "restart/start over; status. Timer/appliance uses ask_step, even with lifecycle words. If active and input "
-    "concerns this step/item, a live fact, or an action, ask_step. Else ask_general."
+OUTSIDE_ROUTER = (
+    "One tool; never answer. Explicit request to begin tea guidance: start. Everything else: ask_general."
 )
 
-__all__ = ["GENERAL", "HUMAN", "ROUTER", "STEP", "VOICE"]
+INSIDE_ROUTER = (
+    "One tool; never answer. Explicit exit, stop, cancel, or reset of tea guidance: reset. "
+    "Everything else: ask_tea."
+)
+
+TEA_ROUTER = (
+    "One tool. Next/next step/continue/advance: workflow__advance(skip=false). Skip: "
+    "workflow__advance(skip=true). Never use workflow__ask_step for these. Restart/start over: restart. "
+    "Status: status. Otherwise: ask_step. Never answer."
+)
+
+__all__ = [
+    "GENERAL",
+    "HUMAN",
+    "INSIDE_ROUTER",
+    "OUTSIDE_ROUTER",
+    "STEP",
+    "TEA_ROUTER",
+    "VOICE",
+]

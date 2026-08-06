@@ -19,15 +19,13 @@ The command prints the selected NAT tool for every route case and exits nonzero
 on a mismatch. For step probes, compare the logged tool call or commit to the
 expected fields. Visual fixtures are ordinary captions, including one
 negative water-visibility case that must fail the deterministic evidence gate.
-Routing cases distinguish explicit workflow management from task questions,
-action reports, current readings, timer questions, and general requests. They
-also guard mentions such as “before we continue” from becoming accidental step
-transitions. Appliance commands and questions containing “next,” “start,”
-“skip,” or “reset” are not lifecycle intent. Adversarial timer commands must
-remain step requests, while explicit guide reset and restart remain available.
-General tea knowledge must use
-RAG, general scene questions must use current vision, and a deictic tea question
-must inspect before retrieval; all remain available while guidance is idle.
+Routing cases exercise the production hierarchy: idle start/general, active
+exit/tea delegation, then tea management/current-step delegation. Bare “next”
+and “next step” must reach advance, while questions containing transition words
+remain step requests. Appliance and adversarial timer commands remain step
+requests; explicit guide reset and restart remain available. General tea
+knowledge must use RAG, general scene questions must use current vision, and a
+deictic tea question must inspect before retrieval while guidance is idle.
 
 Corner-case probes cover atomic identification readiness, irrelevant retrieval
 results, absent or unitless temperature readings, unconfirmed immersion, a running timer, and
