@@ -39,9 +39,9 @@ _KNOWN: dict[str, tuple[str, str, str]] = {
     "HF_TOKEN": (
         "HuggingFace token",
         "https://huggingface.co/settings/tokens",
-        "Without HF_TOKEN, requests to the HuggingFace Hub are unauthenticated "
-        "— rate limits are lower, downloads are slower, and gated models will "
-        "fail to download.",
+        "Without HF_TOKEN, Hub requests are rate-limited: large checkpoint "
+        "downloads can stall indefinitely with no error output, and gated "
+        "models fail to download.",
     ),
     "NGC_API_KEY": (
         "NGC API key",
@@ -104,13 +104,9 @@ def warn_if_missing(*names: str) -> None:
     """
     Non-interactively surface missing optional tokens — NEVER prompts.
 
-    Loads saved / `huggingface-cli login` / env tokens, then prints one
-    actionable line per still-missing token (pointing at docs/credentials.md)
-    so a missing token is visible early without blocking startup on an
-    interactive prompt. Use this in orchestrators that pull HuggingFace / NGC
-    artifacts instead of ``ensure_credentials`` when the token is optional
-    (e.g. the default models are public — a token only raises rate limits and
-    download speed, and is required only for gated models).
+    Loads saved / `huggingface-cli login` / env tokens, then prints an
+    actionable notice per still-missing token and continues, so a missing
+    token is visible early without blocking startup on an interactive prompt.
     """
     load_credentials()
     for name in names:
@@ -125,6 +121,34 @@ def warn_if_missing(*names: str) -> None:
                    if name == "HF_TOKEN" else f"`export {name}=...`")
             print(f"  To enable it: get one at {url}, then {how}.", file=sys.stderr)
         print("  See docs/credentials.md.", file=sys.stderr)
+
+
+def require_credentials(*names: str, allow_missing: bool = False) -> None:
+    """
+    Exit non-zero unless each named token is available; NEVER prompts.
+
+    *allow_missing* (wired to the orchestrators' ``--allow-anonymous`` flag)
+    downgrades to ``warn_if_missing`` behavior.
+    """
+    if allow_missing:
+        warn_if_missing(*names)
+        return
+    load_credentials()
+    missing = [name for name in names if not os.environ.get(name)]
+    if not missing:
+        return
+    for name in missing:
+        label, url, why = _KNOWN.get(name, (name, "", ""))
+        print(f"\n[credentials] {label} is required but not set.", file=sys.stderr)
+        if why:
+            print(f"  {why}", file=sys.stderr)
+        if url:
+            how = ("`export HF_TOKEN=...` or `huggingface-cli login`"
+                   if name == "HF_TOKEN" else f"`export {name}=...`")
+            print(f"  Get one at {url}, then {how}.", file=sys.stderr)
+        print("  Or pass --allow-anonymous to start without it. "
+              "See docs/credentials.md.", file=sys.stderr)
+    sys.exit(2)
 
 
 def ensure_credentials(*names: str) -> None:

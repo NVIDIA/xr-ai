@@ -36,6 +36,30 @@ All model weights land in `models/` at the repository root (not checked into ver
 all servers). Each YAML configures `model_cache` — resolved relative to the
 YAML file.
 
+## Two HuggingFace cache roots under `models/`
+
+The servers use two different `HF_HOME` values, so HuggingFace weights live in
+two separate trees:
+
+| Consumer | `HF_HOME` | Hub cache |
+|---|---|---|
+| vLLM-backed servers (pip and docker) | `models/` | `models/hub/` |
+| STT and Magpie TTS (NeMo host processes) | `models/huggingface/` | `models/huggingface/hub/` |
+
+(The NeMo servers additionally cache non-HF artifacts under `models/nemo/`.)
+
+A model downloaded into one tree is invisible to consumers of the other, so
+check both paths before concluding a model is missing. For a manual
+`hf download`, set `HF_HOME` to match the consumer that will load the model:
+
+```bash
+# For a vLLM-served model (VLM / LLM servers):
+HF_HOME=models hf download nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+
+# For the STT / Magpie TTS servers:
+HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
+```
+
 ## Adding a server to a sample
 
 **1 — Add the process to the orchestrator:**

@@ -30,7 +30,7 @@ import argparse
 import os
 from pathlib import Path
 
-from xr_ai_launcher import Process, detect_gpu_config, run_stack, warn_if_missing
+from xr_ai_launcher import Process, detect_gpu_config, require_credentials, run_stack
 from xr_ai_logging import setup_logging
 from xr_ai_vllm import stop_persistent_servers
 
@@ -125,16 +125,18 @@ def run() -> None:
         help="Start the default Nemotron-3-Nano + Cosmos VLM stack.",
     )
     p.set_defaults(stack="vlm-llm")
+    p.add_argument("--allow-anonymous", action="store_true",
+                   help="Start without HF_TOKEN (unauthenticated downloads "
+                        "of the multi-GB checkpoints may stall indefinitely).")
     ns, _ = p.parse_known_args()
 
     if ns.stop:
         _stop_models()
         return
 
-    # HF_TOKEN is optional for the default (public) models — it only raises HF
-    # rate limits / download speed and is required only for gated models.
-    # Warn instead of prompting; see docs/credentials.md.
-    warn_if_missing("HF_TOKEN")
+    # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
+    # docs/credentials.md.
+    require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
     _stop_incompatible_stack(ns.stack)
     run_stack(_build_processes(ns.stack), _BASE, exit_after_ready=True)
 
