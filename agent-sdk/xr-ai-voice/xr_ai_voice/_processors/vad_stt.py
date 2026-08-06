@@ -49,6 +49,7 @@ from .._frames import ParticipantLeftFrame
 PartialTranscriptHandler = Callable[[str, str], Awaitable[bool | None]]
 _MAX_PARTIAL_PROBES = 3
 _PARTIAL_PROBE_TAIL_S = 0.12
+_PARTIAL_PROBE_FINISH_GRACE_S = 0.15
 
 
 @dataclass(frozen=True)
@@ -58,10 +59,10 @@ class VadConfig:
     Mirrors the constructor of :class:`xr_ai_vad.VadDetector`. Default
     values match the in-tree samples' current behavior.
 
-    ``stop_probe_after_s`` — seconds after ``on_speech_start`` to run an
-    extra STT pass on the partial audio buffer. This gives STOP commands a
-    fast interrupt path and lets a configured wake phrase be acknowledged
-    before the utterance ends. Set to ``0`` or negative to disable probes.
+    ``stop_probe_after_s`` — cadence in seconds for up to three STT probes of
+    the partial audio buffer. This gives STOP commands a fast interrupt path
+    and lets a configured wake phrase be acknowledged before the utterance
+    ends. Set to ``0`` or negative to disable probes.
     """
     silence_duration:   float = 0.8
     min_speech:         float = 0.15
@@ -414,16 +415,18 @@ class VadSttProcessor(FrameProcessor):
         logger.info("evicted per-participant VAD state pid={!r}", pid)
 
     async def _finish_probe_for_utterance(self, pid: str) -> None:
-        """Let an active STT probe finish; cancel a probe still waiting to run."""
+        """Give active STT a short grace period; cancel all other probes."""
         task = self._probe_task.get(pid)
         if task is None or task.done() or pid not in self._probe_inflight:
             await self._cancel_probe_task(pid)
             return
         self._probe_task.pop(pid, None)
         try:
-            await task
+            await asyncio.wait_for(task, timeout=_PARTIAL_PROBE_FINISH_GRACE_S)
+        except TimeoutError:
+            logger.info("partial probe grace expired pid={!r}", pid)
         except asyncio.CancelledError:
-            pass
+            logger.debug("partial probe cancelled during finalization pid={!r}", pid)
         except Exception:
             logger.exception("partial probe completion raised pid={!r}", pid)
 
