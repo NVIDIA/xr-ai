@@ -140,9 +140,9 @@ steps:
       arguments:
         question: >-
           Describe visible heater-on indicators and transcribe the exact current
-          numeric kettle display or thermometer reading with its unit. Mention
-          immediate hazards. If missing, say what is not visible. Do not convert
-          or judge readiness.
+          numeric kettle or thermometer reading. Write the unit as Celsius or
+          Fahrenheit. Mention hazards. If missing, say what is not visible. Do
+          not convert or judge readiness.
       result_field: answer
     evidence:
       pattern: "(?is)^(?:(?=.*\\b\\d{2,3}\\s*(°|degrees|c|f)\\b).+|(?!(?:.*\\b(no|not|without)\\b.{0,24}\\b(heater|heating|power|indicator|display|light)\\b|.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(off|inactive|not)\\b))(?=.*\\b(heater|heating|power|indicator|display|light)\\b.{0,24}\\b(on|active|running|lit|illuminated)\\b).+)$"
@@ -150,23 +150,24 @@ steps:
     agent:
       prompt: >-
         Set heating_started true only when input is false and the caption shows
-        an active heater indicator or a numeric temperature with its unit.
-        Otherwise commit empty updates/message. Do not compare temperatures or
-        track whether the water is ready.
+        an active heater indicator or a numeric temperature followed by Celsius
+        or Fahrenheit. Otherwise commit empty updates/message. Do not compare
+        temperatures or track whether the water is ready.
       tools: []
     voice:
       prompt: >-
         Explain the target when asked. For a current reading or hot-enough
-        question, call current_view; only with an exact number and C/F unit,
-        call temperature__verify using that number and unit, then report its
-        result. If either is missing, say readiness cannot be checked.
+        question, call current_view; only with an exact number and an explicit
+        Celsius or Fahrenheit unit, call temperature__verify using that number
+        and unit, then report its result. If either is missing, say readiness
+        cannot be checked.
       tools: [current_view, temperature__verify]
     complete_when: {heating_started: true}
     next: start_steeping
     state_on_skip: {heating_started: true}
     messages:
       enter: Heat the water to {{ target_temperature_c | temperature_c }}.
-      complete: Heating is underway. Ask if it is hot enough, or say next when ready.
+      complete: Heating is underway. Wait for the water to reach the target temperature.
       skip: I will assume heating has started.
 
   - id: start_steeping

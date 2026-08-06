@@ -158,11 +158,15 @@ def run() -> None:
     assert "user report is not" in fill.voice.prompt
     assert heat.agent.tools == ()
     assert "Set heating_started true only when input is false" in heat.agent.prompt
+    assert "Celsius or Fahrenheit" in str(heat.trigger.arguments["question"])
+    assert "Celsius or Fahrenheit" in heat.agent.prompt
     assert "Do not compare temperatures" in heat.agent.prompt
     assert heat.voice.tools == ("current_view", "temperature__verify")
     assert "call temperature__verify using that number and unit" in heat.voice.prompt
+    assert "C/F" not in heat.voice.prompt
     assert "readiness cannot be checked" in heat.voice.prompt
     assert heat.complete_when == {"heating_started": True}
+    assert "next" not in heat.complete_message.lower()
     context = cases["observation_context"]
     assert context["keys"] == ["observation", "already_complete", "state"]
     assert context["prior_status_is_state_value"] is False

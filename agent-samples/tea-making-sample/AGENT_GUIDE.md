@@ -97,6 +97,8 @@ changes.
 31. Temperature verification requires a fresh visible numeric reading and
     explicit Celsius or Fahrenheit unit. Missing either produces an unavailable
     voice answer; no temperature result can complete or mutate the heating step.
+32. Heating detection announces that heating is underway and tells the user to
+    wait for the target. It never describes the following step as ready.
 
 ## Nested machines
 

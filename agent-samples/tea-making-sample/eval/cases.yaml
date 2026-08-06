@@ -160,7 +160,7 @@ heating_completion_notice:
   observation: A kettle display reads 82 degrees Fahrenheit.
   state: {target_temperature_c: 95, heating_started: false}
   expected_updates: {heating_started: true}
-  expected_message: Heating is underway. Ask if it is hot enough, or say next when ready.
+  expected_message: Heating is underway. Wait for the water to reach the target temperature.
   expected_complete: true
 
 routine_notice_guard:
