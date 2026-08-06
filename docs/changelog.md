@@ -14,8 +14,10 @@ preserved and not re-litigated.
 The tea voice router now separates explicit lifecycle intent, active-step
 questions, and general requests. A single general delegate uses current vision
 and tea RAG while idle or active but receives no workflow mutation tools.
-Lifecycle words embedded in questions do not count as transition commands;
-step agents and their existing tool policies remain unchanged.
+Lifecycle words embedded in questions do not count as transition commands, and
+deictic questions inspect before retrieval. The invocation scope records the
+executed route tool, so direct router prose is retried rather than accepted as
+a decision. Step agents and their existing tool policies remain unchanged.
 
 ### 2026-08-05 — Listening chimes belong to wake recognition, not response start
 

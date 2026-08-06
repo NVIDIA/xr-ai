@@ -11,6 +11,7 @@ from langgraph.prebuilt.tool_node import ToolInvocationError
 from pydantic import ValidationError
 from tea_making_worker.agents.registry import AgentRegistry, _state_contract
 from tea_making_worker.functions.workflow import CommitRequest
+from tea_making_worker.runtime.scope import current_invocation, invocation_scope
 from tea_making_worker.runtime.state import SessionStore
 from tea_making_worker.spec import load_workflow
 
@@ -47,6 +48,19 @@ class _InvalidCommit:
 class _Broken:
     async def ainvoke(self, request, *, to_type):
         raise RuntimeError("service failed")
+
+
+class _RouteAgent:
+    def __init__(self, *, select_on: int | None) -> None:
+        self.select_on = select_on
+        self.requests: list[str] = []
+
+    async def ainvoke(self, request, *, to_type):
+        self.requests.append(request)
+        if self.select_on == len(self.requests):
+            current_invocation().route_operation = "ask_general"
+            return "general answer"
+        return "unrouted answer"
 
 
 class RegistryTest(unittest.IsolatedAsyncioTestCase):
@@ -116,6 +130,33 @@ class RegistryTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(RuntimeError, "service failed"):
             await registry.observe(session, "visible label", "trace")
+
+    async def test_router_retries_a_direct_answer_until_a_tool_is_selected(self) -> None:
+        workflow = load_workflow(_WORKFLOW)
+        session = SessionStore(workflow).get("tester")
+        agent = _RouteAgent(select_on=2)
+        registry = AgentRegistry(workflow)
+        registry._router = agent
+
+        with invocation_scope(session, "trace"):
+            result = await registry.route(session, "What tea is this?", "trace")
+
+        self.assertEqual(result, "general answer")
+        self.assertEqual(len(agent.requests), 2)
+        self.assertIn("Call exactly one route tool.", agent.requests[1])
+
+    async def test_router_returns_a_recoverable_reply_after_two_direct_answers(self) -> None:
+        workflow = load_workflow(_WORKFLOW)
+        session = SessionStore(workflow).get("tester")
+        agent = _RouteAgent(select_on=None)
+        registry = AgentRegistry(workflow)
+        registry._router = agent
+
+        with invocation_scope(session, "trace"):
+            result = await registry.route(session, "ambiguous request", "trace")
+
+        self.assertEqual(result, "I could not determine the request. Please rephrase it.")
+        self.assertEqual(len(agent.requests), 2)
 
 
 if __name__ == "__main__":

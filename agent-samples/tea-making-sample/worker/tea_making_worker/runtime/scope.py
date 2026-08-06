@@ -13,10 +13,11 @@ from typing import Iterator
 from .state import Session
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Invocation:
     session: Session
     trace_id: str
+    route_operation: str | None = None
 
 
 _CURRENT: ContextVar[Invocation | None] = ContextVar("tea_guidance_invocation", default=None)

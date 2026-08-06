@@ -69,19 +69,28 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
         return json.dumps(asdict(store.commit(call.session, request.updates, request.message)), separators=(",", ":"))
 
     async def start(request: EmptyRequest) -> str:
-        return store.start(current_invocation().session)
+        call = current_invocation()
+        call.route_operation = "start"
+        return store.start(call.session)
 
     async def advance(request: AdvanceRequest) -> str:
-        return store.advance(current_invocation().session, skip=request.skip)
+        call = current_invocation()
+        call.route_operation = "advance"
+        return store.advance(call.session, skip=request.skip)
 
     async def reset(request: EmptyRequest) -> str:
-        return store.reset(current_invocation().session)
+        call = current_invocation()
+        call.route_operation = "reset"
+        return store.reset(call.session)
 
     async def status(request: EmptyRequest) -> str:
-        return store.status(current_invocation().session)
+        call = current_invocation()
+        call.route_operation = "status"
+        return store.status(call.session)
 
     async def ask_step(request: AskStepRequest) -> str:
         call = current_invocation()
+        call.route_operation = "ask_step"
         emit(
             "voice.delegate",
             participant_id=call.session.participant_id,
@@ -94,6 +103,7 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
 
     async def ask_general(request: AskStepRequest) -> str:
         call = current_invocation()
+        call.route_operation = "ask_general"
         emit(
             "voice.delegate",
             participant_id=call.session.participant_id,
@@ -109,20 +119,20 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
             commit,
             "Atomically update supported active-step state according to the supplied state contract.",
         ),
-        "start": (start, "Use only for an explicit request to start guidance."),
+        "start": (start, "Explicitly start this tea guide; not a heater, timer, or hypothetical action."),
         "advance": (
             advance,
-            "Handle explicit step changes: skip false for next/continue/advance; true only for skip.",
+            "Explicitly change this guide's step: false for next/continue/advance; true only for skip.",
         ),
-        "reset": (reset, "Use only for explicit stop, cancel, or reset commands."),
-        "status": (status, "Use only when asked which workflow step is active or whether guidance is running."),
+        "reset": (reset, "Explicitly stop or reset this tea guide; not an appliance or timer."),
+        "status": (status, "Report whether this guide is active and its current step."),
         "ask_step": (
             ask_step,
-            "Active workflow only: current-step questions, readings, timers, help, or action reports.",
+            "Active guide only: current-step/item help, readings, timers, or action reports.",
         ),
         "ask_general": (
             ask_general,
-            "General tea knowledge or visual questions; works while idle or active and never manages workflow.",
+            "Everything else, including general tea knowledge and visual questions; never manages the guide.",
         ),
     }
     handler, description = handlers[config.operation]

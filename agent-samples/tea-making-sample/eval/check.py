@@ -35,7 +35,8 @@ def run() -> None:
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
     assert "if unavailable, say so" in VOICE
-    assert "Mentions are not commands" in ROUTER
+    assert "explicit guide intent" in ROUTER
+    assert "another question is not intent" in ROUTER
     assert "ask_general" in ROUTER
     style = cases["spoken_style_guard"]
     assert all(fragment in style["compact_input"] for fragment in style["forbidden_fragments"])
@@ -48,6 +49,7 @@ def run() -> None:
     general = cases["general_queries"]
     assert general["tea_knowledge"]["expected_tools"] == ["rag_lookup"]
     assert general["visible_scene"]["expected_tools"] == ["current_view"]
+    assert general["visible_tea"]["expected_order"] == ["current_view", "rag_lookup"]
     assert general["safety"] == {"state_updates": False, "lifecycle_tools": False}
     assert set(cases["steps"]) == set(workflow.steps)
     assert cases["rag_fallback"]["expected_tools"] == ["rag_lookup", "workflow__commit"]

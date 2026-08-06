@@ -59,7 +59,8 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert "already_complete is status, not state" in STEP
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
-    assert "Mentions are not commands" in ROUTER
+    assert "explicit guide intent" in ROUTER
+    assert "another question is not intent" in ROUTER
     assert "ask_general" in ROUTER
     for step, source in zip(workflow.steps.values(), raw["steps"], strict=True):
         assert step.trigger.function
@@ -291,6 +292,10 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     }
     assert cases["general_queries"]["tea_knowledge"]["expected_tools"] == ["rag_lookup"]
     assert cases["general_queries"]["visible_scene"]["expected_tools"] == ["current_view"]
+    assert cases["general_queries"]["visible_tea"]["expected_order"] == [
+        "current_view",
+        "rag_lookup",
+    ]
     assert cases["general_queries"]["safety"] == {
         "state_updates": False,
         "lifecycle_tools": False,

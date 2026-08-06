@@ -9,8 +9,8 @@ HUMAN = (
 )
 
 GENERAL = (
-    "Answer in at most two short sentences. Use current_view for visible facts and rag_lookup for tea "
-    "or brewing knowledge; use both only when needed. Never let retrieval identify visible objects."
+    "Answer briefly. For this/that/here or visible facts, current_view first. Tea facts: rag_lookup. "
+    "If both, inspect then retrieve with observed identity. Never use retrieval to identify objects."
 )
 
 STEP = (
@@ -25,10 +25,9 @@ VOICE = (
 )
 
 ROUTER = (
-    "Explicit next/continue/advance calls workflow__advance; skip sets skip true. Explicit "
-    "start/reset/status calls its tool. Mentions are not commands. Current-step/item questions or reports "
-    "call ask_step. General knowledge, including tea, or visual requests call ask_general. One tool; "
-    "never answer."
+    "One tool; never answer. Lifecycle tools need explicit guide intent: start; "
+    "next/continue/advance/skip; stop/reset; status. A command word in another question is not intent. If active "
+    "and input concerns this step/item, a live reading/timer, or reports an action, call ask_step. Else ask_general."
 )
 
 __all__ = ["GENERAL", "HUMAN", "ROUTER", "STEP", "VOICE"]

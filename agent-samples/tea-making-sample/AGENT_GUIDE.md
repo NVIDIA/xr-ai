@@ -102,7 +102,10 @@ changes.
     wait for the target. It never describes the following step as ready.
 33. The router separates explicit lifecycle intent, active-step questions, and
     general knowledge or vision. The general delegate works while idle and has
-    no workflow mutation tools.
+    no workflow mutation tools. Deictic requests inspect vision before RAG.
+35. An accepted route must execute exactly one constrained workflow tool. Retry
+    a direct router answer once, then return a recoverable rephrase request;
+    never treat unconstrained model prose as a routing result.
 
 ## Nested machines
 
@@ -125,16 +128,19 @@ commit no updates or message. `SessionStore` records every such call as
 The voice machine is independent of monitoring:
 
 ```text
-request -> router -> {start | advance | reset | status | ask_step}
+request -> router -> {start | advance | reset | status | ask_step | ask_general}
 ask_step -> current read-only voice agent -> optional read-only tools -> answer
+ask_general -> vision/RAG agent -> optional read-only tools -> answer
 ```
 
 Step voice prompts include a compact procedure so references to the current
 action can be answered without storing the previous conversation turn.
 
 `runtime/scope.py` carries participant and trace identity into workflow NAT
-functions without putting those repeated values in every tool schema. The
-scope exists only during one locked participant turn or observation.
+functions without putting those repeated values in every tool schema. It also
+records which route tool actually executed so direct model prose cannot bypass
+the constrained router. The scope exists only during one locked participant
+turn or observation.
 
 ## YAML review checklist
 
@@ -208,7 +214,8 @@ expected versus observed behavior:
 
 Then inspect in this order:
 
-1. `agent.router.request/response` for the selected outer function.
+1. `agent.router.request/response` for the selected outer function; inspect
+   `agent.router.retry/skipped` when no route tool was produced.
 2. `trigger.request/response` for the exact fresh caption and latency.
 3. `step.evidence` for the deterministic match and consecutive count.
 4. `rag.lookup.request/response` when identification needs missing brew facts.

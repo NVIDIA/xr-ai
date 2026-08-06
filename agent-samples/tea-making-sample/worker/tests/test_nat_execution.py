@@ -17,7 +17,7 @@ from tea_making_worker.functions import (
 )
 from tea_making_worker.functions.temperature import temperature_verify
 from tea_making_worker.functions.vision import current_view
-from tea_making_worker.runtime.scope import invocation_scope
+from tea_making_worker.runtime.scope import current_invocation, invocation_scope
 from tea_making_worker.runtime.state import SessionStore
 from tea_making_worker.spec import load_workflow
 from xr_ai_nat.functions.vision import LiveVisionResult
@@ -106,6 +106,7 @@ class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
             ask_general = await builder.get_function("workflow__ask_general")
             with invocation_scope(session, "general-trace"):
                 response = await ask_general.ainvoke({"question": "How is white tea brewed?"}, to_type=str)
+                self.assertEqual(current_invocation().route_operation, "ask_general")
             self.assertEqual(response, "general answer")
             self.assertFalse(session.active)
 
@@ -113,6 +114,7 @@ class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
             commit = await builder.get_function("workflow__commit")
             with invocation_scope(session, "route-trace"):
                 response = await start.ainvoke({}, to_type=str)
+                self.assertEqual(current_invocation().route_operation, "start")
             self.assertEqual(response, workflow.step("identify").enter_message)
             self.assertEqual(session.step_id, "identify")
             store.observe(

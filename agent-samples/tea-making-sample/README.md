@@ -15,7 +15,7 @@ one outer workflow state machine; its active step runs one repeated inner loop:
 Voice uses a separate hierarchy:
 
 ```text
-utterance -> router NAT agent -> management function OR current step voice agent
+utterance -> router NAT agent -> management OR step delegate OR general delegate
 ```
 
 There is no custom tool-call loop. NeMo Agent Toolkit builds the router, every
@@ -27,6 +27,9 @@ workflow-step status requests. Task questions, action reports, correctness
 checks, current readings, and timer questions always delegate to the active
 step voice agent. Explicit next/continue/advance/skip commands always select the
 advance function and are never delegated as task questions.
+Lifecycle words used incidentally or hypothetically do not manage the guide.
+Everything unrelated to the active step goes to a read-only general agent that
+can inspect the current view and retrieve tea knowledge, including while idle.
 
 Every observation agent calls the same commit function exactly once. Completed,
 unsupported, or unclear observations use an empty commit. Step prompts name the
@@ -171,7 +174,10 @@ profile.
 The voice router keeps explicit start, next, skip, reset, and status requests
 on workflow tools. Questions about the active step go to its step agent; other
 tea-knowledge or scene questions go to a general vision-and-RAG agent that also
-works before guidance starts. The general path has no workflow mutation tools.
+works before guidance starts. Deictic questions inspect the current frame before
+retrieval, and the general path has no workflow mutation tools. A direct router
+answer is rejected and retried because every accepted route must execute one of
+the constrained NAT tools.
 
 Both profiles disable hidden reasoning for Omni agent calls. The Omni vision
 profile also caps continuous caption generation; agent calls retain their
@@ -205,8 +211,8 @@ The most useful event names are:
   state-agent context and result.
 - `step.commit`, `step.commit_noop`, and `step.commit_rejected`: state deltas,
   completed-step no-ops, or validation failures.
-- `agent.router.*`, `voice.delegate`, and `agent.voice.*`: voice routing and
-  step answer traces.
+- `agent.router.*`, `voice.delegate`, and `agent.voice.*`: selected route,
+  missing-tool/schema retries, and delegated answer traces.
 - `step.ready`, `step.enter`, `workflow.reset`, `workflow.complete`, and
   `notice.queued`: readiness, lifecycle resets, explicit transitions, and speech.
 

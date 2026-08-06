@@ -27,7 +27,35 @@ routes:
   - utterance: How much steeping time remains?
     expected_tool: workflow__ask_step
   - utterance: Before we continue, is the kettle hot enough?
+    active: true
+    step: heat_water
     expected_tool: workflow__ask_step
+  - utterance: What should I do next?
+    active: true
+    step: fill_water
+    expected_tool: workflow__ask_step
+  - utterance: What happens if I skip steeping?
+    active: true
+    step: start_steeping
+    expected_tool: workflow__ask_step
+  - utterance: Should I start the kettle now?
+    active: true
+    step: heat_water
+    expected_tool: workflow__ask_step
+  - utterance: Stop the kettle.
+    active: true
+    step: heat_water
+    expected_tool: workflow__ask_step
+  - utterance: Can you read the next line on this label?
+    active: false
+    expected_tool: workflow__ask_general
+  - utterance: What tea is this?
+    active: false
+    expected_tool: workflow__ask_general
+  - utterance: Please stop tea guidance.
+    active: true
+    step: fill_water
+    expected_tool: workflow__reset
   - utterance: How should I brew white tea?
     active: true
     step: identify
@@ -50,6 +78,11 @@ general_queries:
     question: What objects can you see on the counter?
     active: false
     expected_tools: [current_view]
+  visible_tea:
+    question: How should I brew this tea?
+    active: false
+    expected_tools: [current_view, rag_lookup]
+    expected_order: [current_view, rag_lookup]
   safety:
     state_updates: false
     lifecycle_tools: false

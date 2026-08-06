@@ -8,14 +8,24 @@
 `cases.yaml` covers each router action and every step policy with facts that do
 not appear as worked examples in the prompts. `check.py` validates schema,
 coverage, and prompt budgets without model servers. During a model-backed human
-test, use the same cases as probes and compare the logged tool call or commit to
-the expected fields. Visual fixtures are ordinary captions, including one
+test, run the exact production router against the active model service:
+
+```bash
+uv run --directory agent-samples/tea-making-sample/worker \
+  python ../eval/routes.py --models ../yaml/models.omni.json
+```
+
+The command prints the selected NAT tool for every route case and exits nonzero
+on a mismatch. For step probes, compare the logged tool call or commit to the
+expected fields. Visual fixtures are ordinary captions, including one
 negative water-visibility case that must fail the deterministic evidence gate.
 Routing cases distinguish explicit workflow management from task questions,
 action reports, current readings, timer questions, and general requests. They
 also guard mentions such as “before we continue” from becoming accidental step
-transitions. General tea knowledge must use RAG, general scene questions must
-use current vision, and both remain available while guidance is idle.
+transitions. Appliance commands and questions containing “next,” “start,”
+“skip,” or “reset” are not lifecycle intent. General tea knowledge must use
+RAG, general scene questions must use current vision, and a deictic tea question
+must inspect before retrieval; all remain available while guidance is idle.
 
 Corner-case probes cover atomic identification readiness, irrelevant retrieval
 results, absent or unitless temperature readings, unconfirmed immersion, a running timer, and

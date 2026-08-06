@@ -17,6 +17,7 @@ from xr_ai_models import LLMService
 from xr_ai_nat.llm import ModelsLLMConfig
 
 from ..runtime.events import emit
+from ..runtime.scope import current_invocation
 from ..runtime.state import Session
 from ..spec import Step, Workflow
 from .prompts import GENERAL, HUMAN, ROUTER, STEP, VOICE
@@ -37,17 +38,7 @@ class AgentRegistry:
         self._router: Function | None = None
 
     async def build(self, builder: WorkflowBuilder, llm: LLMService) -> None:
-        llm_ref = LLMRef("guide_llm")
-        await builder.add_llm(
-            llm_ref,
-            ModelsLLMConfig(
-                service=llm,
-                model_name="guidance-llm",
-                max_tokens=512,
-                temperature=0,
-                enable_thinking=False,
-            ),
-        )
+        llm_ref = await self._add_llm(builder, llm)
         for step in self.workflow.steps.values():
             self._step[step.id] = await self._agent(
                 builder,
@@ -71,7 +62,14 @@ class AgentRegistry:
             prompt=f"{GENERAL}\n{HUMAN}",
             tools=(FunctionRef("current_view"), FunctionRef("rag_lookup")),
         )
-        self._router = await self._agent(
+        self._router = await self._build_router(builder, llm_ref)
+
+    async def build_router(self, builder: WorkflowBuilder, llm: LLMService) -> None:
+        """Build only the production router for model-backed route evals."""
+        self._router = await self._build_router(builder, await self._add_llm(builder, llm))
+
+    async def _build_router(self, builder: WorkflowBuilder, llm_ref: LLMRef) -> Function:
+        return await self._agent(
             builder,
             name="guide_router",
             llm_ref=llm_ref,
@@ -79,6 +77,21 @@ class AgentRegistry:
             tools=_ROUTES,
             return_direct=_ROUTES,
         )
+
+    @staticmethod
+    async def _add_llm(builder: WorkflowBuilder, llm: LLMService) -> LLMRef:
+        llm_ref = LLMRef("guide_llm")
+        await builder.add_llm(
+            llm_ref,
+            ModelsLLMConfig(
+                service=llm,
+                model_name="guidance-llm",
+                max_tokens=512,
+                temperature=0,
+                enable_thinking=False,
+            ),
+        )
+        return llm_ref
 
     async def observe(self, session: Session, observation: Any, trace_id: str) -> str:
         step = self._active_step(session)
@@ -189,14 +202,46 @@ class AgentRegistry:
             chars=len(payload),
             input=payload,
         )
-        result = await self._router.ainvoke(payload, to_type=str)
+        call = current_invocation()
+        for attempt in range(2):
+            call.route_operation = None
+            try:
+                result = await self._router.ainvoke(payload, to_type=str)
+            except Exception as exc:
+                if not _is_tool_schema_error(exc) or attempt == 1:
+                    raise
+                emit(
+                    "agent.router.retry",
+                    participant_id=session.participant_id,
+                    trace_id=trace_id,
+                    reason="invalid_tool_arguments",
+                )
+                payload = f"{payload}\nRetry tool arguments: {_schema_feedback(exc)}"
+                continue
+            if call.route_operation is not None:
+                emit(
+                    "agent.router.response",
+                    participant_id=session.participant_id,
+                    trace_id=trace_id,
+                    route=call.route_operation,
+                    output=result,
+                )
+                return result.strip()
+            emit(
+                "agent.router.retry",
+                participant_id=session.participant_id,
+                trace_id=trace_id,
+                reason="missing_route_tool",
+                output=result,
+            )
+            payload = f"{payload}\nCall exactly one route tool."
         emit(
-            "agent.router.response",
+            "agent.router.skipped",
             participant_id=session.participant_id,
             trace_id=trace_id,
-            output=result,
+            reason="missing_route_tool",
         )
-        return result.strip()
+        return "I could not determine the request. Please rephrase it."
 
     @staticmethod
     async def _agent(
