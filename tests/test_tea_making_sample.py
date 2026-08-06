@@ -163,6 +163,12 @@ def test_identification_keeps_native_rag_fallback() -> None:
     assert (_SAMPLE / "rag-documents" / "tea-brewing.md").is_file()
 
 
+def test_magpie_profile_preserves_native_voice_quality() -> None:
+    config = yaml.safe_load((_SAMPLE / "yaml" / "magpie_tts_server.yaml").read_text(encoding="utf-8"))
+
+    assert config["speed"] == 1.0
+
+
 def test_visual_evidence_uses_plain_captions_and_rejects_absence() -> None:
     workflow = _workflow()
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))

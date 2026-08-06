@@ -163,8 +163,8 @@ uv run --project agent-samples/tea-making-sample tea_making_sample \
 Agent”; saying only the wake phrase opens a five-second follow-up window. The
 `--tts-mode piper` selects lightweight CPU speech on port 8105;
 `--tts-mode magpie` selects NeMo Magpie speech on port 8104 and uses CUDA when
-available. The sample's Magpie profile uses a pitch-preserving 1.1-times
-speaking rate. The launcher writes temporary model, worker, and RAG configs, so
+available. The sample uses Magpie's native speaking rate to preserve voice
+quality. The launcher writes temporary model, worker, and RAG configs, so
 switching modes never edits source files and every process uses the selected
 profile.
 

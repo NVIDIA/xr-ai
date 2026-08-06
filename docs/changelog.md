@@ -31,7 +31,8 @@ continuous narration without adding step-specific throttles or YAML fields.
 
 Magpie TTS now honors the OpenAI-compatible `speed` request field and a YAML
 default from 0.25 to 4.0 using pitch-preserving time stretching. The tea sample
-sets a modest 1.1-times default while the service default remains unchanged.
+uses the native 1.0 rate because post-synthesis stretching adds audible phase
+artifacts; explicit consumers may still choose the speed-quality tradeoff.
 
 The heat observation prompt now bypasses temperature verification unless the
 caption contains both a number and an explicit unit. This prevents absence

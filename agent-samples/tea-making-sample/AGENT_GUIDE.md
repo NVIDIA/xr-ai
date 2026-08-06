@@ -90,7 +90,8 @@ changes.
     never selects a second text model or requires a model-server restart.
 29. `--tts-mode` selects the managed Piper or Magpie process and rewrites only
     the temporary TTS preset and endpoint. The launched process and model
-    profile must always agree.
+    profile must always agree. Keep Magpie at its native speaking rate; waveform
+    time stretching makes generated speech sound hollow.
 30. A model-generated tool argument validation error gets one immediate retry.
     If it repeats, skip that observation frame and continue; service,
     configuration, and application errors still propagate.
