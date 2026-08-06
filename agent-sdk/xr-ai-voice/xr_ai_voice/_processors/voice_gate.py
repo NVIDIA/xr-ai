@@ -75,6 +75,7 @@ class VoiceGateProcessor(FrameProcessor):
             on_participant_joined = self._on_gate_participant_joined,
         )
         self._early_wake_ack: set[str] = set()
+        self._speech_utterance: set[str] = set()
         # Speech-onset timestamp (µs) of the transcript currently being fed to
         # the gate. ``VoiceGate.feed`` invokes ``_on_gate_query`` synchronously,
         # so the value is read back inside that callback.
@@ -137,11 +138,13 @@ class VoiceGateProcessor(FrameProcessor):
             finally:
                 self._feeding_pts_us = None
                 self._early_wake_ack.discard(frame.user_id)
+                self._speech_utterance.discard(frame.user_id)
             return
 
         if isinstance(frame, UserStartedSpeakingFrame):
             if frame.transport_source:
                 self._early_wake_ack.discard(frame.transport_source)
+                self._speech_utterance.add(frame.transport_source)
                 self._gate.begin_utterance(frame.transport_source)
             await self.push_frame(frame, direction)
             return
@@ -155,6 +158,7 @@ class VoiceGateProcessor(FrameProcessor):
         if isinstance(frame, ParticipantLeftFrame):
             self._gate.forget(frame.participant_id)
             self._early_wake_ack.discard(frame.participant_id)
+            self._speech_utterance.discard(frame.participant_id)
             await self.push_frame(frame, direction)
             return
 
@@ -163,7 +167,7 @@ class VoiceGateProcessor(FrameProcessor):
     # ── gate handlers ─────────────────────────────────────────────────────────
 
     async def _on_gate_query(self, pid: str, text: str, fresh_match: bool) -> None:
-        if fresh_match:
+        if fresh_match and pid not in self._speech_utterance:
             await self._emit_chime(pid, early=False)
         await self.push_frame(GatedQueryFrame(
             participant_id = pid,

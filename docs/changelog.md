@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Listening chimes belong to wake recognition, not response start
+
+Wake-word probes run on an absolute cadence and append a short silent tail so
+the offline STT model can finalize the leading phrase. VAD finalization lets an
+active probe finish before starting final STT instead of cancelling useful
+near-complete work. Spoken queries never fall back to a final-transcript chime:
+if early recognition misses, silence is less confusing than a chime attached to
+the assistant response. Phrase-only and synthetic transcript paths retain their
+final-match acknowledgment.
+
 ### 2026-08-03 — Spoken text must carry terminal punctuation
 
 The TTS stage batches on sentence-final punctuation and flushes trailing
