@@ -106,6 +106,10 @@ changes.
 35. An accepted route must execute exactly one constrained workflow tool. Retry
     a direct router answer once, then return a recoverable rephrase request;
     never treat unconstrained model prose as a routing result.
+36. Starting is valid only from idle and is idempotent while active. Reset
+    returns to idle; restart alone clears state and enters the first step.
+    Lifecycle mutation tools name the `tea_guide` scope, while timer and
+    appliance requests remain step-agent work regardless of lifecycle words.
 
 ## Nested machines
 
@@ -128,7 +132,7 @@ commit no updates or message. `SessionStore` records every such call as
 The voice machine is independent of monitoring:
 
 ```text
-request -> router -> {start | advance | reset | status | ask_step | ask_general}
+request -> router -> {start | advance | reset | restart | status | ask_step | ask_general}
 ask_step -> current read-only voice agent -> optional read-only tools -> answer
 ask_general -> vision/RAG agent -> optional read-only tools -> answer
 ```

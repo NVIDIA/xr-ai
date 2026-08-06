@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from nat.builder.workflow_builder import WorkflowBuilder
+from pydantic import ValidationError
 from tea_making_worker.functions import (
     CurrentViewConfig,
     CurrentViewRequest,
@@ -17,6 +18,7 @@ from tea_making_worker.functions import (
 )
 from tea_making_worker.functions.temperature import temperature_verify
 from tea_making_worker.functions.vision import current_view
+from tea_making_worker.functions.workflow import GuideRequest
 from tea_making_worker.runtime.scope import current_invocation, invocation_scope
 from tea_making_worker.runtime.state import SessionStore
 from tea_making_worker.spec import load_workflow
@@ -26,6 +28,11 @@ _WORKFLOW = Path(__file__).parents[2] / "yaml" / "workflow.yaml"
 
 
 class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
+    async def test_lifecycle_scope_excludes_timers_and_appliances(self) -> None:
+        self.assertEqual(GuideRequest(scope="tea_guide").scope, "tea_guide")
+        with self.assertRaises(ValidationError):
+            GuideRequest.model_validate({"scope": "timer"})
+
     async def test_temperature_verification_converts_and_compares(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         session = SessionStore(workflow).get("temperature-test")
@@ -111,10 +118,21 @@ class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(session.active)
 
             start = await builder.get_function("workflow__start")
+            restart = await builder.get_function("workflow__restart")
             commit = await builder.get_function("workflow__commit")
             with invocation_scope(session, "route-trace"):
-                response = await start.ainvoke({}, to_type=str)
+                response = await start.ainvoke({"scope": "tea_guide"}, to_type=str)
                 self.assertEqual(current_invocation().route_operation, "start")
+            self.assertEqual(response, workflow.step("identify").enter_message)
+            self.assertEqual(session.step_id, "identify")
+            session.step_id = "heat_water"
+            with invocation_scope(session, "repeated-start-trace"):
+                response = await start.ainvoke({"scope": "tea_guide"}, to_type=str)
+            self.assertEqual(response, "Current step: Heat the water.")
+            self.assertEqual(session.step_id, "heat_water")
+            with invocation_scope(session, "restart-trace"):
+                response = await restart.ainvoke({"scope": "tea_guide"}, to_type=str)
+                self.assertEqual(current_invocation().route_operation, "restart")
             self.assertEqual(response, workflow.step("identify").enter_message)
             self.assertEqual(session.step_id, "identify")
             store.observe(

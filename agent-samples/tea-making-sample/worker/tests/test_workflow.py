@@ -80,6 +80,34 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual(self.session.step_id, "fill_water")
         self.assertEqual(response, self.workflow.step("fill_water").enter_message)
 
+    def test_start_does_not_reset_an_active_session(self) -> None:
+        self.store.start(self.session)
+        self.session.step_id = "start_steeping"
+        self.session.state["tea_name"] = "oolong"
+        revision = self.session.revision
+
+        response = self.store.start(self.session)
+
+        self.assertEqual(response, "Current step: Start steeping.")
+        self.assertEqual(self.session.step_id, "start_steeping")
+        self.assertEqual(self.session.state["tea_name"], "oolong")
+        self.assertEqual(self.session.revision, revision)
+
+    def test_restart_explicitly_returns_to_the_first_step(self) -> None:
+        self.store.start(self.session)
+        self.session.step_id = "start_steeping"
+        self.session.state["tea_name"] = "oolong"
+        self.session.notices.append("stale notice")
+        revision = self.session.revision
+
+        response = self.store.restart(self.session)
+
+        self.assertEqual(response, self.workflow.step("identify").enter_message)
+        self.assertEqual(self.session.step_id, "identify")
+        self.assertNotIn("tea_name", self.session.state)
+        self.assertFalse(self.session.notices)
+        self.assertEqual(self.session.revision, revision + 1)
+
     def test_invalid_commit_is_atomic(self) -> None:
         self.store.start(self.session)
         before = dict(self.session.state)

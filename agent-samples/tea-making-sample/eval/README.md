@@ -23,7 +23,9 @@ Routing cases distinguish explicit workflow management from task questions,
 action reports, current readings, timer questions, and general requests. They
 also guard mentions such as “before we continue” from becoming accidental step
 transitions. Appliance commands and questions containing “next,” “start,”
-“skip,” or “reset” are not lifecycle intent. General tea knowledge must use
+“skip,” or “reset” are not lifecycle intent. Adversarial timer commands must
+remain step requests, while explicit guide reset and restart remain available.
+General tea knowledge must use
 RAG, general scene questions must use current vision, and a deictic tea question
 must inspect before retrieval; all remain available while guidance is idle.
 

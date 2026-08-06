@@ -16,7 +16,16 @@ from ..runtime.scope import current_invocation
 from ..runtime.state import Session, SessionStore
 
 VoiceAnswer = Callable[[Session, str, str], Awaitable[str]]
-Operation = Literal["commit", "start", "advance", "reset", "status", "ask_step", "ask_general"]
+Operation = Literal[
+    "commit",
+    "start",
+    "advance",
+    "reset",
+    "restart",
+    "status",
+    "ask_step",
+    "ask_general",
+]
 
 
 class _Request(BaseModel):
@@ -25,6 +34,12 @@ class _Request(BaseModel):
 
 class EmptyRequest(_Request):
     pass
+
+
+class GuideRequest(_Request):
+    scope: Literal["tea_guide"] = Field(
+        description="The tea guide itself; timer and appliance requests use ask_step."
+    )
 
 
 class AdvanceRequest(_Request):
@@ -68,7 +83,7 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
         call = current_invocation()
         return json.dumps(asdict(store.commit(call.session, request.updates, request.message)), separators=(",", ":"))
 
-    async def start(request: EmptyRequest) -> str:
+    async def start(request: GuideRequest) -> str:
         call = current_invocation()
         call.route_operation = "start"
         return store.start(call.session)
@@ -78,10 +93,15 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
         call.route_operation = "advance"
         return store.advance(call.session, skip=request.skip)
 
-    async def reset(request: EmptyRequest) -> str:
+    async def reset(request: GuideRequest) -> str:
         call = current_invocation()
         call.route_operation = "reset"
         return store.reset(call.session)
+
+    async def restart(request: GuideRequest) -> str:
+        call = current_invocation()
+        call.route_operation = "restart"
+        return store.restart(call.session)
 
     async def status(request: EmptyRequest) -> str:
         call = current_invocation()
@@ -119,12 +139,16 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
             commit,
             "Atomically update supported active-step state according to the supplied state contract.",
         ),
-        "start": (start, "Explicitly start this tea guide; not a heater, timer, or hypothetical action."),
+        "start": (start, "Start the idle tea guide. While active this cannot reset or change its step."),
         "advance": (
             advance,
             "Explicitly change this guide's step: false for next/continue/advance; true only for skip.",
         ),
         "reset": (reset, "Explicitly stop or reset this tea guide; not an appliance or timer."),
+        "restart": (
+            restart,
+            "Explicitly start this tea guide over from its first step; not an appliance or timer.",
+        ),
         "status": (status, "Report whether this guide is active and its current step."),
         "ask_step": (
             ask_step,
@@ -146,7 +170,16 @@ async def add_workflow_functions(
     answer_step: VoiceAnswer,
     answer_general: VoiceAnswer,
 ) -> None:
-    for operation in ("commit", "start", "advance", "reset", "status", "ask_step", "ask_general"):
+    for operation in (
+        "commit",
+        "start",
+        "advance",
+        "reset",
+        "restart",
+        "status",
+        "ask_step",
+        "ask_general",
+    ):
         await builder.add_function(
             f"workflow__{operation}",
             WorkflowFunctionConfig(

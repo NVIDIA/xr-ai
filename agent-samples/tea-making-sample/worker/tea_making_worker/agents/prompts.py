@@ -25,9 +25,9 @@ VOICE = (
 )
 
 ROUTER = (
-    "One tool; never answer. Lifecycle tools need explicit guide intent: start; "
-    "next/continue/advance/skip; stop/reset; status. A command word in another question is not intent. If active "
-    "and input concerns this step/item, a live reading/timer, or reports an action, call ask_step. Else ask_general."
+    "One tool; never answer. Guide lifecycle only: start; next/continue/advance/skip; stop/reset; "
+    "restart/start over; status. Timer/appliance uses ask_step, even with lifecycle words. If active and input "
+    "concerns this step/item, a live fact, or an action, ask_step. Else ask_general."
 )
 
 __all__ = ["GENERAL", "HUMAN", "ROUTER", "STEP", "VOICE"]

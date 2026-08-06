@@ -59,8 +59,23 @@ class SessionStore:
         self._sessions.pop(participant_id, None)
 
     def start(self, session: Session) -> str:
+        if session.active:
+            emit(
+                "workflow.start_noop",
+                participant_id=session.participant_id,
+                step=session.step_id,
+                revision=session.revision,
+            )
+            return self.status(session)
+        return self._restart(session)
+
+    def restart(self, session: Session) -> str:
+        return self._restart(session)
+
+    def _restart(self, session: Session) -> str:
         session.state = self.workflow.initial_state()
         session.active = True
+        session.notices.clear()
         session.evidence_hits = 0
         session.revision += 1
         return self._enter(session, self.workflow.start_step)

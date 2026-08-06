@@ -9,6 +9,15 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-05 — Guide start cannot reset active progress
+
+Tea guidance lifecycle operations are state-safe at the function boundary.
+Starting is valid from idle and becomes an observable no-op while active;
+reset returns to idle, while the distinct restart operation alone clears state
+and enters the first step. Lifecycle mutation calls name the tea-guide scope,
+and router evaluations distinguish guide operations from timer and appliance
+commands even when adversarial wording includes lifecycle verbs.
+
 ### 2026-08-05 — General assistance is a non-mutating router branch
 
 The tea voice router now separates explicit lifecycle intent, active-step

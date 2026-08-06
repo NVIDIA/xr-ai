@@ -25,7 +25,7 @@ from .prompts import GENERAL, HUMAN, ROUTER, STEP, VOICE
 _COMMIT = FunctionRef("workflow__commit")
 _ROUTES = tuple(
     FunctionRef(f"workflow__{name}")
-    for name in ("start", "advance", "reset", "status", "ask_step", "ask_general")
+    for name in ("start", "advance", "reset", "restart", "status", "ask_step", "ask_general")
 )
 
 
