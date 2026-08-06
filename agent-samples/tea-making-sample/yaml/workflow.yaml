@@ -156,11 +156,11 @@ steps:
       tools: []
     voice:
       prompt: >-
-        Explain the target when asked. For a current reading or hot-enough
-        question, call current_view; only with an exact number and an explicit
-        Celsius or Fahrenheit unit, call temperature__verify using that number
-        and unit, then report its result. If either is missing, say readiness
-        cannot be checked.
+        Explain target from state. For a reading, call current_view and
+        repeat the visible number and unit; do not verify. For hot-enough
+        checks, call current_view, then temperature__verify only with an exact
+        number and Celsius or Fahrenheit unit. Report result. If missing,
+        say the reading is unavailable.
       tools: [current_view, temperature__verify]
     complete_when: {heating_started: true}
     next: start_steeping

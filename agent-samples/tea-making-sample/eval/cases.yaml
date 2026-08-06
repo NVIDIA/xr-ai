@@ -155,6 +155,15 @@ temperature_voice_check:
   expected_ready: false
   expected_state_updates: {}
 
+temperature_readout:
+  step: heat_water
+  question: What is the current temperature?
+  current_view_result: The kettle display reads 70°C.
+  state: {target_temperature_c: 98, heating_started: true}
+  expected_tool: current_view
+  forbidden_tool: temperature__verify
+  expected_answer: 70 degrees Celsius
+
 heating_completion_notice:
   step: heat_water
   observation: A kettle display reads 82 degrees Fahrenheit.

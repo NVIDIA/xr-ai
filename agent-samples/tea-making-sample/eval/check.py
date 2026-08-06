@@ -145,6 +145,10 @@ def run() -> None:
     assert voice_check["expected_verify_request"] == {"reading": 70, "unit": "celsius"}
     assert voice_check["expected_ready"] is False
     assert voice_check["expected_state_updates"] == {}
+    readout = cases["temperature_readout"]
+    assert readout["expected_tool"] == "current_view"
+    assert readout["forbidden_tool"] == "temperature__verify"
+    assert readout["expected_answer"] == "70 degrees Celsius"
     completion_notice = cases["heating_completion_notice"]
     assert completion_notice["expected_updates"] == {"heating_started": True}
     assert completion_notice["expected_message"] == heat.complete_message
@@ -162,9 +166,11 @@ def run() -> None:
     assert "Celsius or Fahrenheit" in heat.agent.prompt
     assert "Do not compare temperatures" in heat.agent.prompt
     assert heat.voice.tools == ("current_view", "temperature__verify")
-    assert "call temperature__verify using that number and unit" in heat.voice.prompt
+    assert "For a reading" in heat.voice.prompt
+    assert "repeat the visible number and unit; do not verify" in heat.voice.prompt
+    assert "For hot-enough checks" in heat.voice.prompt
     assert "C/F" not in heat.voice.prompt
-    assert "readiness cannot be checked" in heat.voice.prompt
+    assert "reading is unavailable" in heat.voice.prompt
     assert heat.complete_when == {"heating_started": True}
     assert "next" not in heat.complete_message.lower()
     context = cases["observation_context"]

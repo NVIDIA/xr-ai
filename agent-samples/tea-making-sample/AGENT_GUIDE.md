@@ -94,9 +94,9 @@ changes.
 30. A model-generated tool argument validation error gets one immediate retry.
     If it repeats, skip that observation frame and continue; service,
     configuration, and application errors still propagate.
-31. Temperature verification requires a fresh visible numeric reading and
-    explicit Celsius or Fahrenheit unit. Missing either produces an unavailable
-    voice answer; no temperature result can complete or mutate the heating step.
+31. A temperature-readout question repeats the fresh visible value without
+    verification. A hot-enough question verifies only a fresh numeric reading
+    with an explicit Celsius or Fahrenheit unit. Neither path mutates state.
 32. Heating detection announces that heating is underway and tells the user to
     wait for the target. It never describes the following step as ready.
 
