@@ -97,44 +97,16 @@ class NatExecutionTest(unittest.IsolatedAsyncioTestCase):
         store = SessionStore(workflow)
         session = store.get("tester")
 
-        async def answer_step(*_args) -> str:
-            return "step answer"
-
-        async def answer_general(*_args) -> str:
-            return "general answer"
-
-        async def answer_tea(*_args) -> str:
-            return "tea route"
-
         async with WorkflowBuilder() as builder:
-            await add_workflow_functions(
-                builder,
-                store=store,
-                answer_step=answer_step,
-                answer_tea=answer_tea,
-                answer_general=answer_general,
-            )
-            ask_general = await builder.get_function("workflow__ask_general")
-            with invocation_scope(session, "general-trace"):
-                response = await ask_general.ainvoke({"question": "How is white tea brewed?"}, to_type=str)
-                self.assertEqual(current_invocation().route_operation, "ask_general")
-            self.assertEqual(response, "general answer")
-            self.assertFalse(session.active)
-
+            await add_workflow_functions(builder, store=store)
             start = await builder.get_function("workflow__start")
             restart = await builder.get_function("workflow__restart")
-            ask_tea = await builder.get_function("workflow__ask_tea")
             commit = await builder.get_function("workflow__commit")
             with invocation_scope(session, "route-trace"):
                 response = await start.ainvoke({"scope": "tea_guide"}, to_type=str)
                 self.assertEqual(current_invocation().route_operation, "start")
             self.assertEqual(response, workflow.step("identify").enter_message)
             self.assertEqual(session.step_id, "identify")
-            with invocation_scope(session, "tea-route-trace"):
-                current_invocation().request = "Next"
-                response = await ask_tea.ainvoke({}, to_type=str)
-                self.assertEqual(current_invocation().outer_route_operation, "tea")
-            self.assertEqual(response, "tea route")
             session.step_id = "heat_water"
             with invocation_scope(session, "repeated-start-trace"):
                 response = await start.ainvoke({"scope": "tea_guide"}, to_type=str)

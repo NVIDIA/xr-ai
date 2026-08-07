@@ -84,13 +84,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         )
         await add_clock_functions(builder)
         await add_temperature_functions(builder)
-        await add_workflow_functions(
-            builder,
-            store=store,
-            answer_step=agents.answer,
-            answer_tea=agents.route_tea,
-            answer_general=agents.answer_general,
-        )
+        await add_workflow_functions(builder, store=store)
         await agents.build(builder, llm)
         triggers = TriggerRegistry(workflow)
         await triggers.build(builder)

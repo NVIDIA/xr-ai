@@ -9,6 +9,18 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-07 — Voice uses one foreground agent per turn
+
+Tea voice interaction now follows foreground-process semantics. Session state
+selects the root agent while idle or the current tea-step variant while active
+before any model call. Root can answer, inspect, retrieve, or launch tea; each
+tea variant combines shared lifecycle tools with only its step's quick tools.
+Lifecycle NAT functions change the foreground application or internal step and
+return directly. Quick tools and direct answers keep the same foreground. This
+removes the inside router, tea router, and LLM delegation functions, reducing
+active voice turns from as many as three model calls to one. A compact eval
+matrix exercises lifecycle and ambiguous requests across every tea step.
+
 ### 2026-08-05 — Tea voice routing follows application state
 
 Voice routing is now a nested NAT-agent hierarchy. Idle sessions expose only

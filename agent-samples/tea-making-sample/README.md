@@ -12,29 +12,25 @@ one outer workflow state machine; its active step runs one repeated inner loop:
     YAML NAT trigger -> plain caption -> step NAT agent -> workflow__commit
 ```
 
-Voice uses a separate hierarchy:
+Voice uses foreground-process semantics:
 
 ```text
-idle -> outside router -> start tea guide | general assistant
-active -> inside router -> exit tea guide | tea router
-tea router -> step management | active-step agent
+idle -> root agent -> answer | vision/RAG | start tea guide
+active -> current tea-step agent -> answer | quick tool | lifecycle transition
 ```
 
-There is no custom tool-call loop. NeMo Agent Toolkit builds all three routers,
-every step agent, every voice agent, and their constrained tool lists. Current
+There is no custom tool-call loop. NeMo Agent Toolkit builds the root agent,
+every observation agent, and one foreground variant for each tea step. Current
 and historical conversation turns are not added to prompts. Session state
-selects the outside or inside router without an LLM call. The outside router
-can only start tea guidance or delegate to the general assistant. The inside
-router can only exit tea guidance or delegate to the tea router. The tea router
-alone chooses next/skip/restart/status or the current-step voice agent. General
-vision and RAG tools are therefore unavailable until tea guidance exits. Tea
-delegation forwards the invocation's original utterance rather than an
-LLM-generated argument, preserving commands such as “next” exactly.
+selects exactly one foreground function before the LLM call, so the inactive
+agent is never invoked and no model delegates to another model. Root exposes
+start, vision, and RAG. A tea variant exposes lifecycle tools plus only its
+step's quick tools. The exact utterance reaches that agent directly.
 
 Starting an active guide remains an idempotent status response at the function
 boundary, and only reset or restart may clear state. Explicit imperative
 next/continue/advance/skip commands select the advance function; questions that
-merely contain those words remain current-step questions.
+merely contain those words remain direct answers in the current foreground.
 
 Every observation agent calls the same commit function exactly once. Completed,
 unsupported, or unclear observations use an empty commit. Step prompts name the
@@ -131,7 +127,7 @@ giving a small model enough semantics to produce a supported patch.
 Completing a step never changes the active step. Observation continues through
 the same trigger-agent-commit loop; commits become revision-free no-ops while
 the completion predicate remains true. Only an explicit user “next,”
-“continue,” or “skip” request lets the top-level router advance it.
+“continue,” or “skip” request lets the active tea agent advance it.
 Participant state is ephemeral. A real client join, including the roster replay
 after an app restart, resets guidance to idle; leaving and reconnecting creates
 a fresh session. Duplicate roster replays for an already-known connection are
@@ -176,12 +172,12 @@ quality. The launcher writes temporary model, worker, and RAG configs, so
 switching modes never edits source files and every process uses the selected
 profile.
 
-While idle, voice can start the guide or use the general vision-and-RAG agent.
-While active, the outer router exposes only exit and tea delegation. The nested
-tea router exposes only next/skip/restart/status and the current-step agent, so
-general assistance cannot compete with a step transition. Lifecycle calls
-carry the `tea_guide` scope. Direct router answers are rejected and retried
-because every accepted route at each level must execute a constrained NAT tool.
+While idle, the root foreground can answer directly, inspect the current view,
+retrieve tea knowledge, or launch tea guidance. While active, the current tea
+variant alone handles the turn with next/skip/restart/status/exit plus that
+step's tools. Lifecycle calls carry the `tea_guide` scope and return directly;
+quick tool results remain in the same NAT agent loop. Direct answers are valid
+but cannot mutate state.
 
 Both profiles disable hidden reasoning for Omni agent calls. The Omni vision
 profile also caps continuous caption generation; agent calls retain their
@@ -215,8 +211,10 @@ The most useful event names are:
   state-agent context and result.
 - `step.commit`, `step.commit_noop`, and `step.commit_rejected`: state deltas,
   completed-step no-ops, or validation failures.
-- `agent.router.*`, `voice.delegate`, and `agent.voice.*`: outside, inside, and
-  tea route levels, leaf selection, missing-tool/schema retries, and answers.
+- `agent.foreground.request`, `agent.foreground.response`, and
+  `agent.foreground.retry`: selected root/tea foreground, exact compact input,
+  lifecycle operation or direct answer, resulting foreground state, and
+  corrected tool arguments.
 - `step.ready`, `step.enter`, `workflow.start_noop`, `workflow.reset`,
   `workflow.complete`, and `notice.queued`: readiness, protected repeated
   starts, lifecycle resets, explicit transitions, and speech.

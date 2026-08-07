@@ -5,25 +5,30 @@
 
 # Guidance evals
 
-`cases.yaml` covers each router action and every step policy with facts that do
+`cases.yaml` covers each foreground action and every step policy with facts that do
 not appear as worked examples in the prompts. `check.py` validates schema,
 coverage, and prompt budgets without model servers. During a model-backed human
-test, run the exact production router against the active model service:
+test, run the exact production foreground agents against the active model service:
 
 ```bash
 uv run --directory agent-samples/tea-making-sample/worker \
   python ../eval/routes.py --models ../yaml/models.omni.json
 ```
 
-The command prints the selected NAT tool for every route case and exits nonzero
-on a mismatch. For step probes, compare the logged tool call or commit to the
-expected fields. Visual fixtures are ordinary captions, including one
-negative water-visibility case that must fail the deterministic evidence gate.
-Routing cases exercise the production hierarchy: idle start/general, active
-exit/tea delegation, then tea management/current-step delegation. Bare “next”
-and “next step” must reach advance, while questions containing transition words
-remain step requests. Appliance and adversarial timer commands remain step
-requests; explicit guide reset and restart remain available. General tea
+The command expands the compact state matrix and prints the lifecycle NAT tool
+or direct-answer action for every case. Transition, skip, exit, restart,
+status, and ambiguous questions run from every configured tea step; idle start
+and general queries run separately. Skip cases also verify that the workflow
+actually advances, while ordinary next commands against incomplete steps must
+stay put. The command exits nonzero on a mismatch. For step probes, compare the
+logged tool call or commit to the expected fields. Visual fixtures are ordinary
+captions, including one negative water-visibility case that must fail the
+deterministic evidence gate.
+Voice cases exercise deterministic foreground selection: idle input reaches
+root and active input reaches the current tea-step variant. Bare “next” and
+“next step” must reach advance, while questions containing transition words
+remain direct answers. Appliance and adversarial timer commands remain in the
+tea foreground; explicit guide reset and restart remain available. General tea
 knowledge must use RAG, general scene questions must use current vision, and a
 deictic tea question must inspect before retrieval while guidance is idle.
 

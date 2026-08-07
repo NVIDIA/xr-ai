@@ -20,13 +20,12 @@ from ..runtime.events import emit
 from ..runtime.scope import current_invocation
 from ..runtime.state import Session
 from ..spec import Step, Workflow
-from .prompts import GENERAL, HUMAN, INSIDE_ROUTER, OUTSIDE_ROUTER, STEP, TEA_ROUTER, VOICE
+from .prompts import HUMAN, ROOT, STEP, TEA, VOICE
 
 _COMMIT = FunctionRef("workflow__commit")
-_OUTSIDE_ROUTES = tuple(FunctionRef(f"workflow__{name}") for name in ("start", "ask_general"))
-_INSIDE_ROUTES = tuple(FunctionRef(f"workflow__{name}") for name in ("reset", "ask_tea"))
-_TEA_ROUTES = tuple(
-    FunctionRef(f"workflow__{name}") for name in ("advance", "restart", "status", "ask_step")
+_ROOT_TOOLS = tuple(FunctionRef(name) for name in ("workflow__start", "current_view", "rag_lookup"))
+_TEA_MANAGEMENT_TOOLS = tuple(
+    FunctionRef(f"workflow__{name}") for name in ("advance", "reset", "restart", "status")
 )
 
 
@@ -34,11 +33,8 @@ class AgentRegistry:
     def __init__(self, workflow: Workflow) -> None:
         self.workflow = workflow
         self._step: dict[str, Function] = {}
-        self._voice: dict[str, Function] = {}
-        self._general: Function | None = None
-        self._router_outside: Function | None = None
-        self._router_inside: Function | None = None
-        self._tea_router: Function | None = None
+        self._root: Function | None = None
+        self._tea: dict[str, Function] = {}
 
     async def build(self, builder: WorkflowBuilder, llm: LLMService) -> None:
         llm_ref = await self._add_llm(builder, llm)
@@ -51,52 +47,31 @@ class AgentRegistry:
                 tools=(_COMMIT, *map(FunctionRef, step.agent.tools)),
                 return_direct=(_COMMIT,),
             )
-            self._voice[step.id] = await self._agent(
+        await self._build_foreground(builder, llm_ref)
+
+    async def build_foreground(self, builder: WorkflowBuilder, llm: LLMService) -> None:
+        """Build only the production foreground agents for model-backed voice evals."""
+        await self._build_foreground(builder, await self._add_llm(builder, llm))
+
+    async def _build_foreground(self, builder: WorkflowBuilder, llm_ref: LLMRef) -> None:
+        context = self.workflow.foreground_prompt
+        self._root = await self._agent(
+            builder,
+            name="foreground_root",
+            llm_ref=llm_ref,
+            prompt=f"{ROOT}\n{context}\n{HUMAN}".strip(),
+            tools=_ROOT_TOOLS,
+            return_direct=(FunctionRef("workflow__start"),),
+        )
+        for step in self.workflow.steps.values():
+            self._tea[step.id] = await self._agent(
                 builder,
-                name=f"voice_{step.id}",
+                name=f"foreground_tea_{step.id}",
                 llm_ref=llm_ref,
-                prompt=f"{VOICE}\n{step.voice.prompt}\n{HUMAN}",
-                tools=tuple(map(FunctionRef, step.voice.tools)),
+                prompt=f"{TEA}\n{VOICE}\n{context}\n{step.voice.prompt}\n{HUMAN}".strip(),
+                tools=(*_TEA_MANAGEMENT_TOOLS, *map(FunctionRef, step.voice.tools)),
+                return_direct=_TEA_MANAGEMENT_TOOLS,
             )
-        self._general = await self._agent(
-            builder,
-            name="guide_general",
-            llm_ref=llm_ref,
-            prompt=f"{GENERAL}\n{HUMAN}",
-            tools=(FunctionRef("current_view"), FunctionRef("rag_lookup")),
-        )
-        await self._build_routers(builder, llm_ref)
-
-    async def build_router(self, builder: WorkflowBuilder, llm: LLMService) -> None:
-        """Build only the production router hierarchy for model-backed route evals."""
-        await self._build_routers(builder, await self._add_llm(builder, llm))
-
-    async def _build_routers(self, builder: WorkflowBuilder, llm_ref: LLMRef) -> None:
-        context = self.workflow.router_prompt
-        self._router_outside = await self._agent(
-            builder,
-            name="guide_router_outside",
-            llm_ref=llm_ref,
-            prompt=f"{OUTSIDE_ROUTER}\n{context}".strip(),
-            tools=_OUTSIDE_ROUTES,
-            return_direct=_OUTSIDE_ROUTES,
-        )
-        self._router_inside = await self._agent(
-            builder,
-            name="guide_router_inside",
-            llm_ref=llm_ref,
-            prompt=f"{INSIDE_ROUTER}\n{context}".strip(),
-            tools=_INSIDE_ROUTES,
-            return_direct=_INSIDE_ROUTES,
-        )
-        self._tea_router = await self._agent(
-            builder,
-            name="guide_router_tea",
-            llm_ref=llm_ref,
-            prompt=f"{TEA_ROUTER}\n{context}".strip(),
-            tools=_TEA_ROUTES,
-            return_direct=_TEA_ROUTES,
-        )
 
     @staticmethod
     async def _add_llm(builder: WorkflowBuilder, llm: LLMService) -> LLMRef:
@@ -157,153 +132,59 @@ class AgentRegistry:
         )
         return result
 
-    async def answer(self, session: Session, question: str, trace_id: str) -> str:
-        if not session.active or session.step_id is None:
-            return f"{self.workflow.name} guidance is idle. Ask me to start when you are ready."
-        step = self._active_step(session)
-        request = _json(
-            question=question,
-            step=step.title,
-            state=self.workflow.project(step, session.state),
-        )
-        emit(
-            "agent.voice.request",
-            participant_id=session.participant_id,
-            step=step.id,
-            trace_id=trace_id,
-            chars=len(request),
-            input=request,
-        )
-        result = await self._voice[step.id].ainvoke(request, to_type=str)
-        emit(
-            "agent.voice.response",
-            participant_id=session.participant_id,
-            step=step.id,
-            trace_id=trace_id,
-            output=result,
-        )
-        return result.strip()
-
-    async def answer_general(self, session: Session, question: str, trace_id: str) -> str:
-        if self._general is None:
-            raise RuntimeError("agent registry has not been built")
-        request = _json(question=question)
-        emit(
-            "agent.general.request",
-            participant_id=session.participant_id,
-            step=session.step_id,
-            trace_id=trace_id,
-            chars=len(request),
-            input=request,
-        )
-        result = await self._general.ainvoke(request, to_type=str)
-        emit(
-            "agent.general.response",
-            participant_id=session.participant_id,
-            step=session.step_id,
-            trace_id=trace_id,
-            output=result,
-        )
-        return result.strip()
-
     async def route(self, session: Session, request: str, trace_id: str) -> str:
-        current_invocation().request = request
-        agent = self._router_inside if session.active else self._router_outside
+        if session.active:
+            step = self._active_step(session)
+            agent = self._tea.get(step.id)
+            foreground = "tea"
+            payload = _json(request=request, state=self.workflow.project(step, session.state))
+        else:
+            step = None
+            agent = self._root
+            foreground = "root"
+            payload = _json(request=request)
         if agent is None:
             raise RuntimeError("agent registry has not been built")
-        return await self._route_with(
-            agent,
-            session,
-            _json(request=request),
-            trace_id,
-            level="inside" if session.active else "outside",
-            operation_field="outer_route_operation",
-        )
-
-    async def route_tea(self, session: Session, request: str, trace_id: str) -> str:
-        if self._tea_router is None:
-            raise RuntimeError("agent registry has not been built")
-        self._active_step(session)
-        return await self._route_with(
-            self._tea_router,
-            session,
-            _json(request=request),
-            trace_id,
-            level="tea",
-            operation_field="tea_route_operation",
-        )
-
-    async def _route_with(
-        self,
-        agent: Function,
-        session: Session,
-        payload: str,
-        trace_id: str,
-        *,
-        level: str,
-        operation_field: str,
-    ) -> str:
         emit(
-            "agent.router.request",
+            "agent.foreground.request",
             participant_id=session.participant_id,
-            step=session.step_id,
+            step=step.id if step else None,
             trace_id=trace_id,
-            level=level,
+            foreground=foreground,
             chars=len(payload),
             input=payload,
         )
         call = current_invocation()
         for attempt in range(2):
-            setattr(call, operation_field, None)
-            if level == "tea":
-                call.route_operation = None
+            call.route_operation = None
             try:
                 result = await agent.ainvoke(payload, to_type=str)
             except Exception as exc:
                 if not _is_tool_schema_error(exc) or attempt == 1:
                     raise
                 emit(
-                    "agent.router.retry",
+                    "agent.foreground.retry",
                     participant_id=session.participant_id,
-                    step=session.step_id,
+                    step=step.id if step else None,
                     trace_id=trace_id,
-                    level=level,
+                    foreground=foreground,
                     reason="invalid_tool_arguments",
                 )
                 payload = f"{payload}\nRetry tool arguments: {_schema_feedback(exc)}"
                 continue
-            operation = getattr(call, operation_field)
-            if operation is not None:
-                emit(
-                    "agent.router.response",
-                    participant_id=session.participant_id,
-                    step=session.step_id,
-                    trace_id=trace_id,
-                    level=level,
-                    route=operation,
-                    leaf_route=call.route_operation,
-                    output=result,
-                )
-                return result.strip()
             emit(
-                "agent.router.retry",
+                "agent.foreground.response",
                 participant_id=session.participant_id,
-                step=session.step_id,
+                step=step.id if step else None,
                 trace_id=trace_id,
-                level=level,
-                reason="missing_route_tool",
+                foreground=foreground,
+                operation=call.route_operation or "answer",
+                active=session.active,
+                next_step=session.step_id,
                 output=result,
             )
-            payload = f"{payload}\nCall exactly one route tool."
-        emit(
-            "agent.router.skipped",
-            participant_id=session.participant_id,
-            step=session.step_id,
-            trace_id=trace_id,
-            level=level,
-            reason="missing_route_tool",
-        )
-        return "I could not determine the request. Please rephrase it."
+            return result.strip()
+        raise AssertionError("unreachable")
 
     @staticmethod
     async def _agent(

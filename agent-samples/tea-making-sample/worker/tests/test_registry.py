@@ -51,26 +51,16 @@ class _Broken:
 
 
 class _RouteAgent:
-    def __init__(
-        self,
-        *,
-        select_on: int | None,
-        operation: str = "ask_general",
-        operation_field: str = "outer_route_operation",
-    ) -> None:
-        self.select_on = select_on
+    def __init__(self, answer: str, operation: str | None = None) -> None:
+        self.answer = answer
         self.operation = operation
-        self.operation_field = operation_field
         self.requests: list[str] = []
 
     async def ainvoke(self, request, *, to_type):
         self.requests.append(request)
-        if self.select_on == len(self.requests):
-            call = current_invocation()
-            setattr(call, self.operation_field, self.operation)
-            call.route_operation = self.operation
-            return f"{self.operation} answer"
-        return "unrouted answer"
+        if self.operation is not None:
+            current_invocation().route_operation = self.operation
+        return self.answer
 
 
 class RegistryTest(unittest.IsolatedAsyncioTestCase):
@@ -141,64 +131,84 @@ class RegistryTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(RuntimeError, "service failed"):
             await registry.observe(session, "visible label", "trace")
 
-    async def test_router_retries_a_direct_answer_until_a_tool_is_selected(self) -> None:
+    async def test_foreground_accepts_a_direct_answer_without_a_route_tool(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         session = SessionStore(workflow).get("tester")
-        agent = _RouteAgent(select_on=2)
+        agent = _RouteAgent("direct answer")
         registry = AgentRegistry(workflow)
-        registry._router_outside = agent
+        registry._root = agent
 
         with invocation_scope(session, "trace"):
             result = await registry.route(session, "What tea is this?", "trace")
+            operation = current_invocation().route_operation
 
-        self.assertEqual(result, "ask_general answer")
-        self.assertEqual(len(agent.requests), 2)
-        self.assertIn("Call exactly one route tool.", agent.requests[1])
+        self.assertEqual(result, "direct answer")
+        self.assertEqual(len(agent.requests), 1)
+        self.assertIsNone(operation)
 
-    async def test_router_returns_a_recoverable_reply_after_two_direct_answers(self) -> None:
+    async def test_foreground_retries_invalid_tool_arguments_once(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         session = SessionStore(workflow).get("tester")
-        agent = _RouteAgent(select_on=None)
+        agent = _InvalidCommit()
         registry = AgentRegistry(workflow)
-        registry._router_outside = agent
+        registry._root = agent
 
         with invocation_scope(session, "trace"):
-            result = await registry.route(session, "ambiguous request", "trace")
+            result = await registry.route(session, "start", "trace")
 
-        self.assertEqual(result, "I could not determine the request. Please rephrase it.")
+        self.assertEqual(result, "recovered")
         self.assertEqual(len(agent.requests), 2)
+        self.assertIn("state: Extra inputs are not permitted", agent.requests[1])
 
-    async def test_active_session_uses_only_the_inside_router(self) -> None:
+    async def test_dispatcher_selects_only_the_foreground_agent(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         store = SessionStore(workflow)
-        session = store.get("tester")
-        store.start(session)
-        registry = AgentRegistry(workflow)
-        registry._router_outside = _Broken()
-        registry._router_inside = _RouteAgent(select_on=1, operation="reset")
+        for step_id in (None, *workflow.steps):
+            with self.subTest(step=step_id or "idle"):
+                session = store.get(f"tester-{step_id or 'idle'}")
+                if step_id is not None:
+                    store.start(session)
+                    session.step_id = step_id
+                root = _RouteAgent("root answer")
+                tea = _RouteAgent("tea answer")
+                registry = AgentRegistry(workflow)
+                registry._root = root
+                if step_id is not None:
+                    registry._tea[step_id] = tea
 
-        with invocation_scope(session, "trace"):
-            result = await registry.route(session, "Exit tea guidance", "trace")
+                with invocation_scope(session, "trace"):
+                    result = await registry.route(session, "route me exactly", "trace")
 
-        self.assertEqual(result, "reset answer")
+                selected, unused = (tea, root) if step_id is not None else (root, tea)
+                self.assertEqual(result, "tea answer" if step_id is not None else "root answer")
+                expected = {"request": "route me exactly"}
+                if step_id is not None:
+                    expected["state"] = workflow.project(workflow.step(step_id), session.state)
+                self.assertEqual(json.loads(selected.requests[0]), expected)
+                self.assertEqual(unused.requests, [])
 
-    async def test_tea_router_tracks_its_leaf_operation(self) -> None:
+    async def test_quick_answer_preserves_foreground_and_state(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         store = SessionStore(workflow)
-        session = store.get("tester")
-        store.start(session)
-        registry = AgentRegistry(workflow)
-        registry._tea_router = _RouteAgent(
-            select_on=1,
-            operation="advance",
-            operation_field="tea_route_operation",
-        )
+        for step_id in workflow.steps:
+            with self.subTest(step=step_id):
+                session = store.get(f"tester-{step_id}")
+                store.start(session)
+                session.step_id = step_id
+                registry = AgentRegistry(workflow)
+                agent = _RouteAgent("quick answer")
+                registry._tea[step_id] = agent
+                request = f"Next, exactly as spoken — {step_id}!"
+                state = dict(session.state)
 
-        with invocation_scope(session, "trace"):
-            result = await registry.route_tea(session, "Next", "trace")
+                with invocation_scope(session, "trace"):
+                    result = await registry.route(session, request, "trace")
 
-        self.assertEqual(result, "advance answer")
-        self.assertEqual(json.loads(registry._tea_router.requests[0]), {"request": "Next"})
+                self.assertEqual(result, "quick answer")
+                self.assertTrue(session.active)
+                self.assertEqual(session.step_id, step_id)
+                self.assertEqual(session.state, state)
+                self.assertEqual(json.loads(agent.requests[0])["request"], request)
 
 
 if __name__ == "__main__":

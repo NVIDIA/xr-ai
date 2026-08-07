@@ -74,7 +74,7 @@ class Step:
 class Workflow:
     name: str
     start_step: str
-    router_prompt: str
+    foreground_prompt: str
     complete_message: str
     state_fields: dict[str, StateField]
     steps: dict[str, Step]
@@ -111,7 +111,7 @@ def load_workflow(path: Path) -> Workflow:
     return Workflow(
         name=str(task.get("name", "guided workflow")),
         start_step=start,
-        router_prompt=str(task.get("router_prompt", "")).strip(),
+        foreground_prompt=str(task.get("foreground_prompt", "")).strip(),
         complete_message=str(task.get("complete_message", "Workflow complete.")).strip(),
         state_fields=fields,
         steps=by_id,

@@ -15,18 +15,15 @@ _SAMPLE = Path(__file__).parents[1]
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from tea_making_worker.agents.prompts import (  # noqa: E402
-    GENERAL,
     HUMAN,
-    INSIDE_ROUTER,
-    OUTSIDE_ROUTER,
+    ROOT,
     STEP,
-    TEA_ROUTER,
+    TEA,
     VOICE,
 )
 from tea_making_worker.agents.registry import (  # noqa: E402
-    _INSIDE_ROUTES,
-    _OUTSIDE_ROUTES,
-    _TEA_ROUTES,
+    _ROOT_TOOLS,
+    _TEA_MANAGEMENT_TOOLS,
     _state_contract,
 )
 from tea_making_worker.runtime.render import render_message  # noqa: E402
@@ -36,10 +33,9 @@ from tea_making_worker.spec import load_workflow  # noqa: E402
 def run() -> None:
     workflow = load_workflow(_SAMPLE / "yaml" / "workflow.yaml")
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
-    assert all(len(prompt) <= 240 for prompt in (OUTSIDE_ROUTER, INSIDE_ROUTER, TEA_ROUTER))
-    assert len(f"{GENERAL}\n{HUMAN}") <= 320
+    assert len(f"{ROOT}\n{HUMAN}") <= 450
+    assert len(f"{TEA}\n{VOICE}\n{HUMAN}") <= 550
     assert len(f"{STEP}\n{HUMAN}") <= 350
-    assert len(f"{VOICE}\n{HUMAN}") <= 300
     assert "natural spoken language" in HUMAN
     assert "temperature" not in HUMAN.lower()
     assert "Rewrite tool/state" in HUMAN
@@ -48,27 +44,38 @@ def run() -> None:
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
     assert "if unavailable, say so" in VOICE
-    assert "Everything else: ask_general" in OUTSIDE_ROUTER
-    assert "Everything else: ask_tea" in INSIDE_ROUTER
-    assert "Next/next step/continue/advance" in TEA_ROUTER
-    assert "Never use workflow__ask_step for these" in TEA_ROUTER
-    assert "Otherwise: ask_step" in TEA_ROUTER
-    assert tuple(map(str, _OUTSIDE_ROUTES)) == ("workflow__start", "workflow__ask_general")
-    assert tuple(map(str, _INSIDE_ROUTES)) == ("workflow__reset", "workflow__ask_tea")
-    assert tuple(map(str, _TEA_ROUTES)) == (
+    assert "Explicit request to begin tea guidance: workflow__start" in ROOT
+    assert "Next/continue/advance" in TEA
+    assert "Questions using these words are not commands" in TEA
+    assert tuple(map(str, _ROOT_TOOLS)) == ("workflow__start", "current_view", "rag_lookup")
+    assert tuple(map(str, _TEA_MANAGEMENT_TOOLS)) == (
         "workflow__advance",
+        "workflow__reset",
         "workflow__restart",
         "workflow__status",
-        "workflow__ask_step",
     )
     style = cases["spoken_style_guard"]
     assert all(fragment in style["compact_input"] for fragment in style["forbidden_fragments"])
     assert all(fragment not in style["expected_output"] for fragment in style["forbidden_fragments"])
     assert not {"tea", "temperature"} & set(style["compact_input"].lower().split())
-    assert {case["expected_tool"] for case in cases["routes"]} == {
-        f"workflow__{name}"
-        for name in ("start", "advance", "reset", "restart", "status", "ask_step", "ask_general")
+    lifecycle_actions = {
+        f"workflow__{name}" for name in ("start", "advance", "reset", "restart", "status")
     }
+    assert {case["expected_tool"] for case in cases["routes"]} == {"answer"} | lifecycle_actions
+    matrix = cases["route_state_matrix"]
+    assert set(matrix["active_steps"]) == set(workflow.steps)
+    active_actions = {
+        f"workflow__{name}" for name in ("advance", "reset", "restart", "status")
+    }
+    assert {case["expected_tool"] for case in matrix["active_cases"]} == {"answer"} | active_actions
+    assert {case["expected_tool"] for case in matrix["idle_cases"]} == {
+        "workflow__start",
+        "answer",
+    }
+    advance_cases = [
+        case for case in matrix["active_cases"] if case["expected_tool"] == "workflow__advance"
+    ]
+    assert {case["expected_advanced"] for case in advance_cases} == {False, True}
     general = cases["general_queries"]
     assert general["tea_knowledge"]["expected_tools"] == ["rag_lookup"]
     assert general["visible_scene"]["expected_tools"] == ["current_view"]
@@ -250,8 +257,15 @@ def run() -> None:
         assert len(question) <= 240, f"{step.id} VLM question is too large"
         assert len(step.agent.prompt) <= 420, f"{step.id} observation prompt is too large"
         assert len(step.voice.prompt) <= 300, f"{step.id} voice prompt is too large"
+        foreground = f"{TEA}\n{VOICE}\n{workflow.foreground_prompt}\n{step.voice.prompt}\n{HUMAN}"
+        assert len(foreground) <= 850, f"{step.id} foreground prompt is too large"
         assert len(_state_contract(workflow, step)) <= 500, f"{step.id} state contract is too large"
-    print(f"validated {len(workflow.steps)} steps and {len(cases['routes'])} routes")
+    route_count = (
+        len(cases["routes"])
+        + len(matrix["idle_cases"])
+        + len(matrix["active_steps"]) * len(matrix["active_cases"])
+    )
+    print(f"validated {len(workflow.steps)} steps and {route_count} routes")
 
 
 if __name__ == "__main__":

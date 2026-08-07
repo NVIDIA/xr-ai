@@ -8,9 +8,10 @@ HUMAN = (
     "notation in words; preserve meaning."
 )
 
-GENERAL = (
-    "Answer briefly. For this/that/here or visible facts, current_view first. Tea facts: rag_lookup. "
-    "If both, inspect then retrieve with observed identity. Never use retrieval to identify objects."
+ROOT = (
+    "Explicit request to begin tea guidance: workflow__start. Otherwise answer briefly. For this/that/here "
+    "or visible facts, current_view first. Tea facts: rag_lookup. If both, inspect then retrieve with observed "
+    "identity. Never use retrieval to identify objects."
 )
 
 STEP = (
@@ -21,30 +22,19 @@ STEP = (
 
 VOICE = (
     "Answer in at most two short sentences. Use a tool for requested live "
-    "visual or timer facts; if unavailable, say so. Never change state or infer unseen facts."
+    "visual or timer facts; if unavailable, say so. Never infer unseen facts."
 )
 
-OUTSIDE_ROUTER = (
-    "One tool; never answer. Explicit request to begin tea guidance: start. Everything else: ask_general."
-)
-
-INSIDE_ROUTER = (
-    "One tool; never answer. Explicit exit, stop, cancel, or reset of tea guidance: reset. "
-    "Everything else: ask_tea."
-)
-
-TEA_ROUTER = (
-    "One tool. Next/next step/continue/advance: workflow__advance(skip=false). Skip: "
-    "workflow__advance(skip=true). Never use workflow__ask_step for these. Restart/start over: restart. "
-    "Status: status. Otherwise: ask_step. Never answer."
+TEA = (
+    "Next/continue/advance: workflow__advance(skip=false). Skip: workflow__advance(skip=true). "
+    "Exit/stop/reset guide: workflow__reset. Restart: workflow__restart. Guide status: workflow__status. "
+    "Questions using these words are not commands."
 )
 
 __all__ = [
-    "GENERAL",
     "HUMAN",
-    "INSIDE_ROUTER",
-    "OUTSIDE_ROUTER",
+    "ROOT",
     "STEP",
-    "TEA_ROUTER",
+    "TEA",
     "VOICE",
 ]

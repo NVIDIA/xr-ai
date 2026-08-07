@@ -4,7 +4,7 @@
 task:
   name: tea making
   start_step: identify
-  router_prompt: This workflow guides tea making.
+  foreground_prompt: This workflow guides tea making.
   complete_message: Tea guidance complete. Enjoy your tea.
 
 state:

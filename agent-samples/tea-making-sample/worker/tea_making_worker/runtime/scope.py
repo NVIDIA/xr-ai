@@ -17,10 +17,7 @@ from .state import Session
 class Invocation:
     session: Session
     trace_id: str
-    request: str | None = None
     route_operation: str | None = None
-    outer_route_operation: str | None = None
-    tea_route_operation: str | None = None
 
 
 _CURRENT: ContextVar[Invocation | None] = ContextVar("tea_guidance_invocation", default=None)

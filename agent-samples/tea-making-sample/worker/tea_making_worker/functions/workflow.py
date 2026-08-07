@@ -4,29 +4,16 @@
 """Individually selectable state and workflow-management functions."""
 
 import json
-from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from typing import Any, Literal
 
 from nat.plugin_api import Builder, FunctionBaseConfig, FunctionInfo, register_function
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..runtime.events import emit
 from ..runtime.scope import current_invocation
-from ..runtime.state import Session, SessionStore
+from ..runtime.state import SessionStore
 
-VoiceAnswer = Callable[[Session, str, str], Awaitable[str]]
-Operation = Literal[
-    "commit",
-    "start",
-    "advance",
-    "reset",
-    "restart",
-    "status",
-    "ask_tea",
-    "ask_step",
-    "ask_general",
-]
+Operation = Literal["commit", "start", "advance", "reset", "restart", "status"]
 
 
 class _Request(BaseModel):
@@ -38,17 +25,11 @@ class EmptyRequest(_Request):
 
 
 class GuideRequest(_Request):
-    scope: Literal["tea_guide"] = Field(
-        description="The tea guide itself; timer and appliance requests use ask_step."
-    )
+    scope: Literal["tea_guide"] = Field(description="The interactive tea guide itself.")
 
 
 class AdvanceRequest(_Request):
     skip: bool = Field(default=False, description="True only when the user explicitly asks to skip.")
-
-
-class AskStepRequest(_Request):
-    question: str = Field(min_length=1, max_length=500)
 
 
 class CommitRequest(_Request):
@@ -70,17 +51,11 @@ class WorkflowFunctionConfig(FunctionBaseConfig, name="tea_guidance_workflow_fun
 
     operation: Operation
     store: Any = Field(exclude=True, repr=False)
-    answer_step: Any = Field(exclude=True, repr=False)
-    answer_tea: Any = Field(exclude=True, repr=False)
-    answer_general: Any = Field(exclude=True, repr=False)
 
 
 @register_function(config_type=WorkflowFunctionConfig)
 async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
     store: SessionStore = config.store
-    answer_step: VoiceAnswer = config.answer_step
-    answer_tea: VoiceAnswer = config.answer_tea
-    answer_general: VoiceAnswer = config.answer_general
 
     async def commit(request: CommitRequest) -> str:
         call = current_invocation()
@@ -88,76 +63,28 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
 
     async def start(request: GuideRequest) -> str:
         call = current_invocation()
-        call.outer_route_operation = "start"
         call.route_operation = "start"
         return store.start(call.session)
 
     async def advance(request: AdvanceRequest) -> str:
         call = current_invocation()
-        call.tea_route_operation = "advance"
         call.route_operation = "advance"
         return store.advance(call.session, skip=request.skip)
 
     async def reset(request: GuideRequest) -> str:
         call = current_invocation()
-        call.outer_route_operation = "reset"
         call.route_operation = "reset"
         return store.reset(call.session)
 
     async def restart(request: GuideRequest) -> str:
         call = current_invocation()
-        call.tea_route_operation = "restart"
         call.route_operation = "restart"
         return store.restart(call.session)
 
     async def status(request: EmptyRequest) -> str:
         call = current_invocation()
-        call.tea_route_operation = "status"
         call.route_operation = "status"
         return store.status(call.session)
-
-    async def ask_tea(request: EmptyRequest) -> str:
-        call = current_invocation()
-        if call.request is None:
-            raise RuntimeError("tea routing requires the original voice request")
-        call.outer_route_operation = "tea"
-        emit(
-            "voice.delegate",
-            participant_id=call.session.participant_id,
-            step=call.session.step_id,
-            trace_id=call.trace_id,
-            target="tea_router",
-            question=call.request,
-        )
-        return await answer_tea(call.session, call.request, call.trace_id)
-
-    async def ask_step(request: AskStepRequest) -> str:
-        call = current_invocation()
-        call.tea_route_operation = "ask_step"
-        call.route_operation = "ask_step"
-        emit(
-            "voice.delegate",
-            participant_id=call.session.participant_id,
-            step=call.session.step_id,
-            trace_id=call.trace_id,
-            target="step",
-            question=request.question,
-        )
-        return await answer_step(call.session, request.question, call.trace_id)
-
-    async def ask_general(request: AskStepRequest) -> str:
-        call = current_invocation()
-        call.outer_route_operation = "ask_general"
-        call.route_operation = "ask_general"
-        emit(
-            "voice.delegate",
-            participant_id=call.session.participant_id,
-            step=call.session.step_id,
-            trace_id=call.trace_id,
-            target="general",
-            question=request.question,
-        )
-        return await answer_general(call.session, request.question, call.trace_id)
 
     handlers: dict[str, tuple[Any, str]] = {
         "commit": (
@@ -175,18 +102,6 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
             "Explicitly start this tea guide over from its first step; not an appliance or timer.",
         ),
         "status": (status, "Report whether this guide is active and its current step."),
-        "ask_tea": (
-            ask_tea,
-            "Active tea guide: delegate every request except an explicit guide exit.",
-        ),
-        "ask_step": (
-            ask_step,
-            "Current-step questions, reports, help, readings, timers, or checks; never next, continue, advance, or skip.",
-        ),
-        "ask_general": (
-            ask_general,
-            "Everything else, including general tea knowledge and visual questions; never manages the guide.",
-        ),
     }
     handler, description = handlers[config.operation]
     yield FunctionInfo.from_fn(handler, description=description)
@@ -196,30 +111,11 @@ async def add_workflow_functions(
     builder: Builder,
     *,
     store: SessionStore,
-    answer_step: VoiceAnswer,
-    answer_tea: VoiceAnswer,
-    answer_general: VoiceAnswer,
 ) -> None:
-    for operation in (
-        "commit",
-        "start",
-        "advance",
-        "reset",
-        "restart",
-        "status",
-        "ask_tea",
-        "ask_step",
-        "ask_general",
-    ):
+    for operation in ("commit", "start", "advance", "reset", "restart", "status"):
         await builder.add_function(
             f"workflow__{operation}",
-            WorkflowFunctionConfig(
-                operation=operation,
-                store=store,
-                answer_step=answer_step,
-                answer_tea=answer_tea,
-                answer_general=answer_general,
-            ),
+            WorkflowFunctionConfig(operation=operation, store=store),
         )
 
 
