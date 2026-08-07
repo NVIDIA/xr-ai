@@ -13,12 +13,15 @@ assembly path.
 """
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker
 
 from xr_ai_models import STTService, TTSService
 from xr_ai_voicegate import VoiceGateConfig
 
+from ._handler import VoiceTurn
 from ._processors.handler import _VoiceHandlerProcessor
 from ._processors.streaming_tts import StreamingTtsProcessor
 from ._processors.vad_stt import VadConfig, VadSttProcessor
@@ -36,6 +39,7 @@ def _build_voice_pipeline(
     voice_gate_cfg: VoiceGateConfig,
     text_topic: str = "agent.response",
     idle_timeout_secs: float | None = None,
+    transcription_observer: Callable[[VoiceTurn], Awaitable[None]] | None = None,
 ) -> tuple[Pipeline, PipelineWorker]:
     """Assemble the unified voice pipeline.
 
@@ -60,7 +64,11 @@ def _build_voice_pipeline(
     =True`` at ``IDLE_TIMEOUT_SECS`` — i.e. on by default upstream, which would
     silently drop idle sessions.
     """
-    voice_gate_proc = VoiceGateProcessor(cfg=voice_gate_cfg, tts=tts)
+    voice_gate_proc = VoiceGateProcessor(
+        cfg=voice_gate_cfg,
+        tts=tts,
+        transcription_observer=transcription_observer,
+    )
     streaming_tts   = StreamingTtsProcessor(
         tts        = tts,
         voice_gate = voice_gate_proc.gate,

@@ -16,6 +16,7 @@ import yaml
 class WorkerConfig:
     models_config: Path
     workflow_config: Path
+    applications_config: Path
     voice_gate_config: Path
     rag_endpoint: str
     frame_max_age_s: float
@@ -43,6 +44,7 @@ def load_config(source: Path | None) -> WorkerConfig:
     return WorkerConfig(
         models_config=_path(str(raw.get("models_config", "models.omni.json")), source),
         workflow_config=_path(str(raw.get("workflow_config", "workflow.yaml")), source),
+        applications_config=_path(str(raw.get("applications_config", "applications.yaml")), source),
         voice_gate_config=_path(str(raw.get("voice_gate_config", "voice_gate.yaml")), source),
         rag_endpoint=str(raw.get("rag_endpoint", "tcp://127.0.0.1:8340")),
         frame_max_age_s=float(raw.get("frame_max_age_s", 3)),

@@ -9,6 +9,44 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-07 — Background summaries and visual logs are distinct outputs
+
+Transcript summaries now run on a configurable monotonic interval and publish
+under the transcript application's UI label instead of entering the synthetic
+voice-notice path. A third background application performs broad VLM captioning
+every two seconds, sends a five-caption rolling window to one NAT delta agent,
+and persists each caption and unique-current delta as JSON Lines. Both prompt
+sets and scheduling parameters remain sample configuration.
+
+### 2026-08-07 — Transcript observation precedes command gating
+
+`VoiceSession.run()` now exposes a raw final-transcription observer immediately
+before wake-word gating. The tea sample uses it only while the explicitly
+started transcript application is active, allowing ordinary speech to be
+recorded without making ordinary speech an agent command. Wake matching also
+accepts up to two common leading disfluencies because final STT may prepend
+them; arbitrary preceding speech remains rejected to preserve command intent.
+
+### 2026-08-07 — Background monitoring focus and output are application-scoped
+
+Generated background start functions now accept one bounded instruction. The
+visual watcher stores that focus per participant and sends it only to its VLM
+caption and LLM comparison calls alongside bounded caption history. Important
+events publish directly to the client data channel under the application's
+human title; they no longer create synthetic voice turns or TTS audio.
+
+### 2026-08-07 — Sample voice applications declare routing and ownership
+
+The tea-making sample now composes voice capabilities through sample-local
+`RoutedFunction` metadata. Inline functions keep the selected foreground,
+foreground functions push an interactive application onto a deterministic
+stack, and background functions start continuous work without replacing root.
+The root NAT agent receives a generated catalog of function routes and effects;
+once tea is foreground, root is not invoked. Two independent background
+applications validate the contract: a VLM-caption and LLM-change watcher, and a
+speech transcript recorder with bounded periodic summaries. This structure
+stays inside the sample until human testing stabilizes the extraction boundary.
+
 ### 2026-08-07 — Voice uses one foreground agent per turn
 
 Tea voice interaction now follows foreground-process semantics. Session state

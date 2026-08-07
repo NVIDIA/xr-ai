@@ -16,24 +16,31 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from tea_making_worker.agents.prompts import (  # noqa: E402
     HUMAN,
-    ROOT,
     STEP,
     TEA,
     VOICE,
 )
 from tea_making_worker.agents.registry import (  # noqa: E402
-    _ROOT_TOOLS,
     _TEA_MANAGEMENT_TOOLS,
     _state_contract,
 )
+from tea_making_worker.applications.compose import root_function_specs  # noqa: E402
+from tea_making_worker.desktop.spec import load_desktop  # noqa: E402
+from tea_making_worker.desktop.types import FunctionEffect  # noqa: E402
 from tea_making_worker.runtime.render import render_message  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
 
 
 def run() -> None:
     workflow = load_workflow(_SAMPLE / "yaml" / "workflow.yaml")
+    desktop = load_desktop(_SAMPLE / "yaml" / "applications.yaml")
+    root_functions = root_function_specs(desktop)
+    root_prompt = (
+        f"{desktop.root_prompt}\nRoutes: "
+        f"{'; '.join(function.catalog_entry() for function in root_functions)}\n{HUMAN}"
+    )
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
-    assert len(f"{ROOT}\n{HUMAN}") <= 450
+    assert len(root_prompt) <= 950
     assert len(f"{TEA}\n{VOICE}\n{HUMAN}") <= 550
     assert len(f"{STEP}\n{HUMAN}") <= 350
     assert "natural spoken language" in HUMAN
@@ -44,10 +51,31 @@ def run() -> None:
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
     assert "if unavailable, say so" in VOICE
-    assert "Explicit request to begin tea guidance: workflow__start" in ROOT
     assert "Next/continue/advance" in TEA
     assert "Questions using these words are not commands" in TEA
-    assert tuple(map(str, _ROOT_TOOLS)) == ("workflow__start", "current_view", "rag_lookup")
+    assert {function.name for function in root_functions} == {
+        "current_view",
+        "rag_lookup",
+        "workflow__start",
+        "desktop__status",
+        "change_watch__start",
+        "change_watch__stop",
+        "change_watch__status",
+        "transcript__start",
+        "transcript__stop",
+        "transcript__status",
+        "video_log__start",
+        "video_log__stop",
+        "video_log__status",
+    }
+    assert next(function for function in root_functions if function.name == "workflow__start").effect == (
+        FunctionEffect.FOREGROUND
+    )
+    assert all(
+        function.effect == FunctionEffect.BACKGROUND
+        for function in root_functions
+        if function.name.startswith(("change_watch__", "transcript__", "video_log__"))
+    )
     assert tuple(map(str, _TEA_MANAGEMENT_TOOLS)) == (
         "workflow__advance",
         "workflow__reset",
@@ -58,10 +86,15 @@ def run() -> None:
     assert all(fragment in style["compact_input"] for fragment in style["forbidden_fragments"])
     assert all(fragment not in style["expected_output"] for fragment in style["forbidden_fragments"])
     assert not {"tea", "temperature"} & set(style["compact_input"].lower().split())
-    lifecycle_actions = {
-        f"workflow__{name}" for name in ("start", "advance", "reset", "restart", "status")
+    background_actions = {
+        f"{app}__{operation}"
+        for app in ("change_watch", "transcript", "video_log")
+        for operation in ("start", "stop", "status")
     }
-    assert {case["expected_tool"] for case in cases["routes"]} == {"answer"} | lifecycle_actions
+    routed_actions = {
+        f"workflow__{name}" for name in ("start", "advance", "reset", "restart", "status")
+    } | {"desktop__status"} | background_actions
+    assert {case["expected_tool"] for case in cases["routes"]} == {"answer"} | routed_actions
     matrix = cases["route_state_matrix"]
     assert set(matrix["active_steps"]) == set(workflow.steps)
     active_actions = {
@@ -70,6 +103,10 @@ def run() -> None:
     assert {case["expected_tool"] for case in matrix["active_cases"]} == {"answer"} | active_actions
     assert {case["expected_tool"] for case in matrix["idle_cases"]} == {
         "workflow__start",
+        "change_watch__start",
+        "transcript__start",
+        "video_log__start",
+        "desktop__status",
         "answer",
     }
     advance_cases = [
@@ -81,6 +118,56 @@ def run() -> None:
     assert general["visible_scene"]["expected_tools"] == ["current_view"]
     assert general["visible_tea"]["expected_order"] == ["current_view", "rag_lookup"]
     assert general["safety"] == {"state_updates": False, "lifecycle_tools": False}
+    assert desktop.application("tea").mode == "foreground"
+    assert desktop.application("change_watch").mode == "background"
+    assert desktop.application("transcript").mode == "background"
+    assert desktop.application("video_log").mode == "background"
+    assert len(str(desktop.application("change_watch").settings["caption_prompt"])) <= 180
+    assert len(str(desktop.application("change_watch").settings["event_prompt"])) <= 420
+    assert len(str(desktop.application("change_watch").settings["default_instruction"])) <= 240
+    assert (
+        len(str(desktop.application("change_watch").settings["caption_prompt"]))
+        + len(str(desktop.application("change_watch").settings["default_instruction"]))
+        + len("\nFocus: ")
+        <= 500
+    )
+    assert len(str(desktop.application("transcript").settings["summary_prompt"])) <= 240
+    assert len(str(desktop.application("video_log").settings["caption_prompt"])) <= 240
+    assert len(str(desktop.application("video_log").settings["delta_prompt"])) <= 360
+    assert desktop.application("video_log").settings["interval_s"] == 2
+    assert desktop.application("video_log").settings["history_size"] == 5
+    background = cases["background_applications"]
+    assert background["change_watch"]["important"]["expected_notice"] is True
+    assert background["change_watch"]["insignificant"]["expected_notice"] is False
+    assert all(
+        case["instruction"]
+        for case in background["change_watch"].values()
+    )
+    assert background["transcript"]["expected_output"] is True
+    assert background["transcript"]["max_sentences"] == 2
+    assert background["video_log"]["expected_delta_terms"] == ["person", "parcel"]
+    prompt_text = " ".join(
+        (
+            str(desktop.application("change_watch").settings["event_prompt"]),
+            str(desktop.application("transcript").settings["summary_prompt"]),
+            str(desktop.application("video_log").settings["caption_prompt"]),
+            str(desktop.application("video_log").settings["delta_prompt"]),
+        )
+    ).lower()
+    fixture_text = " ".join(
+        (
+            background["change_watch"]["important"]["current"],
+            background["change_watch"]["insignificant"]["current"],
+            background["change_watch"]["important"]["instruction"],
+            background["change_watch"]["insignificant"]["instruction"],
+            *background["transcript"]["utterances"],
+            *background["video_log"]["previous"],
+            background["video_log"]["current"],
+        )
+    ).lower()
+    assert not set(re.findall(r"\b[a-z]{8,}\b", prompt_text)) & set(
+        re.findall(r"\b[a-z]{8,}\b", fixture_text)
+    )
     assert set(cases["steps"]) == set(workflow.steps)
     assert cases["rag_fallback"]["expected_tools"] == ["rag_lookup", "workflow__commit"]
     assert cases["rag_fallback"]["expected_top_k"] == 2

@@ -838,6 +838,60 @@ async def test_voice_gate_processor_dispatches_query_frame_on_fresh_match():
 
 
 @pytest.mark.asyncio
+async def test_voice_gate_processor_observes_final_transcript_before_gate_drop():
+    turns: list[VoiceTurn] = []
+
+    async def observe(turn: VoiceTurn) -> None:
+        turns.append(turn)
+
+    proc = VoiceGateProcessor(
+        cfg=VoiceGateConfig(magic_phrases=("agent",)),
+        tts=_FakeTts(),
+        transcription_observer=observe,
+    )
+    transcript = TranscriptionFrame(
+        text="ordinary speech without a wake word",
+        user_id="pid-1",
+        timestamp="t",
+    )
+    transcript.pts = 1_700_000_000_000_000
+
+    sink = await _run_chain(proc, sends=[transcript])
+
+    assert not any(isinstance(frame, GatedQueryFrame) for frame in sink.frames)
+    assert turns == [
+        VoiceTurn(
+            participant_id="pid-1",
+            role="user",
+            timestamp_us=1_700_000_000_000,
+            text="ordinary speech without a wake word",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_voice_gate_processor_accepts_wake_after_a_speech_filler():
+    proc = VoiceGateProcessor(
+        cfg=VoiceGateConfig(magic_phrases=("agent", "hey agent")),
+        tts=_FakeTts(),
+    )
+
+    sink = await _run_chain(
+        proc,
+        sends=[
+            TranscriptionFrame(
+                text="Uh, hey agent, reset the demo",
+                user_id="pid-1",
+                timestamp="t",
+            )
+        ],
+    )
+
+    queries = [frame for frame in sink.frames if isinstance(frame, GatedQueryFrame)]
+    assert [query.text for query in queries] == ["reset the demo"]
+
+
+@pytest.mark.asyncio
 async def test_voice_gate_processor_stamps_query_with_speech_onset():
     """The dispatched query carries the transcript's speech-onset timestamp, so
     a turn is anchored to when the user spoke rather than to when STT
@@ -1045,6 +1099,8 @@ async def test_voice_gate_processor_classifies_partial_wake_prefixes():
     proc = VoiceGateProcessor(cfg=cfg, tts=_FakeTts())
 
     assert await proc.handle_partial_transcript("pid-1", "hey") is False
+    assert await proc.handle_partial_transcript("pid-1", "uh") is False
+    assert await proc.handle_partial_transcript("pid-1", "um, hey") is False
     assert await proc.handle_partial_transcript("pid-1", "room conversation") is None
 
 

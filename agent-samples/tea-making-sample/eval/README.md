@@ -15,22 +15,34 @@ uv run --directory agent-samples/tea-making-sample/worker \
   python ../eval/routes.py --models ../yaml/models.omni.json
 ```
 
+Run the production change-detection, transcript-summary, and video-delta prompts separately:
+
+```bash
+uv run --directory agent-samples/tea-making-sample/worker \
+  python ../eval/backgrounds.py --models ../yaml/models.omni.json
+```
+
 The command expands the compact state matrix and prints the lifecycle NAT tool
 or direct-answer action for every case. Transition, skip, exit, restart,
-status, and ambiguous questions run from every configured tea step; idle start
-and general queries run separately. Skip cases also verify that the workflow
+status, and ambiguous questions run from every configured tea step; root tea
+launch, background application launch, desktop status, and general queries run
+separately. Skip cases also verify that the workflow
 actually advances, while ordinary next commands against incomplete steps must
 stay put. The command exits nonzero on a mismatch. For step probes, compare the
 logged tool call or commit to the expected fields. Visual fixtures are ordinary
 captions, including one negative water-visibility case that must fail the
 deterministic evidence gate.
-Voice cases exercise deterministic foreground selection: idle input reaches
-root and active input reaches the current tea-step variant. Bare “next” and
+Voice cases exercise deterministic foreground selection: root input reaches
+root and active tea input reaches the current tea-step variant. Bare “next” and
 “next step” must reach advance, while questions containing transition words
 remain direct answers. Appliance and adversarial timer commands remain in the
 tea foreground; explicit guide reset and restart remain available. General tea
 knowledge must use RAG, general scene questions must use current vision, and a
-deictic tea question must inspect before retrieval while guidance is idle.
+deictic tea question must inspect before retrieval while root owns foreground.
+The background suite verifies a user-specified monitoring focus, an important
+visual event, a viewpoint-only non-event, human-labeled UI outputs, one periodic
+multi-utterance transcript summary, and one rolling visual delta without an
+artifact outside its temporary directory.
 
 Corner-case probes cover atomic identification readiness, irrelevant retrieval
 results, absent or unitless temperature readings, unconfirmed immersion, a running timer, and

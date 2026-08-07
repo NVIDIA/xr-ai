@@ -19,8 +19,9 @@ changes.
    `while tool_calls` loop.
 5. Observation agents can write only the active step's `writes`. The
    deterministic dispatcher invokes exactly one foreground agent per voice
-   turn. Quick tools are read-only; only lifecycle NAT tools may change the
-   foreground application or its step.
+   turn. Every root function declares inline, foreground, or background effect.
+   Quick tools are read-only; only lifecycle NAT tools may change application
+   ownership or tea state.
 6. No conversation transcript is included. Add memory only for a named case
    that cannot be solved with the current question and step projection.
 7. Recover only errors that a later frame or corrected model call can repair.
@@ -37,12 +38,11 @@ changes.
     YAML evidence gate, not the observation agent's interpretation alone,
     authorizes visual completion after repeated matching frames.
 11. Sessions are ephemeral: first join and app-start roster replay reset to
-    idle, participant leave discards state, and duplicate roster events are
-    idempotent.
-12. Foreground management is literal. Idle input goes directly to the root
-    agent; active input goes directly to the current tea-step variant. No LLM
-    delegates to another LLM. Reports, questions, timers, and appliance commands
-    remain in the active foreground unless they explicitly manage tea guidance.
+    root, stop background state, and reset tea. Participant leave flushes and
+    discards state; duplicate roster events are idempotent.
+12. Foreground management is literal. Root input goes directly to root; tea
+    input goes directly to the current tea-step variant. No LLM delegates to
+    another LLM. Root tools are unavailable while tea owns foreground.
 13. Model-visible vision requests contain only a question. `current_view`
     injects participant identity from invocation scope.
 14. User-facing values are natural speech. Keep state numeric; use the shared
@@ -71,8 +71,9 @@ changes.
     focus excludes artwork and supplied words; RAG may provide brewing values
     only when its passage contains the variety already visible in the caption.
 22. Launching requires explicit model, voice, and TTS modes. The orchestrator
-    writes temporary model, worker, and RAG configs from those selections so
-    their profiles cannot diverge; never restore an implicit launch default.
+    writes temporary model, worker, application, and RAG references from those
+    selections so their profiles cannot diverge; never restore an implicit
+    launch default.
 23. Continuous Omni captions disable reasoning and have a small output cap.
     Omni agent calls also disable reasoning so their token budget produces a
     tool call. A bounded caption timeout is recoverable and must leave the
@@ -103,22 +104,57 @@ changes.
     with an explicit Celsius or Fahrenheit unit. Neither path mutates state.
 32. Heating detection announces that heating is underway and tells the user to
     wait for the target. It never describes the following step as ready.
-33. Foreground tool surfaces separate application modes. Root exposes start,
-    vision, and RAG. Each tea variant exposes tea lifecycle tools plus only its
-    step's quick tools. Deictic root requests inspect vision before RAG.
+33. Foreground tool surfaces separate application modes. Root is composed from
+    `RoutedFunction` metadata: vision and RAG are inline, tea launch captures
+    foreground, and watcher/transcript/video-log controls remain background.
+    Each tea variant exposes tea lifecycle tools plus only its step's quick
+    tools.
 34. Direct foreground answers are valid and do not change state. Lifecycle
     intent must call its constrained workflow tool; a model-generated invalid
     tool schema receives one immediate retry.
 35. Starting is valid only from idle and is idempotent while active. Reset
-    returns to idle; restart alone clears state and enters the first step.
+    returns to root; restart alone clears state and enters the first step.
     Lifecycle mutation tools name the `tea_guide` scope, while timer and
     appliance requests remain step-agent work regardless of lifecycle words.
-36. Voice follows foreground-process semantics. Session state selects root or
-    tea deterministically before the LLM call. Launch enters tea, reset exits to
-    root, and internal step transitions select the next prebuilt tea variant.
-    The inactive agent is never invoked.
+36. Voice follows foreground-process semantics. A stack selects root or the
+    current application before the LLM call. Tea launch pushes tea, reset or
+    completion pops it, and internal steps select prebuilt tea variants. The
+    inactive agent is never invoked; nested foregrounds return to their caller.
+37. Background applications never capture foreground. They receive final raw
+    speech transcripts before command gating or ticks only while active;
+    synthetic notices bypass both root and transcript input. Start, stop, and
+    status are generated NAT functions.
+38. Visual change watching keeps only two prior captions by default. The VLM
+    receives the per-session start instruction as its focus; one NAT agent sees
+    only that instruction plus recent captions, decides importance, and commits
+    once. Its labeled data-channel output bypasses TTS. Unavailable frames and
+    malformed repeated tool calls defer to a later tick.
+39. Transcript recording persists JSON Lines incrementally and does not require
+    a wake phrase once explicitly started. At the configured monotonic interval,
+    the summary agent receives only unsummarized utterances and emits labeled
+    UI text without TTS or root routing.
+40. Video logging runs a broad VLM caption on its configured interval. Its delta
+    agent receives only the current caption and rolling caption window, commits
+    exactly once, and persists both caption and delta. It has no spoken output.
 
-## Foreground and observation machines
+## Desktop, foreground, and observation machines
+
+`desktop/runtime.py` owns application scheduling:
+
+```text
+foreground stack: root -> app -> nested app
+background set:   {change_watch, transcript, video_log, ...}
+```
+
+An inline function returns to the same foreground. A foreground launch pushes
+an application, and exit pops back to the caller. Starting or stopping a
+background only changes the set. `desktop/registry.py` reads the stack before
+the model call and invokes exactly one registered handler.
+
+`RoutedFunction` is the reusable composition contract. `name` resolves a NAT
+function, `route` tells root which requests match, `effect` exposes ownership,
+and `return_direct` controls the NAT agent loop. `yaml/applications.yaml` loads
+these code-level contracts for this sample; it is not required by the runtime.
 
 `SessionStore` owns the outer deterministic machine:
 
@@ -136,14 +172,20 @@ When completion already holds, the observation agent still runs and should
 commit no updates or message. `SessionStore` records every such call as
 `step.commit_noop` and suppresses attempted mutations or notices.
 
-The foreground voice machine is independent of monitoring:
+The foreground voice machine is independent of all background monitoring:
 
 ```text
-idle request -> root agent -> {answer | vision/RAG | start tea}
-active request -> current tea-step agent -> {answer | step tool | advance/restart/status/exit}
-start tea -> foreground becomes tea
-exit tea -> foreground becomes root
+root request -> root agent -> {answer | inline tool | foreground launch | background control}
+tea request -> current tea-step agent -> {answer | step tool | advance/restart/status/exit}
+start tea -> push tea; exit tea -> pop tea
+start watcher/transcript/video log -> root remains foreground; background loop starts
 ```
+
+The generated background start schema accepts one optional bounded
+`instruction`. Change watching stores it per participant and uses the configured
+default only when it is omitted. Application text output uses the human title
+as its data-channel topic, so clients render `[Visual change watcher] ...`
+without creating a synthetic voice turn.
 
 Step voice prompts include a compact procedure so references to the current
 action can be answered without storing the previous conversation turn.
@@ -151,8 +193,16 @@ action can be answered without storing the previous conversation turn.
 `runtime/scope.py` carries participant and trace identity into workflow NAT
 functions without putting those repeated values in every tool schema. It also
 records the lifecycle operation selected during the one locked participant
-turn. The root receives only the request. A tea variant receives the exact
-request plus its step's sparse state projection.
+turn plus small application-private context needed by commit functions. The
+root receives only the request and generated route catalog. A tea variant
+receives the exact request plus its step's sparse state projection. Change
+detection receives only its start instruction and recent captions; transcript
+summaries receive only utterances accumulated since the prior summary. The
+transcript writer receives final STT output before the wake gate; command
+routing still receives only accepted queries.
+
+Video logging receives only its broad current caption and configured rolling
+window; neither voice history nor tea state enters that prompt.
 
 ## YAML review checklist
 
@@ -193,9 +243,12 @@ Budgets are guardrails for the small local models:
 
 | Input | Budget |
 |---|---:|
-| Root foreground prompt + speech rule | 450 characters |
+| Root prompt + generated function catalog + speech rule | 950 characters |
 | Tea management + shared voice rules | 550 characters |
 | Full per-step foreground prompt | 850 characters |
+| Change-watch caption focus | 180 characters |
+| Change-watch event policy | 420 characters |
+| Transcript summary policy | 240 characters |
 | Shared observation prompt | 350 characters |
 | Shared voice prompt | 300 characters |
 | Generated state contract | 500 characters |
@@ -210,9 +263,10 @@ meaning. Do not put domain-specific examples or repeat this rule in step
 prompts.
 
 The eval check enforces the budgets. Requests use compact JSON with no
-indentation. The root receives only `request`; a tea variant also receives only
-its sparse state projection. The voice eval expands each active intent across
-every workflow step.
+indentation. The root receives only `request`; tool ownership and routing are a
+generated catalog, not per-turn context. A tea variant also receives only its
+sparse state projection. The voice eval expands each active intent across every
+workflow step and root application launch.
 An observation or voice agent receives only its step projection. The generated
 contract includes only writable fields and their completion values. Do not add
 a whole-workflow dump, previous frames, or assistant history.
@@ -230,14 +284,17 @@ expected versus observed behavior:
 
 Then inspect in this order:
 
-1. `agent.foreground.request/response` for the selected root or tea agent;
+1. `desktop.route` and `desktop.foreground.*` for selected ownership.
+2. `agent.foreground.request/response` for the selected root or tea agent;
    inspect `agent.foreground.retry` for corrected tool arguments.
-2. `trigger.request/response` for the exact fresh caption and latency.
-3. `step.evidence` for the deterministic match and consecutive count.
-4. `rag.lookup.request/response` when identification needs missing brew facts.
-5. `agent.observe.request/response` for the compact context seen by the model.
-6. `step.commit`, `step.commit_noop`, or `step.commit_rejected` for the result.
-7. `step.ready`, `step.enter`, and `notice.queued` for readiness, explicit
+3. `desktop.background.*`, `change_watch.*`, `transcript.*`, or `video_log.*`
+   for continuous work.
+4. `trigger.request/response` for the exact fresh tea caption and latency.
+5. `step.evidence` for the deterministic match and consecutive count.
+6. `rag.lookup.request/response` when identification needs missing brew facts.
+7. `agent.observe.request/response` for the compact context seen by the model.
+8. `step.commit`, `step.commit_noop`, or `step.commit_rejected` for the result.
+9. `step.ready`, `step.enter`, and `notice.queued` for readiness, explicit
    transition, and user notification.
 
 Prefer the narrowest fix:
@@ -251,8 +308,13 @@ Prefer the narrowest fix:
   verify that the first supported field commit also writes `tea_ready` true.
 - Wrong tool: reduce or clarify only that step's tool list/description.
 - Wrong voice action: tighten only the active foreground prompt or function
-  description and add a state-matrix eval; keep the YAML foreground prompt
-  limited to domain identity.
+  route description and add a state-matrix eval. Do not add another router.
+- Wrong watcher output: inspect the stored instruction and caption first, then
+  tune only the caption focus or event policy depending on which stage failed.
+- Missing transcript summary: inspect its interval deadline, unsummarized
+  utterances, summary request, and labeled output before changing the interval.
+- Wrong video delta: inspect `video_log.caption` first, then compare the rolling
+  history in `video_log.delta`; tune only the corresponding YAML prompt.
 - Wrong live answer with a fabricated participant ID: the model-visible vision
   schema has regressed; participant identity must remain invocation-scoped.
 - Runtime invariant failure: fix Python and add a unit test.
@@ -270,16 +332,37 @@ the state delta, revision, completion result, and notification;
 `step.commit_noop` records continued observation after completion. Preserve
 these fields so test feedback remains searchable across iterations.
 
+Desktop events name `application`, foreground depth, background membership,
+and revision. Change-watch events retain the exact caption and importance
+summary. `application.text_output` records the label and UI-only message;
+watcher output never creates a notice or TTS request. Transcript events log
+file paths only at lifecycle boundaries and record input size rather than
+duplicating user text in the standard log; the JSON Lines file is the
+transcript source of truth. `transcription.observed` proves pre-gate delivery
+without copying the transcript into the standard event log.
+Video-log events retain each broad caption and rolling delta; its JSON Lines
+artifact is the durable source of truth.
+
 ## Reuse candidates
 
-These pieces stay sample-local until a second concrete guided application uses
+These pieces now have multiple concrete applications but stay sample-local for
+this iteration. Move them together in a dedicated library PR after the API has
+survived human tests:
+
+- `desktop/types.py`: routed NAT function metadata.
+- `desktop/runtime.py`: foreground stack and background set.
+- `desktop/registry.py`: deterministic one-foreground dispatch.
+- `applications/controls.py` and `applications/background.py`: generated
+  background controls and lifecycle fan-out.
+
+Guidance-engine pieces remain sample-only until a second guided workflow uses
 them:
 
 - Generic trigger argument resolution and `TriggerRegistry`.
 - Participant invocation scope for stateful NAT tools.
 - Typed sparse `SessionStore` with YAML write boundaries and completion rules.
 - Workflow management NAT functions and compact agent factory.
-- Background notice bridge into `VoiceSession`.
+- Background spoken-notice and labeled UI-text bridges into `VoiceSession`.
 - Deterministic temperature normalization and threshold verification.
 
 The retrieval service and `xr_rag` group are already shared library
@@ -294,4 +377,4 @@ or `xr-ai-voice`; do not move tea YAML, messages, or state names.
 - Unbounded conversational memory.
 - Arbitrary expressions or code in YAML.
 - Silent fallbacks for unavailable model services or invalid configuration.
-- A generic library abstraction before another sample validates it.
+- Publishing the sample-local desktop API as shared SDK before human validation.

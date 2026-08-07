@@ -18,8 +18,12 @@ from xr_ai_voice import TextMessageInput, VadConfig, VoiceQuery, VoiceSession
 from xr_ai_voicegate import load_voice_gate_config
 
 from .agents import AgentRegistry
+from .agents.factory import add_guidance_llm
+from .applications.compose import build_applications
 from .config import WorkerConfig
-from .engine import Coordinator, NoticeBridge, TriggerRegistry
+from .desktop.runtime import DesktopRuntime
+from .desktop.spec import load_desktop
+from .engine import Coordinator, NoticeBridge, TextOutputBridge, TriggerRegistry
 from .functions import (
     CurrentViewConfig,
     RAGLookupConfig,
@@ -37,6 +41,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     llm = make_llm(models, "agent_llm")
     vlm = make_vlm(models, "vlm")
     workflow = load_workflow(config.workflow_config)
+    desktop_spec = load_desktop(config.applications_config)
+    desktop_runtime = DesktopRuntime(desktop_spec)
     voice_gate = load_voice_gate_config(config.voice_gate_config)
     session = VoiceSession(
         stt=make_stt(models, "stt"),
@@ -58,6 +64,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         store = SessionStore(workflow)
         agents = AgentRegistry(workflow)
         notices = NoticeBridge(session)
+        text_output = TextOutputBridge(session)
         vision_config = VisionToolsConfig(
             endpoint=session.transport.endpoint,
             vlm=vlm,
@@ -66,7 +73,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         )
         vision_group = await builder.add_function_group("vision", vision_config)
         vision_functions = await vision_group.get_all_functions()
-        await builder.add_function(
+        current_view = await builder.add_function(
             "current_view",
             CurrentViewConfig(
                 source=vision_functions["vision__look_at_current_frame"],
@@ -84,11 +91,29 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         )
         await add_clock_functions(builder)
         await add_temperature_functions(builder)
-        await add_workflow_functions(builder, store=store)
-        await agents.build(builder, llm)
+        await add_workflow_functions(builder, store=store, desktop=desktop_runtime)
+        llm_ref = await add_guidance_llm(builder, llm)
+        await agents.build(builder, llm_ref)
+        applications = await build_applications(
+            builder,
+            llm_ref=llm_ref,
+            spec=desktop_spec,
+            runtime=desktop_runtime,
+            tea=agents,
+            current_view=current_view,
+            notice=notices.send,
+            text_output=text_output.send,
+        )
         triggers = TriggerRegistry(workflow)
         await triggers.build(builder)
-        coordinator = Coordinator(store=store, agents=agents, triggers=triggers, notice=notices.send)
+        coordinator = Coordinator(
+            store=store,
+            agents=agents,
+            desktop=applications.desktop,
+            backgrounds=applications.backgrounds,
+            triggers=triggers,
+            notice=notices.send,
+        )
         TextMessageInput(session=session, fresh_match=True)
 
         async def handler(turn: VoiceQuery) -> str:
@@ -105,6 +130,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             try:
                 await session.run(
                     handler,
+                    transcription_observer=coordinator.handle_transcription,
                     on_participant_joined=coordinator.participant_joined,
                     on_participant_left=participant_left,
                     interrupt_on_supersede=True,

@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+root_prompt: >-
+  Match tool; else answer briefly. Inline/background stay; foreground launches.
+  Inspect deictics. Never infer unseen facts.
+
+capabilities:
+  current_view: live view or deictic
+  rag_lookup: tea knowledge; not visual identity
+
+applications:
+  tea:
+    title: Tea guidance
+    mode: foreground
+    route: start tea guide
+
+  change_watch:
+    title: Visual change watcher
+    mode: background
+    route: watch requested visual changes
+    settings:
+      interval_s: 2
+      history_size: 2
+      default_instruction: important changes involving people, objects, actions, or possible hazards
+      caption_prompt: >-
+        Caption only visible facts relevant to the supplied focus. Include
+        enough scene context to compare changes.
+      event_prompt: >-
+        Compare previous captions with current against watch_for. Call
+        change_watch__commit once. Important means a newly visible change
+        relevant to watch_for. Ignore wording, viewpoint, and lighting changes.
+        For an important change write one short natural sentence; otherwise set
+        important false and summary empty.
+
+  transcript:
+    title: Transcript recorder
+    mode: background
+    route: record speech and summarize periodically
+    settings:
+      output_dir: ../artifacts/transcripts
+      summary_interval_s: 120
+      summary_prompt: >-
+        Summarize the supplied utterances in one or two short factual sentences.
+        Call transcript__commit_summary exactly once. Do not add unstated facts.
+
+  video_log:
+    title: Video activity logger
+    mode: background
+    route: log general camera activity deltas
+    settings:
+      output_dir: ../artifacts/video-logs
+      interval_s: 2
+      history_size: 5
+      caption_prompt: >-
+        Describe all visible people, objects, actions, readable text, and notable
+        scene conditions. Report only visible facts and do not infer.
+      delta_prompt: >-
+        Compare current with the recent captions. State only material visible
+        information unique to current. If nothing material changed, use "No
+        meaningful visual change." Call video_log__commit exactly once. Do not
+        infer.

@@ -3,29 +3,48 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Tea-making guidance sample
+# Composable voice desktop and tea-making sample
 
-This sample is a configuration-driven physical-task guide. A participant has
-one outer workflow state machine; its active step runs one repeated inner loop:
+This sample hosts independent NAT applications behind one voice desktop. Every
+root-visible function declares a compact routing description and one effect:
+
+- `inline` answers a bounded request and keeps the current foreground.
+- `foreground` launches an interactive application and captures future turns.
+- `background` starts or manages continuous work without replacing the root.
+
+The desktop chooses the current foreground deterministically before any model
+call. Foregrounds form a stack, so a future child application can return to its
+caller without re-running a root router. Background applications remain active
+beside that stack.
+
+```text
+root agent
+  ├─ inline vision or RAG ───────────────> root agent
+  ├─ launch tea [foreground] ────────────> tea step agent
+  ├─ start visual watcher [background] ──> root agent + watcher loop
+  ├─ start transcript [background] ──────> root agent + transcript loop
+  └─ start video logger [background] ────> root agent + video log loop
+```
+
+Tea guidance remains a configuration-driven physical-task application. Its
+active step runs one repeated inner loop:
 
 ```text
     YAML NAT trigger -> plain caption -> step NAT agent -> workflow__commit
 ```
 
-Voice uses foreground-process semantics:
+Tea voice uses foreground-process semantics:
 
 ```text
-idle -> root agent -> answer | vision/RAG | start tea guide
-active -> current tea-step agent -> answer | quick tool | lifecycle transition
+root -> tea launch NAT function -> current tea-step agent
+tea step -> answer | quick tool | lifecycle transition | exit to root
 ```
 
-There is no custom tool-call loop. NeMo Agent Toolkit builds the root agent,
-every observation agent, and one foreground variant for each tea step. Current
-and historical conversation turns are not added to prompts. Session state
-selects exactly one foreground function before the LLM call, so the inactive
-agent is never invoked and no model delegates to another model. Root exposes
-start, vision, and RAG. A tea variant exposes lifecycle tools plus only its
-step's quick tools. The exact utterance reaches that agent directly.
+There is no custom tool-call loop. NeMo Agent Toolkit builds every agent and
+typed function surface. Current and historical conversation turns are not
+added to prompts. Desktop state selects exactly one foreground function before
+the LLM call, so inactive agents are never invoked and no model delegates to
+another model. The exact utterance reaches the selected foreground directly.
 
 Starting an active guide remains an idempotent status response at the function
 boundary, and only reset or restart may clear state. Explicit imperative
@@ -45,6 +64,49 @@ such as “how do I do that?” without conversation history. The `current_view`
 tool exposes only a question to the model; participant identity is injected
 from the active invocation, preventing a small model from inventing an ID and
 looking at the wrong camera stream.
+
+## Compose applications
+
+`desktop/types.py` defines the reusable `RoutedFunction` contract. Its name,
+route description, effect, and direct-return policy generate the root tool
+catalog and NAT agent configuration. `desktop/runtime.py` owns only the
+foreground stack and background set; it knows nothing about tea, vision, or
+transcription. `desktop/registry.py` dispatches one turn to root or the current
+registered foreground.
+
+`yaml/applications.yaml` is the sample convenience layer. The same application
+specifications can be constructed directly with `ApplicationSpec` and ordinary
+prompt strings. `applications/compose.py` is intentionally the only place that
+chooses this sample's concrete applications:
+
+- `tea` is foreground. Launch pushes it onto the stack; exit or completion
+  pops it back to root. Existing step prompts and tools are unchanged.
+- `change_watch` is background. Its VLM produces a focused plain caption. A
+  small NAT agent compares the two most recent captions with the current one
+  and calls one commit function. Its start tool stores the user's requested
+  monitoring focus per participant. Important changes appear only as labeled
+  UI text, such as `[Visual change watcher] A person entered the room.`; they
+  never enter the TTS pipeline.
+- `transcript` is background. Once started, every finalized speech transcript
+  is appended to a per-participant JSON Lines file under
+  `artifacts/transcripts/` before wake-word gating. The wake phrase still
+  controls commands, but ordinary speech is recorded without it. On the
+  configured interval, accumulated new utterances are sent to a summary agent.
+  Summaries are persisted and appear as labeled `[Transcript recorder]` UI
+  text; they never enter root routing or TTS.
+- `video_log` is background. Every two seconds its VLM broadly captions visible
+  people, objects, actions, text, and scene conditions. A small NAT agent sees
+  the current caption plus enough prior captions to keep a five-caption rolling
+  window, then records only what is materially unique to the current caption.
+  Full captions and deltas are persisted under `artifacts/video-logs/`; prompts,
+  interval, history size, and output directory are tuned in
+  `yaml/applications.yaml`.
+
+Each background application contributes generated start, stop, and status NAT
+functions. Adding a foreground requires a manifest, a registered voice handler,
+and one launch function. Adding a background requires a manifest plus the
+`on_transcription`, `tick`, and `release` lifecycle. The desktop runtime itself
+does not change.
 
 ## Configure a workflow
 
@@ -164,20 +226,29 @@ uv run --project agent-samples/tea-making-sample tea_making_sample \
 
 `--voice-mode always-on` accepts every transcribed utterance.
 `--voice-mode wake-word` requires each command to start with “Agent” or “Hey
-Agent”; saying only the wake phrase opens a five-second follow-up window. The
+Agent”; up to two common speech fillers may precede the phrase, but arbitrary
+speech may not. Saying only the wake phrase opens a five-second follow-up
+window. An active transcript recorder captures finalized speech before this
+command gate, so recorded speech does not need a wake phrase. The
 `--tts-mode piper` selects lightweight CPU speech on port 8105;
 `--tts-mode magpie` selects NeMo Magpie speech on port 8104 and uses CUDA when
 available. The sample uses Magpie's native speaking rate to preserve voice
-quality. The launcher writes temporary model, worker, and RAG configs, so
-switching modes never edits source files and every process uses the selected
-profile.
+quality. The launcher writes temporary model, worker, and RAG configs and
+points the worker at the application manifest, so switching modes never edits
+source files and every process uses the selected profile.
 
-While idle, the root foreground can answer directly, inspect the current view,
-retrieve tea knowledge, or launch tea guidance. While active, the current tea
-variant alone handles the turn with next/skip/restart/status/exit plus that
-step's tools. Lifecycle calls carry the `tea_guide` scope and return directly;
-quick tool results remain in the same NAT agent loop. Direct answers are valid
-but cannot mutate state.
+At root, voice can answer directly, inspect the current view, retrieve tea
+knowledge, launch tea guidance, or manage any background application. For
+example, say “Monitor the doorway and tell me when someone enters,” “Watch the
+stove and report if it is left unattended,” or “Record what I say and summarize
+it periodically.” Say “Start a general video activity log” to persist rolling
+camera-caption deltas. The watcher passes its request as a bounded VLM and LLM
+focus rather than conversation history. Ask “What is running?” to inspect
+desktop state. While tea is foreground, its current step variant alone
+handles the turn with next/skip/restart/status/exit plus that step's tools. Root
+and background-management tools are not exposed inside tea. Lifecycle calls
+carry the `tea_guide` scope and return directly; quick tool results remain in
+the same NAT agent loop. Direct answers are valid but cannot mutate state.
 
 Both profiles disable hidden reasoning for Omni agent calls. The Omni vision
 profile also caps continuous caption generation; agent calls retain their
@@ -212,9 +283,21 @@ The most useful event names are:
 - `step.commit`, `step.commit_noop`, and `step.commit_rejected`: state deltas,
   completed-step no-ops, or validation failures.
 - `agent.foreground.request`, `agent.foreground.response`, and
-  `agent.foreground.retry`: selected root/tea foreground, exact compact input,
-  lifecycle operation or direct answer, resulting foreground state, and
-  corrected tool arguments.
+  `agent.foreground.retry`: selected foreground, exact compact input, lifecycle
+  operation or direct answer, resulting foreground state, and corrected tool
+  arguments.
+- `desktop.route`, `desktop.foreground.*`, and `desktop.background.*`: one-turn
+  dispatch, stack changes, and concurrently active applications.
+- `change_watch.caption`, `change_watch.event`, and `agent.background.*`: exact
+  captions, importance decisions, summaries, and recoverable tool retries.
+- `change_watch.started` and `application.text_output`: retained monitoring
+  focus and labeled UI-only output that bypasses speech synthesis.
+- `transcription.observed`, `transcript.utterance`, `transcript.summary`, and
+  `transcript.started`: pre-gate STT delivery, file lifecycle, recorded input
+  sizes, and labeled periodic summary output.
+- `video_log.caption`, `video_log.delta`, `video_log.started`, and
+  `video_log.stopped`: broad captions, rolling deltas, and persistent-log
+  lifecycle.
 - `step.ready`, `step.enter`, `workflow.start_noop`, `workflow.reset`,
   `workflow.complete`, and `notice.queued`: readiness, protected repeated
   starts, lifecycle resets, explicit transitions, and speech.

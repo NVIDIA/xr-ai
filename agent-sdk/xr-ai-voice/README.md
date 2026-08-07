@@ -37,9 +37,13 @@ A handler may also return an `AsyncIterator[str]` to stream the reply token by
 token. Typed messages route through the same path via `TextMessageInput`; data
 received outside an active `run()` is ignored.
 
-`VoiceSession.run()` accepts participant lifecycle callbacks, a turn observer,
-and explicit follow-up policies. `queue_queries` preserves FIFO execution per
-participant instead of cancelling the active handler. With
+`VoiceSession.run()` accepts participant lifecycle callbacks, observers, and
+explicit follow-up policies. `transcription_observer` receives every finalized
+user STT turn before wake-word gating, including utterances that are not
+commands; applications should enable persistence only through an explicit user
+action. The regular `observer` receives accepted user queries and assistant
+responses. `queue_queries` preserves FIFO execution per participant instead of
+cancelling the active handler. With
 `interrupt_on_supersede`, each queued turn flushes speech left from the
 preceding response when it starts. Explicit interruption frames such as stop
 cancel the active turn and clear its participant queue. The `on_query_superseded`
@@ -54,7 +58,9 @@ participant's transport sender is released on leave. NAT applications create
 the callable with `xr_ai_nat.adapters.as_voice_handler`; transcript recording
 is a separate observer rather than a side effect of function invocation.
 
-When wake phrases and the listening chime are enabled, the VAD/STT stage probes
+When wake phrases and the listening chime are enabled, a command may contain up
+to two common speech fillers before its wake phrase. Arbitrary preceding speech
+is still rejected. The VAD/STT stage probes
 the opening audio on a fixed cadence while the user is still speaking. Probe
 audio includes a short silent tail so offline STT can finalize the wake word. A
 recognized phrase emits the chime immediately, while only the final transcript

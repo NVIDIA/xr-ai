@@ -18,6 +18,7 @@ acknowledge a wake phrase before the complete command is available.
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable
 
 from loguru import logger
 from pipecat.frames.frames import (
@@ -34,6 +35,7 @@ from xr_ai_voicegate import VoiceGate, VoiceGateConfig
 
 from .._audio import wav_to_output_frames
 from .._frames import GatedQueryFrame, ParticipantJoinedFrame, ParticipantLeftFrame
+from .._handler import VoiceTurn
 
 
 _STOP_ACK_TEXT = "Okay, I will stop."
@@ -54,6 +56,7 @@ class VoiceGateProcessor(FrameProcessor):
         cfg: VoiceGateConfig,
         tts: TTSService,
         gate: VoiceGate | None = None,
+        transcription_observer: Callable[[VoiceTurn], Awaitable[None]] | None = None,
     ) -> None:
         """Build the gate-backed processor.
 
@@ -68,6 +71,7 @@ class VoiceGateProcessor(FrameProcessor):
         """
         super().__init__()
         self._gate = gate or VoiceGate(cfg, audio_sink=self, tts=tts)
+        self._transcription_observer = transcription_observer
         self._gate.bind(
             on_query              = self._on_gate_query,
             on_stop               = self._on_gate_stop,
@@ -133,7 +137,17 @@ class VoiceGateProcessor(FrameProcessor):
             # utterance (nanoseconds); the gate's query callback stamps it onto
             # the turn so downstream consumers anchor to when the user spoke.
             self._feeding_pts_us = frame.pts // 1_000 if frame.pts is not None else None
+            timestamp_us = self._feeding_pts_us or time.time_ns() // 1_000
             try:
+                if self._transcription_observer is not None:
+                    await self._transcription_observer(
+                        VoiceTurn(
+                            participant_id=frame.user_id,
+                            role="user",
+                            timestamp_us=timestamp_us,
+                            text=frame.text,
+                        )
+                    )
                 await self._gate.feed(frame.user_id, frame.text)
             finally:
                 self._feeding_pts_us = None

@@ -5,6 +5,7 @@
 
 from .coordinator import Coordinator
 from .notices import NoticeBridge
+from .text_output import TextOutputBridge
 from .triggers import TriggerRegistry
 
-__all__ = ["Coordinator", "NoticeBridge", "TriggerRegistry"]
+__all__ = ["Coordinator", "NoticeBridge", "TextOutputBridge", "TriggerRegistry"]

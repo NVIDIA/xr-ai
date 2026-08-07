@@ -92,6 +92,37 @@ routes:
     active: true
     step: steep_timer
     expected_tool: answer
+  - utterance: Watch the room and tell me when something important changes.
+    active: false
+    expected_tool: change_watch__start
+    expected_instruction_terms: [room, important]
+  - utterance: Start recording what I say and summarize it periodically.
+    active: false
+    expected_tool: transcript__start
+  - utterance: Which applications are running?
+    active: false
+    expected_tool: desktop__status
+  - utterance: Stop watching the camera for changes.
+    active: false
+    expected_tool: change_watch__stop
+  - utterance: Is the visual change watcher running?
+    active: false
+    expected_tool: change_watch__status
+  - utterance: Stop recording my speech.
+    active: false
+    expected_tool: transcript__stop
+  - utterance: Is the transcript recorder running?
+    active: false
+    expected_tool: transcript__status
+  - utterance: Start a general video activity log.
+    active: false
+    expected_tool: video_log__start
+  - utterance: Stop the video activity logger.
+    active: false
+    expected_tool: video_log__stop
+  - utterance: Is the video activity logger running?
+    active: false
+    expected_tool: video_log__status
 
 route_state_matrix:
   active_steps: [identify, fill_water, heat_water, start_steeping, steep_timer]
@@ -122,6 +153,15 @@ route_state_matrix:
       expected_tool: answer
     - utterance: What should I do next?
       expected_tool: answer
+    - utterance: Monitor the camera for important changes.
+      expected_tool: change_watch__start
+      expected_instruction_terms: [important, changes]
+    - utterance: Record a transcript of what I say.
+      expected_tool: transcript__start
+    - utterance: Start logging general camera activity.
+      expected_tool: video_log__start
+    - utterance: What is running right now?
+      expected_tool: desktop__status
 
 general_queries:
   tea_knowledge:
@@ -142,6 +182,37 @@ general_queries:
   safety:
     state_updates: false
     lifecycle_tools: false
+
+background_applications:
+  change_watch:
+    important:
+      instruction: a person opening or taking the delivery box
+      previous:
+        - A closed delivery box sits beside the doorway.
+        - The doorway is empty and the box remains closed.
+      current: A person is opening the delivery box beside the doorway.
+      expected_notice: true
+    insignificant:
+      instruction: the blue mug being removed from the desk
+      previous:
+        - A blue mug is on the desk near a notebook.
+      current: The same blue mug and notebook are visible from a slightly closer camera angle.
+      expected_notice: false
+  transcript:
+    utterances:
+      - The prototype review is scheduled for Thursday.
+      - Morgan will prepare the accessibility results.
+      - I will send the revised agenda tomorrow.
+    expected_output: true
+    max_sentences: 2
+  video_log:
+    previous:
+      - An empty office contains a desk, chair, and closed door.
+      - The same empty office remains still.
+      - The desk and closed door remain unchanged.
+      - No people are visible in the office.
+    current: A person enters through the door carrying a cardboard parcel.
+    expected_delta_terms: [person, parcel]
 
 steps:
   identify:

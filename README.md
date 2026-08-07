@@ -293,12 +293,24 @@ for the full option list.
 
 ---
 
-### Tea-making guide (YAML-driven visual workflow)
+### Composable voice desktop and tea-making guide
 
-The tea-making sample demonstrates nested, YAML-driven guidance state machines.
-Each step selects a native NAT trigger, observation agent, read-only voice
-agent, projected state, tools, completion rule, and transition. A small NAT
-router handles top-level voice management, while every state change goes
+The tea-making sample now demonstrates a sample-local voice application host
+plus nested, YAML-driven guidance state machines. Routed NAT functions declare
+whether they answer inline, capture foreground, or start background work. A
+deterministic foreground stack prevents cascaded model routing, while independent
+visual-change, transcript-summary, and rolling video-log applications can run
+beside the root.
+The watcher accepts a spoken monitoring focus and publishes important changes
+as application-labeled UI text without invoking speech synthesis.
+Once explicitly started, the transcript application records finalized speech
+before wake-word command gating, so ordinary recorded speech needs no wake
+phrase while application commands remain gated.
+Transcript summaries and watcher events use application-labeled UI text rather
+than TTS. The video logger persists broad two-second captions and unique deltas
+over a five-caption rolling window.
+Tea steps still select a native NAT trigger, observation agent, projected
+state, tools, completion rule, and transition. Every tea state change goes
 through one typed commit function. Completed steps keep observing but remain
 active until the user explicitly says next, continue, or skip.
 Vision prompts are focus-only guides and return plain captions; YAML evidence

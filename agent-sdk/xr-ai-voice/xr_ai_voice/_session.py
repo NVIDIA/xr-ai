@@ -85,6 +85,7 @@ class VoiceSession:
         handler: VoiceHandler,
         *,
         observer: Callable[[VoiceTurn], Awaitable[None]] | None = None,
+        transcription_observer: Callable[[VoiceTurn], Awaitable[None]] | None = None,
         on_participant_joined: Callable[[str], Awaitable[None] | None] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
         on_user_started_speaking: Callable[[str], Awaitable[None] | None] | None = None,
@@ -93,6 +94,10 @@ class VoiceSession:
         queue_queries: bool = False,
     ) -> None:
         """Run a voice handler with explicit turn and participant callbacks.
+
+        ``transcription_observer`` receives every final user STT turn before
+        wake-word gating. ``observer`` receives only accepted user queries and
+        assistant responses.
 
         ``queue_queries`` runs participant queries sequentially instead of
         cancelling the active query. With ``interrupt_on_supersede``, the next
@@ -122,6 +127,7 @@ class VoiceSession:
             voice_gate_cfg=self.voice_gate,
             text_topic=self.text_topic,
             idle_timeout_secs=self.idle_timeout_secs,
+            transcription_observer=transcription_observer,
         )
         loop = asyncio.get_running_loop()
         cancel_requested = False

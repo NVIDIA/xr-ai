@@ -157,12 +157,15 @@ class VoiceGate:
         return self._chime_enabled
 
     def matches_magic_phrase(self, text: str) -> bool:
-        """Return whether *text* begins with a configured magic phrase."""
+        """Return whether *text* begins with a phrase after bounded fillers."""
         return self._magic_re is not None and strip_magic(self._magic_re, text) is not None
 
     def could_match_magic_phrase(self, text: str) -> bool:
         """Return whether a growing partial transcript can become a match."""
-        candidate = _normalize_phrase(text)
+        normalized = _normalize_phrase(text)
+        if _contains_only_bounded_fillers(normalized):
+            return bool(self._magic_prefixes)
+        candidate = _strip_leading_fillers(normalized)
         return bool(candidate) and any(
             phrase.startswith(candidate) for phrase in self._magic_prefixes
         )
@@ -373,3 +376,19 @@ class VoiceGate:
 
 def _normalize_phrase(text: str) -> str:
     return " ".join(re.findall(r"\w+", text.casefold()))
+
+
+def _strip_leading_fillers(text: str) -> str:
+    words = text.split()
+    removed = 0
+    while words and removed < 2 and re.fullmatch(r"(?:uh+|um+|erm+|hmm+)", words[0]):
+        words.pop(0)
+        removed += 1
+    return " ".join(words)
+
+
+def _contains_only_bounded_fillers(text: str) -> bool:
+    words = text.split()
+    return bool(words) and len(words) <= 2 and all(
+        re.fullmatch(r"(?:uh+|um+|erm+|hmm+)", word) for word in words
+    )

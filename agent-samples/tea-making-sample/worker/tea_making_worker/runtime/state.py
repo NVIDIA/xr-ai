@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..desktop.runtime import DesktopState
 from ..spec import StateField, Step, Workflow
 from .events import emit
 from .render import render_message
@@ -21,6 +22,7 @@ from .render import render_message
 class Session:
     participant_id: str
     state: dict[str, Any]
+    desktop: DesktopState = field(default_factory=DesktopState)
     active: bool = False
     step_id: str | None = None
     revision: int = 0
@@ -51,6 +53,9 @@ class SessionStore:
 
     def active(self) -> tuple[Session, ...]:
         return tuple(session for session in self._sessions.values() if session.active)
+
+    def sessions(self) -> tuple[Session, ...]:
+        return tuple(self._sessions.values())
 
     def step_complete(self, session: Session) -> bool:
         return self._active_step(session).is_complete(session.state)

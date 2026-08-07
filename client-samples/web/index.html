@@ -413,6 +413,45 @@
       </div>
     </div>
 
+    <!-- ── Data channel section ───────────────────────────────────────── -->
+    <section class="section">
+      <h2 class="section-header">Data Channel</h2>
+      <div class="card">
+
+        <!-- Ping -->
+        <div class="btn-row">
+          <button id="ping-btn" class="btn btn-secondary btn-full" disabled>
+            Send Ping
+          </button>
+        </div>
+
+        <!-- Custom message -->
+        <div class="input-send-row">
+          <input
+            id="message-input"
+            class="text-input"
+            type="text"
+            placeholder="Custom message&#x2026;"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          >
+          <button id="send-btn" class="btn btn-primary" disabled>Send</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Received messages ──────────────────────────────────────────── -->
+    <section class="section">
+      <h2 class="section-header">Received</h2>
+      <div class="card">
+        <ul id="messages">
+          <li class="empty-hint">No messages received yet.</li>
+        </ul>
+      </div>
+    </section>
+
     <!-- ── Agent response ─────────────────────────────────────────────────── -->
     <section class="section">
       <h2 class="section-header">Agent</h2>
@@ -555,45 +594,6 @@
           <span id="camera-status" class="status-text status-idle">Not connected</span>
         </div>
 
-      </div>
-    </section>
-
-    <!-- ── Data channel section ───────────────────────────────────────── -->
-    <section class="section">
-      <h2 class="section-header">Data Channel</h2>
-      <div class="card">
-
-        <!-- Ping -->
-        <div class="btn-row">
-          <button id="ping-btn" class="btn btn-secondary btn-full" disabled>
-            Send Ping
-          </button>
-        </div>
-
-        <!-- Custom message -->
-        <div class="input-send-row">
-          <input
-            id="message-input"
-            class="text-input"
-            type="text"
-            placeholder="Custom message&#x2026;"
-            autocomplete="off"
-            autocorrect="off"
-            spellcheck="false"
-          >
-          <button id="send-btn" class="btn btn-primary" disabled>Send</button>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ── Received messages ──────────────────────────────────────────── -->
-    <section class="section">
-      <h2 class="section-header">Received</h2>
-      <div class="card">
-        <ul id="messages">
-          <li class="empty-hint">No messages received yet.</li>
-        </ul>
       </div>
     </section>
 

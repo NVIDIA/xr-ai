@@ -170,6 +170,7 @@ def _materialize_configs(
         {
             "models_config": models,
             "workflow_config": (yaml_dir / "workflow.yaml").resolve(),
+            "applications_config": (yaml_dir / "applications.yaml").resolve(),
             "voice_gate_config": voice_gate,
         },
     )

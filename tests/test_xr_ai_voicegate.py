@@ -156,11 +156,25 @@ def test_phrase_mid_sentence_does_not_match():
     assert strip_magic(pat, "the agent told me to wait") is None
 
 
-def test_phrase_no_filler_allowance_before_phrase():
-    """Case 6: even one filler word before the phrase ('hello agent') is
-    rejected. Strict prefix means literally first token after whitespace."""
+def test_phrase_arbitrary_word_before_phrase_does_not_match():
+    """Case 6: ordinary speech before the phrase remains rejected."""
     pat = build_magic_pattern(["agent"])
     assert strip_magic(pat, "hello agent") is None
+
+
+@pytest.mark.parametrize("text", [
+    "uh hey agent reset the demo",
+    "Um, agent, reset the demo",
+    "uh, um, hey agent reset the demo",
+])
+def test_phrase_tolerates_bounded_leading_disfluencies(text: str):
+    pat = build_magic_pattern(["agent", "hey agent"])
+    assert strip_magic(pat, text) == "reset the demo"
+
+
+def test_phrase_rejects_more_than_two_leading_disfluencies():
+    pat = build_magic_pattern(["agent"])
+    assert strip_magic(pat, "uh um erm agent reset") is None
 
 
 def test_phrase_empty_list_yields_none_pattern_and_passthrough_strip():

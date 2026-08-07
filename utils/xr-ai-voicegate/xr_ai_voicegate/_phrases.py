@@ -20,14 +20,14 @@ STOP_RE: re.Pattern = re.compile(
 
 
 def build_magic_pattern(phrases: Sequence[str]) -> re.Pattern | None:
-    """Compile one strict-prefix regex covering every configured phrase.
+    """Compile one bounded-prefix regex covering every configured phrase.
 
-    Longest-first ordering picks the most specific match when one phrase
-    is a prefix of another (e.g. "agent" vs "agent buddy"). Inside each
-    phrase, the literal space between words is treated as "whitespace OR
-    punctuation" so STT transcripts like "Hey, agent." still match the
-    configured "hey agent". Returns ``None`` when ``phrases`` is empty
-    so the gate degrades to always-on.
+    Up to two common speech fillers may precede the phrase. Longest-first
+    ordering picks the most specific match when one phrase is a prefix of
+    another (e.g. "agent" vs "agent buddy"). Inside each phrase, the literal
+    space between words is treated as "whitespace OR punctuation" so STT
+    transcripts like "Hey, agent." still match the configured "hey agent".
+    Returns ``None`` when ``phrases`` is empty so the gate degrades to always-on.
     """
     cleaned = tuple(p.strip().lower() for p in phrases if p and p.strip())
     if not cleaned:
@@ -37,13 +37,14 @@ def build_magic_pattern(phrases: Sequence[str]) -> re.Pattern | None:
         sep.join(re.escape(w) for w in p.split())
         for p in sorted(cleaned, key=len, reverse=True)
     )
-    return re.compile(rf'^\s*(?:{alts})\b[\s,.:;!?-]*', re.IGNORECASE)
+    fillers = r'(?:(?:uh+|um+|erm+|hmm+)[\s,.:;!?-]+){0,2}'
+    return re.compile(rf'^\s*{fillers}(?:{alts})\b[\s,.:;!?-]*', re.IGNORECASE)
 
 
 def strip_magic(pattern: re.Pattern | None, text: str) -> str | None:
     """Return the transcript with the matched phrase stripped, or ``None``
-    when no phrase is the strict prefix. With ``pattern is None`` the gate
-    is disabled and ``text`` is returned unchanged."""
+    when no phrase follows the bounded prefix. With ``pattern is None`` the
+    gate is disabled and ``text`` is returned unchanged."""
     if pattern is None:
         return text
     m = pattern.match(text)

@@ -133,10 +133,12 @@ class RegistryTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_foreground_accepts_a_direct_answer_without_a_route_tool(self) -> None:
         workflow = load_workflow(_WORKFLOW)
-        session = SessionStore(workflow).get("tester")
+        store = SessionStore(workflow)
+        session = store.get("tester")
+        store.start(session)
         agent = _RouteAgent("direct answer")
         registry = AgentRegistry(workflow)
-        registry._root = agent
+        registry._tea["identify"] = agent
 
         with invocation_scope(session, "trace"):
             result = await registry.route(session, "What tea is this?", "trace")
@@ -148,10 +150,12 @@ class RegistryTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_foreground_retries_invalid_tool_arguments_once(self) -> None:
         workflow = load_workflow(_WORKFLOW)
-        session = SessionStore(workflow).get("tester")
+        store = SessionStore(workflow)
+        session = store.get("tester")
+        store.start(session)
         agent = _InvalidCommit()
         registry = AgentRegistry(workflow)
-        registry._root = agent
+        registry._tea["identify"] = agent
 
         with invocation_scope(session, "trace"):
             result = await registry.route(session, "start", "trace")
@@ -160,32 +164,29 @@ class RegistryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(agent.requests), 2)
         self.assertIn("state: Extra inputs are not permitted", agent.requests[1])
 
-    async def test_dispatcher_selects_only_the_foreground_agent(self) -> None:
+    async def test_tea_dispatcher_selects_the_current_step_variant(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         store = SessionStore(workflow)
-        for step_id in (None, *workflow.steps):
-            with self.subTest(step=step_id or "idle"):
-                session = store.get(f"tester-{step_id or 'idle'}")
-                if step_id is not None:
-                    store.start(session)
-                    session.step_id = step_id
-                root = _RouteAgent("root answer")
+        for step_id in workflow.steps:
+            with self.subTest(step=step_id):
+                session = store.get(f"tester-{step_id}")
+                store.start(session)
+                session.step_id = step_id
                 tea = _RouteAgent("tea answer")
                 registry = AgentRegistry(workflow)
-                registry._root = root
-                if step_id is not None:
-                    registry._tea[step_id] = tea
+                registry._tea[step_id] = tea
 
                 with invocation_scope(session, "trace"):
                     result = await registry.route(session, "route me exactly", "trace")
 
-                selected, unused = (tea, root) if step_id is not None else (root, tea)
-                self.assertEqual(result, "tea answer" if step_id is not None else "root answer")
-                expected = {"request": "route me exactly"}
-                if step_id is not None:
-                    expected["state"] = workflow.project(workflow.step(step_id), session.state)
-                self.assertEqual(json.loads(selected.requests[0]), expected)
-                self.assertEqual(unused.requests, [])
+                self.assertEqual(result, "tea answer")
+                self.assertEqual(
+                    json.loads(tea.requests[0]),
+                    {
+                        "request": "route me exactly",
+                        "state": workflow.project(workflow.step(step_id), session.state),
+                    },
+                )
 
     async def test_quick_answer_preserves_foreground_and_state(self) -> None:
         workflow = load_workflow(_WORKFLOW)

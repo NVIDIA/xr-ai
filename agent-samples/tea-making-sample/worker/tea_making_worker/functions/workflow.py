@@ -10,6 +10,7 @@ from typing import Any, Literal
 from nat.plugin_api import Builder, FunctionBaseConfig, FunctionInfo, register_function
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..desktop.runtime import DesktopRuntime
 from ..runtime.scope import current_invocation
 from ..runtime.state import SessionStore
 
@@ -51,11 +52,13 @@ class WorkflowFunctionConfig(FunctionBaseConfig, name="tea_guidance_workflow_fun
 
     operation: Operation
     store: Any = Field(exclude=True, repr=False)
+    desktop: Any = Field(exclude=True, repr=False)
 
 
 @register_function(config_type=WorkflowFunctionConfig)
 async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
     store: SessionStore = config.store
+    desktop: DesktopRuntime = config.desktop
 
     async def commit(request: CommitRequest) -> str:
         call = current_invocation()
@@ -64,17 +67,24 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
     async def start(request: GuideRequest) -> str:
         call = current_invocation()
         call.route_operation = "start"
-        return store.start(call.session)
+        result = store.start(call.session)
+        desktop.capture(call.session, "tea")
+        return result
 
     async def advance(request: AdvanceRequest) -> str:
         call = current_invocation()
         call.route_operation = "advance"
-        return store.advance(call.session, skip=request.skip)
+        result = store.advance(call.session, skip=request.skip)
+        if not call.session.active:
+            desktop.release(call.session, "tea")
+        return result
 
     async def reset(request: GuideRequest) -> str:
         call = current_invocation()
         call.route_operation = "reset"
-        return store.reset(call.session)
+        result = store.reset(call.session)
+        desktop.release(call.session, "tea")
+        return result
 
     async def restart(request: GuideRequest) -> str:
         call = current_invocation()
@@ -111,11 +121,12 @@ async def add_workflow_functions(
     builder: Builder,
     *,
     store: SessionStore,
+    desktop: DesktopRuntime,
 ) -> None:
     for operation in ("commit", "start", "advance", "reset", "restart", "status"):
         await builder.add_function(
             f"workflow__{operation}",
-            WorkflowFunctionConfig(operation=operation, store=store),
+            WorkflowFunctionConfig(operation=operation, store=store, desktop=desktop),
         )
 
 

@@ -4,6 +4,7 @@
 # The sample launcher replaces these selectors from its required command-line modes.
 models_config: models.omni.json
 workflow_config: workflow.yaml
+applications_config: applications.yaml
 voice_gate_config: voice_gate.yaml
 rag_endpoint: tcp://127.0.0.1:8340
 frame_max_age_s: 3

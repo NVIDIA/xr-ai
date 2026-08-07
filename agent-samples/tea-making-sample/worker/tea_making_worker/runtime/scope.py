@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 from typing import Iterator
 
 from .state import Session
@@ -18,6 +19,7 @@ class Invocation:
     session: Session
     trace_id: str
     route_operation: str | None = None
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 _CURRENT: ContextVar[Invocation | None] = ContextVar("tea_guidance_invocation", default=None)

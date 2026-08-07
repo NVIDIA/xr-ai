@@ -1,9 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Strict-prefix wake phrases. The matched phrase is removed before the workflow
-# receives the command, so "Agent, help me make tea" becomes
-# "help me make tea".
+# Prefix wake phrases. Up to two common speech fillers may precede a phrase;
+# the matched prefix is removed before the workflow receives the command.
 magic_phrases:
   - "agent"
   - "hey agent"

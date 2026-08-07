@@ -11,8 +11,11 @@ import uuid
 from collections.abc import Awaitable, Callable
 
 from xr_ai_hub import FrameUnavailable
+from xr_ai_voice import VoiceTurn
 
 from ..agents import AgentRegistry
+from ..applications.background import BackgroundRegistry
+from ..desktop.registry import Desktop
 from ..runtime.events import emit
 from ..runtime.scope import invocation_scope
 from ..runtime.state import Session, SessionStore
@@ -27,11 +30,15 @@ class Coordinator:
         *,
         store: SessionStore,
         agents: AgentRegistry,
+        desktop: Desktop,
+        backgrounds: BackgroundRegistry,
         triggers: TriggerRegistry,
         notice: Notice,
     ) -> None:
         self.store = store
         self.agents = agents
+        self.desktop = desktop
+        self.backgrounds = backgrounds
         self.triggers = triggers
         self.notice = notice
         self._stopped = asyncio.Event()
@@ -42,7 +49,7 @@ class Coordinator:
         trace_id = _trace_id()
         async with session.lock:
             with invocation_scope(session, trace_id):
-                result = await self.agents.route(session, text, trace_id)
+                result = await self.desktop.route(session, text, trace_id)
         emit(
             "voice.complete",
             participant_id=participant_id,
@@ -51,6 +58,19 @@ class Coordinator:
         )
         return result
 
+    async def handle_transcription(self, turn: VoiceTurn) -> None:
+        """Forward final STT output before wake-word command gating."""
+        trace_id = _trace_id()
+        session = self.store.get(turn.participant_id)
+        await self.backgrounds.on_transcription(session, turn.text, trace_id)
+        emit(
+            "transcription.observed",
+            participant_id=turn.participant_id,
+            trace_id=trace_id,
+            timestamp_us=turn.timestamp_us,
+            characters=len(turn.text),
+        )
+
     async def participant_joined(self, participant_id: str) -> None:
         if participant_id in self._connected:
             emit("participant.replayed", participant_id=participant_id)
@@ -58,6 +78,8 @@ class Coordinator:
         self._connected.add(participant_id)
         session = self.store.get(participant_id)
         async with session.lock:
+            await self.backgrounds.release(session)
+            self.desktop.runtime.reset(session)
             self.store.reset(session)
         emit("participant.joined", participant_id=participant_id)
 
@@ -65,12 +87,18 @@ class Coordinator:
         self._connected.discard(participant_id)
         session = self.store.get(participant_id)
         async with session.lock:
+            await self.backgrounds.release(session)
+            self.desktop.runtime.reset(session)
             self.store.release(participant_id)
         emit("participant.left", participant_id=participant_id)
 
     async def monitor(self) -> None:
         while not self._stopped.is_set():
-            await asyncio.gather(*(self._tick(session) for session in self.store.active()))
+            sessions = self.store.sessions()
+            await asyncio.gather(
+                *(self._tick(session) for session in sessions if session.active),
+                *(self.backgrounds.tick(session) for session in sessions),
+            )
             try:
                 await asyncio.wait_for(self._stopped.wait(), timeout=0.25)
             except TimeoutError:

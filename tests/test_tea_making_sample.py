@@ -22,17 +22,18 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from tea_making_worker.agents.prompts import (  # noqa: E402
     HUMAN,
-    ROOT,
     STEP,
     TEA,
     VOICE,
 )
 from tea_making_worker.agents.registry import (  # noqa: E402
-    _ROOT_TOOLS,
     _TEA_MANAGEMENT_TOOLS,
     _state_contract,
 )
+from tea_making_worker.applications.compose import root_function_specs  # noqa: E402
 from tea_making_worker.config import load_config  # noqa: E402
+from tea_making_worker.desktop.spec import load_desktop  # noqa: E402
+from tea_making_worker.desktop.types import FunctionEffect  # noqa: E402
 from tea_making_worker.functions.vision import CurrentViewRequest  # noqa: E402
 from tea_making_worker.functions.workflow import CommitRequest  # noqa: E402
 from tea_making_worker.runtime.render import render_message  # noqa: E402
@@ -51,6 +52,12 @@ def _workflow():
 
 def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     workflow = _workflow()
+    desktop = load_desktop(_SAMPLE / "yaml" / "applications.yaml")
+    root_functions = root_function_specs(desktop)
+    root_prompt = (
+        f"{desktop.root_prompt}\nRoutes: "
+        f"{'; '.join(function.catalog_entry() for function in root_functions)}\n{HUMAN}"
+    )
     raw = yaml.safe_load((_SAMPLE / "yaml" / "workflow.yaml").read_text(encoding="utf-8"))
     assert list(workflow.steps) == [
         "identify",
@@ -59,7 +66,7 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
         "start_steeping",
         "steep_timer",
     ]
-    assert len(f"{ROOT}\n{HUMAN}") <= 450
+    assert len(root_prompt) <= 950
     assert len(f"{TEA}\n{VOICE}\n{HUMAN}") <= 550
     assert len(f"{STEP}\n{HUMAN}") <= 350
     assert "natural spoken language" in HUMAN
@@ -68,10 +75,31 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert "already_complete is status, not state" in STEP
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
-    assert "Explicit request to begin tea guidance: workflow__start" in ROOT
     assert "Next/continue/advance" in TEA
     assert "Questions using these words are not commands" in TEA
-    assert tuple(map(str, _ROOT_TOOLS)) == ("workflow__start", "current_view", "rag_lookup")
+    assert {function.name for function in root_functions} == {
+        "current_view",
+        "rag_lookup",
+        "workflow__start",
+        "desktop__status",
+        "change_watch__start",
+        "change_watch__stop",
+        "change_watch__status",
+        "transcript__start",
+        "transcript__stop",
+        "transcript__status",
+        "video_log__start",
+        "video_log__stop",
+        "video_log__status",
+    }
+    assert next(function for function in root_functions if function.name == "workflow__start").effect == (
+        FunctionEffect.FOREGROUND
+    )
+    assert all(
+        function.effect == FunctionEffect.BACKGROUND
+        for function in root_functions
+        if function.name.startswith(("change_watch__", "transcript__", "video_log__"))
+    )
     assert tuple(map(str, _TEA_MANAGEMENT_TOOLS)) == (
         "workflow__advance",
         "workflow__reset",
@@ -275,6 +303,9 @@ def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
                         expected_models["models"]["tts"]["adapter"] = {"preset": tts_preset}
                         expected_models["models"]["tts"]["endpoint"]["base_url"] = tts_url
                         assert models == expected_models
+                        assert worker.applications_config == (
+                            _SAMPLE / "yaml" / "applications.yaml"
+                        ).resolve()
                         assert worker.voice_gate_config == (_SAMPLE / "yaml" / voice_file).resolve()
                         gate = yaml.safe_load(worker.voice_gate_config.read_text(encoding="utf-8"))
                         if voice_mode == "wake-word":
@@ -304,10 +335,15 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     workflow = _workflow()
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
     assert set(cases["steps"]) == set(workflow.steps)
-    lifecycle_actions = {
-        f"workflow__{name}" for name in ("start", "advance", "reset", "restart", "status")
+    background_actions = {
+        f"{app}__{operation}"
+        for app in ("change_watch", "transcript", "video_log")
+        for operation in ("start", "stop", "status")
     }
-    assert {case["expected_tool"] for case in cases["routes"]} == {"answer"} | lifecycle_actions
+    routed_actions = {
+        f"workflow__{name}" for name in ("start", "advance", "reset", "restart", "status")
+    } | {"desktop__status"} | background_actions
+    assert {case["expected_tool"] for case in cases["routes"]} == {"answer"} | routed_actions
     matrix = cases["route_state_matrix"]
     assert set(matrix["active_steps"]) == set(workflow.steps)
     active_actions = {
@@ -316,6 +352,10 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     assert {case["expected_tool"] for case in matrix["active_cases"]} == {"answer"} | active_actions
     assert {case["expected_tool"] for case in matrix["idle_cases"]} == {
         "workflow__start",
+        "change_watch__start",
+        "transcript__start",
+        "video_log__start",
+        "desktop__status",
         "answer",
     }
     assert {
@@ -333,6 +373,13 @@ def test_eval_cases_cover_every_route_and_step() -> None:
         "state_updates": False,
         "lifecycle_tools": False,
     }
+    background = cases["background_applications"]
+    assert background["change_watch"]["important"]["expected_notice"] is True
+    assert background["change_watch"]["insignificant"]["expected_notice"] is False
+    assert all(case["instruction"] for case in background["change_watch"].values())
+    assert background["transcript"]["expected_output"] is True
+    assert background["transcript"]["max_sentences"] == 2
+    assert background["video_log"]["expected_delta_terms"] == ["person", "parcel"]
     assert cases["rag_fallback"]["expected_tools"] == ["rag_lookup", "workflow__commit"]
     assert cases["rag_fallback"]["expected_top_k"] == 2
     assert cases["rag_fallback"]["expected_tea_ready"] is True
