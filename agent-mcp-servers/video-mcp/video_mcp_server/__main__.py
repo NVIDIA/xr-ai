@@ -182,9 +182,12 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
             recording_enabled,
             config.get("hub_pub", _DEFAULT_HUB_PUB),
         )
+        serve_task = asyncio.create_task(server.serve())
         if ready_file:
+            while not server.started:
+                await asyncio.sleep(0.05)
             ready_file.touch()
-        await server.serve()
+        await serve_task
     finally:
         endpoint.stop()
         endpoint_task.cancel()
