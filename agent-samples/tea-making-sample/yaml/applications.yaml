@@ -20,6 +20,7 @@ applications:
     mode: background
     route: watch requested visual changes
     settings:
+      output_dir: ../artifacts/change-watch
       interval_s: 2
       history_size: 2
       default_instruction: important changes involving people, objects, actions, or possible hazards

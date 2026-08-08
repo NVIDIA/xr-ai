@@ -87,12 +87,14 @@ class _VideoDeltaAgent:
 
 class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
     async def test_change_watch_uses_a_baseline_then_notifies_an_important_change(self) -> None:
+        directory = self.enterContext(tempfile.TemporaryDirectory())
         app_spec = ApplicationSpec(
             "change_watch",
             "Visual change watcher",
             "background",
             "watch changes",
             {
+                "output_dir": Path(directory),
                 "interval_s": 1,
                 "history_size": 2,
                 "default_instruction": "important changes",
@@ -122,11 +124,21 @@ class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
             [("Visual change watcher", "A person entered the room.")],
         )
         self.assertIn("Focus: people entering the room", view.requests[0]["question"])
+        state = app._states[session.participant_id]
         self.assertEqual(
-            list(app._states[session.participant_id].captions),
+            list(state.captions),
             ["An empty room.", "A person entered the room."],
         )
         self.assertEqual(runtime.current(session), "root")
+        await app.stop(session)
+        records = [json.loads(line) for line in state.path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(
+            [record["type"] for record in records],
+            ["session", "baseline", "observation", "session_end"],
+        )
+        self.assertEqual(records[0]["watch_for"], "people entering the room")
+        self.assertTrue(records[2]["important"])
+        self.assertEqual(records[2]["summary"], "A person entered the room.")
 
     async def test_text_output_bypasses_query_and_uses_application_label(self) -> None:
         class _Transport:

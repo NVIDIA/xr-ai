@@ -9,13 +9,24 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-07 — Spoken output excludes formatting and internal syntax
+
+The tea sample's compact shared output contract now requires plain spoken prose
+and explicitly excludes Markdown, lists, formatting marks, code syntax, and
+internal names. Capability answers had exposed bold asterisks, backticks, and
+function identifiers to TTS despite the previous generic natural-language
+instruction. The rule remains workflow-independent and within the existing
+small-model prompt budget, with a formatting-focused eval guard.
+
 ### 2026-08-07 — Tea demo artifacts have a sample-local live viewer
 
-The tea-making launcher now starts a separate stdlib HTTP process that tails
-new transcript and video-log JSON Lines records into one bounded, chronological
-browser feed. It baselines existing files at startup so a recorded demo begins
-cleanly, and remains read-only and outside agent routing, model, hub, and TTS
-paths. Its configurable port and artifact sources stay within the sample.
+The tea-making launcher now starts a separate stdlib HTTP process with four
+simultaneous panes for transcript, video-log activity, visual change-watcher
+activity, and agent activity. Transcript, video-log, and change-watch each own a
+separate per-participant JSON Lines session file through the same sample-local
+persistence helpers; only agent diagnostics come from configured structured
+worker-log events. Existing artifacts are baselined so a recorded demo begins
+cleanly, and the viewer remains outside agent, model, hub, and TTS paths.
 
 ### 2026-08-07 — Background summaries and visual logs are distinct outputs
 

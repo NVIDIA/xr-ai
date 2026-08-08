@@ -72,9 +72,10 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert len(root_prompt) <= 950
     assert len(f"{TEA}\n{VOICE}\n{HUMAN}") <= 550
     assert len(f"{STEP}\n{HUMAN}") <= 350
-    assert "natural spoken language" in HUMAN
+    assert "Natural spoken prose only" in HUMAN
     assert "temperature" not in HUMAN.lower()
-    assert "Rewrite tool/state" in HUMAN
+    assert "No Markdown, lists, code syntax, formatting marks" in HUMAN
+    assert "internal names" in HUMAN
     assert "already_complete is status, not state" in STEP
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
@@ -360,7 +361,18 @@ def test_activity_viewer_tails_only_complete_new_jsonl_records() -> None:
         path = source_dir / "speaker.jsonl"
         path.write_text('{"type":"utterance","text":"old"}\n', encoding="utf-8")
         store = EventStore()
-        watcher = JsonlWatcher((Source("transcript", "Transcript recorder", source_dir),), store)
+        watcher = JsonlWatcher(
+            (
+                Source(
+                    id="transcript",
+                    title="Transcript recorder",
+                    location=source_dir,
+                    pattern="*.jsonl",
+                    format="jsonl",
+                ),
+            ),
+            store,
+        )
         watcher.baseline()
 
         with path.open("a", encoding="utf-8") as stream:
@@ -379,16 +391,103 @@ def test_activity_viewer_tails_only_complete_new_jsonl_records() -> None:
         assert [event["record"]["text"] for event in events] == ["new", "partial"]
 
 
+def test_activity_viewer_extracts_structured_agent_events_from_worker_log() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        worker_log = Path(directory) / "worker.log"
+        store = EventStore()
+        source = Source(
+            id="agent",
+            title="Agent activity",
+            location=worker_log,
+            pattern=None,
+            format="event_log",
+            include_prefixes=("agent.", "step."),
+            exclude_events=frozenset({"step.commit_noop"}),
+        )
+        watcher = JsonlWatcher((source,), store)
+        watcher.baseline()
+        worker_log.write_text(
+            "2026-08-07 18:22:09.100 DEBUG module ordinary log line\n"
+            '2026-08-07 18:22:09.200 INFO module event {"event":"agent.observe.request","step":"identify"}\n'
+            '2026-08-07 18:22:09.300 INFO module event {"event":"step.commit_noop"}\n',
+            encoding="utf-8",
+        )
+
+        assert watcher.scan() == 1
+        record = store.after(0)[0]["record"]
+        assert record == {
+            "event": "agent.observe.request",
+            "step": "identify",
+            "timestamp": "2026-08-07T18:22:09.200",
+        }
+
+
+def test_activity_viewer_sources_have_independent_cursors_for_one_log() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        worker_log = Path(directory) / "worker.log"
+        store = EventStore()
+        sources = (
+            Source(
+                id="agent",
+                title="Agent activity",
+                location=worker_log,
+                pattern=None,
+                format="event_log",
+                include_prefixes=("agent.",),
+            ),
+            Source(
+                id="change_watch",
+                title="Visual change watcher",
+                location=worker_log,
+                pattern=None,
+                format="event_log",
+                include_prefixes=("change_watch.",),
+            ),
+        )
+        watcher = JsonlWatcher(sources, store)
+        watcher.baseline()
+        worker_log.write_text(
+            '2026-08-07 18:22:09.100 INFO module event {"event":"agent.observe.request"}\n'
+            '2026-08-07 18:22:09.200 INFO module event {"event":"change_watch.caption","caption":"A mug moved."}\n',
+            encoding="utf-8",
+        )
+
+        assert watcher.scan() == 2
+        assert [event["source_id"] for event in store.after(0)] == ["agent", "change_watch"]
+
+
 def test_activity_viewer_config_and_static_page_are_sample_local() -> None:
-    config = load_viewer_config(_SAMPLE / "yaml" / "activity_viewer.json")
+    run_log_dir = Path("/tmp/tea-making-viewer-test-logs")
+    config = load_viewer_config(
+        _SAMPLE / "yaml" / "activity_viewer.json",
+        run_log_dir=run_log_dir,
+    )
     assert config.host == "0.0.0.0"
     assert config.port == 8092
-    assert {source.id for source in config.sources} == {"transcript", "video_log"}
-    assert all(_SAMPLE in source.directory.parents for source in config.sources)
+    assert {source.id for source in config.sources} == {
+        "transcript",
+        "video_log",
+        "agent",
+        "change_watch",
+    }
+    assert all(
+        _SAMPLE in source.location.parents
+        for source in config.sources
+        if source.id != "agent"
+    )
+    log_sources = [source for source in config.sources if source.format == "event_log"]
+    assert {source.id for source in log_sources} == {"agent"}
+    assert all(source.location == run_log_dir / "worker.log" for source in log_sources)
+    change_watch = next(source for source in config.sources if source.id == "change_watch")
+    assert change_watch.format == "jsonl"
+    assert change_watch.location == (_SAMPLE / "artifacts" / "change-watch").resolve()
     page = (_SAMPLE / "tea_making_viewer" / "static" / "index.html").read_text(encoding="utf-8")
     assert "Tea Demo Activity" in page
     assert "Transcript" in page
     assert "Video activity" in page
+    assert "Agent activity" in page
+    assert "Visual change watcher" in page
+    assert page.count('class="pane ') == 4
 
 
 def test_eval_cases_cover_every_route_and_step() -> None:
@@ -485,3 +584,6 @@ def test_eval_cases_cover_every_route_and_step() -> None:
     assert cases["steeping_negative_guard"]["expected_accepted"] is False
     assert cases["timer_running_guard"]["expected_steeping_complete"] is False
     assert cases["voice_tool_guards"]["timer_question"]["expected_tool"] == "clock__timer"
+    capability = cases["capability_answer_guard"]
+    assert capability["expected_style"] == "short plain spoken sentences"
+    assert {"*", "`", "__", "workflow"} <= set(capability["forbidden_fragments"])

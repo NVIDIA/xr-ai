@@ -43,9 +43,10 @@ def run() -> None:
     assert len(root_prompt) <= 950
     assert len(f"{TEA}\n{VOICE}\n{HUMAN}") <= 550
     assert len(f"{STEP}\n{HUMAN}") <= 350
-    assert "natural spoken language" in HUMAN
+    assert "Natural spoken prose only" in HUMAN
     assert "temperature" not in HUMAN.lower()
-    assert "Rewrite tool/state" in HUMAN
+    assert "No Markdown, lists, code syntax, formatting marks" in HUMAN
+    assert "internal names" in HUMAN
     assert "already_complete is status, not state" in STEP
     assert "Completion requires" not in STEP
     assert "message only with a real non-completing state change" in STEP
@@ -86,6 +87,9 @@ def run() -> None:
     assert all(fragment in style["compact_input"] for fragment in style["forbidden_fragments"])
     assert all(fragment not in style["expected_output"] for fragment in style["forbidden_fragments"])
     assert not {"tea", "temperature"} & set(style["compact_input"].lower().split())
+    capability = cases["capability_answer_guard"]
+    assert capability["expected_style"] == "short plain spoken sentences"
+    assert {"*", "`", "__", "workflow"} <= set(capability["forbidden_fragments"])
     background_actions = {
         f"{app}__{operation}"
         for app in ("change_watch", "transcript", "video_log")

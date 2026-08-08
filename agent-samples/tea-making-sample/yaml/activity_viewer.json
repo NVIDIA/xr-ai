@@ -12,6 +12,29 @@
       "id": "video_log",
       "title": "Video activity logger",
       "directory": "../artifacts/video-logs"
+    },
+    {
+      "id": "agent",
+      "title": "Agent activity",
+      "path": "worker.log",
+      "format": "event_log",
+      "include_prefixes": [
+        "agent.",
+        "desktop.",
+        "rag.",
+        "step.",
+        "trigger.",
+        "voice.",
+        "workflow."
+      ],
+      "exclude_events": [
+        "step.commit_noop"
+      ]
+    },
+    {
+      "id": "change_watch",
+      "title": "Visual change watcher",
+      "directory": "../artifacts/change-watch"
     }
   ]
 }

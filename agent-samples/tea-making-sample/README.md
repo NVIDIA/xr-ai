@@ -86,7 +86,9 @@ chooses this sample's concrete applications:
   and calls one commit function. Its start tool stores the user's requested
   monitoring focus per participant. Important changes appear only as labeled
   UI text, such as `[Visual change watcher] A person entered the room.`; they
-  never enter the TTS pipeline.
+  never enter the TTS pipeline. Session, baseline, caption, importance, and
+  summary records are persisted under `artifacts/change-watch/` using the same
+  JSON Lines lifecycle as the other background recorders.
 - `transcript` is background. Once started, every finalized speech transcript
   is appended to a per-participant JSON Lines file under
   `artifacts/transcripts/` before wake-word gating. The wake phrase still
@@ -129,9 +131,9 @@ User-facing message templates support generic presentation filters:
 `{{ value | duration }}` converts seconds to natural minutes and seconds.
 Internal state remains numeric for comparisons and tools. The shared voice
 contract gives both voice answers and background agent notices one
-workflow-independent final-output rule: rewrite abbreviations, symbols, unit
-notation, machine formats, and compact tool or state text as complete spoken
-words and familiar quantities without changing meaning.
+workflow-independent final-output rule: use plain spoken prose without
+Markdown, lists, formatting marks, code syntax, or internal names, and spell
+out shorthand and units.
 
 The worker contains no tea-specific branch. The five supplied steps use the
 same engine even though four are triggered by live vision and one by the native
@@ -272,14 +274,20 @@ The launcher also starts a sample-local activity page on a separate port:
 http://<host>:8092
 ```
 
-It follows new JSON Lines records written during the current run by the
-transcript recorder and video activity logger. The combined chronological feed
-can be filtered by application, follows new entries by default, and shows full
-VLM captions behind each video delta. Earlier artifact files are baselined at
-viewer startup and do not fill a new recording session with stale events.
-Configure the bind address, port, polling interval, titles, and sample-local
-artifact directories in `yaml/activity_viewer.json`. The page is read-only and
-does not enter the agent, router, or TTS paths.
+It keeps four panes visible at once for screen recording: finalized transcript
+and summary records, video deltas with expandable full VLM captions, visual
+change-watcher captions and importance decisions, and live agent activity. The
+three recorder panes tail their own JSON Lines artifacts. Only agent activity is
+extracted from structured events in the current run's `worker.log`; it includes
+routing, visual analysis, retrieval, state commits, retries, and responses. Each
+pane follows its own new entries; no extra model calls are made. Earlier artifact
+files are baselined at viewer startup and do not fill a new recording session
+with stale events.
+
+Configure the bind address, port, polling interval, titles, sources, and agent
+event filters in `yaml/activity_viewer.json`. The page is read-only and does
+not enter the agent, router, or TTS paths. On narrow screens the panes stack;
+use a wide browser window to keep all four visible in a demo recording.
 
 Because the default bind address is `0.0.0.0`, anyone who can reach port 8092
 can see camera-derived text and recorded speech while the sample is running.
@@ -318,7 +326,9 @@ The most useful event names are:
   `video_log.stopped`: broad captions, rolling deltas, and persistent-log
   lifecycle.
 - `activity-viewer`: a separate sample-local process that tails new transcript
-  and video-log artifacts and serves them at port 8092 without changing them.
+  change-watch, and video-log artifacts plus structured events from the current
+  worker log. It serves four simultaneous panes at port 8092 without changing
+  the sources.
 - `step.ready`, `step.enter`, `workflow.start_noop`, `workflow.reset`,
   `workflow.complete`, and `notice.queued`: readiness, protected repeated
   starts, lifecycle resets, explicit transitions, and speech.

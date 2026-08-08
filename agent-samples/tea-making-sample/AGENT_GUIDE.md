@@ -45,9 +45,10 @@ changes.
     another LLM. Root tools are unavailable while tea owns foreground.
 13. Model-visible vision requests contain only a question. `current_view`
     injects participant identity from invocation scope.
-14. User-facing values are natural speech. Keep state numeric; use the shared
-    voice rule and message render filters instead of step-specific display
-    fields or preformatted state.
+14. User-facing values are natural speech. The shared rule forbids Markdown,
+    lists, formatting marks, code syntax, and internal names while spelling out
+    shorthand and units. Keep state numeric and use message render filters
+    instead of step-specific display fields or preformatted state.
 15. Treat prompt failures as prompt-tuning work first. Confirm before changing
     evidence thresholds, state semantics, transitions, or other runtime policy.
 16. Automatic heating observation records only `heating_started`; it never
@@ -138,8 +139,13 @@ changes.
     exactly once, and persists both caption and delta. It has no spoken output.
 41. The sample-local activity viewer is a read-only process, not an agent
     function. It baselines existing JSON Lines files at startup, tails only new
-    complete records, and serves one chronological transcript and video-log
-    feed without entering foreground routing, model calls, or TTS.
+    complete records, and extracts only configured structured events from the
+    current worker log. Its simultaneous transcript, video-log, change-watcher,
+    and agent panes do not enter foreground routing, model calls, or TTS.
+42. Transcript, video-log, and change-watch applications each own a separate
+    per-participant JSON Lines session file and use the shared `jsonl.py`
+    lifecycle helpers. The activity viewer treats all three as directory
+    sources; only agent diagnostics are decoded from `worker.log`.
 
 ## Desktop, foreground, and observation machines
 
@@ -150,11 +156,12 @@ foreground stack: root -> app -> nested app
 background set:   {change_watch, transcript, video_log, ...}
 ```
 
-The independent `tea_making_activity_viewer` process tails the transcript and
-video-log artifact directories declared in `yaml/activity_viewer.json`. It is
-started before the worker so a demo recording includes the first new record;
-existing files are offsets, not page history. The in-memory browser feed is
-bounded and the persisted JSON Lines files remain the source of truth.
+The independent `tea_making_activity_viewer` process tails the change-watch,
+transcript, and video-log artifact directories plus the current run's worker log
+as declared in `yaml/activity_viewer.json`. It is started before the worker so a
+demo recording includes the first structured agent event; existing artifact
+files are offsets, not page history. Source formats and event prefix filters are
+configuration, and the bounded browser feed never becomes a persistence layer.
 
 An inline function returns to the same foreground. A foreground launch pushes
 an application, and exit pops back to the caller. Starting or stopping a
@@ -266,11 +273,10 @@ Budgets are guardrails for the small local models:
 | Step observation policy | 420 characters |
 | Step voice policy | 300 characters |
 
-The shared prompts own a generic final-output rule across steps: rewrite
-abbreviations, symbols, unit notation, machine formats, and compact tool or
-state text as complete spoken words and familiar quantities while preserving
-meaning. Do not put domain-specific examples or repeat this rule in step
-prompts.
+The shared prompts own a generic final-output rule across steps: plain spoken
+prose only, without Markdown, lists, formatting marks, code syntax, or internal
+names, with shorthand and units spelled out. Do not put domain-specific examples
+or repeat this rule in step prompts.
 
 The eval check enforces the budgets. Requests use compact JSON with no
 indentation. The root receives only `request`; tool ownership and routing are a
@@ -345,11 +351,12 @@ these fields so test feedback remains searchable across iterations.
 Desktop events name `application`, foreground depth, background membership,
 and revision. Change-watch events retain the exact caption and importance
 summary. `application.text_output` records the label and UI-only message;
-watcher output never creates a notice or TTS request. Transcript events log
-file paths only at lifecycle boundaries and record input size rather than
-duplicating user text in the standard log; the JSON Lines file is the
-transcript source of truth. `transcription.observed` proves pre-gate delivery
-without copying the transcript into the standard event log.
+watcher output never creates a notice or TTS request. Its JSON Lines artifact
+persists the session focus, baseline, every evaluated caption, importance, and
+summary. Transcript events log file paths only at lifecycle boundaries and
+record input size rather than duplicating user text in the standard log; its
+JSON Lines file is the transcript source of truth. `transcription.observed`
+proves pre-gate delivery without copying the transcript into the standard log.
 Video-log events retain each broad caption and rolling delta; its JSON Lines
 artifact is the durable source of truth.
 

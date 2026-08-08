@@ -15,38 +15,64 @@
     <div>
       <p class="eyebrow">NVIDIA XR-AI</p>
       <h1>Tea Demo Activity</h1>
-      <p class="subtitle">Live transcript and visual activity records</p>
+      <p class="subtitle">Transcript, video log, visual change watch, and agent decisions in real time</p>
     </div>
-    <div class="connection"><span id="status-dot"></span><span id="status">Connecting</span></div>
+    <div class="controls">
+      <div class="connection"><span id="status-dot"></span><span id="status">Connecting</span></div>
+      <label><input id="follow" type="checkbox" checked> Follow</label>
+      <button id="clear">Clear panes</button>
+    </div>
   </header>
 
-  <nav aria-label="Activity filters">
-    <button class="filter active" data-source="all">All</button>
-    <button class="filter" data-source="transcript">Transcript</button>
-    <button class="filter" data-source="video_log">Video activity</button>
-    <span class="spacer"></span>
-    <label><input id="follow" type="checkbox" checked> Follow</label>
-    <button id="clear" class="clear">Clear pane</button>
-  </nav>
+  <main>
+    <section class="pane transcript" data-source="transcript">
+      <div class="pane-head">
+        <div><span class="marker"></span><h2>Transcript</h2></div>
+        <span class="count">0</span>
+      </div>
+      <div class="feed">
+        <div class="empty">Waiting for recorded speech</div>
+      </div>
+    </section>
 
-  <main id="feed" aria-live="polite">
-    <div id="empty">
-      <strong>Waiting for demo activity</strong>
-      <span>Start the transcript recorder or video activity logger.</span>
-    </div>
+    <section class="pane video_log" data-source="video_log">
+      <div class="pane-head">
+        <div><span class="marker"></span><h2>Video activity</h2></div>
+        <span class="count">0</span>
+      </div>
+      <div class="feed">
+        <div class="empty">Waiting for visual activity</div>
+      </div>
+    </section>
+
+    <section class="pane agent" data-source="agent">
+      <div class="pane-head">
+        <div><span class="marker"></span><h2>Agent activity</h2></div>
+        <span class="count">0</span>
+      </div>
+      <div class="feed">
+        <div class="empty">Waiting for agent decisions</div>
+      </div>
+    </section>
+
+    <section class="pane change_watch" data-source="change_watch">
+      <div class="pane-head">
+        <div><span class="marker"></span><h2>Visual change watcher</h2></div>
+        <span class="count">0</span>
+      </div>
+      <div class="feed">
+        <div class="empty">Waiting for watched changes</div>
+      </div>
+    </section>
   </main>
 
   <template id="event-template">
     <article class="event">
-      <div class="event-head">
-        <span class="source"></span>
-        <span class="kind"></span>
-        <time></time>
-      </div>
+      <div class="event-head"><span class="kind"></span><time></time></div>
       <p class="primary"></p>
       <details>
-        <summary>Full caption</summary>
-        <p class="caption"></p>
+        <summary>Details</summary>
+        <pre></pre>
       </details>
     </article>
   </template>

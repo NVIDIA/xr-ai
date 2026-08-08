@@ -4,8 +4,8 @@
 """Shared prompts kept intentionally smaller than step-authored policy."""
 
 HUMAN = (
-    "Use natural spoken language. Rewrite tool/state abbreviations, symbols, units, and machine "
-    "notation in words; preserve meaning."
+    "Natural spoken prose only. No Markdown, lists, code syntax, formatting marks, or internal "
+    "names. Spell out shorthand and units."
 )
 
 STEP = (

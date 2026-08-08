@@ -555,8 +555,9 @@ external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
 
 Composable voice desktop with a foreground tea guide and independent background
 change-watching, transcript, and video-log applications. The orchestrator also
-packages a sample-local stdlib HTTP activity viewer that tails the two persisted
-JSON Lines feeds; it adds no runtime dependency.
+packages a sample-local stdlib HTTP activity viewer that tails three persisted
+JSON Lines feeds and the current worker's structured log events into four
+simultaneous panes; it adds no runtime dependency.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
@@ -570,8 +571,10 @@ Nemotron-3-Omni service for both `agent_llm` and `vlm`, plus local STT,
 embedding, and TTS. The worker registers sample-local clock and workflow
 functions, the shared native vision and RAG groups, and an exact `rag_lookup`
 adapter in-process. `tea_making_activity_viewer` uses only the standard library
-and reads the sample's configured artifact directories without importing the
-worker or shared server runtime.
+and reads configured artifact directories plus the inherited per-run worker log
+without importing the worker or shared server runtime. One compact shared output
+contract keeps every model-authored user response in plain speakable prose and
+hides Markdown and internal function syntax.
 
 ### model-servers  (agent-samples/model-servers/)
 

@@ -22,8 +22,8 @@ def run() -> None:
     parser.add_argument("--ready-file", type=Path)
     args = parser.parse_args()
 
-    setup_logging("activity-viewer", namespace="tea-making-sample")
-    config = load_config(args.config)
+    log_file = setup_logging("activity-viewer", namespace="tea-making-sample")
+    config = load_config(args.config, run_log_dir=log_file.parent)
     store = EventStore()
     watcher = JsonlWatcher(config.sources, store)
     watcher.baseline()

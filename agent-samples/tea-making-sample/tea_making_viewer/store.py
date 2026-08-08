@@ -3,7 +3,6 @@
 
 """Tail configured JSON Lines directories into one ordered event stream."""
 
-import json
 import threading
 from collections import deque
 from dataclasses import dataclass
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Source
+from .decode import decode_record
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,18 +59,19 @@ class JsonlWatcher:
     def __init__(self, sources: tuple[Source, ...], store: EventStore) -> None:
         self.sources = sources
         self.store = store
-        self._offsets: dict[Path, int] = {}
+        self._offsets: dict[tuple[str, Path], int] = {}
 
     def baseline(self) -> None:
         for source in self.sources:
-            source.directory.mkdir(parents=True, exist_ok=True)
-            for path in source.directory.glob("*.jsonl"):
-                self._offsets[path] = path.stat().st_size
+            if source.pattern is not None:
+                source.location.mkdir(parents=True, exist_ok=True)
+            for path in self._paths(source):
+                self._offsets[(source.id, path)] = path.stat().st_size
 
     def scan(self) -> int:
         pending: list[tuple[str, Source, Path, dict[str, Any]]] = []
         for source in self.sources:
-            for path in sorted(source.directory.glob("*.jsonl")):
+            for path in self._paths(source):
                 pending.extend(self._read(source, path))
         pending.sort(key=lambda item: item[0])
         for _, source, path, record in pending:
@@ -78,7 +79,8 @@ class JsonlWatcher:
         return len(pending)
 
     def _read(self, source: Source, path: Path) -> list[tuple[str, Source, Path, dict[str, Any]]]:
-        offset = self._offsets.get(path, 0)
+        key = (source.id, path)
+        offset = self._offsets.get(key, 0)
         if path.stat().st_size < offset:
             offset = 0
         records: list[tuple[str, Source, Path, dict[str, Any]]] = []
@@ -88,11 +90,19 @@ class JsonlWatcher:
                 if not line.endswith(b"\n"):
                     break
                 offset = stream.tell()
-                record = json.loads(line)
+                record = decode_record(source, line)
+                if record is None:
+                    continue
                 timestamp = str(record.get("timestamp", ""))
                 records.append((timestamp, source, path, record))
-        self._offsets[path] = offset
+        self._offsets[key] = offset
         return records
+
+    @staticmethod
+    def _paths(source: Source) -> tuple[Path, ...]:
+        if source.pattern is not None:
+            return tuple(sorted(source.location.glob(source.pattern)))
+        return (source.location,) if source.location.is_file() else ()
 
 
 __all__ = ["ActivityEvent", "EventStore", "JsonlWatcher"]
