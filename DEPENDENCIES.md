@@ -553,9 +553,10 @@ external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
 
 ### tea-making-sample  (agent-samples/tea-making-sample/)
 
-YAML-defined visual guide: each step selects a native trigger, a NAT
-tool-calling observation agent, a read-only voice agent, typed state, and a
-transition. A separate NAT router handles workflow-level voice commands.
+Composable voice desktop with a foreground tea guide and independent background
+change-watching, transcript, and video-log applications. The orchestrator also
+packages a sample-local stdlib HTTP activity viewer that tails the two persisted
+JSON Lines feeds; it adds no runtime dependency.
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
@@ -568,7 +569,9 @@ and its typed RAG service. The alternate Omni profile manages one
 Nemotron-3-Omni service for both `agent_llm` and `vlm`, plus local STT,
 embedding, and TTS. The worker registers sample-local clock and workflow
 functions, the shared native vision and RAG groups, and an exact `rag_lookup`
-adapter in-process.
+adapter in-process. `tea_making_activity_viewer` uses only the standard library
+and reads the sample's configured artifact directories without importing the
+worker or shared server runtime.
 
 ### model-servers  (agent-samples/model-servers/)
 

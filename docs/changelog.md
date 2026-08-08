@@ -9,6 +9,14 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-07 — Tea demo artifacts have a sample-local live viewer
+
+The tea-making launcher now starts a separate stdlib HTTP process that tails
+new transcript and video-log JSON Lines records into one bounded, chronological
+browser feed. It baselines existing files at startup so a recorded demo begins
+cleanly, and remains read-only and outside agent routing, model, hub, and TTS
+paths. Its configurable port and artifact sources stay within the sample.
+
 ### 2026-08-07 — Background summaries and visual logs are distinct outputs
 
 Transcript summaries now run on a configurable monotonic interval and publish

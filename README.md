@@ -308,7 +308,9 @@ before wake-word command gating, so ordinary recorded speech needs no wake
 phrase while application commands remain gated.
 Transcript summaries and watcher events use application-labeled UI text rather
 than TTS. The video logger persists broad two-second captions and unique deltas
-over a five-caption rolling window.
+over a five-caption rolling window. A sample-local page at
+`http://<host>:8092` combines new transcript and video-log records into a
+filterable live feed for demo recording.
 Tea steps still select a native NAT trigger, observation agent, projected
 state, tools, completion rule, and transition. Every tea state change goes
 through one typed commit function. Completed steps keep observing but remain

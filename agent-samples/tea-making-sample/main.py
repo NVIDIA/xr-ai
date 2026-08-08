@@ -131,6 +131,12 @@ def _build_processes(worker_config: Path, rag_config: Path, tts_mode: str) -> li
         [
             Process("rag", "../../services/rag-service", "rag_service", config=rag_config),
             Process("hub", "../../server-runtime", "xr_media_hub", config="yaml/xr_media_hub.yaml"),
+            Process(
+                "activity-viewer",
+                ".",
+                "tea_making_activity_viewer",
+                config="yaml/activity_viewer.json",
+            ),
             Process("worker", "worker", "tea_making_worker", config=worker_config),
         ]
     )

@@ -20,6 +20,7 @@ xr-ai-logging  = { path = "../../utils/xr-ai-logging", editable = true }
 
 [project.scripts]
 tea_making_sample = "main:run"
+tea_making_activity_viewer = "tea_making_viewer.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["main.py"]
+only-include = ["main.py", "tea_making_viewer"]

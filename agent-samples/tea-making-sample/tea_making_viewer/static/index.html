@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tea Demo Activity</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">NVIDIA XR-AI</p>
+      <h1>Tea Demo Activity</h1>
+      <p class="subtitle">Live transcript and visual activity records</p>
+    </div>
+    <div class="connection"><span id="status-dot"></span><span id="status">Connecting</span></div>
+  </header>
+
+  <nav aria-label="Activity filters">
+    <button class="filter active" data-source="all">All</button>
+    <button class="filter" data-source="transcript">Transcript</button>
+    <button class="filter" data-source="video_log">Video activity</button>
+    <span class="spacer"></span>
+    <label><input id="follow" type="checkbox" checked> Follow</label>
+    <button id="clear" class="clear">Clear pane</button>
+  </nav>
+
+  <main id="feed" aria-live="polite">
+    <div id="empty">
+      <strong>Waiting for demo activity</strong>
+      <span>Start the transcript recorder or video activity logger.</span>
+    </div>
+  </main>
+
+  <template id="event-template">
+    <article class="event">
+      <div class="event-head">
+        <span class="source"></span>
+        <span class="kind"></span>
+        <time></time>
+      </div>
+      <p class="primary"></p>
+      <details>
+        <summary>Full caption</summary>
+        <p class="caption"></p>
+      </details>
+    </article>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

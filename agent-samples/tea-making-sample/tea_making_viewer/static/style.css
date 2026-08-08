@@ -1,0 +1,99 @@
+/*
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+*/
+:root {
+  color-scheme: dark;
+  --bg: #090d0a;
+  --panel: #111712;
+  --panel-2: #182019;
+  --line: #2b382d;
+  --text: #f4f7f4;
+  --muted: #9ca99e;
+  --green: #76b900;
+  --blue: #62b8ff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top right, #182417 0, var(--bg) 42%);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+header, nav, main { width: min(1120px, calc(100% - 40px)); margin-inline: auto; }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 34px 0 22px;
+}
+
+.eyebrow { margin: 0 0 5px; color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: .18em; }
+h1 { margin: 0; font-size: clamp(28px, 4vw, 44px); letter-spacing: -.04em; }
+.subtitle { margin: 8px 0 0; color: var(--muted); }
+
+.connection { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+#status-dot { width: 9px; height: 9px; border-radius: 50%; background: #f5a623; }
+#status-dot.live { background: var(--green); box-shadow: 0 0 12px #76b90088; }
+
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #101610ee;
+  backdrop-filter: blur(14px);
+}
+
+button, label { font: inherit; }
+button {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.filter.active { border-color: var(--green); color: #dfffac; }
+.spacer { flex: 1; }
+label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+.clear { color: var(--muted); }
+
+main { display: grid; gap: 10px; padding: 18px 0 60px; }
+#empty { display: grid; gap: 6px; padding: 64px 20px; text-align: center; color: var(--muted); }
+#empty strong { color: var(--text); font-size: 18px; }
+
+.event {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 12px;
+  background: linear-gradient(110deg, var(--panel-2), var(--panel));
+}
+.event.video_log { border-left-color: var(--blue); }
+.event-head { display: flex; gap: 9px; align-items: center; color: var(--muted); font-size: 12px; }
+.source { color: var(--text); font-weight: 750; }
+.kind { padding: 2px 7px; border-radius: 999px; background: #ffffff10; text-transform: uppercase; letter-spacing: .05em; }
+time { margin-left: auto; }
+.primary { margin: 11px 0 0; font-size: clamp(16px, 2vw, 20px); line-height: 1.45; }
+details { margin-top: 11px; color: var(--muted); }
+summary { cursor: pointer; font-size: 12px; }
+.caption { margin: 8px 0 0; font-size: 13px; line-height: 1.5; }
+
+@media (max-width: 680px) {
+  header { align-items: flex-start; }
+  nav { flex-wrap: wrap; }
+  .spacer { display: none; }
+  nav label { margin-left: auto; }
+  time { display: none; }
+}

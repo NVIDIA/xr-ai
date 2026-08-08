@@ -266,6 +266,25 @@ shared `rag__retrieve` capability; the worker narrows it to the step-selectable
 Open the web client shown by the hub. In wake-word mode, say, “Agent, help me
 make tea.” In always-on mode, say, “Help me make tea.”
 
+The launcher also starts a sample-local activity page on a separate port:
+
+```text
+http://<host>:8092
+```
+
+It follows new JSON Lines records written during the current run by the
+transcript recorder and video activity logger. The combined chronological feed
+can be filtered by application, follows new entries by default, and shows full
+VLM captions behind each video delta. Earlier artifact files are baselined at
+viewer startup and do not fill a new recording session with stale events.
+Configure the bind address, port, polling interval, titles, and sample-local
+artifact directories in `yaml/activity_viewer.json`. The page is read-only and
+does not enter the agent, router, or TTS paths.
+
+Because the default bind address is `0.0.0.0`, anyone who can reach port 8092
+can see camera-derived text and recorded speech while the sample is running.
+Restrict the bind address or firewall when that output is sensitive.
+
 ## Observability
 
 All decisions use structured `event {...}` records in the standard worker log.
@@ -298,6 +317,8 @@ The most useful event names are:
 - `video_log.caption`, `video_log.delta`, `video_log.started`, and
   `video_log.stopped`: broad captions, rolling deltas, and persistent-log
   lifecycle.
+- `activity-viewer`: a separate sample-local process that tails new transcript
+  and video-log artifacts and serves them at port 8092 without changing them.
 - `step.ready`, `step.enter`, `workflow.start_noop`, `workflow.reset`,
   `workflow.complete`, and `notice.queued`: readiness, protected repeated
   starts, lifecycle resets, explicit transitions, and speech.

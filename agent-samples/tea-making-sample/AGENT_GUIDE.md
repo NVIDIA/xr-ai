@@ -136,6 +136,10 @@ changes.
 40. Video logging runs a broad VLM caption on its configured interval. Its delta
     agent receives only the current caption and rolling caption window, commits
     exactly once, and persists both caption and delta. It has no spoken output.
+41. The sample-local activity viewer is a read-only process, not an agent
+    function. It baselines existing JSON Lines files at startup, tails only new
+    complete records, and serves one chronological transcript and video-log
+    feed without entering foreground routing, model calls, or TTS.
 
 ## Desktop, foreground, and observation machines
 
@@ -145,6 +149,12 @@ changes.
 foreground stack: root -> app -> nested app
 background set:   {change_watch, transcript, video_log, ...}
 ```
+
+The independent `tea_making_activity_viewer` process tails the transcript and
+video-log artifact directories declared in `yaml/activity_viewer.json`. It is
+started before the worker so a demo recording includes the first new record;
+existing files are offsets, not page history. The in-memory browser feed is
+bounded and the persisted JSON Lines files remain the source of truth.
 
 An inline function returns to the same foreground. A foreground launch pushes
 an application, and exit pops back to the caller. Starting or stopping a

@@ -18,6 +18,7 @@ import yaml
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
+sys.path.insert(0, str(_SAMPLE))
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from tea_making_worker.agents.prompts import (  # noqa: E402
@@ -39,6 +40,8 @@ from tea_making_worker.functions.workflow import CommitRequest  # noqa: E402
 from tea_making_worker.runtime.render import render_message  # noqa: E402
 from tea_making_worker.runtime.state import SessionStore  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
+from tea_making_viewer.config import Source, load_config as load_viewer_config  # noqa: E402
+from tea_making_viewer.store import EventStore, JsonlWatcher  # noqa: E402
 
 _MAIN_SPEC = importlib.util.spec_from_file_location("tea_making_sample_main", _SAMPLE / "main.py")
 assert _MAIN_SPEC is not None and _MAIN_SPEC.loader is not None
@@ -277,8 +280,18 @@ def test_launcher_requires_explicit_launch_modes() -> None:
 
 def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
     expected_services = {
-        "omni": {"omni", "stt", "embedding", "tts", "rag", "hub", "worker"},
-        "cosmos": {"omni", "vlm", "stt", "embedding", "tts", "rag", "hub", "worker"},
+        "omni": {"omni", "stt", "embedding", "tts", "rag", "hub", "activity-viewer", "worker"},
+        "cosmos": {
+            "omni",
+            "vlm",
+            "stt",
+            "embedding",
+            "tts",
+            "rag",
+            "hub",
+            "activity-viewer",
+            "worker",
+        },
     }
     original_detect = sample_main.detect_gpu_config
     sample_main.detect_gpu_config = lambda: "96G_blackwell"
@@ -320,15 +333,62 @@ def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
                         assert {process.name for process in processes} == expected_services[model_mode]
                         assert all(
                             process.launch_mode
-                            == ("own" if process.name in {"tts", "rag", "hub", "worker"} else "reuse")
+                            == (
+                                "own"
+                                if process.name in {"tts", "rag", "hub", "activity-viewer", "worker"}
+                                else "reuse"
+                            )
                             for process in processes
                         )
                         tts_process = next(process for process in processes if process.name == "tts")
                         assert tts_process.project == f"../../ai-services/tts/{tts_mode}"
                         assert tts_process.command == f"{tts_mode}_tts_server"
                         assert tts_process.config == f"yaml/{tts_mode}_tts_server.yaml"
+                        viewer = next(process for process in processes if process.name == "activity-viewer")
+                        assert viewer.project == "."
+                        assert viewer.command == "tea_making_activity_viewer"
+                        assert viewer.config == "yaml/activity_viewer.json"
     finally:
         sample_main.detect_gpu_config = original_detect
+
+
+def test_activity_viewer_tails_only_complete_new_jsonl_records() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        source_dir = root / "transcripts"
+        source_dir.mkdir()
+        path = source_dir / "speaker.jsonl"
+        path.write_text('{"type":"utterance","text":"old"}\n', encoding="utf-8")
+        store = EventStore()
+        watcher = JsonlWatcher((Source("transcript", "Transcript recorder", source_dir),), store)
+        watcher.baseline()
+
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write('{"type":"utterance","timestamp":"2026-08-07T10:00:00Z","text":"new"}\n')
+            stream.write('{"type":"summary","text":"partial"')
+
+        assert watcher.scan() == 1
+        assert [event["record"]["text"] for event in store.after(0)] == ["new"]
+
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write('}\n')
+
+        assert watcher.scan() == 1
+        events = store.after(0)
+        assert [event["id"] for event in events] == [1, 2]
+        assert [event["record"]["text"] for event in events] == ["new", "partial"]
+
+
+def test_activity_viewer_config_and_static_page_are_sample_local() -> None:
+    config = load_viewer_config(_SAMPLE / "yaml" / "activity_viewer.json")
+    assert config.host == "0.0.0.0"
+    assert config.port == 8092
+    assert {source.id for source in config.sources} == {"transcript", "video_log"}
+    assert all(_SAMPLE in source.directory.parents for source in config.sources)
+    page = (_SAMPLE / "tea_making_viewer" / "static" / "index.html").read_text(encoding="utf-8")
+    assert "Tea Demo Activity" in page
+    assert "Transcript" in page
+    assert "Video activity" in page
 
 
 def test_eval_cases_cover_every_route_and_step() -> None:
