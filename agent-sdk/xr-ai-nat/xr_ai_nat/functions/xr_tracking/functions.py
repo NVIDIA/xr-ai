@@ -6,7 +6,7 @@
 from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, register_function_group
 from pydantic import Field
 
-from ..spatial_math import SpatialFrame
+from ..types import SpatialFrame
 from ._client import HeadPoseRequest, OpenXRClient
 
 

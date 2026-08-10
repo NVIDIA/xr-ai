@@ -7,9 +7,8 @@ Sample workers compose their :class:`BrainProcessor` with
 :func:`make_voice_pipeline`, then use :func:`run_voice_pipeline` to run it.
 The package supplies VAD/STT, voice gate, and streaming TTS.
 
-Live-camera VLM Q&A lives in the framework-agnostic ``xr-ai-capabilities``
-package (``VisionModule``); a pipecat brain wires it up by passing
-``transport.endpoint``.
+The higher-level ``xr-ai-voice`` runtime is preferred for new applications;
+this direct Pipecat surface remains for unmigrated workers.
 """
 from __future__ import annotations
 

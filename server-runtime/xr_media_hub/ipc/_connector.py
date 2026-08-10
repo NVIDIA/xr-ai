@@ -29,7 +29,7 @@ import zmq
 import zmq.asyncio
 from loguru import logger
 
-from xr_ai_agent import (AudioChunk, ConnectorRegistration, ControlMessage,
+from xr_ai_hub import (AudioChunk, ConnectorRegistration, ControlMessage,
                          DataMessage, FrameSignal, MsgType, ParticipantEvent, PixelFormat,
                          ReturnAudioFlush, ShmRingBuffer, decode, encode)
 
@@ -174,7 +174,7 @@ class ConnectorEndpoint:
         # does not byte-prefix-match a topic addressed to `alice2`. The hub
         # publishes return topics with the same trailing delimiter (see
         # `_hub.py`); the processor subscription path guards the inbound topics
-        # identically (`_prefixes` in `xr_ai_agent._processor`).
+        # identically (`_prefixes` in `xr_ai_hub._processor`).
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio.{participant_id}.".encode())
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_audio_flush.{participant_id}.".encode())
         self._sub.setsockopt(zmq.SUBSCRIBE, f"return_data.{participant_id}.".encode())

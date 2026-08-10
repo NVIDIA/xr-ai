@@ -12,11 +12,11 @@ description = "Multi-client / multi-agent integration tests for xr-ai."
 requires-python = ">=3.11,<3.13"
 dependencies = [
     # Pulled in via editable installs of the workspace packages.
-    "xr-ai-agent",
-    "xr-ai-capabilities",
+    "xr-ai-hub-client",
     "xr-ai-models",
-    "xr-ai-nat[services]",
+    "xr-ai-nat[agents,services,vision]",
     "xr-ai-pipecat",
+    "xr-ai-voice",
     "xr-media-hub",
     "xr-ai-launcher",
     "xr-ai-logging",
@@ -30,23 +30,24 @@ dependencies = [
     "xr-render-scene",
     "video-mcp-server",
     "xr-video-memory-service",
+    "xr-rag-service",
     "vec-mcp-server",
     # Test runner.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "numpy>=1.24",
-    # GPU/MCP test deps — only exercised by tests marked `gpu`.
+    # Direct test deps used across CPU MCP/vision/service tests and GPU coverage.
     "fastmcp>=3.4,<4",
     "Pillow>=10.0",
     "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
-xr-ai-agent           = { path = "../agent-sdk",                        editable = true }
-xr-ai-capabilities    = { path = "../agent-sdk/xr-ai-capabilities",     editable = true }
+xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub-client",                        editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
 xr-ai-nat             = { path = "../agent-sdk/xr-ai-nat",              editable = true }
 xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable = true }
+xr-ai-voice           = { path = "../agent-sdk/xr-ai-voice",            editable = true }
 xr-media-hub          = { path = "../server-runtime",                   editable = true }
 xr-ai-launcher        = { path = "../utils/xr-ai-launcher",             editable = true }
 xr-ai-logging         = { path = "../utils/xr-ai-logging",              editable = true }
@@ -59,6 +60,7 @@ render-mcp            = { path = "../agent-mcp-servers/render-mcp",     editable
 xr-render-scene       = { path = "../agent-samples/xr-render-demo/scene", editable = true }
 video-mcp-server      = { path = "../agent-mcp-servers/video-mcp",      editable = true }
 xr-video-memory-service = { path = "../services/video-memory-service", editable = true }
+xr-rag-service          = { path = "../services/rag-service", editable = true }
 vec-mcp-server        = { path = "../agent-mcp-servers/vec-mcp",        editable = true }
 
 [tool.hatch.build.targets.wheel]

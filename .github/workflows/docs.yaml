@@ -2,26 +2,31 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Build the XR AI Sphinx docs. On every docs PR: strict build (warnings = errors).
-# On push to main of the canonical repo: build + deploy to GitHub Pages.
-# Deploy is push-to-main only — the github-pages environment restricts deploys to
-# main, so PR-branch deploys are rejected by environment protection.
+# GitHub Pages defaults to the latest semantic-version release while retaining
+# ``main`` as development docs. Its environment admits only main and ``v*``
+# refs; sphinx-multiversion selects release tags from complete Git history.
 name: Docs
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "docs/**"
       - ".github/workflows/docs.yaml"
+      - ".github/scripts/select_latest_docs_release.py"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - "docs/**"
       - ".github/workflows/docs.yaml"
+      - ".github/scripts/select_latest_docs_release.py"
 
 concurrency:
-  group: docs-${{ github.ref }}
-  cancel-in-progress: true
+  # A tag deployment also rebuilds ``main``. Serialize deployments so an older
+  # tag build cannot publish after a newer main build.
+  group: docs-${{ github.event_name == 'push' && 'pages' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   build:
@@ -29,13 +34,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # sphinx-multiversion reads the release tags and main directly from Git.
+          fetch-depth: 0
+      - name: Make current docs build ref available
+        if: github.event_name == 'push'
+        run: |
+          if ! git show-ref --verify --quiet refs/heads/main; then
+            git branch main origin/main
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install doc deps
         run: pip install -r docs/requirements.txt
-      - name: Strict Sphinx build
-        run: sphinx-build -W --keep-going -b html docs/source docs/_build
+      - name: Strict checked-out documentation build
+        if: github.event_name == 'pull_request'
+        env:
+          DOCS_GITHUB_REF: ${{ github.event.pull_request.head.sha }}
+        run: make -C docs strict
+      - name: Upload documentation preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-preview
+          path: docs/_build/current
+          if-no-files-found: error
+      - name: Strict versioned documentation build
+        if: github.event_name == 'push'
+        run: make -C docs strict-versions
+      - name: Point the site root at the latest release
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          latest_release="$(make -s -C docs latest-release)"
+
+          latest_target="../main/"
+          if [[ -n "$latest_release" ]]; then
+            latest_target="../${latest_release}/"
+          fi
+
+          mkdir -p docs/_build/latest
+          sed "s|__XR_AI_DOCS_TARGET__|${latest_target}|g" \
+            docs/source/_static/latest-redirect.html > docs/_build/latest/index.html
+          cp docs/source/_static/root-redirect.html docs/_build/index.html
       - name: Upload Pages artifact
         if: github.event_name == 'push' && github.repository == 'NVIDIA/xr-ai'
         uses: actions/upload-pages-artifact@v3

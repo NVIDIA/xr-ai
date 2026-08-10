@@ -28,11 +28,17 @@ _TOOL_CALL_KEY_SHAPES: tuple[frozenset[str], ...] = (
 
 
 def looks_like_leaked_tool_call(text: str) -> bool:
-    """True if *text* is a JSON object/array whose top level matches an
+    """True if *text* should never reach TTS: a whole-message JSON object or
+    array (e.g. an echoed tool result), or JSON whose top level matches an
     OpenAI-style tool-call envelope (name+arguments, tool+args, or
-    function+arguments). Plain prose that happens to start with "{" returns
-    False; only parseable JSON with the right keys is sanitized.
+    function+arguments). Prose that merely contains JSON passes through.
     """
+    stripped = text.strip()
+    if stripped.startswith("["):
+        try:
+            return isinstance(json.loads(stripped), list)
+        except json.JSONDecodeError:
+            return False
     obj_text = extract_json(text)
     if obj_text is None:
         return False
@@ -40,6 +46,8 @@ def looks_like_leaked_tool_call(text: str) -> bool:
         obj = json.loads(obj_text)
     except json.JSONDecodeError:
         return False
+    if obj_text.strip() == stripped and isinstance(obj, dict):
+        return True
     candidates: list[dict] = []
     if isinstance(obj, dict):
         candidates.append(obj)

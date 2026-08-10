@@ -12,7 +12,7 @@ output — typically burning the whole ``max_tokens`` budget on hidden
 reasoning, returning ``finish_reason="length"`` with empty content and
 no tool_calls. The ``default_extras`` below pins the wire-level default
 to off; per-call ``enable_thinking=True`` still overrides via the
-nested merge in ``openai_compat._build_payload``.
+nested merge in ``_openai_compat._build_payload``.
 """
 
 NEMOTRON3_NANO = {

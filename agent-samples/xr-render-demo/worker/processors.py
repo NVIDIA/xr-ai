@@ -6,47 +6,47 @@ Brain processor for xr-render-demo.
 
 The voice pipeline (input → VadStt → VoiceGate → brain → StreamingTts → output)
 is assembled by ``xr_ai_pipecat.make_voice_pipeline``. This module supplies
-the sample-specific brain — a multi-step agentic loop over render-mcp,
-oxr-mcp, vec-mcp, vlm-mcp, and video-mcp tools.
+the sample-specific brain — a multi-step agentic loop over native NAT
+functions for scene, tracking, spatial math, vision, and video memory.
 
 Agentic loop (max ``_MAX_LOOP`` iterations):
-  - Llama-Nemotron emits an OpenAI ``tool_calls`` payload → execute tool,
+  - Nemotron-3-Nano emits an OpenAI ``tool_calls`` payload → execute tool,
     append result, continue.
   - When the model returns text instead of a tool call, that text is the
     final user-visible response.
 
-A parallel "quick-ack" call to Minitron fires at the start of each turn
+An initial "quick-ack" call is awaited before the agentic loop starts
 to (a) speak an immediate acknowledgment and (b) classify whether the
 agentic loop needs thinking enabled. A periodic "still-working" loop
 streams contextual progress messages to the data channel while the agent
 reasons.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
-import os
 import time
 import uuid
 from pathlib import Path
+from collections.abc import Callable
 from typing import AsyncIterator
 
-from fastmcp import Client as McpClient
 from loguru import logger
+from nat.builder.function import Function
 
-from xr_ai_agent import DataMessage
+from xr_ai_hub import DataMessage
 from xr_ai_logging import print_task_done_banner
-from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef, VLMService
-from xr_ai_capabilities import VisionModule, VisionUnavailable
+from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
 from xr_ai_pipecat import BrainProcessor
 from xr_ai_pipecat.transport import XRMediaHubTransport
 
 from config import WorkerConfig
+from capabilities import NativeToolbox
 from tooling import (
     extract_json,
     looks_like_leaked_tool_call,
     normalize_tool_args,
-    tool_payload,
 )
 
 # Dedicated trace logger — writes a clean session transcript to a file.
@@ -59,102 +59,94 @@ _trace_log = logger.bind(trace=True)
 _MAX_LOOP = 10  # visual queries need up to 5 steps; give headroom
 
 
-# Tools served by oxr-mcp (routed there, not to render-mcp).
-_OXR_TOOLS = frozenset({
-    "get_head_pose", "position_ahead", "position_relative",
-    "place_user_relative", "place_object_relative",
-    "place_inside_by_id", "displace_object", "displace_objects",
-})
+# Native perception tools (from the ``xr_vision_tools`` group) exposed to the
+# model. The processor supplies participant context (and the utterance time for
+# recorded lookups) that the model never provides.
+_LIVE_PERCEPTION_TOOL = "look_at_current_frame"
+_PAST_PERCEPTION_TOOL = "look_at_past_frame"
 
-# Spatial primitive math tools served by vec-mcp. Routed there so
-# the LLM offloads vector arithmetic.
-_VEC_TOOLS = frozenset({
-    "between_anchors", "world_offset",
-    "along_direction", "scale_value",
-})
-
-# Tools served by vlm-mcp and video-mcp.
-_VLM_TOOLS   = frozenset({"ask_image"})
-_VIDEO_TOOLS = frozenset({
-    "get_frame_from_time",
-    # video-mcp exposes get_latest_frame instead of get_frame_from_time when
-    # recording is disabled (the default for this demo), so it must still route
-    # to video-mcp — otherwise the call falls through to render-mcp.
-    "get_latest_frame",
-    "list_live_participants", "list_recorded_participants",
-    "get_video_stats", "query_video",
-})
-
-# Brain-executed perception tool. Not served by any MCP server — the brain
-# intercepts it in _execute_tool, turns the camera on (if needed), grabs the
-# latest live frame for the active participant, and runs the VLM on it. This
-# replaces the broken get_frame_from_time→ask_image two-step (the camera was
-# never turned on, and get_frame_from_time isn't even registered when video
-# recording is disabled), mirroring simple-vlm-example's live-frame VLM path.
-_PERCEPTION_TOOL = "look_at_current_frame"
-
-_PERCEPTION_TOOL_DEF = ToolDef(
-    name=_PERCEPTION_TOOL,
+# Model-facing perception schemas. The native ``xr_vision_tools`` request models
+# also carry ``participant_id`` (and ``reference_time_us`` for recorded lookups),
+# which the processor injects — the model never supplies them. Presenting the raw
+# generated schema would tell the model to fill a required ``participant_id`` it
+# cannot know and whose value is discarded, so the model sees these trimmed
+# contracts instead (the worker swaps them in for the native ones).
+_LIVE_PERCEPTION_TOOL_DEF = ToolDef(
+    name=_LIVE_PERCEPTION_TOOL,
     description=(
-        "Look at the user's LIVE camera feed right now and answer a question "
-        "about the real world — what they are holding, pointing at, or looking "
-        "at; a real-world colour, shape, text, or object. Turns the camera on "
-        "automatically and inspects the current frame. Use this whenever the "
-        "answer cannot be known from the XR scene state alone."
+        "Inspect the user's present physical view when a request explicitly requires a visible fact. "
+        "Do not use this tool to interpret conversation or inspect the virtual XR scene."
     ),
     parameters={
         "type": "object",
         "properties": {
             "question": {
                 "type": "string",
-                "description": (
-                    "The specific question to answer about the live camera "
-                    "frame, e.g. 'What colour is the object the user is "
-                    "holding?'"
-                ),
+                "description": "Specific question about the live camera frame.",
             },
         },
         "required": ["question"],
     },
 )
 
+_PAST_PERCEPTION_TOOL_DEF = ToolDef(
+    name=_PAST_PERCEPTION_TOOL,
+    description=(
+        "Inspect a recorded camera frame only for an explicitly historical question, using a positive "
+        "seconds offset from the user's utterance time."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "Specific question about the recorded camera frame.",
+            },
+            "second_ago": {
+                "type": "integer",
+                "description": "Positive offset from the utterance time in seconds.",
+            },
+        },
+        "required": ["question", "second_ago"],
+    },
+)
+
+# Presented to the model in place of the native perception request schemas.
+_PERCEPTION_TOOL_DEFS: tuple[ToolDef, ...] = (
+    _LIVE_PERCEPTION_TOOL_DEF,
+    _PAST_PERCEPTION_TOOL_DEF,
+)
+
 # Spoken when a perception query is asked but no live camera frame can be
 # obtained. Short, user-actionable, never a hang or silent failure.
 _NO_FRAME_MSG = "I can't see a camera feed right now — please check your camera."
 
-# VLM guidance for the live-frame answer. Plain spoken English, terse.
-_PERCEPTION_SYSTEM_PROMPT = (
-    "You are looking at the user's live camera feed. Answer the question "
-    "directly from what is visible in the image, in one short plain-English "
-    "sentence. Never reply with JSON, code, or markdown."
-)
-
 # Brief human-readable progress message shown while a tool runs.
 _TOOL_PROGRESS: dict[str, str] = {
-    "get_head_pose":        "Checking your position...",
-    "position_ahead":       "Computing gaze position...",
-    "position_relative":    "Computing relative position...",
-    "place_user_relative":  "Placing relative to you...",
-    "place_object_relative":"Placing relative to object...",
-    "place_inside_by_id":   "Placing inside container...",
-    "displace_object":      "Shifting object...",
-    "displace_objects":     "Shifting objects...",
-    "between_anchors":      "Computing midpoint...",
-    "world_offset":         "Computing offset...",
-    "along_direction":      "Computing position...",
-    "scale_value":          "Computing size...",
-    "get_scene_state":      "Scanning the scene...",
-    "add_primitive":        "Creating object...",
-    "update_primitive":     "Updating object...",
-    "remove_primitive":     "Removing object...",
+    "get_head_pose": "Checking your position...",
+    "position_ahead": "Computing gaze position...",
+    "position_relative": "Computing relative position...",
+    "place_user_relative": "Placing relative to you...",
+    "place_object_relative": "Placing relative to object...",
+    "place_inside_by_id": "Placing inside container...",
+    "displace_object": "Shifting object...",
+    "displace_objects": "Shifting objects...",
+    "between_anchors": "Computing midpoint...",
+    "world_offset": "Computing offset...",
+    "along_direction": "Computing position...",
+    "scale_value": "Computing size...",
+    "get_scene_state": "Scanning the scene...",
+    "add_primitive": "Creating object...",
+    "update_primitive": "Updating object...",
+    "remove_primitive": "Removing object...",
 }
 
-_AGENT_RESPONSE_TOPIC  = "agent.response"
-_AGENT_PROGRESS_TOPIC  = "agent.progress"
+_AGENT_RESPONSE_TOPIC = "agent.response"
+_AGENT_PROGRESS_TOPIC = "agent.progress"
 
 
 class _SceneNotReadyError(Exception):
-    """Raised when render-mcp returns not_started — LOVR hasn't launched yet."""
+    """Raised when the scene service reports that LOVR has not launched yet."""
 
 
 class _PerceptionUnavailableError(Exception):
@@ -174,16 +166,17 @@ def _now_us() -> int:
 
 # ── RenderSceneProcessor ──────────────────────────────────────────────────────
 
+
 class RenderSceneProcessor(BrainProcessor):
     """
-    Multi-step agentic loop over render-mcp, oxr-mcp, and vec-mcp tools.
+    Multi-step agentic loop over native NAT functions.
 
-    Uses Llama-Nemotron (port 8106) with OpenAI tool calling + LMFE for the
-    reasoning loop — guaranteed syntactically valid tool calls every iteration.
-    Uses Minitron (port 8101) for the parallel quick-ack (fast, cheap).
+    Uses Nemotron-3-Nano (port 8107) with OpenAI tool calling for the
+    reasoning loop; the pre-loop quick-ack shares the same server via the
+    `llm` logical model.
 
     On each utterance:
-      1. Quick-ack fires immediately (parallel, max 25 tokens) → agent.progress
+      1. Quick-ack is awaited first (max 40 tokens) → agent.progress
       2. Agentic loop: model calls tools via OpenAI tool_calls protocol until
          it returns a text response (finish_reason != "tool_calls")
       3. Progress messages sent before each tool execution → agent.progress
@@ -193,53 +186,40 @@ class RenderSceneProcessor(BrainProcessor):
     def __init__(
         self,
         *,
-        transport:   XRMediaHubTransport,
-        cfg:         WorkerConfig,
-        render:      McpClient,
-        oxr:         McpClient,
-        vlm:         McpClient,
-        video:       McpClient,
-        vec:         McpClient,
+        transport: XRMediaHubTransport,
+        cfg: WorkerConfig,
+        toolbox: NativeToolbox,
+        release_vision: Callable[[str], None],
+        text_memory: Function | None,
         prompt_path: Path,
-        tools:       list[ToolDef],
-        llm:         LLMService,
-        agent_llm:   LLMService,
-        vlm_service: VLMService | None = None,
-        frame_max_age_s: float = 2.0,
-        frame_timeout_s: float = 5.0,
+        tools: list[ToolDef],
+        llm: LLMService,
+        agent_llm: LLMService,
     ):
         super().__init__()
-        self._transport      = transport
-        self._cfg            = cfg
-        self._render         = render
-        self._oxr            = oxr
-        self._vlm            = vlm
-        self._video          = video
-        self._vec            = vec
-        # Worker-local VLM service for live-frame perception (look_at_current_frame).
-        # None in unit tests / notice-only paths that never hit the perception tool.
-        self._vlm_service    = vlm_service
-        self._prompt_path      = prompt_path
-        self._prompt_cache     = prompt_path.read_text(encoding="utf-8").strip()
-        _prompts               = prompt_path.parent
-        self._quick_ack_path   = _prompts / "quick_ack.txt"
-        self._still_work_path  = _prompts / "still_working.txt"
-        self._validate_path    = _prompts / "validate.txt"
-        self._quick_ack_cache  = self._quick_ack_path.read_text(encoding="utf-8").strip()
+        self._transport = transport
+        self._cfg = cfg
+        self._toolbox = toolbox
+        self._release_vision = release_vision
+        self._text_memory = text_memory
+        self._prompt_path = prompt_path
+        self._prompt_cache = prompt_path.read_text(encoding="utf-8").strip()
+        _prompts = prompt_path.parent
+        self._quick_ack_path = _prompts / "quick_ack.txt"
+        self._still_work_path = _prompts / "still_working.txt"
+        self._quick_ack_cache = self._quick_ack_path.read_text(encoding="utf-8").strip()
         self._still_work_cache = self._still_work_path.read_text(encoding="utf-8").strip()
-        self._validate_cache   = self._validate_path.read_text(encoding="utf-8").strip()
-        self._tools            = tools
-        self._llm              = llm
-        self._agent_llm        = agent_llm
+        self._tools = tools
+        self._llm = llm
+        self._agent_llm = agent_llm
 
         # Rolling conversation buffer — last N turns of (user_text, agent_response).
         # Injected as context so the agent understands "fix that", "undo", "the one I just added".
-        self._history:    list[tuple[str, str]] = []
+        self._history: list[tuple[str, str]] = []
         self._history_max = 4
 
         # Move log for "put it back" — (obj_id, prev, new), capped at N.
-        self._recent_moves: list[tuple[str, tuple[float, float, float],
-                                              tuple[float, float, float]]] = []
+        self._recent_moves: list[tuple[str, tuple[float, float, float], tuple[float, float, float]]] = []
         self._recent_moves_max = 5
         # Per-turn snapshot used to compute prev→new pairs on update_primitive.
         self._pre_move_positions: dict[str, tuple[float, float, float]] = {}
@@ -249,23 +229,6 @@ class RenderSceneProcessor(BrainProcessor):
         # handle_query, which short-circuits the LLM loop for a matching entry.
         # See enqueue_notice / _emit_notice.
         self._pending_notices: dict[str, list[str]] = {}
-
-        # ── live-frame perception (look_at_current_frame) ────────────────────
-        # VisionModule owns frame tracking and the VLM call — shared with
-        # simple-vlm-example. Built only when a VLM service is wired
-        # (None in unit tests / no-camera deployments).
-        self._vision: VisionModule | None = None
-        if vlm_service is not None:
-            self._vision = VisionModule(
-                transport.endpoint, vlm_service,
-                system_prompt   = _PERCEPTION_SYSTEM_PROMPT,
-                frame_max_age_s = frame_max_age_s,
-                frame_timeout_s = frame_timeout_s,
-            )
-            # FrameSignal events aren't pipecat frames, so the module subscribes
-            # on the endpoint directly. Guard the unit-test transport double.
-            if getattr(transport, "endpoint", None) is not None:
-                self._vision.register()
 
     # ── public: text-channel entry ────────────────────────────────────────────
 
@@ -279,12 +242,15 @@ class RenderSceneProcessor(BrainProcessor):
         through a synthesized ``GatedQueryFrame``.
         """
         from xr_ai_pipecat import GatedQueryFrame
-        await self._spawn_query(GatedQueryFrame(
-            participant_id = pid,
-            text           = text,
-            fresh_match    = False,
-            pts_us         = _now_us(),
-        ))
+
+        await self._spawn_query(
+            GatedQueryFrame(
+                participant_id=pid,
+                text=text,
+                fresh_match=False,
+                pts_us=_now_us(),
+            )
+        )
 
     async def enqueue_notice(self, pid: str, text: str) -> None:
         """Speak a canned, agent-authored notice through the normal turn path.
@@ -303,18 +269,24 @@ class RenderSceneProcessor(BrainProcessor):
         the notice task runs is never mistaken for the notice.
         """
         from xr_ai_pipecat import GatedQueryFrame
+
         self._pending_notices.setdefault(pid, []).append(text)
-        await self._spawn_query(GatedQueryFrame(
-            participant_id = pid,
-            text           = text,
-            fresh_match    = False,
-            pts_us         = _now_us(),
-        ))
+        await self._spawn_query(
+            GatedQueryFrame(
+                participant_id=pid,
+                text=text,
+                fresh_match=False,
+                pts_us=_now_us(),
+            )
+        )
 
     # ── BrainProcessor overrides ──────────────────────────────────────────────
 
     async def handle_query(
-        self, pid: str, text: str, fresh_match: bool,
+        self,
+        pid: str,
+        text: str,
+        fresh_match: bool,
     ) -> AsyncIterator[str]:
         """Drive one full turn of the agentic loop for *text* from *pid*.
 
@@ -353,22 +325,35 @@ class RenderSceneProcessor(BrainProcessor):
         text = text.strip()
         if not text:
             return
-
         send_pid = pid or self._transport.target_participant
+        # Bracket the whole turn with the client UI status signal: "processing"
+        # on entry, "idle" in finally so it always clears — including failure or
+        # a barge-in cancellation. The "processing" publish is INSIDE the try so
+        # a cancellation landing during that await still runs the finally (never
+        # leaving the client stuck in "processing"). Status is a per-client
+        # lifecycle signal owned by the render turn; the native vision functions
+        # stay reusable/UI-free.
+        try:
+            if send_pid:
+                await self._set_status("processing", send_pid)
+            async for chunk in self._run_turn_body(pid, send_pid, text):
+                yield chunk
+        finally:
+            if send_pid:
+                await self._set_status("idle", send_pid)
+
+    async def _run_turn_body(self, pid: str, send_pid: str, text: str) -> AsyncIterator[str]:
         # Capture the moment the user finished speaking so visual tool calls
         # can be anchored to that timestamp (not to when the tool fires).
         ref_us = _now_us()
-        t0     = time.monotonic()
+        t0 = time.monotonic()
 
-        # Quick-ack: fast Minitron call that (a) speaks an immediate
+        # Quick-ack: fast LLM call that (a) speaks an immediate
         # acknowledgment and (b) classifies whether Nemotron needs
         # reasoning enabled.  Await it first so the think flag is ready
-        # before the main loop starts — it takes ~1s so the delay is small.
-        try:
-            ack, needs_thinking = await self._quick_ack(text)
-        except Exception:
-            logger.exception("quick ack failed")
-            ack, needs_thinking = "", False
+        # before the main loop starts. On failure _quick_ack falls back to
+        # ("", False); thinking degrades tool-following accuracy.
+        ack, needs_thinking = await self._quick_ack(text)
 
         if ack and send_pid:
             # ACK-SPEAK POLICY (deliberate): speak the quick-ack on EVERY turn,
@@ -382,7 +367,10 @@ class RenderSceneProcessor(BrainProcessor):
             # single spoken ack is enough to signal "I'm on it". Also mirror
             # the ack to the panel.
             await self._send(send_pid, ack, topic=_AGENT_PROGRESS_TOPIC)
-            yield ack
+            # TTS batches on sentence-final punctuation; an unterminated ack
+            # would sit in its buffer until the final response lands and play
+            # concatenated with it.
+            yield ack if ack[-1] in ".!?" else ack + "."
 
         # Start a "still working" timer — fires if reasoning takes >5s.
         # Cancelled as soon as the loop returns.
@@ -390,8 +378,7 @@ class RenderSceneProcessor(BrainProcessor):
         # the still-working messages can reflect what the 30B is reasoning about.
         thinking_ctx: list[str] = [""]
         still_task = asyncio.create_task(
-            self._still_working_loop(text, send_pid, thinking_ctx,
-                                     enabled=needs_thinking),
+            self._still_working_loop(text, send_pid, thinking_ctx),
             name="still-working",
         )
 
@@ -399,7 +386,10 @@ class RenderSceneProcessor(BrainProcessor):
         outcome = "done"
         try:
             response = await self._agentic_loop(
-                text, pid, ref_us=ref_us, needs_thinking=needs_thinking,
+                text,
+                pid,
+                ref_us=ref_us,
+                needs_thinking=needs_thinking,
                 thinking_ctx=thinking_ctx,
             )
         except asyncio.CancelledError:
@@ -455,9 +445,35 @@ class RenderSceneProcessor(BrainProcessor):
         if len(self._history) > self._history_max:
             self._history.pop(0)
 
+        if self._text_memory is not None and send_pid:
+            await self._record_turn(send_pid, ref_us, text, display)
+
         if send_pid:
             await self._send(send_pid, display, topic=_AGENT_RESPONSE_TOPIC)
         yield display
+
+    async def _record_turn(
+        self,
+        participant_id: str,
+        request_time_us: int,
+        user_text: str,
+        assistant_text: str,
+    ) -> None:
+        """Persist final user and assistant messages without agent scratch state."""
+        for timestamp_us, text in (
+            (request_time_us, f"user: {user_text}"),
+            (_now_us(), f"assistant: {assistant_text}"),
+        ):
+            try:
+                await self._text_memory.ainvoke(
+                    {
+                        "source_id": participant_id,
+                        "timestamp_us": timestamp_us,
+                        "text": text,
+                    }
+                )
+            except Exception:
+                logger.opt(exception=True).warning("text-memory write failed")
 
     def _read_prompt(self, path: Path, cache_attr: str) -> str:
         try:
@@ -483,8 +499,7 @@ class RenderSceneProcessor(BrainProcessor):
             context = f"[Previous turn] User: {last_user} / Agent: {last_agent}\n"
 
         messages = [
-            ChatMessage(role="system", content=self._read_prompt(
-                self._quick_ack_path, "_quick_ack_cache")),
+            ChatMessage(role="system", content=self._read_prompt(self._quick_ack_path, "_quick_ack_cache")),
             ChatMessage(role="user", content=context + transcript),
         ]
         try:
@@ -497,24 +512,29 @@ class RenderSceneProcessor(BrainProcessor):
             if obj_text:
                 try:
                     obj = json.loads(obj_text)
-                    ack   = str(obj.get("ack", "")).strip()
-                    think = bool(obj.get("think", False))
+                    ack = str(obj.get("ack", "")).strip()
+                    # Strict is-True: a model emitting "think": "false" must
+                    # not truthy its way into the thinking path.
+                    think = obj.get("think") is True
                     logger.info("quick-ack: {!r}  think={}", ack, think)
                     _trace_log.info("ACK   {}  [think={}]", ack, think)
                     return ack, think
                 except json.JSONDecodeError:
                     pass
-            # Fallback: treat raw text as ack, no thinking
+            # Fallback: treat raw text as ack, no thinking. A truncated JSON
+            # payload has no closing brace, so extract_json returns None —
+            # don't speak the fragment.
+            if raw.startswith("{"):
+                return "", False
             return raw, False
         except Exception as exc:
-            logger.warning("quick-ack failed: {}", exc)
+            logger.warning("quick-ack failed: {!r}", exc)
         return "", False
 
-    # ── agentic loop (OpenAI tool calling + LMFE) ────────────────────────────
+    # ── agentic loop (OpenAI tool calling) ───────────────────────────────────
 
-    async def _still_working_msg(self, transcript: str, sent: list[str],
-                                  thinking_ctx: list[str]) -> str:
-        """Ask Minitron for a short contextual 'still working' sentence.
+    async def _still_working_msg(self, transcript: str, sent: list[str], thinking_ctx: list[str]) -> str:
+        """Ask the LLM for a short contextual 'still working' sentence.
 
         `sent` is the list of messages already shown this turn.
         `thinking_ctx` is a one-element list holding the latest reasoning_content
@@ -554,17 +574,19 @@ class RenderSceneProcessor(BrainProcessor):
         return ""
 
     async def _still_working_loop(
-        self, transcript: str, pid: str, thinking_ctx: list[str],
-        *, first_after: float = 5.0, repeat_every: float = 10.0,
-        enabled: bool = True,
+        self,
+        transcript: str,
+        pid: str,
+        thinking_ctx: list[str],
+        *,
+        first_after: float = 5.0,
+        repeat_every: float = 10.0,
     ) -> None:
-        """Speak periodic contextual updates while the agentic loop runs.
+        """Post periodic contextual updates while the agentic loop runs.
 
-        Only fires when enabled=True (i.e. needs_thinking).  Non-thinking turns
-        resolve in under a second — a "still working" message would just be noise.
+        Purely time-gated: any turn still running after ``first_after``
+        gets panel updates, thinking or not.
         """
-        if not enabled:
-            return
         sent: list[str] = []
         await asyncio.sleep(first_after)
         while True:
@@ -580,39 +602,6 @@ class RenderSceneProcessor(BrainProcessor):
                 sent.append(msg)
             await asyncio.sleep(repeat_every)
 
-    async def _validate(self, transcript: str, post_scene: dict) -> tuple[bool, str]:
-        """Ask Minitron whether the task was completed as requested.
-
-        Returns (ok, issue). Defaults to ok=True on any failure so a broken
-        validator never blocks the response.
-        """
-        messages = [
-            ChatMessage(role="system", content=self._read_prompt(
-                self._validate_path, "_validate_cache")),
-            ChatMessage(role="user", content=(
-                f"Request: {transcript}\n"
-                f"Current scene: {json.dumps(post_scene or {})}"
-            )),
-        ]
-        try:
-            resp = await asyncio.wait_for(
-                self._llm.chat(messages, max_tokens=60, temperature=0.0),
-                timeout=8.0,
-            )
-            raw = resp.content.strip()
-            obj_text = extract_json(raw)
-            if obj_text:
-                obj = json.loads(obj_text)
-                ok    = bool(obj.get("ok", True))
-                issue = str(obj.get("issue", ""))
-                logger.debug("validation: ok={}  issue={!r}", ok, issue)
-                return ok, issue
-        except Exception:
-            logger.opt(exception=True).debug(
-                "validation call failed — defaulting to ok",
-            )
-        return True, ""
-
     async def _build_turn_context(self, pid: str, *, ref_us: int = 0) -> str:
         """Pre-fetch scene/pose and format the turn-context block.
 
@@ -624,9 +613,9 @@ class RenderSceneProcessor(BrainProcessor):
         calls during this turn can be recorded as (prev → new) move-log entries.
         """
         scene, pose, ahead = await asyncio.gather(
-            self._call_mcp(self._render, "get_scene_state",  {}, silent=True),
-            self._call_mcp(self._oxr,    "get_head_pose",    {}, silent=True),
-            self._call_mcp(self._oxr,    "position_ahead",   {"distance": 1.5}, silent=True),
+            self._call_tool("get_scene_state", {}, silent=True),
+            self._call_tool("get_head_pose", {}, silent=True),
+            self._call_tool("position_ahead", {"distance": 1.5}, silent=True),
         )
 
         ctx_parts: list[str] = []
@@ -646,9 +635,9 @@ class RenderSceneProcessor(BrainProcessor):
                 )
                 lines.append(
                     f"  {o['id']} ({o['type']})  "
-                    f"pos=({pos.get('x',0):.2f}, {pos.get('y',0):.2f}, {pos.get('z',0):.2f})  "
-                    f"color=(r={col.get('r',0):.2f} g={col.get('g',0):.2f} b={col.get('b',0):.2f})  "
-                    f"size={o.get('size',0.1):.3f}m"
+                    f"pos=({pos.get('x', 0):.2f}, {pos.get('y', 0):.2f}, {pos.get('z', 0):.2f})  "
+                    f"color=(r={col.get('r', 0):.2f} g={col.get('g', 0):.2f} b={col.get('b', 0):.2f})  "
+                    f"size={o.get('size', 0.1):.3f}m"
                 )
             ctx_parts.append("\n".join(lines))
         else:
@@ -656,16 +645,14 @@ class RenderSceneProcessor(BrainProcessor):
 
         # ── Head pose + derived spatial shortcuts ─────────────────────────────
         if isinstance(pose, dict) and pose.get("is_valid"):
-            p  = pose["position"]
+            p = pose["position"]
             fv = pose["forward"]
             rv = pose["right"]
             uv = pose.get("up", {"x": 0, "y": 1, "z": 0})
 
             # Compute common offsets directly — no extra tool calls needed.
             def _off(vec: dict, d: float) -> str:
-                return (f"({p['x']+vec['x']*d:.2f}, "
-                        f"{p['y']+vec['y']*d:.2f}, "
-                        f"{p['z']+vec['z']*d:.2f})")
+                return f"({p['x'] + vec['x'] * d:.2f}, {p['y'] + vec['y'] * d:.2f}, {p['z'] + vec['z'] * d:.2f})"
 
             ahead_str = (
                 f"({ahead['x']:.2f}, {ahead['y']:.2f}, {ahead['z']:.2f})"
@@ -679,12 +666,12 @@ class RenderSceneProcessor(BrainProcessor):
                 f"  forward  : ({fv['x']:.3f}, {fv['y']:.3f}, {fv['z']:.3f})  ← 'ahead/forward'\n"
                 f"  right    : ({rv['x']:.3f}, {rv['y']:.3f}, {rv['z']:.3f})  ← 'right'\n"
                 f"  up       : ({uv['x']:.3f}, {uv['y']:.3f}, {uv['z']:.3f})  ← 'up'\n"
-                f"  yaw={pose.get('yaw_deg',0):.1f}°  pitch={pose.get('pitch_deg',0):.1f}°\n"
+                f"  yaw={pose.get('yaw_deg', 0):.1f}°  pitch={pose.get('pitch_deg', 0):.1f}°\n"
                 "SPATIAL SHORTCUTS (pre-computed — use directly, no tool call needed):\n"
                 f"  1.5m ahead of you     : {ahead_str}\n"
-                f"  1m to your right      : {_off(rv,  1.0)}\n"
+                f"  1m to your right      : {_off(rv, 1.0)}\n"
                 f"  1m to your left       : {_off(rv, -1.0)}\n"
-                f"  0.5m above eye level  : {_off(uv,  0.5)}\n"
+                f"  0.5m above eye level  : {_off(uv, 0.5)}\n"
                 f"  1m behind you         : {_off(fv, -1.0)}\n"
                 "  For other distances: new_pos = obj.pos + direction_vec × distance (per component)"
             )
@@ -706,8 +693,7 @@ class RenderSceneProcessor(BrainProcessor):
                     f"  {obj_id}: ({prev[0]:.2f}, {prev[1]:.2f}, {prev[2]:.2f}) → "
                     f"({new[0]:.2f}, {new[1]:.2f}, {new[2]:.2f})"
                 )
-            ctx_parts.append("[Recent moves] (most recent last — prev → new)\n"
-                             + "\n".join(move_lines))
+            ctx_parts.append("[Recent moves] (most recent last — prev → new)\n" + "\n".join(move_lines))
 
         # Recent conversation history — lets the agent understand "fix that",
         # "undo", "the sphere I just added", etc.
@@ -724,7 +710,9 @@ class RenderSceneProcessor(BrainProcessor):
         return context
 
     def _recover_text_tool_call(
-        self, content: str, all_names: set[str],
+        self,
+        content: str,
+        all_names: set[str],
     ) -> dict | None:
         """Recover a tool call the model emitted as plain text instead of via
         the tool_calls field. Two shapes seen in practice:
@@ -749,10 +737,15 @@ class RenderSceneProcessor(BrainProcessor):
                 logger.debug("failed to decode recovered tool-call JSON: {!r}", obj_text)
         return None
 
-    async def _agentic_loop(self, transcript: str, pid: str, *,
-                            ref_us: int = 0,
-                            needs_thinking: bool = False,
-                            thinking_ctx: list[str] | None = None) -> str:
+    async def _agentic_loop(
+        self,
+        transcript: str,
+        pid: str,
+        *,
+        ref_us: int = 0,
+        needs_thinking: bool = False,
+        thinking_ctx: list[str] | None = None,
+    ) -> str:
         """
         Multi-turn tool-calling loop using the OpenAI tool calling protocol.
 
@@ -793,8 +786,7 @@ class RenderSceneProcessor(BrainProcessor):
                 "Write out each component: x=…, y=…, z=…\n"
                 "\n"
                 "THINK STEP 4 — EXECUTE: call the tool with the computed values, "
-                "then reply with ONE short sentence to the user.\n\n"
-                + system_content
+                "then reply with ONE short sentence to the user.\n\n" + system_content
             )
 
         messages: list[ChatMessage] = [
@@ -827,11 +819,11 @@ class RenderSceneProcessor(BrainProcessor):
                 )
             except Exception:
                 logger.exception("agent-llm call failed on iteration {}", iteration)
-                break
+                return "Something went wrong — please try again."
 
-            finish     = resp.finish_reason or ""
+            finish = resp.finish_reason or ""
             tool_calls = resp.tool_calls or []
-            content    = resp.content.strip()
+            content = resp.content.strip()
 
             # Share the 30B's reasoning with the still-working loop so progress
             # updates reflect what the model is actually working on.
@@ -844,7 +836,10 @@ class RenderSceneProcessor(BrainProcessor):
 
             logger.debug(
                 "agent-llm iter={}  finish={}  tool_calls={}  content={!r}",
-                iteration, finish, len(tool_calls), content[:200],
+                iteration,
+                finish,
+                len(tool_calls),
+                content[:200],
             )
 
             if not tool_calls:
@@ -854,8 +849,8 @@ class RenderSceneProcessor(BrainProcessor):
                 # gets another chance with the same context.
                 if finish == "length" and needs_thinking:
                     logger.warning(
-                        "agent-llm iter={} hit length limit during thinking — "
-                        "retrying without thinking", iteration,
+                        "agent-llm iter={} hit length limit during thinking — retrying without thinking",
+                        iteration,
                     )
                     needs_thinking = False
                     continue
@@ -867,22 +862,26 @@ class RenderSceneProcessor(BrainProcessor):
 
                 if recovered:
                     logger.warning("text-format tool call {!r} — recovering", recovered["name"])
-                    tool_calls = [ToolCall(
-                        id=f"call_{uuid.uuid4().hex[:12]}",
-                        name=recovered["name"],
-                        arguments=json.dumps(recovered["arguments"]),
-                    )]
+                    tool_calls = [
+                        ToolCall(
+                            id=f"call_{uuid.uuid4().hex[:12]}",
+                            name=recovered["name"],
+                            arguments=json.dumps(recovered["arguments"]),
+                        )
+                    ]
                 else:
                     # Genuine final response.
                     _trace_log.info("RESP  {}", content or "Done.")
                     return content or "Done."
 
             # Add the assistant's tool-call message to the conversation.
-            messages.append(ChatMessage(
-                role="assistant",
-                content=content or "",
-                tool_calls=list(tool_calls),
-            ))
+            messages.append(
+                ChatMessage(
+                    role="assistant",
+                    content=content or "",
+                    tool_calls=list(tool_calls),
+                )
+            )
 
             # The spatial thinking prompt helps plan the first action but
             # actively harms subsequent iterations: it steers the model to
@@ -910,16 +909,15 @@ class RenderSceneProcessor(BrainProcessor):
 
                 logger.debug("tool call  iter={}  tool={}  args={}", iteration, name, args)
                 _trace_log.debug(
-                    "TOOL  [{}] {}({})", iteration, name,
+                    "TOOL  [{}] {}({})",
+                    iteration,
+                    name,
                     ", ".join(f"{k}={v}" for k, v in args.items()),
                 )
                 try:
-                    result = await self._execute_tool(name, args, pid=pid)
+                    result = await self._execute_tool(name, args, pid=pid, ref_us=ref_us)
                 except _SceneNotReadyError:
-                    return (
-                        "The XR scene isn't ready yet. "
-                        "Please click 'Launch XR' to start the headset session first."
-                    )
+                    return "The XR scene isn't ready yet. Please click 'Launch XR' to start the headset session first."
                 except _PerceptionUnavailableError as exc:
                     # No camera feed / frame / VLM — end the turn with a short
                     # spoken+panel message rather than looping or going silent.
@@ -928,103 +926,90 @@ class RenderSceneProcessor(BrainProcessor):
                 logger.info("tool result  tool={}  {}", name, result_str[:200])
                 _trace_log.info("RES   [{}] {} → {}", iteration, name, result_str[:300])
 
-                messages.append(ChatMessage(
-                    role="tool",
-                    content=result_str,
-                    tool_call_id=tc.id,
-                ))
+                messages.append(
+                    ChatMessage(
+                        role="tool",
+                        content=result_str,
+                        tool_call_id=tc.id,
+                    )
+                )
 
         return "Done."
 
     # ── live-frame perception (look_at_current_frame) ─────────────────────────
 
     async def _look_at_current_frame(self, pid: str, question: str) -> dict:
-        """Run the VLM on the current live camera frame via the shared
-        :class:`VisionModule` (frame tracking, camera-on-demand, and the VLM
-        call all live there). Returns a dict the agentic loop relays:
-          {"answer": "<vlm text>"}                  on success
-          {"error":  "<reason>", "spoken": "..."}   on graceful failure
+        """Answer a live-camera question through the native perception tool.
 
-        On a failure the user should hear, the dict carries a short ``spoken``
-        message; the loop relays the answer/error text and never hangs.
+        The ``xr_vision_tools`` group exposes ``look_at_current_frame`` over the
+        always-on live frame source. The processor injects the active
+        participant (which the model never supplies) and raises
+        ``_PerceptionUnavailableError`` when no fresh frame or VLM answer is
+        available so the turn ends with a short spoken message rather than
+        looping or failing silently.
         """
         if not pid:
-            return {"error": "no active participant", "spoken": _NO_FRAME_MSG}
-        if self._vision is None:
-            logger.error("look_at_current_frame called but no VLM service wired")
-            return {"error": "vlm unavailable", "spoken": _NO_FRAME_MSG}
-
+            raise _PerceptionUnavailableError(_NO_FRAME_MSG)
         _trace_log.info("LOOK  {}", question[:120])
         try:
-            answer = await self._vision.perceive(
-                pid, question, system_prompt=_PERCEPTION_SYSTEM_PROMPT,
+            result = await self._toolbox.invoke(
+                _LIVE_PERCEPTION_TOOL,
+                {"participant_id": pid, "question": question},
             )
-            _trace_log.info("VLM   {}", answer[:200])
-            return {"answer": answer}
-        except VisionUnavailable as exc:
-            logger.info("perception unavailable: {}", exc)
-            return {"error": str(exc), "spoken": _NO_FRAME_MSG}
         except Exception as exc:
             logger.exception("look_at_current_frame failed")
-            return {"error": str(exc), "spoken": _NO_FRAME_MSG}
+            raise _PerceptionUnavailableError(_NO_FRAME_MSG) from exc
+        _trace_log.info("VLM   {}", str(result.get("answer", ""))[:200])
+        return result
+
+    async def _look_at_past_frame(self, pid: str, args: dict, ref_us: int) -> dict:
+        """Answer a recorded-camera question through the native perception tool.
+
+        Injects the active participant and the utterance timestamp (never model
+        supplied); the model provides the question and a positive seconds
+        offset. A lookup failure is returned to the model as an error dict —
+        unlike the live path, a missing recorded frame does not end the turn.
+        """
+        return await self._call_tool(
+            _PAST_PERCEPTION_TOOL,
+            {
+                "participant_id": pid,
+                "question": str(args.get("question") or "").strip(),
+                "second_ago": args.get("second_ago", 0),
+                "reference_time_us": ref_us,
+            },
+        )
 
     # ── tool routing ──────────────────────────────────────────────────────────
 
     async def _execute_tool(
-        self, tool: str, args: dict, *, pid: str = "",
+        self,
+        tool: str,
+        args: dict,
+        *,
+        pid: str = "",
+        ref_us: int = 0,
     ) -> dict | str | None:
-        """Route a tool call to render-mcp, oxr-mcp, vec-mcp, vlm-mcp,
-        video-mcp, or the brain-local perception path."""
-        # Brain-executed live-frame perception — not an MCP tool. Intercept
+        """Invoke a native tool or a participant-aware perception path."""
+        # Live perception needs participant context that is not model supplied. Intercept
         # before _normalize_tool_args (which would strip the question text if
-        # it ever produced an empty value) and before MCP routing.
-        if tool == _PERCEPTION_TOOL:
-            question = str(args.get("question") or "").strip()
-            result = await self._look_at_current_frame(pid, question)
-            # Deterministic graceful failure: end the turn with the spoken
-            # message instead of feeding an error back to the model (which a
-            # flaky 30B might silently swallow → the "hangs in thinking" bug).
-            if isinstance(result, dict) and result.get("spoken"):
-                raise _PerceptionUnavailableError(result["spoken"])
-            return result
+        # it ever produced an empty value) and before native invocation.
+        if tool == _LIVE_PERCEPTION_TOOL:
+            return await self._look_at_current_frame(pid, str(args.get("question") or "").strip())
+        if tool == _PAST_PERCEPTION_TOOL:
+            return await self._look_at_past_frame(pid, args, ref_us)
 
         # Normalize nested dicts that the LLM sometimes generates instead of
         # flat scalar args — e.g. {"position": {x,y,z}} → x=, y=, z=.
         args = normalize_tool_args(args)
 
-        if tool in _OXR_TOOLS:
-            return await self._call_mcp(self._oxr, tool, args)
-
-        if tool in _VEC_TOOLS:
-            return await self._call_mcp(self._vec, tool, args)
-
-        # Intercept not_started before it reaches the model — it means LOVR
-        # hasn't spawned yet and no render op will succeed.  Return a clear
-        # explanation so the model can respond to the user instead of retrying.
-        if tool in _VLM_TOOLS:
-            # Guard against fabricated paths: the model must call
-            # get_frame_from_time first and use the returned path.
-            if tool == "ask_image":
-                path = args.get("image_path", "")
-                if path and not os.path.isfile(path):
-                    return {
-                        "error": (
-                            f"File not found: {path!r}. "
-                            "You must call get_frame_from_time first to get the "
-                            "real image path, then pass that path to ask_image."
-                        )
-                    }
-            return await self._call_mcp(self._vlm, tool, args)
-        if tool in _VIDEO_TOOLS:
-            return await self._call_mcp(self._video, tool, args)
-        result = await self._call_mcp(self._render, tool, args)
+        result = await self._call_tool(tool, args)
         if isinstance(result, dict) and result.get("reason") == "not_started":
             raise _SceneNotReadyError()
 
         # Record (prev → new) for any update_primitive that touched x/y/z so
         # later turns can answer "put it back" by reading the move log.
-        if (tool == "update_primitive" and isinstance(result, dict)
-                and result.get("ok")):
+        if tool == "update_primitive" and isinstance(result, dict) and result.get("ok"):
             obj_id = args.get("obj_id")
             prev = self._pre_move_positions.get(obj_id) if obj_id else None
             if prev and ("x" in args or "y" in args or "z" in args):
@@ -1043,42 +1028,42 @@ class RenderSceneProcessor(BrainProcessor):
 
         return result
 
-    async def _call_mcp(
-        self, client: McpClient, tool: str, args: dict, *, silent: bool = False
-    ) -> dict | str | None:
+    async def _call_tool(self, tool: str, args: dict, *, silent: bool = False) -> dict | str | list | None:
         try:
-            res  = await client.call_tool(tool, args)
-            data = tool_payload(res)
-            return data
+            return await self._toolbox.invoke(tool, args)
         except Exception as exc:
             if not silent:
-                logger.error("mcp {} failed: {}", tool, exc)
+                logger.error("native tool {} failed: {}", tool, exc)
             return {"error": str(exc)}
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
     async def _send(self, pid: str, text: str, *, topic: str) -> None:
         try:
-            await self._transport.send_return_data(DataMessage(
-                participant_id=pid,
-                topic=topic,
-                pts_us=_now_us(),
-                data=text.encode(),
-            ))
+            await self._transport.send_return_data(
+                DataMessage(
+                    participant_id=pid,
+                    topic=topic,
+                    pts_us=_now_us(),
+                    data=text.encode(),
+                )
+            )
         except Exception:
             logger.exception("send failed  topic={}", topic)
 
+    async def _set_status(self, status: str, pid: str) -> None:
+        """Publish the per-client UI status ('processing' / 'idle') on the
+        reserved ``_agent.status`` channel. Best-effort: it runs from a finally
+        during cancellation, so a failed publish must never break the turn."""
+        try:
+            await self._transport.endpoint.set_status(status, pid)
+        except Exception:
+            logger.opt(exception=True).debug("set_status({!r}) failed", status)
+
     async def on_participant_left(self, pid: str) -> None:
-        """Tear down per-pid live-frame / camera state. The base class cancels
-        in-flight query tasks; the VisionModule owns the frame + camera state."""
-        if self._vision is not None:
-            self._vision.release(pid)
+        """Release cached native live-frame state after participant cleanup."""
+        self._release_vision(pid)
 
     async def close(self) -> None:
         await self._llm.close()
         await self._agent_llm.close()
-        if self._vlm_service is not None:
-            try:
-                await self._vlm_service.close()
-            except Exception:
-                logger.opt(exception=True).debug("vlm_service close failed")

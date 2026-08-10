@@ -50,7 +50,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
-from xr_ai_agent import PixelFormat
+from xr_ai_hub import PixelFormat
 
 if TYPE_CHECKING:
     from xr_media_hub.ipc import SlotView
@@ -156,9 +156,7 @@ class VideoRecorder:
                 old_encoder = enc.encoder
                 enc.encoder = None
                 try:
-                    flushed = old_encoder.EndEncode()
-                    if flushed:
-                        enc.chunk_buf.extend(flushed)
+                    _append_encoded_packets(enc.chunk_buf, old_encoder.EndEncode())
                 except Exception as e:
                     logger.warning(
                         "recorder  EndEncode error on resolution change pid={!r}: {}",
@@ -194,17 +192,13 @@ class VideoRecorder:
                 if enc.failed:
                     return
 
-            encoded = enc.encoder.Encode(nv12)
-            if encoded:
-                enc.chunk_buf.extend(encoded)
+            _append_encoded_packets(enc.chunk_buf, enc.encoder.Encode(nv12))
 
             enc.chunk_frames += 1
 
     def _rotate_chunk(self, enc: _TrackEncoder, pid: str) -> None:
         try:
-            flushed = enc.encoder.EndEncode()
-            if flushed:
-                enc.chunk_buf.extend(flushed)
+            _append_encoded_packets(enc.chunk_buf, enc.encoder.EndEncode())
         except Exception as e:
             logger.warning("recorder  EndEncode error pid={!r}: {}", pid, e)
         self._flush_chunk(enc)
@@ -319,12 +313,30 @@ class VideoRecorder:
                 # failed; skip EndEncode but still flush any buffered chunk.
                 if enc.encoder is not None:
                     try:
-                        flushed = enc.encoder.EndEncode()
-                        if flushed:
-                            enc.chunk_buf.extend(flushed)
+                        _append_encoded_packets(enc.chunk_buf, enc.encoder.EndEncode())
                     except Exception as e:
                         logger.warning("recorder  flush error pid={!r}: {}", pid, e)
                 self._flush_chunk(enc)
+
+
+# ── encoded packets ───────────────────────────────────────────────────────────
+
+def _append_encoded_packets(
+    buffer: bytearray,
+    packets: list[dict[str, object]],
+) -> None:
+    """Append bitstream data from PyNvVideoCodec 2.2 encoded packets."""
+    for packet in packets:
+        if not isinstance(packet, dict):
+            raise TypeError(
+                f"unexpected PyNvVideoCodec packet: {type(packet).__name__}",
+            )
+        data = packet.get("data")
+        if not isinstance(data, bytes):
+            raise TypeError(
+                f"unexpected PyNvVideoCodec packet data: {type(data).__name__}",
+            )
+        buffer.extend(data)
 
 
 # ── pixel format conversion ───────────────────────────────────────────────────

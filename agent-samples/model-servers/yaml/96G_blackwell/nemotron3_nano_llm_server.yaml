@@ -10,8 +10,8 @@
 # free_at_startup ≈ 96 GiB.
 # 0.35 × 96 = 33.6 GiB cap: ~15-20 GiB NVFP4 weights + ~14 GiB KV.
 #
-# Total budget (agent-llm 0.35 + vlm 0.20 + llm 0.16):
-#   0.71 × 96 ≈ 68 GiB — leaves ~28 GiB for STT, LOVR, drivers, overhead.
+# Total budget (agent-llm 0.35 + vlm 0.20):
+#   0.55 × 96 ≈ 53 GiB — leaves ~43 GiB for STT, LOVR, drivers, overhead.
 
 host: "0.0.0.0"
 port: 8107

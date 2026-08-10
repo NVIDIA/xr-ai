@@ -16,7 +16,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_agent import ReturnAudioFlush
+from xr_ai_hub import ReturnAudioFlush
 
 pytestmark = pytest.mark.asyncio
 

@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+endpoint: tcp://0.0.0.0:8340
+documents_dir: documents
+models_config: models.local.json
+embedding_role: embedding
+cache_dir: .rag-cache
+chunk_size: 900
+overlap: 120
+embedding_dim: 768
+batch_size: 32
+min_score: 0.3
+# Set this when an endpoint changes its backing model without a profile edit.
+# cache_key: embedding-model-revision

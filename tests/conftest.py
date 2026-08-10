@@ -32,7 +32,7 @@ from typing import AsyncIterator, Callable
 
 import pytest
 
-from xr_ai_agent          import ProcessorEndpoint
+from xr_ai_hub          import ProcessorEndpoint
 from xr_media_hub.ipc     import ConnectorEndpoint, HubEndpoint
 
 

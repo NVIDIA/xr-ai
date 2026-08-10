@@ -1,0 +1,24 @@
+{
+  "models": {
+    "stt": {
+      "adapter": {"preset": "parakeet_stt"},
+      "endpoint": {"base_url": "http://localhost:8103", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "stt"}
+    },
+    "vlm": {
+      "category": "vlm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "llm",
+        "capabilities": {"streaming": true, "vision": true}
+      },
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "vlm-omni"}
+    },
+    "tts": {
+      "adapter": {"preset": "piper_tts"},
+      "endpoint": {"base_url": "http://localhost:8105", "readiness": "health"},
+      "deployment": {"ownership": "managed", "service": "tts"}
+    }
+  }
+}

@@ -25,7 +25,7 @@ try:
 except (ImportError, RuntimeError, OSError) as exc:
     pytest.skip(f"PyNvVideoCodec unavailable: {exc}", allow_module_level=True)
 
-from xr_ai_agent import FrameSignal, PixelFormat, SlotView  # noqa: E402
+from xr_ai_hub import FrameSignal, PixelFormat, SlotView  # noqa: E402
 
 from xr_media_hub.video import VideoRecorder, VideoRecorderConfig  # noqa: E402
 

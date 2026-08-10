@@ -15,75 +15,86 @@ Text in (data ch.)    → text query
                                                 │
                        sentence-batched TTS  ←──┴──→  data channel reply
 
-Model backend
--------------
-``model_backend`` in yaml/simple_vlm_example_worker.yaml selects where the
-VLM runs: ``local`` (default) uses the local vlm-server; ``nim`` uses hosted
-NVIDIA NIM (the worker loads models.nim.yaml and the local vlm-server is not
-started). STT and TTS always run locally. See the README section
-"Hosting models on NVIDIA NIM".
+Model deployment
+----------------
+``models_config`` in yaml/simple_vlm_example_worker.yaml selects a deployment
+profile. The default profile owns local STT, VLM, and TTS services; the hosted
+profile replaces only the VLM with NVIDIA NIM.
 
 How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example
 """
-import re
+from dataclasses import replace
 from pathlib import Path
 
-from xr_ai_launcher import Process, ensure_credentials, run_stack, warn_if_missing
+from xr_ai_launcher import (
+    Process,
+    ensure_credentials,
+    load_model_deployment,
+    run_stack,
+    warn_if_missing,
+)
 from xr_ai_logging import setup_logging
 
 _BASE = Path(__file__).resolve().parent
 
 _WORKER_CONFIG = "yaml/simple_vlm_example_worker.yaml"
 
-# Read the model_backend scalar from the worker YAML without pyyaml — the
-# orchestrator is stdlib-only. Mirrors the regex-read precedent used for
-# lovr_bin in xr-render-demo.
-_BACKEND_RE = re.compile(r"^\s*model_backend\s*:\s*[\"']?(\w+)[\"']?", re.MULTILINE)
+_MODEL_PROCESSES = {
+    "vlm": Process(
+        "vlm", "../../ai-services/vlm-server", "vlm_server",
+        config="yaml/vlm_server.yaml",
+    ),
+    "vlm-omni": Process(
+        "vlm-omni",
+        "../../ai-services/llm/nemotron_omni",
+        "nemotron_omni_llm_server",
+    ),
+    "stt": Process(
+        "stt", "../../ai-services/stt-server", "stt_server",
+        config="yaml/stt_server.yaml",
+    ),
+    "tts": Process(
+        "tts", "../../ai-services/tts/piper", "piper_tts_server",
+        config="yaml/piper_tts_server.yaml",
+    ),
+}
 
 
-def _model_backend() -> str:
-    try:
-        m = _BACKEND_RE.search((_BASE / _WORKER_CONFIG).read_text())
-    except OSError:
-        return "local"
-    return m.group(1).lower() if m else "local"
-
-
-def _build_processes(backend: str) -> list[Process]:
+def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
+    deployment = load_model_deployment(_BASE / _WORKER_CONFIG)
+    unknown_services = deployment.services.keys() - _MODEL_PROCESSES.keys()
+    if unknown_services:
+        raise ValueError(
+            f"model profile declares unknown services: {sorted(unknown_services)}"
+        )
     procs = [
         Process("hub", "../../server-runtime", "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),
     ]
-    # The local vlm-server is only needed when the VLM runs locally; with
-    # model_backend: nim the worker calls hosted NIM instead, so starting it
-    # would waste GPU (and a load failure would abort the fail-fast stack).
-    if backend != "nim":
-        procs.append(
-            Process("vlm", "../../ai-services/vlm-server", "vlm_server",
-                    config="yaml/vlm_server.yaml"),
+    for service, process in _MODEL_PROCESSES.items():
+        launch_mode = deployment.launch_mode(service)
+        if launch_mode is not None:
+            procs.append(replace(process, launch_mode=launch_mode))
+    procs.append(
+        Process(
+            "worker", "worker", "simple_vlm_example_worker",
+            config=_WORKER_CONFIG,
         )
-    procs += [
-        Process("stt", "../../ai-services/stt-server", "stt_server",
-                config="yaml/stt_server.yaml"),
-        Process("tts", "../../ai-services/tts/piper", "piper_tts_server",
-                config="yaml/piper_tts_server.yaml"),
-        Process("worker", "worker", "simple_vlm_example_worker",
-                config=_WORKER_CONFIG),
-    ]
-    return procs
+    )
+    return procs, deployment.required_credentials
 
 
 def run() -> None:
     setup_logging("orchestrator", namespace="simple-vlm-example")
-    backend = _model_backend()
+    processes, credentials = _build_processes()
     # HF_TOKEN is optional for the default (public) model — it only raises HF
     # rate limits / download speed and is required only for gated models.
     # Warn instead of prompting; see docs/credentials.md.
     warn_if_missing("HF_TOKEN")
-    if backend == "nim":
-        ensure_credentials("NGC_API_KEY")
-    run_stack(_build_processes(backend), _BASE)
+    for credential in credentials:
+        ensure_credentials(credential)
+    run_stack(processes, _BASE)
 
 
 if __name__ == "__main__":

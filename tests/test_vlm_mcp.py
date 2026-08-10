@@ -24,7 +24,7 @@ import pytest
 from aiohttp import web
 from fastmcp import Client as McpClient
 
-from xr_ai_models.openai_compat import OpenAICompatVLM
+from xr_ai_models import OpenAICompatVLM
 
 from vlm_mcp_server.__main__ import (
     _make_vlm_from_cfg,

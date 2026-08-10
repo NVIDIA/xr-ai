@@ -1,38 +1,33 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typed values returned by text-memory functions."""
+"""Deprecated forwarding alias for the former ``text_memory.schemas`` module.
 
-from pydantic import BaseModel
+The schema classes folded into :mod:`xr_ai_nat.functions.text_memory.functions`
+when text-memory adopted a typed request/result API. Import surviving names from
+:mod:`xr_ai_nat.functions.text_memory` instead of this module; this alias will be
+removed in a future version.
 
+``TranscriptSegment`` is unchanged. ``TranscriptStats`` was renamed to
+``TranscriptStatsResult`` but keeps the same fields (only ``earliest_us`` /
+``latest_us`` widened ``int`` → ``int | None``), so it remains here as a
+deprecated alias. ``OperationResult`` and ``TextMemoryError`` were genuinely
+removed (the typed API validates input and returns typed results instead of
+error-as-data) and are not aliased.
+"""
 
-class OperationResult(BaseModel):
-    """Confirmation that a text-memory write completed."""
+import warnings
 
-    ok: bool = True
+from .functions import TranscriptSegment, TranscriptStatsResult
 
+# Deprecated alias — same fields as the old TranscriptStats (bounds widened).
+TranscriptStats = TranscriptStatsResult
 
-class TextMemoryError(BaseModel):
-    """A query error represented as data for agent and MCP callers."""
+warnings.warn(
+    "xr_ai_nat.functions.text_memory.schemas is deprecated; import from "
+    "xr_ai_nat.functions.text_memory instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-    error: str
-
-
-class TranscriptSegment(BaseModel):
-    """One timestamped text segment."""
-
-    timestamp_us: int
-    text: str
-
-
-class TranscriptStats(BaseModel):
-    """Summary statistics for one text source."""
-
-    source_id: str
-    count: int
-    total_chars: int
-    earliest_us: int
-    latest_us: int
-
-
-__all__ = ["OperationResult", "TextMemoryError", "TranscriptSegment", "TranscriptStats"]
+__all__ = ["TranscriptSegment", "TranscriptStats"]

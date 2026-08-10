@@ -40,8 +40,9 @@ PIL_Image = pytest.importorskip("PIL.Image")
 pytest.importorskip("fastmcp")
 
 from fastmcp import Client as McpClient  # noqa: E402
-from xr_ai_agent import PixelFormat  # noqa: E402
+from xr_ai_hub import PixelFormat  # noqa: E402
 from xr_media_hub.ipc import ConnectorEndpoint  # noqa: E402
+from xr_media_hub.video._recorder import _append_encoded_packets  # noqa: E402
 
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
@@ -87,12 +88,8 @@ def _encode_chunk(out_dir: pathlib.Path, pid: str, start_us: int) -> dict:
 
     buf = bytearray()
     for i in range(_FRAMES):
-        chunk = encoder.Encode(_synthetic_nv12(i))
-        if chunk:
-            buf.extend(chunk)
-    flushed = encoder.EndEncode()
-    if flushed:
-        buf.extend(flushed)
+        _append_encoded_packets(buf, encoder.Encode(_synthetic_nv12(i)))
+    _append_encoded_packets(buf, encoder.EndEncode())
 
     h264_path = pid_dir / f"{start_us}.264"
     h264_path.write_bytes(bytes(buf))
@@ -167,7 +164,7 @@ async def test_get_frame_from_time_returns_valid_png(tmp_path: pathlib.Path) -> 
     start_us = int(time.time() * 1_000_000)
     try:
         meta = _encode_chunk(rec_dir, pid, start_us)
-    except Exception as exc:  # noqa: BLE001
+    except (RuntimeError, OSError) as exc:
         # No NVENC hardware (or driver mismatch) — skip cleanly per the
         # task brief; we only care about the path when the GPU is present.
         pytest.skip(f"NVENC unavailable: {exc!r}")

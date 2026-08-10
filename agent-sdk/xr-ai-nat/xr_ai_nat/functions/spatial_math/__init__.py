@@ -3,8 +3,8 @@
 
 """Public spatial-math function group and coordinate schemas."""
 
+from ..types import SpatialFrame, Vector3
 from .functions import SpatialMathFunctionsConfig
-from .schemas import SpatialFrame, Vector3
 
 __all__ = [
     "SpatialFrame",

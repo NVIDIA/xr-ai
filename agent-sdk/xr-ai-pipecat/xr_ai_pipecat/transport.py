@@ -32,7 +32,7 @@ from pipecat.transports.base_input import BaseInputTransport
 from pipecat.transports.base_output import BaseOutputTransport
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 
-from xr_ai_agent import (
+from xr_ai_hub import (
     AudioChunk,
     DataMessage,
     ParticipantEvent,
@@ -95,6 +95,8 @@ class XRMediaHubInputTransport(BaseInputTransport):
         self._ep.on_participant(self._on_hub_participant)
 
     async def start(self, frame: StartFrame):
+        if self._started_event:
+            self._started_event.clear()
         await super().start(frame)
         self._started = True
         self._ep_task = asyncio.create_task(self._ep.run(), name="ep-run")
@@ -105,6 +107,8 @@ class XRMediaHubInputTransport(BaseInputTransport):
 
     async def stop(self, frame: EndFrame):
         self._started = False
+        if self._started_event:
+            self._started_event.clear()
         self._ep.stop()
         if self._ep_task:
             self._ep_task.cancel()
@@ -117,6 +121,8 @@ class XRMediaHubInputTransport(BaseInputTransport):
 
     async def cancel(self, frame: CancelFrame):
         self._started = False
+        if self._started_event:
+            self._started_event.clear()
         self._ep.stop()
         if self._ep_task:
             self._ep_task.cancel()

@@ -8,8 +8,7 @@
 # Model backend: where the LLM and VLM run.
 #   local — local vLLM model-servers (default)
 #   nim   — hosted NVIDIA NIM (build.nvidia.com); the worker loads
-#           models.nim.yaml and the orchestrator points vlm-mcp at
-#           vlm_mcp_server.nim.yaml. Requires NGC_API_KEY (docs/credentials.md).
+#           models.nim.yaml. Requires NGC_API_KEY (docs/credentials.md).
 #           STT/TTS stay local. This is the ONLY change needed — no main.py edit.
 model_backend: local
 
@@ -26,15 +25,11 @@ models_yaml: models.yaml
 # operators populate the list to enable wake-word gating.
 voice_gate_yaml: voice_gate.yaml
 
-# ── MCP server base URLs ──────────────────────────────────────────────────────
-render_mcp_url: http://localhost:8220
-oxr_mcp_url:    http://localhost:8230
-vlm_mcp_url:    http://localhost:8240
-video_mcp_url:  http://localhost:8210
-# vec-mcp: pure-math spatial primitives (midpoint, world_offset,
-# along_direction, scale_value).  Lets the LLM use the math instead of
-# computing it in head.
-vec_mcp_url:    http://localhost:8250
+# ── Native capability services ───────────────────────────────────────────────
+scene_endpoint: tcp://127.0.0.1:8320
+openxr_endpoint: tcp://127.0.0.1:8330
+video_memory_endpoint: tcp://127.0.0.1:8310
+text_memory_dir: /dev/shm/xr-ai/text-memory
 
 # ── Voice activity detection (Silero VAD, ONNX backend) ──────────────────────
 # silence_duration: seconds of trailing silence that ends an utterance.

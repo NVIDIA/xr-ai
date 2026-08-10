@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import importlib
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,9 +13,13 @@ import pytest
 from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
 from transcript_mcp_server.__main__ import build_mcp
-from xr_ai_nat.adapters.mcp import create_mcp_server
-from xr_ai_nat.functions.text_memory import TextMemoryError, TextMemoryFunctionsConfig
-from xr_ai_nat.functions.text_memory._store import TextMemoryStore
+from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
+from xr_ai_nat.functions.text_memory.functions import (
+    TranscriptSegment,
+    TranscriptStatsResult,
+    _TranscriptStore,
+)
+from xr_ai_nat.mcp import create_mcp_server
 
 
 @asynccontextmanager
@@ -51,8 +56,8 @@ async def test_text_memory_functions_persist_query_and_summarize(tmp_path) -> No
         source_ids = await sources.ainvoke({})
         summary = await stats.ainvoke({"source_id": "alice@home"})
         missing = await stats.ainvoke({"source_id": "missing"})
-    assert [segment.text for segment in segments] == ["first", "later"]
-    assert source_ids == ["alice@home"]
+    assert [segment.text for segment in segments.segments] == ["first", "later"]
+    assert source_ids.sources == ["alice@home"]
     assert summary.model_dump() == {
         "source_id": "alice@home",
         "count": 2,
@@ -60,7 +65,13 @@ async def test_text_memory_functions_persist_query_and_summarize(tmp_path) -> No
         "earliest_us": 10,
         "latest_us": 20,
     }
-    assert isinstance(missing, TextMemoryError)
+    assert missing.model_dump() == {
+        "source_id": "missing",
+        "count": 0,
+        "total_chars": 0,
+        "earliest_us": None,
+        "latest_us": None,
+    }
     assert (tmp_path / "alice_home.identity").read_text() == "alice@home"
 
 
@@ -94,9 +105,9 @@ async def test_generic_mcp_adapter_preserves_list_and_object_results(tmp_path) -
         "timestamp_us",
         "text",
     }
-    assert added.structured_content == {"result": {"ok": True}}
+    assert added.structured_content == {"ok": True}
     assert queried.structured_content == {
-        "result": [{"timestamp_us": 100, "text": "remember this"}]
+        "segments": [{"timestamp_us": 100, "text": "remember this"}]
     }
 
 
@@ -115,7 +126,7 @@ async def test_transcript_mcp_functions_survive_builder_teardown(tmp_path) -> No
 
     assert added.structured_content == {"ok": True}
     assert queried.structured_content == {
-        "result": [{"timestamp_us": 100, "text": "remember this"}]
+        "segments": [{"timestamp_us": 100, "text": "remember this"}]
     }
 
 
@@ -130,8 +141,8 @@ async def test_text_memory_disambiguates_sanitized_source_names(tmp_path) -> Non
             {"source_id": "room?a", "start_us": 0, "end_us": 10}
         )
 
-    assert [segment.text for segment in slash] == ["slash"]
-    assert [segment.text for segment in question] == ["question"]
+    assert [segment.text for segment in slash.segments] == ["slash"]
+    assert [segment.text for segment in question.segments] == ["question"]
     assert (tmp_path / "room_a.identity").read_text() == "room/a"
     assert (tmp_path / "room_a_2.identity").read_text() == "room?a"
 
@@ -140,12 +151,24 @@ def test_text_memory_store_does_not_follow_identity_symlinks(tmp_path: Path) -> 
     root = tmp_path / "transcripts"
     outside = tmp_path / "outside.identity"
     outside.write_text("malicious", encoding="utf-8")
-    store = TextMemoryStore(root)
+    store = _TranscriptStore(root)
     (root / "malicious.jsonl").write_text("", encoding="utf-8")
     (root / "malicious.identity").symlink_to(outside)
 
-    with pytest.raises(ValueError, match="escapes text-memory directory"):
+    with pytest.raises(ValueError, match="escapes transcript directory"):
         store.query("malicious", 0, 1)
+
+
+def test_text_memory_schemas_alias_forwards_transcript_segment() -> None:
+    from xr_ai_nat.functions.text_memory import schemas as schemas_module
+
+    assert schemas_module.TranscriptSegment is TranscriptSegment
+    # TranscriptStats was renamed but kept the same fields, so it stays as an alias.
+    assert schemas_module.TranscriptStats is TranscriptStatsResult
+    assert schemas_module.__all__ == ["TranscriptSegment", "TranscriptStats"]
+
+    with pytest.warns(DeprecationWarning, match="text_memory"):
+        importlib.reload(schemas_module)
 
 
 async def test_mcp_adapter_rejects_ambiguous_or_unknown_names(tmp_path) -> None:

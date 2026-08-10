@@ -79,7 +79,8 @@ def setup_hf_env(cfg: dict, model_cache: Path) -> str | None:
     cuda_devices = cfg.get("cuda_visible_devices")
     if cuda_devices is not None:
         cuda_devices = str(cuda_devices)
-        # Pip mode reads it from the env; docker mode forwards via --gpus.
+        # Pip mode reads it from the env; docker mode forwards it through the
+        # NVIDIA runtime.
         os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
 
     hf_token = cfg.get("hf_token") or os.environ.get("HF_TOKEN", "")

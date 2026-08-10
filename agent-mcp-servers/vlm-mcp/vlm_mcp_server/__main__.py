@@ -5,11 +5,12 @@
 VLM MCP server.
 
 Thin MCP compatibility process — one tool at /mcp on port 8240. There are no
-REST endpoints, hub IPC subscriptions, or `xr-ai-agent` runtime dependencies.
+REST endpoints, hub IPC subscriptions, or `xr-ai-hub-client` runtime dependencies.
 
-The single tool ``ask_image(question, image_path)`` reads a local PNG path,
-republishes the native ``xr_vision`` image-question function. Image
-normalization and the VLM call stay in the native function.
+The single tool ``ask_image(question, image_path)`` reads a local PNG path and
+forwards it to the VLM. It is a self-contained file → VLM wrapper: the native
+vision surface is now always-on streaming (``xr_vision_tools``) with no
+file-path tool, so this path-based tool lives with its only consumer.
 
 Typical two-step agent flow
 ───────────────────────────
@@ -59,16 +60,16 @@ from loguru import logger
 from nat.builder.workflow_builder import WorkflowBuilder
 
 from xr_ai_logging import setup_logging
-from xr_ai_nat.adapters.mcp import create_mcp_server
-from xr_ai_nat.functions.vision import VisionFunctionsConfig
+from xr_ai_nat.mcp import create_mcp_server
 from xr_ai_models import (
     ModelsConfig,
+    VLMService,
     VLMSpec,
     load_models_config_from_dict,
     make_vlm,
 )
-from xr_ai_models.config import KIND_OPENAI_COMPAT
-from xr_ai_models.protocols import VLMService
+
+from ._ask_image import AskImageConfig
 
 
 # ── VLM factory ──────────────────────────────────────────────────────────────
@@ -116,7 +117,6 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
         )
         chat_template_kwargs: dict[str, Any] = {"enable_thinking": enable_thinking}
         spec = VLMSpec(
-            kind=KIND_OPENAI_COMPAT,
             base_url=vlm_server,
             model_name="vlm",
             capabilities={"streaming": True, "vision": True},
@@ -137,10 +137,10 @@ def _make_vlm_from_cfg(cfg: dict[str, Any]) -> tuple[VLMService, float]:
 # ── FastMCP build ─────────────────────────────────────────────────────────────
 
 async def build_mcp(vlm: VLMService):
-    """Republish the native vision function under the existing MCP tool name."""
+    """Expose the file-based image-question function under the MCP tool name."""
 
     async with WorkflowBuilder() as builder:
-        await builder.add_function_group("vision", VisionFunctionsConfig(vlm=vlm))
+        await builder.add_function_group("vision", AskImageConfig(vlm=vlm))
         group = await builder.get_function_group("vision")
         functions = await group.get_all_functions()
 

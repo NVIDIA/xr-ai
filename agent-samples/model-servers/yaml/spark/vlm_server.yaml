@@ -3,7 +3,7 @@
 
 # VLM server — DGX Spark (GB10, ~120 GiB GPU-visible HBM).
 #
-# vlm is SECOND in load order: agent-llm → vlm → llm.
+# vlm is SECOND in load order: agent-llm → vlm.
 # free_at_startup ≈ 120 − 42 (agent-llm) − 2 (STT) ≈ 76 GiB.
 # 0.20 × 120 = 24 GiB cap: ~16 GiB Cosmos-7B weights + ~8 GiB KV.
 

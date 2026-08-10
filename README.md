@@ -49,9 +49,9 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Sample | Local VRAM needed |
 |---|---|
-| model-servers (all 4 models) | ~70 GB |
+| model-servers (shared models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
-| xr-render-demo (requires model-servers) | ~70 GB (models) + ~2 GB (hub/TTS) |
+| xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
 **Software**
@@ -121,13 +121,13 @@ the demo itself: start `model-servers` once, then run the demo as many times
 as you like without reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
-abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS
-behind four service protocols.  Each sample ships a `yaml/models.yaml` that
-names the logical models the worker needs (`llm`, `vlm`, `stt`, …) with
+abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
+embeddings behind typed service protocols. Each sample ships a model config that names the
+logical models the worker needs (`llm`, `vlm`, `stt`, …) with
 preset references that pre-fill model-specific quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings).  Workers call
 `make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
-"stt")` / `make_tts(config, "tts")` — no hand-rolled httpx clients, no model
+"stt")` / `make_tts(config, "tts")` / `make_embedding(config, "embedding")` — no hand-rolled httpx clients, no model
 quirks leaking out of the SDK.  Full quickstart and the built-in preset
 table: [`agent-sdk/xr-ai-models/README.md`](agent-sdk/xr-ai-models/README.md).
 
@@ -140,7 +140,7 @@ on startup.
 
 ### Model servers (shared AI services)
 
-`model-servers` starts the four inference services used across demos and exits
+`model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running `xr-render-demo`, or whenever you want to
 pre-warm models:
@@ -155,6 +155,18 @@ GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
 On first run each model downloads from HuggingFace (~50 GB total; can take
 tens of minutes).  On subsequent runs the containers restart in under a minute.
 
+The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
+STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
+Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
+On `dual_48G_ada`, the default stack places Cosmos and embeddings on GPU 0;
+the Omni stack places Omni on GPU 0 and embeddings on GPU 1.
+Switching stacks stops the incompatible persistent models first and aborts if
+they cannot be stopped, avoiding GPU overcommit.
+
+```bash
+uv run model_servers --omni-stack
+```
+
 The default models are public, so no HuggingFace token is required.  Set
 `HF_TOKEN` to lift download rate limits / speed, or to use a gated model — see
 [`docs/credentials.md`](docs/credentials.md).  The launcher won't prompt; it
@@ -166,12 +178,20 @@ To stop all model servers when done:
 uv run model_servers --stop
 ```
 
+`--stop` always stops both stack variants, so it takes no stack-selection flag.
+
 ### Simple VLM example (vision Q&A over voice + text)
 
 End-to-end voice + vision sample.  Speak into the mic, type into the data
 channel, or send the literal text `"ping"` — all routes go through the
 same VLM pipeline against the latest video frame.  Replies arrive as
 streaming Piper TTS audio plus a `vlm.response` text message.
+
+The packaged worker composes the NAT-native streaming vision function with
+`xr-ai-voice`'s `VoiceSession`; Pipecat remains private to that runtime and no
+MCP client is involved. See the
+[sample README](agent-samples/simple-vlm-example/README.md) for the worker
+layout and configuration boundaries.
 
 Uses `nvidia/Cosmos-Reason1-7B` (NVIDIA Open Model License + Apache 2.0).
 
@@ -237,36 +257,35 @@ after a moment, and you hear the reply through your speakers.
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
 
-**Remote model** — create a models overlay that points the VLM at your
-remote endpoint, then tell the worker to use it:
+**Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
+your server, and select it in the worker config:
 
-```yaml
-# yaml/models.custom.yaml — overlay for a remote VLM endpoint
-vlm:
-  kind:     preset:cosmos_vlm
-  base_url: https://your-remote-vlm.example.com
+```json
+{
+  "endpoint": {"base_url": "https://your-remote-vlm.example.com"},
+  "deployment": {"ownership": "external"}
+}
 ```
 
 ```yaml
-# yaml/simple_vlm_example_worker.yaml — point the worker at the overlay
-models_yaml: yaml/models.custom.yaml
+# yaml/simple_vlm_example_worker.yaml
+models_config: models.remote.json
 ```
 
-When pointing at a remote model, `vlm_server.yaml` is unused — remove
-the `vlm_server` entry from the launcher's process list so no local
-vLLM process is started.
+The external deployment declaration makes the orchestrator skip the local VLM
+process automatically.
 
 **Hosted NVIDIA NIM** — run the VLM on hosted NIM
 ([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS
 stay local) by setting **one key** in `simple_vlm_example_worker.yaml`:
 
 ```yaml
-model_backend: nim     # default is "local"
+models_config: models.hosted.json
 ```
 
-The worker then loads the ready-made `yaml/models.nim.yaml` overlay and the
-orchestrator skips the local vlm-server automatically — no `main.py` edits.
-Pick the hosted model id in `models.nim.yaml` and provide an `NGC_API_KEY` as
+The same profile configures the worker and makes the orchestrator skip the
+local VLM server. Pick the hosted model id in `models.hosted.json` and provide
+an `NGC_API_KEY` as
 an **environment variable** (or save it once via the launcher credential
 prompt) — it is not stored in YAML; the overlay only names the env var via
 `api_key_env: NGC_API_KEY`. See
@@ -289,10 +308,11 @@ Quest 3 / Vision Pro on the same LAN, or the IWER emulator built into the
 web client for desktop dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, MCP compatibility adapters, and the
-worker. The Pipecat pipeline pairs a fast
-Llama-8B for quick-acks with a Nemotron-30B agentic tool-calling loop over
-`render-mcp` / `oxr-mcp` / `vlm-mcp` / `video-mcp`. Full process map,
+endpoints, typed capability processes, and the worker. The worker calls those
+processes through native NAT functions; MCP adapters remain optional outward
+compatibility surfaces and are not in the sample's execution path. The Pipecat pipeline runs
+quick-acks and a Nemotron-30B agentic tool-calling loop over
+scene, XR tracking, spatial math, vision, and video-memory functions. Full process map,
 agentic-loop details, and the XR session lifecycle:
 [`docs/xr-render-demo.md`](docs/xr-render-demo.md).
 
@@ -306,7 +326,7 @@ cd agent-samples/model-servers
 uv sync && uv run model_servers
 ```
 
-This exits immediately once all four services are ready.  Weights stay loaded
+This exits immediately once all services are ready. Weights stay loaded
 in the background.
 
 #### Step 2 — Start the demo
@@ -367,10 +387,10 @@ uv run model_servers --stop
 model_backend: nim     # default is "local"
 ```
 
-The worker loads `yaml/models.nim.yaml` and the orchestrator points `vlm-mcp`
-at `yaml/vlm_mcp_server.nim.yaml` automatically — no `main.py` edits. Provide
+The worker loads `yaml/models.nim.yaml` for the native model-backed functions —
+no `main.py` edits. Provide
 an `NGC_API_KEY` as an **environment variable** (or via the launcher
-credential prompt — not in YAML) and just don't start the local `llm` /
+credential prompt — not in YAML) and just don't start the local
 `agent-llm` / `vlm` model-servers. See
 [`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
 
@@ -478,10 +498,11 @@ For engineers and agents working in the repo:
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
+| [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
 | [`docs/architecture.md`](docs/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
 | [`docs/process-model.md`](docs/process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
 | [`docs/ai-services.md`](docs/ai-services.md) | VLM / STT / TTS / LLM server reference + worker call examples |
-| [`docs/xr-render-demo.md`](docs/xr-render-demo.md) | xr-render-demo architecture: 12-process stack, agentic loop, XR lifecycle |
+| [`docs/xr-render-demo.md`](docs/xr-render-demo.md) | xr-render-demo architecture: native functions, agentic loop, XR lifecycle |
 | [`docs/adding-a-sample.md`](docs/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
 | [`docs/adding-cloudxr.md`](docs/adding-cloudxr.md) | Wiring CloudXR into a sample |
 | [`docs/credentials.md`](docs/credentials.md) | HF / NGC token management |

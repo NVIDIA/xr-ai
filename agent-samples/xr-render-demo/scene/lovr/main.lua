@@ -20,11 +20,11 @@ function lovr.log(message, level, tag)
     io.stdout:flush()
 end
 
-lovr.log("main.lua: top of file", "info", "render-mcp-scene")
+lovr.log("main.lua: top of file", "info", "xr-render-scene")
 
 local zmq = require("lib.zmq")
 local mp  = require("lib.msgpack")
-lovr.log("lib.zmq + lib.msgpack loaded", "info", "render-mcp-scene")
+lovr.log("lib.zmq + lib.msgpack loaded", "info", "xr-render-scene")
 
 -- ── Scene state ───────────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ local ok, err = pcall(function()
 end)
 if not ok then
     recv_err = tostring(err)
-    lovr.log("ZMQ error: " .. recv_err, "info", "render-mcp-scene")
+    lovr.log("ZMQ error: " .. recv_err, "info", "xr-render-scene")
 end
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ end
 local function handle_scene_add(v)
     local id = v.id
     if not id then
-        lovr.log("scene.add: missing id — dropping", "info", "render-mcp-scene")
+        lovr.log("scene.add: missing id — dropping", "info", "xr-render-scene")
         return
     end
     local ptype      = v.type or "sphere"
@@ -92,7 +92,7 @@ local function handle_scene_add(v)
     lovr.log(string.format(
         "scene.add  id=%s type=%s pos=(%.2f,%.2f,%.2f) color=(%.2f,%.2f,%.2f) size=%.3fm  total=%d",
         id, ptype, px, py, pz, cr, cg, cb, size, count_primitives()),
-        "info", "render-mcp-scene")
+        "info", "xr-render-scene")
 end
 
 local function handle_scene_update(v)
@@ -100,7 +100,7 @@ local function handle_scene_update(v)
     local obj = id and primitives[id]
     if not obj then
         lovr.log(string.format("scene.update: unknown id=%s", tostring(id)),
-                 "info", "render-mcp-scene")
+                 "info", "xr-render-scene")
         return
     end
     local changed = {}
@@ -123,7 +123,7 @@ local function handle_scene_update(v)
     end
     lovr.log(string.format("scene.update id=%s  %s",
                            id, #changed > 0 and table.concat(changed, "  ") or "(nothing changed)"),
-             "info", "render-mcp-scene")
+             "info", "xr-render-scene")
 end
 
 local function handle_scene_remove(v)
@@ -131,10 +131,10 @@ local function handle_scene_remove(v)
     if id and primitives[id] then
         primitives[id] = nil
         lovr.log(string.format("scene.remove id=%s  remaining=%d", id, count_primitives()),
-                 "info", "render-mcp-scene")
+                 "info", "xr-render-scene")
     elseif id then
         lovr.log(string.format("scene.remove: unknown id=%s", id),
-                 "info", "render-mcp-scene")
+                 "info", "xr-render-scene")
     end
 end
 
@@ -143,19 +143,19 @@ end
 function lovr.load()
     lovr.graphics.setBackgroundColor(0, 0, 0, 0)
     lovr.headset.setClipDistance(256.0, 0.15)
-    lovr.log("lovr.load  socket=" .. socket_addr, "info", "render-mcp-scene")
+    lovr.log("lovr.load  socket=" .. socket_addr, "info", "xr-render-scene")
 
     local ok_a, active = pcall(lovr.headset.isActive)
     local ok_d, name   = pcall(lovr.headset.getDriver)
     lovr.log(string.format("headset: active=%s driver=%s",
         ok_a and tostring(active) or "<err>",
         ok_d and tostring(name)   or "<err>"),
-        "info", "render-mcp-scene")
+        "info", "xr-render-scene")
 
     local ok_p, applied = pcall(lovr.headset.setPassthrough, "blend")
     lovr.log(string.format("setPassthrough('blend') ok=%s applied=%s",
         tostring(ok_p), tostring(applied)),
-        "info", "render-mcp-scene")
+        "info", "xr-render-scene")
 end
 
 local function drain_commands()
@@ -167,12 +167,12 @@ local function drain_commands()
         local okd, decoded = pcall(mp.decode, raw)
         if not okd then
             lovr.log("msgpack decode error: " .. tostring(decoded),
-                     "info", "render-mcp-scene")
+                     "info", "xr-render-scene")
             goto continue
         end
         if type(decoded) ~= "table" then
             lovr.log("unexpected message type: " .. type(decoded),
-                     "info", "render-mcp-scene")
+                     "info", "xr-render-scene")
             goto continue
         end
 
@@ -185,15 +185,15 @@ local function drain_commands()
         elseif op == "scene.update" then ok_h, herr = pcall(handle_scene_update, v)
         elseif op == "scene.remove" then ok_h, herr = pcall(handle_scene_remove, v)
         elseif op ~= nil then
-            lovr.log("unknown op=" .. tostring(op), "info", "render-mcp-scene")
+            lovr.log("unknown op=" .. tostring(op), "info", "xr-render-scene")
         else
-            lovr.log("message missing 'op' field", "info", "render-mcp-scene")
+            lovr.log("message missing 'op' field", "info", "xr-render-scene")
         end
 
         if ok_h == false then
             lovr.log(string.format("handler error (op=%s): %s",
                                    tostring(op), tostring(herr)),
-                     "info", "render-mcp-scene")
+                     "info", "xr-render-scene")
         end
 
         ::continue::
@@ -224,7 +224,7 @@ function lovr.update(dt)
         heartbeat_t = 0.0
         local n = count_primitives()
         if n == 0 then
-            lovr.log("heartbeat: scene empty", "info", "render-mcp-scene")
+            lovr.log("heartbeat: scene empty", "info", "xr-render-scene")
         else
             for id, obj in pairs(primitives) do
                 lovr.log(string.format(
@@ -232,7 +232,7 @@ function lovr.update(dt)
                     id, obj.type,
                     obj.current_pos[1], obj.current_pos[2], obj.current_pos[3],
                     obj.current_scale),
-                    "info", "render-mcp-scene")
+                    "info", "xr-render-scene")
             end
         end
     end

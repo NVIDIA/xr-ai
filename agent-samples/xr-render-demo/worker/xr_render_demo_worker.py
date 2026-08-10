@@ -10,6 +10,7 @@ Voice pipeline (assembled by ``xr_ai_pipecat.make_voice_pipeline``):
 
 Launched as a subprocess by ``uv run xr_render_demo``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,18 +19,26 @@ import pathlib
 import signal
 from pathlib import Path
 
-from fastmcp import Client as McpClient
 from loguru import logger
+from nat.builder.function import Function
+from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
-from xr_ai_models import ToolDef, load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import ChatMessage, load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
 from xr_ai_pipecat import VadConfig, make_voice_pipeline, run_voice_pipeline
-from xr_ai_pipecat.services import mcp_probe, wait_for_services
+from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
 from xr_ai_voicegate import load_voice_gate_config
 
 from agent import RenderDemoAgent
+from capabilities import build_native_toolbox
 from config import WorkerConfig, load_config
-from processors import _PERCEPTION_TOOL_DEF, RenderSceneProcessor
+from processors import (
+    _LIVE_PERCEPTION_TOOL,
+    _PAST_PERCEPTION_TOOL,
+    _PERCEPTION_TOOL_DEFS,
+    RenderSceneProcessor,
+)
 
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
 
@@ -40,25 +49,12 @@ _TRACE_FILE = "/tmp/xr-agent-trace.log"
 _WORKER_MANAGED_TOOLS = frozenset({"start_xr", "get_health"})
 
 
-def _build_tools(render_tools: list, oxr_tools: list,
-                 vlm_tools: list = (), video_tools: list = (),
-                 vec_tools: list = ()) -> list[ToolDef]:
-    """Convert MCP tool definitions to ToolDef objects for the SDK."""
-    tools: list[ToolDef] = []
-    # vec-mcp's pure-math primitives sit next to oxr-mcp's pose-driven helpers
-    # in the tool list so the model sees them as a single spatial toolbox.
-    all_tools = (list(oxr_tools) + list(vec_tools) + list(render_tools)
-                 + list(vlm_tools) + list(video_tools))
-    for t in all_tools:
-        if t.name in _WORKER_MANAGED_TOOLS:
-            continue
-        schema = getattr(t, "inputSchema", None) or {"type": "object", "properties": {}}
-        tools.append(ToolDef(
-            name=t.name,
-            description=(t.description or "").strip(),
-            parameters=schema,
-        ))
-    return tools
+async def _group_functions(builder: WorkflowBuilder, *names: str) -> dict[str, Function]:
+    functions: dict[str, Function] = {}
+    for name in names:
+        group = await builder.get_function_group(name)
+        functions.update(await group.get_all_functions())
+    return functions
 
 
 _PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
@@ -85,83 +81,79 @@ async def main(
     )
     logger.bind(trace=True).info("=== trace started ===")
 
-    models_cfg  = load_models_config(cfg.models_yaml)
-    llm         = make_llm(models_cfg, "llm")
-    agent_llm   = make_llm(models_cfg, "agent_llm")
-    stt         = make_stt(models_cfg, "stt")
-    tts         = make_tts(models_cfg, "tts")
+    models_cfg = load_models_config(cfg.models_yaml)
+    llm = make_llm(models_cfg, "llm")
+    agent_llm = make_llm(models_cfg, "agent_llm")
+    stt = make_stt(models_cfg, "stt")
+    tts = make_tts(models_cfg, "tts")
     vlm_service = make_vlm(models_cfg, "vlm")
 
     # VLM /health only returns 200 after weights are fully loaded — this ensures
     # GPU 0 memory has settled before LOVR starts its Vulkan device, preventing
     # the transient OOM race condition.
     probes = {
-        "LLM":       llm.health,
+        "LLM": llm.health,
         "agent-LLM": agent_llm.health,
-        "STT":       stt.health,
-        "TTS":       tts.health,
-        "VLM":       vlm_service.health,
-        "render-mcp":mcp_probe(cfg.render_mcp.rstrip("/") + "/mcp"),
-        "oxr-mcp":   mcp_probe(cfg.oxr_mcp.rstrip("/")   + "/mcp"),
-        "vlm-mcp":   mcp_probe(cfg.vlm_mcp.rstrip("/")   + "/mcp"),
-        "video-mcp": mcp_probe(cfg.video_mcp.rstrip("/") + "/mcp"),
-        "vec-mcp":   mcp_probe(cfg.vec_mcp.rstrip("/")   + "/mcp"),
+        "STT": stt.health,
+        "TTS": tts.health,
+        "VLM": vlm_service.health,
     }
     await wait_for_services(probes)
-    # vlm_service is retained (NOT closed here): the brain's
-    # look_at_current_frame perception tool runs live-frame VLM calls through
-    # it. brain.close() closes it on shutdown.
+
+    # A cold vLLM engine pays kernel-autotune costs on its first inference
+    # that can exceed the quick-ack timeout; absorb them before the first
+    # turn with a request shaped like a real quick-ack. Hosted backends
+    # (health_check: false, e.g. NIM) are always warm — skip the paid call.
+    if models_cfg.llm("llm").health_check:
+        try:
+            await llm.chat(
+                [ChatMessage(role="user", content="Add a small cube.")],
+                max_tokens=40,
+                timeout=120.0,
+            )
+        except Exception:
+            logger.opt(exception=True).warning("LLM warmup failed")
 
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
 
-    async with (
-        McpClient(cfg.render_mcp.rstrip("/") + "/mcp") as render,
-        McpClient(cfg.oxr_mcp.rstrip("/")    + "/mcp") as oxr,
-        McpClient(cfg.vlm_mcp.rstrip("/")    + "/mcp") as vlm_mcp,
-        McpClient(cfg.video_mcp.rstrip("/")  + "/mcp") as video,
-        McpClient(cfg.vec_mcp.rstrip("/")    + "/mcp") as vec,
-    ):
-        render_tools, oxr_tools, vlm_tools, video_tools, vec_tools = [], [], [], [], []
-        for name, client, store in [
-            ("render-mcp", render,  lambda t: render_tools.extend(t)),
-            ("oxr-mcp",    oxr,     lambda t: oxr_tools.extend(t)),
-            ("vlm-mcp",    vlm_mcp, lambda t: vlm_tools.extend(t)),
-            ("video-mcp",  video,   lambda t: video_tools.extend(t)),
-            ("vec-mcp",    vec,     lambda t: vec_tools.extend(t)),
-        ]:
-            try:
-                discovered = await client.list_tools()
-                store(discovered)
-                logger.info("{} tools: {}", name, [t.name for t in discovered])
-            except Exception as exc:
-                logger.warning("{} tool discovery failed: {}", name, exc)
+    transport = XRMediaHubTransport()
+    async with WorkflowBuilder() as builder:
+        toolbox, vision_config = await build_native_toolbox(
+            builder,
+            scene_endpoint=cfg.scene_endpoint,
+            openxr_endpoint=cfg.openxr_endpoint,
+            video_memory_endpoint=cfg.video_memory_endpoint,
+            frame_endpoint=transport.endpoint,
+            vlm=vlm_service,
+        )
+        await builder.add_function_group(
+            "text_memory", TextMemoryFunctionsConfig(directory=cfg.text_memory_dir)
+        )
 
-        tools = _build_tools(render_tools, oxr_tools, vlm_tools, video_tools, vec_tools)
-        # Brain-executed live-frame perception tool (not served by any MCP
-        # server) — see RenderSceneProcessor._look_at_current_frame.
-        tools.append(_PERCEPTION_TOOL_DEF)
-        logger.info("tool-calling tools: {}", [t.name for t in tools])
+        text_memory_functions = await _group_functions(builder, "text_memory")
+        text_memory = text_memory_functions["text_memory__add_transcript"]
+        # The native perception request models carry participant/reference
+        # context the processor injects; present the model trimmed schemas
+        # (question, and question+second_ago) in place of the raw native ones.
+        tools = toolbox.definitions(
+            exclude=_WORKER_MANAGED_TOOLS | {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
+        )
+        tools.extend(_PERCEPTION_TOOL_DEFS)
+        logger.info("native tool-calling functions: {}", [tool.name for tool in tools])
 
-        transport = XRMediaHubTransport()
         brain = RenderSceneProcessor(
             transport=transport,
             cfg=cfg,
-            render=render,
-            oxr=oxr,
-            vlm=vlm_mcp,
-            video=video,
-            vec=vec,
+            toolbox=toolbox,
+            release_vision=vision_config.release,
+            text_memory=text_memory,
             prompt_path=_PROMPT_FILE,
             tools=tools,
             llm=llm,
             agent_llm=agent_llm,
-            vlm_service=vlm_service,
         )
-        # Wire xr.session.started → start_xr lifecycle and the typed-text
-        # input path. The agent registers callbacks on the transport's
-        # endpoint; those bound methods keep it alive for the worker's
-        # lifetime.
-        _agent = RenderDemoAgent(transport=transport, brain=brain, render=render)  # noqa: F841
+        # The endpoint retains the agent's bound callbacks for the worker lifetime.
+        RenderDemoAgent(transport=transport, brain=brain, tools=toolbox)
 
         _, task = make_voice_pipeline(
             transport=transport,
@@ -210,12 +202,17 @@ async def main(
         finally:
             transport.shutdown()
             await brain.close()
+            for service in (stt, tts, vlm_service):
+                try:
+                    await service.close()
+                except Exception:
+                    logger.opt(exception=True).warning("service close failed")
     logger.info("xr_render_demo stopped")
 
 
 def run() -> None:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--config",     type=pathlib.Path, default=None)
+    p.add_argument("--config", type=pathlib.Path, default=None)
     p.add_argument("--ready-file", type=pathlib.Path, default=None)
     ns, _ = p.parse_known_args()
     cfg = load_config(ns.config)

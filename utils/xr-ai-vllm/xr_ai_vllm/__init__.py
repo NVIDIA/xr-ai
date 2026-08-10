@@ -43,7 +43,6 @@ from __future__ import annotations
 
 import logging
 import os
-import urllib.request
 from pathlib import Path
 
 from . import _docker, _pip
@@ -149,37 +148,34 @@ def serve(
 
 def stop_persistent_servers(
     services: list[tuple[str, int]],
-) -> None:
-    """Stop persisted servers; safe to call when nothing is running.
+) -> bool:
+    """Stop persisted servers and report whether every discovered server stopped.
 
     *services* is a list of ``(label, port)`` tuples.  For each entry:
 
-    1. Probe ``http://127.0.0.1:<port>/health``. Skip if not reachable.
-    2. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
+    1. Look for a docker container labelled ``xr-ai-vllm.port=<port>``
        (stamped at start time by the vLLM wrapper) and ``docker stop`` it.
-    3. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
+    2. Fall back to port → pid → SIGTERM → SIGKILL for pip-mode vLLM or
        in-process servers (e.g. STT).
 
-    Output is print-style with ``[<label>] …`` prefixes.
+    A missing container and listener is already stopped. Output is print-style
+    with ``[<label>] …`` prefixes. Discovery errors and listeners that are not
+    identified as xr-ai services fail closed without sending a signal.
     """
     import signal
     import time
 
+    success = True
     found = False
     for label, port in services:
-        try:
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/health", timeout=2
-            ) as r:
-                if r.status != 200:
-                    continue
-        except Exception:
+        container_name, container_checked = _docker.container_on_port_checked(port)
+        if not container_checked:
+            print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
+            success = False
             continue
 
-        found = True
-
-        container_name = _docker.container_on_port(port)
         if container_name:
+            found = True
             print(f"  [{label}] stopping container {container_name}…", flush=True)
             if _docker.stop_container(container_name):
                 # Remove the container so the next launch goes through a full
@@ -203,12 +199,23 @@ def stop_persistent_servers(
             else:
                 print(f"  [{label}] docker stop failed — check `docker ps -a`",
                       flush=True)
+                success = False
             continue
 
-        pid = _docker.pid_on_port(port)
-        if pid is None:
-            print(f"  [{label}] running on :{port} but no PID found — "
-                  f"kill manually", flush=True)
+        pid, pid_checked, listening = _docker.pid_on_port_checked(port)
+        if not pid_checked or (listening and pid is None):
+            print(f"  [{label}] cannot inspect :{port} ownership — not stopping", flush=True)
+            success = False
+            continue
+        if not listening:
+            continue
+
+        assert pid is not None
+        found = True
+        if not _docker.is_xr_ai_server_process(pid, label, port):
+            print(f"  [{label}] listener on :{port} is not an xr-ai server — not stopping",
+                  flush=True)
+            success = False
             continue
 
         print(f"  [{label}] stopping (pid={pid}, port={port})…", flush=True)
@@ -224,11 +231,20 @@ def stop_persistent_servers(
             else:
                 print(f"  [{label}] force-killing", flush=True)
                 os.kill(pid, signal.SIGKILL)
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    print(f"  [{label}] stopped", flush=True)
+                else:
+                    print(f"  [{label}] still running after SIGKILL", flush=True)
+                    success = False
         except ProcessLookupError:
             print(f"  [{label}] already gone", flush=True)
 
     if not found:
         print("  No persistent servers found running.", flush=True)
+
+    return success
 
 
 __all__ = [

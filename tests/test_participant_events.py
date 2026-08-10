@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_agent import ParticipantEvent, PixelFormat
+from xr_ai_hub import ParticipantEvent, PixelFormat
 
 pytestmark = pytest.mark.asyncio
 

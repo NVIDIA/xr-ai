@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from xr_ai_agent import FrameData, LiveFrameSource, PixelFormat
+from xr_ai_hub import FrameData, LiveFrameSource, PixelFormat
 
 
 def _safe_name(value: str) -> str:

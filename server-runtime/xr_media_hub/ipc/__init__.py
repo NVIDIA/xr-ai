@@ -10,7 +10,7 @@ ConnectorEndpoint   — producer (LiveKit connector process)
 HubEndpoint         — server  (XR-Media-Hub process)
 ProcessorEndpoint   — subscriber + publisher (agents, analytics, downstream processors)
 
-Agent code should import from `xr_ai_agent` directly rather than this module —
+Agent code should import from `xr_ai_hub` directly rather than this module —
 it avoids pulling in the full server-runtime dependency tree.
 
 Extensibility
@@ -27,9 +27,9 @@ Register new message types at import time:
     register_decoder(MyMsgType.MY_MSG, lambda p: MyMsg(p[0], p[1]))
 """
 
-# Agent-facing types and endpoint — re-exported from xr_ai_agent for
+# Agent-facing types and endpoint — re-exported from xr_ai_hub for
 # backwards compatibility with code that imports from xr_media_hub.ipc.
-from xr_ai_agent import (
+from xr_ai_hub import (
     AGENT_STATUS_TOPIC,
     AudioChunk,
     ConnectorRegistration,

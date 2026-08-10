@@ -1,17 +1,20 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Recorded-video NAT functions backed by the video-memory service."""
+"""NAT recorded-video functions backed by the video-memory service."""
 
 from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, register_function_group
 from pydantic import Field
 
-from ._client import VideoMemoryClient
-from .schemas import EmptyRequest, ParticipantsResult
+from ._client import (
+    ListRecordedParticipantsRequest,
+    ListRecordedParticipantsResult,
+    VideoMemoryClient,
+)
 
 
 class VideoMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_video_memory"):
-    """Configure recorded-video discovery, query, and frame extraction."""
+    """Configure recorded-video query operations."""
 
     endpoint: str = Field(
         description="Private msgpack/ZMQ endpoint of video-memory-service."
@@ -25,15 +28,19 @@ class VideoMemoryFunctionsConfig(FunctionGroupBaseConfig, name="xr_video_memory"
 
 @register_function_group(config_type=VideoMemoryFunctionsConfig)
 async def video_memory_functions(config: VideoMemoryFunctionsConfig, _builder: Builder):
-    """Expose recorded history without coupling agents to storage or NVDEC."""
+    """Expose recorded-video capabilities without leaking their transport."""
 
     client = VideoMemoryClient(config.endpoint, timeout_s=config.timeout_s)
+
+    async def list_recorded_participants(
+        request: ListRecordedParticipantsRequest,
+    ) -> ListRecordedParticipantsResult:
+        # Thin strict wrapper: keep the agent-facing tool schema a strict empty
+        # object. The client method accepts an optional request for legacy Python
+        # callers, but the NAT tool must not expose that nullable compat parameter.
+        return await client.list_recorded_participants(request)
+
     group = FunctionGroup(config=config)
-
-    async def list_recorded_participants(request: EmptyRequest) -> ParticipantsResult:
-        del request
-        return await client.list_recorded_participants()
-
     group.add_function(
         "list_recorded_participants",
         list_recorded_participants,
@@ -66,7 +73,6 @@ async def video_memory_functions(config: VideoMemoryFunctionsConfig, _builder: B
             "whole seconds. This never accesses a current live camera frame."
         ),
     )
-
     try:
         yield group
     finally:

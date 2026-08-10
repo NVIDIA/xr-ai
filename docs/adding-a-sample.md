@@ -19,7 +19,7 @@ Derive all other names from it mechanically:
 | Sample directory | `agent-samples/<kebab-name>/` | `simple-vlm-example/` |
 | Orchestrator module | `<snake_name>.py` | `simple_vlm_example.py` |
 | Orchestrator entry point | `<snake_name>` | `simple_vlm_example` |
-| Worker entry module | `<snake_name>_worker.py` | `simple_vlm_example_worker.py` |
+| Worker package | `<snake_name>_worker/` | `simple_vlm_example_worker/` |
 | Worker entry point | `<snake_name>_worker` | `simple_vlm_example_worker` |
 | Agent class | `<CamelName>Agent` | `SimpleVlmAgent` |
 | Logger name | `"<snake_name>"` | `"simple_vlm_example"` |
@@ -28,10 +28,9 @@ Derive all other names from it mechanically:
 
 ## Directory layout
 
-Both sub-projects use **flat module layouts** — no nested package
-directories, no `__main__.py`, no `__init__.py`. Hatchling ships the
-listed `.py` files as top-level modules in each sub-project's isolated
-venv.
+Workers use a named Python package. This keeps imports unambiguous, includes
+package resources in built wheels, and gives each worker an explicit module
+entry point.
 
 ```
 agent-samples/<name>/
@@ -40,37 +39,38 @@ agent-samples/<name>/
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── xr_media_hub.yaml
 │   ├── <command>.yaml              ← one per launchable process
-│   ├── models.yaml                 ← logical model names + preset references
+│   ├── models.yaml                 ← worker-only model config
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
-    ├── <snake_name>_worker.py      ← entry point: parses config, runs main loop
-    ├── agent.py                    ← <CamelName>Agent class
-    └── …                           ← split helpers as needed (audio.py, services.py, …)
+    └── <snake_name>_worker/
+        ├── __init__.py             ← package marker
+        ├── __main__.py             ← entry point: parse arguments and run
+        └── …                       ← cohesive workflow, transport, and config modules
 ```
 
 `yaml/models.yaml` names the logical models the worker needs (`llm`,
 `vlm`, `stt`, `tts`, or any sample-specific name) with `kind:
-preset:<name>` + `base_url:` entries.  The worker passes its path to
+preset:<name>` + `base_url:` entries. A sample whose orchestrator derives model
+process ownership uses a structured JSON profile instead. The worker passes
+either path to
 `load_models_config(...)` and constructs services via `make_llm` /
 `make_vlm` / `make_stt` / `make_tts` from `xr_ai_models`.  Schema, preset
 table, and the explicit (no-preset) spec are in
 [`agent-sdk/xr-ai-models/README.md`](../agent-sdk/xr-ai-models/README.md).
 
-When the worker is small (≲ 100 lines) keep it as a single file —
-`worker/<snake_name>_worker.py` containing everything. Only split once
-the file makes the agent logic harder to read; aim for a few focused
-modules over one monolith *or* a swarm of tiny files.
+When the worker is small, keep its implementation in the package's
+`__main__.py`. Split it once argument parsing, lifecycle, configuration, and
+workflow composition become distinct responsibilities.
 
 Suggested split (used by `simple-vlm-example`):
 
 | File | Responsibility |
 |---|---|
-| `<snake>_worker.py` | Entry point: config parsing, signal handling, lifecycle |
-| `agent.py` | The agent class — IPC callbacks and orchestration |
-| `audio.py` | WAV/PCM helpers, pixel-format conversion (rename if not audio) |
-| `services.py` | Thin HTTP/MCP clients for external services + readiness probe |
-| `voice.py` | Per-participant bookkeeping for `xr-ai-vad`'s `VadDetector` + in-flight STT/response state (when applicable) |
+| `__main__.py` | Argument parsing and delegation to the application lifecycle |
+| `app.py` | Dependency construction and native function/runtime composition |
+| `config.py` | Typed configuration loading and path resolution |
+| `prompts/` | Package-owned prompt resources |
 
 ## Orchestrator `pyproject.toml`
 
@@ -107,31 +107,20 @@ name = "<kebab-name>-worker"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "xr-ai-agent",
+    "xr-ai-hub-client",
     "xr-ai-models",
     # add task-specific deps here: numpy, torch, etc.
 ]
 
 [tool.uv.sources]
-xr-ai-agent  = { path = "../../../agent-sdk",              editable = true }
+xr-ai-hub-client  = { path = "../../../agent-sdk/xr-ai-hub-client", editable = true }
 xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
-<snake_name>_worker = "<snake_name>_worker:run"
+<snake_name>_worker = "<snake_name>_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = [
-    "<snake_name>_worker.py",
-    "agent.py",
-    # add other split modules here
-]
-```
-
-When the worker is a single file, drop the extra entries:
-
-```toml
-[tool.hatch.build.targets.wheel]
-only-include = ["<snake_name>_worker.py"]
+packages = ["<snake_name>_worker"]
 ```
 
 ## Orchestrator `main.py`
@@ -165,9 +154,13 @@ if __name__ == "__main__":
     run()
 ```
 
-## Worker `<snake_name>_worker.py`
+## Raw-IPC worker `<snake_name>_worker/__main__.py`
 
-Follow this structure exactly. Fill in the sections marked `# ← FILL IN`.
+Use this template when the worker talks directly to `ProcessorEndpoint`. Native
+voice workers keep argument parsing in `__main__.py` and delegate composition
+to sibling `app.py` and `config.py` modules; see
+[`simple-vlm-example`](../agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/)
+for that shape. Fill in the sections marked `# ← FILL IN`.
 
 ```python
 """
@@ -196,7 +189,7 @@ import logging
 import signal
 from pathlib import Path
 
-from xr_ai_agent import (          # ← import only what you use
+from xr_ai_hub import (          # ← import only what you use
     AudioChunk, DataMessage, FrameSignal, ParticipantEvent, ProcessorEndpoint,
     Subscribe,                     # ← only needed when scoping subscriptions
 )

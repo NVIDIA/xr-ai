@@ -168,7 +168,7 @@ async def run_voice_pipeline(
         if status_task is not None:
             status_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await status_task
+                _ = await status_task
         if not started_task.done():
             started_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

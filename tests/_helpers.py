@@ -24,7 +24,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Callable
 
-from xr_ai_agent      import AudioChunk, DataMessage, ReturnAudioFlush
+from xr_ai_hub      import AudioChunk, DataMessage, ReturnAudioFlush
 from xr_media_hub.ipc import ConnectorEndpoint
 
 

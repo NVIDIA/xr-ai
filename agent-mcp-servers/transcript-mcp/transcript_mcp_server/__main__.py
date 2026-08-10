@@ -1,7 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""MCP compatibility process for the native text-memory functions."""
+"""MCP compatibility process for the native text-memory functions.
+
+Wire-shape note: republishing over the typed native surface (without the former
+``untyped_outputs`` unwrapping) means ``query_transcripts`` and ``list_sources``
+now return typed objects — ``{"segments": [...]}`` and ``{"sources": [...]}`` —
+rather than the bare lists the legacy shim emitted. This is a deliberate change
+that keeps the MCP outputs aligned with the typed native API. This process is a
+transitional compatibility shim (removed in a later phase) and has no in-tree
+consumer, so the typed shape is adopted rather than reproducing the legacy one.
+"""
 
 from __future__ import annotations
 
@@ -16,8 +25,8 @@ import yaml
 from loguru import logger
 from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
-from xr_ai_nat.adapters.mcp import create_mcp_server
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
+from xr_ai_nat.mcp import create_mcp_server
 
 
 async def build_mcp(directory: str | Path):
@@ -45,11 +54,6 @@ async def build_mcp(directory: str | Path):
         "transcript-mcp",
         exports,
         tool_names=aliases,
-        untyped_outputs={
-            "text_memory__add_transcript",
-            "text_memory__query_transcripts",
-            "text_memory__get_transcript_stats",
-        },
     )
 
 

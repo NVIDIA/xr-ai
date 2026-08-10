@@ -5,6 +5,7 @@
 
 import asyncio
 import contextlib
+import importlib
 import json
 import time
 import uuid
@@ -19,16 +20,26 @@ from video_mcp_server import __main__ as video_mcp_main
 from video_mcp_server.live import _frame_to_rgb
 from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
-from xr_ai_agent import (
+from xr_ai_hub import (
     FrameData,
     FrameSignal,
     LiveFrameSource,
     ParticipantEvent,
     PixelFormat,
 )
-from xr_ai_nat.functions._rpc import RPCError, RPCServer
-from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
-from xr_ai_nat.functions.video_memory.schemas import HistoricalFrameRequest
+from xr_ai_nat.functions._service.rpc import RPCError, RPCServer
+from xr_ai_nat.functions.video_memory import (
+    HistoricalFrameRequest,
+    ParticipantsResult,
+    VideoMemoryFunctionsConfig,
+)
+from xr_ai_nat.functions.video_memory._client import (
+    ListRecordedParticipantsRequest,
+    ListRecordedParticipantsResult,
+    VideoHealthResult,
+    VideoMemoryClient,
+    VideoStatsRequest,
+)
 
 
 class _LiveFrames:
@@ -57,7 +68,7 @@ class _UnusedClient:
 
 
 class _UnavailableRecordedClient:
-    async def list_recorded_participants(self):
+    async def list_recorded_participants(self, _request=None):
         raise RPCError("video service unavailable", code="connection_error")
 
 
@@ -209,6 +220,46 @@ async def test_video_mcp_recorded_discovery_reports_service_failures() -> None:
         result = await client.call_tool("list_recorded_participants", {})
 
     assert result.data == {"error": "video service unavailable"}
+
+
+@pytest.mark.asyncio
+async def test_video_mcp_lists_recorded_participants_over_a_real_client() -> None:
+    def dispatch(operation: str, arguments: dict) -> dict:
+        if operation == "list_recorded_participants":
+            return {"participants": ["recorded-user"]}
+        raise RPCError("unknown operation", code="unknown_operation")
+
+    endpoint = f"ipc:///tmp/video-mcp-{uuid.uuid4().hex}"
+    client = VideoMemoryClient(endpoint)
+    try:
+        async with _running_server(endpoint, dispatch):
+            # The compatibility no-argument client call (client builds the typed
+            # request internally, like get_health).
+            direct = await client.list_recorded_participants()
+            assert direct.participants == ["recorded-user"]
+            mcp = video_mcp_main.build_mcp(client, _LiveFrames(), recording_enabled=True)
+            async with McpClient(mcp) as mcp_client:
+                result = await mcp_client.call_tool("list_recorded_participants", {})
+    finally:
+        await client.close()
+
+    assert result.data == ["recorded-user"]
+
+
+@pytest.mark.asyncio
+async def test_list_recorded_participants_tool_schema_is_strict_empty() -> None:
+    """The native tool must expose a strict empty-object input, not the client's
+    optional/nullable `request` compatibility parameter."""
+    async with WorkflowBuilder() as builder:
+        await builder.add_function_group(
+            "video", VideoMemoryFunctionsConfig(endpoint="ipc:///tmp/unused")
+        )
+        functions = await (await builder.get_function_group("video")).get_all_functions()
+        schema = functions["video__list_recorded_participants"].input_schema.model_json_schema()
+
+    # No leaked `request` wrapper; the empty request flattens to no properties.
+    assert schema.get("properties", {}) == {}
+    assert "request" not in schema.get("properties", {})
 
 
 @pytest.mark.asyncio
@@ -419,6 +470,22 @@ async def test_recorded_frame_reports_frame_export_errors(tmp_path: Path, monkey
         )
 
     assert error.value.code == "frame_export_error"
+
+
+def test_video_memory_schemas_alias_forwards_and_warns() -> None:
+    import xr_ai_nat.functions.video_memory.schemas as schemas_module
+
+    with pytest.warns(DeprecationWarning):
+        importlib.reload(schemas_module)
+
+    # Unchanged names re-exported.
+    assert schemas_module.VideoStatsRequest is VideoStatsRequest
+    # Renamed models are kept as deprecated aliases (same data contracts).
+    assert schemas_module.ParticipantsResult is ListRecordedParticipantsResult
+    assert schemas_module.VideoMemoryHealth is VideoHealthResult
+    assert schemas_module.EmptyRequest is ListRecordedParticipantsRequest
+    # The pre-rename package-level export is preserved too.
+    assert ParticipantsResult is ListRecordedParticipantsResult
 
 
 def test_historical_frame_schema_requires_an_absolute_reference() -> None:

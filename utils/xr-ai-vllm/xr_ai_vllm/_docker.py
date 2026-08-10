@@ -98,7 +98,9 @@ def build_run_argv(
 
     argv += ["-v", f"{model_cache}:{model_cache}"]
 
-    argv.append(image)
+    # Some vLLM images default to `vllm serve`; override the entrypoint so
+    # setup installs run in a shell before the server starts.
+    argv += ["--entrypoint", "/bin/bash", image]
     # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
     # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
     install_cmds = ["pip install -q hf_transfer"]
@@ -113,7 +115,7 @@ def build_run_argv(
             f"pip install -q --no-build-isolation {shlex.join(extra_pip)}"
         )
     install_cmds.append(shlex.join(vllm_argv))
-    argv += ["bash", "-c", " && ".join(install_cmds)]
+    argv += ["-c", " && ".join(install_cmds)]
     return argv
 
 
@@ -451,37 +453,35 @@ def run(
         return
 
     if container_exists(container_name) and not container_running(container_name):
-        # Stopped container already has hf_transfer installed — restart it
-        # rather than running a fresh image (avoids reinstalling every time).
+        # A container's command and entrypoint are immutable. Recreate failed
+        # containers so launcher fixes and changed service arguments take effect.
         print(
-            f"[{log_prefix}] Restarting stopped container {container_name}",
+            f"[{log_prefix}] Recreating stopped container {container_name}",
             flush=True,
         )
-        proc = subprocess.Popen(
-            ["docker", "start", "-a", container_name],
-            start_new_session=True,
-        )
-        _state["proc"] = proc
-    else:
-        _maybe_ngc_login(image)
-        argv = build_run_argv(
-            image=image,
-            container_name=container_name,
-            port=port,
-            model_cache=model_cache,
-            hf_token=hf_token,
-            cuda_visible_devices=cuda_visible_devices,
-            extra_env=extra_env,
-            extra_pip=extra_pip,
-            vllm_argv=vllm_argv,
-        )
-        print(
-            f"[{log_prefix}] Launching vLLM (docker)  image={image}  "
-            f"container={container_name}  http://{host}:{port}/v1",
-            flush=True,
-        )
-        proc = subprocess.Popen(argv, start_new_session=True)
-        _state["proc"] = proc
+        if not remove_container(container_name):
+            log.error("Could not remove stopped container %s", container_name)
+            sys.exit(1)
+
+    _maybe_ngc_login(image)
+    argv = build_run_argv(
+        image=image,
+        container_name=container_name,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+    )
+    print(
+        f"[{log_prefix}] Launching vLLM (docker)  image={image}  "
+        f"container={container_name}  http://{host}:{port}/v1",
+        flush=True,
+    )
+    proc = subprocess.Popen(argv, start_new_session=True)
+    _state["proc"] = proc
 
     streamer_proc, log_path = _start_log_streamer(container_name)
     _state["streamer"] = streamer_proc
@@ -528,13 +528,8 @@ def run(
 _CONTAINER_PREFIX = "xr-ai-vllm-"
 
 
-def container_on_port(port: int) -> str | None:
-    """Return the name of a running xr-ai-vllm container serving *port*, or None.
-
-    ``docker ps --filter publish=<port>`` silently misses ``--network host``
-    containers.  We label each container with ``xr-ai-vllm.port=<port>`` at
-    run time and filter by that label here instead.
-    """
+def container_on_port_checked(port: int) -> tuple[str | None, bool]:
+    """Return a labelled container and whether Docker discovery succeeded."""
     try:
         out = subprocess.check_output(
             ["docker", "ps",
@@ -544,17 +539,32 @@ def container_on_port(port: int) -> str | None:
             stderr=subprocess.DEVNULL,
         ).strip()
         names = out.splitlines()
-        return names[0] if names else None
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
+        return (names[0] if names else None), True
+    except FileNotFoundError:
+        # Without the Docker CLI, a local Docker container cannot be managed;
+        # pip-mode ownership is still established from the listener process.
+        return None, True
+    except subprocess.CalledProcessError:
+        return None, False
 
 
-def pid_on_port(port: int) -> int | None:
-    """Return the pid listening on *port* (any v4/v6 socket), or None.
+def container_on_port(port: int) -> str | None:
+    """Return the name of a running xr-ai-vllm container serving *port*, or None.
+
+    ``docker ps --filter publish=<port>`` silently misses ``--network host``
+    containers.  We label each container with ``xr-ai-vllm.port=<port>`` at
+    run time and filter by that label here instead.
+    """
+    container, _ = container_on_port_checked(port)
+    return container
+
+
+def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
+    """Return the listening PID, inspection status, and listener presence.
 
     Tries `ss` first (always present on modern Linux), falls back to `lsof`.
-    Used by the stop helper to send SIGTERM to the vLLM process (pip or docker
-    with --network host — both are visible to ss(8) on the host).
+    A listener without a visible PID is still reported so callers fail closed
+    instead of mistaking an uninspectable listener for an unused port.
     """
     try:
         out = subprocess.check_output(
@@ -564,8 +574,9 @@ def pid_on_port(port: int) -> int | None:
         )
         m = re.search(r"pid=(\d+)", out)
         if m:
-            return int(m.group(1))
-    except Exception:
+            return int(m.group(1)), True, True
+        return None, True, bool(out.strip())
+    except (FileNotFoundError, subprocess.CalledProcessError):
         pass
     try:
         out = subprocess.check_output(
@@ -574,7 +585,33 @@ def pid_on_port(port: int) -> int | None:
             stderr=subprocess.DEVNULL,
         ).strip()
         if out:
-            return int(out.splitlines()[0])
-    except Exception:
-        pass
-    return None
+            return int(out.splitlines()[0]), True, True
+        return None, True, False
+    except subprocess.CalledProcessError:
+        return None, True, False
+    except FileNotFoundError:
+        return None, False, False
+
+
+def pid_on_port(port: int) -> int | None:
+    """Return the pid listening on *port* (any v4/v6 socket), or None."""
+    pid, _, _ = pid_on_port_checked(port)
+    return pid
+
+
+def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
+    """Return whether *pid* has the expected xr-ai server command line."""
+    try:
+        command = Path(f"/proc/{pid}/cmdline").read_text(errors="replace")
+    except OSError:
+        return False
+    if label == "stt":
+        return "stt_server" in command
+    try:
+        environment = Path(f"/proc/{pid}/environ").read_bytes()
+    except OSError:
+        return False
+    return (
+        b"XR_AI_VLLM_MANAGED=1\0" in environment
+        and f"XR_AI_VLLM_PORT={port}\0".encode() in environment
+    )

@@ -12,7 +12,7 @@ on startup.
 
 ## Model servers (shared AI services)
 
-`model-servers` starts the four inference services used across demos and exits
+`model-servers` starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running `xr-render-demo`, or whenever you want to
 pre-warm models:
@@ -29,6 +29,16 @@ are presets for common configurations; to run on a different GPU, refer to
 On first run each model downloads from HuggingFace (~50 GB total; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
+The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
+STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
+Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
+Switching stacks stops the incompatible persistent models first and aborts if
+they cannot be stopped, avoiding GPU overcommit.
+
+```bash
+uv run model_servers --omni-stack
+```
+
 The default models are public, so no HuggingFace token is required. Set
 `HF_TOKEN` to lift download rate limits and speed, or to use a gated model: refer
 to the credentials guide. The launcher won't prompt; it prints a one-line notice
@@ -39,6 +49,8 @@ To stop all model servers when done:
 ```bash
 uv run model_servers --stop
 ```
+
+`--stop` always stops both stack variants, so it takes no stack-selection flag.
 
 ## Simple VLM example (vision Q&A over voice + text)
 
@@ -109,36 +121,35 @@ a moment, and you hear the reply through your speakers.
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
 
-**Remote model** — create a models overlay that points the VLM at your remote
-endpoint, then tell the worker to use it:
+**Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
+your server, and select it in the worker config:
 
-```yaml
-# yaml/models.custom.yaml — overlay for a remote VLM endpoint
-vlm:
-  kind:     preset:cosmos_vlm
-  base_url: https://your-remote-vlm.example.com
+```json
+{
+  "endpoint": {"base_url": "https://your-remote-vlm.example.com"},
+  "deployment": {"ownership": "external"}
+}
 ```
 
 ```yaml
-# yaml/simple_vlm_example_worker.yaml — point the worker at the overlay
-models_yaml: yaml/models.custom.yaml
+# yaml/simple_vlm_example_worker.yaml
+models_config: models.remote.json
 ```
 
-When pointing at a remote model, `vlm_server.yaml` is unused — remove the
-`vlm_server` entry from the launcher's process list so no local vLLM process is
-started.
+The external deployment declaration makes the orchestrator skip the local VLM
+process automatically.
 
 **Hosted NVIDIA NIM** — run the VLM on hosted NIM
 ([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS stay
 local) by setting **one key** in `simple_vlm_example_worker.yaml`:
 
 ```yaml
-model_backend: nim     # default is "local"
+models_config: models.hosted.json
 ```
 
-The worker then loads the ready-made `yaml/models.nim.yaml` overlay and the
-orchestrator skips the local vlm-server automatically. Pick
-the hosted model id in `models.nim.yaml` and provide an `NGC_API_KEY` as an
+The same profile configures the worker and makes the orchestrator skip the
+local VLM server. Pick the hosted model id in `models.hosted.json` and provide
+an `NGC_API_KEY` as an
 **environment variable** (or save it once via the launcher credential prompt) —
 it is not stored in YAML; the overlay only names the env var via
 `api_key_env: NGC_API_KEY`. Refer to the credentials and AI-services guides for
@@ -156,10 +167,11 @@ Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, MCP compatibility adapters, and the
-worker. The Pipecat pipeline pairs a fast Llama-8B for
-quick-acks with a Nemotron-30B agentic tool-calling loop over `render-mcp`,
-`oxr-mcp`, `vlm-mcp`, and `video-mcp`. Refer to the xr-render-demo guide for the
+endpoints, typed capability processes, and the worker. Native NAT Functions
+connect the worker to those capabilities; MCP adapters remain optional outward
+compatibility surfaces. The Pipecat pipeline runs quick-acks
+and a Nemotron-30B agentic tool-calling loop over scene, tracking,
+spatial-math, vision, and video-memory Functions. Refer to the xr-render-demo guide for the
 full process map, agentic-loop details, and the XR session lifecycle.
 
 **Requires `model-servers` to be running first** — the demo does not start its
@@ -172,7 +184,7 @@ cd agent-samples/model-servers
 uv sync && uv run model_servers
 ```
 
-This exits immediately once all four services are ready. Weights stay loaded in
+This exits immediately once all configured services are ready. Weights stay loaded in
 the background.
 
 ### Step 2 — Start the demo
@@ -229,10 +241,10 @@ stay local) by setting **one key** in `xr_render_demo_worker.yaml`:
 model_backend: nim     # default is "local"
 ```
 
-The worker loads `yaml/models.nim.yaml` and the orchestrator points `vlm-mcp` at
-`yaml/vlm_mcp_server.nim.yaml` automatically. Provide an
+The worker loads `yaml/models.nim.yaml` for native model-backed Functions.
+Provide an
 `NGC_API_KEY` as an **environment variable** (or via the launcher credential
-prompt — not in YAML) and just don't start the local `llm` / `agent-llm` / `vlm`
+prompt — not in YAML) and just don't start the local `agent-llm` / `vlm`
 model-servers. Refer to the AI-services guide.
 
 ## Hub only (server-runtime standalone)

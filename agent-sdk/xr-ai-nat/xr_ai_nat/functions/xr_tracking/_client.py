@@ -8,8 +8,8 @@ from typing import Literal
 from pydantic import BaseModel
 
 from .._models import _StrictRequest
-from .._rpc import RPCClient
-from ..spatial_math import Vector3
+from .._service.rpc import RPCClient
+from ..types import Vector3
 
 
 class HeadPoseRequest(_StrictRequest):

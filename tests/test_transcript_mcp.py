@@ -28,6 +28,7 @@ from pathlib import Path
 import pytest
 import yaml
 from fastmcp import Client as McpClient
+from fastmcp.exceptions import ToolError
 
 pytestmark = pytest.mark.asyncio
 
@@ -42,10 +43,11 @@ def _free_port() -> int:
 
 
 def _tool_payload(result):
-    """Extract structured output from a FastMCP CallToolResult."""
-    if hasattr(result, "data") and result.data is not None:
-        return result.data
-    return getattr(result, "structured_content", None)
+    """Extract the structured JSON output from a FastMCP CallToolResult."""
+    structured = getattr(result, "structured_content", None)
+    if structured is not None:
+        return structured
+    return getattr(result, "data", None)
 
 
 async def _wait_ready(url: str, proc: subprocess.Popen, timeout: float) -> None:
@@ -105,7 +107,8 @@ async def test_transcript_mcp_end_to_end():
                 }
 
                 # Two utterances from one source plus one from another;
-                # the empty-text guard must produce an error dict.
+                # the blank-text guard now rejects the input at the request
+                # model boundary instead of returning an error payload.
                 add_alice_1 = _tool_payload(await mcp.call_tool(
                     "add_transcript",
                     {"source_id": "alice@home", "timestamp_us": 1_000_000, "text": "hello"},
@@ -118,32 +121,32 @@ async def test_transcript_mcp_end_to_end():
                     "add_transcript",
                     {"source_id": "agent-vlm", "timestamp_us": 3_000_000, "text": "frame seen"},
                 ))
-                add_empty = _tool_payload(await mcp.call_tool(
-                    "add_transcript",
-                    {"source_id": "alice@home", "timestamp_us": 4_000_000, "text": "   "},
-                ))
                 assert add_alice_1 == {"ok": True}
                 assert add_alice_2 == {"ok": True}
                 assert add_bob     == {"ok": True}
-                assert "error" in add_empty
+                with pytest.raises(ToolError):
+                    await mcp.call_tool(
+                        "add_transcript",
+                        {"source_id": "alice@home", "timestamp_us": 4_000_000, "text": "   "},
+                    )
 
                 sources = _tool_payload(await mcp.call_tool("list_sources", {}))
-                assert set(sources) == {"alice@home", "agent-vlm"}
+                assert set(sources["sources"]) == {"alice@home", "agent-vlm"}
 
                 # Inclusive window covering both alice utterances.
                 q = _tool_payload(await mcp.call_tool(
                     "query_transcripts",
                     {"source_id": "alice@home", "start_us": 0, "end_us": 5_000_000},
                 ))
-                assert [r["text"] for r in q] == ["hello", "world"]
-                assert [r["timestamp_us"] for r in q] == [1_000_000, 2_000_000]
+                assert [r["text"] for r in q["segments"]] == ["hello", "world"]
+                assert [r["timestamp_us"] for r in q["segments"]] == [1_000_000, 2_000_000]
 
                 # Half-open window — only the later utterance lands inside.
                 q_late = _tool_payload(await mcp.call_tool(
                     "query_transcripts",
                     {"source_id": "alice@home", "start_us": 1_500_000, "end_us": 5_000_000},
                 ))
-                assert [r["text"] for r in q_late] == ["world"]
+                assert [r["text"] for r in q_late["segments"]] == ["world"]
 
                 stats = _tool_payload(await mcp.call_tool(
                     "get_transcript_stats", {"source_id": "alice@home"},
@@ -154,10 +157,14 @@ async def test_transcript_mcp_end_to_end():
                 assert stats["earliest_us"] == 1_000_000
                 assert stats["latest_us"]   == 2_000_000
 
+                # A never-seen source is no longer an error — it reports an
+                # empty transcript with null time bounds.
                 missing_stats = _tool_payload(await mcp.call_tool(
                     "get_transcript_stats", {"source_id": "never-seen"},
                 ))
-                assert "error" in missing_stats
+                assert missing_stats["count"] == 0
+                assert missing_stats["earliest_us"] is None
+                assert missing_stats["latest_us"] is None
 
             # On-disk artefacts — _safe_name turns '@' into '_', so the
             # alice file is sanitized while agent-vlm passes through.

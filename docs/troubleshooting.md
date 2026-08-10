@@ -167,7 +167,6 @@ contains only wrapper messages — nothing from inside the container.
 ```bash
 curl -fsS http://127.0.0.1:8107/health   # nemotron3_nano (agent-llm)
 curl -fsS http://127.0.0.1:8100/health   # vlm_server
-curl -fsS http://127.0.0.1:8106/health   # llama_nemotron (llm)
 ```
 
 **Container post-mortem** — the wrapper now streams `docker logs -f` into the
@@ -224,14 +223,15 @@ back to OpenH264 (which is royalty-bearing). See
 **Cause:** an idle-timeout that auto-cancels the voice pipeline after a stretch
 with no user/bot speech.
 
-**Status:** disabled by default. `make_voice_pipeline` passes
-`cancel_on_idle_timeout=False` (overriding pipecat's on-by-default
+**Status:** disabled by default. `VoiceSession` and `make_voice_pipeline` pass
+`cancel_on_idle_timeout=False` (overriding Pipecat's on-by-default
 `IDLE_TIMEOUT_SECS`), so a quiet session stays connected indefinitely.
 
 **If you want it:** set `idle_timeout_secs: <seconds>` (e.g. `300` for 5 min)
 in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
 `xr_render_demo_worker.yaml`); `0` or unset keeps it disabled. The knob is
-threaded to `xr_ai_pipecat.make_voice_pipeline`, where it's documented.
+owned by `xr_ai_voice.VoiceSession` or, for a direct Pipecat consumer,
+`xr_ai_pipecat.make_voice_pipeline`.
 
 ### Browser client connects but no audio / no video
 
@@ -358,7 +358,7 @@ flip `enforce_eager: false` unless you have a measured reason.
 ### `xr_render_demo` exits but VRAM is still pinned
 
 **By design.** The vLLM-backed servers (`vlm_server`,
-`llama_nemotron_llm_server`, `nemotron3_nano_llm_server`) survive stack
+`nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
 restarts. See [`docs/ai-services.md`](ai-services.md) → *vLLM model
 persistence*.

@@ -9,15 +9,387 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
-### 2026-07-24 — Pipecat worker ready files wait for inbound IPC
+### 2026-08-10 — Voice-worker ready files wait for inbound IPC
 
-`run_voice_pipeline` releases a managed worker's ready-file callback only
-after `XRMediaHubInputTransport` has started its `ProcessorEndpoint` receive
-loop. Participant roster catch-up remains asynchronous, so process readiness
-stays a launcher concern rather than a per-client discovery barrier. The
-endpoint stores each agent's current status and Pipecat re-announces that state
-periodically; a late or reconnecting client therefore converges on readiness
+`VoiceSession` and the direct `run_voice_pipeline` compatibility path release a
+managed worker's ready file only after the input transport has started its hub
+IPC receive loop. Participant roster catch-up remains asynchronous, so process
+readiness stays a launcher concern rather than a per-client discovery barrier.
+The endpoint stores each agent's current status and the pipeline re-announces
+that state periodically; a late or reconnecting client therefore converges
 without relying on a one-shot event.
+
+### 2026-08-05 — Docker vLLM setup owns the image entrypoint
+
+The shared vLLM Docker launcher explicitly selects `/bin/bash` before installing
+model-specific wheels and executing `vllm serve`. The Omni profile's
+`vllm/vllm-openai:v0.20.0` image otherwise interprets the setup command through
+its default `vllm serve` entrypoint. Failed stopped containers are recreated
+rather than restarted because Docker cannot update their recorded entrypoint or
+command.
+
+### 2026-08-04 — Model servers select one multimodal stack
+
+`model_servers` defaults to the separate Nemotron-3 Nano and Cosmos services,
+with `--omni-stack` selecting Nemotron-3 Nano Omni instead. The launcher keeps
+STT and embeddings in both layouts and persists Omni like the other shared
+vLLM services, so the launcher can exit after readiness without unloading
+weights. `--stop` cleans every stack-specific port without requiring the
+original selection.
+
+### 2026-08-03 — Spoken text must carry terminal punctuation
+
+The TTS stage batches on sentence-final punctuation and flushes trailing
+fragments only at end of turn, so any mid-turn utterance yielded without
+terminal punctuation plays late, concatenated with the final response. The
+render demo's spoken quick-ack is punctuation-normalized at the yield site;
+whole-message JSON (an echoed tool result) is sanitized before TTS.
+
+### 2026-08-03 — Thinking is reserved for requests the tools can't settle
+
+The quick-ack classifier routes every positional operation — placement,
+movement, resizing, recoloring, removal, camera lookups — to the
+non-thinking fast path: the spatial-math tools compute exact answers, so
+reasoning over them adds latency without improving results. `think: true`
+is reserved for vague corrections and free-form compositions no tool
+pattern covers. Live-verified on Nemotron-3-Nano-30B: relative placements,
+displacement with unit conversion, and midpoint placement all execute
+correctly without thinking. The still-working panel ticker is purely
+time-gated so slow non-thinking turns get progress updates too.
+
+### 2026-08-03 — xr-render-demo drops the dedicated quick-response LLM
+
+The Llama-3.1-Nemotron-Nano-8B server (port 8106) is no longer part of the
+`model-servers` or xr-render-demo stacks. Nemotron-3-Nano-30B is fast enough
+for the quick-ack and still-working calls, so the `llm` logical model now
+points at the same server as `agent_llm` (port 8107) and the ~16 GiB of VRAM
+the 8B held is freed. The standalone `ai-services/llm/llama_nemotron` server
+and its `xr-ai-models` preset remain available for samples that want a small
+dedicated model.
+
+### 2026-08-03 — Native RAG uses a typed service boundary
+
+Dense document retrieval is a reusable `rag-service` capability exposed to
+agents as the native `xr_rag` NAT function group. The service owns document
+loading, chunking, content-addressed embedding caches, and retrieval; its
+private msgpack/ZMQ transport remains behind typed NAT contracts. Embedding
+HTTP is added to `xr-ai-models` alongside the existing model protocols, and a
+small persistent vLLM embedding server joins the shared model-server stack.
+This replaces the prototype's FastMCP boundary and synchronous HTTP client
+without coupling samples to the retrieval implementation.
+
+### 2026-07-31 — GitHub Pages publishes immutable release documentation
+
+The documentation site now uses `sphinx-multiversion` to render `main` as
+development documentation and every semantic `v*` tag as a separate release
+site subtree. The root URL redirects through `latest/` to the most recently
+released stable SemVer tag, falling back to the highest prerelease only when no
+stable release exists (or to `main/` until the first release); the version
+selector identifies the latest release, links to it from older versions, and
+preserves the current page when it exists in the selected version.
+Pull requests strictly build the checked-out source and expose an HTML artifact
+for review; protected pushes fetch full Git history and strictly render every
+published version. Repository links are rewritten while each documentation
+version is read, so historical release pages point to their matching tag. Only
+`main` and `v*` tags are eligible to deploy, so pull requests remain build-only.
+
+### 2026-07-31 — Separate model behavior, endpoints, and deployment ownership
+
+Model configuration accepts a nested profile with independent `adapter`,
+`endpoint`, and `deployment` sections while preserving the flat YAML format.
+Workers continue to construct clients through `xr-ai-models`; stdlib-only
+orchestrators read only service ownership and credentials through
+`load_model_deployment()`. Launcher-visible profiles intentionally use wrapped,
+structured JSON: the launcher does not depend on PyYAML or resolve model
+presets. The simple VLM sample consumes bundled local and hosted profiles
+end-to-end, replacing its separate `model_backend` and `models_yaml` switches.
+This keeps endpoint selection and process lifecycle in one profile without
+coupling the launcher to the model SDK.
+
+### 2026-07-30 — Simple VLM adopts the native voice runtime
+
+`simple-vlm-example` is the first sample migrated from direct
+`xr-ai-pipecat` assembly to the public `xr-ai-voice` runtime. Its worker is now
+a named package with separate entry-point, configuration, application, and
+prompt resources. `VoiceSession` owns readiness, ready-file creation, hub
+transport, voice-gate processing, signals, turn cancellation, and cleanup,
+while the application composes `StreamingVisionConfig` through
+`xr_ai_nat.adapters.as_voice_handler`.
+
+Voice, typed text, and `ping` continue through one streaming VLM path;
+participant departure releases live-frame state and newer turns interrupt
+superseded speech. `VoiceSession` defers its default hub transport until model
+readiness succeeds and closes model clients if readiness fails; typed data
+outside an active session is ignored. Transcript persistence is not added
+because this sample has no conversation-memory behavior to preserve.
+`xr-ai-pipecat` remains available for `xr-render-demo` and other unmigrated
+consumers.
+
+### 2026-07-30 — Retire the superseded xr-ai-capabilities package
+
+`xr-ai-capabilities` and its unused `VisionModule` are removed after production
+samples migrated live and recorded vision behavior to the typed
+`StreamingVisionConfig` and `VisionToolsConfig` functions in `xr-ai-nat`.
+Keeping both surfaces duplicated frame acquisition and VLM orchestration without
+an active consumer. This removal does not add a replacement abstraction:
+reusable agent functions remain NAT-first, while application-specific
+capabilities stay with their application.
+
+### 2026-07-30 — Adopt the PyNvVideoCodec 2.2 packet contract
+
+`xr-media-hub` and `video-memory-service` now require PyNvVideoCodec 2.2 or
+newer. Version 2.2 changed `Encode()` and `EndEncode()` from returning one byte
+string to returning a list of packet dictionaries whose `data` values hold the
+bitstream. The recorder consumes that packet contract directly; passing the new
+result to `bytearray.extend()` dropped every frame with
+`TypeError: 'dict' object cannot be interpreted as an integer`. The
+historical-video GPU fixture follows the same contract and no longer masks type
+errors as unavailable NVENC hardware.
+
+### 2026-07-29 — Hub client renamed: `xr_ai_agent` → `xr_ai_hub` (`xr-ai-hub-client`)
+
+The name `xr_ai_agent` had drifted from what the package is: an agent-side
+*client for the hub*, not the agent. It also occupied the `agent-sdk/` root, so
+the directory that holds every SDK package was itself one of them — leaving
+nowhere to state a dependency rule about the hub client specifically, and
+forcing `agent-sdk/pyproject.toml` into unrelated CI cache keys.
+
+The module `xr_ai_agent` becomes `xr_ai_hub`, and its distribution moves from the
+`agent-sdk/` root (`xr-ai-agent`) into its own package directory
+`agent-sdk/xr-ai-hub-client/` (`xr-ai-hub-client`), leaving `agent-sdk/` a plain
+container. In-tree consumers import `xr_ai_hub` and depend on `xr-ai-hub-client`.
+
+**Breaking: the distribution name changed.** `xr-ai-agent` no longer resolves —
+anything declaring that dependency must switch to `xr-ai-hub-client`. Every
+in-tree consumer is an editable path dependency and is updated in this same
+change, and the package is not published, so no compatibility distribution is
+shipped. The *import* API is a different matter and is preserved: because
+`xr_ai_agent` was a public top-level import, the `xr-ai-hub-client` distribution
+ships a deprecated `xr_ai_agent` package that forwards to `xr_ai_hub` and emits a
+`DeprecationWarning` on import. That alias only helps once a consumer has already
+switched its dependency declaration; it will be removed in a future version.
+
+Two small type-checking tweaks ride along: `cast(bytes, …)` in `_codec` and
+`memoryview` None-narrowing in `_shm`. `LiveFrameSource` is carried over
+unchanged — it keeps multi-waiter `get()`, `participants()`, and participant-leave
+auto-release because the video-mcp live-frame exporter calls `participants()` in
+two places, so slimming it here would break a live consumer.
+
+### 2026-07-29 — xr-ai-models internal modules are privatized
+
+The `xr-ai-models` implementation modules `config.py`, `factory.py`,
+`openai_compat.py`, and `protocols.py` moved to underscore-private names
+(`_config.py`, `_factory.py`, `_openai_compat.py`, `_protocols.py`). The
+package's public API is unchanged: every name previously re-exported from
+`xr_ai_models` is still importable from the package root
+(`from xr_ai_models import VLMService, load_models_config, make_vlm, …`).
+In-tree consumers now import from the package root (and tests reach into the
+private modules directly for internal helpers). Because the four old module
+paths were documented public imports, each is retained as a deprecated
+forwarding alias that emits a `DeprecationWarning` on import and re-exports the
+canonical objects — including the config names not exposed at the package root
+(`KIND_OPENAI_COMPAT`, `ModelKind`, `Category`, `Spec`), which stay importable
+from `xr_ai_models.config`; the aliases will be removed in a future version.
+
+### 2026-07-28 — Voice adapters and conversation recall
+
+Added `xr_ai_nat.adapters.voice` (`as_voice_handler`, `record_voice_transcripts`)
+— the bridge between native NAT functions and an `xr-ai-voice` `VoiceSession`.
+`adapters/voice` imports `xr-ai-voice`, so it is gated behind a new
+`xr-ai-nat[voice]` optional extra rather than a hard dependency.
+
+`record_voice_transcripts` is the producer that stores completed turns under
+`{participant_id}:user` / `{participant_id}:agent` sources. With that producer
+now landing, the `xr_conversation_memory` function group (`recall_conversation`)
+— deferred out of the text-memory PR because it had no producer on main — is
+re-introduced here, alongside an end-to-end record→recall test. It reads those
+role-scoped sources back through the existing typed `query_transcripts` and
+returns timestamp-ordered `ConversationEntry` turns for one participant. A real
+exchange gives the user turn and the agent turn the same timestamp (both carry
+the originating query's time), so recall orders that tie user-before-agent.
+
+Because agents consume these schemas, the whole recall surface is described:
+every `ConversationEntry` field and `RecallConversationResult.entries` carry
+descriptions, `role` is constrained to `Literal["user", "agent"]` — the only two
+values the producer writes — and the config's `text_memory` reference documents
+which group recall reads from. A regression asserts the generated request/result
+contract keeps its descriptions and the `role` enum.
+
+Both adapters are re-exported from the `xr_ai_nat.adapters` package namespace,
+which is the documented import path. The re-export is lazy (PEP 562
+`__getattr__`) because the adapters need the optional extra: importing
+`xr_ai_nat.adapters` without it still succeeds, and only attribute access
+raises — with an error naming the extra to install. Lazy access also keeps the
+deprecated `adapters.mcp` alias from emitting its warning on an unrelated import
+of the package. The `xr-ai-nat` README documents the `[voice]` extra, both
+adapters, `xr_conversation_memory`, and how transcript recording feeds recall.
+
+### 2026-07-28 — Introduce `xr-ai-voice` alongside `xr-ai-pipecat`
+
+Added the `xr-ai-voice` SDK package (`agent-sdk/xr-ai-voice`), a voice runtime
+exposing `VoiceSession` plus the `VoiceHandler`/`VoiceQuery`/`VoiceResponse`/
+`VoiceTurn` handler surface and `HubVoiceTransport`. It is introduced alongside
+the existing `xr-ai-pipecat`; neither package is removed and no sample migrates
+onto voice yet (there are no consumers). Readiness is health-based (split across
+`_readiness`/`_session`); if #300's request-readiness lands, it folds into
+`_readiness` when samples migrate.
+
+The voice runtime anchors every turn to when the participant actually spoke: the
+hub's ``AudioChunk.pts_us`` is carried forward on pipecat's presentation
+timestamp, ``VadSttProcessor`` captures the value at speech onset and stamps it
+onto the transcript, and ``VoiceGateProcessor`` uses it for the dispatched
+query's ``pts_us`` (falling back to wall clock only for a transcript with no
+originating audio). Stamping wall clock after STT instead baked VAD hangover plus
+transcription latency into the timestamp, and that error would persist into
+stored transcripts and time-relative recorded-frame lookups. Pipeline shutdown is
+also complete: ``EndFrame``/``CancelFrame`` cancels and awaits in-flight handler
+turns and tears down pending early-STT probe tasks, so neither a turn nor a probe
+can emit text or write a transcript after the session has ended.
+
+The voice runtime is participant-scoped for the repository's one-hub/many-clients
+model, and every teardown path is scoped the same way: a ``ParticipantLeftFrame``
+releases just the departing participant's synthesis state (before the frame
+reaches the output transport, which drops that pid's media sender — otherwise a
+lingering synth task could emit audio afterwards and the transport's lazy routing
+would recreate the sender it had just released), and a pid-less interruption
+drains every participant *and* flushes each of their hub audio rather than only
+the fallback target's. `StreamingTtsProcessor` keys its pending text, synthesis/order queue,
+sender task, interruption, and hub flush by participant id, so concurrent
+participants never share a buffer (which would splice their words) or a sender
+(which would misroute audio); an `InterruptionFrame` scopes to its
+`transport_source` pid — the handler's supersede interrupt now carries that pid.
+Per-participant transport `MediaSender`s are released on `ParticipantLeftFrame`
+and every sender task is torn down on pipeline `EndFrame`/`CancelFrame`, so
+join/leave churn and shutdown retain no state. The `on_query_superseded` callback
+fires only when a new query actually replaces a still-in-flight turn (not for a
+queued follow-up or a query after the previous turn finished).
+
+The voice runtime's `VoiceGateProcessor` relies on the wake-gate's partial-wake
+/ early-chime helpers (`VoiceGate.begin_utterance`, `wake_ack_enabled`,
+`matches_magic_phrase`, `could_match_magic_phrase`, and `play_chime` returning
+whether audio was emitted). These are additive superset helpers not yet present
+in `xr-ai-voicegate` on main, so `utils/xr-ai-voicegate/{gate,config}.py` are
+extended with them in the same change. The additions are backward-compatible:
+existing `xr-ai-voicegate`/`xr-ai-pipecat` callers ignore the `play_chime`
+return value, and their tests continue to pass.
+### 2026-07-27 — Native vision exposes current- and recorded-frame tools
+
+The `xr_ai_nat` vision capability drops the path-based `xr_vision`/`ask_image`
+function group in favour of the native `xr_vision_tools` group
+(`VisionToolsConfig`), which exposes `look_at_current_frame` over the always-on
+live frame source and `look_at_past_frame` over the `video_memory` function
+group. `StreamingVisionConfig` (`xr_streaming_vision`) is retained for
+simple-vlm's streaming Q&A.
+
+**Breaking (public API):** `VisionFunctionsConfig` — previously exported from
+`xr_ai_nat.functions.vision` — is removed and semantically replaced by
+`VisionToolsConfig`; the two have different config fields and tool surfaces, so
+this is a versioned breaking change rather than a rename (no forwarding alias).
+Callers on `VisionFunctionsConfig`/`xr_vision`/`ask_image` must migrate to
+`VisionToolsConfig`/`xr_vision_tools`. The `vision/_images.py` → `vision/_pixels.py`
+move is an internal (underscore-private) helper rename with no compatibility
+surface.
+
+The xr-render worker now consumes the native perception
+tools directly: the local `look_at_current_frame` `ToolDef` wrapper and the
+`ask_image` two-step were removed from `processors.py`, with the processor
+injecting participant identity (and the utterance timestamp for recorded
+lookups) that the model never supplies. The no-frame path still ends the turn
+with a short spoken message. Camera capture remains always-on streaming — no
+camera-on-demand path was reintroduced. vlm-mcp keeps its file-based `ask_image`
+MCP tool, now self-contained in the server since the native surface no longer
+offers a file-path tool.
+
+### 2026-07-27 — Video-memory contracts inline into the typed client
+
+The model definitions move into `video_memory/_client.py`, aligning the model
+surface with the render-subagents branch: request models now extend the shared
+`_StrictRequest` base and a `VideoMemoryClient.health()` helper is added. The
+client imports `RPCClient` from the canonical `xr_ai_nat.functions._service.rpc`
+(#303, merged), and `VideoHealthResult` retains `recording_enabled` so the Video
+MCP shim's conditional tool sets and live-only outage fallback stay intact.
+`VideoMemoryClient.list_recorded_participants()` keeps a no-argument form
+(building the typed request internally, like `get_health()`), so no-argument
+callers continue to work.
+
+`video_memory/schemas.py` is retained as a deprecated forwarding alias (emits a
+`DeprecationWarning` on import). It preserves the full legacy public surface:
+the models whose names are unchanged, plus the renamed ones as aliases — because
+their data contracts are unchanged. `ParticipantsResult` →
+`ListRecordedParticipantsResult`, `VideoMemoryHealth` → `VideoHealthResult`, and
+the legacy no-argument `EmptyRequest` → `ListRecordedParticipantsRequest` (both
+field-less strict requests). The package-level `ParticipantsResult` export is
+likewise kept as a deprecated alias. Import from
+`xr_ai_nat.functions.video_memory` (or its `._client` submodule) going forward;
+the aliases will be removed in a future version.
+
+### 2026-07-27 — Text-memory adopts typed request/result models
+
+The native `text_memory` capability now speaks explicit `_StrictRequest`
+request models and typed result models instead of returning errors as data.
+`add_transcript` rejects blank text at the request boundary
+(`Field(min_length=1)` plus a `field_validator`) rather than emitting a
+`TextMemoryError`, and `get_transcript_stats` for an unknown source returns a
+`TranscriptStatsResult` with `count=0` and null `earliest_us`/`latest_us`
+rather than an error. `query_transcripts` and `list_sources` return objects
+(`{"segments": …}`, `{"sources": …}`) in place of bare lists. The store and
+schemas modules fold into `functions.py`: the private `_store.py` is removed
+outright, while `schemas.py` survives as a deprecated forwarding alias (warns on
+import). It keeps `TranscriptSegment` (unchanged) and `TranscriptStats` — which
+was renamed to `TranscriptStatsResult` but kept the same fields (only
+`earliest_us`/`latest_us` widened `int` → `int | None`), so it stays as a
+deprecated alias. **Genuine removals** (no alias): `OperationResult` and
+`TextMemoryError`, because the typed API validates input and returns typed
+results instead of error-as-data. Import from
+`xr_ai_nat.functions.text_memory` going forward. The
+path-escape guard is preserved: every `.identity`/`.jsonl` path is wrapped in
+`_check()` (`resolve()` + `is_relative_to(root)`) before it is read or used,
+including the `glob("*.identity")` loops, so a symlinked identity file is never
+followed. The `transcript-mcp` compatibility shim keeps republishing the four
+legacy tools over the new typed surface; because it no longer applies the
+`untyped_outputs` unwrapping, its `query_transcripts` and `list_sources` MCP
+outputs are now the typed objects (`{"segments": …}`, `{"sources": …}`) rather
+than the bare lists the earlier shim emitted — a deliberate wire-shape change
+that aligns the shim with the typed native API. Participant-oriented
+`recall_conversation` is deferred to land with its producer (the future
+`record_voice_transcripts` writer that stores `{participant_id}:{role}`
+sources); the render worker currently writes transcripts under the bare
+`participant_id`, so wiring recall now would return empty history.
+
+### 2026-07-27 — MCP export lives under `xr_ai_nat.mcp`
+
+The generic native-function → MCP publisher moved from
+`xr_ai_nat.adapters.mcp` to a top-level `xr_ai_nat.mcp` package. The canonical
+import is now `xr_ai_nat.mcp.create_mcp_server`; `mcp/` owns exposing native
+capabilities to MCP-only agents, leaving `adapters/` for framework adapters.
+Public signature is unchanged; only the import path moved. Since
+`xr_ai_nat.adapters.mcp.create_mcp_server` was a documented public import, it
+remains as a deprecated forwarding alias (it emits a `DeprecationWarning` on
+import) to avoid a silent breaking change; the alias will be removed in a
+future version.
+
+### 2026-07-27 — Shared service transport and value models under `xr-ai-nat`
+
+The private correlated msgpack/ZMQ transport shared by service-backed functions
+moved from `xr_ai_nat.functions._rpc` (a four-module package) to a single
+`xr_ai_nat.functions._service.rpc` module; `_service/` owns the private RPC
+transport. The shared value models live separately in a capability-neutral
+`xr_ai_nat.functions.types`: the coordinate models `Vector3` and `SpatialFrame`
+moved there out of `spatial_math/schemas.py`, drawn from a shared, exported
+`ServiceResult` base. `spatial_math/schemas.py` is retained as a deprecated
+re-export alias (with a `DeprecationWarning`) so existing `spatial_math.schemas`
+imports keep working; it will be removed in a future version. `Color` is added
+to `functions.types` too as a preparatory shared home; the render scene still
+defines and uses its own `Color`/`Vector3`, so migrating that scene schema onto
+these types is deferred to a later change.
+
+The RPC wire format and the models' JSON string rendering (`__str__` →
+`model_dump_json`) are identical. One deliberate semantic change: the shared
+`ServiceResult` base sets `extra="allow"`, so unknown fields are now retained
+rather than dropped (the previous coordinate base used Pydantic's default
+`extra="ignore"`). This matches the target's intent and only affects inputs
+that carry fields outside the model — the spatial-math/tracking call sites pass
+exactly the declared fields, so their behaviour is unchanged.
 
 ### 2026-07-21 — Video memory is recorded history, not live capture
 
@@ -27,6 +399,34 @@ longer subscribes to hub IPC. Callers that need a current frame use
 until the compatibility adapter is retired. Recorded-frame requests use an
 absolute Unix-microsecond reference timestamp plus a whole-second offset so an
 agent can reason coarsely while receiving the precise selected timestamp.
+
+### 2026-07-20 — NAT agents retain the xr-ai-models service boundary
+
+`ModelsLLMConfig` registers an `xr-ai-models` `LLMService` as a NAT LLM
+provider. Its LangChain client translates NAT agent messages and tools but does
+not own model transport, so built-in NAT agents preserve the same deployment
+profiles and OpenAI-compatible service seam as direct callers. The provider is
+independent of the current XR render loop so future NAT agent workflows can use
+the same model-service boundary without a parallel client implementation.
+
+### 2026-07-20 — XR render composes native capabilities directly
+
+The XR render worker builds scene, tracking, spatial-math, vision,
+video-memory, and text-memory Functions in one NAT workflow. Runtime-backed
+Functions retain typed process boundaries, but the sample no longer launches
+or calls MCP adapters. Its existing model tool names and prompt remain stable
+while schemas are derived from Functions, keeping this transport migration
+independent from the later agent-loop migration. The prompt eval derives its
+tool schemas from the same native toolbox assembly and executes effects against
+fixtures, so it no longer requires compatibility MCP processes.
+
+### 2026-07-20 — Simple VLM invokes native live vision
+
+`simple-vlm-example` now builds `StreamingVisionConfig` with a NAT
+`WorkflowBuilder` and adapts that function to its existing Pipecat voice
+pipeline. Live-frame tracking, conversion, and VLM streaming therefore have a
+native invocation boundary while voice behavior and model deployment profiles
+remain unchanged.
 
 ### 2026-07-20 — XR render scene and LOVR stay sample-local
 

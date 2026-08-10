@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Internal helpers shared between config and openai_compat."""
+"""Internal helpers shared between _config and _openai_compat."""
 from __future__ import annotations
 
 from typing import Any, Iterable

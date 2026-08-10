@@ -51,7 +51,11 @@ def run(
     # own process group so the launcher's killpg() on the wrapper does not
     # reach it. Non-persistent wrappers stay in the wrapper's group so SIGTERM
     # propagates and vLLM exits with the wrapper.
-    proc = subprocess.Popen(vllm_argv, start_new_session=persistent)
+    env = os.environ | {
+        "XR_AI_VLLM_MANAGED": "1",
+        "XR_AI_VLLM_PORT": str(port),
+    }
+    proc = subprocess.Popen(vllm_argv, env=env, start_new_session=persistent)
 
     _lifecycle.wait_until_healthy(
         health_url,

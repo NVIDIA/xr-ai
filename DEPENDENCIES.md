@@ -15,11 +15,9 @@
 ## Python version
 
 Every `pyproject.toml` in this repo pins `requires-python = ">=3.11,<3.13"` by
-convention. The upper bound exists because `PyNvVideoCodec` (used by
-`xr-media-hub` and `video-memory-service` for NVENC encode / NVDEC decode) does not
-yet publish wheels for Python 3.13. With the cap in place, `uv sync` will pick
-3.12 even on a host where 3.13 is also installed. Loosen the upper bound only
-after `PyNvVideoCodec` ships 3.13 wheels.
+convention. PyNvVideoCodec 2.2 publishes Python 3.13 wheels, but the rest of the
+repository dependency graph and test matrix have not been qualified on 3.13.
+Loosen the upper bound only as a coordinated repository-wide change.
 
 A project may state a different range when its dependencies require it; the
 constraints stay honest because `.github/workflows/lock-check.yml` runs
@@ -39,17 +37,20 @@ CI matrices:
 ## Internal packages
 
 ```
-xr-ai-agent  (agent-sdk/)
+xr-ai-hub-client  (agent-sdk/xr-ai-hub-client/)
     └── pyzmq >=27.0
     └── msgpack >=1.0
+    Ships the canonical ``xr_ai_hub`` package plus a deprecated ``xr_ai_agent``
+    forwarding alias (warns on import) for the former ``xr-ai-agent`` name.
 
 xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
-    └── xr-ai-agent     [editable: ..]
+    └── xr-ai-hub-client     [editable: ../xr-ai-hub-client]
     └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models    [editable: ../xr-ai-models]
     └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
     └── xr-ai-voicegate [editable: ../../utils/xr-ai-voicegate]
     └── pipecat-ai >=1.3
+    └── nltk !=3.10.1       (3.10.1 rejects deps in in-project venvs)
     └── numpy >=1.24
     └── scipy >=1.11
     └── httpx >=0.27
@@ -61,24 +62,30 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     16 kHz int16 for STT, converts TTS int16 PCM back to float32 AudioChunks
     for return. SttClient / TtsClient are thin wrappers around xr-ai-models'
     OpenAICompatSTT / OpenAICompatTTS; httpx is retained for http_probe()
-    readiness checks.
-    Not a dep of xr-ai-agent itself — import only in workers that use Pipecat.
+    readiness checks. ``run_voice_pipeline`` releases a launcher's ready-file
+    callback only after the input transport starts its hub IPC receive loop.
+    Not a dep of xr-ai-hub-client itself — import only in workers that use Pipecat.
 
-xr-ai-capabilities  (agent-sdk/xr-ai-capabilities/)
-    └── xr-ai-agent   [editable: ..]
-    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-models  [editable: ../xr-ai-models]
+xr-ai-voice  (agent-sdk/xr-ai-voice/)
+    └── xr-ai-hub-client [editable: ../xr-ai-hub-client]
+    └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models    [editable: ../xr-ai-models]
+    └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
+    └── xr-ai-voicegate [editable: ../../utils/xr-ai-voicegate]
+    └── pipecat-ai >=1.3
+    └── nltk !=3.10.1       (3.10.1 rejects deps in in-project venvs)
     └── numpy >=1.24
-    └── Pillow >=10.0
-    Framework-agnostic, reusable agent capabilities (see AGENTS.md → "Agent
-    sample architecture"). A capability talks to the hub through a
-    ``ProcessorEndpoint`` and depends only on the core SDK — NOT on pipecat or
-    any pipeline framework — so both pipecat and non-pipecat agents can compose
-    it. Hosts ``pixels`` (frame → PIL → JPEG; numpy + Pillow) and ``vision``
-    (VisionModule — live-camera VLM Q&A with camera-on-demand, exposing ``ask``
-    for streaming TTS and ``perceive`` for agentic tool loops), so vision
-    samples no longer copy that code per-worker. A pipecat brain wires it up by
-    passing ``transport.endpoint``.
+    └── scipy >=1.11
+    Native voice runtime used by simple-vlm-example. Exposes the
+    ``VoiceSession`` public API plus the ``VoiceHandler`` / ``VoiceQuery`` /
+    ``VoiceResponse`` / ``VoiceTurn`` handler surface, ``HubVoiceTransport``,
+    ``VadConfig``, and ``TextMessageInput``; Pipecat, audio framing, and
+    pipeline processors are implementation details. Service health gates
+    transport construction, while ``VoiceSession.run`` touches its ready file
+    only after the input transport starts its hub IPC receive loop. The
+    readiness contract is split across the ``_readiness`` / ``_session``
+    modules. Not a dep of xr-ai-hub-client itself — import only in workers that
+    opt into the voice runtime.
 
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24
@@ -87,46 +94,63 @@ xr-ai-voicegate  (utils/xr-ai-voicegate/)
     + STOP ladder, the lazy listening chime synthesized at the TTS sample
     rate, and the participant-joined greeting hook. Workers feed STT
     transcripts via ``feed`` and register handlers — either one-at-a-time via
-    ``on_*`` setters or together via ``bind(...)``. Consumed inside
-    xr-ai-pipecat by ``VoiceGateProcessor`` so sample workers don't import it
-    directly when they use the unified pipeline.
+    ``on_*`` setters or together via ``bind(...)``. Voice runtimes consume it
+    through ``VoiceGateProcessor``; applications may also load the shared YAML
+    config directly.
 
 xr-ai-models  (agent-sdk/xr-ai-models/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── httpx >=0.27
     └── pyyaml >=6.0
-    Unified service protocols (LLMService, VLMService, STTService, TTSService)
+    Unified service protocols (LLMService, VLMService, STTService, TTSService,
+    EmbeddingService)
     and OpenAI-compatible HTTP clients that cover every in-tree model backend
     (vLLM-served VLM/LLMs, NeMo Parakeet STT, Piper/Magpie TTS).  Per-model
     quirks live behind one seam: reasoning-field aliasing (nano_v3 →
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
-    for the seven in-tree services.  Future backends (LiteLLM, vendor SDKs)
-    plug in as new `kind`s in `factory.py::make_*` without touching the
+    for the in-tree services. Future backends (LiteLLM, vendor SDKs)
+    plug in as new `kind`s in `_factory.py::make_*` without touching the
     protocols or callers.  Workers depend on this instead of rolling their
-    own httpx wrappers.
+    own httpx wrappers. Profiles may separate adapter, endpoint, and deployment
+    metadata while the existing flat YAML schema remains valid.
 
 xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── nvidia-nat-core ==1.8.0
     └── pydantic >=2.10
+    └── [agents] nvidia-nat-langchain ==1.8.0, xr-ai-models [editable: ../xr-ai-models]
     └── [mcp] fastmcp >=3.4,<4
     └── [services] msgpack >=1.0, pyzmq >=27.0
-    └── [vision] httpx >=0.27, Pillow >=10.0, xr-ai-models [editable: ../xr-ai-models]
+    └── [vision] httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
+    └── [voice] xr-ai-voice [editable: ../xr-ai-voice]
     Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
     ``xr_spatial_math`` function group accepts explicit coordinate frames and
     performs deterministic spatial calculations without OpenXR, model, or MCP
     dependencies. ``xr_text_memory`` owns persistent per-source JSONL text
-    history. Its optional MCP adapter exports an application's explicit native
-    function list without routing native composition through MCP. Each
+    history, and ``xr_conversation_memory`` composes it into a participant-
+    oriented ``recall_conversation`` view. Its optional MCP adapter exports an
+    application's explicit native function list without routing native
+    composition through MCP. The ``[voice]`` extra adds the
+    ``xr_ai_nat.adapters`` voice adapters: ``as_voice_handler`` wraps a native
+    function as a voice-session handler, and ``record_voice_transcripts``
+    persists each completed turn under ``{participant_id}:{role}`` — the
+    producer that ``recall_conversation`` reads. Each
     capability module is its own ``nat.plugins`` discovery entry point; there
     is no package-wide registration aggregator. The spatial pure math core is
     also used by the transitional Vec and OpenXR MCP compatibility surfaces.
-    ``xr_vision`` normalizes an acquired local image and calls an injected
-    xr-ai-models VLM; it does not acquire frames itself. ``xr_tracking`` calls
+    ``xr_vision_tools`` exposes ``look_at_current_frame`` and
+    ``look_at_past_frame`` over the always-on live-frame source, acquiring the
+    frame itself and calling an injected xr-ai-models VLM; recorded lookups
+    resolve through the ``xr_video_memory`` group. A separate
+    ``xr_streaming_vision`` function composes current-frame acquisition with
+    complete or streaming VLM invocation. ``xr_tracking`` calls
     the typed OpenXR service and returns a complete user coordinate frame.
     ``xr_video_memory`` calls the typed video-memory service for recorded-video
-    discovery, queries, and frame extraction. Live frames stay with the hub
-    client owned by their caller.
+    discovery, queries, and frame extraction. ``xr_rag`` calls the typed RAG
+    service for document discovery and dense passage retrieval. Live frames stay with the hub
+    client owned by their caller. The ``agents`` extra registers
+    ``ModelsLLMConfig`` so NAT's built-in LangChain-backed agents delegate
+    model I/O to an ``xr-ai-models`` LLMService.
 
 xr-openxr-service  (services/openxr-service/)
     └── xr-ai-launcher [editable: ../../utils/xr-ai-launcher]
@@ -140,24 +164,36 @@ xr-openxr-service  (services/openxr-service/)
     to its Python path only for CPU-only pose-math regression tests, avoiding a
     test-time isaacteleop installation.
 
+xr-rag-service  (services/rag-service/)
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-models [editable: ../../agent-sdk/xr-ai-models]
+    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
+    └── numpy >=1.24
+    └── pyyaml >=6.0
+    Recursively indexes Markdown and text documents, caches dense embeddings
+    by content and index settings, and exposes private msgpack/ZMQ retrieval at
+    port 8340. Applications consume the typed ``xr_rag`` NAT group.
+
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
     `_cloudxr_env` owns the shared CloudXR env helpers (stdlib-only, os + re):
     `load_cloudxr_env`, plus the single source of truth for native device
     profiles: `NATIVE_DEVICE_PROFILES`, `is_native_profile(profile)`, and
     `read_device_profile(yaml_path)` (env-first NV_DEVICE_PROFILE read, regex
-    YAML fallback).
+    YAML fallback). `load_model_deployment()` reads the profile selected by a
+    worker config and maps service ownership to launcher modes without adding
+    a YAML or model-SDK dependency.
 
 xr-ai-logging  (utils/xr-ai-logging/)
     └── loguru >=0.7
 
 xr-ai-vllm  (utils/xr-ai-vllm/)
     └── (stdlib only — zero runtime deps)
-    Pluggable vLLM hosting for the four vLLM-backed services.  Dispatches to
+    Pluggable vLLM hosting for vLLM-backed services. Dispatches to
     either pip-installed `vllm serve` or `docker run nvcr.io/nvidia/vllm:<tag>`
     based on each YAML's `vllm_backend:` key.  Stays stdlib-only so docker mode
     does not pull vllm/torch/etc. into the wrapper's venv just to manage a
-    container.  Imported by the four vllm wrappers and by the orchestrator
+    container. Imported by the vLLM wrappers and by the orchestrator
     `--stop` flow.  Besides `serve` / `stop_persistent_servers`, exposes the
     shared wrapper helpers `resolve_model_cache`, `load_config`, `setup_hf_env`,
     and `gpu_compute_major` (all stdlib-only; pyyaml is imported function-locally
@@ -177,7 +213,7 @@ xr-ai-vad  (utils/xr-ai-vad/)
     completes).
 
 xr-media-hub  (server-runtime/)
-    └── xr-ai-agent  [editable: ../agent-sdk]
+    └── xr-ai-hub-client  [editable: ../agent-sdk/xr-ai-hub-client]
     └── pyzmq >=27.0
     └── livekit >=1.0
     └── livekit-api >=1.0
@@ -188,7 +224,7 @@ xr-media-hub  (server-runtime/)
     └── numpy >=1.24
     └── pyyaml >=6.0
     └── cryptography >=42.0
-    PyNvVideoCodec >=1.0 (NVENC H.264 encoder; used when video_recording.enabled: true)
+    PyNvVideoCodec >=2.2 (NVENC H.264 encoder; used when video_recording.enabled: true)
 
 transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
     └── uvicorn[standard] >=0.29
@@ -205,10 +241,13 @@ vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
     └── xr-ai-nat[mcp,vision] [editable: ../../agent-sdk/xr-ai-nat]
-    Thin MCP compatibility process with one tool at /mcp (no REST). It
-    republishes ``vision__ask_image`` under the existing ``ask_image`` name.
-    Image normalization and the VLM call live in the native vision function;
-    the legacy ``vlm_server:`` URL key remains accepted with a warning.
+    Thin MCP compatibility process with one tool at /mcp (no REST). It owns a
+    self-contained file-path ``ask_image`` tool: image normalization (Pillow,
+    hence the ``[vision]`` extra) and the VLM call live in the server's own
+    ``xr_vlm_ask_image`` group, not in the native vision surface — which is now
+    the path-free, always-on ``xr_vision_tools``. MCP-only agents that hold an
+    image path use this tool; the legacy ``vlm_server:`` URL key remains
+    accepted with a warning.
 
 video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── uvicorn[standard] >=0.29
@@ -216,7 +255,7 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
     └── pyyaml >=6.0
     └── numpy >=1.24
     └── Pillow >=10.0
-    └── xr-ai-agent [editable: ../../agent-sdk]
+    └── xr-ai-hub-client [editable: ../../agent-sdk/xr-ai-hub-client]
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
     Pure FastMCP compatibility adapter at /mcp. Preserves the conditional
@@ -226,7 +265,7 @@ video-mcp-server  (agent-mcp-servers/video-mcp/)
 xr-video-memory-service  (services/video-memory-service/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
-    └── PyNvVideoCodec >=1.0
+    └── PyNvVideoCodec >=2.2
     └── Pillow >=10.0
     └── numpy >=1.24
     └── pyyaml >=6.0
@@ -280,11 +319,12 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
     remains compatibility-only and is not part of the native function group.
 
 xr-ai-tests  (tests/)
-    └── xr-ai-agent             [editable: ../agent-sdk]
-    └── xr-ai-capabilities      [editable: ../agent-sdk/xr-ai-capabilities]
+    └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub-client]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
-    └── xr-ai-nat               [editable: ../agent-sdk/xr-ai-nat]
+    └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
+    └── xr-rag-service [editable: ../services/rag-service]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
+    └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
     └── xr-media-hub            [editable: ../server-runtime]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
     └── xr-ai-logging           [editable: ../utils/xr-ai-logging]
@@ -300,9 +340,9 @@ xr-ai-tests  (tests/)
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
-    └── fastmcp >=3.4,<4 (MCP adapter contracts and tests marked `gpu`)
-    └── Pillow >=10.0   (only used by tests marked `gpu`)
-    └── pyyaml >=6.0    (only used by tests marked `gpu`)
+    └── fastmcp >=3.4,<4 (CPU MCP adapter contracts and GPU MCP tests)
+    └── Pillow >=10.0   (CPU native-vision and GPU image tests)
+    └── pyyaml >=6.0    (CPU subprocess/service configs and GPU service tests)
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages
@@ -335,6 +375,15 @@ vlm-server  (ai-services/vlm-server/)
     vLLM — model survives stack restarts (see docs/changelog.md 2026-05-05).
     vllm_backend: pip|docker — pip path uses the wrapper's vllm; docker path
     runs `nvcr.io/nvidia/vllm:<tag> vllm serve …` instead.
+
+embedding-server  (ai-services/embedding-server/)
+    └── vllm >=0.14.0
+    └── pyyaml >=6.0
+    └── hf-transfer >=0.1.4
+    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
+    └── xr-ai-vllm [editable: ../../utils/xr-ai-vllm]
+    Model: nvidia/llama-nemotron-embed-1b-v2. Exposes OpenAI-compatible
+    embeddings at port 8109 through the shared vLLM hosting wrapper.
 
 stt-server  (ai-services/stt-server/)
     └── nemo_toolkit[asr] >=2.5
@@ -419,12 +468,14 @@ piper-tts-server  (ai-services/tts/piper/)
 | `ai-services/llm/llama_nemotron/` | `llama-nemotron-llm-server` | `llama_nemotron_llm_server` | 8106 | Llama-3.1-Nemotron-Nano-8B-v1 | vLLM (pip or docker) |
 | `ai-services/llm/nemotron3_nano/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (GPU-selected) | vLLM (pip or docker) |
 | `ai-services/llm/nemotron_omni/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} | vLLM (pip or docker) — multimodal text+video |
+| `ai-services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
 | `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed msgpack/ZMQ → recorded H.264 queries |
 | `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP compatibility adapter → recorded service + live hub IPC |
 | `agent-samples/xr-render-demo/scene/` | `xr-render-scene` | `xr_render_scene` | 8320 | — | Sample-local typed scene service → LOVR |
 | `agent-mcp-servers/render-mcp/` | `render-mcp` | `render_mcp` | 8220 | — | FastMCP compatibility adapter → xr-render-scene |
 | `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed msgpack/ZMQ → headless OpenXR / CloudXR |
+| `services/rag-service/` | `xr-rag-service` | `rag_service` | 8340 | — | Typed msgpack/ZMQ → dense document retrieval |
 | `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | FastMCP compatibility adapter → openxr-service |
 | `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
 | `agent-mcp-servers/vec-mcp/` | `vec-mcp-server` | `vec_mcp_server` | 8250 | — | Pure FastMCP; deterministic spatial-math primitives (no model) |
@@ -484,26 +535,27 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent`, `xr-ai-capabilities [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-pipecat [editable]` | pyyaml >=6.0 (VisionModule + pixels now come from xr-ai-capabilities, which pulls numpy + Pillow; xr-ai-vad + xr-ai-voicegate + pipecat-ai + scipy + httpx + fastmcp pulled in via xr-ai-pipecat) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision,voice] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-nat[vision]` pulls in httpx, numpy, and Pillow) |
 
-Worker runs on the unified pipecat voice pipeline assembled by
-`xr_ai_pipecat.make_voice_pipeline`. `SimpleVlmBrain` (a
-`BrainProcessor`) owns the camera-on-demand state machine, frame
-tracking, the VLM streaming call, and the data-channel side path
-("ping" + ad-hoc text); voice gate (magic phrases, follow-up grace,
-listening chime, stop ack) lives in `xr_ai_voicegate` inside the
-`VoiceGateProcessor`. VAD/STT and sentence-batched TTS are also
-provided by the pipeline so the worker only configures the knobs.
+The packaged worker registers `StreamingVisionConfig` in-process and maps it to
+`VoiceSession` with `xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` owns
+readiness, hub transport, signals, the private Pipecat pipeline, and cleanup;
+`TextMessageInput` routes `"ping"` and ad-hoc text through the same
+participant-aware path as speech. Voice-gate behavior (magic phrases, follow-up
+grace, listening chime, stop acknowledgement), VAD/STT, and sentence-batched TTS
+remain provided by the shared voice runtime. The sample has no direct
+`xr-ai-pipecat` or MCP dependency.
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
-in-process.  Model endpoints are configured via `yaml/models.yaml`
-(default: Cosmos profile) or `yaml/models.omni.yaml` (Nemotron-Omni
-on port 8108). Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
+in-process. The `models_config` key selects a structured deployment profile:
+`models.local.json` manages the default services, `models.hosted.json` uses an
+external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
+8108. Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
 
 ### model-servers  (agent-samples/model-servers/)
 
-Standalone launcher that starts the four AI inference servers and keeps
+Standalone launcher that starts the shared AI inference servers and keeps
 them alive across stack restarts.  No hub, worker, or agent involved —
 run this first to warm up model weights before starting any demo sample.
 
@@ -511,35 +563,40 @@ run this first to warm up model weights before starting any demo sample.
 |---|---|---|---|
 | Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
 
-Starts stt-server (8103), nemotron3-nano-llm-server (8107, `persistent=True`),
-vlm-server (8100, `persistent=True`), llama-nemotron-llm-server (8106, `persistent=True`).
-The three vLLM servers survive launcher restarts; use `--stop` to shut them down.
+The default `--vlm-llm-stack` starts stt-server (8103),
+nemotron3-nano-llm-server (8107, `persistent=True`), and vlm-server (8100,
+`persistent=True`), plus embedding-server (8109, `persistent=True`).
+`--omni-stack` replaces Nano and Cosmos with nemotron-omni-llm-server (8108,
+`persistent=True`) while retaining stt-server and embedding-server. The stacks
+are mutually exclusive; `--stop` shuts down every model-server port without
+selecting one.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
-action list (user-frame coords) → render-mcp → typed scene process → LOVR. Pose from oxr-mcp lets
-the worker convert user-frame requests ("to my left") to world-frame before
-forwarding.
+tool calls → native NAT functions → typed scene/OpenXR/video services → LOVR.
+The worker composes tracking and spatial-math functions in process for
+user-relative requests such as "to my left".
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
 | Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-nat` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent`, `xr-ai-capabilities` [editable], `xr-ai-models` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable] | fastmcp >=2.0, pyyaml >=6.0, pipecat-ai >=1.3 (numpy + Pillow pulled in via xr-ai-capabilities; silero-vad via xr-ai-pipecat → xr-ai-vad). The `look_at_current_frame` perception tool reuses `xr_ai_capabilities.VisionModule` (live-frame VLM Q&A); the worker-local `pixels.py` and its frame/camera helpers were removed. |
+| Worker | `xr-render-demo-worker` | `xr-ai-hub-client`, `xr-ai-models` [editable], `xr-ai-nat[services,vision]` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pyyaml >=6.0, pipecat-ai >=1.3 (native scene, tracking, spatial-math, video-memory, vision, and text-memory functions replace capability MCP clients; silero-vad via xr-ai-pipecat → xr-ai-vad). |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
 `make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
-a transitive dep of `xr-ai-pipecat` and `fastmcp`.
+a transitive dep of `xr-ai-pipecat` and `xr-ai-nat[vision]`.
 
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
 is explicit in the process list.
-Starts: hub, cloudxr-runtime, piper-tts (8105), vlm-mcp (8240),
-video-memory (8310), video-mcp (8210), scene (8320), render-mcp (8220),
-openxr-service (8330), oxr-mcp (8230), vec-mcp (8250), worker.
+Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
+scene (8320), openxr-service (8330), and worker. The model-server
+entries are declared with `launch_mode="reuse"` and must already be healthy.
+No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).
 
@@ -552,12 +609,12 @@ updated in the same commit**.
 
 | Component changed | Must also update |
 |---|---|
-| `agent-sdk/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
+| `agent-sdk/xr-ai-hub-client/` API or types | `AGENTS.md` worker boilerplate, any sample worker that uses the changed API |
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
-| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All four vllm wrappers (`ai-services/vlm-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), `agent-samples/xr-render-demo/main.py` (`_PERSISTENT_SERVERS`) |
+| `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All vLLM wrappers (`ai-services/vlm-server/`, `ai-services/embedding-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), model-server orchestrators |
 | `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
-| Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `_PERSISTENT_SERVERS` in `agent-samples/xr-render-demo/main.py` |
+| Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `stop_persistent_servers` names in `agent-samples/model-servers/main.py` |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, `docs/adding-cloudxr.md` |
@@ -580,7 +637,7 @@ updated in the same commit**.
 - `utils/xr-ai-vllm/` — zero runtime dependencies. Stdlib only. Adding deps
   here would defeat docker mode (whose point is to keep heavy vllm-side deps
   out of the wrapper's venv).
-- `agent-sdk/` (`xr-ai-agent`) — only `pyzmq` + `msgpack`. No server-side packages.
+- `agent-sdk/xr-ai-hub-client/` (`xr-ai-hub-client`) — only `pyzmq` + `msgpack`. No server-side packages.
 - `agent-sdk/xr-ai-models/` — `xr-ai-logging` + `httpx` + `pyyaml` only. No
   vendor SDKs (no `openai`, no `anthropic`, no `litellm`). All in-tree
   backends speak OpenAI-compatible HTTP; vendor adapters arrive as new
@@ -588,6 +645,6 @@ updated in the same commit**.
 - `agent-sdk/xr-ai-nat/` — NAT framework dependencies plus only the smallest
   capability-specific dependencies. Spatial math remains CPU-only and has no
   tracking, service, model, or MCP dependency.
-- Agent workers — `xr-ai-agent` + `xr-ai-models` + task-specific libs (numpy,
+- Agent workers — `xr-ai-hub-client` + `xr-ai-models` + task-specific libs (numpy,
   torch, etc.). Must never import from `xr-media-hub` or `xr-ai-launcher`.
 - New external deps require a note here explaining why they were added.

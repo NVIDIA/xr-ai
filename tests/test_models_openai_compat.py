@@ -18,12 +18,27 @@ from _stub_openai import StubOpenAI
 from xr_ai_models import (
     Capabilities,
     ChatMessage,
+    OpenAICompatEmbedding,
     OpenAICompatLLM,
     OpenAICompatSTT,
     OpenAICompatTTS,
     OpenAICompatVLM,
     ToolDef,
 )
+
+
+async def test_embedding_batches_inputs_and_preserves_response_order() -> None:
+    stub = StubOpenAI()
+    stub.set_embeddings([[1.0, 0.0], [0.0, 1.0]])
+    async with OpenAICompatEmbedding(
+        "http://stub", "embed", client=stub.client(),
+    ) as embedding:
+        vectors = await embedding.embed(["query: alpha", "passage: beta"])
+    assert vectors == [[1.0, 0.0], [0.0, 1.0]]
+    assert stub.last_json() == {
+        "model": "embed",
+        "input": ["query: alpha", "passage: beta"],
+    }
 
 
 # ── LLM: chat ─────────────────────────────────────────────────────────────
@@ -327,7 +342,7 @@ def test_cleartext_key_transport_detection() -> None:
     # A bearer token over plain http:// to a non-loopback host is cleartext
     # credential transmission (CWE-319) — must be flagged. https, loopback,
     # or no key configured are all fine.
-    from xr_ai_models.openai_compat import _is_cleartext_key_transport as is_ct
+    from xr_ai_models._openai_compat import _is_cleartext_key_transport as is_ct
     assert is_ct("http://example.com", "k") is True
     assert is_ct("http://example.com:8000", "k") is True
     assert is_ct("https://example.com", "k") is False

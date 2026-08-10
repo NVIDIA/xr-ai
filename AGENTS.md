@@ -14,10 +14,10 @@ historical decisions in `docs/changelog.md`.
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 server-runtime/     # XR-Media-Hub core + LiveKit transport
 agent-sdk/          # Five packages:
-                    #   xr-ai-agent        — IPC client library (pyzmq + msgpack only)
+                    #   xr-ai-hub-client   — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
-                    #   xr-ai-capabilities — framework-agnostic reusable agent features (VisionModule)
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
+                    #   xr-ai-voice        — voice runtime (VoiceSession); introduced alongside xr-ai-pipecat
                     #   xr-ai-nat          — typed, in-process NAT functions for XR capabilities
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 cloudxr-runtime/    # Shared CloudXR OpenXR runtime + WSS proxy (opt-in)
@@ -37,25 +37,30 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   `ProcessorEndpoint`; return traffic goes only to the originating client.
 - **Agents talk to the hub via IPC only.** LiveKit is an internal transport
   detail — never surface it to agents.
-- **`agent-sdk/xr-ai-agent` depends only on `pyzmq` + `msgpack`.** No
+- **`agent-sdk/xr-ai-hub-client` depends only on `pyzmq` + `msgpack`.** No
   LiveKit, FastAPI, or uvicorn. `agent-sdk/xr-ai-pipecat` is a separate
   optional package with heavier deps (pipecat-ai, scipy, numpy, httpx,
   fastmcp); it bridges `ProcessorEndpoint` to Pipecat pipelines.
 - **All HTTP calls to AI services go through `agent-sdk/xr-ai-models`.**
-  Workers and MCP servers depend on its four protocols
-  (`LLMService`, `VLMService`, `STTService`, `TTSService`) and construct
-  clients from a per-sample `yaml/models.yaml` via `make_llm` /
-  `make_vlm` / `make_stt` / `make_tts`.  Hand-rolled `httpx` clients
+  Workers and services depend on its typed protocols
+  (`LLMService`, `VLMService`, `STTService`, `TTSService`, `EmbeddingService`)
+  and construct
+  clients from a per-sample model config via `make_llm` /
+  `make_vlm` / `make_stt` / `make_tts` / `make_embedding`. Hand-rolled `httpx` clients
   against `/v1/chat/completions`, `/v1/audio/transcriptions`, or
-  `/v1/audio/speech` are forbidden — model quirks belong in this one
+  `/v1/audio/speech`, or `/v1/embeddings` are forbidden — model quirks belong in this one
   package's presets, not in callers. No vendor SDKs (no `openai`, no
   `anthropic`, no `litellm`); all in-tree backends speak
   OpenAI-compatible HTTP.
-- **Workers never import from `server-runtime` or `xr_ai_launcher`.** Only
-  `xr_ai_agent` + `xr_ai_models` + task-specific libs (numpy, torch, …).
+- **Workers never import from `server-runtime` or `xr_ai_launcher`.** Use the
+  public `xr_ai_hub`, `xr_ai_models`, `xr_ai_nat`, and `xr_ai_voice` SDK
+  surfaces plus task-specific libraries (numpy, torch, …).
 - **Agentic functions are NAT-first and in-process.** Reusable deterministic
   functions live in `xr-ai-nat` as typed NAT function groups. Existing MCP
   servers remain compatibility surfaces while their capabilities migrate.
+- **RAG is a native typed capability.** `rag-service` owns document chunking,
+  embedding caches, and dense retrieval behind private msgpack/ZMQ;
+  `RAGFunctionsConfig` exposes it as the `xr_rag` NAT function group.
 - **A process boundary does not imply MCP.** `xr-ai-nat[mcp]` may expose an
   application's explicit native-function list to MCP-only agents, but native
   applications invoke the functions directly. XR tracking calls the typed
@@ -68,10 +73,13 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   scene state, native scene functions, and the LOVR app live together under
   `agent-samples/xr-render-demo/scene`; they are not exported from `xr-ai-nat`.
   Render MCP only republishes that sample-local typed capability.
-- **Image acquisition and vision reasoning stay separate.** The native vision
-  function accepts an acquired image path and calls a `VLMService` from
-  `xr-ai-models`; it does not own hub, participant, recording, or MCP state.
-  VLM MCP republishes this function only for MCP clients.
+- **Native vision tools own frame acquisition; the file-path adapter stays
+  separate.** The native `xr_vision_tools` group (`look_at_current_frame` /
+  `look_at_past_frame`) acquires the participant's live or recorded frame itself
+  and calls a `VLMService` from `xr-ai-models`; recorded lookups resolve through
+  the `xr_video_memory` group. The legacy file-path `ask_image` tool is not part
+  of the native surface — it lives self-contained in VLM MCP for MCP-only clients
+  that already hold an image path.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml`. See `docs/credentials.md`.
 
@@ -83,7 +91,7 @@ processes may be nested beside them when they are not reusable SDK services:
 | Sub-project | Role | Dependencies |
 |---|---|---|
 | `<sample>/` | Orchestrator — declares `PROCESSES`, calls `run_stack` | `xr-ai-launcher` only |
-| `<sample>/worker/` | Agent worker — connects to hub via IPC | `xr-ai-agent` + task libs |
+| `<sample>/worker/` | Agent worker — connects to hub via IPC | `xr-ai-hub-client` + task libs |
 | `<sample>/<capability>/` | Optional application-specific native function/service slice | Narrow capability deps |
 
 - Processes start serially in declaration order; each must `Path(--ready-file).touch()`
@@ -108,29 +116,32 @@ mechanically:
 
 **Worker code rules** (apply to every sample worker):
 
-- Import IPC types from `xr_ai_agent`; native agent functions come from
-  `xr_ai_nat`.
-- `_HUB_PUB` / `_HUB_PUSH` are module-level constants, not magic strings.
-- Wire `SIGINT` and `SIGTERM` to `agent.shutdown()`; wrap `await agent.run()`
-  in `try/finally` calling `shutdown()`.
-- `shutdown()` is synchronous (signal-handler safe). Cancel asyncio tasks
-  first, then `ep.stop()` + `ep.close()`.
+- Import IPC types from `xr_ai_hub`; native agent functions come from
+  `xr_ai_nat`, model clients from `xr_ai_models`, and the native voice runtime
+  from `xr_ai_voice`.
+- Raw IPC workers keep `_HUB_PUB` / `_HUB_PUSH` as module-level constants,
+  wire `SIGINT` and `SIGTERM` to a synchronous `shutdown()`, cancel asyncio
+  tasks first, then call `ep.stop()` + `ep.close()`. Voice workers delegate
+  readiness, signals, pipeline cancellation, and cleanup to `VoiceSession`.
 - Callbacks are `async def` even if the work inside is sync.
 - CPU-bound work goes through `loop.run_in_executor(...)` — never block the
   event loop.
-- Imports are absolute (flat module layout). No `__init__.py` or `__main__.py`.
+- New and migrated workers are named packages with relative internal imports,
+  an explicit `__init__.py`, and a `__main__.py` entry point.
 
 **Checklist for a new sample:**
 
 - [ ] `agent-samples/<name>/pyproject.toml` — orchestrator, deps: `xr-ai-launcher` only
-- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, deps: `xr-ai-agent` + task libs (list every `.py` in `only-include`)
+- [ ] `agent-samples/<name>/worker/pyproject.toml` — worker, narrow task deps; package `<snake_name>_worker`
 - [ ] `agent-samples/<name>/main.py` — exact orchestrator boilerplate
-- [ ] `agent-samples/<name>/worker/<snake_name>_worker.py` — entry point + (optional) split helpers
+- [ ] `agent-samples/<name>/worker/<snake_name>_worker/` — package with
+      `__init__.py`, `__main__.py`, and cohesive sibling modules
 - [ ] `agent-samples/<name>/yaml/xr_media_hub.yaml` — hub config
 - [ ] `agent-samples/<name>/yaml/<command>.yaml` — one per process that needs config
-- [ ] `agent-samples/<name>/yaml/models.yaml` — logical model names + preset references (see `agent-sdk/xr-ai-models/README.md`)
+- [ ] `agent-samples/<name>/yaml/models.yaml` — worker-only model config, or a structured JSON deployment profile when the orchestrator also consumes ownership (see `agent-sdk/xr-ai-models/README.md`)
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
-- [ ] `README.md` updated — sample tour and quickstart
+- [ ] `agent-samples/<name>/README.md` — sample-specific setup and operation
+- [ ] Root `README.md` updated — sample tour and quickstart
 
 Boilerplate templates (orchestrator, worker, `pyproject.toml`): `docs/adding-a-sample.md`.
 Reference implementation: `agent-samples/simple-vlm-example/`.
@@ -144,46 +155,49 @@ Typed agent functions live in `xr-ai-nat`. `SpatialMathFunctionsConfig`
 registers deterministic coordinate operations that receive an explicit spatial
 frame; tracking and process boundaries remain outside the math functions.
 `TextMemoryFunctionsConfig` provides persistent timestamped text without a
-network boundary. `VisionFunctionsConfig` adds image-question answering over an
-injected `xr-ai-models` VLM while leaving frame acquisition to its own
-capability. `XRTrackingFunctionsConfig` exposes the current user frame through
+network boundary. `VisionToolsConfig` (`xr_vision_tools`) adds
+`look_at_current_frame` / `look_at_past_frame` question answering over an
+injected `xr-ai-models` VLM, acquiring the participant's live or recorded frame
+itself. `XRTrackingFunctionsConfig` exposes the current user frame through
 the typed OpenXR service without routing native agents through MCP.
 `VideoMemoryFunctionsConfig` exposes recorded-video discovery, queries, and
 frame extraction through a typed service while keeping MCP optional; callers
-obtain current frames through the hub client.
+obtain current frames through the hub client. `StreamingVisionConfig` composes
+raw frame acquisition with VLM streaming behind one native function for voice
+workflows. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
+NAT's built-in LangChain-backed agent types; applications install
+`xr-ai-nat[agents]` rather than calling LangChain model clients directly.
 
-The **voice pipeline** lives in `xr-ai-pipecat` (it depends on pipecat):
+The public **native voice runtime** lives in `xr-ai-voice` (it depends on
+pipecat internally):
 
-- **Voice pipeline** — `make_voice_pipeline` assembles
-  `input → VadStt → VoiceGate → brain → StreamingTts → output`. A sample
-  subclasses `BrainProcessor`, hands it to the factory, then runs the worker
-  with `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)`.
+- **Voice session** — `VoiceSession.run(handler)` privately assembles
+  `input → VadStt → VoiceGate → handler → StreamingTts → output`, owns model
+  readiness and ready-file semantics, installs signal handlers, and closes the
+  transport and model clients. It touches the ready file only after the input
+  transport has entered its hub IPC receive loop.
+- **Native handler** — `xr_ai_nat.adapters.as_voice_handler` maps a typed NAT
+  function onto `VoiceSession`; `TextMessageInput` routes participant text
+  through the same turn path as speech.
 - **Wake word / speech gate** — `xr-ai-voicegate` (the `VoiceGate` state
   machine) wired in as `VoiceGateProcessor`; per-sample config in
   `yaml/voice_gate.yaml` (`magic_phrases: ["hey agent"]`, or `[]` for
   always-on). No sample code — config only.
 
-**Reusable capabilities** live in `xr-ai-capabilities` — framework-agnostic
-features that talk to the hub through a `ProcessorEndpoint` and depend only on
-the core SDK (no pipecat), so both pipecat and non-pipecat agents can compose
-them:
+`xr-ai-pipecat` remains available for samples that still subclass its
+`BrainProcessor`; those workers run the assembled pipeline with
+`run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` so they use
+the same IPC-start readiness boundary.
 
-- **Live-camera vision Q&A** — `VisionModule` (frame tracking,
-  camera-on-demand, the VLM call). Two call styles over one
-  frame-acquisition path: `ask(pid, q)` **streams** tokens (for TTS) and
-  `perceive(pid, q)` returns a **string** (for agentic tool loops, raising
-  `VisionUnavailable`). `pixels` is its frame → JPEG codec. A pipecat brain
-  constructs it with `VisionModule(transport.endpoint, vlm)`.
-
-A new vision sample's brain therefore reduces to thin glue over `VisionModule`;
-a voice sample gets the wake word from config alone.
+A native voice sample adapts its NAT function to `VoiceSession`; wake-word
+behavior comes from config alone.
 
 ### Scope decision and named follow-ups
 
-The capabilities/pipeline boundary is now explicit: `xr-ai-pipecat` stays "voice
-pipeline plumbing" and reusable capabilities live in `xr-ai-capabilities`, which
-has no pipeline-framework dependency. Keep new reusable agent building blocks in
-`xr-ai-capabilities` — `xr-ai-pipecat` must not become a catch-all.
+The function/pipeline boundary is explicit: `xr-ai-pipecat` stays "voice
+pipeline plumbing", while reusable typed agent functions live in `xr-ai-nat`.
+Application-specific capabilities stay with their application;
+`xr-ai-pipecat` must not become a catch-all.
 Planned structural follow-ups (own PRs):
 
 1. **`MCPToolset`.** `RenderSceneProcessor` still takes one `McpClient` per MCP
@@ -196,7 +210,6 @@ Planned structural follow-ups (own PRs):
    brain = AgentBrain(
        transport=transport, llm=llm,
        toolsets=[MCPToolset(oxr, _OXR_TOOLS), MCPToolset(render)],  # render = catch-all
-       capabilities=[VisionModule(transport.endpoint, vlm)],
    )
    ```
 
@@ -235,9 +248,9 @@ Hard rules (also in `DEPENDENCIES.md`):
 
 - `utils/xr-ai-launcher/` has zero runtime dependencies — stdlib only. Keep it that way.
 - `utils/xr-ai-logging/` depends only on `loguru>=0.7`. Used by every process via `setup_logging()`.
-- `agent-sdk/xr-ai-agent` depends only on `pyzmq` + `msgpack`.
+- `agent-sdk/xr-ai-hub-client` depends only on `pyzmq` + `msgpack`.
 - `agent-sdk/xr-ai-models` depends only on `xr-ai-logging` + `httpx` + `pyyaml`. No vendor SDKs.
-- Agent workers import only from `xr_ai_agent` + `xr_ai_models` (and task-specific libs).
+- Agent workers import only from `xr_ai_hub` + `xr_ai_models` (and task-specific libs).
 - Agent workers must never import from `xr_media_hub` or `xr_ai_launcher`.
 - Don't add abstractions until needed by two concrete use-cases.
 
@@ -301,7 +314,7 @@ Read these on demand when the topic comes up:
 | `docs/process-model.md` | Touching `utils/xr-ai-launcher/`, orchestrators, ready-files, or adding a managed process type |
 | `docs/credentials.md` | Code that needs `HF_TOKEN` / `NGC_API_KEY` |
 | `docs/ai-services.md` | Adding, calling, or operating a VLM / STT / TTS / LLM server (incl. vLLM persistence) |
-| `docs/xr-render-demo.md` | Working inside `agent-samples/xr-render-demo/` — process stack, two-LLM split, agentic loop, XR lifecycle |
+| `docs/xr-render-demo.md` | Working inside `agent-samples/xr-render-demo/` — process stack, LLM roles, agentic loop, XR lifecycle |
 | `docs/adding-a-sample.md` | Scaffolding a new sample — full boilerplate templates |
 | `docs/adding-cloudxr.md` | Wiring CloudXR into a sample |
 | `docs/spdx-headers.md` | SPDX comment styles, exceptions, enforcement |

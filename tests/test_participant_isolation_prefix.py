@@ -15,7 +15,7 @@ of the other (``alice`` ⊂ ``alice2``). The connector owning ``alice`` must
 families (data, audio, audio-flush).
 
 This is the same hazard the processor subscription path already guards against
-(see ``_PREFIXES_BY_FLAG`` / ``_prefixes`` in ``xr_ai_agent._processor``); these
+(see ``_PREFIXES_BY_FLAG`` / ``_prefixes`` in ``xr_ai_hub._processor``); these
 tests lock the connector return path to the same guarantee. The existing
 ``test_return_routing`` suite uses non-prefix identities (``alice``/``bob``) and
 so cannot detect this case.
@@ -26,7 +26,7 @@ import asyncio
 
 import pytest
 
-from xr_ai_agent import AudioChunk, DataMessage, ReturnAudioFlush
+from xr_ai_hub import AudioChunk, DataMessage, ReturnAudioFlush
 
 pytestmark = pytest.mark.asyncio
 

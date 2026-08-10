@@ -13,13 +13,20 @@ Each sample has **two sub-projects**:
 | Sub-project | Role | Dependencies |
 |---|---|---|
 | `<sample>/` | Orchestrator — declares process list in code, launches all | `xr-ai-launcher` only (stdlib) |
-| `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-agent`, numpy, etc. |
+| `<sample>/worker/` | Agent worker — connects to hub via IPC, runs agent logic | `xr-ai-hub-client`, numpy, etc. |
 
 **Config convention** — the YAML config path for each process is declared
 explicitly in the orchestrator's `PROCESSES` list via the `config=` field of
 `Process`. The launcher passes it as `--config <path>` to the subprocess.
 All sample configs live in the `yaml/` directory. Omit `config=` for
 processes that use their own internal defaults.
+
+Samples that support interchangeable local and hosted models may set
+`models_config` in the worker YAML. `load_model_deployment()` reads the selected
+structured JSON profile using only the standard library and exposes its
+managed, reused, or external service ownership to the orchestrator. The same
+file is loaded by the worker through `xr-ai-models`; see
+`agent-samples/simple-vlm-example/yaml/models.local.json`.
 
 The orchestrator declares the process sequence in code:
 
@@ -49,6 +56,8 @@ def run() -> None:
   before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
+- **Native voice workers** pass the ready file to `VoiceSession`; `run()`
+  touches it only after the input transport's hub IPC receive loop has started.
 - **Pipecat workers** build their voice pipeline, then call
   `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)`. The
   callback runs only after the input transport's hub IPC receive loop has
