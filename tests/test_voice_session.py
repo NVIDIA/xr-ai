@@ -4,6 +4,8 @@
 """Contract tests for shared voice-worker lifecycle primitives."""
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from xr_ai_hub import DataMessage
 from xr_ai_voice import TextMessageInput, VadConfig, VoiceSession
@@ -12,8 +14,18 @@ from xr_ai_voicegate import VoiceGateConfig
 
 
 class _Endpoint:
+    def __init__(self) -> None:
+        self.statuses: list[str] = []
+        self.republish_calls = 0
+
     def on_data(self, callback) -> None:
         self.callback = callback
+
+    async def set_status(self, status: str) -> None:
+        self.statuses.append(status)
+
+    async def republish_statuses(self) -> None:
+        self.republish_calls += 1
 
 
 class _Transport:
@@ -21,6 +33,10 @@ class _Transport:
         self.endpoint = _Endpoint()
         self.target_participant = ""
         self.shutdown_called = False
+        self.started = asyncio.Event()
+
+    async def wait_until_started(self) -> None:
+        await self.started.wait()
 
     def set_target_participant(self, participant_id: str) -> None:
         self.target_participant = participant_id
@@ -99,7 +115,29 @@ async def test_data_query_adapter_drops_text_while_session_is_stopped() -> None:
     assert session.queries == []
 
 
-async def test_voice_session_owns_readiness_ready_file_and_cleanup(tmp_path) -> None:
+async def test_voice_session_owns_readiness_ready_file_and_cleanup(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Worker:
+        async def cancel(self) -> None:
+            runner_finished.set()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), _Worker()),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+
     stt = _Service()
     tts = _Service()
     extra = _Service()
@@ -116,8 +154,25 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(tmp_path) -> 
         transport=transport,  # type: ignore[arg-type]
     )
 
+    async def handler(_query) -> str:
+        return "unused"
+
     async with session:
+        assert not ready_file.exists()
+        run_task = asyncio.create_task(session.run(handler))
+        await runner_started.wait()
+        await asyncio.sleep(0)
+        assert not ready_file.exists()
+
+        transport.started.set()
+        while not ready_file.exists():
+            await asyncio.sleep(0)
+
         assert ready_file.exists()
+        assert transport.endpoint.statuses == ["idle"]
+
+        runner_finished.set()
+        assert await run_task is None
 
     assert transport.shutdown_called
     assert stt.closed == 1

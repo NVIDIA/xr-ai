@@ -21,7 +21,7 @@ import gc
 import io
 import wave
 import warnings
-from typing import AsyncIterator, Sequence
+from typing import AsyncIterator, Callable, Sequence
 
 import numpy as np
 import pytest
@@ -31,6 +31,7 @@ from pipecat.frames.frames import (
     InputAudioRawFrame,
     InterruptionFrame,
     OutputAudioRawFrame,
+    StartFrame,
     TextFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
@@ -51,6 +52,7 @@ from xr_ai_pipecat import (
     VadConfig,
     VadSttProcessor,
     VoiceGateProcessor,
+    run_voice_pipeline,
 )
 from xr_ai_voicegate import VoiceGate, VoiceGateConfig
 
@@ -190,6 +192,9 @@ class _CallbackStubEndpoint:
     def __init__(self) -> None:
         self.audio_cb = None
         self.participant_cb = None
+        self.run_started = asyncio.Event()
+        self.run_finished = asyncio.Event()
+        self.ready_to_receive = asyncio.Event()
 
     def on_audio(self, cb) -> None:
         self.audio_cb = cb
@@ -197,8 +202,169 @@ class _CallbackStubEndpoint:
     def on_participant(self, cb) -> None:
         self.participant_cb = cb
 
+    async def run(self) -> None:
+        self.run_started.set()
+        await self.run_finished.wait()
+
+    async def wait_until_running(self) -> None:
+        await self.ready_to_receive.wait()
+
     def stop(self) -> None:
-        return
+        self.run_finished.set()
+
+
+class _StatusEndpoint:
+    def __init__(self) -> None:
+        self.statuses: list[str] = []
+        self.republish_calls = 0
+
+    async def set_status(self, status: str) -> None:
+        self.statuses.append(status)
+
+    async def republish_statuses(self) -> None:
+        self.republish_calls += 1
+
+
+class _StartupBarrierTransport:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.endpoint = _StatusEndpoint()
+
+    async def wait_until_started(self) -> None:
+        await self.started.wait()
+
+
+class _PipelineWorkerStub:
+    def __init__(self, on_cancel: Callable[[], None] | None = None) -> None:
+        self.cancel_calls = 0
+        self._on_cancel = on_cancel
+
+    async def cancel(self) -> None:
+        self.cancel_calls += 1
+        if self._on_cancel:
+            self._on_cancel()
+
+
+@pytest.mark.asyncio
+async def test_run_voice_pipeline_releases_ready_after_input_starts(monkeypatch):
+    """The ready callback waits for the input transport's startup barrier."""
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    monkeypatch.setattr("xr_ai_pipecat.pipeline.PipelineRunner", _Runner)
+
+    transport = _StartupBarrierTransport()
+    ready = asyncio.Event()
+    run_task = asyncio.create_task(
+        run_voice_pipeline(_PipelineWorkerStub(), transport, on_ready=ready.set),
+    )
+
+    await runner_started.wait()
+    await asyncio.sleep(0)
+    assert not ready.is_set()
+
+    transport.started.set()
+    await ready.wait()
+    assert not run_task.done()
+
+    runner_finished.set()
+    assert await run_task is None
+    assert transport.endpoint.statuses == ["idle"]
+
+
+@pytest.mark.asyncio
+async def test_run_voice_pipeline_reannounces_current_status(monkeypatch):
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    monkeypatch.setattr("xr_ai_pipecat.pipeline.PipelineRunner", _Runner)
+    monkeypatch.setattr("xr_ai_pipecat.pipeline._STATUS_REANNOUNCE_INTERVAL_S", 0.01)
+
+    transport = _StartupBarrierTransport()
+    run_task = asyncio.create_task(
+        run_voice_pipeline(_PipelineWorkerStub(), transport),
+    )
+
+    await runner_started.wait()
+    transport.started.set()
+    for _ in range(20):
+        if transport.endpoint.republish_calls:
+            break
+        await asyncio.sleep(0.01)
+
+    assert transport.endpoint.statuses == ["idle"]
+    assert transport.endpoint.republish_calls > 0
+
+    runner_finished.set()
+    assert await run_task is None
+
+
+@pytest.mark.asyncio
+async def test_run_voice_pipeline_allows_early_clean_exit(monkeypatch):
+    class _Runner:
+        async def run(self, _worker) -> None:
+            return
+
+    monkeypatch.setattr("xr_ai_pipecat.pipeline.PipelineRunner", _Runner)
+
+    worker = _PipelineWorkerStub()
+    assert await run_voice_pipeline(worker, _StartupBarrierTransport()) is None
+
+    assert worker.cancel_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_run_voice_pipeline_propagates_runner_error(monkeypatch):
+    class _Runner:
+        async def run(self, _worker) -> None:
+            raise ValueError("runner failure")
+
+    monkeypatch.setattr("xr_ai_pipecat.pipeline.PipelineRunner", _Runner)
+
+    worker = _PipelineWorkerStub()
+    with pytest.raises(ValueError, match="runner failure"):
+        await run_voice_pipeline(worker, _StartupBarrierTransport())
+
+    assert worker.cancel_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_run_voice_pipeline_cancels_runner_when_ready_callback_fails(monkeypatch):
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    def raise_ready_error() -> None:
+        raise OSError("ready file unavailable")
+
+    monkeypatch.setattr("xr_ai_pipecat.pipeline.PipelineRunner", _Runner)
+
+    transport = _StartupBarrierTransport()
+    worker = _PipelineWorkerStub(on_cancel=runner_finished.set)
+    run_task = asyncio.create_task(
+        run_voice_pipeline(worker, transport, on_ready=raise_ready_error),
+    )
+
+    await runner_started.wait()
+    transport.started.set()
+    with pytest.raises(OSError, match="ready file unavailable"):
+        _ = await run_task
+
+    assert worker.cancel_calls == 1
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1415,6 +1581,42 @@ async def test_streaming_tts_observes_each_wav_through_gate():
 # ════════════════════════════════════════════════════════════════════════════
 # XRMediaHubInputTransport
 # ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_input_transport_releases_startup_barrier_after_endpoint_starts():
+    """The barrier releases once the endpoint receive loop starts, not after roster catch-up."""
+    from xr_ai_pipecat.transport import (
+        SAMPLE_RATE,
+        XRMediaHubInputTransport,
+    )
+    from pipecat.transports.base_transport import TransportParams
+
+    endpoint = _CallbackStubEndpoint()
+    started = asyncio.Event()
+    transport = XRMediaHubInputTransport(
+        endpoint,
+        TransportParams(
+            audio_in_enabled=True,
+            audio_in_sample_rate=SAMPLE_RATE,
+            audio_in_channels=1,
+        ),
+        started_event=started,
+    )
+
+    try:
+        start_task = asyncio.create_task(transport.start(StartFrame()))
+        await endpoint.run_started.wait()
+        assert not started.is_set()
+
+        endpoint.ready_to_receive.set()
+        assert await start_task is None
+        assert endpoint.run_started.is_set()
+        assert started.is_set()
+    finally:
+        await transport.stop(EndFrame())
+
+    assert not started.is_set()
 
 
 @pytest.mark.asyncio

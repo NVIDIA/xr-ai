@@ -62,7 +62,8 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     16 kHz int16 for STT, converts TTS int16 PCM back to float32 AudioChunks
     for return. SttClient / TtsClient are thin wrappers around xr-ai-models'
     OpenAICompatSTT / OpenAICompatTTS; httpx is retained for http_probe()
-    readiness checks.
+    readiness checks. ``run_voice_pipeline`` releases a launcher's ready-file
+    callback only after the input transport starts its hub IPC receive loop.
     Not a dep of xr-ai-hub-client itself — import only in workers that use Pipecat.
 
 xr-ai-voice  (agent-sdk/xr-ai-voice/)
@@ -79,10 +80,12 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     ``VoiceSession`` public API plus the ``VoiceHandler`` / ``VoiceQuery`` /
     ``VoiceResponse`` / ``VoiceTurn`` handler surface, ``HubVoiceTransport``,
     ``VadConfig``, and ``TextMessageInput``; Pipecat, audio framing, and
-    pipeline processors are implementation details. Readiness is health-based,
-    split across the ``_readiness`` / ``_session`` modules. Not a dep of
-    xr-ai-hub-client itself — import only in workers that opt into the voice
-    runtime.
+    pipeline processors are implementation details. Service health gates
+    transport construction, while ``VoiceSession.run`` touches its ready file
+    only after the input transport starts its hub IPC receive loop. The
+    readiness contract is split across the ``_readiness`` / ``_session``
+    modules. Not a dep of xr-ai-hub-client itself — import only in workers that
+    opt into the voice runtime.
 
 xr-ai-voicegate  (utils/xr-ai-voicegate/)
     └── numpy >=1.24
@@ -103,7 +106,9 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     EmbeddingService)
     and OpenAI-compatible HTTP clients that cover every in-tree model backend
     (vLLM-served VLM/LLMs, NeMo Parakeet STT, Piper/Magpie TTS).  Per-model
-    quirks live behind one seam: reasoning-field aliasing (nano_v3 →
+    profiles separate adapter behavior, endpoint connectivity/readiness, and
+    launcher-facing deployment ownership. Per-model quirks remain behind one
+    seam: reasoning-field aliasing (nano_v3 →
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
     for the in-tree services. Future backends (LiteLLM, vendor SDKs)
@@ -177,9 +182,9 @@ xr-ai-launcher  (utils/xr-ai-launcher/)
     `load_cloudxr_env`, plus the single source of truth for native device
     profiles: `NATIVE_DEVICE_PROFILES`, `is_native_profile(profile)`, and
     `read_device_profile(yaml_path)` (env-first NV_DEVICE_PROFILE read, regex
-    YAML fallback). `load_model_deployment()` reads the profile selected by a
-    worker config and maps service ownership to launcher modes without adding
-    a YAML or model-SDK dependency.
+    YAML fallback). `load_model_deployment()` reads the selected wrapped JSON
+    model profile using only stdlib to derive managed/reused services and
+    required credential names, without adding a YAML or model-SDK dependency.
 
 xr-ai-logging  (utils/xr-ai-logging/)
     └── loguru >=0.7
@@ -350,7 +355,10 @@ xr-ai-tests  (tests/)
     tests, the vlm-mcp adapter, and the sample-local scene native groups plus
     render-mcp adapter surface (LOVR is stubbed). oxr-mcp is not
     included: it needs native isaacteleop + a CloudXR runtime, so its
-    smoke test self-skips on CPU (see tests/README.md).
+    smoke test self-skips on CPU (see tests/README.md). Root pytest adds
+    ai-services/stt-server to its Python path (not a dependency) so the
+    endpoint tests can import its FastAPI app with a mocked backend,
+    avoiding a test-time NeMo installation.
 
     Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
     `-m "not gpu"` in CI). They spawn real ai-services via `uv run` (e.g.
@@ -548,7 +556,9 @@ Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 in-process. The `models_config` key selects a structured deployment profile:
 `models.local.json` manages the default services, `models.hosted.json` uses an
 external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
-8108. Voice-gate knobs are configured via `yaml/voice_gate.yaml`.
+8108. These profiles separate adapter behavior, endpoint readiness and
+credentials, and launcher ownership. Voice-gate knobs are configured via
+`yaml/voice_gate.yaml`.
 
 ### visual-task-guide  (agent-samples/visual-task-guide/)
 
@@ -577,9 +587,13 @@ run this first to warm up model weights before starting any demo sample.
 |---|---|---|---|
 | Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
 
-Starts stt-server (8103), nemotron3-nano-llm-server (8107, `persistent=True`),
-vlm-server (8100), and embedding-server (8109). The vLLM servers survive
-launcher restarts; use `--stop` to shut them down.
+The default `--vlm-llm-stack` starts stt-server (8103),
+nemotron3-nano-llm-server (8107, `persistent=True`), and vlm-server (8100,
+`persistent=True`), plus embedding-server (8109, `persistent=True`).
+`--omni-stack` replaces Nano and Cosmos with nemotron-omni-llm-server (8108,
+`persistent=True`) while retaining stt-server and embedding-server. The stacks
+are mutually exclusive; `--stop` shuts down every model-server port without
+selecting one.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 
 ### xr-render-demo  (agent-samples/xr-render-demo/)
@@ -604,7 +618,7 @@ Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency
 is explicit in the process list.
 Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
-scene (8320), openxr-service (8330), and worker. The three model-server
+scene (8320), openxr-service (8330), and worker. The model-server
 entries are declared with `launch_mode="reuse"` and must already be healthy.
 No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK
@@ -624,7 +638,7 @@ updated in the same commit**.
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
 | `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All vLLM wrappers (`ai-services/vlm-server/`, `ai-services/embedding-server/`, `ai-services/llm/llama_nemotron/`, `ai-services/llm/nemotron3_nano/`, `ai-services/llm/nemotron_omni/`), model-server orchestrators |
 | `vllm_backend` / `vllm_image` YAML keys | `ai-services/{vlm-server,llm/llama_nemotron,llm/nemotron3_nano,llm/nemotron_omni}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
-| Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `_PERSISTENT_SERVERS` in `agent-samples/xr-render-demo/main.py` |
+| Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `stop_persistent_servers` names in `agent-samples/model-servers/main.py` |
 | vlm-server model class or supported architectures | `ai-services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `ai-services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, `docs/adding-cloudxr.md` |
@@ -635,7 +649,7 @@ updated in the same commit**.
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
 | Any new sample added | `DEPENDENCIES.md`, `AGENTS.md`, `README.md` |
 | Any new shared component added (peer of `server-runtime/`) | `AGENTS.md` Architecture section, `DEPENDENCIES.md` |
-| `xr-ai-models` protocols (`LLMService`, `VLMService`, …) or `models.yaml` schema | `AGENTS.md` "HTTP calls go through `xr-ai-models`" rule, `agent-sdk/xr-ai-models/README.md`, every sample's `yaml/models.yaml` |
+| `xr-ai-models` protocols (`LLMService`, `VLMService`, …) or model-profile schema | `AGENTS.md` "HTTP calls go through `xr-ai-models`" rule, `agent-sdk/xr-ai-models/README.md`, sample model profiles |
 | `xr-ai-models` preset added (new in-tree service or backend variant) | `agent-sdk/xr-ai-models/xr_ai_models/presets/__init__.py` registry, `agent-sdk/xr-ai-models/README.md` preset table |
 
 ---

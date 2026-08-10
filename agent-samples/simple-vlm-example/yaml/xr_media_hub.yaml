@@ -21,3 +21,6 @@ web_client_dir:    ../../../client-samples/web
 
 # ── Optional: token server ────────────────────────────────────────────────────
 enable_token_server: true
+# Change if another service holds port 8000 (e.g. iphlpsvc under WSL2 mirrored
+# networking; see the note in server-runtime/xr_media_hub.yaml).
+# token_server_port: 8000

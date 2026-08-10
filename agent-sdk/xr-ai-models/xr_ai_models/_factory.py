@@ -30,54 +30,62 @@ def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:
 
 def make_llm(config: ModelsConfig, name: str) -> LLMService:
     spec = config.llm(name)
-    if spec.kind == KIND_OPENAI_COMPAT:
+    adapter = spec.adapter
+    endpoint = spec.endpoint
+    if adapter.kind == KIND_OPENAI_COMPAT:
         return OpenAICompatLLM(
-            base_url=spec.base_url,
-            model_name=spec.model_name,
-            capabilities=Capabilities(**spec.capabilities),
-            reasoning_field=spec.reasoning_field,
-            default_extras=spec.default_extras,
-            api_key_env=spec.api_key_env,
-            timeout=spec.timeout,
-            health_check=spec.health_check,
+            base_url=endpoint.base_url,
+            model_name=adapter.model_name,
+            capabilities=Capabilities(**adapter.capabilities),
+            reasoning_field=adapter.reasoning_field,
+            default_extras=adapter.default_extras,
+            api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
         )
-    raise ValueError(f"unsupported LLM kind: {spec.kind!r}")
+    raise ValueError(f"unsupported LLM kind: {adapter.kind!r}")
 
 
 def make_vlm(config: ModelsConfig, name: str) -> VLMService:
     spec = config.vlm(name)
-    if spec.kind == KIND_OPENAI_COMPAT:
+    adapter = spec.adapter
+    endpoint = spec.endpoint
+    if adapter.kind == KIND_OPENAI_COMPAT:
         return OpenAICompatVLM(
-            base_url=spec.base_url,
-            model_name=spec.model_name,
-            capabilities=Capabilities(**spec.capabilities),
-            default_extras=spec.default_extras,
-            api_key_env=spec.api_key_env,
-            timeout=spec.timeout,
-            health_check=spec.health_check,
+            base_url=endpoint.base_url,
+            model_name=adapter.model_name,
+            capabilities=Capabilities(**adapter.capabilities),
+            default_extras=adapter.default_extras,
+            api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
         )
-    raise ValueError(f"unsupported VLM kind: {spec.kind!r}")
+    raise ValueError(f"unsupported VLM kind: {adapter.kind!r}")
 
 
 def make_stt(config: ModelsConfig, name: str) -> STTService:
     spec = config.stt(name)
-    if spec.kind == KIND_OPENAI_COMPAT:
+    adapter = spec.adapter
+    endpoint = spec.endpoint
+    if adapter.kind == KIND_OPENAI_COMPAT:
         return OpenAICompatSTT(
-            base_url=spec.base_url,
-            api_key_env=spec.api_key_env,
-            timeout=spec.timeout,
-            health_check=spec.health_check,
+            base_url=endpoint.base_url,
+            api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
         )
-    raise ValueError(f"unsupported STT kind: {spec.kind!r}")
+    raise ValueError(f"unsupported STT kind: {adapter.kind!r}")
 
 
 def make_tts(config: ModelsConfig, name: str) -> TTSService:
     spec = config.tts(name)
-    if spec.kind == KIND_OPENAI_COMPAT:
+    adapter = spec.adapter
+    endpoint = spec.endpoint
+    if adapter.kind == KIND_OPENAI_COMPAT:
         return OpenAICompatTTS(
-            base_url=spec.base_url,
-            api_key_env=spec.api_key_env,
-            timeout=spec.timeout,
-            health_check=spec.health_check,
+            base_url=endpoint.base_url,
+            api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
         )
-    raise ValueError(f"unsupported TTS kind: {spec.kind!r}")
+    raise ValueError(f"unsupported TTS kind: {adapter.kind!r}")

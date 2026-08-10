@@ -22,11 +22,10 @@ from pathlib import Path
 from loguru import logger
 from nat.builder.function import Function
 from nat.builder.workflow_builder import WorkflowBuilder
-from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_logging import setup_logging
-from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_models import ChatMessage, load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
-from xr_ai_pipecat import VadConfig, make_voice_pipeline
+from xr_ai_pipecat import VadConfig, make_voice_pipeline, run_voice_pipeline
 from xr_ai_pipecat.services import wait_for_services
 from xr_ai_pipecat.transport import XRMediaHubTransport
 from xr_ai_voicegate import load_voice_gate_config
@@ -101,6 +100,20 @@ async def main(
     }
     await wait_for_services(probes)
 
+    # A cold vLLM engine pays kernel-autotune costs on its first inference
+    # that can exceed the quick-ack timeout; absorb them before the first
+    # turn with a request shaped like a real quick-ack. Hosted backends
+    # (health_check: false, e.g. NIM) are always warm — skip the paid call.
+    if models_cfg.llm("llm").health_check:
+        try:
+            await llm.chat(
+                [ChatMessage(role="user", content="Add a small cube.")],
+                max_tokens=40,
+                timeout=120.0,
+            )
+        except Exception:
+            logger.opt(exception=True).warning("LLM warmup failed")
+
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
 
     transport = XRMediaHubTransport()
@@ -142,9 +155,6 @@ async def main(
         # The endpoint retains the agent's bound callbacks for the worker lifetime.
         RenderDemoAgent(transport=transport, brain=brain, tools=toolbox)
 
-        if ready_file:
-            ready_file.touch()
-
         _, task = make_voice_pipeline(
             transport=transport,
             stt=stt,
@@ -184,7 +194,11 @@ async def main(
 
         logger.info("xr_render_demo starting")
         try:
-            await PipelineRunner().run(task)
+            await run_voice_pipeline(
+                task,
+                transport,
+                on_ready=ready_file.touch if ready_file else None,
+            )
         finally:
             transport.shutdown()
             await brain.close()

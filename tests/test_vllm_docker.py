@@ -5,16 +5,20 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from xr_ai_vllm._docker import (
     _already_logged_in,
+    _LogStreamer,
     _registry_for,
     build_run_argv,
     container_exists,
     container_running,
     pid_on_port,
+    run,
 )
 
 
@@ -152,9 +156,18 @@ class TestBuildRunArgv:
         argv = build_run_argv(**self._base_kwargs(tmp_path))
         assert "nvcr.io/nvidia/vllm:26.04-py3" in argv
 
+    def test_shell_overrides_image_entrypoint(self, tmp_path):
+        kwargs = self._base_kwargs(tmp_path)
+        image = "vllm/vllm-openai:v0.20.0"
+        kwargs["image"] = image
+        argv = build_run_argv(**kwargs)
+        image_index = argv.index(image)
+        assert argv[image_index - 2 : image_index] == ["--entrypoint", "/bin/bash"]
+        assert argv[image_index + 1] == "-c"
+
     def test_no_extra_pip_runs_only_hf_transfer_install(self, tmp_path):
         argv = build_run_argv(**self._base_kwargs(tmp_path))
-        # bash -c "<install>... && vllm serve ..." — the install is the last
+        # /bin/bash -c "<install>... && vllm serve ..." — the install is the last
         # argv entry; with no extra_pip there must be exactly one pip line.
         bash_cmd = argv[-1]
         assert bash_cmd.count("pip install ") == 1
@@ -172,6 +185,130 @@ class TestBuildRunArgv:
         bash_cmd = argv[-1]
         assert "pip install -q hf_transfer" in bash_cmd
         assert "pip install -q --no-build-isolation mamba-ssm causal-conv1d" in bash_cmd
+
+
+class _FakeLogProc:
+    """Stands in for the `docker logs -f` Popen inside _LogStreamer."""
+
+    def __init__(self):
+        self._done = threading.Event()
+
+    def wait(self, timeout=None):
+        self._done.wait(timeout)
+        return 0
+
+    def poll(self):
+        return 0 if self._done.is_set() else None
+
+    def terminate(self):
+        self._done.set()
+
+    kill = terminate
+
+
+def _wait_for(predicate, timeout_s=5.0):
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+class TestLogStreamer:
+    def _make(self, monkeypatch, tmp_path, exists):
+        attached: list[_FakeLogProc] = []
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker._container_log_path",
+            lambda name: tmp_path / f"{name}.log",
+        )
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker.container_exists", lambda name: exists.is_set(),
+        )
+
+        def _fake_attach(self):
+            proc = _FakeLogProc()
+            attached.append(proc)
+            return proc
+
+        monkeypatch.setattr(_LogStreamer, "_attach", _fake_attach)
+        return _LogStreamer("fake-container"), attached
+
+    def test_attach_waits_for_container(self, monkeypatch, tmp_path):
+        exists = threading.Event()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        try:
+            time.sleep(0.3)
+            assert not attached  # container absent — must not attach yet
+            exists.set()
+            assert _wait_for(lambda: len(attached) == 1)
+        finally:
+            streamer.stop()
+
+    def test_reattaches_after_streamer_exit(self, monkeypatch, tmp_path):
+        exists = threading.Event()
+        exists.set()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        try:
+            assert _wait_for(lambda: len(attached) == 1)
+            attached[0].terminate()  # simulate "docker logs -f" dying
+            assert _wait_for(lambda: len(attached) == 2)
+        finally:
+            streamer.stop()
+
+    def test_stop_terminates_streamer(self, monkeypatch, tmp_path):
+        exists = threading.Event()
+        exists.set()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        assert _wait_for(lambda: len(attached) == 1)
+        streamer.stop()
+        assert attached[0].poll() is not None
+        assert not streamer._thread.is_alive()
+
+    def test_stop_before_container_exists(self, monkeypatch, tmp_path):
+        exists = threading.Event()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        streamer.stop()
+        assert not streamer._thread.is_alive()
+        assert not attached
+
+    def test_reattach_passes_since(self, monkeypatch, tmp_path):
+        """A re-attach must not replay the container log from the start."""
+        exists = threading.Event()
+        exists.set()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        try:
+            assert _wait_for(lambda: len(attached) == 1)
+            assert streamer._since is None
+            attached[0].terminate()
+            assert _wait_for(lambda: len(attached) == 2)
+            assert streamer._since is not None
+        finally:
+            streamer.stop()
+
+    def test_unwritable_log_path_ends_supervisor(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker._container_log_path",
+            lambda name: tmp_path / "missing-dir" / f"{name}.log",
+        )
+        monkeypatch.setattr("xr_ai_vllm._docker.container_exists", lambda name: True)
+        streamer = _LogStreamer("fake-container")
+        assert _wait_for(lambda: not streamer._thread.is_alive())
+        streamer.stop()
+
+    def test_popen_oserror_ends_supervisor(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker._container_log_path",
+            lambda name: tmp_path / f"{name}.log",
+        )
+        monkeypatch.setattr("xr_ai_vllm._docker.container_exists", lambda name: True)
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker.subprocess.Popen",
+            lambda *a, **kw: (_ for _ in ()).throw(OSError("no fds")),
+        )
+        streamer = _LogStreamer("fake-container")
+        assert _wait_for(lambda: not streamer._thread.is_alive())
+        streamer.stop()
 
 
 class TestContainerHelpers:
@@ -195,3 +332,43 @@ class TestContainerHelpers:
             side_effect=FileNotFoundError,
         ):
             assert pid_on_port(8100) is None
+
+
+class TestRun:
+    def test_stopped_container_is_removed_and_relaunched(self, tmp_path):
+        argv = ["docker", "run", "fresh-container"]
+        process = MagicMock()
+        process.poll.return_value = None
+
+        with (
+            patch("xr_ai_vllm._docker._docker_available", return_value=True),
+            patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
+            patch("xr_ai_vllm._docker.container_exists", return_value=True),
+            patch("xr_ai_vllm._docker.container_running", return_value=False),
+            patch("xr_ai_vllm._docker.remove_container", return_value=True) as remove,
+            patch("xr_ai_vllm._docker._maybe_ngc_login"),
+            patch("xr_ai_vllm._docker.build_run_argv", return_value=argv),
+            patch("xr_ai_vllm._docker.subprocess.Popen", return_value=process) as popen,
+            patch("xr_ai_vllm._docker._LogStreamer", return_value=MagicMock()),
+            patch("xr_ai_vllm._docker._lifecycle.wait_until_healthy"),
+            patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped"),
+            patch("xr_ai_vllm._docker.signal.getsignal", return_value=None),
+            patch("xr_ai_vllm._docker.signal.signal"),
+        ):
+            run(
+                image="vllm/vllm-openai:v0.20.0",
+                container_name="xr-ai-vllm-omni",
+                log_prefix="omni",
+                vllm_argv=["vllm", "serve", "model"],
+                host="0.0.0.0",
+                port=8108,
+                model_cache=tmp_path,
+                hf_token=None,
+                cuda_visible_devices="0",
+                extra_env=None,
+                extra_pip=["mamba-ssm"],
+                ready_file=None,
+            )
+
+        remove.assert_called_once_with("xr-ai-vllm-omni")
+        popen.assert_called_once_with(argv, start_new_session=True)

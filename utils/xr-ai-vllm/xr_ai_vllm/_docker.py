@@ -25,7 +25,9 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import _lifecycle
@@ -98,7 +100,9 @@ def build_run_argv(
 
     argv += ["-v", f"{model_cache}:{model_cache}"]
 
-    argv.append(image)
+    # Some vLLM images default to `vllm serve`; override the entrypoint so
+    # setup installs run in a shell before the server starts.
+    argv += ["--entrypoint", "/bin/bash", image]
     # Install hf_transfer before starting vLLM — the NGC image doesn't ship it
     # but HF_HUB_ENABLE_HF_TRANSFER=1 will error if it's missing.
     install_cmds = ["pip install -q hf_transfer"]
@@ -113,7 +117,7 @@ def build_run_argv(
             f"pip install -q --no-build-isolation {shlex.join(extra_pip)}"
         )
     install_cmds.append(shlex.join(vllm_argv))
-    argv += ["bash", "-c", " && ".join(install_cmds)]
+    argv += ["-c", " && ".join(install_cmds)]
     return argv
 
 
@@ -298,7 +302,7 @@ def _container_log_path(container_name: str) -> Path:
     return log_dir / f"{container_name}.log"
 
 
-def _start_log_streamer(container_name: str) -> tuple[subprocess.Popen | None, Path | None]:
+class _LogStreamer:
     """Stream container stdout/stderr to a sibling file (not to the terminal).
 
     `docker run -d` does not pipe container output back to the parent and
@@ -308,40 +312,103 @@ def _start_log_streamer(container_name: str) -> tuple[subprocess.Popen | None, P
     sinks) stay quiet — the user reads the container log on demand via
     ``tail -f``. ``docker logs -f`` replays from container start, so a
     fast crash is still captured.
+
+    ``docker run`` returns before dockerd registers the container, and a
+    ``docker logs -f`` attached too early exits with "No such container"
+    and never recovers. A supervisor thread therefore waits for the container
+    to exist before attaching (image pulls can hold this off for minutes) and
+    re-attaches if the streamer exits while the container is still expected,
+    i.e. until :meth:`stop`.
     """
-    log_path = _container_log_path(container_name)
-    try:
-        out_fd = open(log_path, "ab", buffering=0)
-    except OSError as exc:
-        log.warning("vllm_docker: could not open %s for streaming: %s", log_path, exc)
-        return None, None
-    try:
-        proc = subprocess.Popen(
-            # -t prefixes each line with the daemon-side RFC3339 timestamp so
-            # the file is searchable without going through loguru.
-            ["docker", "logs", "-f", "-t", container_name],
-            stdout=out_fd, stderr=out_fd,
+
+    def __init__(self, container_name: str) -> None:
+        self._name    = container_name
+        self.log_path = _container_log_path(container_name)
+        self._stop_evt  = threading.Event()
+        self._proc: subprocess.Popen | None = None
+        self._announced = False
+        # RFC3339 start point for re-attaches; a plain `docker logs -f`
+        # replays from container start, duplicating the file's contents.
+        self._since: str | None = None
+        self._thread = threading.Thread(
+            target=self._supervise, name=f"docker-logs-{container_name}", daemon=True,
         )
-    except FileNotFoundError:
-        out_fd.close()
-        return None, None
-    out_fd.close()  # the child holds its own dup'd fd
-    log.info("container logs → %s", log_path)
-    return proc, log_path
+        self._thread.start()
 
+    def _attach(self) -> subprocess.Popen | None:
+        try:
+            out_fd = open(self.log_path, "ab", buffering=0)
+        except OSError as exc:
+            log.warning("vllm_docker: could not open %s for streaming: %s",
+                        self.log_path, exc)
+            return None
+        argv = ["docker", "logs", "-f", "-t"]
+        if self._since:
+            argv += ["--since", self._since]
+        argv.append(self._name)
+        try:
+            proc = subprocess.Popen(
+                # -t prefixes each line with the daemon-side RFC3339 timestamp
+                # so the file is searchable without going through loguru.
+                argv,
+                stdout=out_fd, stderr=out_fd,
+            )
+        except OSError as exc:
+            log.warning("vllm_docker: could not attach docker logs: %s", exc)
+            return None
+        finally:
+            out_fd.close()  # on success the child holds its own dup'd fd
+        return proc
 
-def _stop_log_streamer(proc: subprocess.Popen | None) -> None:
-    if proc is None or proc.poll() is not None:
-        return
-    proc.terminate()
-    try:
-        proc.wait(timeout=2)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    def _supervise(self) -> None:
+        while not self._stop_evt.is_set():
+            delay = 0.2
+            while not container_exists(self._name):
+                if self._stop_evt.wait(delay):
+                    return
+                delay = min(delay * 2, 5.0)
+            proc = self._attach()
+            if proc is None:
+                return
+            self._proc = proc
+            if self._stop_evt.is_set():
+                self._terminate(proc)
+                return
+            if not self._announced:
+                self._announced = True
+                log.info("container logs → %s", self.log_path)
+            proc.wait()
+            self._proc = None
+            # Back-date the cursor: lines the dead follower never delivered
+            # would land before "now" and be skipped forever. A re-attach may
+            # duplicate up to 30 s of output; losing diagnostics is worse.
+            self._since = (
+                datetime.now(timezone.utc) - timedelta(seconds=30)
+            ).isoformat()
+            # docker logs -f also exits when the container stops; pause so a
+            # stopped-but-expected container doesn't spin the attach loop.
+            self._stop_evt.wait(1.0)
+
+    @staticmethod
+    def _terminate(proc: subprocess.Popen) -> None:
+        if proc.poll() is not None:
+            return
+        proc.terminate()
         try:
             proc.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            pass
+            proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def stop(self) -> None:
+        self._stop_evt.set()
+        proc = self._proc
+        if proc is not None:
+            self._terminate(proc)
+        self._thread.join(timeout=5)
 
 
 def _append_post_mortem(container_name: str, log_path: Path | None, n: int = 200) -> None:
@@ -431,7 +498,8 @@ def run(
         stop_container(container_name, timeout_s=10)
         remove_container(container_name)
         sp = _state["streamer"]
-        _stop_log_streamer(sp if isinstance(sp, subprocess.Popen) else None)
+        if isinstance(sp, _LogStreamer):
+            sp.stop()
         sys.exit(130)
 
     signal.signal(signal.SIGINT,  _on_signal)
@@ -451,40 +519,38 @@ def run(
         return
 
     if container_exists(container_name) and not container_running(container_name):
-        # Stopped container already has hf_transfer installed — restart it
-        # rather than running a fresh image (avoids reinstalling every time).
+        # A container's command and entrypoint are immutable. Recreate failed
+        # containers so launcher fixes and changed service arguments take effect.
         print(
-            f"[{log_prefix}] Restarting stopped container {container_name}",
+            f"[{log_prefix}] Recreating stopped container {container_name}",
             flush=True,
         )
-        proc = subprocess.Popen(
-            ["docker", "start", "-a", container_name],
-            start_new_session=True,
-        )
-        _state["proc"] = proc
-    else:
-        _maybe_ngc_login(image)
-        argv = build_run_argv(
-            image=image,
-            container_name=container_name,
-            port=port,
-            model_cache=model_cache,
-            hf_token=hf_token,
-            cuda_visible_devices=cuda_visible_devices,
-            extra_env=extra_env,
-            extra_pip=extra_pip,
-            vllm_argv=vllm_argv,
-        )
-        print(
-            f"[{log_prefix}] Launching vLLM (docker)  image={image}  "
-            f"container={container_name}  http://{host}:{port}/v1",
-            flush=True,
-        )
-        proc = subprocess.Popen(argv, start_new_session=True)
-        _state["proc"] = proc
+        if not remove_container(container_name):
+            log.error("Could not remove stopped container %s", container_name)
+            sys.exit(1)
 
-    streamer_proc, log_path = _start_log_streamer(container_name)
-    _state["streamer"] = streamer_proc
+    _maybe_ngc_login(image)
+    argv = build_run_argv(
+        image=image,
+        container_name=container_name,
+        port=port,
+        model_cache=model_cache,
+        hf_token=hf_token,
+        cuda_visible_devices=cuda_visible_devices,
+        extra_env=extra_env,
+        extra_pip=extra_pip,
+        vllm_argv=vllm_argv,
+    )
+    print(
+        f"[{log_prefix}] Launching vLLM (docker)  image={image}  "
+        f"container={container_name}  http://{host}:{port}/v1",
+        flush=True,
+    )
+    proc = subprocess.Popen(argv, start_new_session=True)
+    _state["proc"] = proc
+
+    streamer = _LogStreamer(container_name)
+    _state["streamer"] = streamer
     try:
         _lifecycle.wait_until_healthy(
             health_url,
@@ -500,10 +566,9 @@ def run(
         if _state["handling"]:
             raise
         time.sleep(0.5)
-        _append_post_mortem(container_name, log_path)
-        _stop_log_streamer(streamer_proc)
-        if log_path is not None:
-            log.error("vLLM container failed — see %s", log_path)
+        streamer.stop()
+        _append_post_mortem(container_name, streamer.log_path)
+        log.error("vLLM container failed — see %s", streamer.log_path)
         raise
 
     log.info("Ready  →  http://localhost:%d/v1  (docker: %s)", port, container_name)
@@ -520,7 +585,7 @@ def run(
     try:
         _lifecycle.idle_until_stopped(health_url, log_prefix)
     finally:
-        _stop_log_streamer(streamer_proc)
+        streamer.stop()
 
 
 # ── port → container / pid (used by the stop helper) ────────────────────────
@@ -528,13 +593,8 @@ def run(
 _CONTAINER_PREFIX = "xr-ai-vllm-"
 
 
-def container_on_port(port: int) -> str | None:
-    """Return the name of a running xr-ai-vllm container serving *port*, or None.
-
-    ``docker ps --filter publish=<port>`` silently misses ``--network host``
-    containers.  We label each container with ``xr-ai-vllm.port=<port>`` at
-    run time and filter by that label here instead.
-    """
+def container_on_port_checked(port: int) -> tuple[str | None, bool]:
+    """Return a labelled container and whether Docker discovery succeeded."""
     try:
         out = subprocess.check_output(
             ["docker", "ps",
@@ -544,17 +604,32 @@ def container_on_port(port: int) -> str | None:
             stderr=subprocess.DEVNULL,
         ).strip()
         names = out.splitlines()
-        return names[0] if names else None
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
+        return (names[0] if names else None), True
+    except FileNotFoundError:
+        # Without the Docker CLI, a local Docker container cannot be managed;
+        # pip-mode ownership is still established from the listener process.
+        return None, True
+    except subprocess.CalledProcessError:
+        return None, False
 
 
-def pid_on_port(port: int) -> int | None:
-    """Return the pid listening on *port* (any v4/v6 socket), or None.
+def container_on_port(port: int) -> str | None:
+    """Return the name of a running xr-ai-vllm container serving *port*, or None.
+
+    ``docker ps --filter publish=<port>`` silently misses ``--network host``
+    containers.  We label each container with ``xr-ai-vllm.port=<port>`` at
+    run time and filter by that label here instead.
+    """
+    container, _ = container_on_port_checked(port)
+    return container
+
+
+def pid_on_port_checked(port: int) -> tuple[int | None, bool, bool]:
+    """Return the listening PID, inspection status, and listener presence.
 
     Tries `ss` first (always present on modern Linux), falls back to `lsof`.
-    Used by the stop helper to send SIGTERM to the vLLM process (pip or docker
-    with --network host — both are visible to ss(8) on the host).
+    A listener without a visible PID is still reported so callers fail closed
+    instead of mistaking an uninspectable listener for an unused port.
     """
     try:
         out = subprocess.check_output(
@@ -564,8 +639,9 @@ def pid_on_port(port: int) -> int | None:
         )
         m = re.search(r"pid=(\d+)", out)
         if m:
-            return int(m.group(1))
-    except Exception:
+            return int(m.group(1)), True, True
+        return None, True, bool(out.strip())
+    except (FileNotFoundError, subprocess.CalledProcessError):
         pass
     try:
         out = subprocess.check_output(
@@ -574,7 +650,33 @@ def pid_on_port(port: int) -> int | None:
             stderr=subprocess.DEVNULL,
         ).strip()
         if out:
-            return int(out.splitlines()[0])
-    except Exception:
-        pass
-    return None
+            return int(out.splitlines()[0]), True, True
+        return None, True, False
+    except subprocess.CalledProcessError:
+        return None, True, False
+    except FileNotFoundError:
+        return None, False, False
+
+
+def pid_on_port(port: int) -> int | None:
+    """Return the pid listening on *port* (any v4/v6 socket), or None."""
+    pid, _, _ = pid_on_port_checked(port)
+    return pid
+
+
+def is_xr_ai_server_process(pid: int, label: str, port: int) -> bool:
+    """Return whether *pid* has the expected xr-ai server command line."""
+    try:
+        command = Path(f"/proc/{pid}/cmdline").read_text(errors="replace")
+    except OSError:
+        return False
+    if label == "stt":
+        return "stt_server" in command
+    try:
+        environment = Path(f"/proc/{pid}/environ").read_bytes()
+    except OSError:
+        return False
+    return (
+        b"XR_AI_VLLM_MANAGED=1\0" in environment
+        and f"XR_AI_VLLM_PORT={port}\0".encode() in environment
+    )

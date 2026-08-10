@@ -167,7 +167,6 @@ contains only wrapper messages — nothing from inside the container.
 ```bash
 curl -fsS http://127.0.0.1:8107/health   # nemotron3_nano (agent-llm)
 curl -fsS http://127.0.0.1:8100/health   # vlm_server
-curl -fsS http://127.0.0.1:8109/health   # embedding_server
 ```
 
 **Container post-mortem** — the wrapper now streams `docker logs -f` into the
@@ -359,7 +358,7 @@ flip `enforce_eager: false` unless you have a measured reason.
 ### `xr_render_demo` exits but VRAM is still pinned
 
 **By design.** The vLLM-backed servers (`vlm_server`,
-`llama_nemotron_llm_server`, `nemotron3_nano_llm_server`) survive stack
+`nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
 restarts. See [`docs/ai-services.md`](ai-services.md) → *vLLM model
 persistence*.
@@ -385,5 +384,7 @@ time.
 the repo root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).
 
 **Fix:** wait. Subsequent runs use the cached weights and start in
-~30–60 s. If a download fails, check that `HF_TOKEN` is set if the model
-needs it (see [`docs/credentials.md`](credentials.md)).
+~30–60 s. If the download makes no progress, note that unauthenticated
+downloads (runs started with `--allow-anonymous`) are rate-limited and can
+stall indefinitely; set `HF_TOKEN` and restart
+(see [`docs/credentials.md`](credentials.md)).

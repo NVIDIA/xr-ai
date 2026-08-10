@@ -142,6 +142,47 @@ class TestEnsureCredentials:
         assert hf_file.read_text().strip() == "new_tok"
 
 
+class TestRequireCredentials:
+    """require_credentials exits non-zero on a missing token; NEVER prompts."""
+
+    def test_missing_token_exits(self, fake_creds_dir, monkeypatch):
+        with patch("getpass.getpass", side_effect=AssertionError("must not prompt")):
+            with pytest.raises(SystemExit) as exc_info:
+                _creds.require_credentials("HF_TOKEN")
+        assert exc_info.value.code == 2
+
+    def test_allow_missing_downgrades_to_warning(self, fake_creds_dir, monkeypatch):
+        with patch("getpass.getpass", side_effect=AssertionError("must not prompt")):
+            _creds.require_credentials("HF_TOKEN", allow_missing=True)
+        assert not os.environ.get("HF_TOKEN")
+
+    def test_env_token_passes(self, fake_creds_dir, monkeypatch):
+        monkeypatch.setenv("HF_TOKEN", "env_tok")
+        _creds.require_credentials("HF_TOKEN")
+        assert os.environ["HF_TOKEN"] == "env_tok"
+
+    def test_saved_token_passes(self, fake_creds_dir, monkeypatch):
+        creds_file, _ = fake_creds_dir
+        creds_file.write_text(json.dumps({"HF_TOKEN": "saved_tok"}))
+        _creds.require_credentials("HF_TOKEN")
+        assert os.environ.get("HF_TOKEN") == "saved_tok"
+
+    def test_hf_token_file_passes(self, fake_creds_dir, monkeypatch):
+        _, hf_file = fake_creds_dir
+        hf_file.write_text("file_tok\n")
+        _creds.require_credentials("HF_TOKEN")
+        assert os.environ.get("HF_TOKEN") == "file_tok"
+
+    def test_mixed_present_and_missing_exits(self, fake_creds_dir, monkeypatch, capsys):
+        monkeypatch.setenv("HF_TOKEN", "env_tok")
+        with pytest.raises(SystemExit) as exc_info:
+            _creds.require_credentials("HF_TOKEN", "NGC_API_KEY")
+        assert exc_info.value.code == 2
+        err = capsys.readouterr().err
+        assert "NGC API key" in err
+        assert "HuggingFace token" not in err
+
+
 class TestWarnIfMissing:
     """warn_if_missing surfaces a missing token but NEVER prompts."""
 

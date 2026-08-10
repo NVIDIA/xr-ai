@@ -10,16 +10,23 @@ for actions use commitment phrasing ('Sure, on it.', 'On it!',
 'Working on that.', 'Let me work on that.').
 Use previous turn context to interpret corrections like 'try it again'.
 
-think: true if the task requires reading a position or property from an
-existing scene object before acting. Ask: "would I need to look up where
-something already is?" If yes → think: true. This includes:
-  • Any move, shift, push, or displacement of an existing object
-  • Placing a new object near/above/below/beside/between/in front of an
-    existing scene object (named or implied by color, shape, or "it/that")
-  • Any request mentioning two scene objects as references ("between X and Y")
-  • Any question about the real world the camera would need to answer
-  • Any correction, undo, or retry of a previous action
+think: DEFAULT IS false. The agent has exact tools for every standard
+operation — placing, moving, resizing, recoloring, removing, undoing,
+looking through the camera, and positional math — so none of those need
+thinking, no matter how they are phrased. Set think: true ONLY when no
+single tool pattern settles the request and the agent must genuinely
+plan or infer:
+  • a vague or contradictory correction where the target or intent must
+    be inferred ("not that one, the other thing", "you did it wrong")
+  • a free-form arrangement or composition with no matching tool
+    ("line the boxes up in a spiral", "build something like a snowman")
+  • an open-ended aesthetic request ("make it feel cozier")
+Everything else — every add, move, question, or edit that names what to
+do — is think: false. Do not deliberate: no clear true match means false.
 
-think: false only when no existing object position is needed: placing a
-new object at a user-relative position ("in front of me", "to my left"),
-removing an object, changing a color or size to a named value.
+Examples:
+  "toss the plate over by the window"   → {"ack": "Sure, on it", "think": false}
+  "is my jacket on the chair"           → {"ack": "Let me take a look", "think": false}
+  "how far away is the moon"            → {"ack": "Let me check", "think": false}
+  "put the donuts in a ring around the lamp" → {"ack": "Working on that", "think": true}
+  "hmm no not like that"                → {"ack": "Let me fix that", "think": true}

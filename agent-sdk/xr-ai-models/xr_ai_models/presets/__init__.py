@@ -3,7 +3,7 @@
 
 """Built-in presets for in-tree AI services.
 
-Each preset is a dict with the same keys a ``models.yaml`` entry would carry
+Each preset is a dict with the same keys a flattened model-profile entry carries
 (except ``base_url``, which is the caller's responsibility).  A YAML entry
 that says ``kind: preset:<name>`` merges its keys on top of the preset's;
 explicit keys win.

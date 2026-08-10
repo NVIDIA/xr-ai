@@ -88,7 +88,6 @@ class TestTypeIdPreservation:
         msg = RosterRequest()
         assert rt_type_id(MsgType.ROSTER_REQUEST, msg) == MsgType.ROSTER_REQUEST
 
-
 # ── payload field round-trips ──────────────────────────────────────────────────
 
 class TestFrameSignalCodec:
@@ -251,7 +250,7 @@ class TestReturnAudioFlushCodec:
 
 
 class TestRosterRequestCodec:
-    def test_roundtrip_produces_instance(self):
+    def test_roundtrip_preserves_empty_payload(self):
         orig = RosterRequest()
         out = rt(MsgType.ROSTER_REQUEST, orig)
         assert isinstance(out, RosterRequest)
@@ -273,8 +272,7 @@ class TestWireFormat:
         assert isinstance(encode(MsgType.ROSTER_REQUEST, msg), bytes)
 
     def test_minimum_wire_length(self):
-        """Even the smallest message (RosterRequest, empty payload) must have
-        at least 1 byte for the type header."""
+        """Every encoded message includes at least its one-byte type header."""
         wire = encode(MsgType.ROSTER_REQUEST, RosterRequest())
         assert len(wire) >= 1
 

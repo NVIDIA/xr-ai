@@ -309,6 +309,8 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
         sessions.append(session)
 
         async def run(handler, **options) -> None:
+            if session.ready_file:
+                session.ready_file.touch()
             run_options.update(options)
             response = await handler(
                 VoiceQuery(

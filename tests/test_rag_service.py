@@ -9,9 +9,11 @@ import uuid
 import numpy as np
 import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
+from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
+from rag_service.index import _chunk_text
 from xr_ai_nat.functions._service.rpc import RPCServer
-from xr_ai_nat.functions.rag import RAGClient, RAGFunctionsConfig, RetrieveRequest
+from xr_ai_nat.functions.rag import RAGFunctionsConfig, RetrieveRequest, RetrieveResult
 
 
 class _Embedding:
@@ -63,6 +65,13 @@ async def test_build_retrieve_list_and_health(tmp_path) -> None:
     assert health == {"ready": True, "document_count": 2, "chunk_count": 2}
     embedder.healthy = False
     assert (await service.dispatch("get_health", {}))["ready"] is False
+
+
+def test_chunk_text_splits_oversized_unbroken_token() -> None:
+    chunks = _chunk_text("x" * 2_500, chunk_size=900, overlap=120)
+
+    assert [len(chunk) for chunk in chunks] == [900, 900, 700]
+    assert "".join(chunks) == "x" * 2_500
 
 
 async def test_cache_reuse_and_invalidation(tmp_path) -> None:
@@ -153,7 +162,7 @@ async def test_min_score_filters_weak_matches(tmp_path) -> None:
     assert await index.retrieve("unrelated topic", top_k=1) == []
 
 
-async def test_native_client_and_function_group_use_typed_contracts(tmp_path) -> None:
+async def test_native_function_group_uses_typed_contracts(tmp_path) -> None:
     documents = tmp_path / "documents"
     documents.mkdir()
     (documents / "guide.md").write_text("Reset the task before starting again.")
@@ -167,23 +176,28 @@ async def test_native_client_and_function_group_use_typed_contracts(tmp_path) ->
     server = RPCServer(endpoint, RAGService(index).dispatch)
     task = asyncio.create_task(server.serve())
     await asyncio.sleep(0.02)
-    client = RAGClient(endpoint)
     try:
-        result = await client.retrieve(RetrieveRequest(query="reset", top_k=1))
-        assert result.results[0].source == "guide.md"
-        assert (await client.get_health()).ready is True
+        async with WorkflowBuilder() as builder:
+            await builder.add_function_group("rag", RAGFunctionsConfig(endpoint=endpoint))
+            functions = await (await builder.get_function_group("rag")).get_all_functions()
+            schemas = {
+                name: function.input_schema.model_json_schema()
+                for name, function in functions.items()
+            }
+            result = await functions["rag__retrieve"].ainvoke(
+                {"query": "reset", "top_k": 1},
+                to_type=RetrieveResult,
+            )
+            assert result.results[0].source == "guide.md"
     finally:
-        await client.close()
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group("rag", RAGFunctionsConfig(endpoint=endpoint))
-        functions = await (await builder.get_function_group("rag")).get_all_functions()
-        schemas = {
-            name: function.input_schema.model_json_schema()
-            for name, function in functions.items()
-        }
     assert set(schemas) == {"rag__retrieve", "rag__list_documents"}
     assert schemas["rag__retrieve"]["properties"]["query"]["minLength"] == 1
     assert schemas["rag__list_documents"].get("properties", {}) == {}
+
+
+def test_retrieve_request_rejects_blank_query() -> None:
+    with pytest.raises(ValidationError, match="query must not be blank"):
+        RetrieveRequest(query="  ")

@@ -193,6 +193,9 @@ class _CallbackStubEndpoint:
     def __init__(self) -> None:
         self.audio_cb = None
         self.participant_cb = None
+        self.run_started = asyncio.Event()
+        self.run_finished = asyncio.Event()
+        self.ready_to_receive = asyncio.Event()
 
     def on_audio(self, cb) -> None:
         self.audio_cb = cb
@@ -200,8 +203,15 @@ class _CallbackStubEndpoint:
     def on_participant(self, cb) -> None:
         self.participant_cb = cb
 
+    async def run(self) -> None:
+        self.run_started.set()
+        await self.run_finished.wait()
+
+    async def wait_until_running(self) -> None:
+        await self.ready_to_receive.wait()
+
     def stop(self) -> None:
-        return
+        self.run_finished.set()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1828,6 +1838,39 @@ async def test_streaming_tts_observes_each_wav_through_gate():
 # ════════════════════════════════════════════════════════════════════════════
 # XRMediaHubInputTransport
 # ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_input_transport_releases_startup_barrier_after_endpoint_starts():
+    """The startup barrier releases independently of roster convergence."""
+    from pipecat.frames.frames import StartFrame
+    from pipecat.transports.base_transport import TransportParams
+    from xr_ai_voice._transport import SAMPLE_RATE, XRMediaHubInputTransport
+
+    endpoint = _CallbackStubEndpoint()
+    started = asyncio.Event()
+    transport = XRMediaHubInputTransport(
+        endpoint,
+        TransportParams(
+            audio_in_enabled=True,
+            audio_in_sample_rate=SAMPLE_RATE,
+            audio_in_channels=1,
+        ),
+        started_event=started,
+    )
+
+    try:
+        start_task = asyncio.create_task(transport.start(StartFrame()))
+        await endpoint.run_started.wait()
+        assert not started.is_set()
+
+        endpoint.ready_to_receive.set()
+        assert await start_task is None
+        assert started.is_set()
+    finally:
+        await transport.stop(EndFrame())
+
+    assert not started.is_set()
 
 
 @pytest.mark.asyncio

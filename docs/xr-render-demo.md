@@ -95,27 +95,12 @@ The worker reads two YAML files:
 
 ## The LLM server
 
-The vLLM wrapper reads YAML config,
+### NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107
+
+A vLLM `execvp` shim — a small Python wrapper that reads YAML config,
 sets `HF_HOME` / token env vars, then `os.execvp`s into `vllm serve`. The
 Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
 and tool calling from that point on.
-
-### NVIDIA-Nemotron-3-Nano-30B-A3B — port 8107
-
-The same deployed model serves both logical LLM roles. It handles the agentic
-tool loop and these short latency-sensitive calls:
-
-- **Quick-ack** — fires in parallel with the agentic loop the moment an
-  utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
-  spoken acknowledgment. Also classifies whether the request needs spatial
-  reasoning (`think: true/false`), so the 30B model knows before it starts
-  whether to engage its thinking budget. Max 40 tokens, 8s timeout. The ack
-  is always sent on the data channel (`agent.progress` topic); it is only
-  also spoken via TTS on every turn so the user immediately knows they were heard.
-- **Still-working messages** — if the agentic loop exceeds 5s, this model
-  generates a short contextual phrase like *"Still finding the right
-  position"* on a 7s repeat. Sent to the data channel only — never spoken,
-  to avoid stacking up in the TTS queue behind the real response.
 
 `vllm serve` with `--tool-call-parser qwen3_coder` and
 `--reasoning-parser nano_v3` (plugin auto-fetched from the model card into
@@ -124,7 +109,23 @@ FlashInfer FP4 MoE autotune silently takes 3–8 minutes on cold start without
 it. Requires a Blackwell GPU (B200 / RTX PRO 6000 / Jetson Thor) for native
 FP4; swap to the BF16 variant for Hopper / Ampere.
 
-This is the model that runs the multi-step tool-calling loop.
+One server backs both logical models in `yaml/models.yaml`: `agent_llm` runs
+the multi-step tool-calling loop, and `llm` serves two cheap, latency-sensitive
+calls (thinking stays off):
+
+- **Quick-ack** — awaited before the agentic loop starts, the moment an
+  utterance lands. Returns `{"ack": "On it!", "think": false}` — a 3–6 word
+  spoken acknowledgment. Also classifies whether the request needs
+  open-ended reasoning (`think: true/false`): positional operations always
+  run without thinking because the math tools compute exact answers, so
+  thinking is reserved for vague corrections and free-form compositions
+  no tool pattern settles. Max 40 tokens, 8s timeout. The ack
+  is always sent on the data channel (`agent.progress` topic); it is only
+  also spoken via TTS on every turn so the user immediately knows they were heard.
+- **Still-working messages** — if the agentic loop exceeds 5s, this model
+  generates a short contextual phrase like *"Still finding the right
+  position"* on a 10s repeat. Sent to the data channel only — never spoken,
+  to avoid stacking up in the TTS queue behind the real response.
 
 ## VLM — Cosmos-Reason1-7B
 
@@ -204,8 +205,8 @@ worker owns the XR lifecycle.
 
 On each `TranscriptionFrame`:
 
-1. **Quick-ack** fires immediately (Nemotron-3-Nano :8107, parallel task).
-2. **Still-working timer** starts (fires at 5s, repeats every 7s, data
+1. **Quick-ack** runs first (`llm` :8107, awaited before the loop).
+2. **Still-working timer** starts (fires at 5s, repeats every 10s, data
    channel only).
 3. **Pre-fetch** (concurrent): `get_scene_state` + `get_head_pose` +
    `position_ahead(1.5)` — results injected into the user message so the
@@ -221,7 +222,7 @@ On each `TranscriptionFrame`:
    - If `think=true`: reasoning preamble injected into system prompt
      (RESOLVE object → LOCATE coordinates → COMPUTE new position →
      EXECUTE). The `<think>` block stays private; only one short sentence
-     goes to the user. Token budget: 2048 total / 1024 thinking budget.
+     goes to the user. Token budget: 6144 total / 4096 thinking budget.
    - If thinking fills the token budget without a tool call
      (`finish_reason=length`): retry the same iteration with
      `needs_thinking=False`.

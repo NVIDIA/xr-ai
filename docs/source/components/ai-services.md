@@ -32,9 +32,40 @@ tool-calling, reasoning, and hardware trade-offs documented below.
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded service + live hub IPC |
 | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 | — | FastMCP → vlm-server (`ask_image` tool) |
 
-All model weights land in `models/` at the repository root (not checked into version control, shared across
-all servers). Each YAML configures `model_cache` — resolved relative to the
-YAML file.
+All model weights land in the service's `model_cache` directory, set per YAML
+and resolved relative to the YAML file (every `models/` tree is excluded from
+version control). The model-servers profiles share `models/` at the
+repository root; the exact layout per launch style is below.
+
+## Two HuggingFace cache roots
+
+The servers use two different `HF_HOME` values, so HuggingFace weights live in
+two separate trees under the service's resolved `model_cache`:
+
+| Consumer | `HF_HOME` | Hub cache |
+|---|---|---|
+| vLLM-backed servers (pip and docker) | `<model_cache>/` | `<model_cache>/hub/` |
+| STT and Magpie TTS (NeMo host processes) | `<model_cache>/huggingface/` | `<model_cache>/huggingface/hub/` |
+
+(The NeMo servers additionally cache non-HF artifacts under `<model_cache>/nemo/`.)
+
+`model_cache` itself is set per YAML and resolved relative to the YAML file,
+so it differs by launch layout: the model-servers profile YAMLs resolve it to
+`models/` at the repository root, while the standalone YAMLs shipped next to
+each service resolve it to `ai-services/models/`. A model downloaded into one
+tree is invisible to consumers of the others, so check the tree your YAML
+actually points at before concluding a model is missing. For a manual
+`hf download`, set `HF_HOME` to match both the consumer and the layout:
+
+```bash
+# vLLM-served model, launched via a model-servers profile
+# (model_cache resolves to models/ at the repository root):
+HF_HOME=models hf download nvidia/Cosmos-Reason1-7B
+
+# STT server launched from its standalone YAML
+# (model_cache resolves to ai-services/models/):
+HF_HOME=ai-services/models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
+```
 
 ## Adding a server to a sample
 
@@ -88,16 +119,16 @@ Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on [`agent-sdk/xr-ai-models`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md),
-load a per-sample model config, and construct service clients via
-`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK
-encapsulates the OpenAI-compatible wire format and the per-model quirks
-(reasoning-field aliasing, `chat_template_kwargs`, served-model-name strings)
-so callers never branch on backend.
+load a per-sample model profile, and construct service clients via
+`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
+OpenAI-compatible wire format and the per-model quirks (reasoning-field
+aliasing, `chat_template_kwargs`, served-model-name strings) so callers
+never branch on backend.
 
 ```python
 from xr_ai_models import load_models_config, make_llm, ChatMessage
 
-config = load_models_config("yaml/models.yaml")
+config = load_models_config("yaml/models.local.json")
 async with make_llm(config, "agent_llm") as llm:
     resp = await llm.chat(
         [ChatMessage(role="user", content="hello")],
@@ -107,82 +138,91 @@ async with make_llm(config, "agent_llm") as llm:
     print(resp.content, resp.reasoning)
 ```
 
-A matching `models.yaml` for the built-in service categories:
+A model profile separates adapter behavior, endpoint connectivity, and
+deployment ownership:
 
-```yaml
-agent_llm:
-  kind:     preset:nemotron3_nano
-  base_url: http://localhost:8107
-
-vlm:
-  kind:     preset:cosmos_vlm
-  base_url: http://localhost:8100
-
-stt:
-  kind:     preset:parakeet_stt
-  base_url: http://localhost:8103
-
-tts:
-  kind:     preset:piper_tts
-  base_url: http://localhost:8105
-
-embedding:
-  kind:     preset:nemotron_embedding
-  base_url: http://localhost:8109
+```json
+{
+  "models": {
+    "agent_llm": {
+      "category": "llm",
+      "adapter": {"preset": "nemotron3_nano"},
+      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "agent-llm"}
+    }
+  }
+}
 ```
 
-Swapping a backend is a `kind:` + `base_url:` edit in YAML; worker code does
-not change.  Full protocol surface, the preset table, and the explicit
-(no-preset) specification are in
+The worker-side `xr-ai-models` loader accepts JSON or YAML, including flat
+legacy entries and direct role mappings. A profile shared with the stdlib-only
+launcher must use the wrapped nested `.json` contract; non-`.json` profiles are
+rejected before deployment metadata is read. Full protocol surface, the preset
+table, and the profile contract are in
 [`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md).
 
 ## Hosting models on NVIDIA NIM
 
 The LLM and VLM can run on [NVIDIA NIM](https://build.nvidia.com) instead of
 local vLLM — NIM exposes the same OpenAI-compatible `/v1/chat/completions`
-API, so this is a `models.yaml` change with no worker code edits. STT and TTS
+API, so this is a model-profile change with no worker code edits. STT and TTS
 stay local: hosted NIM speech (Riva) is not OpenAI `/v1/audio`-compatible.
 
-A NIM model entry differs from a local one in three fields:
+A hosted entry uses an environment-variable reference for its credential,
+disables endpoint health probing, and declares external ownership:
 
-```yaml
-vlm:
-  kind:        openai_compat
-  category:    vlm
-  base_url:    https://integrate.api.nvidia.com   # client appends /v1/...
-  model_name:  nvidia/cosmos-reason1-7b           # confirm slug at build.nvidia.com
-  api_key_env: NGC_API_KEY                         # → Authorization: Bearer
-  health_check: false                              # hosted NIM has no /health
-  capabilities: { vision: true, streaming: true }
+```json
+{
+  "models": {
+    "vlm": {
+      "category": "vlm",
+      "adapter": {
+        "kind": "openai_compat",
+        "model_name": "nvidia/cosmos-reason1-7b",
+        "capabilities": {"vision": true, "streaming": true}
+      },
+      "endpoint": {
+        "base_url": "https://integrate.api.nvidia.com",
+        "api_key_env": "NGC_API_KEY",
+        "readiness": "none"
+      },
+      "deployment": {"ownership": "external"}
+    }
+  }
+}
 ```
 
-- **`api_key_env: NGC_API_KEY`** sends the key as a bearer token. The key is a
+- **`api_key_env: NGC_API_KEY`** sends the environment value as a bearer
+  token. The key is a
   managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
   subprocess (refer to [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)); or export it.
-- **`health_check: false`** is required for hosted endpoints — they have no
-  local `/health` route, so the worker readiness gate must not probe them.
-  (Default is `true` for local servers.)
+- **`readiness: none`** is required when the hosted endpoint has no local
+  `/health` route.
+- **`ownership: external`** keeps the launcher from starting or stopping the
+  hosted service.
 - **`model_name`** is the hosted model id from [build.nvidia.com](https://build.nvidia.com).
 
 For `simple-vlm-example`, set `models_config: models.hosted.json` in the worker
-YAML. The structured profile is consumed by both the worker and orchestrator,
+YAML. This wrapped JSON profile is consumed by both the worker and orchestrator,
 so the local VLM process is omitted and `NGC_API_KEY` is requested
 automatically. Select `models.local.json` to switch back.
 
 `xr-render-demo` retains its `model_backend: nim` selector and
-`models.nim.yaml` overlay. Run it without the local `llm` / `agent-llm` / `vlm`
+`models.nim.yaml` overlay. Run it without the local `agent-llm` / `vlm`
 model-servers and provide `NGC_API_KEY`.
 
 **Self-hosted NIM containers** work the same way: point `base_url` at the
-container (e.g. `http://localhost:8000`) and set `health_check: true` if it
+container (e.g. `http://localhost:8000`), set `readiness: health`, and choose
+`managed` or `reused` ownership if the launcher owns that service. Legacy flat
+profiles may continue to set `health_check: true` when it
 exposes `/v1/health`.
 
 ## vLLM model persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
-`nemotron3_nano_llm_server`, `embedding_server`) **survive stack restarts by design**.
-`nemotron_omni_llm_server` is foreground (dies with the wrapper). Each
-persistent wrapper script checks its health endpoint before spawning vLLM:
+`nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
+**survive stack restarts by design**. Each persistent wrapper script checks its
+health endpoint before spawning vLLM:
 
 - **Already running** → touch the ready file immediately, then idle. Stack is
   ready in seconds; no model reload.
@@ -200,11 +240,12 @@ vLLM keeps running.
 uv run xr_render_demo --stop
 ```
 
-This hits each model server's `/health` endpoint, then either runs
-`docker stop <container_name>` (docker-mode servers) or finds the listening
-PID via `ss` or `lsof` and sends `SIGTERM` (pip-mode), escalating to
-`docker kill` or `SIGKILL` after 20 s. It is safe to run while the stack is
-down — processes and containers that are not running are silently skipped.
+Cleanup locates labelled Docker containers before inspecting ports, then
+stops them with `docker stop` (escalating to `docker kill` after 20 s).
+Pip-mode processes must carry the `XR_AI_VLLM_MANAGED` and
+`XR_AI_VLLM_PORT` ownership markers before cleanup sends `SIGTERM` or
+`SIGKILL`. Unknown listeners and failed inspection abort cleanup without
+sending a signal; absent servers are silently skipped.
 
 The target ports and container names match the defaults in the per-profile YAML files.
 
@@ -234,7 +275,7 @@ another tag, an internal mirror, or a custom build.
 
 - **Docker Engine** with the user in the `docker` group (`docker version`
   must succeed without `sudo`).
-- **NVIDIA Container Toolkit** so `--gpus` works:
+- **NVIDIA Container Toolkit** so the `nvidia` runtime can expose GPUs:
   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 - **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
@@ -249,8 +290,11 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 
 ### docker mode — runtime details
 
-- Container is launched with `--network host --ipc host --gpus …` (matches
-  gives vLLM the shared-memory region its workers expect).
+- Container is launched with `--network host --ipc host --runtime nvidia`
+  (forwarding `NVIDIA_VISIBLE_DEVICES`), and `/bin/bash` overrides the image
+  entrypoint so setup installs run before `vllm serve`.
+- Failed stopped containers are recreated because Docker cannot change their
+  recorded entrypoint or command.
 - The host `model_cache` is bind-mounted at the same path inside the
   container and `HF_HOME` is set to it, so weights cached by pip mode are
   reused by docker mode and vice versa.
@@ -258,19 +302,23 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
   `xr-ai-vllm-llama-nemotron-llm-server`,
   `xr-ai-vllm-nemotron3-nano-llm-server`,
   `xr-ai-vllm-nemotron-omni-llm-server`.
-- Persistence parity: `vlm_server`, `llama_nemotron_llm_server`, and
-  `nemotron3_nano_llm_server` run detached (`docker run -d --rm --name …`) so
-  the container survives stack restarts, mirroring their pip-mode
-  `start_new_session=True` behavior. `nemotron_omni_llm_server` runs
-  foreground (container exits with the wrapper) — same as its pip-mode
-  semantics.
+- Persistence parity: `vlm_server`, `llama_nemotron_llm_server`,
+  `nemotron3_nano_llm_server`, and `nemotron_omni_llm_server` launch their
+  Docker processes in separate sessions, so they survive launcher shutdowns
+  like their pip-mode `start_new_session=True` counterparts.
 
 ### Cleanup
 
-`uv run xr_render_demo --stop` works for both modes. The cleanup path probes
-`/health` first; for docker mode it then runs `docker stop <container_name>`
-(escalating to `docker kill` after 20 s); for pip mode it falls back to the
-port → PID → SIGTERM/SIGKILL path. Same UX for both.
+`uv run xr_render_demo --stop` works for both modes. Cleanup locates labelled
+Docker containers before inspecting ports, then stops them with `docker stop`
+(escalating to `docker kill` after 20 s). Pip-mode processes carry an
+`xr-ai-vllm` ownership marker; unknown listeners and failed inspection abort
+cleanup without sending a signal.
+
+Pip-mode vLLM processes started before the ownership markers were introduced
+cannot be identified safely. After upgrading, stop each unmarked process
+manually once; subsequent launches include the markers and support managed
+cleanup.
 
 ## Per-server notes
 
@@ -306,8 +354,7 @@ port → PID → SIGTERM/SIGKILL path. Same UX for both.
   `use_bf16: true` for highest quality at the largest VRAM cost. Same
   OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
   swap backends. Hosting backend is selectable per YAML (refer to *Choosing the
-  vLLM runtime*); runs foreground in both pip and docker modes (no
-  cross-restart persistence).
+  vLLM runtime*); persists across stack restarts in both pip and docker modes.
 - **stt-server** loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
   English-only; the `language` and `temperature` form fields are accepted but ignored.
 - **tts/magpie** loads magpie_tts_multilingual_357m via NeMo TTS in-process.

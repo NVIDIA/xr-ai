@@ -9,14 +9,15 @@ The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
-  `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP
-  clients, driven by a model-profile configuration. Swapping a backend is a
-  configuration edit, not a code edit.
+  `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
+  structured model deployment profile. Swapping a backend is a configuration
+  edit, not a code edit.
 - **`xr-ai-voice`** — the native voice runtime. `VoiceSession` owns readiness,
   hub transport, voice gating, streaming responses, signals, and cleanup while
   applications provide a `VoiceHandler`.
 - **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
-  consumers such as `xr-render-demo`.
+  consumers such as `xr-render-demo`. Its `run_voice_pipeline` helper exposes
+  the same IPC-start request-readiness boundary as `VoiceSession`.
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
@@ -29,10 +30,11 @@ from:
 ## xr-ai-models
 
 Worker code depends on the service protocols and constructs concrete
-clients from a model configuration — no hand-rolled `httpx` calls in callers,
-no model quirks leaking out of this package.
+clients from a model deployment profile — no hand-rolled `httpx` calls in
+callers, no model quirks leaking out of this package.
 
-Each sample's model config names the logical models the worker needs;
+Each profile names the logical models the worker needs and separates adapter,
+endpoint, and deployment metadata;
 `make_llm(config, "llm")` / `make_vlm` / `make_stt` / `make_tts` return an
 object satisfying the matching service protocol regardless of backend or
 model-specific quirks (such as reasoning-field naming). Swapping a model is a
@@ -43,7 +45,7 @@ config edit, not a code change.
 ```python
 from xr_ai_models import load_models_config, make_llm, ChatMessage
 
-config = load_models_config("yaml/models.yaml")
+config = load_models_config("yaml/models.local.json")
 async with make_llm(config, "agent_llm") as llm:
     resp = await llm.chat(
         [ChatMessage(role="user", content="hello")],
@@ -53,29 +55,22 @@ async with make_llm(config, "agent_llm") as llm:
     print(resp.content, resp.reasoning)
 ```
 
-`models.yaml`:
+`models.local.json`:
 
-```yaml
-agent_llm:
-  kind:     preset:nemotron3_nano
-  base_url: http://localhost:8107
-
-vlm:
-  kind:     preset:cosmos_vlm
-  base_url: http://localhost:8100
-
-stt:
-  kind:     preset:parakeet_stt
-  base_url: http://localhost:8103
-
-tts:
-  kind:     preset:piper_tts
-  base_url: http://localhost:8105
-
-embedding:
-  kind:     preset:nemotron_embedding
-  base_url: http://localhost:8109
+```json
+{
+  "models": {
+    "agent_llm": {
+      "category": "llm",
+      "adapter": {"preset": "nemotron3_nano"},
+      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "agent-llm"}
+    }
+  }
+}
 ```
+
+JSON and YAML are both accepted; flat legacy entries remain compatible.
 
 ### Built-in presets
 
@@ -131,10 +126,11 @@ The worker passes the file to `load_models_config()`. The orchestrator calls
 `load_model_deployment(worker_config)` to map `managed` to an owned process,
 `reused` to `launch_mode="reuse"`, and `external` to no local process. Launcher
 profiles must use the wrapped nested JSON shape and declare credentials as
-`endpoint.api_key_env`; flat YAML remains supported for worker-only configs.
+`endpoint.api_key_env`; the launcher rejects non-`.json` profiles before
+parsing, while flat YAML remains supported for worker-only configs.
 
-`adapter` and `endpoint` are normalized into the existing typed service specs;
-only `deployment` remains separately typed as `DeploymentSpec`.
+Model roles compose `AdapterSpec`, `EndpointSpec`, and `DeploymentSpec`; their
+legacy flat attributes remain available as read-only compatibility aliases.
 
 ### Protocols
 
@@ -251,7 +247,8 @@ async with session:
 `TextMessageInput` routes typed messages through the same turn path as speech
 and ignores data received outside an active `run()`. The default hub transport
 is opened only after readiness probes succeed; failed readiness closes the
-session's model clients without opening hub sockets.
+session's model clients without opening hub sockets. The ready file is touched
+from `run()` only after the input transport enters its hub IPC receive loop.
 NAT applications create handlers with
 `xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` preserves participant
 routing, cancels superseded or interrupted turns, installs signal handlers,
@@ -261,9 +258,9 @@ and closes its transport and model clients.
 
 The unified [Pipecat](https://github.com/pipecat-ai/pipecat) voice pipeline for
 xr-ai agents that still use the direct processor API. The top-level entry point
-is `make_voice_pipeline`; those workers subclass `BrainProcessor` and hand the
-instance to the factory. Everything else — VAD/STT, voice gate, streaming TTS —
-is provided.
+is `make_voice_pipeline`; those workers subclass `BrainProcessor`, hand the
+instance to the factory, and run it with `run_voice_pipeline`. Everything else
+— VAD/STT, voice gate, streaming TTS — is provided.
 
 ### make_voice_pipeline
 
@@ -289,6 +286,22 @@ The resulting pipeline is:
 
 ```text
 input → VadStt → VoiceGate → brain → StreamingTts → output
+```
+
+### run_voice_pipeline
+
+Run the returned worker with its transport. For launcher-managed workers, pass
+the ready-file callback so it runs only after the input transport has started
+the hub IPC receive loop. Participant roster catch-up remains asynchronous;
+the worker re-announces its current status periodically so clients that join
+or reconnect later converge on the same state. If the callback fails, the
+worker is cancelled and the error propagates so the launcher reports startup
+failure rather than waiting on a process that cannot signal readiness:
+
+```python
+from xr_ai_pipecat import run_voice_pipeline
+
+await run_voice_pipeline(worker, transport, on_ready=ready_file.touch)
 ```
 
 | Stage | Processor | Role |
@@ -476,7 +489,8 @@ frame = await frames.get("participant-1")
 | `send_return_data(msg)`              | a `DataMessage` back to a client (text or binary on a topic) |
 | `send_return_audio(chunk)`           | an `AudioChunk` of agent or TTS audio to a client |
 | `flush_return_audio(pid)`            | drops audio queued at the hub for `pid` — interrupts the agent's own playback |
-| `set_status(status, pid=None)`       | publishes agent status (e.g. `"idle"`, `"processing"`) on the reserved `_agent.status` channel; broadcasts when `pid` is omitted |
+| `set_status(status, pid=None)`       | records and publishes agent status (e.g. `"idle"`, `"processing"`) on the reserved `_agent.status` channel; broadcasts when `pid` is omitted |
+| `republish_statuses()`               | re-sends each connected participant's current agent status so a missed one-shot update self-heals |
 | `request_roster()`                   | asks the hub to replay "joined" events for all current pids |
 
 ### IPC message types

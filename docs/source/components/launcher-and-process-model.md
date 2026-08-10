@@ -56,6 +56,11 @@ def run() -> None:
   before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
+- **Native voice workers** pass the ready file to `VoiceSession`; `run()`
+  touches it only after the input transport's hub IPC receive loop has started.
+- **Direct Pipecat workers** call
+  `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` to use the
+  same IPC-start readiness boundary.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
 - The worker never imports anything from `server-runtime` or `utils/xr-ai-launcher/`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
@@ -115,7 +120,7 @@ to serve requests. The launcher blocks on the file's existence; if the process
 exits before creating it, startup is aborted and the whole stack is torn down.
 This makes readiness explicit and process-defined: a model server signals ready
 after weights load, an HTTP server after it starts listening, a worker after
-its IPC socket connects.
+its IPC receive loop is active.
 
 ### `launch_mode`: own, persist, reuse
 

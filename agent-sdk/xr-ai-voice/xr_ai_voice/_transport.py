@@ -78,22 +78,37 @@ def _hub_pcm_to_mono_16k(pcm_int16: bytes, channels: int, sample_rate: int) -> b
 class XRMediaHubInputTransport(BaseInputTransport):
     """Hub → Pipecat: float32 hub audio → 16 kHz int16 pipecat frames."""
 
-    def __init__(self, ep: ProcessorEndpoint, params: TransportParams, **kwargs):
+    def __init__(
+        self,
+        ep: ProcessorEndpoint,
+        params: TransportParams,
+        *,
+        started_event: asyncio.Event | None = None,
+        **kwargs,
+    ):
         super().__init__(params, **kwargs)
         self._ep = ep
         self._ep_task: asyncio.Task | None = None
         self._started = False
+        self._started_event = started_event
         self._ep.on_audio(self._on_hub_audio)
         self._ep.on_participant(self._on_hub_participant)
 
     async def start(self, frame: StartFrame):
+        if self._started_event:
+            self._started_event.clear()
         await super().start(frame)
         self._started = True
         self._ep_task = asyncio.create_task(self._ep.run(), name="ep-run")
+        await self._ep.wait_until_running()
+        if self._started_event:
+            self._started_event.set()
         logger.info("XRMediaHubInputTransport started")
 
     async def stop(self, frame: EndFrame):
         self._started = False
+        if self._started_event:
+            self._started_event.clear()
         self._ep.stop()
         if self._ep_task:
             self._ep_task.cancel()
@@ -106,6 +121,8 @@ class XRMediaHubInputTransport(BaseInputTransport):
 
     async def cancel(self, frame: CancelFrame):
         self._started = False
+        if self._started_event:
+            self._started_event.clear()
         self._ep.stop()
         if self._ep_task:
             self._ep_task.cancel()
@@ -366,7 +383,13 @@ class HubVoiceTransport(BaseTransport):
             audio_out_channels=NUM_CHANNELS,
         )
 
-        self._input  = XRMediaHubInputTransport(self._ep, params, name=self._input_name)
+        self._input_started = asyncio.Event()
+        self._input = XRMediaHubInputTransport(
+            self._ep,
+            params,
+            name=self._input_name,
+            started_event=self._input_started,
+        )
         self._output = XRMediaHubOutputTransport(self._ep, params, name=self._output_name)
 
     def input(self) -> XRMediaHubInputTransport:
@@ -378,6 +401,10 @@ class HubVoiceTransport(BaseTransport):
     @property
     def endpoint(self) -> ProcessorEndpoint:
         return self._ep
+
+    async def wait_until_started(self) -> None:
+        """Wait until the input transport has started its hub IPC receiver."""
+        await self._input_started.wait()
 
     async def send_return_data(self, msg: DataMessage) -> None:
         await self._ep.send_return_data(msg)

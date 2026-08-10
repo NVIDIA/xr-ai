@@ -3,9 +3,12 @@
 
 """xr-ai-pipecat — unified Pipecat voice pipeline for xr-ai agents.
 
-Top-level entry point is :func:`make_voice_pipeline`. Sample workers
-subclass :class:`BrainProcessor` and hand the instance to the factory;
-everything else (VAD/STT, voice gate, streaming TTS) is provided.
+Sample workers compose their :class:`BrainProcessor` with
+:func:`make_voice_pipeline`, then use :func:`run_voice_pipeline` to run it.
+The package supplies VAD/STT, voice gate, and streaming TTS.
+
+The higher-level ``xr-ai-voice`` runtime is preferred for new applications;
+this direct Pipecat surface remains for unmigrated workers.
 """
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ from .frames import (
     ParticipantJoinedFrame,
     ParticipantLeftFrame,
 )
-from .pipeline import make_voice_pipeline
+from .pipeline import make_voice_pipeline, run_voice_pipeline
 from .processors import (
     BrainProcessor,
     StreamingTtsProcessor,
@@ -35,4 +38,5 @@ __all__ = [
     "VadSttProcessor",
     "VoiceGateProcessor",
     "make_voice_pipeline",
+    "run_voice_pipeline",
 ]
