@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
@@ -6,10 +5,7 @@ Agent-LLM eval harness for xr-render-demo. It uses the live model endpoint,
 derives schemas from the worker's native tools, and executes tool
 effects against deterministic fixtures so it never mutates the live scene.
 
-Usage:
-  uv run --project ../worker python eval.py                 # all cases
-  uv run --project ../worker python eval.py "Move it down"  # one query
-  uv run --project ../worker python eval.py --prompt PATH   # alternate prompt
+"""End-to-end eval corpus for the render worker."""
 
 By default reads ../worker/xr_render_demo_worker/prompts/system.txt (the live xr-render-demo
 prompt). Edit it and re-run; no stack restart needed.
@@ -78,67 +74,58 @@ ROLLED_HEAD_POSE = {
     "pitch_deg": 4.3,
 }
 
+
 def _became(prim_type: str | None = None,
             *,
             r_min: float | None = None,
             g_min: float | None = None,
             b_min: float | None = None):
-    """Predicate factory: returns a checker that asserts at least one
-    add_primitive / update_primitive call sets ``prim_type`` AND each
-    requested colour channel reaches the given lower bound.  Facets may
-    appear in one call or be split across calls (e.g. shape on one
-    update, colour on another).  All requested facets must be observed
-    for the predicate to pass."""
+    """Predicate factory: assert at least one add/update sets ``prim_type``
+    AND each requested colour channel reaches the given lower bound. Facets
+    may appear in one call or be split across calls."""
     requirements: dict[str, str | float] = {}
     if prim_type is not None:
         requirements["prim_type"] = prim_type
-    for ch, thresh in (("r", r_min), ("g", g_min), ("b", b_min)):
-        if thresh is not None:
-            requirements[ch] = thresh
+    for channel, threshold in (("r", r_min), ("g", g_min), ("b", b_min)):
+        if threshold is not None:
+            requirements[channel] = threshold
 
-    def _pred(muts: list[dict]) -> tuple[bool, str]:
+    def _pred(mutations: list[tuple[str, dict]]) -> tuple[bool, str]:
         seen = dict.fromkeys(requirements, False)
-        for tc in muts:
-            if tc["function"]["name"] not in ("add_primitive", "update_primitive"):
+        for name, args in mutations:
+            if name not in ("add_primitive", "update_primitive"):
                 continue
-            args = tc["function"]["arguments"]
-            args = json.loads(args) if isinstance(args, str) else args
             for key, expected in requirements.items():
                 if key == "prim_type":
                     if args.get("prim_type") == expected:
                         seen[key] = True
                 else:
-                    v = args.get(key)
-                    if v is not None and float(v) >= float(expected):
+                    value = args.get(key)
+                    if value is not None and float(value) >= float(expected):
                         seen[key] = True
         if all(seen.values()):
             return True, f"saw {requirements}"
-        missing = [k for k, v in seen.items() if not v]
+        missing = [key for key, hit in seen.items() if not hit]
         return False, f"missing facets: {missing} (wanted {requirements})"
 
     return _pred
 
 
-def _stacked_vertically(muts: list[dict]) -> tuple[bool, str]:
+def _stacked_vertically(mutations: list[tuple[str, dict]]) -> tuple[bool, str]:
     """Predicate for ``stack_*`` cases: every add_primitive must share the
-    same x/z column and have distinct y values, regardless of absolute
-    base height.  Floor stack and eye-level stack are both accepted."""
-    adds = [tc for tc in muts if tc["function"]["name"] == "add_primitive"]
+    same x/z column and have distinct y values, regardless of base height."""
+    adds = [args for name, args in mutations if name == "add_primitive"]
     if len(adds) < 2:
-        return False, f"need ≥2 add_primitive calls, got {len(adds)}"
-    rows = []
-    for tc in adds:
-        a = tc["function"]["arguments"]
-        a = json.loads(a) if isinstance(a, str) else a
-        rows.append((a.get("x", 0.0), a.get("y", 0.0), a.get("z", 0.0)))
-    xs = {round(r[0], 2) for r in rows}
-    zs = {round(r[2], 2) for r in rows}
+        return False, f"need >=2 add_primitive calls, got {len(adds)}"
+    rows = [(a.get("x", 0.0), a.get("y", 0.0), a.get("z", 0.0)) for a in adds]
+    xs = {round(row[0], 2) for row in rows}
+    zs = {round(row[2], 2) for row in rows}
     if len(xs) > 1 or len(zs) > 1:
         return False, f"x/z not aligned across stack: {rows}"
-    ys = sorted(round(r[1], 2) for r in rows)
-    for a, b in zip(ys, ys[1:]):
-        if b - a < 0.05:
-            return False, f"y values not separated (need ≥5 cm gap): {ys}"
+    ys = sorted(round(row[1], 2) for row in rows)
+    for low, high in zip(ys, ys[1:]):
+        if high - low < 0.05:
+            return False, f"y values not separated (need >=5 cm gap): {ys}"
     return True, f"stacked at y={ys}"
 
 
@@ -288,7 +275,7 @@ CASES = [
         ],
         "user":  "Add a red sphere behind the green cube.",
         # Behind cube → z < cube.z (further from user). Anchor is the cube
-        # alone — y/x align with cube, not midpoint with the other sphere.
+        # alone: y/x align with cube, not midpoint with the other sphere.
         "result": [
             {"tool": "add_primitive",
              "args": {"prim_type": "sphere",
@@ -466,7 +453,7 @@ CASES = [
         "scene": [{"id": "sphere-0", "type": "sphere",
                    "pos": [0.5, 1.5, -1.5], "color": [1, 0, 0], "size": 0.2}],
         "user":  "Put a green cube on top of the sphere.",
-        # Scene `size` is radius for spheres / half-edge for boxes.
+        # render-mcp `size` is radius for spheres / half-edge for boxes.
         # Sphere top y = 1.5 + 0.2 = 1.7; a default cube (half-edge 0.1)
         # sits ON the sphere when its centre y ≈ 1.8.
         "result": [
@@ -582,7 +569,7 @@ CASES = [
             {"tool": "remove_primitive", "args": {"obj_id": "sphere-0"}},
             {"tool": "remove_primitive", "args": {"obj_id": "sphere-1"}},
         ],
-        "ignore_extra": False,  # the cube must NOT be removed
+        "ignore_extra": False,
     },
 
     # ── closer to me ──────────────────────────────────────────────────────────
@@ -701,7 +688,7 @@ CASES = [
         "scene": [{"id": "sphere-0", "type": "sphere",
                    "pos": [0.0, 1.6, -1.5], "color": [1, 0, 0], "size": 0.1}],
         "user":  "Turn the sphere into a cube.",
-        # Either path is fine — update_primitive(prim_type=box) OR
+        # Either path is fine: update_primitive(prim_type=box) OR
         # remove + add(prim_type=box).  Predicate enforces "a cube
         # exists at the end" without pinning which path the LLM picked.
         "result": [],
@@ -715,12 +702,12 @@ CASES = [
                    "pos": [0.5, 1.0, -1.5], "color": [0, 0.4, 1], "size": 0.1}],
         "user":  "Put a yellow sphere 1 meter above the cube.",
         # "1m above" can mean center+1m (=2.0) or top+1m (=2.15 with
-        # half-edge 0.1 + tolerance) — accept either.
+        # half-edge 0.1 + tolerance): accept either.
         "result": [
             {"tool": "add_primitive",
              "args": {"prim_type": "sphere",
                       "r": (0.7, 1.0), "g": (0.7, 1.0),
-                      # b not pinned — Nemotron occasionally leaks the cube's blue
+                      # b not pinned: Nemotron occasionally leaks the cube's blue
                       "x": (0.45, 0.55),
                       "y": (1.95, 2.20),
                       "z": (-1.55, -1.45)}},
@@ -836,7 +823,7 @@ CASES = [
             {"tool": "update_primitive",
              "args": {"obj_id": "sphere-1", "size": (0.11, 1.0)}},
         ],
-        # Plural-restricted target — the box must NOT also grow.
+        # Plural-restricted target: the box must NOT also grow.
         "ignore_extra": False,
     },
 
@@ -939,7 +926,7 @@ CASES = [
         ],
         "user":  "Move the red sphere to the left.",
         # Either sphere is a valid pick.  Empty result asserts
-        # "≥1 mutating call happened" — we don't pin which sphere.
+        # "≥1 mutating call happened": we don't pin which sphere.
         "result": [],
     },
 
@@ -1010,7 +997,7 @@ CASES = [
         ],
         # Bare "right 1 m" (no "my") isolates pronoun resolution from
         # anchor selection.  "It" should resolve to the blue sphere
-        # (subject of the last reply), which is at y=1.6 — guarding
+        # (subject of the last reply), which is at y=1.6: guarding
         # against the model picking the yellow one at y=0.6.
         "user":  "Move it right by 1 metre.",
         "result": [
@@ -1123,7 +1110,7 @@ CASES = [
              "pos": [ 0.14, 1.60, -0.92], "color": [0, 0, 1], "size": 0.1},
         ],
         "user":  "Move everything 1 meter further away.",
-        # All three should end up 1 m further from the user — z more
+        # All three should end up 1 m further from the user: z more
         # negative by ~1 at canonical pose.  y / x unchanged.
         "result": [
             {"tool": "update_primitive",
@@ -1219,7 +1206,7 @@ CASES = [
                       "y": ( 1.55, 1.65),
                       "z": (-1.55, -1.45)}},
         ],
-        # Cube must NOT move — that's what distinguishes this from swap.
+        # Cube must NOT move: that's what distinguishes this from swap.
         "ignore_extra": False,
     },
 
@@ -1245,9 +1232,7 @@ CASES = [
     # says "Put it above the blue sphere" expecting the existing
     # pyramid to be raised.  Model has historically picked add_primitive
     # ("clone the recently-named object") instead of update_primitive on
-    # the existing pyramid.  Pass-or-fail probe — captures the bug so
-    # we can iterate; the prompt-side rule lives in the
-    # "EXISTING ID → update_primitive" section.
+    # the existing pyramid.
     {
         "name":  "pronoun_after_swap_uses_update_not_add",
         "scene": [
@@ -1325,6 +1310,49 @@ CASES = [
              "args": {"obj_id": "sphere-0", "y": (0.5, 1.61)}},
             {"tool": "update_primitive",
              "args": {"obj_id": "sphere-0", "y": (0.5, 1.61)}},
+        ],
+    },
+
+    # ── perception gating: real-world colour must come from the camera ───────
+    # The colour word is never in the utterance; the model must call
+    # look_at_current_frame FIRST and read the colour out of the answer.
+    # `vlm_answer` is what the mocked camera sees; `must_call_first` fails
+    # the case if the model mutates before (or without) looking.
+    {
+        "name":  "perception_color_of_held_object",
+        "scene": [],
+        "user":  "Make a sphere the same color as the thing I'm holding.",
+        "vlm_answer": "The user is holding a bright red apple.",
+        "must_call_first": PERCEPTION_TOOL,
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "sphere",
+                      "r": (0.7, 1.0), "g": (0.0, 0.4), "b": (0.0, 0.4)}},
+        ],
+    },
+    {
+        "name":  "perception_recolor_to_match_shirt",
+        "scene": [{"id": "sphere-0", "type": "sphere",
+                   "pos": [0.0, 1.6, -1.5], "color": [1, 1, 1], "size": 0.1}],
+        "user":  "Make the sphere the same color as my shirt.",
+        "vlm_answer": "The user's shirt is blue.",
+        "must_call_first": PERCEPTION_TOOL,
+        "result": [
+            {"tool": "update_primitive",
+             "args": {"obj_id": "sphere-0",
+                      "b": (0.5, 1.0), "r": (0.0, 0.3)}},
+        ],
+    },
+    {
+        "name":  "perception_wall_color_cube",
+        "scene": [],
+        "user":  "Add a cube that matches the color of the wall I'm looking at.",
+        "vlm_answer": "The wall is green.",
+        "must_call_first": PERCEPTION_TOOL,
+        "result": [
+            {"tool": "add_primitive",
+             "args": {"prim_type": "box",
+                      "g": (0.5, 1.0), "r": (0.0, 0.4), "b": (0.0, 0.3)}},
         ],
     },
 ]

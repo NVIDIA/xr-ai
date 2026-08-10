@@ -3,3 +3,8 @@
 
 endpoint: tcp://0.0.0.0:8330
 cloudxr_env_file: ~/.cloudxr/run/cloudxr.env
+
+# Test hook: when true, set_sim_pose/clear_sim_pose RPC ops let eval drivers
+# inject a simulated head pose that overrides real tracking for every client
+# until cleared. Keep false outside eval runs.
+allow_sim_pose: false

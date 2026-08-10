@@ -11,130 +11,124 @@ prompt and native tool schemas as the live worker, executes tool
 effects against deterministic fixtures, then checks the resulting scene
 mutations against a per-case expectation.
 
-## Prerequisites
+| Tier | Command | Runs against | Cost |
+|---|---|---|---|
+| Supervisor routing | `xr_render_demo_eval_supervisor` | faked subagents that record delegations | ~15 s/case |
+| Subagent components | `xr_render_demo_eval_subagents` | one real agent over faked leaf functions | ~30 s/case |
+| End-to-end corpus + basics | `xr_render_demo_eval` | supervisor + agents over faked services | ~30 min full |
+| Live | `xr_render_demo_live_{smoke,pose_matrix,manip,garble,explore}` | the running demo stack | minutes |
 
-The agent LLM must be running:
-
-```bash
-# weights resident in the background — start once, leave alone
-uv run --project ~/hub/xr-ai/agent-samples/model-servers model_servers
-
-```
-
-By default the harness calls the agent LLM at `http://localhost:8108`. It does
-not require the render-demo stack, capability services, MCP adapters, or LOVR.
-
-## Run
+All commands run from the eval project:
 
 ```bash
-# All built-in cases against the current system.txt
-uv run --project agent-samples/xr-render-demo/worker \
-  python agent-samples/xr-render-demo/eval/eval.py
+cd agent-samples/xr-render-demo/eval && uv sync   # once
 
-# Subset by case name — fast iteration on a single failing cluster.
-# Comma-separated; unknown names error out (mutually exclusive with the
-# positional query arg below).
-uv run --project agent-samples/xr-render-demo/worker \
-  python agent-samples/xr-render-demo/eval/eval.py \
-  --only move_left_one_meter,between_two_spheres
+# Full corpus + native cases + basics battery
+uv run xr_render_demo_eval
 
-# Watcher-friendly equivalent: write case names (newline- or
-# comma-separated; '#' comments OK) to eval/.only. Gitignored.
-# Active subset is echoed at startup.
+# The basics battery alone: the most common utterances, their perturbation
+# classes, and history-bearing variants. Run after EVERY prompt or ops
+# change; full-suite variance hides single-case damage.
+uv run xr_render_demo_eval basics
 
-# One ad-hoc query (prints the raw LLM response)
-uv run --project agent-samples/xr-render-demo/worker \
-  python agent-samples/xr-render-demo/eval/eval.py "Move the cube up 30 cm"
+# Subset by case name (space-separated; unknown names error out)
+uv run xr_render_demo_eval move_left_one_meter between_two_spheres
 
-# Score a prompt file other than the live worker's system.txt — e.g.
-# main's version, a draft, or a checkout from another branch.
-uv run --project agent-samples/xr-render-demo/worker \
-  python agent-samples/xr-render-demo/eval/eval.py --prompt /tmp/alt-system.txt
-
-# Score against a hosted model (e.g. nvidia/nemotron-3-super-120b-a12b at
-# build.nvidia.com) instead of the local vLLM on 8108.  Set NVIDIA_API_KEY
-# in the env first (or pass --agent-api-key).
-export NVIDIA_API_KEY=nvapi-...
-uv run --project agent-samples/xr-render-demo/worker \
-  python agent-samples/xr-render-demo/eval/eval.py \
-  --agent-llm   https://integrate.api.nvidia.com/v1/chat/completions \
-  --agent-model nvidia/nemotron-3-super-120b-a12b
+# Routing and component tiers, optionally filtered by agent or case name
+uv run xr_render_demo_eval_supervisor
+uv run xr_render_demo_eval_subagents placement
 ```
 
-Run `uv sync` in `agent-samples/xr-render-demo/worker` before the first eval.
+The offline tiers need only the agent LLM (default `http://localhost:8107`);
+they do not require the demo stack, capability services, or LOVR.
+
+## Live drivers
+
+Live drivers join the running stack (`uv run python main.py` from the sample
+directory) as synthetic participants, inject typed text, set a simulated
+head pose, and score real scene state. They require `allow_sim_pose: true`
+in `yaml/openxr_service.yaml` (off by default; flip it for eval runs and
+restart the stack). Isolation rules:
+
+- Fresh participant id per case: transcript history otherwise bleeds between
+  cases and collapses supervisor behavior.
+- Clear the scene between cases through the scene RPC: leftovers make
+  referents ambiguous and invite anchoring on stale objects.
+- Vary prompt phrasing across cases: repeating one sentence builds a
+  self-history no real user produces.
+- Never filter a run's output in the run command; write the full log to a
+  file and filter the file.
+- Repeat runs (3x) before believing any single-run delta; near-tie decisions
+  flip run to run even at temperature 0.
+
+`xr_render_demo_live_garble` covers speech-to-text noise (homophones,
+truncations, corrections, stutters) with restraint scoring: wrong mutations
+fail, clarifying replies pass. `xr_render_demo_live_explore` sends novel
+conversational phrasings scored by intent invariants; promote any violation
+into a permanent tier case, then fix.
+
+## Prompt-tuning law
+
+The current agent model follows templates and contrast pairs; it ignores
+prohibitions. Fix behavior with worked examples, and pair every
+refuse-example with a proceed-example so it does not contaminate neighboring
+behaviors.
+
+When even worked examples fail (the model keeps resolving what it should
+copy) move the resolution into code and rename the tool parameter so the
+schema asks for exactly what the model does reliably. Anchor descriptors are
+the precedent: renaming the parameter to `anchor_words` with a copy-verbatim
+description fixed in one step what five prompt variants could not, with
+`spatial_ops` resolving shape synonyms, mangled nouns, and color words
+against the scene deterministically.
 
 ## Watcher
 
-`eval_watch.sh` polls `system.txt`'s sha1 once per second (hash, not
-mtime — editors and language servers re-save the file without
-changing bytes when you switch focus). This allows a coding agent to
-iterate on the prompt and read scores out of `/tmp/eval_loop.log`
-without the user re-launching `eval.py` between rounds. Any content
-change aborts the running eval and starts a new one once the file
-has been quiet for 10 seconds.
+`eval_watch.sh` polls a combined sha1 of every worker prompt file
+(`supervisor_prompt.txt` and `agents/*/prompt.txt`) once per second (hash,
+not mtime: editors re-save without changing bytes). Any content change
+aborts the running eval and starts a new corpus run once the prompts have
+been quiet for 10 seconds, so a prompt-tuning loop can read scores out of
+`/tmp/eval_loop.log` without relaunching between rounds.
 
 ```bash
 agent-samples/xr-render-demo/eval/eval_watch.sh
 tail -f /tmp/eval_loop.log
-
-agent-samples/xr-render-demo/eval/eval_watch.sh /path/to/alt.txt   # different prompt
-kill $(cat /tmp/eval_watch.pid)                                     # stop
+kill $(cat /tmp/eval_watch.pid)   # stop
 ```
 
-Only one watcher runs at a time. A second invocation refuses to
-start, exits non-zero, and prints the existing PID along with the
-two ways to handle it (`tail` the log of the running watcher, or
-`kill <pid>` and rerun). The script never kills processes it didn't
-spawn — that decision stays with the caller, which keeps the behavior
-predictable across users / sandboxes / CI runners.
-
-`eval_watch.sh` is Linux-only. The single-instance guard reads
-`/proc/<pid>/cmdline` to confirm the stored PID is the watcher (not
-some unrelated process that recycled the same PID); macOS has no
-`/proc`, so the script will not run there.
-
-Score history at a glance:
-
-```bash
-grep "passed$" /tmp/eval_loop.log | tail
-```
+Only one watcher runs at a time; a second invocation refuses to start and
+prints the existing PID. Linux-only (the single-instance guard reads
+`/proc/<pid>/cmdline`).
 
 ## Writing a case
 
-Read `eval.py`'s `CASES` list — every shape (single-turn, pose
-override, multi-turn `history`, undo `recent_moves`) is exemplified
-there. Copy the closest existing case and edit. The case dict is
-what the harness consumes directly; there's no case schema layer.
+The end-to-end corpus lives in `xr_render_demo_eval/cases.py` (dict-shaped;
+pose override, multi-turn `history`, and undo `recent_moves` are all
+exemplified). Native and basics cases are `Case` dataclasses in
+`xr_render_demo_eval/harness.py`; routing and component cases live in
+`supervisor.py` and `subagents.py`. Copy the closest existing case and edit.
 
 ## Don't train on the test set
 
-Prompt worked-examples and case fixtures share the same model. The
-harness audits at startup for four kinds of overlap and prints a
-warning for any it finds:
+Prompt worked examples and case fixtures share the same model, so the
+harness audits every worker prompt at startup (all three offline tiers run
+it) and warns on:
 
-1. Verbatim user utterance from a case appearing in `system.txt`.
-2. Concrete scene coordinates (formatted like `(0.50, 1.60, -1.50)`)
-   from a case appearing in `system.txt`.
-3. `recent_moves` coordinates from a case appearing in `system.txt`.
-4. **Reserved prompt vocabulary** — any colour or shape word from the
-   eval-case vocabulary (`_EVAL_VOCAB_COLORS` / `_EVAL_VOCAB_SHAPES`
-   in `eval.py`) appearing inside a worked-example section of
-   `system.txt`. Worked-example sections are triple-backtick blocks
-   and any block starting with `WORKED EXAMPLE`, `Example:`,
-   `iter N:`, or `tool_call N:`; the first blank line after the
-   marker ends the block. Rule narration outside those blocks may
-   still mention the eval vocabulary generically (e.g. the colour
-   table, anchor-routing rules) — the restriction is only on the
-   worked examples, which are the strings the model is most likely
-   to memorise as a template.
+1. A case utterance from any tier appearing verbatim in a prompt.
+2. A case fixture id appearing in a prompt.
+3. A quoted prompt example pairing an eval-vocabulary color
+   (red/green/blue/yellow/cyan/orange/purple/white/black) with an
+   eval-vocabulary shape (sphere/cube/box/ball).
 
-Fix overlaps by changing the prompt example, not the case. For
-check #4, use colours and shapes outside the eval vocabulary
-(turquoise / teal / lavender / magenta / cone / cylinder / capsule)
-when reaching for a fixture word in a worked example.
+Fix overlaps by changing the prompt, not the case; use colors and shapes
+outside the eval vocabulary (teal / lavender / magenta / turquoise, cone /
+cylinder / capsule / torus) in worked examples. A case that only passes
+while the prompt contains its vocabulary is scoring recall, not skill.
 
 ## What the harness does not cover
 
-- The live worker pipeline (VAD, STT, TTS, history bookkeeping).
+- The live worker pipeline (VAD, STT, TTS, history bookkeeping); the live
+  tier covers it.
 - Real scene-service / LOVR effects (fixture-succeeded).
-- Real visual queries (`look_at_current_frame`, `look_at_past_frame`) — stubbed.
+- Real visual queries (`look_at_current_frame`, `look_at_past_frame`): stubbed.

@@ -594,7 +594,7 @@ For engineers and agents working in the repo:
 | [`docs/source/overview/architecture.md`](docs/source/overview/architecture.md) | System topology, runtime data paths, ownership, and extension boundaries |
 | [`docs/source/components/launcher-and-process-model.md`](docs/source/components/launcher-and-process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
 | [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) | VLM / STT / TTS / LLM / embedding server reference + worker call examples |
-| [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) | xr-render-demo architecture: native functions, agentic loop, XR lifecycle |
+| [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) | xr-render-demo architecture: native functions, supervisor + subagents, XR lifecycle |
 | [`docs/source/guides/adding-a-sample.md`](docs/source/guides/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
 | [`docs/source/guides/adding-cloudxr.md`](docs/source/guides/adding-cloudxr.md) | Wiring CloudXR into a sample |
 | [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md) | HF / NGC token management |

@@ -3,3 +3,8 @@
 
 endpoint: tcp://0.0.0.0:8330
 cloudxr_env_file: ~/.cloudxr/run/cloudxr.env
+
+# Test hook: the eval live drivers need a simulated head pose; flip to true
+# while running them. The injected pose overrides real tracking for every
+# client until cleared, so it must never ship enabled.
+allow_sim_pose: false

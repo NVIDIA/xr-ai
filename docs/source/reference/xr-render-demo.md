@@ -94,7 +94,7 @@ The worker reads two config files:
 
 ### Nemotron-3-Nano-Omni-30B-A3B-Reasoning — port 8108
 
-A vLLM `execvp` shim — a small Python wrapper that reads YAML configuration,
+A vLLM `execvp` shim: a small Python wrapper that reads YAML configuration,
 sets `HF_HOME` and token environment variables, then `os.execvp`s into `vllm serve`. The
 Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
 and tool calling from that point on.
@@ -167,8 +167,8 @@ one is in-flight.
 
 ## TTS — Piper
 
-Port 8105. `rhasspy/piper-voices` ONNX. Runs on CPU, ~100 ms per sentence. All
-synthesis runs in a thread pool so the asyncio loop is never blocked.
+Served on port 8105. The voice runtime streams the supervisor's final
+reply to Piper and returns the audio to the participant.
 
 ```
 voice.output topic (agentic-loop quick-ack or final response)
@@ -337,15 +337,13 @@ Refer to
 for the case format and the watch-mode loop. Run with:
 
 ```bash
-uv run --project agent-samples/xr-render-demo/worker \
-  python agent-samples/xr-render-demo/eval/eval.py
+uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval
 ```
 
 ### Prompt/eval overlap audit
 
-The harness audits the system prompt's worked-example blocks against every
-case fixture at startup and warns if they share specifics: verbatim user
-utterances (≥12 chars), scene coordinates rendered as `(x.xx, y.yy, z.zz)`,
-`recent_moves` coords, or any reserved colour or shape word that appears in
-both a case fixture and a worked-example block. This guards against the eval
-cases overfitting to the prompt's worked examples.
+Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker
+prompt against every tier's case inputs at startup and warns on overlap:
+verbatim case utterances, case fixture ids, and any quoted prompt example
+pairing an eval-vocabulary color with an eval-vocabulary shape. Clearing a
+warning means changing the prompt, not the case.

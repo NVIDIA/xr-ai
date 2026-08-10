@@ -24,6 +24,7 @@ _DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "openxr_service.yaml"
 class Config:
     endpoint: str
     cloudxr_env_file: Path | None
+    allow_sim_pose: bool
 
 
 def _load_config(path: Path) -> Config:
@@ -35,6 +36,7 @@ def _load_config(path: Path) -> Config:
     return Config(
         endpoint=str(raw.get("endpoint", "tcp://0.0.0.0:8330")),
         cloudxr_env_file=env_file,
+        allow_sim_pose=bool(raw.get("allow_sim_pose", False)),
     )
 
 
@@ -48,7 +50,7 @@ async def _serve(config: Config, ready_file: Path | None) -> None:
     from .session import HardwarePoseSource
 
     source = HardwarePoseSource()
-    server = RPCServer(config.endpoint, OpenXRService(source).dispatch)
+    server = RPCServer(config.endpoint, OpenXRService(source, allow_sim_pose=config.allow_sim_pose).dispatch)
     logger.info("openxr-service rpc={}", config.endpoint)
     try:
         await server.serve(ready=ready_file.touch if ready_file else None)

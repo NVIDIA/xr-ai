@@ -2,22 +2,21 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Watch the xr-render-demo system prompt and re-run the eval on every
+# Watch every xr-render-demo worker prompt and re-run the eval on any
 # change.  See eval/README.md for behaviour (debounce, single-instance,
 # log location).
 #
-# Usage: ./eval_watch.sh [PROMPT_PATH]
+# Usage: ./eval_watch.sh [PROMPTS_DIR]
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_PROMPT="$HERE/../worker/xr_render_demo_worker/prompts/system.txt"
 
-PROMPT="${1:-$DEFAULT_PROMPT}"
+PROMPTS_DIR="${1:-$DEFAULT_PROMPTS_DIR}"
 LOG=/tmp/eval_loop.log
 LOCK=/tmp/eval_watch.pid
-EVAL="$HERE/eval.py"
-WORKER="$HERE/../worker"
+EVAL_PROJECT="$HERE"
 SELF="$(readlink -f "$0")"
 DEBOUNCE_SECS=10
 TIME_FMT='+%H:%M:%S'
@@ -56,7 +55,8 @@ echo $$ > "$LOCK"
 # editors / language servers / git tools re-save the file without changing
 # bytes (focus changes, refresh-on-blur, etc.).
 file_hash() {
-    sha1sum "$PROMPT" 2>/dev/null | awk '{print $1}' || true
+    find "$PROMPTS_DIR" -name '*prompt*.txt' -print0 2>/dev/null \
+        | sort -z | xargs -0 sha1sum 2>/dev/null | sha1sum | awk '{print $1}' || true
     return 0
 }
 
@@ -79,7 +79,7 @@ trigger() {
     {
         echo
         echo "═══════════════════════════════════════════════════════════════"
-        echo "  $(date "$TIME_FMT")  prompt=$PROMPT"
+        echo "  $(date "$TIME_FMT")  prompts=$PROMPTS_DIR"
         echo "═══════════════════════════════════════════════════════════════"
     } >> "$LOG"
     # Reuse the worker environment so schema discovery imports the exact
@@ -97,7 +97,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
-echo "watching $PROMPT — log $LOG  debounce ${DEBOUNCE_SECS}s  (stop: kill $$)"
+echo "watching $PROMPTS_DIR prompts — log $LOG  debounce ${DEBOUNCE_SECS}s  (stop: kill $$)"
 echo "started $(date "$TIME_FMT") (PID $$)" >> "$LOG"
 
 # Baseline run on startup so the user sees a score immediately.

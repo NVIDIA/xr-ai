@@ -418,6 +418,14 @@ class ProcessorEndpoint:
         """Queue a PCM audio chunk for playback by its target participant."""
         await self._push.send(encode(MsgType.RETURN_AUDIO, chunk))
 
+    async def inject_participant_event(self, event: ParticipantEvent) -> None:
+        """Publish a synthetic participant event; a supported seam for test drivers."""
+        await self._push.send(encode(MsgType.PARTICIPANT_EVENT, event))
+
+    async def inject_data(self, msg: DataMessage) -> None:
+        """Publish a synthetic upstream data message; a supported seam for test drivers."""
+        await self._push.send(encode(MsgType.DATA_MESSAGE, msg))
+
     async def flush_return_audio(self, participant_id: str) -> None:
         """
         Drop any return audio currently queued at the hub for *participant_id*.
