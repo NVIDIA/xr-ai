@@ -37,6 +37,7 @@ on:
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
       - ".github/scripts/remove_docs_preview.sh"
+      - ".github/actions/deploy-docs-site/action.yaml"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
@@ -45,6 +46,7 @@ on:
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
       - ".github/scripts/remove_docs_preview.sh"
+      - ".github/actions/deploy-docs-site/action.yaml"
 
 concurrency:
   # A tag deployment also rebuilds ``main``. Serialize deployments so an older

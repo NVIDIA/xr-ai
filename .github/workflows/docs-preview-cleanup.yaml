@@ -40,11 +40,24 @@ jobs:
             .github/scripts
             .github/actions
       - name: Remove preview/pr-${{ github.event.pull_request.number }}
+        id: remove
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         shell: bash
         run: |
-          .github/scripts/remove_docs_preview.sh \
-            "${{ github.event.pull_request.number }}"
+          set -euo pipefail
+          before="$(git ls-remote "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            refs/heads/gh-pages | cut -f1)"
+          .github/scripts/remove_docs_preview.sh "$PR_NUMBER"
+          after="$(git ls-remote "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            refs/heads/gh-pages | cut -f1)"
+          if [[ "$before" != "$after" ]]; then
+            echo "removed=true" >> "$GITHUB_OUTPUT"
+          fi
+      # Most closes have no preview to remove — a fork PR never had one, and
+      # neither did a PR that never touched docs. Only deploy when the branch
+      # actually moved.
       - name: Deploy the site
+        if: steps.remove.outputs.removed == 'true'
         uses: ./.github/actions/deploy-docs-site
