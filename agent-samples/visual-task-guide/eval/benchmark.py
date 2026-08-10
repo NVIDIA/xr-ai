@@ -11,11 +11,12 @@ from typing import Any
 
 from nat.builder.workflow_builder import WorkflowBuilder
 from visual_task_guide_worker.agent import TaskGuideAgentConfig
+from visual_task_guide_worker.finger_count import parse_finger_count
 from visual_task_guide_worker.models import GuideAgentRequest
 from visual_task_guide_worker.task_functions import TaskStateFunctionsConfig
 from visual_task_guide_worker.task_store import TaskStore
 from xr_ai_models import load_models_config, make_llm, make_vlm
-from xr_ai_nat.functions.rag import RAGFunctionsConfig
+from xr_ai_nat.functions.rag import RAGFunctionsConfig, RetrieveResult
 from xr_ai_nat.llm import ModelsLLMConfig
 
 try:
@@ -63,8 +64,14 @@ async def run_eval(
                     max_tokens=40,
                     temperature=0.0,
                 )
-                text = (response.content or "").strip().casefold()
-                passed = all(term in text for term in case["required_terms"])
+                text = (response.content or "").strip()
+                parsed = parse_finger_count(text)
+                passed = (
+                    parsed is not None
+                    and parsed.count == case["expected_count"]
+                    and parsed.hands == case["expected_hands"]
+                    and parsed.confidence in {"high", "medium"}
+                )
             except Exception as error:
                 text, passed = f"{type(error).__name__}: {error}", False
             results.append(
@@ -86,6 +93,9 @@ async def run_eval(
                 "task_knowledge",
                 RAGFunctionsConfig(endpoint=rag_endpoint),
             )
+            knowledge_group = await builder.get_function_group("task_knowledge")
+            knowledge_functions = await knowledge_group.get_all_functions()
+            retrieve = knowledge_functions["task_knowledge__retrieve"]
             guide = await builder.add_function("task_guide_agent", TaskGuideAgentConfig())
 
             for index, case in enumerate(GUIDE_CASES):
@@ -93,6 +103,16 @@ async def run_eval(
                     continue
                 before_revision = store.progress("eval-user").revision
                 try:
+                    retrieval = RetrieveResult.model_validate(
+                        await retrieve.ainvoke({"query": case["question"], "top_k": 2})
+                    )
+                    expected_source = case.get("knowledge_source")
+                    expected_term = case.get("knowledge_term", "").casefold()
+                    retrieval_passed = expected_source is None or any(
+                        result.source == expected_source
+                        and expected_term in result.text.casefold()
+                        for result in retrieval.results
+                    )
                     reply = await guide.ainvoke(
                         GuideAgentRequest(
                             participant_id="eval-user",
@@ -105,8 +125,12 @@ async def run_eval(
                         all(term in text for term in case["required_terms"])
                         and len(reply.response.split()) <= case["max_words"]
                         and store.progress("eval-user").revision == before_revision
+                        and retrieval_passed
                     )
-                    output: Any = reply.response
+                    output: Any = {
+                        "response": reply.response,
+                        "retrieved_sources": [result.source for result in retrieval.results],
+                    }
                 except Exception as error:
                     passed = False
                     output = f"{type(error).__name__}: {error}"

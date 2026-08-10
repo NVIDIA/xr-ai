@@ -5,6 +5,5 @@ id: show-one
 title: Show one
 instructions: Hold up exactly one finger and keep your hand visible to the camera.
 visual_completion_criteria: Exactly one extended finger is clearly visible and all other fingers are folded.
-knowledge_files:
-  - knowledge/counting.md
-  - knowledge/presentation.md
+expected_finger_count: 1
+expected_hands: 1

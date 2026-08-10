@@ -17,12 +17,14 @@ Vision never advances the task. Only explicit `start task`, `next step`, and
 `reset task` commands change state. `task status` reads it. These controls,
 on-demand vision, RAG, and the root workflow are native NAT functions.
 
-## Task folder
+## Bundled task
 
 `tasks/hand-counting/workflow.yaml` orders ten separate step YAML files. Each
-step declares its instruction, visible criterion, and Markdown knowledge about
-counting and presenting hands. Copy the folder and change `task_directory` in
-`yaml/visual_task_guide_worker.yaml` to define another workflow.
+step declares its instruction, visible criterion, expected finger count, and
+expected visible-hand count. Deterministic validation reads those fields rather
+than inferring the answer from the step number. The RAG service is intentionally
+configured for this sample's bundled `knowledge/` directory; this PR does not
+claim a general copy-and-retarget task-folder contract.
 
 ## Run
 

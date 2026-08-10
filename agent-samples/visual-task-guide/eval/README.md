@@ -27,8 +27,9 @@ uv run --project agent-samples/visual-task-guide/eval visual_task_guide_eval \
   --output agent-samples/visual-task-guide/eval/results/local.json
 ```
 
-The harness checks the structured finger count, the 30-word guide limit,
-native dense RAG use, and immutable task revision. Native workflow tests separately
-cover deterministic next-step and current-step validation queries. Before
-model calls the harness audits distinctive fixture markers against both prompts
-to prevent test leakage.
+The harness parses exact structured count/hand/confidence fields, checks the
+30-word guide limit, verifies a distinctive RAG source and fact, and confirms
+the task revision stays immutable. Native workflow tests separately cover
+deterministic next-step and current-step validation queries. Before model calls,
+the harness audits distinctive fixture markers against both prompts to prevent
+test leakage.

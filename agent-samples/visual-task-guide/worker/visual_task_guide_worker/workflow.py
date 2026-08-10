@@ -167,17 +167,19 @@ async def task_guide_workflow(config: TaskGuideWorkflowConfig, builder: Builder)
                 response = format_task_status(current)
             else:
                 assert current.current_step is not None
-                expected = current.progress.step_index + 1
+                expected_count = current.current_step.expected_finger_count
+                expected_hands = current.current_step.expected_hands
                 count = await observe_count(request.participant_id, current.current_step.id)
                 if count is None or count.confidence == "low":
                     response = f"{current.current_step.title} — I do not have a reliable finger count yet."
-                elif count.count == expected:
+                elif count.count == expected_count and count.hands == expected_hands:
                     fingers = "finger" if count.count == 1 else "fingers"
                     response = f"{current.current_step.title} — Yes, I see {count.count} extended {fingers}."
                 else:
                     response = (
-                        f"{current.current_step.title} — Not yet; I see {count.count}, "
-                        f"but this step needs {expected}."
+                        f"{current.current_step.title} — Not yet; I see {count.count} extended fingers "
+                        f"across {count.hands} visible hands. "
+                        f"This step requires: {current.current_step.visual_completion_criteria}"
                     )
         elif not command:
             response = format_task_status(current)
@@ -219,7 +221,7 @@ async def task_guide_workflow(config: TaskGuideWorkflowConfig, builder: Builder)
 
     yield FunctionInfo.from_fn(
         guide,
-        description="Control a hand-counting task or answer from its latest monitored observation.",
+        description="Control a hand-counting task or answer from its latest requested observation.",
     )
 
 

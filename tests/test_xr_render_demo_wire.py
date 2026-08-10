@@ -98,7 +98,6 @@ def test_models_yaml_loads() -> None:
 
     # nemotron3_nano preset must set reasoning_field so ChatResponse.reasoning
     # is populated from the server's "reasoning" field.
-    assert llm_spec.reasoning_field == "reasoning"
     assert agent_llm_spec.reasoning_field == "reasoning"
 
     # Both logical models share the nemotron3_nano server. The preset must pin

@@ -17,6 +17,8 @@ class TaskStatusRequest(StrictModel):
 
 
 class TaskStatusResult(StrictModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     progress: TaskProgress
     current_step: TaskStep | None
     next_step: TaskStep | None

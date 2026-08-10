@@ -14,32 +14,33 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaskStep(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
     title: str
     instructions: str
     visual_completion_criteria: str
-    knowledge_files: list[str] = Field(default_factory=list)
+    expected_finger_count: int = Field(ge=0, le=10)
+    expected_hands: int = Field(ge=0, le=2)
 
 
 class TaskDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
     title: str
-    step_files: list[str] = Field(min_length=1)
+    step_files: tuple[str, ...] = Field(min_length=1)
 
 
 class TaskProgress(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     participant_id: str
     task_id: str
     state: Literal["not_started", "running", "completed"] = "not_started"
     revision: int = 0
     step_index: int = 0
-    transitions: list[str] = Field(default_factory=list)
+    transitions: tuple[str, ...] = ()
 
 
 class TaskStore:
@@ -65,12 +66,7 @@ class TaskStore:
 
     def _load_step(self, relative: str) -> TaskStep:
         path = self._resolve_inside(relative)
-        step = TaskStep.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
-        for knowledge in step.knowledge_files:
-            candidate = self._resolve_inside(knowledge)
-            if not candidate.is_file():
-                raise ValueError(f"missing knowledge file: {knowledge}")
-        return step
+        return TaskStep.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
 
     def _load_progress_unlocked(self, participant_id: str) -> TaskProgress:
         return self._progress.get(
@@ -81,6 +77,11 @@ class TaskStore:
     def progress(self, participant_id: str) -> TaskProgress:
         with self._lock:
             return self._load_progress_unlocked(participant_id)
+
+    def release(self, participant_id: str) -> None:
+        """Drop all session-local state for a disconnected participant."""
+        with self._lock:
+            self._progress.pop(participant_id, None)
 
     def current_step(self, progress: TaskProgress) -> TaskStep | None:
         return None if progress.state == "completed" else self.steps[progress.step_index]
@@ -101,7 +102,7 @@ class TaskStore:
                 update={
                     "state": "running",
                     "revision": progress.revision + 1,
-                    "transitions": [*progress.transitions, "start"],
+                    "transitions": (*progress.transitions, "start"),
                 }
             )
             self._save_unlocked(progress)
@@ -115,7 +116,7 @@ class TaskStore:
                     "state": "not_started",
                     "revision": progress.revision + 1,
                     "step_index": 0,
-                    "transitions": [*progress.transitions, "reset"],
+                    "transitions": (*progress.transitions, "reset"),
                 }
             )
             self._save_unlocked(progress)
@@ -134,7 +135,7 @@ class TaskStore:
                     "state": "completed" if next_index >= len(self.steps) else "running",
                     "revision": progress.revision + 1,
                     "step_index": min(next_index, len(self.steps) - 1),
-                    "transitions": [*progress.transitions, "advance"],
+                    "transitions": (*progress.transitions, "advance"),
                 }
             )
             self._save_unlocked(progress)

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose live monitoring, explicit task controls, guidance, and voice I/O."""
+"""Compose on-demand vision, explicit task controls, guidance, and voice I/O."""
 
 from __future__ import annotations
 
@@ -92,13 +92,14 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
             "task_guide_workflow",
             TaskGuideWorkflowConfig(),
         )
-        control_group = await builder.get_function_group("task_control")
-        control_functions = await control_group.get_all_functions()
-        reset_task = control_functions["task_control__reset_task"]
+        state_group = await builder.get_function_group("task_state")
+        state_functions = await state_group.get_all_functions()
+        get_status = state_functions["task_state__get_task_status"]
 
         async def participant_joined(participant_id: str) -> None:
+            store.release(participant_id)
             status = TaskStatusResult.model_validate(
-                await reset_task.ainvoke({"participant_id": participant_id})
+                await get_status.ainvoke({"participant_id": participant_id})
             )
             await voice.transport.endpoint.send_return_data(
                 DataMessage(
@@ -111,6 +112,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
 
         async def participant_left(participant_id: str) -> None:
             vision_config.release(participant_id)
+            store.release(participant_id)
 
         handler = as_voice_handler(
             workflow,
@@ -133,6 +135,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         finally:
             for participant_id in voice.transport.endpoint.connected_participants:
                 vision_config.release(participant_id)
+                store.release(participant_id)
 
 
 __all__ = ["run_app"]

@@ -5,6 +5,5 @@ id: show-five
 title: Show five
 instructions: Hold up all five fingers on one hand and keep your hand visible to the camera.
 visual_completion_criteria: Exactly five extended fingers are clearly visible on one hand.
-knowledge_files:
-  - knowledge/counting.md
-  - knowledge/presentation.md
+expected_finger_count: 5
+expected_hands: 1

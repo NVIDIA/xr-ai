@@ -5,6 +5,5 @@ id: show-six
 title: Show six
 instructions: Hold up exactly six fingers across both hands and keep both hands visible to the camera.
 visual_completion_criteria: Exactly six extended fingers are clearly visible across two non-overlapping hands.
-knowledge_files:
-  - knowledge/counting.md
-  - knowledge/presentation.md
+expected_finger_count: 6
+expected_hands: 2

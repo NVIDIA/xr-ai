@@ -10,7 +10,8 @@ GUIDE_CASES = (
         "observation": "Two hands overlap near the edge of the frame.",
         "required_terms": ("side by side",),
         "max_words": 30,
-        "requires_knowledge": True,
+        "knowledge_source": "presentation.md",
+        "knowledge_term": "both hands side by side",
     },
     {
         "name": "latest_observation_answer",
@@ -18,7 +19,6 @@ GUIDE_CASES = (
         "observation": "Seven extended fingers are clearly visible across two separated hands.",
         "required_terms": ("seven",),
         "max_words": 30,
-        "requires_knowledge": False,
     },
 )
 
@@ -27,13 +27,15 @@ VLM_CASES = (
         "name": "two_finger_fixture",
         "fixture": "two-extended-fingers.jpg",
         "question": "Apply the configured finger-count contract to this image.",
-        "required_terms": ("count=2", "confidence="),
+        "expected_count": 2,
+        "expected_hands": 1,
     },
     {
         "name": "closed_fist_fixture",
         "fixture": "closed-fist.jpg",
         "question": "Apply the configured finger-count contract to this image.",
-        "required_terms": ("count=0", "confidence="),
+        "expected_count": 0,
+        "expected_hands": 1,
     },
 )
 

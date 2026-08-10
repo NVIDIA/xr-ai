@@ -6,7 +6,7 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 _COUNT = re.compile(r"\bCOUNT\s*=\s*(10|[0-9])\b", re.IGNORECASE)
 _HANDS = re.compile(r"\bHANDS\s*=\s*([0-2])\b", re.IGNORECASE)
@@ -22,6 +22,14 @@ class FingerCount(BaseModel):
     confidence: Literal["high", "medium", "low"]
     note: str = ""
 
+    @model_validator(mode="after")
+    def count_must_fit_visible_hands(self) -> "FingerCount":
+        if self.hands == 0 and self.count != 0:
+            raise ValueError("a nonzero count requires at least one visible hand")
+        if self.hands == 1 and self.count > 5:
+            raise ValueError("one visible hand cannot have more than five extended fingers")
+        return self
+
 
 def parse_finger_count(text: str) -> FingerCount | None:
     count = _COUNT.search(text)
@@ -30,12 +38,15 @@ def parse_finger_count(text: str) -> FingerCount | None:
     if count is None or hands is None or confidence is None:
         return None
     note = _NOTE.search(text)
-    return FingerCount(
-        count=int(count.group(1)),
-        hands=int(hands.group(1)),
-        confidence=confidence.group(1).casefold(),
-        note=note.group(1).strip(" .") if note else "",
-    )
+    try:
+        return FingerCount(
+            count=int(count.group(1)),
+            hands=int(hands.group(1)),
+            confidence=confidence.group(1).casefold(),
+            note=note.group(1).strip(" .") if note else "",
+        )
+    except ValidationError:
+        return None
 
 
 def format_finger_count(result: FingerCount) -> str:

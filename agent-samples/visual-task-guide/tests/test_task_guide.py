@@ -12,9 +12,15 @@ from eval.benchmark import audit_fixture_leakage
 from eval.cases import GUIDE_CASES, VLM_CASES
 from nat.builder.workflow_builder import WorkflowBuilder
 from nat.plugin_api import Builder, FunctionBaseConfig, FunctionInfo, FunctionRef, register_function
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, ValidationError
+from visual_task_guide_worker.config import load_config
 from visual_task_guide_worker.finger_count import format_finger_count, parse_finger_count
-from visual_task_guide_worker.models import GuideAgentRequest, TaskGuideReply, TaskGuideRequest
+from visual_task_guide_worker.models import (
+    GuideAgentRequest,
+    TaskGuideReply,
+    TaskGuideRequest,
+    TaskStatusResult,
+)
 from visual_task_guide_worker.task_functions import (
     TaskControlFunctionsConfig,
     TaskStateFunctionsConfig,
@@ -63,6 +69,8 @@ def test_deployed_eval_covers_both_prompts_without_fixture_leakage() -> None:
     audit_fixture_leakage()
     assert GUIDE_CASES and VLM_CASES
     assert all(case["max_words"] <= 30 for case in GUIDE_CASES)
+    assert any(case.get("knowledge_source") for case in GUIDE_CASES)
+    assert all("expected_count" in case and "expected_hands" in case for case in VLM_CASES)
     models = json.loads((_SAMPLE / "yaml/models.local.json").read_text(encoding="utf-8"))
     assert models["models"]["guide_llm"]["adapter"] == {"preset": "nemotron3_nano"}
     assert models["models"]["guide_llm"]["endpoint"]["base_url"] == "http://localhost:8107"
@@ -93,6 +101,7 @@ def test_sample_uses_standard_web_client_without_recorded_video_service() -> Non
     assert "ChatCompletionConfig" in agent
     assert "ToolCallAgentWorkflowConfig" not in agent
     assert 'text_topic=_OUTPUT_TOPIC' in app
+    assert app.count("store.release(participant_id)") >= 2
 
 
 def test_bundled_workflow_counts_from_one_through_ten(tmp_path) -> None:
@@ -110,7 +119,9 @@ def test_bundled_workflow_counts_from_one_through_ten(tmp_path) -> None:
         "show-nine",
         "show-ten",
     ]
-    assert all(step.knowledge_files for step in store.steps)
+    assert [step.expected_finger_count for step in store.steps] == list(range(1, 11))
+    assert [step.expected_hands for step in store.steps] == [1] * 5 + [2] * 5
+    assert all(step.visual_completion_criteria for step in store.steps)
 
 
 def test_task_store_requires_explicit_state_transitions(tmp_path) -> None:
@@ -133,6 +144,61 @@ def test_task_store_requires_explicit_state_transitions(tmp_path) -> None:
     assert store.current_step(reset).id == "show-one"
 
 
+def test_task_status_is_an_immutable_snapshot(tmp_path) -> None:
+    store = _store(tmp_path)
+    progress = store.start("alice")
+    snapshot = TaskStatusResult(
+        progress=progress,
+        current_step=store.current_step(progress),
+        next_step=store.next_step(progress),
+    )
+
+    with pytest.raises(ValidationError, match="frozen"):
+        snapshot.progress.state = "completed"
+    with pytest.raises(ValidationError, match="frozen"):
+        snapshot.progress.transitions = (*snapshot.progress.transitions, "bypass")
+    assert snapshot.current_step is not None
+    with pytest.raises(ValidationError, match="frozen"):
+        snapshot.current_step.title = "Bypassed"
+
+    current = store.progress("alice")
+    assert current.state == "running"
+    assert current.transitions == ("start",)
+
+
+def test_release_drops_disconnected_participant_session(tmp_path) -> None:
+    store = _store(tmp_path)
+    store.start("alice")
+    store.advance("alice")
+
+    store.release("alice")
+    reconnected = store.progress("alice")
+
+    assert reconnected.state == "not_started"
+    assert reconnected.revision == 0
+    assert reconnected.step_index == 0
+    assert reconnected.transitions == ()
+
+
+def test_shipped_config_uses_packaged_prompt_and_disables_zero_idle_timeout() -> None:
+    config = load_config(_SAMPLE / "yaml/visual_task_guide_worker.yaml")
+
+    assert config.caption_prompt.startswith("Inspect one current camera frame")
+    assert config.idle_timeout_secs is None
+
+
+def test_worker_config_rejects_non_mapping_and_negative_idle_timeout(tmp_path) -> None:
+    invalid_shape = tmp_path / "invalid-shape.yaml"
+    invalid_shape.write_text("- not\n- a mapping\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="YAML mapping"):
+        load_config(invalid_shape)
+
+    invalid_idle = tmp_path / "invalid-idle.yaml"
+    invalid_idle.write_text("idle_timeout_secs: -1\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="non-negative"):
+        load_config(invalid_idle)
+
+
 def test_task_store_completes_only_after_ten_explicit_advances(tmp_path) -> None:
     store = _store(tmp_path)
     store.start("alice")
@@ -153,6 +219,17 @@ def test_structured_finger_count_is_human_readable() -> None:
     assert format_finger_count(parsed) == (
         "2 extended fingers (high confidence). index and middle straight; others folded."
     )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "COUNT=7; HANDS=1; CONFIDENCE=high; NOTE=contradictory",
+        "COUNT=3; HANDS=0; CONFIDENCE=high; NOTE=contradictory",
+    ],
+)
+def test_structured_finger_count_rejects_impossible_cross_fields(text: str) -> None:
+    assert parse_finger_count(text) is None
 
 
 @pytest.mark.asyncio

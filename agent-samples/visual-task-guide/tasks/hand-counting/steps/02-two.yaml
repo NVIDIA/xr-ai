@@ -5,6 +5,5 @@ id: show-two
 title: Show two
 instructions: Hold up exactly two fingers and keep your hand visible to the camera.
 visual_completion_criteria: Exactly two extended fingers are clearly visible and all other fingers are folded.
-knowledge_files:
-  - knowledge/counting.md
-  - knowledge/presentation.md
+expected_finger_count: 2
+expected_hands: 1
