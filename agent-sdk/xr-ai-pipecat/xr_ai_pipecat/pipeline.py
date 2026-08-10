@@ -126,9 +126,12 @@ async def run_voice_pipeline(
     The callback is intended for a launcher-managed worker's ready file. It
     runs only after the input transport has entered the processor endpoint
     receive loop. Roster discovery converges asynchronously and does not
-    delay process readiness. Once ready, the endpoint publishes an ``idle``
-    state and re-announces the current state periodically so late or
-    reconnecting clients converge without depending on one initial event.
+    delay process readiness. Once ready, the endpoint marks itself available
+    and re-announces its state periodically so late or reconnecting clients
+    converge without depending on one initial event. Process readiness is not
+    client readiness: a client is told the room is ready only once the hub
+    sees every attached agent available and this endpoint's subscription for
+    that client confirmed.
     If the callback fails, the worker is cancelled and the error propagates
     to the launcher.
     """
@@ -152,7 +155,7 @@ async def run_voice_pipeline(
         await started_task
         if on_ready:
             on_ready()
-        await transport.endpoint.set_status("idle")
+        await transport.endpoint.mark_ready()
         status_task = asyncio.create_task(
             _reannounce_status(transport),
             name="voice-pipeline-status",

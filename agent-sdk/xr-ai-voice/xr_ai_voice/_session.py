@@ -171,7 +171,7 @@ class VoiceSession:
             _ = await started_task
             if self.ready_file:
                 self.ready_file.touch()
-            await self.transport.endpoint.set_status("idle")
+            await self.transport.endpoint.mark_ready()
             status_task = asyncio.create_task(
                 _reannounce_status(self.transport),
                 name="voice-session-status",
