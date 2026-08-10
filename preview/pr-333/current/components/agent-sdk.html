@@ -380,14 +380,15 @@
 from:</p>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code></strong> — unified service protocols (<code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, <code class="docutils literal notranslate"><span class="pre">VLMService</span></code>,
-<code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>) plus OpenAI-compatible HTTP clients, driven by a
-model-profile configuration. Swapping a backend is a configuration
-edit, not a code edit.</p></li>
+<code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP
+clients, driven by a model-profile configuration. Swapping a backend is a
+configuration edit, not a code edit.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness,
 hub transport, voice gating, streaming responses, signals, and cleanup while
 applications provide a <code class="docutils literal notranslate"><span class="pre">VoiceHandler</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat surface retained for unmigrated
-consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>.</p></li>
+consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>. Its <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> helper exposes
+the same IPC-start request-readiness boundary as <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code></strong> — the minimal pyzmq + msgpack IPC library every agent uses
 to talk to the XR-Media-Hub (refer to <a class="reference internal" href="server-runtime.html"><span class="doc">Server runtime</span></a>). No LiveKit or
 FastAPI dependency.</p></li>
@@ -398,7 +399,7 @@ continues through <code class="docutils literal notranslate"><span class="pre">x
 <hr class="docutils" />
 <section id="xr-ai-models">
 <h2>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h2>
-<p>Worker code depends on the four service protocols and constructs concrete
+<p>Worker code depends on the service protocols and constructs concrete
 clients from a model configuration — no hand-rolled <code class="docutils literal notranslate"><span class="pre">httpx</span></code> calls in callers,
 no model quirks leaking out of this package.</p>
 <p>Each sample’s model config names the logical models the worker needs;
@@ -436,6 +437,10 @@ config edit, not a code change.</p>
 <span class="nt">tts</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:piper_tts</span>
 <span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8105</span>
+
+<span class="nt">embedding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron_embedding</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8109</span>
 </pre></div>
 </div>
 </section>
@@ -477,6 +482,10 @@ config edit, not a code change.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">magpie_tts</span></code></p></td>
 <td><p>tts/magpie</p></td>
 <td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nemotron_embedding</span></code></p></td>
+<td><p>embedding-server</p></td>
+<td><p>dense text embeddings</p></td>
 </tr>
 </tbody>
 </table>
@@ -627,7 +636,8 @@ Pipecat processors. A handler returns a string or an async stream of strings:</p
 <p><code class="docutils literal notranslate"><span class="pre">TextMessageInput</span></code> routes typed messages through the same turn path as speech
 and ignores data received outside an active <code class="docutils literal notranslate"><span class="pre">run()</span></code>. The default hub transport
 is opened only after readiness probes succeed; failed readiness closes the
-session’s model clients without opening hub sockets.
+session’s model clients without opening hub sockets. The ready file is touched
+from <code class="docutils literal notranslate"><span class="pre">run()</span></code> only after the input transport enters its hub IPC receive loop.
 NAT applications create handlers with
 <code class="docutils literal notranslate"><span class="pre">xr_ai_nat.adapters.as_voice_handler</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant
 routing, cancels superseded or interrupted turns, installs signal handlers,
@@ -637,9 +647,9 @@ and closes its transport and model clients.</p>
 <h2>xr-ai-pipecat<a class="headerlink" href="#xr-ai-pipecat" title="Link to this heading">#</a></h2>
 <p>The unified <a class="reference external" href="https://github.com/pipecat-ai/pipecat">Pipecat</a> voice pipeline for
 xr-ai agents that still use the direct processor API. The top-level entry point
-is <code class="docutils literal notranslate"><span class="pre">make_voice_pipeline</span></code>; those workers subclass <code class="docutils literal notranslate"><span class="pre">BrainProcessor</span></code> and hand the
-instance to the factory. Everything else — VAD/STT, voice gate, streaming TTS —
-is provided.</p>
+is <code class="docutils literal notranslate"><span class="pre">make_voice_pipeline</span></code>; those workers subclass <code class="docutils literal notranslate"><span class="pre">BrainProcessor</span></code>, hand the
+instance to the factory, and run it with <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code>. Everything else
+— VAD/STT, voice gate, streaming TTS — is provided.</p>
 <section id="make-voice-pipeline">
 <h3>make_voice_pipeline<a class="headerlink" href="#make-voice-pipeline" title="Link to this heading">#</a></h3>
 <p>One call composes the chain and returns the assembled pipeline plus a
@@ -660,6 +670,21 @@ is provided.</p>
 </div>
 <p>The resulting pipeline is:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>input → VadStt → VoiceGate → brain → StreamingTts → output
+</pre></div>
+</div>
+</section>
+<section id="run-voice-pipeline">
+<h3>run_voice_pipeline<a class="headerlink" href="#run-voice-pipeline" title="Link to this heading">#</a></h3>
+<p>Run the returned worker with its transport. For launcher-managed workers, pass
+the ready-file callback so it runs only after the input transport has started
+the hub IPC receive loop. Participant roster catch-up remains asynchronous;
+the worker re-announces its current status periodically so clients that join
+or reconnect later converge on the same state. If the callback fails, the
+worker is cancelled and the error propagates so the launcher reports startup
+failure rather than waiting on a process that cannot signal readiness:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_pipecat</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_voice_pipeline</span>
+
+<span class="k">await</span> <span class="n">run_voice_pipeline</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">transport</span><span class="p">,</span> <span class="n">on_ready</span><span class="o">=</span><span class="n">ready_file</span><span class="o">.</span><span class="n">touch</span><span class="p">)</span>
 </pre></div>
 </div>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -918,9 +943,12 @@ wake pending requests; wait state is removed when each request completes.</p>
 <td><p>drops audio queued at the hub for <code class="docutils literal notranslate"><span class="pre">pid</span></code> — interrupts the agent’s own playback</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set_status(status,</span> <span class="pre">pid=None)</span></code></p></td>
-<td><p>publishes agent status (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;idle&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;processing&quot;</span></code>) on the reserved <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> channel; broadcasts when <code class="docutils literal notranslate"><span class="pre">pid</span></code> is omitted</p></td>
+<td><p>records and publishes agent status (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;idle&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;processing&quot;</span></code>) on the reserved <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> channel; broadcasts when <code class="docutils literal notranslate"><span class="pre">pid</span></code> is omitted</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">request_roster()</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">republish_statuses()</span></code></p></td>
+<td><p>re-sends each connected participant’s current agent status so a missed one-shot update self-heals</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">request_roster()</span></code></p></td>
 <td><p>asks the hub to replay “joined” events for all current pids</p></td>
 </tr>
 </tbody>
@@ -1063,7 +1091,8 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-nat-model-bridge">xr-ai-nat model bridge</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-voice">xr-ai-voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-pipecat">xr-ai-pipecat</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#make-voice-pipeline">make_voice_pipeline</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#make-voice-pipeline">make_voice_pipeline</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#run-voice-pipeline">run_voice_pipeline</a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#the-idle-timeout-knob">The idle-timeout knob</a></li>
 </ul>
 </li>

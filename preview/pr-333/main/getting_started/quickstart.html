@@ -405,7 +405,7 @@ iOS/visionOS app, or AR glasses — can join the session using the token printed
 on startup.</p>
 <section id="model-servers-shared-ai-services">
 <h2>Model servers (shared AI services)<a class="headerlink" href="#model-servers-shared-ai-services" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts the four inference services used across demos and exits
+<p><code class="docutils literal notranslate"><span class="pre">model-servers</span></code> starts the shared inference services used across demos and exits
 immediately — the services keep running in the background with weights hot.
 Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or whenever you want to
 pre-warm models:</p>
@@ -419,6 +419,14 @@ are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
 On first run each model downloads from HuggingFace (~50 GB total; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
+<p>The default <code class="docutils literal notranslate"><span class="pre">--vlm-llm-stack</span></code> starts Nemotron-3 Nano (8107), Cosmos (8100),
+STT (8103), and embeddings (8109). Use <code class="docutils literal notranslate"><span class="pre">--omni-stack</span></code> to replace Nano and
+Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
+Switching stacks stops the incompatible persistent models first and aborts if
+they cannot be stopped, avoiding GPU overcommit.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--omni-stack
+</pre></div>
+</div>
 <p>The default models are public, so no HuggingFace token is required. Set
 <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> to lift download rate limits and speed, or to use a gated model: refer
 to the credentials guide. The launcher won’t prompt; it prints a one-line notice
@@ -427,6 +435,7 @@ and continues if the token is unset.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">--stop</span></code> always stops both stack variants, so it takes no stack-selection flag.</p>
 </section>
 <section id="simple-vlm-example-vision-q-a-over-voice-text">
 <h2>Simple VLM example (vision Q&amp;A over voice + text)<a class="headerlink" href="#simple-vlm-example-vision-q-a-over-voice-text" title="Link to this heading">#</a></h2>
@@ -525,8 +534,8 @@ dev.</p>
 <p>Under the hood, the orchestrator launches the hub, CloudXR runtime, model
 endpoints, typed capability processes, and the worker. Native NAT Functions
 connect the worker to those capabilities; MCP adapters remain optional outward
-compatibility surfaces. The Pipecat pipeline pairs a fast Llama-8B for
-quick-acks with a Nemotron-30B agentic tool-calling loop over scene, tracking,
+compatibility surfaces. The Pipecat pipeline runs quick-acks
+and a Nemotron-30B agentic tool-calling loop over scene, tracking,
 spatial-math, vision, and video-memory Functions. Refer to the xr-render-demo guide for the
 full process map, agentic-loop details, and the XR session lifecycle.</p>
 <p><strong>Requires <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> to be running first</strong> — the demo does not start its
@@ -537,7 +546,7 @@ own model services.</p>
 uv<span class="w"> </span>sync<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>model_servers
 </pre></div>
 </div>
-<p>This exits immediately once all four services are ready. Weights stay loaded in
+<p>This exits immediately once all configured services are ready. Weights stay loaded in
 the background.</p>
 </section>
 <section id="step-2-start-the-demo">
@@ -588,7 +597,7 @@ stay local) by setting <strong>one key</strong> in <code class="docutils literal
 <p>The worker loads <code class="docutils literal notranslate"><span class="pre">yaml/models.nim.yaml</span></code> for native model-backed Functions.
 Provide an
 <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> as an <strong>environment variable</strong> (or via the launcher credential
-prompt — not in YAML) and just don’t start the local <code class="docutils literal notranslate"><span class="pre">llm</span></code> / <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
+prompt — not in YAML) and just don’t start the local <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
 model-servers. Refer to the AI-services guide.</p>
 </section>
 </section>

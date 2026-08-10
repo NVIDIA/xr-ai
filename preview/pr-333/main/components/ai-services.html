@@ -406,7 +406,7 @@ orchestrator pattern that wires servers into a sample, refer to
 <code class="docutils literal notranslate"><span class="pre">server-runtime/</span></code>. All expose an OpenAI-compatible REST API so agent workers
 can call them with any OpenAI SDK client or plain <code class="docutils literal notranslate"><span class="pre">httpx</span></code> or <code class="docutils literal notranslate"><span class="pre">requests</span></code>.
 Reference services cover vision-language reasoning, speech recognition,
-text-to-speech, and large language models. Three LLM backends ship
+text-to-speech, embeddings, and large language models. Three LLM backends ship
 side-by-side under <code class="docutils literal notranslate"><span class="pre">ai-services/llm/</span></code> — pick one per sample based on the
 tool-calling, reasoning, and hardware trade-offs documented below.</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -461,25 +461,31 @@ tool-calling, reasoning, and hardware trade-offs documented below.</p>
 <td><p>Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected)</p></td>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/transcript-mcp/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/embedding-server/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
+<td><p>8109</p></td>
+<td><p>llama-nemotron-embed-1b-v2</p></td>
+<td><p>vLLM (pip or docker)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/transcript-mcp/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">transcript_mcp_server</span></code></p></td>
 <td><p>8200</p></td>
 <td><p>—</p></td>
 <td><p>JSONL + FastMCP</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310</p></td>
 <td><p>—</p></td>
 <td><p>Typed recorded-video capability</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/video-mcp/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/video-mcp/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_mcp_server</span></code></p></td>
 <td><p>8210</p></td>
 <td><p>—</p></td>
 <td><p>FastMCP → recorded service + live hub IPC</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/vlm-mcp/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/vlm-mcp/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">vlm_mcp_server</span></code></p></td>
 <td><p>8240</p></td>
 <td><p>—</p></td>
@@ -539,10 +545,10 @@ cp<span class="w"> </span>../../agent-mcp-servers/video-mcp/video_mcp_server.yam
 <p>Workers do not hand-roll <code class="docutils literal notranslate"><span class="pre">httpx</span></code> clients against these endpoints.  They
 depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
 load a per-sample model config, and construct service clients via
-<code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>.  The SDK encapsulates the
-OpenAI-compatible wire format and the per-model quirks (reasoning-field
-aliasing, <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs</span></code>, served-model-name strings) so callers
-never branch on backend.</p>
+<code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK
+encapsulates the OpenAI-compatible wire format and the per-model quirks
+(reasoning-field aliasing, <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs</span></code>, served-model-name strings)
+so callers never branch on backend.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span><span class="p">,</span> <span class="n">ChatMessage</span>
 
 <span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.yaml&quot;</span><span class="p">)</span>
@@ -555,7 +561,7 @@ never branch on backend.</p>
     <span class="nb">print</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>A matching <code class="docutils literal notranslate"><span class="pre">models.yaml</span></code> for the four built-in service backends:</p>
+<p>A matching <code class="docutils literal notranslate"><span class="pre">models.yaml</span></code> for the built-in service categories:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">agent_llm</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron3_nano</span>
 <span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8107</span>
@@ -571,6 +577,10 @@ never branch on backend.</p>
 <span class="nt">tts</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:piper_tts</span>
 <span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8105</span>
+
+<span class="nt">embedding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron_embedding</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8109</span>
 </pre></div>
 </div>
 <p>Swapping a backend is a <code class="docutils literal notranslate"><span class="pre">kind:</span></code> + <code class="docutils literal notranslate"><span class="pre">base_url:</span></code> edit in YAML; worker code does
@@ -609,7 +619,7 @@ YAML. The structured profile is consumed by both the worker and orchestrator,
 so the local VLM process is omitted and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is requested
 automatically. Select <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> to switch back.</p>
 <p><code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> retains its <code class="docutils literal notranslate"><span class="pre">model_backend:</span> <span class="pre">nim</span></code> selector and
-<code class="docutils literal notranslate"><span class="pre">models.nim.yaml</span></code> overlay. Run it without the local <code class="docutils literal notranslate"><span class="pre">llm</span></code> / <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
+<code class="docutils literal notranslate"><span class="pre">models.nim.yaml</span></code> overlay. Run it without the local <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
 model-servers and provide <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>.</p>
 <p><strong>Self-hosted NIM containers</strong> work the same way: point <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at the
 container (e.g. <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code>) and set <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> if it
@@ -618,9 +628,9 @@ exposes <code class="docutils literal notranslate"><span class="pre">/v1/health<
 <section id="vllm-model-persistence">
 <h2>vLLM model persistence<a class="headerlink" href="#vllm-model-persistence" title="Link to this heading">#</a></h2>
 <p>The persistent vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
-<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) <strong>survive stack restarts by design</strong>.
-<code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code> is foreground (dies with the wrapper). Each
-persistent wrapper script checks its health endpoint before spawning vLLM:</p>
+<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding_server</span></code>)
+<strong>survive stack restarts by design</strong>. Each persistent wrapper script checks its
+health endpoint before spawning vLLM:</p>
 <ul class="simple">
 <li><p><strong>Already running</strong> → touch the ready file immediately, then idle. Stack is
 ready in seconds; no model reload.</p></li>
@@ -635,17 +645,18 @@ vLLM keeps running.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>xr_render_demo<span class="w"> </span>--stop
 </pre></div>
 </div>
-<p>This hits each model server’s <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint, then either runs
-<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span> <span class="pre">&lt;container_name&gt;</span></code> (docker-mode servers) or finds the listening
-PID via <code class="docutils literal notranslate"><span class="pre">ss</span></code> or <code class="docutils literal notranslate"><span class="pre">lsof</span></code> and sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> (pip-mode), escalating to
-<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code> after 20 s. It is safe to run while the stack is
-down — processes and containers that are not running are silently skipped.</p>
+<p>Cleanup locates labelled Docker containers before inspecting ports, then
+stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code> (escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s).
+Pip-mode processes must carry the <code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_MANAGED</span></code> and
+<code class="docutils literal notranslate"><span class="pre">XR_AI_VLLM_PORT</span></code> ownership markers before cleanup sends <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> or
+<code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code>. Unknown listeners and failed inspection abort cleanup without
+sending a signal; absent servers are silently skipped.</p>
 <p>The target ports and container names match the defaults in the per-profile YAML files.</p>
 </section>
 <section id="choosing-the-vllm-runtime-pip-vs-docker">
 <h2>Choosing the vLLM runtime (pip vs Docker)<a class="headerlink" href="#choosing-the-vllm-runtime-pip-vs-docker" title="Link to this heading">#</a></h2>
-<p>All four vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
-<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>) accept a
+<p>All five vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
+<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">embedding_server</span></code>) accept a
 <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span></code> key in their YAML to pick how vLLM is hosted:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -682,7 +693,7 @@ another tag, an internal mirror, or a custom build.</p>
 <ul>
 <li><p><strong>Docker Engine</strong> with the user in the <code class="docutils literal notranslate"><span class="pre">docker</span></code> group (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">version</span></code>
 must succeed without <code class="docutils literal notranslate"><span class="pre">sudo</span></code>).</p></li>
-<li><p><strong>NVIDIA Container Toolkit</strong> so <code class="docutils literal notranslate"><span class="pre">--gpus</span></code> works:
+<li><p><strong>NVIDIA Container Toolkit</strong> so the <code class="docutils literal notranslate"><span class="pre">nvidia</span></code> runtime can expose GPUs:
 <a class="reference external" href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html</a></p></li>
 <li><p><strong>NGC pull access</strong> for <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
@@ -698,8 +709,11 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <section id="docker-mode-runtime-details">
 <h3>docker mode — runtime details<a class="headerlink" href="#docker-mode-runtime-details" title="Link to this heading">#</a></h3>
 <ul class="simple">
-<li><p>Container is launched with <code class="docutils literal notranslate"><span class="pre">--network</span> <span class="pre">host</span> <span class="pre">--ipc</span> <span class="pre">host</span> <span class="pre">--gpus</span> <span class="pre">…</span></code> (matches
-gives vLLM the shared-memory region its workers expect).</p></li>
+<li><p>Container is launched with <code class="docutils literal notranslate"><span class="pre">--network</span> <span class="pre">host</span> <span class="pre">--ipc</span> <span class="pre">host</span> <span class="pre">--runtime</span> <span class="pre">nvidia</span></code>
+(forwarding <code class="docutils literal notranslate"><span class="pre">NVIDIA_VISIBLE_DEVICES</span></code>), and <code class="docutils literal notranslate"><span class="pre">/bin/bash</span></code> overrides the image
+entrypoint so setup installs run before <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code>.</p></li>
+<li><p>Failed stopped containers are recreated because Docker cannot change their
+recorded entrypoint or command.</p></li>
 <li><p>The host <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> is bind-mounted at the same path inside the
 container and <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> is set to it, so weights cached by pip mode are
 reused by docker mode and vice versa.</p></li>
@@ -707,20 +721,23 @@ reused by docker mode and vice versa.</p></li>
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-llama-nemotron-llm-server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-nemotron3-nano-llm-server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">xr-ai-vllm-nemotron-omni-llm-server</span></code>.</p></li>
-<li><p>Persistence parity: <code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code> run detached (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span> <span class="pre">-d</span> <span class="pre">--rm</span> <span class="pre">--name</span> <span class="pre">…</span></code>) so
-the container survives stack restarts, mirroring their pip-mode
-<code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code> behavior. <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code> runs
-foreground (container exits with the wrapper) — same as its pip-mode
-semantics.</p></li>
+<li><p>Persistence parity: <code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>, <code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code>,
+<code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>, and <code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code> launch their
+Docker processes in separate sessions, so they survive launcher shutdowns
+like their pip-mode <code class="docutils literal notranslate"><span class="pre">start_new_session=True</span></code> counterparts.</p></li>
 </ul>
 </section>
 <section id="cleanup">
 <h3>Cleanup<a class="headerlink" href="#cleanup" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span> <span class="pre">--stop</span></code> works for both modes. The cleanup path probes
-<code class="docutils literal notranslate"><span class="pre">/health</span></code> first; for docker mode it then runs <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span> <span class="pre">&lt;container_name&gt;</span></code>
-(escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s); for pip mode it falls back to the
-port → PID → SIGTERM/SIGKILL path. Same UX for both.</p>
+<p><code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">xr_render_demo</span> <span class="pre">--stop</span></code> works for both modes. Cleanup locates labelled
+Docker containers before inspecting ports, then stops them with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stop</span></code>
+(escalating to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">kill</span></code> after 20 s). Pip-mode processes carry an
+<code class="docutils literal notranslate"><span class="pre">xr-ai-vllm</span></code> ownership marker; unknown listeners and failed inspection abort
+cleanup without sending a signal.</p>
+<p>Pip-mode vLLM processes started before the ownership markers were introduced
+cannot be identified safely. After upgrading, stop each unmarked process
+manually once; subsequent launches include the markers and support managed
+cleanup.</p>
 </section>
 </section>
 <section id="per-server-notes">
@@ -758,8 +775,7 @@ capability: NVFP4 on Blackwell (SM100+), FP8 on Ada and Hopper, BF16 forced via
 <code class="docutils literal notranslate"><span class="pre">use_bf16:</span> <span class="pre">true</span></code> for highest quality at the largest VRAM cost. Same
 OpenAI-compatible HTTP contract as the other LLM servers — swap the port to
 swap backends. Hosting backend is selectable per YAML (refer to <em>Choosing the
-vLLM runtime</em>); runs foreground in both pip and docker modes (no
-cross-restart persistence).</p></li>
+vLLM runtime</em>); persists across stack restarts in both pip and docker modes.</p></li>
 <li><p><strong>stt-server</strong> loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
 English-only; the <code class="docutils literal notranslate"><span class="pre">language</span></code> and <code class="docutils literal notranslate"><span class="pre">temperature</span></code> form fields are accepted but ignored.</p></li>
 <li><p><strong>tts/magpie</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>

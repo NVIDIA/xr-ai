@@ -443,32 +443,27 @@ exit terminates the whole stack.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">vlm_server</span></code></p></td>
 <td><p>8100</p></td>
 </tr>
-<tr class="row-odd"><td><p>llm</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ai-services/llm/llama_nemotron/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code></p></td>
-<td><p>8106</p></td>
-</tr>
-<tr class="row-even"><td><p>agent-llm</p></td>
+<tr class="row-odd"><td><p>agent-llm</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">ai-services/llm/nemotron3_nano/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code></p></td>
 <td><p>8107</p></td>
 </tr>
-<tr class="row-odd"><td><p>video-memory</p></td>
+<tr class="row-even"><td><p>video-memory</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310 (recorded-video typed RPC)</p></td>
 </tr>
-<tr class="row-even"><td><p>scene</p></td>
+<tr class="row-odd"><td><p>scene</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/scene/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_render_scene</span></code></p></td>
 <td><p>8320 (typed RPC)</p></td>
 </tr>
-<tr class="row-odd"><td><p>openxr-service</p></td>
+<tr class="row-even"><td><p>openxr-service</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">services/openxr-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">openxr_service</span></code></p></td>
 <td><p>8330 (typed RPC)</p></td>
 </tr>
-<tr class="row-even"><td><p>worker</p></td>
+<tr class="row-odd"><td><p>worker</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/worker/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker</span></code></p></td>
 <td><p>—</p></td>
@@ -519,40 +514,38 @@ and a <code class="docutils literal notranslate"><span class="pre">base_url</spa
 touching the worker code.</p></li>
 </ul>
 </section>
-<section id="the-llm-servers">
-<h2>The LLM servers<a class="headerlink" href="#the-llm-servers" title="Link to this heading">#</a></h2>
-<p>Both are vLLM <code class="docutils literal notranslate"><span class="pre">execvp</span></code> shims — a small Python wrapper that reads YAML configuration,
+<section id="the-llm-server">
+<h2>The LLM server<a class="headerlink" href="#the-llm-server" title="Link to this heading">#</a></h2>
+<section id="nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107">
+<h3>NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107<a class="headerlink" href="#nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107" title="Link to this heading">#</a></h3>
+<p>A vLLM <code class="docutils literal notranslate"><span class="pre">execvp</span></code> shim — a small Python wrapper that reads YAML configuration,
 sets <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> and token environment variables, then <code class="docutils literal notranslate"><span class="pre">os.execvp</span></code>s into <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code>. The
 Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
 and tool calling from that point on.</p>
-<section id="llama-3-1-nemotron-nano-8b-v1-port-8106-fast-reactive-brain">
-<h3>Llama-3.1-Nemotron-Nano-8B-v1 — port 8106 — fast reactive brain<a class="headerlink" href="#llama-3-1-nemotron-nano-8b-v1-port-8106-fast-reactive-brain" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> with <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">llama3_json</span> <span class="pre">--enable-auto-tool-choice</span></code>.
-<code class="docutils literal notranslate"><span class="pre">enforce_eager</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">false</span></code>. Used for three cheap, latency-sensitive
-calls — none of which actually use tool calling:</p>
-<ul class="simple">
-<li><p><strong>Quick-ack</strong> — fires in parallel with the agentic loop the moment an
-utterance lands. Returns <code class="docutils literal notranslate"><span class="pre">{&quot;ack&quot;:</span> <span class="pre">&quot;On</span> <span class="pre">it!&quot;,</span> <span class="pre">&quot;think&quot;:</span> <span class="pre">false}</span></code> — a 3–6 word
-spoken acknowledgment. Also classifies whether the request needs spatial
-reasoning (<code class="docutils literal notranslate"><span class="pre">think:</span> <span class="pre">true/false</span></code>), so the 30B model knows before it starts
-whether to engage its thinking budget. Max 40 tokens, 8s timeout. The ack
-is sent on the data channel (<code class="docutils literal notranslate"><span class="pre">agent.progress</span></code> topic) and spoken on every
-turn so the user immediately knows they were heard.</p></li>
-<li><p><strong>Still-working messages</strong> — if the agentic loop exceeds 5s, this model
-generates a short contextual phrase like <em>“Still finding the right
-position”</em> on a 7s repeat. Sent to the data channel only — never spoken,
-to avoid stacking up in the TTS queue behind the real response.</p></li>
-</ul>
-</section>
-<section id="nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107-agentic-loop">
-<h3>NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107 — agentic loop<a class="headerlink" href="#nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107-agentic-loop" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> with <code class="docutils literal notranslate"><span class="pre">--tool-call-parser</span> <span class="pre">qwen3_coder</span></code> and
 <code class="docutils literal notranslate"><span class="pre">--reasoning-parser</span> <span class="pre">nano_v3</span></code> (plugin auto-fetched from the model card into
 <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>). <code class="docutils literal notranslate"><span class="pre">enforce_eager</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">true</span></code> — CUDA graph capture +
 FlashInfer FP4 MoE autotune silently takes 3–8 minutes on cold start without
 it. Requires a Blackwell GPU (B200, RTX PRO 6000, or Jetson Thor) for native
 FP4; swap to the BF16 variant for Hopper or Ampere.</p>
-<p>This is the model that runs the multi-step tool-calling loop.</p>
+<p>One server backs both logical models in <code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code>: <code class="docutils literal notranslate"><span class="pre">agent_llm</span></code> runs
+the multi-step tool-calling loop, and <code class="docutils literal notranslate"><span class="pre">llm</span></code> serves two cheap, latency-sensitive
+calls (thinking stays off):</p>
+<ul class="simple">
+<li><p><strong>Quick-ack</strong> — awaited before the agentic loop starts, the moment an
+utterance lands. Returns <code class="docutils literal notranslate"><span class="pre">{&quot;ack&quot;:</span> <span class="pre">&quot;On</span> <span class="pre">it!&quot;,</span> <span class="pre">&quot;think&quot;:</span> <span class="pre">false}</span></code> — a 3–6 word
+spoken acknowledgment. Also classifies whether the request needs
+open-ended reasoning (<code class="docutils literal notranslate"><span class="pre">think:</span> <span class="pre">true/false</span></code>): positional operations always
+run without thinking because the math tools compute exact answers, so
+thinking is reserved for vague corrections and free-form compositions
+no tool pattern settles. Max 40 tokens, 8s timeout. The ack
+is sent on the data channel (<code class="docutils literal notranslate"><span class="pre">agent.progress</span></code> topic) and spoken on every
+turn so the user immediately knows they were heard.</p></li>
+<li><p><strong>Still-working messages</strong> — if the agentic loop exceeds 5s, this model
+generates a short contextual phrase like <em>“Still finding the right
+position”</em> on a 10s repeat. Sent to the data channel only — never spoken,
+to avoid stacking up in the TTS queue behind the real response.</p></li>
+</ul>
 </section>
 </section>
 <section id="vlm-cosmos-reason1-7b">
@@ -625,8 +618,8 @@ The LLM tool schemas are derived from those Functions. <code class="docutils lit
 <code class="docutils literal notranslate"><span class="pre">get_health</span></code> remain worker-managed lifecycle operations.</p>
 <p>On each <code class="docutils literal notranslate"><span class="pre">TranscriptionFrame</span></code>:</p>
 <ol class="arabic simple">
-<li><p><strong>Quick-ack</strong> fires immediately (Llama-8B :8106, parallel task).</p></li>
-<li><p><strong>Still-working timer</strong> starts (fires at 5s, repeats every 7s, data
+<li><p><strong>Quick-ack</strong> runs first (<code class="docutils literal notranslate"><span class="pre">llm</span></code> :8107, awaited before the loop).</p></li>
+<li><p><strong>Still-working timer</strong> starts (fires at 5s, repeats every 10s, data
 channel only).</p></li>
 <li><p><strong>Pre-fetch</strong> (concurrent): <code class="docutils literal notranslate"><span class="pre">get_scene_state</span></code> + <code class="docutils literal notranslate"><span class="pre">get_head_pose</span></code> +
 <code class="docutils literal notranslate"><span class="pre">position_ahead(1.5)</span></code> — results injected into the user message so the
@@ -643,7 +636,7 @@ executes (data channel).</p></li>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">think=true</span></code>: reasoning preamble injected into system prompt
 (RESOLVE object → LOCATE coordinates → COMPUTE new position →
 EXECUTE). The <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;</span></code> block stays private; only one short sentence
-goes to the user. Token budget: 2048 total, 1024 thinking budget.</p></li>
+goes to the user. Token budget: 6144 total, 4096 thinking budget.</p></li>
 <li><p>If thinking fills the token budget without a tool call
 (<code class="docutils literal notranslate"><span class="pre">finish_reason=length</span></code>): retry the same iteration with
 <code class="docutils literal notranslate"><span class="pre">needs_thinking=False</span></code>.</p></li>
@@ -816,9 +809,8 @@ cases overfitting to the prompt’s worked examples.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#process-stack">Process stack</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-pinning-for-the-xr-side">GPU pinning for the XR side</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#worker-configuration">Worker configuration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-llm-servers">The LLM servers</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#llama-3-1-nemotron-nano-8b-v1-port-8106-fast-reactive-brain">Llama-3.1-Nemotron-Nano-8B-v1 — port 8106 — fast reactive brain</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107-agentic-loop">NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107 — agentic loop</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-llm-server">The LLM server</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvidia-nemotron-3-nano-30b-a3b-nvfp4-port-8107">NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos-reason1-7b">VLM — Cosmos-Reason1-7B</a></li>

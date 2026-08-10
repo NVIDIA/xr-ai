@@ -436,6 +436,11 @@ before the next one starts. Declare processes in dependency order (hub
 before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).</p></li>
 <li><p><strong>Every process accepts <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code></strong> and must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code>
 when it is fully initialized and ready to serve requests.</p></li>
+<li><p><strong>Native voice workers</strong> pass the ready file to <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>; <code class="docutils literal notranslate"><span class="pre">run()</span></code>
+touches it only after the input transport’s hub IPC receive loop has started.</p></li>
+<li><p><strong>Direct Pipecat workers</strong> call
+<code class="docutils literal notranslate"><span class="pre">run_voice_pipeline(worker,</span> <span class="pre">transport,</span> <span class="pre">on_ready=ready_file.touch)</span></code> to use the
+same IPC-start readiness boundary.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
 <li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">server-runtime</span></code> or <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
@@ -494,7 +499,7 @@ to serve requests. The launcher blocks on the file’s existence; if the process
 exits before creating it, startup is aborted and the whole stack is torn down.
 This makes readiness explicit and process-defined: a model server signals ready
 after weights load, an HTTP server after it starts listening, a worker after
-its IPC socket connects.</p>
+its IPC receive loop is active.</p>
 </section>
 <section id="launch-mode-own-persist-reuse">
 <h3><code class="docutils literal notranslate"><span class="pre">launch_mode</span></code>: own, persist, reuse<a class="headerlink" href="#launch-mode-own-persist-reuse" title="Link to this heading">#</a></h3>
