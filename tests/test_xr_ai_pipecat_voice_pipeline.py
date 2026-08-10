@@ -221,6 +221,9 @@ class _StatusEndpoint:
     async def set_status(self, status: str) -> None:
         self.statuses.append(status)
 
+    async def mark_ready(self) -> None:
+        await self.set_status("ready")
+
     async def republish_statuses(self) -> None:
         self.republish_calls += 1
 
@@ -274,7 +277,7 @@ async def test_run_voice_pipeline_releases_ready_after_input_starts(monkeypatch)
 
     runner_finished.set()
     assert await run_task is None
-    assert transport.endpoint.statuses == ["idle"]
+    assert transport.endpoint.statuses == ["ready"]
 
 
 @pytest.mark.asyncio
@@ -302,7 +305,7 @@ async def test_run_voice_pipeline_reannounces_current_status(monkeypatch):
             break
         await asyncio.sleep(0.01)
 
-    assert transport.endpoint.statuses == ["idle"]
+    assert transport.endpoint.statuses == ["ready"]
     assert transport.endpoint.republish_calls > 0
 
     runner_finished.set()

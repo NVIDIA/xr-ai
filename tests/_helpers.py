@@ -17,6 +17,7 @@ scenario under verification.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import signal
 import time
@@ -24,7 +25,8 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Callable
 
-from xr_ai_hub      import AudioChunk, DataMessage, ReturnAudioFlush
+from xr_ai_hub      import (AGENT_STATUS_TOPIC, AudioChunk, DataMessage,
+                            ReturnAudioFlush)
 from xr_media_hub.ipc import ConnectorEndpoint
 
 
@@ -85,8 +87,14 @@ class FakeClient:
     connector:  ConnectorEndpoint
     task:       asyncio.Task
     return_data:        list[DataMessage]      = field(default_factory=list)
+    return_statuses:    list[DataMessage]      = field(default_factory=list)
     return_audio:       list[AudioChunk]       = field(default_factory=list)
     return_audio_flush: list[ReturnAudioFlush] = field(default_factory=list)
+
+    @property
+    def statuses(self) -> list[str]:
+        """Aggregate agent statuses seen, in order (``["loading", "ready"]``)."""
+        return [json.loads(m.data)["status"] for m in self.return_statuses]
 
 
 async def setup_client(
@@ -108,7 +116,14 @@ async def setup_client(
 
     fc = FakeClient(pid=pid, connector=conn, task=None)  # type: ignore[arg-type]
 
-    async def cb_data(msg, fc=fc):  fc.return_data.append(msg)
+    # Real StreamKit clients intercept _agent.status before the application
+    # layer sees it; mirror that split so cross-talk assertions count only
+    # application messages.
+    async def cb_data(msg, fc=fc):
+        if msg.topic == AGENT_STATUS_TOPIC:
+            fc.return_statuses.append(msg)
+        else:
+            fc.return_data.append(msg)
     async def cb_audio(msg, fc=fc): fc.return_audio.append(msg)
     async def cb_flush(msg, fc=fc): fc.return_audio_flush.append(msg)
 

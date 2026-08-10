@@ -24,6 +24,9 @@ class _Endpoint:
     async def set_status(self, status: str) -> None:
         self.statuses.append(status)
 
+    async def mark_ready(self) -> None:
+        await self.set_status("ready")
+
     async def republish_statuses(self) -> None:
         self.republish_calls += 1
 
@@ -169,7 +172,7 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(
             await asyncio.sleep(0)
 
         assert ready_file.exists()
-        assert transport.endpoint.statuses == ["idle"]
+        assert transport.endpoint.statuses == ["ready"]
 
         runner_finished.set()
         assert await run_task is None
