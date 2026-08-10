@@ -465,7 +465,7 @@ entry point.</p>
 ├── yaml/                           ← all YAML configs for this sample
 │   ├── xr_media_hub.yaml
 │   ├── &lt;command&gt;.yaml              ← one per launchable process
-│   ├── models.yaml                 ← worker-only model config
+│   ├── models.local.json           ← adapter, endpoint, and deployment specs
 │   └── …
 └── worker/
     ├── pyproject.toml              ← worker project
@@ -475,13 +475,14 @@ entry point.</p>
         └── …                       ← cohesive workflow, transport, and config modules
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">yaml/models.yaml</span></code> names the logical models the worker needs (<code class="docutils literal notranslate"><span class="pre">llm</span></code>,
-<code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, or any sample-specific name) with <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">preset:&lt;name&gt;</span></code> + <code class="docutils literal notranslate"><span class="pre">base_url:</span></code> entries. A sample whose orchestrator derives model
-process ownership uses a structured JSON profile instead. The worker passes
-either path to
+<p><code class="docutils literal notranslate"><span class="pre">yaml/models.local.json</span></code> names the logical models the worker needs (<code class="docutils literal notranslate"><span class="pre">llm</span></code>,
+<code class="docutils literal notranslate"><span class="pre">vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">stt</span></code>, <code class="docutils literal notranslate"><span class="pre">tts</span></code>, or any sample-specific name). Each role composes an
+adapter, endpoint, and deployment spec. Worker-only profiles may remain in the
+legacy flat JSON/YAML shape; a profile shared with the stdlib-only orchestrator
+uses the wrapped nested JSON shape. The worker passes either form to
 <code class="docutils literal notranslate"><span class="pre">load_models_config(...)</span></code> and constructs services via <code class="docutils literal notranslate"><span class="pre">make_llm</span></code> /
 <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code> / <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> / <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>.  Schema, preset
-table, and the explicit (no-preset) spec are in
+table, compatibility formats, and the profile contract are in
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
 <p>When the worker is small, keep its implementation in the package’s
 <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>. Split it once argument parsing, lifecycle, configuration, and

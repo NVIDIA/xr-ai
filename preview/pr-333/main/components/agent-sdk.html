@@ -403,9 +403,9 @@
 from:</p>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code></strong> — unified service protocols (<code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, <code class="docutils literal notranslate"><span class="pre">VLMService</span></code>,
-<code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP
-clients, driven by a model-profile configuration. Swapping a backend is a
-configuration edit, not a code edit.</p></li>
+<code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP clients, driven by a
+structured model deployment profile. Swapping a backend is a configuration
+edit, not a code edit.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness,
 hub transport, voice gating, streaming responses, signals, and cleanup while
 applications provide a <code class="docutils literal notranslate"><span class="pre">VoiceHandler</span></code>.</p></li>
@@ -423,9 +423,10 @@ continues through <code class="docutils literal notranslate"><span class="pre">x
 <section id="xr-ai-models">
 <h2>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h2>
 <p>Worker code depends on the service protocols and constructs concrete
-clients from a model configuration — no hand-rolled <code class="docutils literal notranslate"><span class="pre">httpx</span></code> calls in callers,
-no model quirks leaking out of this package.</p>
-<p>Each sample’s model config names the logical models the worker needs;
+clients from a model deployment profile — no hand-rolled <code class="docutils literal notranslate"><span class="pre">httpx</span></code> calls in
+callers, no model quirks leaking out of this package.</p>
+<p>Each profile names the logical models the worker needs and separates adapter,
+endpoint, and deployment metadata;
 <code class="docutils literal notranslate"><span class="pre">make_llm(config,</span> <span class="pre">&quot;llm&quot;)</span></code> / <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code> / <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> / <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> return an
 object satisfying the matching service protocol regardless of backend or
 model-specific quirks (such as reasoning-field naming). Swapping a model is a
@@ -434,7 +435,7 @@ config edit, not a code change.</p>
 <h3>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading">#</a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span><span class="p">,</span> <span class="n">ChatMessage</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.yaml&quot;</span><span class="p">)</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.local.json&quot;</span><span class="p">)</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
     <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
         <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">)],</span>
@@ -444,28 +445,20 @@ config edit, not a code change.</p>
     <span class="nb">print</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">models.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">agent_llm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron3_nano</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8107</span>
-
-<span class="nt">vlm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:cosmos_vlm</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8100</span>
-
-<span class="nt">stt</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:parakeet_stt</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8103</span>
-
-<span class="nt">tts</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:piper_tts</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8105</span>
-
-<span class="nt">embedding</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron_embedding</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8109</span>
+<p><code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;agent_llm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;preset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nemotron3_nano&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8107&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;health&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;reused&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;service&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agent-llm&quot;</span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
 </pre></div>
 </div>
+<p>JSON and YAML are both accepted; flat legacy entries remain compatible.</p>
 </section>
 <section id="built-in-presets">
 <h3>Built-in presets<a class="headerlink" href="#built-in-presets" title="Link to this heading">#</a></h3>
@@ -550,9 +543,10 @@ stdlib-only orchestrator:</p>
 <code class="docutils literal notranslate"><span class="pre">load_model_deployment(worker_config)</span></code> to map <code class="docutils literal notranslate"><span class="pre">managed</span></code> to an owned process,
 <code class="docutils literal notranslate"><span class="pre">reused</span></code> to <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">external</span></code> to no local process. Launcher
 profiles must use the wrapped nested JSON shape and declare credentials as
-<code class="docutils literal notranslate"><span class="pre">endpoint.api_key_env</span></code>; flat YAML remains supported for worker-only configs.</p>
-<p><code class="docutils literal notranslate"><span class="pre">adapter</span></code> and <code class="docutils literal notranslate"><span class="pre">endpoint</span></code> are normalized into the existing typed service specs;
-only <code class="docutils literal notranslate"><span class="pre">deployment</span></code> remains separately typed as <code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">endpoint.api_key_env</span></code>; the launcher rejects non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles before
+parsing, while flat YAML remains supported for worker-only configs.</p>
+<p>Model roles compose <code class="docutils literal notranslate"><span class="pre">AdapterSpec</span></code>, <code class="docutils literal notranslate"><span class="pre">EndpointSpec</span></code>, and <code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code>; their
+legacy flat attributes remain available as read-only compatibility aliases.</p>
 </section>
 <section id="protocols">
 <h3>Protocols<a class="headerlink" href="#protocols" title="Link to this heading">#</a></h3>

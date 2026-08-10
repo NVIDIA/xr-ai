@@ -562,15 +562,15 @@ cp<span class="w"> </span>../../agent-mcp-servers/video-mcp/video_mcp_server.yam
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
 <p>Workers do not hand-roll <code class="docutils literal notranslate"><span class="pre">httpx</span></code> clients against these endpoints.  They
-depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8e2f0c8d1c065bc2df84328f70f8901d80019c2d/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
-load a per-sample model config, and construct service clients via
-<code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK
-encapsulates the OpenAI-compatible wire format and the per-model quirks
-(reasoning-field aliasing, <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs</span></code>, served-model-name strings)
-so callers never branch on backend.</p>
+depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a69d7547cd30c0c45205d55acfb27a6e4bfd122e/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
+load a per-sample model profile, and construct service clients via
+<code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK encapsulates the
+OpenAI-compatible wire format and the per-model quirks (reasoning-field
+aliasing, <code class="docutils literal notranslate"><span class="pre">chat_template_kwargs</span></code>, served-model-name strings) so callers
+never branch on backend.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models_config</span><span class="p">,</span> <span class="n">make_llm</span><span class="p">,</span> <span class="n">ChatMessage</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.yaml&quot;</span><span class="p">)</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_models_config</span><span class="p">(</span><span class="s2">&quot;yaml/models.local.json&quot;</span><span class="p">)</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">make_llm</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">llm</span><span class="p">:</span>
     <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span>
         <span class="p">[</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">)],</span>
@@ -580,68 +580,77 @@ so callers never branch on backend.</p>
     <span class="nb">print</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">reasoning</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>A matching <code class="docutils literal notranslate"><span class="pre">models.yaml</span></code> for the built-in service categories:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">agent_llm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron3_nano</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8107</span>
-
-<span class="nt">vlm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:cosmos_vlm</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8100</span>
-
-<span class="nt">stt</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:parakeet_stt</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8103</span>
-
-<span class="nt">tts</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:piper_tts</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8105</span>
-
-<span class="nt">embedding</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:nemotron_embedding</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8109</span>
+<p>A model profile separates adapter behavior, endpoint connectivity, and
+deployment ownership:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;agent_llm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;preset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nemotron3_nano&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8107&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;health&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;reused&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;service&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agent-llm&quot;</span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
 </pre></div>
 </div>
-<p>Swapping a backend is a <code class="docutils literal notranslate"><span class="pre">kind:</span></code> + <code class="docutils literal notranslate"><span class="pre">base_url:</span></code> edit in YAML; worker code does
-not change.  Full protocol surface, the preset table, and the explicit
-(no-preset) specification are in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8e2f0c8d1c065bc2df84328f70f8901d80019c2d/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
+<p>The worker-side <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> loader accepts JSON or YAML, including flat
+legacy entries and direct role mappings. A profile shared with the stdlib-only
+launcher must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
+rejected before deployment metadata is read. Full protocol surface, the preset
+table, and the profile contract are in
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a69d7547cd30c0c45205d55acfb27a6e4bfd122e/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
 </section>
 <section id="hosting-models-on-nvidia-nim">
 <h2>Hosting models on NVIDIA NIM<a class="headerlink" href="#hosting-models-on-nvidia-nim" title="Link to this heading">#</a></h2>
 <p>The LLM and VLM can run on <a class="reference external" href="https://build.nvidia.com">NVIDIA NIM</a> instead of
 local vLLM — NIM exposes the same OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code>
-API, so this is a <code class="docutils literal notranslate"><span class="pre">models.yaml</span></code> change with no worker code edits. STT and TTS
+API, so this is a model-profile change with no worker code edits. STT and TTS
 stay local: hosted NIM speech (Riva) is not OpenAI <code class="docutils literal notranslate"><span class="pre">/v1/audio</span></code>-compatible.</p>
-<p>A NIM model entry differs from a local one in three fields:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vlm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">openai_compat</span>
-<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">vlm</span>
-<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">https://integrate.api.nvidia.com</span><span class="w">   </span><span class="c1"># client appends /v1/...</span>
-<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">nvidia/cosmos-reason1-7b</span><span class="w">           </span><span class="c1"># confirm slug at build.nvidia.com</span>
-<span class="w">  </span><span class="nt">api_key_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NGC_API_KEY</span><span class="w">                         </span><span class="c1"># → Authorization: Bearer</span>
-<span class="w">  </span><span class="nt">health_check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">                              </span><span class="c1"># hosted NIM has no /health</span>
-<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> vision</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt"> streaming</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<p>A hosted entry uses an environment-variable reference for its credential,
+disables endpoint health probing, and declares external ownership:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;models&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;vlm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_compat&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;model_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvidia/cosmos-reason1-7b&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;vision&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;streaming&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://integrate.api.nvidia.com&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;api_key_env&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;NGC_API_KEY&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;none&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;ownership&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;external&quot;</span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
 </pre></div>
 </div>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code></strong> sends the key as a bearer token. The key is a
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code></strong> sends the environment value as a bearer
+token. The key is a
 managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
-subprocess (refer to <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8e2f0c8d1c065bc2df84328f70f8901d80019c2d/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>); or export it.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">false</span></code></strong> is required for hosted endpoints — they have no
-local <code class="docutils literal notranslate"><span class="pre">/health</span></code> route, so the worker readiness gate must not probe them.
-(Default is <code class="docutils literal notranslate"><span class="pre">true</span></code> for local servers.)</p></li>
+subprocess (refer to <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a69d7547cd30c0c45205d55acfb27a6e4bfd122e/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>); or export it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code></strong> is required when the hosted endpoint has no local
+<code class="docutils literal notranslate"><span class="pre">/health</span></code> route.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code></strong> keeps the launcher from starting or stopping the
+hosted service.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">model_name</span></code></strong> is the hosted model id from <a class="reference external" href="https://build.nvidia.com">build.nvidia.com</a>.</p></li>
 </ul>
 <p>For <code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code>, set <code class="docutils literal notranslate"><span class="pre">models_config:</span> <span class="pre">models.hosted.json</span></code> in the worker
-YAML. The structured profile is consumed by both the worker and orchestrator,
+YAML. This wrapped JSON profile is consumed by both the worker and orchestrator,
 so the local VLM process is omitted and <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is requested
 automatically. Select <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code> to switch back.</p>
 <p><code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code> retains its <code class="docutils literal notranslate"><span class="pre">model_backend:</span> <span class="pre">nim</span></code> selector and
 <code class="docutils literal notranslate"><span class="pre">models.nim.yaml</span></code> overlay. Run it without the local <code class="docutils literal notranslate"><span class="pre">agent-llm</span></code> / <code class="docutils literal notranslate"><span class="pre">vlm</span></code>
 model-servers and provide <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code>.</p>
 <p><strong>Self-hosted NIM containers</strong> work the same way: point <code class="docutils literal notranslate"><span class="pre">base_url</span></code> at the
-container (e.g. <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code>) and set <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> if it
+container (e.g. <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code>), set <code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">health</span></code>, and choose
+<code class="docutils literal notranslate"><span class="pre">managed</span></code> or <code class="docutils literal notranslate"><span class="pre">reused</span></code> ownership if the launcher owns that service. Legacy flat
+profiles may continue to set <code class="docutils literal notranslate"><span class="pre">health_check:</span> <span class="pre">true</span></code> when it
 exposes <code class="docutils literal notranslate"><span class="pre">/v1/health</span></code>.</p>
 </section>
 <section id="vllm-model-persistence">
@@ -717,7 +726,7 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <li><p><strong>NGC pull access</strong> for <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8e2f0c8d1c065bc2df84328f70f8901d80019c2d/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a69d7547cd30c0c45205d55acfb27a6e4bfd122e/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
@@ -774,7 +783,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8e2f0c8d1c065bc2df84328f70f8901d80019c2d/ai-services/llm/llama_nemotron/README.md"><code class="docutils literal notranslate"><span class="pre">ai-services/llm/llama_nemotron/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a69d7547cd30c0c45205d55acfb27a6e4bfd122e/ai-services/llm/llama_nemotron/README.md"><code class="docutils literal notranslate"><span class="pre">ai-services/llm/llama_nemotron/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>llm/nemotron3_nano</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -785,7 +794,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8e2f0c8d1c065bc2df84328f70f8901d80019c2d/ai-services/llm/nemotron3_nano/README.md"><code class="docutils literal notranslate"><span class="pre">ai-services/llm/nemotron3_nano/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a69d7547cd30c0c45205d55acfb27a6e4bfd122e/ai-services/llm/nemotron3_nano/README.md"><code class="docutils literal notranslate"><span class="pre">ai-services/llm/nemotron3_nano/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>llm/nemotron_omni</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
