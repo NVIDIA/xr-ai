@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Deploy the current ``gh-pages`` branch contents to GitHub Pages.
+#
+# Pages stays on the "GitHub Actions" build type and ``gh-pages`` is only
+# storage: a push to it deploys nothing on its own, because commits pushed by a
+# workflow using GITHUB_TOKEN do not trigger a Pages build. Every job that
+# mutates the branch therefore ends by re-uploading the whole branch and
+# deploying it.
+#
+# The calling job must set:
+#   permissions: {contents: write, pages: write, id-token: write}
+#   environment: github-pages
+name: Deploy docs site
+description: Upload the gh-pages branch as a Pages artifact and deploy it.
+
+runs:
+  using: composite
+  steps:
+    - name: Collect the gh-pages branch
+      id: collect
+      shell: bash
+      env:
+        REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+      run: |
+        set -euo pipefail
+        site="${RUNNER_TEMP}/pages-site"
+        if ! git ls-remote --exit-code --heads "$REMOTE" gh-pages >/dev/null 2>&1; then
+          echo "No gh-pages branch; nothing to deploy."
+          echo "present=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        rm -rf "$site"
+        git clone --quiet --depth 1 --branch gh-pages "$REMOTE" "$site"
+        # The artifact is served verbatim; the clone's own history is not part
+        # of the site.
+        rm -rf "$site/.git"
+        echo "present=true" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/upload-pages-artifact@v3
+      if: steps.collect.outputs.present == 'true'
+      with:
+        path: ${{ runner.temp }}/pages-site
+
+    - uses: actions/deploy-pages@v4
+      if: steps.collect.outputs.present == 'true'

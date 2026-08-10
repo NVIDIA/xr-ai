@@ -45,8 +45,9 @@ else
   message="docs: publish ${GITHUB_SHA:0:8}"
 fi
 
-# Sphinx writes .nojekyll per build directory; the branch root needs its own or
-# Jekyll drops every _static/ path.
+# Pages serves this branch through an artifact upload, so Jekyll never runs;
+# .nojekyll is kept at the root so the branch is still correct if it is ever
+# served directly.
 touch "$work/.nojekyll"
 
 cd "$work"

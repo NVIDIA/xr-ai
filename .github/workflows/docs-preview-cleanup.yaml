@@ -21,14 +21,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: write
+      id-token: write
+    environment: github-pages
     concurrency:
       # Shares the publisher's group: both push the gh-pages branch.
+      #
+      # GitHub keeps only one *pending* job per group, so a burst of publishers
+      # can evict this job while it waits. That is tolerated rather than worked
+      # around: docs-preview-sweep.yaml reconciles the branch against the set of
+      # open PRs nightly and removes whatever a lost cleanup left behind.
       group: docs-gh-pages
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .github/actions
       - name: Remove preview/pr-${{ github.event.pull_request.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -36,3 +46,5 @@ jobs:
         run: |
           .github/scripts/remove_docs_preview.sh \
             "${{ github.event.pull_request.number }}"
+      - name: Deploy the site
+        uses: ./.github/actions/deploy-docs-site

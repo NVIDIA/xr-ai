@@ -3,18 +3,28 @@
 #
 # Build the XR AI Sphinx docs. On every docs PR: strict build (warnings = errors).
 # GitHub Pages defaults to the latest semantic-version release while retaining
-# ``main`` as development docs. Its environment admits only main and ``v*``
-# refs; sphinx-multiversion selects release tags from complete Git history.
+# ``main`` as development docs; sphinx-multiversion selects release tags from
+# complete Git history.
 #
-# The site is published from the ``gh-pages`` branch rather than as a Pages
-# artifact, because one artifact can only serve one site and per-PR previews
-# need to live beside the real one:
+# The site is assembled on the ``gh-pages`` branch rather than straight from a
+# build artifact, because one artifact can only serve one site and per-PR
+# previews need to live beside the real one:
 #
 #   /                      the published site (root redirect -> latest release)
 #   /preview/pr-<N>/       one preview per open same-repo PR
 #
 # Publishing the site never touches ``preview/``; closing a PR removes only its
 # own directory (see docs-preview-cleanup.yaml).
+#
+# Pages itself stays on the "GitHub Actions" build type: the branch is storage,
+# and each job that mutates it re-uploads the branch and deploys it (see
+# .github/actions/deploy-docs-site). Branch mode is not usable here because
+# commits pushed by a workflow using GITHUB_TOKEN do not trigger a Pages build,
+# so previews would push without ever deploying.
+#
+# Repo settings this depends on: the ``github-pages`` environment must not
+# restrict deployments to main and ``v*``, or preview deploys from pull_request
+# refs are rejected.
 name: Docs
 
 on:
@@ -25,12 +35,16 @@ on:
       - "docs/**"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/select_latest_docs_release.py"
+      - ".github/scripts/publish_docs.sh"
+      - ".github/scripts/remove_docs_preview.sh"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - "docs/**"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/select_latest_docs_release.py"
+      - ".github/scripts/publish_docs.sh"
+      - ".github/scripts/remove_docs_preview.sh"
 
 concurrency:
   # A tag deployment also rebuilds ``main``. Serialize deployments so an older
@@ -100,6 +114,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: write
+      id-token: write
+    environment: github-pages
     concurrency:
       # Every publisher pushes the same branch. Serialize them all — including
       # across PRs — and never cancel a run mid-push.
@@ -108,7 +125,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .github/actions
       - name: Download documentation site
         uses: actions/download-artifact@v4
         with:
@@ -156,6 +175,12 @@ jobs:
             .github/scripts/remove_docs_preview.sh "$PR_NUMBER"
             echo "removed=true" >> "$GITHUB_OUTPUT"
           fi
+      # The push above deploys nothing on its own; this is what makes the new
+      # branch contents live. It runs after the mid-publish removal too, so a
+      # preview undone by that step is also gone from the served site.
+      - name: Deploy the site
+        if: github.event_name == 'push' || steps.before.outputs.state == 'open'
+        uses: ./.github/actions/deploy-docs-site
       - name: Summarize
         if: >-
           (github.event_name == 'push' || steps.before.outputs.state == 'open')
