@@ -58,7 +58,7 @@ endpoint and no local GPU is required for the agent or hub.
 
 | Requirement | Version | Notes |
 |---|---|---|
-| OS | Linux | Ubuntu 22.04 / 24.04 recommended |
+| OS | Linux | Ubuntu 22.04 / 24.04 recommended; WSL2 is not officially supported (see **Windows (WSL2)** below) |
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
@@ -83,6 +83,14 @@ Quick smoke-test once installed:
 ```bash
 docker run --rm --gpus all nvidia/cuda:13.0.3-base-ubuntu24.04 nvidia-smi
 ```
+
+**Windows (WSL2)**: not an officially supported or tested platform.
+Per a single field report, `model-servers` and `simple-vlm-example` ran
+end-to-end under WSL2 with Docker Engine installed inside the distribution
+(Docker Desktop's WSL integration does not work for this stack), while
+`xr-render-demo` cannot run there at all (no Vulkan ICD in the WSL GPU
+stack).  Networking caveats and workarounds:
+[Windows (WSL2)](docs/source/getting_started/requirements.md#windows-wsl2).
 
 **GPU-profile prerequisites** — install before `uv sync` for these targets:
 
@@ -122,10 +130,11 @@ as you like without reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
 abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
-embeddings behind typed service protocols. Each sample ships a model config that names the
-logical models the worker needs (`llm`, `vlm`, `stt`, …) with
-preset references that pre-fill model-specific quirks (reasoning-field
-aliasing, `chat_template_kwargs`, served-model-name strings).  Workers call
+embeddings behind typed service protocols. Model profiles name the logical roles
+(`llm`, `vlm`, `stt`, …) and separate adapter behavior, endpoint connectivity,
+and deployment ownership. Presets pre-fill model-specific quirks
+(reasoning-field aliasing, `chat_template_kwargs`, served-model-name strings).
+Workers call
 `make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
 "stt")` / `make_tts(config, "tts")` / `make_embedding(config, "embedding")` — no hand-rolled httpx clients, no model
 quirks leaking out of the SDK.  Full quickstart and the built-in preset
@@ -167,10 +176,9 @@ they cannot be stopped, avoiding GPU overcommit.
 uv run model_servers --omni-stack
 ```
 
-The default models are public, so no HuggingFace token is required.  Set
-`HF_TOKEN` to lift download rate limits / speed, or to use a gated model — see
-[`docs/credentials.md`](docs/credentials.md).  The launcher won't prompt; it
-prints a one-line notice and continues if the token is unset.
+`HF_TOKEN` is required by default: without it the ~50 GB first-run download
+can stall indefinitely.  See [`docs/credentials.md`](docs/credentials.md)
+for how to set it, or pass `--allow-anonymous` to run without one.
 
 To stop all model servers when done:
 
@@ -207,8 +215,8 @@ uv run simple_vlm_example
 ```
 
 On the very first run weights download from HuggingFace (~23 GB; can take
-several minutes).  The default model is public — no HuggingFace token needed;
-set `HF_TOKEN` only to lift rate limits / speed or for a gated model (see
+several minutes).  `HF_TOKEN` is required by default; pass
+`--allow-anonymous` to run without one (see
 [`docs/credentials.md`](docs/credentials.md)).
 
 **With model-servers pre-running** — if VLM (port 8100) and STT (port 8103)
@@ -277,7 +285,7 @@ process automatically.
 
 **Hosted NVIDIA NIM** — run the VLM on hosted NIM
 ([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS
-stay local) by setting **one key** in `simple_vlm_example_worker.yaml`:
+stay local) by selecting the shipped profile:
 
 ```yaml
 models_config: models.hosted.json

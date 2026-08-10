@@ -52,7 +52,7 @@ jobs:
     # Runs on the always-on controller VM, which already has the Brev CLI
     # installed and is logged in — no install/login/token step needed.
     runs-on: brev-controller
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Select org
         # The controller is normally already pinned to the right org;
@@ -88,7 +88,7 @@ jobs:
         # but failing here gives a clearer error than a stuck queue).
         run: |
           set -euo pipefail
-          for i in $(seq 1 60); do
+          for i in $(seq 1 80); do
             # grep by name keeps other orgs' instance names out of the
             # log; report just this instance's status field.
             status=$(brev ls | grep -iw "$BREV_INSTANCE_NAME" | grep -oiE 'RUNNING|STOPPED|STARTING|STOPPING|FAILED' | head -n1 || true)
@@ -245,7 +245,7 @@ jobs:
     # a manual `workflow_dispatch` hold the box up for debugging.
     if: always() && inputs.keep_running != true
     runs-on: brev-controller
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Select org
         # The controller is normally already pinned to the right org;
@@ -293,7 +293,7 @@ jobs:
           brev stop "$BREV_INSTANCE_NAME"
 
           # Re-verify: don't conclude success while it's still STOPPING.
-          for i in $(seq 1 20); do
+          for i in $(seq 1 40); do
             status=$(get_status)
             echo "[$i] $BREV_INSTANCE_NAME status: ${status:-<not found>}"
             if [[ "${status^^}" == "STOPPED" ]]; then

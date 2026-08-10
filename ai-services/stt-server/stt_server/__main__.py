@@ -160,12 +160,6 @@ def _build_app(cfg: dict, model_cache: Path):
                     tmp.write(audio_bytes)
                     tmp_path = tmp.name
                 return backend.transcribe(tmp_path)
-            except Exception as exc:
-                # NeMo can throw on very short / noisy audio — return empty
-                # rather than letting the exception become a 500.
-                import logging as _log
-                _log.getLogger("stt_server").warning("transcribe failed: %s", exc)
-                return ""
             finally:
                 if tmp_path:
                     os.unlink(tmp_path)
@@ -173,8 +167,10 @@ def _build_app(cfg: dict, model_cache: Path):
         try:
             text = await loop.run_in_executor(None, _run)
         except Exception as exc:
+            # Full detail goes to the server log only; the wire gets a stable
+            # generic message so backend paths and runtime state don't leak.
             logger.exception("transcription failed: {}", exc)
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            raise HTTPException(status_code=500, detail="transcription failed") from exc
 
         if response_format == "text":
             return PlainTextResponse(text)

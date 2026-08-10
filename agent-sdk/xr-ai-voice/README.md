@@ -29,8 +29,8 @@ async def handle(query: VoiceQuery) -> str:
 session = VoiceSession(
     stt=stt, tts=tts, vad=VadConfig(), voice_gate=VoiceGateConfig(),
 )
-async with session:            # awaits STT/TTS readiness, touches ready_file
-    await session.run(handle)  # drives the hub pipeline until shutdown
+async with session:            # awaits STT/TTS readiness
+    await session.run(handle)  # starts hub IPC, touches ready_file, then runs
 ```
 
 A handler may also return an `AsyncIterator[str]` to stream the reply token by

@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Remove a PR's docs preview from the gh-pages branch once the PR closes.
+# Runs on pull_request_target so a fork PR's own head can never supply the code
+# that runs with write access — this workflow checks out the base branch only.
+#
+# This is not the sole guarantee. A docs build queued before the close can
+# publish after this job has already run; docs.yaml re-checks the PR state
+# after publishing and removes the directory it just wrote.
+name: Docs preview cleanup
+
+on:
+  pull_request_target:
+    types: [closed]
+
+jobs:
+  cleanup:
+    name: Remove preview
+    if: github.repository == 'NVIDIA/xr-ai'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment: github-pages
+    concurrency:
+      # Shares the publisher's group: both push the gh-pages branch.
+      #
+      # queue: max matters most here. Under the default (single), a burst of
+      # publishers would cancel this job while it sat pending and the preview
+      # would outlive its PR until the nightly sweep noticed. Queued cleanups
+      # now wait their turn in FIFO order instead.
+      group: docs-gh-pages
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            .github/actions
+      - name: Remove preview/pr-${{ github.event.pull_request.number }}
+        id: remove
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="$(git ls-remote "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            refs/heads/gh-pages | cut -f1)"
+          .github/scripts/remove_docs_preview.sh "$PR_NUMBER"
+          after="$(git ls-remote "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            refs/heads/gh-pages | cut -f1)"
+          if [[ "$before" != "$after" ]]; then
+            echo "removed=true" >> "$GITHUB_OUTPUT"
+          fi
+      # Most closes have no preview to remove — a fork PR never had one, and
+      # neither did a PR that never touched docs. Only deploy when the branch
+      # actually moved.
+      - name: Deploy the site
+        if: steps.remove.outputs.removed == 'true'
+        uses: ./.github/actions/deploy-docs-site

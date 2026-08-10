@@ -40,6 +40,12 @@ web_client_dir:    ../client-samples/web
 
 # ── Optional: token server (legacy plain-HTTP entry point) ────────────────────
 enable_token_server: true
+# Bind port for the token server (default 8000). Change it if another service
+# already holds 8000. Under WSL2 mirrored networking, Windows' IP Helper
+# service (iphlpsvc) occupies 8000 and the hub aborts with "[Errno 98] address
+# already in use"; either set a free port here, or add `ignoredPorts=8000`
+# under `[experimental]` in %UserProfile%\.wslconfig and run `wsl --shutdown`.
+# token_server_port: 8000
 
 # ── Video recording (NVENC, optional) ─────────────────────────────────────────
 # Requires pynvvideocodec.  Frames are encoded via NVENC and written as

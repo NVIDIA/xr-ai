@@ -56,6 +56,13 @@ def run() -> None:
   before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
+- **Native voice workers** pass the ready file to `VoiceSession`; `run()`
+  touches it only after the input transport's hub IPC receive loop has started.
+- **Pipecat workers** build their voice pipeline, then call
+  `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)`. The
+  callback runs only after the input transport's hub IPC receive loop has
+  started. Roster catch-up is asynchronous; the worker re-announces its
+  current agent status so late and reconnecting clients converge separately.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
 - The worker never imports anything from `server-runtime` or `utils/xr-ai-launcher/`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.

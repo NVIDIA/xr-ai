@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import signal
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from pathlib import Path
@@ -21,6 +22,18 @@ from ._processors.handler import _VoiceHandlerProcessor
 from ._processors.vad_stt import VadConfig
 from ._readiness import ProbeFn, wait_for_services
 from ._transport import HubVoiceTransport
+
+_STATUS_REANNOUNCE_INTERVAL_S = 2.0
+
+
+async def _reannounce_status(transport: HubVoiceTransport) -> None:
+    """Periodically re-send the endpoint's current agent state to clients."""
+    while True:
+        await asyncio.sleep(_STATUS_REANNOUNCE_INTERVAL_S)
+        try:
+            await transport.endpoint.republish_statuses()
+        except Exception:
+            logger.opt(exception=True).warning("agent-status reannouncement failed")
 
 
 class VoiceSession:
@@ -73,8 +86,6 @@ class VoiceSession:
         try:
             await wait_for_services(probes)
             _ = self.transport
-            if self.ready_file:
-                self.ready_file.touch()
         except BaseException:
             await self.close()
             raise
@@ -140,9 +151,47 @@ class VoiceSession:
             except NotImplementedError:
                 continue
             installed.append(sig)
+        runner_task = asyncio.create_task(
+            PipelineRunner().run(task),
+            name="voice-session-pipeline",
+        )
+        started_task = asyncio.create_task(
+            self.transport.wait_until_started(),
+            name="voice-session-input-start",
+        )
+        status_task: asyncio.Task | None = None
         try:
-            await PipelineRunner().run(task)
+            done, _ = await asyncio.wait(
+                (runner_task, started_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if runner_task in done:
+                _ = await runner_task
+                return
+            _ = await started_task
+            if self.ready_file:
+                self.ready_file.touch()
+            await self.transport.endpoint.set_status("idle")
+            status_task = asyncio.create_task(
+                _reannounce_status(self.transport),
+                name="voice-session-status",
+            )
+            _ = await runner_task
+        except BaseException:
+            if not runner_task.done():
+                await task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    _ = await runner_task
+            raise
         finally:
+            if status_task is not None:
+                status_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    _ = await status_task
+            if not started_task.done():
+                started_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                _ = await started_task
             self._handler_processor = None
             for sig in installed:
                 loop.remove_signal_handler(sig)

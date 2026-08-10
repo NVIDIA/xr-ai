@@ -24,6 +24,7 @@ profile replaces only the VLM with NVIDIA NIM.
 How to run (from agent-samples/simple-vlm-example/):
     uv sync && uv run simple_vlm_example
 """
+import argparse
 from dataclasses import replace
 from pathlib import Path
 
@@ -31,8 +32,8 @@ from xr_ai_launcher import (
     Process,
     ensure_credentials,
     load_model_deployment,
+    require_credentials,
     run_stack,
-    warn_if_missing,
 )
 from xr_ai_logging import setup_logging
 
@@ -87,11 +88,17 @@ def _build_processes() -> tuple[list[Process], tuple[str, ...]]:
 
 def run() -> None:
     setup_logging("orchestrator", namespace="simple-vlm-example")
+
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--allow-anonymous", action="store_true",
+                   help="Start without HF_TOKEN (unauthenticated checkpoint "
+                        "downloads may stall indefinitely).")
+    ns, _ = p.parse_known_args()
+
     processes, credentials = _build_processes()
-    # HF_TOKEN is optional for the default (public) model — it only raises HF
-    # rate limits / download speed and is required only for gated models.
-    # Warn instead of prompting; see docs/credentials.md.
-    warn_if_missing("HF_TOKEN")
+    # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
+    # docs/credentials.md.
+    require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
     for credential in credentials:
         ensure_credentials(credential)
     run_stack(processes, _BASE)

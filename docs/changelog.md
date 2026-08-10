@@ -9,6 +9,16 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-10 — Voice-worker ready files wait for inbound IPC
+
+`VoiceSession` and the direct `run_voice_pipeline` compatibility path release a
+managed worker's ready file only after the input transport has started its hub
+IPC receive loop. Participant roster catch-up remains asynchronous, so process
+readiness stays a launcher concern rather than a per-client discovery barrier.
+The endpoint stores each agent's current status and the pipeline re-announces
+that state periodically; a late or reconnecting client therefore converges
+without relying on a one-shot event.
+
 ### 2026-08-05 — Listening chimes belong to wake recognition, not response start
 
 Wake-word probes run on an absolute cadence and append a short silent tail so
@@ -106,6 +116,11 @@ presets. The simple VLM sample consumes bundled local and hosted profiles
 end-to-end, replacing its separate `model_backend` and `models_yaml` switches.
 This keeps endpoint selection and process lifecycle in one profile without
 coupling the launcher to the model SDK.
+
+The loader accepts nested JSON or YAML profiles, an optional `models` root,
+direct role mappings, and existing flat entries. Legacy flat constructors and
+read-only attribute aliases keep current callers compatible. Render profiles
+remain unchanged pending their owning refactor.
 
 ### 2026-07-30 — Simple VLM adopts the native voice runtime
 
@@ -391,6 +406,39 @@ rather than dropped (the previous coordinate base used Pydantic's default
 `extra="ignore"`). This matches the target's intent and only affects inputs
 that carry fields outside the model — the spatial-math/tracking call sites pass
 exactly the declared fields, so their behaviour is unchanged.
+
+### 2026-07-27 — STT transcription failures are 5xx, not empty 200s
+
+The STT endpoint lets backend exceptions propagate to an HTTP 500 carrying a
+stable generic detail ("transcription failed"); the full exception is logged
+server-side only, so backend paths and runtime state stay out of responses.
+The endpoint used to catch every backend exception and return
+200 with an empty transcript, a deliberate guard against NeMo throwing on
+very short audio; in practice that guard made a fully broken backend look
+healthy while every transcription failed. The voice pipeline catches the
+resulting client error, logs it, and drops the utterance, so a session
+survives individual failures. Successful transcriptions of silent or
+unintelligible audio still return 200 with an empty transcript.
+
+### 2026-07-27 — vLLM container logs are streamed by a supervisor
+
+The docker log streamer waits for the container to exist before attaching
+`docker logs -f` and re-attaches (with `--since`) if the stream exits while
+the container is still expected. A single unsupervised attach races
+`docker run`: attaching before dockerd registers the container writes one
+"No such container" line and never recovers, leaving the advertised log
+file empty for the whole run.
+
+### 2026-07-27 — HF_TOKEN is required by checkpoint-downloading samples
+
+`model_servers` and `simple_vlm_example` now call
+`require_credentials("HF_TOKEN")` and exit with instructions when no token is
+found, instead of warning and continuing. Unauthenticated HuggingFace
+downloads are rate-limited to the point of stalling indefinitely on the
+multi-GB checkpoints, with no error and no progress output, so the previous
+one-line warning turned a missing token into an apparent hang on first
+launch. The `--allow-anonymous` flag restores the old warn-and-continue
+behavior for already-cached weights or deliberate anonymous runs.
 
 ### 2026-07-21 — Video memory is recorded history, not live capture
 

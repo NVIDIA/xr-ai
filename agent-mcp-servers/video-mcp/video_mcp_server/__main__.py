@@ -31,6 +31,30 @@ _DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "video_mcp_server.yam
 _DEFAULT_HUB_PUB = "ipc:///tmp/xr_hub_pub"
 _DEFAULT_HUB_PUSH = "ipc:///tmp/xr_hub_in"
 
+_STARTUP_TIMEOUT_S = 10.0
+
+
+async def _wait_until_bound(server: uvicorn.Server, task: asyncio.Task) -> None:
+    """Poll until *server* binds or *task* dies trying.
+
+    Mirrors xr_media_hub.transport.livekit._token_server.wait_until_bound.
+    On timeout the task is cancelled and awaited so we don't orphan it.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _STARTUP_TIMEOUT_S
+    while not server.started and not task.done():
+        if loop.time() >= deadline:
+            break
+        await asyncio.sleep(0.05)
+    if not server.started and not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            # Expected: we cancelled the task ourselves; await it only to let
+            # the cancellation unwind cleanly before we return to the caller.
+            pass
+
 
 def _error(error: Exception) -> dict:
     return {"error": str(error)}
@@ -182,9 +206,21 @@ async def _serve(config: dict, ready_file: Path | None) -> None:
             recording_enabled,
             config.get("hub_pub", _DEFAULT_HUB_PUB),
         )
+        serve_task = asyncio.create_task(server.serve())
+        await _wait_until_bound(server, serve_task)
+        if not server.started:
+            cause = (
+                serve_task.exception()
+                if serve_task.done() and not serve_task.cancelled()
+                else None
+            )
+            raise RuntimeError(
+                f"video-mcp server failed to bind on port {port} "
+                "— port already in use, startup timed out, or ASGI lifespan failed"
+            ) from cause
         if ready_file:
             ready_file.touch()
-        await server.serve()
+        await serve_task
     finally:
         endpoint.stop()
         endpoint_task.cancel()

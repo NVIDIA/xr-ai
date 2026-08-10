@@ -44,9 +44,10 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **All HTTP calls to AI services go through `agent-sdk/xr-ai-models`.**
   Workers and services depend on its typed protocols
   (`LLMService`, `VLMService`, `STTService`, `TTSService`, `EmbeddingService`)
-  and construct
-  clients from a per-sample model config via `make_llm` /
-  `make_vlm` / `make_stt` / `make_tts` / `make_embedding`. Hand-rolled `httpx` clients
+  and construct clients from a per-sample model profile via `make_llm` /
+  `make_vlm` / `make_stt` / `make_tts` / `make_embedding`. Profiles separate
+  adapter behavior, endpoint
+  connectivity/readiness, and deployment ownership. Hand-rolled `httpx` clients
   against `/v1/chat/completions`, `/v1/audio/transcriptions`, or
   `/v1/audio/speech`, or `/v1/embeddings` are forbidden — model quirks belong in this one
   package's presets, not in callers. No vendor SDKs (no `openai`, no
@@ -138,7 +139,9 @@ mechanically:
       `__init__.py`, `__main__.py`, and cohesive sibling modules
 - [ ] `agent-samples/<name>/yaml/xr_media_hub.yaml` — hub config
 - [ ] `agent-samples/<name>/yaml/<command>.yaml` — one per process that needs config
-- [ ] `agent-samples/<name>/yaml/models.yaml` — worker-only model config, or a structured JSON deployment profile when the orchestrator also consumes ownership (see `agent-sdk/xr-ai-models/README.md`)
+- [ ] `agent-samples/<name>/yaml/models.local.json` — structured adapter,
+      endpoint, and deployment specs; worker-only legacy YAML remains supported
+      (see `agent-sdk/xr-ai-models/README.md`)
 - [ ] `uv sync` in both `agent-samples/<name>/` and `agent-samples/<name>/worker/`
 - [ ] `agent-samples/<name>/README.md` — sample-specific setup and operation
 - [ ] Root `README.md` updated — sample tour and quickstart
@@ -174,7 +177,8 @@ pipecat internally):
 - **Voice session** — `VoiceSession.run(handler)` privately assembles
   `input → VadStt → VoiceGate → handler → StreamingTts → output`, owns model
   readiness and ready-file semantics, installs signal handlers, and closes the
-  transport and model clients.
+  transport and model clients. It touches the ready file only after the input
+  transport has entered its hub IPC receive loop.
 - **Native handler** — `xr_ai_nat.adapters.as_voice_handler` maps a typed NAT
   function onto `VoiceSession`; `TextMessageInput` routes participant text
   through the same turn path as speech.
@@ -184,7 +188,9 @@ pipecat internally):
   always-on). No sample code — config only.
 
 `xr-ai-pipecat` remains available for samples that still subclass its
-`BrainProcessor`; this migration does not remove it.
+`BrainProcessor`; those workers run the assembled pipeline with
+`run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` so they use
+the same IPC-start readiness boundary.
 
 A native voice sample adapts its NAT function to `VoiceSession`; wake-word
 behavior comes from config alone.

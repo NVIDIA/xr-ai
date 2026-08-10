@@ -12,6 +12,9 @@ import importlib
 
 import pytest
 from xr_ai_models import (
+    AdapterSpec,
+    DeploymentSpec,
+    EndpointSpec,
     OpenAICompatVLM,
     VLMService,
     _config,
@@ -32,6 +35,9 @@ _ALIASES = {
         ("OpenAICompatVLM", _openai_compat.OpenAICompatVLM),
     ],
     "xr_ai_models.config": [
+        ("AdapterSpec", _config.AdapterSpec),
+        ("DeploymentSpec", _config.DeploymentSpec),
+        ("EndpointSpec", _config.EndpointSpec),
         ("load_models_config", _config.load_models_config),
         ("KIND_OPENAI_COMPAT", _config.KIND_OPENAI_COMPAT),
         # Config-vocabulary names not re-exported at the package root must still
@@ -60,5 +66,8 @@ def test_public_names_reachable_from_package_root() -> None:
     # imported from the package root are the canonical private-module objects.
     assert VLMService is _protocols.VLMService
     assert OpenAICompatVLM is _openai_compat.OpenAICompatVLM
+    assert AdapterSpec is _config.AdapterSpec
+    assert DeploymentSpec is _config.DeploymentSpec
+    assert EndpointSpec is _config.EndpointSpec
     assert load_models_config is _config.load_models_config
     assert make_vlm is _factory.make_vlm

@@ -5,11 +5,14 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from xr_ai_vllm._docker import (
     _already_logged_in,
+    _LogStreamer,
     _registry_for,
     build_run_argv,
     container_exists,
@@ -184,6 +187,130 @@ class TestBuildRunArgv:
         assert "pip install -q --no-build-isolation mamba-ssm causal-conv1d" in bash_cmd
 
 
+class _FakeLogProc:
+    """Stands in for the `docker logs -f` Popen inside _LogStreamer."""
+
+    def __init__(self):
+        self._done = threading.Event()
+
+    def wait(self, timeout=None):
+        self._done.wait(timeout)
+        return 0
+
+    def poll(self):
+        return 0 if self._done.is_set() else None
+
+    def terminate(self):
+        self._done.set()
+
+    kill = terminate
+
+
+def _wait_for(predicate, timeout_s=5.0):
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+class TestLogStreamer:
+    def _make(self, monkeypatch, tmp_path, exists):
+        attached: list[_FakeLogProc] = []
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker._container_log_path",
+            lambda name: tmp_path / f"{name}.log",
+        )
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker.container_exists", lambda name: exists.is_set(),
+        )
+
+        def _fake_attach(self):
+            proc = _FakeLogProc()
+            attached.append(proc)
+            return proc
+
+        monkeypatch.setattr(_LogStreamer, "_attach", _fake_attach)
+        return _LogStreamer("fake-container"), attached
+
+    def test_attach_waits_for_container(self, monkeypatch, tmp_path):
+        exists = threading.Event()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        try:
+            time.sleep(0.3)
+            assert not attached  # container absent — must not attach yet
+            exists.set()
+            assert _wait_for(lambda: len(attached) == 1)
+        finally:
+            streamer.stop()
+
+    def test_reattaches_after_streamer_exit(self, monkeypatch, tmp_path):
+        exists = threading.Event()
+        exists.set()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        try:
+            assert _wait_for(lambda: len(attached) == 1)
+            attached[0].terminate()  # simulate "docker logs -f" dying
+            assert _wait_for(lambda: len(attached) == 2)
+        finally:
+            streamer.stop()
+
+    def test_stop_terminates_streamer(self, monkeypatch, tmp_path):
+        exists = threading.Event()
+        exists.set()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        assert _wait_for(lambda: len(attached) == 1)
+        streamer.stop()
+        assert attached[0].poll() is not None
+        assert not streamer._thread.is_alive()
+
+    def test_stop_before_container_exists(self, monkeypatch, tmp_path):
+        exists = threading.Event()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        streamer.stop()
+        assert not streamer._thread.is_alive()
+        assert not attached
+
+    def test_reattach_passes_since(self, monkeypatch, tmp_path):
+        """A re-attach must not replay the container log from the start."""
+        exists = threading.Event()
+        exists.set()
+        streamer, attached = self._make(monkeypatch, tmp_path, exists)
+        try:
+            assert _wait_for(lambda: len(attached) == 1)
+            assert streamer._since is None
+            attached[0].terminate()
+            assert _wait_for(lambda: len(attached) == 2)
+            assert streamer._since is not None
+        finally:
+            streamer.stop()
+
+    def test_unwritable_log_path_ends_supervisor(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker._container_log_path",
+            lambda name: tmp_path / "missing-dir" / f"{name}.log",
+        )
+        monkeypatch.setattr("xr_ai_vllm._docker.container_exists", lambda name: True)
+        streamer = _LogStreamer("fake-container")
+        assert _wait_for(lambda: not streamer._thread.is_alive())
+        streamer.stop()
+
+    def test_popen_oserror_ends_supervisor(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker._container_log_path",
+            lambda name: tmp_path / f"{name}.log",
+        )
+        monkeypatch.setattr("xr_ai_vllm._docker.container_exists", lambda name: True)
+        monkeypatch.setattr(
+            "xr_ai_vllm._docker.subprocess.Popen",
+            lambda *a, **kw: (_ for _ in ()).throw(OSError("no fds")),
+        )
+        streamer = _LogStreamer("fake-container")
+        assert _wait_for(lambda: not streamer._thread.is_alive())
+        streamer.stop()
+
+
 class TestContainerHelpers:
     def test_container_exists_false_when_docker_missing(self):
         with patch(
@@ -222,7 +349,7 @@ class TestRun:
             patch("xr_ai_vllm._docker._maybe_ngc_login"),
             patch("xr_ai_vllm._docker.build_run_argv", return_value=argv),
             patch("xr_ai_vllm._docker.subprocess.Popen", return_value=process) as popen,
-            patch("xr_ai_vllm._docker._start_log_streamer", return_value=(None, None)),
+            patch("xr_ai_vllm._docker._LogStreamer", return_value=MagicMock()),
             patch("xr_ai_vllm._docker._lifecycle.wait_until_healthy"),
             patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped"),
             patch("xr_ai_vllm._docker.signal.getsignal", return_value=None),

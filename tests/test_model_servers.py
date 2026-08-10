@@ -143,7 +143,7 @@ def test_cli_selects_requested_stack(
 ) -> None:
     selected: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "warn_if_missing", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "_stop_incompatible_stack", lambda _stack: None)
     monkeypatch.setattr(_model_servers, "_build_processes", lambda stack: selected.append(stack) or [])
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
@@ -168,7 +168,7 @@ def test_cli_stops_incompatible_stack_before_starting(
 ) -> None:
     calls: list[object] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "warn_if_missing", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(
         _model_servers,
         "stop_persistent_servers",
@@ -188,7 +188,7 @@ def test_cli_aborts_when_incompatible_stack_cannot_stop(
 ) -> None:
     started: list[bool] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "warn_if_missing", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
     monkeypatch.setattr(sys, "argv", ["model_servers", "--omni-stack"])
