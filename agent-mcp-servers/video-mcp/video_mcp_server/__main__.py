@@ -51,6 +51,8 @@ async def _wait_until_bound(server: uvicorn.Server, task: asyncio.Task) -> None:
         try:
             await task
         except asyncio.CancelledError:
+            # Expected: we cancelled the task ourselves; await it only to let
+            # the cancellation unwind cleanly before we return to the caller.
             pass
 
 
