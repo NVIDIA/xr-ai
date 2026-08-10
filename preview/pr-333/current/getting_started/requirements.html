@@ -421,7 +421,7 @@ local GPU is required for the agent or XR-Media-Hub.</p>
 <tbody>
 <tr class="row-even"><td><p>OS</p></td>
 <td><p>Linux</p></td>
-<td><p>Ubuntu 22.04 / 24.04 recommended</p></td>
+<td><p>Ubuntu 22.04 / 24.04 recommended; WSL2 is not officially supported (refer to <a class="reference internal" href="#windows-wsl2">Windows (WSL2)</a> below)</p></td>
 </tr>
 <tr class="row-odd"><td><p>Python</p></td>
 <td><p>3.11 or 3.12</p></td>
@@ -475,6 +475,49 @@ install guide and run the CDI / runtime-configure steps from there:</p>
 nvcc + FlashInfer. If you switch a profile to <code class="docutils literal notranslate"><span class="pre">vllm_backend:</span> <span class="pre">pip</span></code>, refer to the
 troubleshooting guide for the host CUDA toolchain prerequisite.</p>
 <p>If <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> or the VLM fails on first run, refer to the troubleshooting guide.</p>
+</section>
+<section id="windows-wsl2">
+<h2>Windows (WSL2)<a class="headerlink" href="#windows-wsl2" title="Link to this heading">#</a></h2>
+<p>WSL2 is not an officially supported or tested platform. The notes below come
+from a single field report (Windows 11, RTX PRO 6000 Blackwell, Ubuntu WSL2
+distribution with in-distro Docker Engine) and may not generalize to other
+setups:</p>
+<ul class="simple">
+<li><p><strong>model-servers and simple-vlm-example ran end-to-end</strong> in that
+configuration. Docker Desktop’s WSL integration did not work for this
+stack: <code class="docutils literal notranslate"><span class="pre">--network</span> <span class="pre">host</span></code> attaches containers to the Docker Desktop VM’s
+network namespace, not the distribution’s, so LiveKit signaling succeeds
+but WebRTC media never flows (clients drop after ~18 s).</p></li>
+<li><p><strong>xr-render-demo cannot run under WSL2.</strong> The WSL2 GPU stack is compute-only
+(CUDA, NVENC, NVML) with no Vulkan ICD, so Vulkan falls back to the llvmpipe
+software rasterizer and the <code class="docutils literal notranslate"><span class="pre">VK_KHR_external_semaphore_fd</span></code> /
+<code class="docutils literal notranslate"><span class="pre">VK_KHR_external_fence_fd</span></code> device extensions CloudXR Runtime requires are
+unavailable. This sample needs bare-metal Linux.</p></li>
+<li><p><strong>NAT networking (the WSL default) limits the stack to a browser on the
+same Windows machine.</strong> The WSL <code class="docutils literal notranslate"><span class="pre">eth0</span></code> address is on a host-internal
+virtual subnet that other devices on the LAN cannot reach, and Windows’
+NAT port forwarding (<code class="docutils literal notranslate"><span class="pre">netsh</span> <span class="pre">portproxy</span></code>) is TCP-only, so external clients
+(headset, phone) have no WebRTC media path into a NAT-mode WSL VM.
+Reaching them would require mirrored networking (untested with this stack,
+and subject to the port-8000 collision below).</p></li>
+<li><p><strong>For that same-machine browser under NAT, localhost forwarding is TCP
+only</strong>: signaling works via <code class="docutils literal notranslate"><span class="pre">localhost</span></code> but WebRTC media silently fails.
+Open the web client at the WSL distribution’s <code class="docutils literal notranslate"><span class="pre">eth0</span></code> address instead (note
+it can change across reboots). Microphone capture needs a secure context.
+Prefer the hub’s default HTTPS web server (<code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080</span></code>): an HTTPS
+origin is a secure context once you trust the hub’s self-signed cert
+(download it from <code class="docutils literal notranslate"><span class="pre">https://&lt;eth0-ip&gt;:8080/cert</span></code>, or copy
+<code class="docutils literal notranslate"><span class="pre">~/.local/share/xr-ai/web-server.crt</span></code> out of the WSL filesystem via
+<code class="docutils literal notranslate"><span class="pre">\\wsl$\</span></code>, then install it into the Windows cert store) or click through
+the browser warning. On a plain-HTTP path (the legacy token server, or
+<code class="docutils literal notranslate"><span class="pre">web_server_tls:</span> <span class="pre">false</span></code>), the report’s verified workaround is
+whitelisting the exact origin in
+<code class="docutils literal notranslate"><span class="pre">chrome://flags/#unsafely-treat-insecure-origin-as-secure</span></code>; the HTTPS route
+was not exercised in the report.</p></li>
+<li><p><strong>Mirrored networking collides with the token server</strong>: Windows’ IP Helper
+service occupies port 8000. Refer to the <code class="docutils literal notranslate"><span class="pre">token_server_port</span></code> note in
+<code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub.yaml</span></code>.</p></li>
+</ul>
 </section>
 <section id="running-on-other-gpus">
 <h2>Running on other GPUs<a class="headerlink" href="#running-on-other-gpus" title="Link to this heading">#</a></h2>
@@ -569,6 +612,7 @@ dropped if it is closed.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware">Hardware</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#software">Software</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-profile-prerequisites">GPU-profile prerequisites</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#windows-wsl2">Windows (WSL2)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-on-other-gpus">Running on other GPUs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#network">Network</a></li>
 </ul>

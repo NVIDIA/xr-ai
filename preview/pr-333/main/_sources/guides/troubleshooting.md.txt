@@ -374,5 +374,7 @@ time.
 the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).
 
 **Fix:** wait. Subsequent runs use the cached weights and start in
-~30–60 s. If a download fails, check that `HF_TOKEN` is set if the model
-needs it (see [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)).
+~30–60 s. If the download makes no progress, note that unauthenticated
+downloads (runs started with `--allow-anonymous`) are rate-limited and can
+stall indefinitely; set `HF_TOKEN` and restart
+(see [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)).

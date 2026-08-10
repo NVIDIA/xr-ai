@@ -28,7 +28,7 @@ local GPU is required for the agent or XR-Media-Hub.
 
 | Requirement | Version | Notes |
 |---|---|---|
-| OS | Linux | Ubuntu 22.04 / 24.04 recommended |
+| OS | Linux | Ubuntu 22.04 / 24.04 recommended; WSL2 is not officially supported (refer to [Windows (WSL2)](#windows-wsl2) below) |
 | Python | 3.11 or 3.12 | 3.10 and 3.13 are not supported |
 | [uv](https://docs.astral.sh/uv/) | latest | dependency manager used by all samples |
 | NVIDIA driver | 570+ | required for local model inference |
@@ -65,6 +65,48 @@ nvcc + FlashInfer. If you switch a profile to `vllm_backend: pip`, refer to the
 troubleshooting guide for the host CUDA toolchain prerequisite.
 
 If `uv sync` or the VLM fails on first run, refer to the troubleshooting guide.
+
+## Windows (WSL2)
+
+WSL2 is not an officially supported or tested platform. The notes below come
+from a single field report (Windows 11, RTX PRO 6000 Blackwell, Ubuntu WSL2
+distribution with in-distro Docker Engine) and may not generalize to other
+setups:
+
+- **model-servers and simple-vlm-example ran end-to-end** in that
+  configuration. Docker Desktop's WSL integration did not work for this
+  stack: `--network host` attaches containers to the Docker Desktop VM's
+  network namespace, not the distribution's, so LiveKit signaling succeeds
+  but WebRTC media never flows (clients drop after ~18 s).
+- **xr-render-demo cannot run under WSL2.** The WSL2 GPU stack is compute-only
+  (CUDA, NVENC, NVML) with no Vulkan ICD, so Vulkan falls back to the llvmpipe
+  software rasterizer and the `VK_KHR_external_semaphore_fd` /
+  `VK_KHR_external_fence_fd` device extensions CloudXR Runtime requires are
+  unavailable. This sample needs bare-metal Linux.
+- **NAT networking (the WSL default) limits the stack to a browser on the
+  same Windows machine.** The WSL `eth0` address is on a host-internal
+  virtual subnet that other devices on the LAN cannot reach, and Windows'
+  NAT port forwarding (`netsh portproxy`) is TCP-only, so external clients
+  (headset, phone) have no WebRTC media path into a NAT-mode WSL VM.
+  Reaching them would require mirrored networking (untested with this stack,
+  and subject to the port-8000 collision below).
+- **For that same-machine browser under NAT, localhost forwarding is TCP
+  only**: signaling works via `localhost` but WebRTC media silently fails.
+  Open the web client at the WSL distribution's `eth0` address instead (note
+  it can change across reboots). Microphone capture needs a secure context.
+  Prefer the hub's default HTTPS web server (`https://<eth0-ip>:8080`): an HTTPS
+  origin is a secure context once you trust the hub's self-signed cert
+  (download it from `https://<eth0-ip>:8080/cert`, or copy
+  `~/.local/share/xr-ai/web-server.crt` out of the WSL filesystem via
+  `\\wsl$\`, then install it into the Windows cert store) or click through
+  the browser warning. On a plain-HTTP path (the legacy token server, or
+  `web_server_tls: false`), the report's verified workaround is
+  whitelisting the exact origin in
+  `chrome://flags/#unsafely-treat-insecure-origin-as-secure`; the HTTPS route
+  was not exercised in the report.
+- **Mirrored networking collides with the token server**: Windows' IP Helper
+  service occupies port 8000. Refer to the `token_server_port` note in
+  `server-runtime/xr_media_hub.yaml`.
 
 ## Running on other GPUs
 

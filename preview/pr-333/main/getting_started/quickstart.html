@@ -427,10 +427,10 @@ they cannot be stopped, avoiding GPU overcommit.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--omni-stack
 </pre></div>
 </div>
-<p>The default models are public, so no HuggingFace token is required. Set
-<code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> to lift download rate limits and speed, or to use a gated model: refer
-to the credentials guide. The launcher won’t prompt; it prints a one-line notice
-and continues if the token is unset.</p>
+<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the ~50 GB first-run download
+can stall indefinitely. Refer to the
+<a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
+pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to run without one.</p>
 <p>To stop all model servers when done:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
 </pre></div>
@@ -453,9 +453,9 @@ uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
 <p>On the very first run weights download from HuggingFace (~23 GB; can take
-several minutes). The default model is public — no HuggingFace token needed; set
-<code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> only to lift rate limits and speed or for a gated model (refer to the
-credentials guide).</p>
+several minutes). <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default; pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>
+to run without one (refer to the
+<a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>).</p>
 <p><strong>With model-servers pre-running</strong> — if VLM (port 8100) and STT (port 8103) are
 already up from <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, the demo detects them at startup and reuses
 them. No extra flags needed. When you exit, those services keep running.</p>

@@ -712,8 +712,10 @@ time.</p>
 <p><strong>Cause:</strong> model weights are downloading from HuggingFace into <code class="docutils literal notranslate"><span class="pre">models/</span></code> at
 the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).</p>
 <p><strong>Fix:</strong> wait. Subsequent runs use the cached weights and start in
-~30–60 s. If a download fails, check that <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is set if the model
-needs it (see <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>).</p>
+~30–60 s. If the download makes no progress, note that unauthenticated
+downloads (runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can
+stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart
+(see <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>).</p>
 </section>
 </section>
 </section>
