@@ -122,8 +122,13 @@ jobs:
     concurrency:
       # Every publisher pushes the same branch. Serialize them all — including
       # across PRs — and never cancel a run mid-push.
+      #
+      # queue: max because the default (single) cancels whatever is already
+      # pending in the group when a new run arrives, which would silently drop
+      # a queued cleanup or publish during a burst.
       group: docs-gh-pages
       cancel-in-progress: false
+      queue: max
     steps:
       - uses: actions/checkout@v4
         with:

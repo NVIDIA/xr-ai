@@ -27,12 +27,13 @@ jobs:
     concurrency:
       # Shares the publisher's group: both push the gh-pages branch.
       #
-      # GitHub keeps only one *pending* job per group, so a burst of publishers
-      # can evict this job while it waits. That is tolerated rather than worked
-      # around: docs-preview-sweep.yaml reconciles the branch against the set of
-      # open PRs nightly and removes whatever a lost cleanup left behind.
+      # queue: max matters most here. Under the default (single), a burst of
+      # publishers would cancel this job while it sat pending and the preview
+      # would outlive its PR until the nightly sweep noticed. Queued cleanups
+      # now wait their turn in FIFO order instead.
       group: docs-gh-pages
       cancel-in-progress: false
+      queue: max
     steps:
       - uses: actions/checkout@v4
         with:
