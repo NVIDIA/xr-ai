@@ -11,11 +11,12 @@ from pathlib import Path
 
 from tea_making_worker.applications.change_events import ChangeCommitRequest
 from tea_making_worker.applications.change_watch import ChangeWatchApplication
+from tea_making_worker.applications.events import BACKGROUND_FACT, USER_OUTPUT
+from tea_making_worker.applications.manager.runtime import ApplicationOwnership
+from tea_making_worker.applications.manager.spec import ApplicationCatalog, ApplicationDescriptor
+from tea_making_worker.applications.output import TextOutputBridge
 from tea_making_worker.applications.transcript import TranscriptApplication
 from tea_making_worker.applications.video_log import VideoLogApplication
-from tea_making_worker.desktop.runtime import DesktopRuntime
-from tea_making_worker.desktop.spec import ApplicationSpec, DesktopSpec
-from tea_making_worker.engine.text_output import TextOutputBridge
 from tea_making_worker.runtime.scope import current_invocation
 from tea_making_worker.runtime.state import SessionStore
 from tea_making_worker.spec import load_workflow
@@ -24,8 +25,8 @@ from xr_ai_nat.functions.vision import LiveVisionResult
 _WORKFLOW = Path(__file__).parents[2] / "yaml" / "workflow.yaml"
 
 
-def _runtime(app: ApplicationSpec) -> DesktopRuntime:
-    return DesktopRuntime(DesktopSpec(root_prompt="root", capabilities={}, applications={app.id: app}))
+def _runtime(app: ApplicationDescriptor) -> ApplicationOwnership:
+    return ApplicationOwnership(ApplicationCatalog(root_prompt="root", capabilities={}, applications={app.id: app}))
 
 
 class _View:
@@ -36,6 +37,15 @@ class _View:
     async def ainvoke(self, request, *, to_type):
         self.requests.append(request)
         return LiveVisionResult(answer=self.captions.pop(0))
+
+
+class _Events:
+    def __init__(self) -> None:
+        self.requests = []
+
+    async def publish(self, topic, **kwargs):
+        self.requests.append((topic, kwargs))
+        return ()
 
 
 class _ChangeAgent:
@@ -88,7 +98,7 @@ class _VideoDeltaAgent:
 class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
     async def test_change_watch_uses_a_baseline_then_notifies_an_important_change(self) -> None:
         directory = self.enterContext(tempfile.TemporaryDirectory())
-        app_spec = ApplicationSpec(
+        app_spec = ApplicationDescriptor(
             "change_watch",
             "Visual change watcher",
             "background",
@@ -103,42 +113,45 @@ class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
             },
         )
         runtime = _runtime(app_spec)
-        outputs: list[tuple[str, str]] = []
-
-        async def output(_participant_id: str, label: str, message: str) -> None:
-            outputs.append((label, message))
-
-        app = ChangeWatchApplication(app_spec, runtime, output)
-        view = _View("An empty room.", "A person entered the room.")
+        events = _Events()
+        app = ChangeWatchApplication(app_spec, runtime, events)  # type: ignore[arg-type]
+        view = _View("An empty room.", "A person entered the room.", "A person entered the room.")
         app._view = view
         app._agent = _ChangeAgent(app)
         session = SessionStore(load_workflow(_WORKFLOW)).get("tester")
 
         await app.start(session, "people entering the room")
         await app.tick(session)
-        app._states[session.participant_id].next_tick = 0
+        await app.tick(session)
         await app.tick(session)
 
         self.assertEqual(
-            outputs,
-            [("Visual change watcher", "A person entered the room.")],
+            [request[0] for request in events.requests],
+            [BACKGROUND_FACT, USER_OUTPUT],
         )
         self.assertIn("Focus: people entering the room", view.requests[0]["question"])
         state = app._states[session.participant_id]
         self.assertEqual(
             list(state.captions),
-            ["An empty room.", "A person entered the room."],
+            ["A person entered the room.", "A person entered the room."],
         )
         self.assertEqual(runtime.current(session), "root")
         await app.stop(session)
         records = [json.loads(line) for line in state.path.read_text(encoding="utf-8").splitlines()]
         self.assertEqual(
             [record["type"] for record in records],
-            ["session", "baseline", "observation", "session_end"],
+            ["session", "baseline", "observation", "observation", "session_end"],
         )
         self.assertEqual(records[0]["watch_for"], "people entering the room")
         self.assertTrue(records[2]["important"])
+        self.assertFalse(records[3]["important"])
         self.assertEqual(records[2]["summary"], "A person entered the room.")
+        fact = events.requests[0][1]["payload"]
+        output = events.requests[1][1]["payload"]
+        self.assertEqual(fact.topic, "change_watch.change")
+        self.assertEqual(fact.summary, "A person entered the room.")
+        self.assertEqual(output.label, "Visual change watcher")
+        self.assertEqual(events.requests[1][1]["subscribers"], ("output.text",))
 
     async def test_text_output_bypasses_query_and_uses_application_label(self) -> None:
         class _Transport:
@@ -160,7 +173,7 @@ class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_transcript_emits_a_labeled_periodic_summary_without_tts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            app_spec = ApplicationSpec(
+            app_spec = ApplicationDescriptor(
                 "transcript",
                 "Transcript recorder",
                 "background",
@@ -172,12 +185,8 @@ class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             runtime = _runtime(app_spec)
-            outputs: list[tuple[str, str]] = []
-
-            async def output(_participant_id: str, label: str, message: str) -> None:
-                outputs.append((label, message))
-
-            app = TranscriptApplication(app_spec, runtime, output)
+            events = _Events()
+            app = TranscriptApplication(app_spec, runtime, events)  # type: ignore[arg-type]
             app._agent = _SummaryAgent(app)
             session = SessionStore(load_workflow(_WORKFLOW)).get("speaker")
 
@@ -190,23 +199,23 @@ class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
                 app.on_transcription(session, "Second project update.", "two"),
                 timeout=2,
             )
-            await asyncio.wait_for(app.tick(session), timeout=2)
-            self.assertEqual(outputs, [])
-            app._states[session.participant_id].next_summary = 0
+            self.assertEqual(events.requests, [])
             await asyncio.wait_for(app.tick(session), timeout=2)
             path = app._states[session.participant_id].path
             records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
             self.assertEqual([record["type"] for record in records], ["session", "utterance", "utterance", "summary"])
             self.assertEqual(
-                outputs,
-                [("Transcript recorder", "The speaker discussed two project updates.")],
+                [request[0] for request in events.requests],
+                [BACKGROUND_FACT, USER_OUTPUT],
             )
+            self.assertEqual(events.requests[0][1]["payload"].topic, "transcript.summary")
+            self.assertEqual(events.requests[1][1]["subscribers"], ("output.text",))
             self.assertEqual(runtime.current(session), "root")
 
     async def test_video_log_runs_every_tick_with_a_five_caption_window(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            app_spec = ApplicationSpec(
+            app_spec = ApplicationDescriptor(
                 "video_log",
                 "Video activity logger",
                 "background",
@@ -222,7 +231,8 @@ class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
             runtime = _runtime(app_spec)
             captions = tuple(f"Scene state {index}." for index in range(6))
             view = _View(*captions)
-            app = VideoLogApplication(app_spec, runtime)
+            events = _Events()
+            app = VideoLogApplication(app_spec, runtime, events)  # type: ignore[arg-type]
             agent = _VideoDeltaAgent(app)
             app._view = view
             app._agent = agent
@@ -230,14 +240,10 @@ class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
 
             await app.start(session)
             for _ in captions:
-                app._states[session.participant_id].next_tick = 0
                 await app.tick(session)
 
             state = app._states[session.participant_id]
-            records = [
-                json.loads(line)
-                for line in state.path.read_text(encoding="utf-8").splitlines()
-            ]
+            records = [json.loads(line) for line in state.path.read_text(encoding="utf-8").splitlines()]
             observations = [record for record in records if record["type"] == "observation"]
 
             self.assertEqual(len(observations), 6)
@@ -246,6 +252,9 @@ class BackgroundApplicationTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(agent.requests[-1]["current"], captions[-1])
             self.assertTrue(all(request["question"] == app.caption_prompt for request in view.requests))
             self.assertEqual(runtime.current(session), "root")
+            self.assertEqual(len(events.requests), len(captions))
+            self.assertTrue(all(request[0] == BACKGROUND_FACT for request in events.requests))
+            self.assertTrue(all(request[1]["payload"].topic == "video_log.delta" for request in events.requests))
 
 
 if __name__ == "__main__":

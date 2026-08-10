@@ -6,11 +6,16 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from tea_making_worker.desktop.runtime import DesktopRuntime
-from tea_making_worker.desktop.spec import load_desktop
+from tea_making_worker.applications.events import (
+    APPLICATION_RESET,
+    RAW_TRANSCRIPT,
+)
+from tea_making_worker.applications.manager.runtime import ApplicationOwnership
+from tea_making_worker.applications.manager.spec import load_application_catalog
 from tea_making_worker.engine.coordinator import Coordinator
 from tea_making_worker.runtime.state import SessionStore
 from tea_making_worker.spec import load_workflow
+from xr_ai_nat.events import EventDispatcher
 from xr_ai_voice import VoiceTurn
 
 _WORKFLOW = Path(__file__).parents[2] / "yaml" / "workflow.yaml"
@@ -34,12 +39,13 @@ class _Agents:
         self.calls += 1
 
 
-class _Desktop:
+class _Manager:
     def __init__(self) -> None:
-        self.runtime = DesktopRuntime(load_desktop(_APPLICATIONS))
+        self.ownership = ApplicationOwnership(load_application_catalog(_APPLICATIONS))
+        self.function = self
 
-    async def route(self, *_args) -> str:
-        return "desktop answer"
+    async def ainvoke(self, *_args, **_kwargs) -> str:
+        return "manager answer"
 
 
 class _Backgrounds:
@@ -47,33 +53,39 @@ class _Backgrounds:
         self.inputs: list[str] = []
         self.releases = 0
 
-    async def on_transcription(self, _session, text, _trace_id) -> None:
-        self.inputs.append(text)
-
-    async def tick(self, _session) -> None:
-        return None
-
-    async def release(self, _session) -> None:
-        self.releases += 1
+    async def ainvoke(self, event, **_kwargs):
+        if event.topic == RAW_TRANSCRIPT.name:
+            self.inputs.append(RAW_TRANSCRIPT.payload_from(event).text)
+        elif event.topic == APPLICATION_RESET.name:
+            self.releases += 1
 
 
-async def _notice(*_args) -> None:
-    pass
+class _Output:
+    async def publish(self, _participant_id, _producer, output, **_kwargs) -> str:
+        return output.text
 
 
 def _coordinator(store, *, agents=None, triggers=None):
-    desktop = _Desktop()
+    manager = _Manager()
     backgrounds = _Backgrounds()
+    events = EventDispatcher()
+    for topic in (RAW_TRANSCRIPT, APPLICATION_RESET):
+        events.subscribe(
+            topic,
+            subscriber_id="transcript",
+            function=backgrounds,  # type: ignore[arg-type]
+        )
     return (
         Coordinator(
             store=store,
             agents=agents or _Agents(),
-            desktop=desktop,
-            backgrounds=backgrounds,
+            manager=manager,
+            events=events,
+            output=_Output(),  # type: ignore[arg-type]
+            reset_subscriber_ids=frozenset({"transcript"}),
             triggers=triggers or _Triggers(),
-            notice=_notice,
         ),
-        desktop,
+        manager,
         backgrounds,
     )
 
@@ -82,6 +94,7 @@ class CoordinatorTest(unittest.IsolatedAsyncioTestCase):
     async def test_raw_transcription_reaches_background_without_a_routed_query(self) -> None:
         store = SessionStore(load_workflow(_WORKFLOW))
         coordinator, _, backgrounds = _coordinator(store)
+        store.get("tester").applications.background.add("transcript")
 
         await coordinator.handle_transcription(
             VoiceTurn(
@@ -93,14 +106,6 @@ class CoordinatorTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(backgrounds.inputs, ["ordinary speech without a wake word"])
-
-    async def test_routed_query_is_not_recorded_twice(self) -> None:
-        store = SessionStore(load_workflow(_WORKFLOW))
-        coordinator, _, backgrounds = _coordinator(store)
-
-        self.assertEqual(await coordinator.handle_query("tester", "agent status"), "desktop answer")
-
-        self.assertEqual(backgrounds.inputs, [])
 
     async def test_completed_step_keeps_the_homogeneous_observation_loop(self) -> None:
         workflow = load_workflow(_WORKFLOW)
@@ -140,41 +145,41 @@ class CoordinatorTest(unittest.IsolatedAsyncioTestCase):
         session = store.get("tester")
         store.start(session)
         session.state["tea_name"] = "stale tea"
-        coordinator, desktop, _ = _coordinator(store)
-        desktop.runtime.capture(session, "tea")
-        desktop.runtime.start_background(session, "change_watch")
+        coordinator, manager, _ = _coordinator(store)
+        manager.ownership.capture(session, "tea")
+        manager.ownership.start_background(session, "change_watch")
 
         await coordinator.participant_joined("tester")
 
         self.assertFalse(session.active)
         self.assertIsNone(session.step_id)
         self.assertNotIn("tea_name", session.state)
-        self.assertEqual(desktop.runtime.current(session), "root")
-        self.assertEqual(session.desktop.background, set())
+        self.assertEqual(manager.ownership.current(session), "root")
+        self.assertEqual(session.applications.background, set())
 
     async def test_roster_replay_does_not_reset_an_active_connection(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         store = SessionStore(workflow)
-        coordinator, desktop, _ = _coordinator(store)
+        coordinator, manager, _ = _coordinator(store)
         await coordinator.participant_joined("tester")
         session = store.get("tester")
         store.start(session)
-        desktop.runtime.capture(session, "tea")
+        manager.ownership.capture(session, "tea")
 
         await coordinator.participant_joined("tester")
 
         self.assertTrue(session.active)
         self.assertEqual(session.step_id, "identify")
-        self.assertEqual(desktop.runtime.current(session), "tea")
+        self.assertEqual(manager.ownership.current(session), "tea")
 
     async def test_reconnect_after_leave_gets_a_fresh_session(self) -> None:
         workflow = load_workflow(_WORKFLOW)
         store = SessionStore(workflow)
-        coordinator, desktop, _ = _coordinator(store)
+        coordinator, manager, _ = _coordinator(store)
         await coordinator.participant_joined("tester")
         session = store.get("tester")
         store.start(session)
-        desktop.runtime.capture(session, "tea")
+        manager.ownership.capture(session, "tea")
         session.state["tea_name"] = "stale tea"
         await coordinator.participant_left("tester")
 
@@ -184,7 +189,7 @@ class CoordinatorTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(fresh.active)
         self.assertIsNone(fresh.step_id)
         self.assertNotIn("tea_name", fresh.state)
-        self.assertEqual(desktop.runtime.current(fresh), "root")
+        self.assertEqual(manager.ownership.current(fresh), "root")
 
 
 if __name__ == "__main__":

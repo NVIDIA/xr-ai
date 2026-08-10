@@ -46,6 +46,21 @@ class _Session:
         self.queries.append((participant_id, text, fresh_match, pts_us))
 
 
+class _HandlerProcessor:
+    def __init__(self) -> None:
+        self.responses: list[tuple[str, str, bool, int | None]] = []
+
+    async def enqueue_response(
+        self,
+        participant_id: str,
+        text: str,
+        *,
+        interrupt: bool = False,
+        pts_us: int | None = None,
+    ) -> None:
+        self.responses.append((participant_id, text, interrupt, pts_us))
+
+
 class _Service:
     def __init__(self) -> None:
         self.closed = 0
@@ -182,3 +197,32 @@ async def test_voice_session_cleans_up_when_readiness_fails(monkeypatch) -> None
     assert transports == []
     assert stt.closed == 1
     assert tts.closed == 1
+
+
+async def test_voice_session_queues_direct_assistant_response() -> None:
+    session = VoiceSession(
+        stt=_Service(),  # type: ignore[arg-type]
+        tts=_Service(),  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=_Transport(),  # type: ignore[arg-type]
+    )
+    processor = _HandlerProcessor()
+    session._handler_processor = processor  # type: ignore[assignment]  # noqa: SLF001
+
+    await session.enqueue_response("alice", "Pay attention.", interrupt=True, pts_us=8)
+
+    assert processor.responses == [("alice", "Pay attention.", True, 8)]
+
+
+async def test_voice_session_rejects_direct_response_while_stopped() -> None:
+    session = VoiceSession(
+        stt=_Service(),  # type: ignore[arg-type]
+        tts=_Service(),  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=_Transport(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RuntimeError, match="not running"):
+        await session.enqueue_response("alice", "Too early.")

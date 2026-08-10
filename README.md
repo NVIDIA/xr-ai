@@ -109,7 +109,7 @@ frames are dropped if it is closed.
 | Server runtime | `server-runtime/` | XR-Media-Hub + LiveKit internal transport |
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
-| Agent functions | `agent-sdk/xr-ai-nat/` | Typed, in-process NAT functions for XR capabilities |
+| Agent functions | `agent-sdk/xr-ai-nat/` | Typed NAT functions plus participant-scoped event delivery between them |
 | Capability services | `services/` | Long-running typed services used by native functions |
 | Agent interfaces | `agent-mcp-servers/` | MCP compatibility processes for XR data & rendering |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |

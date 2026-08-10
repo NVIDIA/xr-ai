@@ -25,18 +25,18 @@ from tea_making_worker.agents.registry import (  # noqa: E402
     _state_contract,
 )
 from tea_making_worker.applications.compose import root_function_specs  # noqa: E402
-from tea_making_worker.desktop.spec import load_desktop  # noqa: E402
-from tea_making_worker.desktop.types import FunctionEffect  # noqa: E402
+from tea_making_worker.applications.manager.spec import load_application_catalog  # noqa: E402
+from tea_making_worker.applications.manager.types import InvocationEffect  # noqa: E402
 from tea_making_worker.runtime.render import render_message  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
 
 
 def run() -> None:
     workflow = load_workflow(_SAMPLE / "yaml" / "workflow.yaml")
-    desktop = load_desktop(_SAMPLE / "yaml" / "applications.yaml")
-    root_functions = root_function_specs(desktop)
+    catalog = load_application_catalog(_SAMPLE / "yaml" / "applications.yaml")
+    root_functions = root_function_specs(catalog)
     root_prompt = (
-        f"{desktop.root_prompt}\nRoutes: "
+        f"{catalog.root_prompt}\nRoutes: "
         f"{'; '.join(function.catalog_entry() for function in root_functions)}\n{HUMAN}"
     )
     cases = yaml.safe_load((_SAMPLE / "eval" / "cases.yaml").read_text(encoding="utf-8"))
@@ -52,13 +52,15 @@ def run() -> None:
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
     assert "if unavailable, say so" in VOICE
+    assert "Query background only when needed" in VOICE
     assert "Next/continue/advance" in TEA
     assert "Questions using these words are not commands" in TEA
     assert {function.name for function in root_functions} == {
         "current_view",
         "rag_lookup",
+        "application_context__query",
         "workflow__start",
-        "desktop__status",
+        "application_manager__status",
         "change_watch__start",
         "change_watch__stop",
         "change_watch__status",
@@ -70,10 +72,10 @@ def run() -> None:
         "video_log__status",
     }
     assert next(function for function in root_functions if function.name == "workflow__start").effect == (
-        FunctionEffect.FOREGROUND
+        InvocationEffect.FOREGROUND
     )
     assert all(
-        function.effect == FunctionEffect.BACKGROUND
+        function.effect == InvocationEffect.BACKGROUND
         for function in root_functions
         if function.name.startswith(("change_watch__", "transcript__", "video_log__"))
     )
@@ -97,20 +99,21 @@ def run() -> None:
     }
     routed_actions = {
         f"workflow__{name}" for name in ("start", "advance", "reset", "restart", "status")
-    } | {"desktop__status"} | background_actions
+    } | {"application_manager__status", "application_context__query"} | background_actions
     assert {case["expected_tool"] for case in cases["routes"]} == {"answer"} | routed_actions
     matrix = cases["route_state_matrix"]
     assert set(matrix["active_steps"]) == set(workflow.steps)
     active_actions = {
         f"workflow__{name}" for name in ("advance", "reset", "restart", "status")
-    }
+    } | {"application_context__query"}
     assert {case["expected_tool"] for case in matrix["active_cases"]} == {"answer"} | active_actions
     assert {case["expected_tool"] for case in matrix["idle_cases"]} == {
         "workflow__start",
         "change_watch__start",
         "transcript__start",
         "video_log__start",
-        "desktop__status",
+        "application_manager__status",
+        "application_context__query",
         "answer",
     }
     advance_cases = [
@@ -121,25 +124,26 @@ def run() -> None:
     assert general["tea_knowledge"]["expected_tools"] == ["rag_lookup"]
     assert general["visible_scene"]["expected_tools"] == ["current_view"]
     assert general["visible_tea"]["expected_order"] == ["current_view", "rag_lookup"]
+    assert general["background_context"]["expected_tools"] == ["application_context__query"]
     assert general["safety"] == {"state_updates": False, "lifecycle_tools": False}
-    assert desktop.application("tea").mode == "foreground"
-    assert desktop.application("change_watch").mode == "background"
-    assert desktop.application("transcript").mode == "background"
-    assert desktop.application("video_log").mode == "background"
-    assert len(str(desktop.application("change_watch").settings["caption_prompt"])) <= 180
-    assert len(str(desktop.application("change_watch").settings["event_prompt"])) <= 420
-    assert len(str(desktop.application("change_watch").settings["default_instruction"])) <= 240
+    assert catalog.application("tea").mode == "foreground"
+    assert catalog.application("change_watch").mode == "background"
+    assert catalog.application("transcript").mode == "background"
+    assert catalog.application("video_log").mode == "background"
+    assert len(str(catalog.application("change_watch").settings["caption_prompt"])) <= 180
+    assert len(str(catalog.application("change_watch").settings["event_prompt"])) <= 420
+    assert len(str(catalog.application("change_watch").settings["default_instruction"])) <= 240
     assert (
-        len(str(desktop.application("change_watch").settings["caption_prompt"]))
-        + len(str(desktop.application("change_watch").settings["default_instruction"]))
+        len(str(catalog.application("change_watch").settings["caption_prompt"]))
+        + len(str(catalog.application("change_watch").settings["default_instruction"]))
         + len("\nFocus: ")
         <= 500
     )
-    assert len(str(desktop.application("transcript").settings["summary_prompt"])) <= 240
-    assert len(str(desktop.application("video_log").settings["caption_prompt"])) <= 240
-    assert len(str(desktop.application("video_log").settings["delta_prompt"])) <= 360
-    assert desktop.application("video_log").settings["interval_s"] == 2
-    assert desktop.application("video_log").settings["history_size"] == 5
+    assert len(str(catalog.application("transcript").settings["summary_prompt"])) <= 240
+    assert len(str(catalog.application("video_log").settings["caption_prompt"])) <= 240
+    assert len(str(catalog.application("video_log").settings["delta_prompt"])) <= 360
+    assert catalog.application("video_log").settings["interval_s"] == 2
+    assert catalog.application("video_log").settings["history_size"] == 5
     background = cases["background_applications"]
     assert background["change_watch"]["important"]["expected_notice"] is True
     assert background["change_watch"]["insignificant"]["expected_notice"] is False
@@ -152,10 +156,10 @@ def run() -> None:
     assert background["video_log"]["expected_delta_terms"] == ["person", "parcel"]
     prompt_text = " ".join(
         (
-            str(desktop.application("change_watch").settings["event_prompt"]),
-            str(desktop.application("transcript").settings["summary_prompt"]),
-            str(desktop.application("video_log").settings["caption_prompt"]),
-            str(desktop.application("video_log").settings["delta_prompt"]),
+            str(catalog.application("change_watch").settings["event_prompt"]),
+            str(catalog.application("transcript").settings["summary_prompt"]),
+            str(catalog.application("video_log").settings["caption_prompt"]),
+            str(catalog.application("video_log").settings["delta_prompt"]),
         )
     ).lower()
     fixture_text = " ".join(

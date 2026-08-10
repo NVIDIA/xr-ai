@@ -3,16 +3,16 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Composable voice desktop and tea-making sample
+# Composable voice applications and tea-making sample
 
-This sample hosts independent NAT applications behind one voice desktop. Every
+This sample hosts independent NAT applications behind one application manager. Every
 root-visible function declares a compact routing description and one effect:
 
 - `inline` answers a bounded request and keeps the current foreground.
 - `foreground` launches an interactive application and captures future turns.
 - `background` starts or manages continuous work without replacing the root.
 
-The desktop chooses the current foreground deterministically before any model
+The application manager chooses the current foreground deterministically before any model
 call. Foregrounds form a stack, so a future child application can return to its
 caller without re-running a root router. Background applications remain active
 beside that stack.
@@ -42,9 +42,17 @@ tea step -> answer | quick tool | lifecycle transition | exit to root
 
 There is no custom tool-call loop. NeMo Agent Toolkit builds every agent and
 typed function surface. Current and historical conversation turns are not
-added to prompts. Desktop state selects exactly one foreground function before
+added to prompts. Application-manager state selects exactly one foreground function before
 the LLM call, so inactive agents are never invoked and no model delegates to
 another model. The exact utterance reaches the selected foreground directly.
+
+NAT `Function` is the executable composition type at every application turn
+boundary. The manager itself, its root handler, and tea guidance all expose the
+same typed `ApplicationTurn` NAT function, so another composite NAT agent,
+router, or pipeline can replace tea without changing dispatch. The sample-local
+manager adds only the persistent foreground/background ownership semantics that
+NAT does not provide. Repository policy requires an explicit architecture
+review before introducing any broader execution or composition framework.
 
 Starting an active guide remains an idempotent status response at the function
 boundary, and only reset or restart may clear state. Explicit imperative
@@ -67,15 +75,34 @@ looking at the wrong camera stream.
 
 ## Compose applications
 
-`desktop/types.py` defines the reusable `RoutedFunction` contract. Its name,
+`applications/manager/types.py` defines the reusable `RoutedFunction` contract. Its name,
 route description, effect, and direct-return policy generate the root tool
-catalog and NAT agent configuration. `desktop/runtime.py` owns only the
+catalog and NAT agent configuration. `applications/manager/runtime.py` owns only the
 foreground stack and background set; it knows nothing about tea, vision, or
-transcription. `desktop/registry.py` dispatches one turn to root or the current
-registered foreground.
+transcription. `applications/manager/registry.py` dispatches one typed NAT
+`ApplicationTurn` function to root or the current registered foreground.
+
+`xr_ai_nat.events.EventDispatcher` is the common communication boundary. Each
+topic validates a small Pydantic payload, carries participant, event,
+correlation, causation, producer, and timestamp metadata, and delivers only to
+explicitly selected NAT functions. It does not own prompts, tool loops,
+scheduling, or application state. In this sample:
+
+- `application.request` accepts transport-neutral participant requests. The
+  reusable voice adapter publishes speech into this topic, and only the
+  application-manager NAT function subscribes to it.
+- `voice.transcript` reaches active transcript consumers. Each timed background
+  application owns an independent `application.tick` source that starts and
+  stops with that application.
+- `application.fact` lets background applications publish concise facts to the
+  context recorder. Foreground agents decide whether to query that context.
+- `user.output` independently selects labeled text or serialized voice output.
+  Normal notifications queue behind active speech; urgent output may interrupt.
+  A NAT policy function can be injected above voice delivery later without
+  changing producers.
 
 `yaml/applications.yaml` is the sample convenience layer. The same application
-specifications can be constructed directly with `ApplicationSpec` and ordinary
+specifications can be constructed directly with `ApplicationDescriptor` and ordinary
 prompt strings. `applications/compose.py` is intentionally the only place that
 chooses this sample's concrete applications:
 
@@ -86,7 +113,8 @@ chooses this sample's concrete applications:
   and calls one commit function. Its start tool stores the user's requested
   monitoring focus per participant. Important changes appear only as labeled
   UI text, such as `[Visual change watcher] A person entered the room.`; they
-  never enter the TTS pipeline. Session, baseline, caption, importance, and
+  never enter the TTS pipeline, and an unchanged consecutive caption cannot
+  produce a repeated notification. Session, baseline, caption, importance, and
   summary records are persisted under `artifacts/change-watch/` using the same
   JSON Lines lifecycle as the other background recorders.
 - `transcript` is background. Once started, every finalized speech transcript
@@ -105,10 +133,11 @@ chooses this sample's concrete applications:
   `yaml/applications.yaml`.
 
 Each background application contributes generated start, stop, and status NAT
-functions. Adding a foreground requires a manifest, a registered voice handler,
-and one launch function. Adding a background requires a manifest plus the
-`on_transcription`, `tick`, and `release` lifecycle. The desktop runtime itself
-does not change.
+functions plus NAT subscribers for the event types it needs. Adding a
+foreground requires a descriptor, a typed `ApplicationTurn` NAT function, and
+one launch function. Adding a background requires a descriptor and its selected
+event handlers. The application-manager runtime and event dispatcher do not
+change.
 
 ## Configure a workflow
 
@@ -230,8 +259,10 @@ uv run --project agent-samples/tea-making-sample tea_making_sample \
 `--voice-mode wake-word` requires each command to start with “Agent” or “Hey
 Agent”; up to two common speech fillers may precede the phrase, but arbitrary
 speech may not. Saying only the wake phrase opens a five-second follow-up
-window. An active transcript recorder captures finalized speech before this
-command gate, so recorded speech does not need a wake phrase. The
+window. The sample allows 1.2 seconds of silence inside a turn so a short
+natural pause does not dispatch a partial command. An active transcript
+recorder captures finalized speech before this command gate, so recorded
+speech does not need a wake phrase. The
 `--tts-mode piper` selects lightweight CPU speech on port 8105;
 `--tts-mode magpie` selects NeMo Magpie speech on port 8104 and uses CUDA when
 available. The sample uses Magpie's native speaking rate to preserve voice
@@ -246,7 +277,7 @@ stove and report if it is left unattended,” or “Record what I say and summar
 it periodically.” Say “Start a general video activity log” to persist rolling
 camera-caption deltas. The watcher passes its request as a bounded VLM and LLM
 focus rather than conversation history. Ask “What is running?” to inspect
-desktop state. While tea is foreground, its current step variant alone
+application-manager state. While tea is foreground, its current step variant alone
 handles the turn with next/skip/restart/status/exit plus that step's tools. Root
 and background-management tools are not exposed inside tea. Lifecycle calls
 carry the `tea_guide` scope and return directly; quick tool results remain in
@@ -313,8 +344,13 @@ The most useful event names are:
   `agent.foreground.retry`: selected foreground, exact compact input, lifecycle
   operation or direct answer, resulting foreground state, and corrected tool
   arguments.
-- `desktop.route`, `desktop.foreground.*`, and `desktop.background.*`: one-turn
-  dispatch, stack changes, and concurrently active applications.
+- `application.event`: topic, producer, participant, correlation and causation
+  ids, selected NAT subscribers, and the validated payload. Raw transcript
+  events log only character count; their JSON Lines artifact remains the text
+  source of truth.
+- `application_manager.route`, `application_manager.foreground.*`, and
+  `application_manager.background.*`: one-turn dispatch, stack changes, and
+  concurrently active applications.
 - `change_watch.caption`, `change_watch.event`, and `agent.background.*`: exact
   captions, importance decisions, summaries, and recoverable tool retries.
 - `change_watch.started` and `application.text_output`: retained monitoring
@@ -329,9 +365,10 @@ The most useful event names are:
   change-watch, and video-log artifacts plus structured events from the current
   worker log. It serves four simultaneous panes at port 8092 without changing
   the sources.
-- `step.ready`, `step.enter`, `workflow.start_noop`, `workflow.reset`,
-  `workflow.complete`, and `notice.queued`: readiness, protected repeated
-  starts, lifecycle resets, explicit transitions, and speech.
+- `step.ready`, `step.enter`, `workflow.start_noop`, `workflow.reset`, and
+  `workflow.complete`: readiness, protected repeated starts, lifecycle resets,
+  and explicit transitions. Spoken notifications appear as `user.output`
+  application events.
 
 Use the log directory printed at startup, then filter a human test with:
 

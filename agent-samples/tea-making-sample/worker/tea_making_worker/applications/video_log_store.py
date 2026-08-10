@@ -14,7 +14,6 @@ from typing import Any
 class VideoLogState:
     path: Path
     captions: deque[str]
-    next_tick: float = 0.0
     writes: list[dict[str, Any]] = field(default_factory=list)
     active: bool = True
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)

@@ -12,18 +12,30 @@ from loguru import logger
 from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
+from xr_ai_nat.adapters import as_voice_event_handler
+from xr_ai_nat.events import EventDispatcher, EventEnvelope, add_event_handler
 from xr_ai_nat.functions.rag import RAGFunctionsConfig
 from xr_ai_nat.functions.vision import VisionToolsConfig
-from xr_ai_voice import TextMessageInput, VadConfig, VoiceQuery, VoiceSession
+from xr_ai_voice import TextMessageInput, VadConfig, VoiceSession
 from xr_ai_voicegate import load_voice_gate_config
 
 from .agents import AgentRegistry
 from .agents.factory import add_guidance_llm
 from .applications.compose import build_applications
+from .applications.context import ApplicationContextFunctionsConfig, add_context_query
+from .applications.context.functions import ContextClearRequest
+from .applications.events import (
+    APPLICATION_REQUEST,
+    APPLICATION_RESET,
+    BACKGROUND_FACT,
+    RAW_TRANSCRIPT,
+    ApplicationRequest,
+)
+from .applications.manager.runtime import ApplicationOwnership
+from .applications.manager.spec import load_application_catalog
+from .applications.output import UserOutputDelivery
 from .config import WorkerConfig
-from .desktop.runtime import DesktopRuntime
-from .desktop.spec import load_desktop
-from .engine import Coordinator, NoticeBridge, TextOutputBridge, TriggerRegistry
+from .engine import Coordinator, TriggerRegistry
 from .functions import (
     CurrentViewConfig,
     RAGLookupConfig,
@@ -31,6 +43,7 @@ from .functions import (
     add_temperature_functions,
     add_workflow_functions,
 )
+from .runtime.events import emit
 from .runtime.state import SessionStore
 from .spec import load_workflow
 
@@ -41,8 +54,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     llm = make_llm(models, "agent_llm")
     vlm = make_vlm(models, "vlm")
     workflow = load_workflow(config.workflow_config)
-    desktop_spec = load_desktop(config.applications_config)
-    desktop_runtime = DesktopRuntime(desktop_spec)
+    application_spec = load_application_catalog(config.applications_config)
+    application_ownership = ApplicationOwnership(application_spec)
     voice_gate = load_voice_gate_config(config.voice_gate_config)
     session = VoiceSession(
         stt=make_stt(models, "stt"),
@@ -63,8 +76,26 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     async with session, WorkflowBuilder() as builder:
         store = SessionStore(workflow)
         agents = AgentRegistry(workflow)
-        notices = NoticeBridge(session)
-        text_output = TextOutputBridge(session)
+
+        def observe_event(event, subscribers) -> None:
+            payload = event.payload
+            if event.topic == RAW_TRANSCRIPT.name:
+                payload = {"characters": len(str(payload["text"]))}
+            emit(
+                "application.event",
+                participant_id=event.participant_id,
+                topic=event.topic,
+                producer=event.producer,
+                event_id=event.event_id,
+                correlation_id=event.correlation_id,
+                parent_event_id=event.parent_event_id,
+                subscribers=subscribers,
+                payload=payload,
+            )
+
+        events = EventDispatcher(observer=observe_event)
+        output = UserOutputDelivery(events, session)
+        await output.build(builder)
         vision_config = VisionToolsConfig(
             endpoint=session.transport.endpoint,
             vlm=vlm,
@@ -91,36 +122,70 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         )
         await add_clock_functions(builder)
         await add_temperature_functions(builder)
-        await add_workflow_functions(builder, store=store, desktop=desktop_runtime)
+        await add_workflow_functions(
+            builder,
+            store=store,
+            application_ownership=application_ownership,
+        )
+        context_group = await builder.add_function_group(
+            "context_store",
+            ApplicationContextFunctionsConfig(),
+        )
+        context_functions = await context_group.get_all_functions()
+        events.subscribe(
+            BACKGROUND_FACT,
+            subscriber_id="context.recorder",
+            function=context_functions["context_store__record"],
+        )
+
+        async def reset_context(event: EventEnvelope) -> None:
+            APPLICATION_RESET.payload_from(event)
+            await context_functions["context_store__clear"].ainvoke(ContextClearRequest())
+
+        context_reset = await add_event_handler(
+            builder,
+            name="application__reset_context",
+            handler=reset_context,
+            description="Clear participant context when applications reset.",
+        )
+        events.subscribe(
+            APPLICATION_RESET,
+            subscriber_id="context.recorder",
+            function=context_reset,
+        )
+        await add_context_query(builder, context_functions["context_store__query"])
         llm_ref = await add_guidance_llm(builder, llm)
         await agents.build(builder, llm_ref)
         applications = await build_applications(
             builder,
             llm_ref=llm_ref,
-            spec=desktop_spec,
-            runtime=desktop_runtime,
+            spec=application_spec,
+            ownership=application_ownership,
             tea=agents,
             current_view=current_view,
-            notice=notices.send,
-            text_output=text_output.send,
+            events=events,
+            output=output,
+            store=store,
         )
         triggers = TriggerRegistry(workflow)
         await triggers.build(builder)
         coordinator = Coordinator(
             store=store,
             agents=agents,
-            desktop=applications.desktop,
-            backgrounds=applications.backgrounds,
+            manager=applications.manager,
+            events=events,
+            output=output,
+            reset_subscriber_ids=applications.background_ids | {"context.recorder"},
             triggers=triggers,
-            notice=notices.send,
         )
         TextMessageInput(session=session, fresh_match=True)
 
-        async def handler(turn: VoiceQuery) -> str:
-            notice = notices.take(turn.text)
-            if notice is not None:
-                return notice
-            return await coordinator.handle_query(turn.participant_id, turn.text)
+        handler = as_voice_event_handler(
+            events,
+            APPLICATION_REQUEST,
+            payload=lambda query: ApplicationRequest(text=query.text),
+            subscribers={"application.manager"},
+        )
 
         async def participant_left(participant_id: str) -> None:
             vision_config.release(participant_id)
@@ -138,11 +203,16 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
                 )
             finally:
                 coordinator.stop()
+                await applications.close_periodic_sources()
 
         logger.info("tea-making-sample starting")
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(run_voice(), name="tea-guide-voice")
             tasks.create_task(coordinator.monitor(), name="tea-guide-monitor")
+            tasks.create_task(
+                applications.run_periodic_sources(),
+                name="tea-guide-background-triggers",
+            )
         logger.info("tea-making-sample stopped")
 
 

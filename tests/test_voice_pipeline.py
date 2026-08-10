@@ -1317,6 +1317,81 @@ async def test_assistant_queues_queries_and_interrupts_audio_when_next_turn_star
 
 
 @pytest.mark.asyncio
+async def test_assistant_serializes_direct_response_after_active_query():
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handle(_query: VoiceQuery) -> str:
+        started.set()
+        await release.wait()
+        return "query answer"
+
+    assistant = _VoiceHandlerProcessor(handle, queue_queries=True)
+    sink = _CaptureSink()
+    pipeline = Pipeline([assistant, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(
+            GatedQueryFrame(participant_id="pid-1", text="question", fresh_match=True, pts_us=1)
+        )
+        await started.wait()
+        await assistant.enqueue_response("pid-1", "background notice", pts_us=2)
+        release.set()
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    assert [frame.text for frame in sink.frames if isinstance(frame, TextFrame)] == [
+        "query answer",
+        "background notice",
+    ]
+    assert [frame.text for frame in sink.frames if isinstance(frame, AssistantResponseEndFrame)] == [
+        "query answer",
+        "background notice",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_assistant_urgent_direct_response_replaces_active_query():
+    cancelled = asyncio.Event()
+
+    async def handle(_query: VoiceQuery) -> str:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    assistant = _VoiceHandlerProcessor(handle, queue_queries=True)
+    sink = _CaptureSink()
+    pipeline = Pipeline([assistant, sink])
+    worker = PipelineWorker(pipeline, cancel_on_idle_timeout=False, enable_rtvi=False)
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+
+    async def drive() -> None:
+        await asyncio.sleep(0.05)
+        await worker.queue_frame(
+            GatedQueryFrame(participant_id="pid-1", text="question", fresh_match=True, pts_us=1)
+        )
+        await asyncio.sleep(0.02)
+        await assistant.enqueue_response("pid-1", "urgent notice", interrupt=True, pts_us=2)
+        await asyncio.sleep(0.1)
+        await worker.queue_frame(EndFrame())
+
+    await asyncio.gather(runner.run(), drive())
+
+    assert cancelled.is_set()
+    assert any(isinstance(frame, InterruptionFrame) for frame in sink.frames)
+    assert [frame.text for frame in sink.frames if isinstance(frame, TextFrame)] == ["urgent notice"]
+
+
+@pytest.mark.asyncio
 async def test_assistant_cancels_inflight_on_interruption_frame():
     assistant = _IterAssistant(chunks=[f"chunk{i} " for i in range(200)])
     await _run_chain(

@@ -31,7 +31,7 @@ class VideoDeltaCommitter(Protocol):
     ) -> None: ...
 
 
-class VideoDeltaConfig(FunctionBaseConfig, name="voice_desktop_video_log_commit"):
+class VideoDeltaConfig(FunctionBaseConfig, name="voice_application_video_log_commit"):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     application: Any = Field(exclude=True, repr=False)

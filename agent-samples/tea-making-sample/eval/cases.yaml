@@ -101,7 +101,7 @@ routes:
     expected_tool: transcript__start
   - utterance: Which applications are running?
     active: false
-    expected_tool: desktop__status
+    expected_tool: application_manager__status
   - utterance: Stop watching the camera for changes.
     active: false
     expected_tool: change_watch__stop
@@ -123,6 +123,13 @@ routes:
   - utterance: Is the video activity logger running?
     active: false
     expected_tool: video_log__status
+  - utterance: What did the background activities report recently?
+    active: false
+    expected_tool: application_context__query
+  - utterance: Did the visual watcher notice anything while we were making tea?
+    active: true
+    step: heat_water
+    expected_tool: application_context__query
 
 route_state_matrix:
   active_steps: [identify, fill_water, heat_water, start_steeping, steep_timer]
@@ -146,6 +153,8 @@ route_state_matrix:
       expected_tool: answer
     - utterance: What happens if I skip this step?
       expected_tool: answer
+    - utterance: What did the visual watcher report recently?
+      expected_tool: application_context__query
   idle_cases:
     - utterance: Start tea guidance.
       expected_tool: workflow__start
@@ -161,7 +170,9 @@ route_state_matrix:
     - utterance: Start logging general camera activity.
       expected_tool: video_log__start
     - utterance: What is running right now?
-      expected_tool: desktop__status
+      expected_tool: application_manager__status
+    - utterance: What did the transcript summary say recently?
+      expected_tool: application_context__query
 
 general_queries:
   tea_knowledge:
@@ -179,6 +190,9 @@ general_queries:
     active: false
     expected_tools: [current_view, rag_lookup]
     expected_order: [current_view, rag_lookup]
+  background_context:
+    question: What did the visual watcher report recently?
+    expected_tools: [application_context__query]
   safety:
     state_updates: false
     lifecycle_tools: false

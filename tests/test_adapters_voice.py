@@ -7,13 +7,16 @@
 ``{pid}:agent`` transcript sources; `xr_conversation_memory.recall_conversation`
 is the consumer that reads them back. This exercises both ends end-to-end.
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
 import pytest
 from nat.builder.workflow_builder import WorkflowBuilder
-from xr_ai_nat.adapters import as_voice_handler, record_voice_transcripts
+from pydantic import BaseModel
+from xr_ai_nat.adapters import as_voice_event_handler, as_voice_handler, record_voice_transcripts
+from xr_ai_nat.events import EventDispatcher, EventEnvelope, EventTopic
 from xr_ai_nat.functions.text_memory import (
     ConversationMemoryFunctionsConfig,
     RecallConversationRequest,
@@ -34,15 +37,26 @@ class _EchoFunction:
             yield part
 
 
+class _Request(BaseModel):
+    text: str
+
+
+class _EventFunction:
+    def __init__(self) -> None:
+        self.event: EventEnvelope | None = None
+
+    async def ainvoke(self, event: EventEnvelope) -> str:
+        self.event = event
+        return "event answer"
+
+
 async def test_as_voice_handler_maps_request_and_response() -> None:
     handler = as_voice_handler(
         _EchoFunction(),
         request=lambda query: query.text.upper(),
         response=str,
     )
-    response = await handler(
-        VoiceQuery(participant_id="alice", text="hi", fresh_match=True, timestamp_us=1)
-    )
+    response = await handler(VoiceQuery(participant_id="alice", text="hi", fresh_match=True, timestamp_us=1))
     assert response == "answer:HI"
 
 
@@ -53,20 +67,43 @@ async def test_as_voice_handler_streams_and_drops_empty_chunks() -> None:
         response=lambda chunk: str(chunk).strip(),  # "one " -> "one", "two" -> "two"
         streaming=True,
     )
-    stream = await handler(
-        VoiceQuery(participant_id="alice", text="go", fresh_match=True, timestamp_us=1)
-    )
+    stream = await handler(VoiceQuery(participant_id="alice", text="go", fresh_match=True, timestamp_us=1))
     assert [chunk async for chunk in stream] == ["one", "two"]
+
+
+async def test_as_voice_event_handler_publishes_transport_neutral_request() -> None:
+    topic = EventTopic("application.request", _Request)
+    dispatcher = EventDispatcher()
+    function = _EventFunction()
+    dispatcher.subscribe(topic, subscriber_id="application", function=function)  # type: ignore[arg-type]
+    handler = as_voice_event_handler(
+        dispatcher,
+        topic,
+        payload=lambda query: _Request(text=query.text),
+        subscribers={"application"},
+    )
+
+    response = await handler(
+        VoiceQuery(
+            participant_id="alice",
+            text="start monitoring",
+            fresh_match=True,
+            timestamp_us=42,
+        )
+    )
+
+    assert response == "event answer"
+    assert function.event is not None
+    assert function.event.participant_id == "alice"
+    assert function.event.producer == "voice.input"
+    assert function.event.timestamp_us == 42
+    assert topic.payload_from(function.event) == _Request(text="start monitoring")
 
 
 async def test_record_voice_transcripts_then_recall_conversation(tmp_path) -> None:
     async with WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "text_memory", TextMemoryFunctionsConfig(directory=tmp_path)
-        )
-        await builder.add_function_group(
-            "conversation_memory", ConversationMemoryFunctionsConfig()
-        )
+        await builder.add_function_group("text_memory", TextMemoryFunctionsConfig(directory=tmp_path))
+        await builder.add_function_group("conversation_memory", ConversationMemoryFunctionsConfig())
         text_memory = await builder.get_function_group("text_memory")
         conversation = await builder.get_function_group("conversation_memory")
         add_transcript = (await text_memory.get_all_functions())["text_memory__add_transcript"]
@@ -103,9 +140,14 @@ def test_voice_adapters_are_reachable_from_the_public_adapters_namespace() -> No
     from xr_ai_nat import adapters
     from xr_ai_nat.adapters import voice as voice_module
 
+    assert adapters.as_voice_event_handler is voice_module.as_voice_event_handler
     assert adapters.as_voice_handler is voice_module.as_voice_handler
     assert adapters.record_voice_transcripts is voice_module.record_voice_transcripts
-    assert sorted(adapters.__all__) == ["as_voice_handler", "record_voice_transcripts"]
+    assert sorted(adapters.__all__) == [
+        "as_voice_event_handler",
+        "as_voice_handler",
+        "record_voice_transcripts",
+    ]
     assert "as_voice_handler" in dir(adapters)
     with pytest.raises(AttributeError):
         adapters.not_an_adapter
@@ -113,12 +155,8 @@ def test_voice_adapters_are_reachable_from_the_public_adapters_namespace() -> No
 
 async def test_recall_conversation_respects_time_window(tmp_path) -> None:
     async with WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "text_memory", TextMemoryFunctionsConfig(directory=tmp_path)
-        )
-        await builder.add_function_group(
-            "conversation_memory", ConversationMemoryFunctionsConfig()
-        )
+        await builder.add_function_group("text_memory", TextMemoryFunctionsConfig(directory=tmp_path))
+        await builder.add_function_group("conversation_memory", ConversationMemoryFunctionsConfig())
         add_transcript = (await (await builder.get_function_group("text_memory")).get_all_functions())[
             "text_memory__add_transcript"
         ]
@@ -129,9 +167,7 @@ async def test_recall_conversation_respects_time_window(tmp_path) -> None:
         await record(VoiceTurn(participant_id="alice", role="user", timestamp_us=10, text="early"))
         await record(VoiceTurn(participant_id="alice", role="user", timestamp_us=100, text="late"))
 
-        result = await recall.ainvoke(
-            RecallConversationRequest(participant_id="alice", start_us=50, end_us=200)
-        )
+        result = await recall.ainvoke(RecallConversationRequest(participant_id="alice", start_us=50, end_us=200))
 
     assert [entry.text for entry in result.entries] == ["late"]
 
@@ -144,12 +180,8 @@ async def test_recall_conversation_generated_contract_is_fully_described(tmp_pat
     unconstrained ``role`` invites it to invent a third value.
     """
     async with WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "text_memory", TextMemoryFunctionsConfig(directory=tmp_path)
-        )
-        await builder.add_function_group(
-            "conversation_memory", ConversationMemoryFunctionsConfig()
-        )
+        await builder.add_function_group("text_memory", TextMemoryFunctionsConfig(directory=tmp_path))
+        await builder.add_function_group("conversation_memory", ConversationMemoryFunctionsConfig())
         conversation = await builder.get_function_group("conversation_memory")
         recall = (await conversation.get_all_functions())["conversation_memory__recall_conversation"]
 

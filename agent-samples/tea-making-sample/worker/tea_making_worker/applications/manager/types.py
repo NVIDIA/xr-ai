@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Routing metadata shared by every root-visible NAT function."""
+"""Routing metadata for root-visible NAT functions."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from enum import StrEnum
 from nat.plugin_api import FunctionRef
 
 
-class FunctionEffect(StrEnum):
+class InvocationEffect(StrEnum):
     INLINE = "inline"
     FOREGROUND = "foreground"
     BACKGROUND = "background"
@@ -21,7 +21,7 @@ class FunctionEffect(StrEnum):
 class RoutedFunction:
     name: str
     route: str
-    effect: FunctionEffect = FunctionEffect.INLINE
+    effect: InvocationEffect = InvocationEffect.INLINE
     return_direct: bool = False
 
     @property
@@ -29,7 +29,8 @@ class RoutedFunction:
         return FunctionRef(self.name)
 
     def catalog_entry(self) -> str:
-        return f"{self.name}[{self.effect}]={self.route}"
+        capture = "[foreground]" if self.effect == InvocationEffect.FOREGROUND else ""
+        return f"{self.name}{capture}={self.route}"
 
 
-__all__ = ["FunctionEffect", "RoutedFunction"]
+__all__ = ["InvocationEffect", "RoutedFunction"]

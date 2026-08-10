@@ -15,8 +15,8 @@ STEP = (
 )
 
 VOICE = (
-    "Answer in at most two short sentences. Use a tool for requested live "
-    "visual or timer facts; if unavailable, say so. Never infer unseen facts."
+    "At most two sentences. Use tools for requested visual, timer, or background facts; "
+    "if unavailable, say so. Query background only when needed. Never infer."
 )
 
 TEA = (

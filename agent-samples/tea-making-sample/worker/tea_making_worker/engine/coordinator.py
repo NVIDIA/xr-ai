@@ -8,20 +8,25 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Awaitable, Callable
 
 from xr_ai_hub import FrameUnavailable
+from xr_ai_nat.events import EventDispatcher
 from xr_ai_voice import VoiceTurn
 
 from ..agents import AgentRegistry
-from ..applications.background import BackgroundRegistry
-from ..desktop.registry import Desktop
+from ..applications.events import (
+    APPLICATION_RESET,
+    RAW_TRANSCRIPT,
+    ApplicationReset,
+    RawTranscript,
+    UserOutput,
+)
+from ..applications.manager.registry import ApplicationManager
+from ..applications.output import UserOutputDelivery
 from ..runtime.events import emit
 from ..runtime.scope import invocation_scope
 from ..runtime.state import Session, SessionStore
 from .triggers import TriggerRegistry
-
-Notice = Callable[[str, str], Awaitable[None]]
 
 
 class Coordinator:
@@ -30,39 +35,37 @@ class Coordinator:
         *,
         store: SessionStore,
         agents: AgentRegistry,
-        desktop: Desktop,
-        backgrounds: BackgroundRegistry,
+        manager: ApplicationManager,
+        events: EventDispatcher,
+        output: UserOutputDelivery,
+        reset_subscriber_ids: frozenset[str],
         triggers: TriggerRegistry,
-        notice: Notice,
     ) -> None:
         self.store = store
         self.agents = agents
-        self.desktop = desktop
-        self.backgrounds = backgrounds
+        self.manager = manager
+        self.events = events
+        self.output = output
+        self.reset_subscriber_ids = reset_subscriber_ids
         self.triggers = triggers
-        self.notice = notice
         self._stopped = asyncio.Event()
         self._connected: set[str] = set()
-
-    async def handle_query(self, participant_id: str, text: str) -> str:
-        session = self.store.get(participant_id)
-        trace_id = _trace_id()
-        async with session.lock:
-            with invocation_scope(session, trace_id):
-                result = await self.desktop.route(session, text, trace_id)
-        emit(
-            "voice.complete",
-            participant_id=participant_id,
-            trace_id=trace_id,
-            response=result,
-        )
-        return result
 
     async def handle_transcription(self, turn: VoiceTurn) -> None:
         """Forward final STT output before wake-word command gating."""
         trace_id = _trace_id()
         session = self.store.get(turn.participant_id)
-        await self.backgrounds.on_transcription(session, turn.text, trace_id)
+        async with session.lock:
+            with invocation_scope(session, trace_id):
+                await self.events.publish(
+                    RAW_TRANSCRIPT,
+                    participant_id=turn.participant_id,
+                    producer="voice.input",
+                    payload=RawTranscript(text=turn.text),
+                    subscribers=session.applications.background,
+                    correlation_id=trace_id,
+                    timestamp_us=turn.timestamp_us,
+                )
         emit(
             "transcription.observed",
             participant_id=turn.participant_id,
@@ -77,28 +80,43 @@ class Coordinator:
             return
         self._connected.add(participant_id)
         session = self.store.get(participant_id)
+        trace_id = _trace_id()
         async with session.lock:
-            await self.backgrounds.release(session)
-            self.desktop.runtime.reset(session)
-            self.store.reset(session)
+            with invocation_scope(session, trace_id):
+                await self.events.publish(
+                    APPLICATION_RESET,
+                    participant_id=participant_id,
+                    producer="application.manager",
+                    payload=ApplicationReset(),
+                    subscribers=self.reset_subscriber_ids,
+                    correlation_id=trace_id,
+                )
+                self.manager.ownership.reset(session)
+                self.store.reset(session)
         emit("participant.joined", participant_id=participant_id)
 
     async def participant_left(self, participant_id: str) -> None:
         self._connected.discard(participant_id)
         session = self.store.get(participant_id)
+        trace_id = _trace_id()
         async with session.lock:
-            await self.backgrounds.release(session)
-            self.desktop.runtime.reset(session)
-            self.store.release(participant_id)
+            with invocation_scope(session, trace_id):
+                await self.events.publish(
+                    APPLICATION_RESET,
+                    participant_id=participant_id,
+                    producer="application.manager",
+                    payload=ApplicationReset(),
+                    subscribers=self.reset_subscriber_ids,
+                    correlation_id=trace_id,
+                )
+                self.manager.ownership.reset(session)
+                self.store.release(participant_id)
         emit("participant.left", participant_id=participant_id)
 
     async def monitor(self) -> None:
         while not self._stopped.is_set():
             sessions = self.store.sessions()
-            await asyncio.gather(
-                *(self._tick(session) for session in sessions if session.active),
-                *(self.backgrounds.tick(session) for session in sessions),
-            )
+            await asyncio.gather(*(self._tick(session) for session in sessions if session.active))
             try:
                 await asyncio.wait_for(self._stopped.wait(), timeout=0.25)
             except TimeoutError:
@@ -109,6 +127,7 @@ class Coordinator:
 
     async def _tick(self, session: Session) -> None:
         notices: tuple[str, ...] = ()
+        trace_id = ""
         async with session.lock:
             if not session.active or session.step_id is None:
                 return
@@ -134,7 +153,12 @@ class Coordinator:
                 await self.agents.observe(session, observation, trace_id)
             notices = self.store.drain_notices(session)
         for message in notices:
-            await self.notice(session.participant_id, message)
+            await self.output.publish(
+                session.participant_id,
+                "tea",
+                UserOutput(text=message),
+                correlation_id=trace_id,
+            )
 
 
 def _trace_id() -> str:

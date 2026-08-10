@@ -37,7 +37,7 @@ function agentDescription(record) {
     'agent.observe.skipped': 'Skipped an observation that could not be repaired.',
     'agent.background.request': `${record.application || 'A background agent'} is evaluating new input.`,
     'agent.background.response': `${record.application || 'A background agent'} completed its evaluation.`,
-    'desktop.route': `Routed this turn to ${record.foreground || 'the root agent'}.`,
+    'application_manager.route': `Routed this turn to ${record.foreground || 'the root agent'}.`,
     'rag.lookup.request': 'Searching the tea reference material.',
     'rag.lookup.response': `Reference search completed${record.latency_ms ? ` in ${record.latency_ms} milliseconds` : ''}.`,
     'step.commit': `Updated ${record.step || 'the current step'}${fields ? `: ${fields}` : ''}.`,

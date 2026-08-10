@@ -9,6 +9,23 @@ This file is the continuity contract for future human-test iterations. Update
 it whenever the execution model, YAML schema, prompt budget, or event vocabulary
 changes.
 
+## NAT composition gate
+
+NAT `Function` is the only executable composition boundary. Tools, agents,
+application turns, step variants, routers, and pipelines must be NAT functions;
+use `FunctionGroup` when related functions share configuration or resources.
+The sample application manager may select a foreground function and fan external
+events to active background applications because NAT does not model persistent
+foreground ownership or event subscriptions. It must not interpret the request,
+run a tool loop, or become another agent framework.
+
+Do not implement a new function, agent, activity, workflow, router, or
+composition framework without an explicit maintainer discussion and approval.
+The proposal must first identify the NAT primitives evaluated, the exact missing
+semantic, why a thin adapter is insufficient, two current concrete use cases,
+and the intended package and dependency ownership. Record an approved decision
+in `docs/changelog.md` before implementation.
+
 ## Invariants
 
 1. Task behavior lives in `yaml/workflow.yaml`; Python contains no tea-step
@@ -87,6 +104,8 @@ changes.
     never starts the clock.
 26. Wake-word and always-on behavior are separate voice-gate profiles selected
     by `--voice-mode`; do not make operators edit a shared gate file to switch.
+    The sample uses a 1.2-second VAD silence boundary so brief pauses do not
+    dispatch incomplete commands.
 27. Evidence negatives apply to the required fact, not unrelated caption text.
     Missing hazards or heater indicators do not veto a clear temperature with
     its unit.
@@ -123,7 +142,7 @@ changes.
     inactive agent is never invoked; nested foregrounds return to their caller.
 37. Background applications never capture foreground. They receive final raw
     speech transcripts before command gating or ticks only while active;
-    synthetic notices bypass both root and transcript input. Start, stop, and
+    user-output events bypass both root and transcript input. Start, stop, and
     status are generated NAT functions.
 38. Visual change watching keeps only two prior captions by default. The VLM
     receives the per-session start instruction as its focus; one NAT agent sees
@@ -146,10 +165,16 @@ changes.
     per-participant JSON Lines session file and use the shared `jsonl.py`
     lifecycle helpers. The activity viewer treats all three as directory
     sources; only agent diagnostics are decoded from `worker.log`.
+43. Cross-application communication uses `xr_ai_nat.events` typed topics.
+    Delivery invokes NAT functions only; it never owns prompts, model calls,
+    scheduling, or application state. Publishers keep payloads compact, and
+    consumers subscribe only to the events they need. `user.output` selects
+    text and voice independently; voice is serial per participant and urgent
+    delivery is the only tier allowed to interrupt.
 
-## Desktop, foreground, and observation machines
+## Application manager, foreground, and observation machines
 
-`desktop/runtime.py` owns application scheduling:
+`applications/manager/runtime.py` owns application selection:
 
 ```text
 foreground stack: root -> app -> nested app
@@ -165,13 +190,27 @@ configuration, and the bounded browser feed never becomes a persistence layer.
 
 An inline function returns to the same foreground. A foreground launch pushes
 an application, and exit pops back to the caller. Starting or stopping a
-background only changes the set. `desktop/registry.py` reads the stack before
-the model call and invokes exactly one registered handler.
+background only changes the set. `applications/manager/registry.py` reads the
+stack before the model call and invokes exactly one registered NAT function.
+The manager is itself a typed `ApplicationTurn` NAT function, so the voice
+adapter does not call a parallel execution API.
 
-`RoutedFunction` is the reusable composition contract. `name` resolves a NAT
-function, `route` tells root which requests match, `effect` exposes ownership,
-and `return_direct` controls the NAT agent loop. `yaml/applications.yaml` loads
-these code-level contracts for this sample; it is not required by the runtime.
+`xr_ai_nat.events.EventDispatcher` is only a delivery adapter around those NAT
+functions. `as_voice_event_handler` converts an accepted `VoiceSession` turn
+into the same transport-neutral `application.request` topic that another input
+source may publish. The sample also registers typed subscribers for raw
+transcripts, background facts, resets, and user output. Timed background
+applications each own a `PeriodicEventSource` targeting their NAT subscriber;
+there is no global ticker. Topic schemas and correlation metadata are stable;
+any application may publish an event, and each subscriber independently
+decides whether and how to use it. Foreground agents receive background context
+only by choosing the explicit context-query NAT tool.
+
+`ApplicationTurn` is the executable NAT composition contract. `RoutedFunction`
+is only route metadata: `name` resolves a NAT function, `route` tells root which
+requests match, `effect` exposes ownership, and `return_direct` controls the NAT
+agent loop. `yaml/applications.yaml` supplies descriptors and prompt settings
+for this sample; it is not required by the runtime.
 
 `SessionStore` owns the outer deterministic machine:
 
@@ -202,7 +241,8 @@ The generated background start schema accepts one optional bounded
 `instruction`. Change watching stores it per participant and uses the configured
 default only when it is omitted. Application text output uses the human title
 as its data-channel topic, so clients render `[Visual change watcher] ...`
-without creating a synthetic voice turn.
+without creating a synthetic voice turn. Output consumers enforce the declared
+destination, and identical consecutive watcher captions are never notified twice.
 
 Step voice prompts include a compact procedure so references to the current
 action can be answered without storing the previous conversation turn.
@@ -300,18 +340,18 @@ expected versus observed behavior:
 
 Then inspect in this order:
 
-1. `desktop.route` and `desktop.foreground.*` for selected ownership.
+1. `application_manager.route` and `application_manager.foreground.*` for selected ownership.
 2. `agent.foreground.request/response` for the selected root or tea agent;
    inspect `agent.foreground.retry` for corrected tool arguments.
-3. `desktop.background.*`, `change_watch.*`, `transcript.*`, or `video_log.*`
+3. `application_manager.background.*`, `change_watch.*`, `transcript.*`, or `video_log.*`
    for continuous work.
 4. `trigger.request/response` for the exact fresh tea caption and latency.
 5. `step.evidence` for the deterministic match and consecutive count.
 6. `rag.lookup.request/response` when identification needs missing brew facts.
 7. `agent.observe.request/response` for the compact context seen by the model.
 8. `step.commit`, `step.commit_noop`, or `step.commit_rejected` for the result.
-9. `step.ready`, `step.enter`, and `notice.queued` for readiness, explicit
-   transition, and user notification.
+9. `step.ready`, `step.enter`, and `application.event` with topic `user.output`
+   for readiness, explicit transition, and user notification.
 
 Prefer the narrowest fix:
 
@@ -348,8 +388,12 @@ the state delta, revision, completion result, and notification;
 `step.commit_noop` records continued observation after completion. Preserve
 these fields so test feedback remains searchable across iterations.
 
-Desktop events name `application`, foreground depth, background membership,
-and revision. Change-watch events retain the exact caption and importance
+Typed `application.event` records include the topic, participant, producer,
+event id, correlation id, parent event id, selected NAT subscribers, and
+validated payload. Raw transcript events log only character count.
+Application-manager events use `application_manager.*` and
+record application, foreground depth, background membership, and revision.
+Change-watch events retain the exact caption and importance
 summary. `application.text_output` records the label and UI-only message;
 watcher output never creates a notice or TTS request. Its JSON Lines artifact
 persists the session focus, baseline, every evaluated caption, importance, and
@@ -366,11 +410,10 @@ These pieces now have multiple concrete applications but stay sample-local for
 this iteration. Move them together in a dedicated library PR after the API has
 survived human tests:
 
-- `desktop/types.py`: routed NAT function metadata.
-- `desktop/runtime.py`: foreground stack and background set.
-- `desktop/registry.py`: deterministic one-foreground dispatch.
-- `applications/controls.py` and `applications/background.py`: generated
-  background controls and lifecycle fan-out.
+- `applications/manager/types.py`: routed NAT function metadata.
+- `applications/manager/runtime.py`: foreground stack and background set.
+- `applications/manager/registry.py`: deterministic one-foreground NAT dispatch.
+- `applications/controls.py`: generated background controls.
 
 Guidance-engine pieces remain sample-only until a second guided workflow uses
 them:
@@ -379,11 +422,13 @@ them:
 - Participant invocation scope for stateful NAT tools.
 - Typed sparse `SessionStore` with YAML write boundaries and completion rules.
 - Workflow management NAT functions and compact agent factory.
-- Background spoken-notice and labeled UI-text bridges into `VoiceSession`.
+- Sample-specific `user.output` policy and labeled data-channel rendering.
 - Deterministic temperature normalization and threshold verification.
 
-The retrieval service and `xr_rag` group are already shared library
-capabilities. Only the exact-tool alias and tea corpus belong to this sample.
+The typed event dispatcher, direct serialized voice-response API, retrieval
+service, and `xr_rag` group are already shared library capabilities. Only the
+exact-tool aliases, application composition, output policy, and tea corpus
+belong to this sample.
 
 When a second use exists, move the smallest proven contract into `xr-ai-nat`
 or `xr-ai-voice`; do not move tea YAML, messages, or state names.
@@ -394,4 +439,4 @@ or `xr-ai-voice`; do not move tea YAML, messages, or state names.
 - Unbounded conversational memory.
 - Arbitrary expressions or code in YAML.
 - Silent fallbacks for unavailable model services or invalid configuration.
-- Publishing the sample-local desktop API as shared SDK before human validation.
+- Publishing the sample-local application-manager API as shared SDK before human validation.

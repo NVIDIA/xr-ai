@@ -58,6 +58,18 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **Agentic functions are NAT-first and in-process.** Reusable deterministic
   functions live in `xr-ai-nat` as typed NAT function groups. Existing MCP
   servers remain compatibility surfaces while their capabilities migrate.
+- **NAT is the agent execution and composition framework.** Agents, routers,
+  pipelines, and application turn handlers compose as typed NAT functions;
+  related function surfaces use NAT function groups. Do not build a parallel
+  function, agent, workflow, tool-loop, or composition framework.
+- **New-framework proposals require an explicit architecture gate before
+  implementation.** First document which NAT primitives were evaluated, the
+  concrete capability gap, why a thin adapter cannot close it, and at least two
+  current use cases. Record the proposed ownership and dependency impact in
+  `docs/changelog.md`, discuss it with the maintainer, and obtain explicit
+  approval before adding code. A transport or lifecycle adapter may cover only
+  semantics NAT does not provide; its executable operations remain NAT
+  functions.
 - **RAG is a native typed capability.** `rag-service` owns document chunking,
   embedding caches, and dense retrieval behind private msgpack/ZMQ;
   `RAGFunctionsConfig` exposes it as the `xr_rag` NAT function group.
@@ -167,6 +179,12 @@ raw frame acquisition with VLM streaming behind one native function for voice
 workflows. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
 NAT's built-in LangChain-backed agent types; applications install
 `xr-ai-nat[agents]` rather than calling LangChain model clients directly.
+`xr_ai_nat.events` provides typed participant-scoped delivery between NAT
+functions. Its dispatcher validates topic payloads and carries correlation and
+causation metadata; it does not own prompts, agents, schedules, retries,
+foreground state, or another execution model. `PeriodicEventSource` provides
+an explicit per-application timed source without turning the dispatcher into a
+global scheduler.
 
 The public **native voice runtime** lives in `xr-ai-voice` (it depends on
 pipecat internally):
@@ -176,8 +194,13 @@ pipecat internally):
   readiness and ready-file semantics, installs signal handlers, and closes the
   transport and model clients.
 - **Native handler** — `xr_ai_nat.adapters.as_voice_handler` maps a typed NAT
-  function onto `VoiceSession`; `TextMessageInput` routes participant text
-  through the same turn path as speech.
+  function onto `VoiceSession`. `as_voice_event_handler` instead publishes an
+  accepted turn as a typed application event whose consumers are NAT
+  functions. `TextMessageInput` routes participant text through the same turn
+  path as speech.
+- **Direct assistant output** — `VoiceSession.enqueue_response` serializes
+  application notifications with the participant's active query/output queue;
+  explicit urgent output may interrupt that participant only.
 - **Wake word / speech gate** — `xr-ai-voicegate` (the `VoiceGate` state
   machine) wired in as `VoiceGateProcessor`; per-sample config in
   `yaml/voice_gate.yaml` (`magic_phrases: ["hey agent"]`, or `[]` for
@@ -186,8 +209,8 @@ pipecat internally):
 `xr-ai-pipecat` remains available for samples that still subclass its
 `BrainProcessor`; this migration does not remove it.
 
-A native voice sample adapts its NAT function to `VoiceSession`; wake-word
-behavior comes from config alone.
+A native voice sample adapts its NAT function or typed application-request
+event to `VoiceSession`; wake-word behavior comes from config alone.
 
 ### Scope decision and named follow-ups
 

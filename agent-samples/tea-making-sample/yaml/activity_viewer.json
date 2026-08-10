@@ -20,7 +20,7 @@
       "format": "event_log",
       "include_prefixes": [
         "agent.",
-        "desktop.",
+        "application_manager.",
         "rag.",
         "step.",
         "trigger.",

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Code-first desktop specifications with a YAML convenience loader."""
+"""Code-first application descriptors with a sample YAML loader."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import yaml
 
 
 @dataclass(frozen=True, slots=True)
-class ApplicationSpec:
+class ApplicationDescriptor:
     id: str
     title: str
     mode: Literal["foreground", "background"]
@@ -22,19 +22,19 @@ class ApplicationSpec:
 
 
 @dataclass(frozen=True, slots=True)
-class DesktopSpec:
+class ApplicationCatalog:
     root_prompt: str
     capabilities: dict[str, str]
-    applications: dict[str, ApplicationSpec]
+    applications: dict[str, ApplicationDescriptor]
 
-    def application(self, app_id: str) -> ApplicationSpec:
+    def application(self, app_id: str) -> ApplicationDescriptor:
         return self.applications[app_id]
 
 
-def load_desktop(path: Path) -> DesktopSpec:
+def load_application_catalog(path: Path) -> ApplicationCatalog:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     apps = {
-        app_id: ApplicationSpec(
+        app_id: ApplicationDescriptor(
             id=app_id,
             title=str(config["title"]),
             mode=str(config["mode"]),
@@ -45,7 +45,7 @@ def load_desktop(path: Path) -> DesktopSpec:
     }
     if {app.mode for app in apps.values()} - {"foreground", "background"}:
         raise ValueError("application mode must be foreground or background")
-    return DesktopSpec(
+    return ApplicationCatalog(
         root_prompt=str(raw["root_prompt"]).strip(),
         capabilities={str(name): str(route) for name, route in raw.get("capabilities", {}).items()},
         applications=apps,
@@ -59,4 +59,4 @@ def _resolve_paths(settings: dict[str, Any], base: Path) -> dict[str, Any]:
     return settings
 
 
-__all__ = ["ApplicationSpec", "DesktopSpec", "load_desktop"]
+__all__ = ["ApplicationDescriptor", "ApplicationCatalog", "load_application_catalog"]

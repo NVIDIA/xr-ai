@@ -12,7 +12,7 @@ from nat.plugins.langchain.agent.tool_calling_agent.register import ToolCallAgen
 from xr_ai_models import LLMService
 from xr_ai_nat.llm import ModelsLLMConfig
 
-from ..desktop.types import RoutedFunction
+from ..applications.manager.types import RoutedFunction
 
 
 async def add_guidance_llm(builder: WorkflowBuilder, llm: LLMService) -> LLMRef:

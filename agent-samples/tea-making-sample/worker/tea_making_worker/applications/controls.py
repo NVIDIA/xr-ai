@@ -8,14 +8,14 @@ from typing import Any, Literal, Protocol
 from nat.plugin_api import Builder, FunctionBaseConfig, FunctionInfo, register_function
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..desktop.spec import ApplicationSpec
-from ..desktop.types import FunctionEffect, RoutedFunction
 from ..runtime.scope import current_invocation
 from ..runtime.state import Session
+from .manager.spec import ApplicationDescriptor
+from .manager.types import InvocationEffect, RoutedFunction
 
 
 class BackgroundController(Protocol):
-    spec: ApplicationSpec
+    spec: ApplicationDescriptor
 
     async def start(self, session: Session, instruction: str = "") -> str: ...
 
@@ -38,7 +38,7 @@ class BackgroundStartRequest(BaseModel):
     )
 
 
-class BackgroundControlConfig(FunctionBaseConfig, name="voice_desktop_background_control"):
+class BackgroundControlConfig(FunctionBaseConfig, name="voice_application_background_control"):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     operation: Literal["start", "stop", "status"]
@@ -85,7 +85,7 @@ async def add_background_controls(
     return functions
 
 
-def background_function_specs(spec: ApplicationSpec) -> tuple[RoutedFunction, ...]:
+def background_function_specs(spec: ApplicationDescriptor) -> tuple[RoutedFunction, ...]:
     routes = {
         "start": spec.route,
         "stop": f"stop {spec.id}",
@@ -95,7 +95,7 @@ def background_function_specs(spec: ApplicationSpec) -> tuple[RoutedFunction, ..
         RoutedFunction(
             name=f"{spec.id}__{operation}",
             route=routes[operation],
-            effect=FunctionEffect.BACKGROUND,
+            effect=InvocationEffect.BACKGROUND,
             return_direct=True,
         )
         for operation in ("start", "stop", "status")

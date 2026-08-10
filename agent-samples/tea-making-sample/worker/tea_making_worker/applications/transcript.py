@@ -4,36 +4,51 @@
 """Background speech transcript persistence and bounded periodic summaries."""
 
 import json
-import time
 import uuid
 from pathlib import Path
 
 from nat.builder.function import Function
 from nat.builder.workflow_builder import WorkflowBuilder
 from nat.plugin_api import FunctionRef, LLMRef
+from xr_ai_nat.events import EventDispatcher, PeriodicEventSource
 
 from ..agents.factory import build_agent
 from ..agents.invoke import invoke_with_tool_retry
 from ..agents.prompts import HUMAN
-from ..desktop.runtime import DesktopRuntime
-from ..desktop.spec import ApplicationSpec
-from ..desktop.types import RoutedFunction
 from ..runtime.events import emit
 from ..runtime.scope import current_invocation, invocation_scope
 from ..runtime.state import Session
-from .background import TextOutput
 from .controls import add_background_controls
+from .events import (
+    BACKGROUND_FACT,
+    USER_OUTPUT,
+    BackgroundFact,
+    OutputDestination,
+    UserOutput,
+)
+from .manager.runtime import ApplicationOwnership
+from .manager.spec import ApplicationDescriptor
+from .manager.types import RoutedFunction
+from .output import UserOutputDelivery
 from .transcript_store import TranscriptState, append_records, timestamp, transcript_path
 from .transcript_summary import add_transcript_summary
 
 
 class TranscriptApplication:
-    def __init__(self, spec: ApplicationSpec, runtime: DesktopRuntime, output: TextOutput) -> None:
+    def __init__(
+        self,
+        spec: ApplicationDescriptor,
+        runtime: ApplicationOwnership,
+        events: EventDispatcher,
+        *,
+        periodic: PeriodicEventSource | None = None,
+    ) -> None:
         if spec.mode != "background":
             raise ValueError("transcript recorder must be a background application")
         self.spec = spec
         self.runtime = runtime
-        self.output = output
+        self.events = events
+        self.periodic = periodic
         self.output_dir = Path(spec.settings["output_dir"])
         self.summary_interval_s = float(spec.settings.get("summary_interval_s", 120))
         self.summary_prompt = str(spec.settings["summary_prompt"])
@@ -67,7 +82,6 @@ class TranscriptApplication:
             return f"{self.spec.title} is already running."
         state = TranscriptState(
             path=transcript_path(self.output_dir, session.participant_id),
-            next_summary=time.monotonic() + self.summary_interval_s,
         )
         state.writes.append(
             {
@@ -78,6 +92,8 @@ class TranscriptApplication:
         )
         self._states[session.participant_id] = state
         await self._flush(state)
+        if self.periodic is not None:
+            self.periodic.start(session.participant_id)
         emit(
             "transcript.started",
             participant_id=session.participant_id,
@@ -88,6 +104,8 @@ class TranscriptApplication:
     async def stop(self, session: Session) -> str:
         if not self.runtime.stop_background(session, self.app_id):
             return f"{self.spec.title} is not running."
+        if self.periodic is not None:
+            await self.periodic.stop(session.participant_id)
         state = self._states.get(session.participant_id)
         if state is not None:
             async with state.lock:
@@ -125,17 +143,15 @@ class TranscriptApplication:
             trace_id=trace_id,
             characters=len(text),
         )
+        await self._flush(state)
 
-    async def tick(self, session: Session) -> None:
+    async def tick(self, session: Session, trace_id: str | None = None) -> None:
         state = self._states.get(session.participant_id)
         if state is None:
             return
-        await self._flush(state)
-        now = time.monotonic()
         async with state.lock:
-            if not state.active or state.summarizing or state.next_summary > now:
+            if not state.active or state.summarizing:
                 return
-            state.next_summary = now + self.summary_interval_s
             if not state.turns:
                 return
             state.summarizing = True
@@ -143,7 +159,7 @@ class TranscriptApplication:
         try:
             if self._agent is None:
                 raise RuntimeError("transcript application has not been built")
-            trace_id = uuid.uuid4().hex[:12]
+            trace_id = trace_id or uuid.uuid4().hex[:12]
             with invocation_scope(session, trace_id):
                 call = current_invocation()
                 call.context["transcript.state"] = state
@@ -214,9 +230,35 @@ class TranscriptApplication:
             summary=summary.strip(),
         )
         if should_output:
-            await self.output(session.participant_id, self.spec.title, summary.strip())
+            text = summary.strip()
+            trace_id = current_invocation().trace_id
+            await self.events.publish(
+                BACKGROUND_FACT,
+                participant_id=session.participant_id,
+                producer=self.spec.title,
+                payload=BackgroundFact(
+                    topic="transcript.summary",
+                    summary=text,
+                    source_ref=str(state.path),
+                ),
+                correlation_id=trace_id,
+            )
+            await self.events.publish(
+                USER_OUTPUT,
+                participant_id=session.participant_id,
+                producer=self.spec.title,
+                payload=UserOutput(
+                    text=text,
+                    label=self.spec.title,
+                    destinations=(OutputDestination.TEXT,),
+                ),
+                subscribers=(UserOutputDelivery.TEXT_SUBSCRIBER,),
+                correlation_id=trace_id,
+            )
 
     async def release(self, session: Session) -> None:
+        if self.periodic is not None:
+            await self.periodic.stop(session.participant_id)
         state = self._states.get(session.participant_id)
         if state is None:
             return

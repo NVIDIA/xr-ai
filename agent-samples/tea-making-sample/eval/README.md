@@ -25,7 +25,7 @@ uv run --directory agent-samples/tea-making-sample/worker \
 The command expands the compact state matrix and prints the lifecycle NAT tool
 or direct-answer action for every case. Transition, skip, exit, restart,
 status, and ambiguous questions run from every configured tea step; root tea
-launch, background application launch, desktop status, and general queries run
+launch, background application launch, application status, and general queries run
 separately. Skip cases also verify that the workflow
 actually advances, while ordinary next commands against incomplete steps must
 stay put. The command exits nonzero on a mismatch. For step probes, compare the

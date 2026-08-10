@@ -24,10 +24,11 @@ sys.path.insert(0, str(_SAMPLE / "worker"))
 
 from tea_making_worker.agents.factory import add_guidance_llm  # noqa: E402
 from tea_making_worker.applications.change_watch import ChangeWatchApplication  # noqa: E402
+from tea_making_worker.applications.events import USER_OUTPUT  # noqa: E402
+from tea_making_worker.applications.manager.runtime import ApplicationOwnership  # noqa: E402
+from tea_making_worker.applications.manager.spec import ApplicationCatalog, load_application_catalog  # noqa: E402
 from tea_making_worker.applications.transcript import TranscriptApplication  # noqa: E402
 from tea_making_worker.applications.video_log import VideoLogApplication  # noqa: E402
-from tea_making_worker.desktop.runtime import DesktopRuntime  # noqa: E402
-from tea_making_worker.desktop.spec import DesktopSpec, load_desktop  # noqa: E402
 from tea_making_worker.runtime.scope import current_invocation, invocation_scope  # noqa: E402
 from tea_making_worker.runtime.state import SessionStore  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
@@ -39,8 +40,19 @@ class ViewRequest(BaseModel):
     question: str
 
 
-class ViewConfig(FunctionBaseConfig, name="voice_desktop_background_eval_view"):
+class ViewConfig(FunctionBaseConfig, name="voice_application_background_eval_view"):
     pass
+
+
+class _Events:
+    def __init__(self, outputs: list[tuple[str, str, str]]) -> None:
+        self.outputs = outputs
+
+    async def publish(self, topic, **kwargs):
+        if topic == USER_OUTPUT:
+            payload = kwargs["payload"]
+            self.outputs.append((kwargs["participant_id"], payload.label, payload.text))
+        return ()
 
 
 @register_function(config_type=ViewConfig)
@@ -53,18 +65,15 @@ async def eval_view(config: ViewConfig, _builder: Builder):
 
 async def evaluate(models_path: Path, cases_path: Path) -> int:
     workflow = load_workflow(_SAMPLE / "yaml" / "workflow.yaml")
-    desktop = load_desktop(_SAMPLE / "yaml" / "applications.yaml")
+    catalog = load_application_catalog(_SAMPLE / "yaml" / "applications.yaml")
     cases = yaml.safe_load(cases_path.read_text(encoding="utf-8"))["background_applications"]
     llm = make_llm(load_models_config(models_path), "agent_llm")
     outputs: list[tuple[str, str, str]] = []
 
-    async def output(participant_id: str, label: str, message: str) -> None:
-        outputs.append((participant_id, label, message))
-
     failures = 0
     try:
-        with tempfile.TemporaryDirectory(prefix="voice-desktop-eval-") as directory:
-            transcript_spec = desktop.application("transcript")
+        with tempfile.TemporaryDirectory(prefix="voice-app-eval-") as directory:
+            transcript_spec = catalog.application("transcript")
             transcript_spec = replace(
                 transcript_spec,
                 settings={
@@ -73,24 +82,33 @@ async def evaluate(models_path: Path, cases_path: Path) -> int:
                     "summary_interval_s": 120,
                 },
             )
-            video_spec = desktop.application("video_log")
+            video_spec = catalog.application("video_log")
             video_spec = replace(
                 video_spec,
                 settings={**video_spec.settings, "output_dir": Path(directory)},
             )
-            eval_desktop = DesktopSpec(
-                root_prompt=desktop.root_prompt,
-                capabilities=desktop.capabilities,
+            eval_catalog = ApplicationCatalog(
+                root_prompt=catalog.root_prompt,
+                capabilities=catalog.capabilities,
                 applications={
-                    **desktop.applications,
+                    **catalog.applications,
                     "transcript": transcript_spec,
                     "video_log": video_spec,
                 },
             )
-            runtime = DesktopRuntime(eval_desktop)
-            change = ChangeWatchApplication(eval_desktop.application("change_watch"), runtime, output)
-            transcript = TranscriptApplication(transcript_spec, runtime, output)
-            video = VideoLogApplication(video_spec, runtime)
+            runtime = ApplicationOwnership(eval_catalog)
+            events = _Events(outputs)
+            change = ChangeWatchApplication(
+                eval_catalog.application("change_watch"),
+                runtime,
+                events,  # type: ignore[arg-type]
+            )
+            transcript = TranscriptApplication(
+                transcript_spec,
+                runtime,
+                events,  # type: ignore[arg-type]
+            )
+            video = VideoLogApplication(video_spec, runtime, events)  # type: ignore[arg-type]
             store = SessionStore(workflow)
             async with WorkflowBuilder() as builder:
                 view = await builder.add_function("background_eval_view", ViewConfig())

@@ -10,7 +10,7 @@ rag_endpoint: tcp://127.0.0.1:8340
 frame_max_age_s: 3
 frame_timeout_s: 5
 vlm_timeout_s: 15
-silence_duration: 0.8
+silence_duration: 1.2
 min_speech: 0.15
 silero_threshold: 0.3
 idle_timeout_secs: 0

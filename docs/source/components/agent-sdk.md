@@ -252,10 +252,11 @@ async with session:
 and ignores data received outside an active `run()`. The default hub transport
 is opened only after readiness probes succeed; failed readiness closes the
 session's model clients without opening hub sockets.
-NAT applications create handlers with
-`xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` preserves participant
-routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients.
+NAT applications create handlers with `xr_ai_nat.adapters.as_voice_handler`,
+or publish accepted turns to typed NAT event subscribers with
+`as_voice_event_handler`. `VoiceSession` preserves participant routing,
+cancels superseded or interrupted turns, installs signal handlers, and closes
+its transport and model clients.
 
 ## xr-ai-pipecat
 

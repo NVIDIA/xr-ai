@@ -10,6 +10,7 @@ import inspect
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -33,6 +34,14 @@ from .._handler import VoiceHandler, VoiceQuery, VoiceTurn
 
 if TYPE_CHECKING:
     from .._transport import HubVoiceTransport
+
+
+@dataclass(frozen=True, slots=True)
+class _DirectResponse:
+    participant_id: str
+    text: str
+    pts_us: int
+    interrupt: bool = False
 
 
 class _VoiceHandlerProcessor(FrameProcessor):
@@ -61,15 +70,11 @@ class _VoiceHandlerProcessor(FrameProcessor):
         self._interrupt_on_supersede = interrupt_on_supersede
         self._queue_queries = queue_queries
         self._inflight: dict[str, asyncio.Task[None]] = {}
-        self._queued: dict[str, deque[GatedQueryFrame]] = {}
+        self._queued: dict[str, deque[GatedQueryFrame | _DirectResponse]] = {}
         self._turn_tokens: dict[str, object] = {}
-        # "Has this participant spoken a turn before." A finished turn may still
-        # have TTS draining downstream, so a follow-up turn interrupts to clear
-        # that lingering audio — tracked by history, not live task state. NOTE:
-        # this drives the downstream interrupt only; the on_query_superseded
-        # callback fires solely on an actual in-flight replacement (see
-        # _spawn_query), never merely because a turn was seen before.
-        self._seen_query: set[str] = set()
+        # TTS may outlive its task, so a later query must know that output may
+        # still need flushing. This does not trigger the supersede callback.
+        self._seen_output: set[str] = set()
         # Joined participants receive speech hooks even before their first turn.
         self._joined: set[str] = set()
         # A supplied transport enables automatic single-participant routing.
@@ -92,6 +97,23 @@ class _VoiceHandlerProcessor(FrameProcessor):
                 pts_us=pts_us if pts_us is not None else time.time_ns() // 1_000,
             )
         )
+
+    async def enqueue_response(
+        self,
+        participant_id: str,
+        text: str,
+        *,
+        interrupt: bool = False,
+        pts_us: int | None = None,
+    ) -> None:
+        """Submit assistant text without manufacturing a user query."""
+        response = _DirectResponse(
+            participant_id=participant_id,
+            text=text,
+            interrupt=interrupt,
+            pts_us=pts_us if pts_us is not None else time.time_ns() // 1_000,
+        )
+        await self._spawn_response(response)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         # Pipecat owns interruption metrics, but cannot cancel handler tasks.
@@ -139,7 +161,7 @@ class _VoiceHandlerProcessor(FrameProcessor):
 
         if isinstance(frame, ParticipantLeftFrame):
             self._joined.discard(frame.participant_id)
-            self._seen_query.discard(frame.participant_id)
+            self._seen_output.discard(frame.participant_id)
             logger.info("voice participant left pid={!r}", frame.participant_id)
             if self._transport is not None:
                 self._transport.cleanup_participant(frame.participant_id)
@@ -200,11 +222,29 @@ class _VoiceHandlerProcessor(FrameProcessor):
             await self._notify(self._on_query_superseded, pid)
             self._cancel_pid(pid)
 
-        # A prior turn — even a finished one whose TTS may still be draining —
+        # A prior output turn — even a finished one whose TTS may still be draining —
         # means the new turn interrupts downstream audio so it starts clean.
-        had_prior = pid in self._seen_query
-        self._seen_query.add(pid)
+        had_prior = pid in self._seen_output
+        self._seen_output.add(pid)
         await self._start_query(frame, interrupt=had_prior)
+
+    async def _spawn_response(self, response: _DirectResponse) -> None:
+        pid = response.participant_id
+        if not response.text.strip():
+            return
+        current = self._inflight.get(pid)
+        is_active = current is not None and not current.done()
+        if is_active and not response.interrupt:
+            pending = self._queued.setdefault(pid, deque())
+            pending.append(response)
+            logger.info("voice response queued pid={!r} depth={}", pid, len(pending))
+            return
+        if response.interrupt:
+            self._cancel_pid(pid)
+            interruption = InterruptionFrame()
+            interruption.transport_source = pid
+            await self.push_frame(interruption)
+        await self._start_response(response)
 
     async def _start_query(self, frame: GatedQueryFrame, *, interrupt: bool) -> None:
         pid = frame.participant_id
@@ -219,6 +259,17 @@ class _VoiceHandlerProcessor(FrameProcessor):
         task = asyncio.create_task(
             self._run_query(frame, token),
             name=f"voice-query-{pid}",
+        )
+        self._inflight[pid] = task
+
+    async def _start_response(self, response: _DirectResponse) -> None:
+        pid = response.participant_id
+        self._seen_output.add(pid)
+        token = object()
+        self._turn_tokens[pid] = token
+        task = asyncio.create_task(
+            self._run_response(response, token),
+            name=f"voice-response-{pid}",
         )
         self._inflight[pid] = task
 
@@ -276,12 +327,53 @@ class _VoiceHandlerProcessor(FrameProcessor):
             if is_current:
                 self._turn_tokens.pop(pid, None)
                 self._inflight.pop(pid, None)
-                pending = self._queued.get(pid)
-                if pending:
-                    next_frame = pending.popleft()
-                    if not pending:
-                        self._queued.pop(pid, None)
-                    await self._start_query(next_frame, interrupt=True)
+                await self._start_next(pid)
+
+    async def _run_response(self, response: _DirectResponse, token: object) -> None:
+        pid = response.participant_id
+        cancelled = False
+        try:
+            if self._turn_tokens.get(pid) is token:
+                await self._push_text(response.text, pid=pid)
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
+        except Exception:
+            logger.exception("voice response failed pid={!r}", pid)
+        finally:
+            is_current = self._turn_tokens.get(pid) is token
+            if not cancelled and is_current:
+                await self._observe(
+                    VoiceTurn(
+                        participant_id=pid,
+                        role="agent",
+                        timestamp_us=response.pts_us,
+                        text=response.text,
+                    )
+                )
+                await self.push_frame(
+                    AssistantResponseEndFrame(
+                        pid=pid,
+                        text=response.text,
+                        pts_us=response.pts_us,
+                    )
+                )
+            if is_current:
+                self._turn_tokens.pop(pid, None)
+                self._inflight.pop(pid, None)
+                await self._start_next(pid)
+
+    async def _start_next(self, pid: str) -> None:
+        pending = self._queued.get(pid)
+        if not pending:
+            return
+        item = pending.popleft()
+        if not pending:
+            self._queued.pop(pid, None)
+        if isinstance(item, GatedQueryFrame):
+            await self._start_query(item, interrupt=True)
+        else:
+            await self._start_response(item)
 
     async def _push_text(self, text: str, *, pid: str) -> None:
         """Push a ``TextFrame`` tagged with the participant id.

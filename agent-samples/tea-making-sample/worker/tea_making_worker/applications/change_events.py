@@ -26,10 +26,10 @@ class ChangeCommitter(Protocol):
         session: Session,
         caption: str,
         request: ChangeCommitRequest,
-    ) -> None: ...
+    ) -> bool: ...
 
 
-class ChangeCommitConfig(FunctionBaseConfig, name="voice_desktop_change_watch_commit"):
+class ChangeCommitConfig(FunctionBaseConfig, name="voice_application_change_watch_commit"):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     application: Any = Field(exclude=True, repr=False)
@@ -40,9 +40,9 @@ async def change_watch_commit(config: ChangeCommitConfig, _builder: Builder):
     async def commit(request: ChangeCommitRequest) -> str:
         call = current_invocation()
         caption = str(call.context["change_watch.caption"])
-        await config.application.commit(call.session, caption, request)
+        notified = await config.application.commit(call.session, caption, request)
         return json.dumps(
-            {"important": request.important, "notified": bool(request.important and request.summary.strip())},
+            {"important": request.important, "notified": notified},
             separators=(",", ":"),
         )
 

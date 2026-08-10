@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..desktop.runtime import DesktopState
+from ..applications.manager.runtime import ApplicationState
 from ..spec import StateField, Step, Workflow
 from .events import emit
 from .render import render_message
@@ -22,7 +22,7 @@ from .render import render_message
 class Session:
     participant_id: str
     state: dict[str, Any]
-    desktop: DesktopState = field(default_factory=DesktopState)
+    applications: ApplicationState = field(default_factory=ApplicationState)
     active: bool = False
     step_id: str | None = None
     revision: int = 0

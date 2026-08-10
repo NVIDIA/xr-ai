@@ -21,6 +21,9 @@ _SAMPLE = _ROOT / "agent-samples" / "tea-making-sample"
 sys.path.insert(0, str(_SAMPLE))
 sys.path.insert(0, str(_SAMPLE / "worker"))
 
+from tea_making_viewer.config import Source  # noqa: E402
+from tea_making_viewer.config import load_config as load_viewer_config  # noqa: E402
+from tea_making_viewer.store import EventStore, JsonlWatcher  # noqa: E402
 from tea_making_worker.agents.prompts import (  # noqa: E402
     HUMAN,
     STEP,
@@ -32,16 +35,14 @@ from tea_making_worker.agents.registry import (  # noqa: E402
     _state_contract,
 )
 from tea_making_worker.applications.compose import root_function_specs  # noqa: E402
+from tea_making_worker.applications.manager.spec import load_application_catalog  # noqa: E402
+from tea_making_worker.applications.manager.types import InvocationEffect  # noqa: E402
 from tea_making_worker.config import load_config  # noqa: E402
-from tea_making_worker.desktop.spec import load_desktop  # noqa: E402
-from tea_making_worker.desktop.types import FunctionEffect  # noqa: E402
 from tea_making_worker.functions.vision import CurrentViewRequest  # noqa: E402
 from tea_making_worker.functions.workflow import CommitRequest  # noqa: E402
 from tea_making_worker.runtime.render import render_message  # noqa: E402
 from tea_making_worker.runtime.state import SessionStore  # noqa: E402
 from tea_making_worker.spec import load_workflow  # noqa: E402
-from tea_making_viewer.config import Source, load_config as load_viewer_config  # noqa: E402
-from tea_making_viewer.store import EventStore, JsonlWatcher  # noqa: E402
 
 _MAIN_SPEC = importlib.util.spec_from_file_location("tea_making_sample_main", _SAMPLE / "main.py")
 assert _MAIN_SPEC is not None and _MAIN_SPEC.loader is not None
@@ -55,11 +56,10 @@ def _workflow():
 
 def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     workflow = _workflow()
-    desktop = load_desktop(_SAMPLE / "yaml" / "applications.yaml")
-    root_functions = root_function_specs(desktop)
+    catalog = load_application_catalog(_SAMPLE / "yaml" / "applications.yaml")
+    root_functions = root_function_specs(catalog)
     root_prompt = (
-        f"{desktop.root_prompt}\nRoutes: "
-        f"{'; '.join(function.catalog_entry() for function in root_functions)}\n{HUMAN}"
+        f"{catalog.root_prompt}\nRoutes: {'; '.join(function.catalog_entry() for function in root_functions)}\n{HUMAN}"
     )
     raw = yaml.safe_load((_SAMPLE / "yaml" / "workflow.yaml").read_text(encoding="utf-8"))
     assert list(workflow.steps) == [
@@ -80,12 +80,14 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
     assert "message only with a real non-completing state change" in STEP
     assert "Empty on no change or completion" in STEP
     assert "Next/continue/advance" in TEA
+    assert "Query background only when needed" in VOICE
     assert "Questions using these words are not commands" in TEA
     assert {function.name for function in root_functions} == {
         "current_view",
         "rag_lookup",
+        "application_context__query",
         "workflow__start",
-        "desktop__status",
+        "application_manager__status",
         "change_watch__start",
         "change_watch__stop",
         "change_watch__status",
@@ -97,10 +99,10 @@ def test_workflow_is_uniform_sparse_and_prompt_bounded() -> None:
         "video_log__status",
     }
     assert next(function for function in root_functions if function.name == "workflow__start").effect == (
-        FunctionEffect.FOREGROUND
+        InvocationEffect.FOREGROUND
     )
     assert all(
-        function.effect == FunctionEffect.BACKGROUND
+        function.effect == InvocationEffect.BACKGROUND
         for function in root_functions
         if function.name.startswith(("change_watch__", "transcript__", "video_log__"))
     )
@@ -177,10 +179,7 @@ def test_model_profiles_always_use_omni_for_agents() -> None:
         assert models["agent_llm"]["adapter"]["default_extras"] == {
             "chat_template_kwargs": {"enable_thinking": False},
         }
-        reused = {
-            models[role]["deployment"]["ownership"]
-            for role in ("agent_llm", "vlm", "stt", "embedding")
-        }
+        reused = {models[role]["deployment"]["ownership"] for role in ("agent_llm", "vlm", "stt", "embedding")}
         assert reused == {"reused"}
     assert cosmos["agent_llm"]["deployment"]["service"] == "omni"
     assert cosmos["vlm"]["adapter"]["preset"] == "cosmos_vlm"
@@ -272,9 +271,7 @@ def test_launcher_requires_explicit_launch_modes() -> None:
     assert "--voice-mode {wake-word,always-on}" in help_text
     assert "--tts-mode {piper,magpie}" in help_text
 
-    args = sample_main._parse_args(
-        ["--model-mode", "omni", "--voice-mode", "always-on", "--tts-mode", "magpie"]
-    )
+    args = sample_main._parse_args(["--model-mode", "omni", "--voice-mode", "always-on", "--tts-mode", "magpie"])
     assert args is not None
     assert (args.model_mode, args.voice_mode, args.tts_mode) == ("omni", "always-on", "magpie")
 
@@ -311,16 +308,13 @@ def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
                         worker = load_config(worker_path)
                         rag = yaml.safe_load(rag_path.read_text(encoding="utf-8"))
                         models = json.loads(worker.models_config.read_text(encoding="utf-8"))
-                        expected_models = json.loads(
-                            (_SAMPLE / "yaml" / model_file).read_text(encoding="utf-8")
-                        )
+                        expected_models = json.loads((_SAMPLE / "yaml" / model_file).read_text(encoding="utf-8"))
                         expected_models["models"]["tts"]["adapter"] = {"preset": tts_preset}
                         expected_models["models"]["tts"]["endpoint"]["base_url"] = tts_url
                         assert models == expected_models
-                        assert worker.applications_config == (
-                            _SAMPLE / "yaml" / "applications.yaml"
-                        ).resolve()
+                        assert worker.applications_config == (_SAMPLE / "yaml" / "applications.yaml").resolve()
                         assert worker.voice_gate_config == (_SAMPLE / "yaml" / voice_file).resolve()
+                        assert worker.silence_duration == 1.2
                         gate = yaml.safe_load(worker.voice_gate_config.read_text(encoding="utf-8"))
                         if voice_mode == "wake-word":
                             assert gate["magic_phrases"] == ["agent", "hey agent"]
@@ -335,9 +329,7 @@ def test_launch_modes_align_worker_rag_voice_and_processes() -> None:
                         assert all(
                             process.launch_mode
                             == (
-                                "own"
-                                if process.name in {"tts", "rag", "hub", "activity-viewer", "worker"}
-                                else "reuse"
+                                "own" if process.name in {"tts", "rag", "hub", "activity-viewer", "worker"} else "reuse"
                             )
                             for process in processes
                         )
@@ -383,7 +375,7 @@ def test_activity_viewer_tails_only_complete_new_jsonl_records() -> None:
         assert [event["record"]["text"] for event in store.after(0)] == ["new"]
 
         with path.open("a", encoding="utf-8") as stream:
-            stream.write('}\n')
+            stream.write("}\n")
 
         assert watcher.scan() == 1
         events = store.after(0)
@@ -470,11 +462,7 @@ def test_activity_viewer_config_and_static_page_are_sample_local() -> None:
         "agent",
         "change_watch",
     }
-    assert all(
-        _SAMPLE in source.location.parents
-        for source in config.sources
-        if source.id != "agent"
-    )
+    assert all(_SAMPLE in source.location.parents for source in config.sources if source.id != "agent")
     log_sources = [source for source in config.sources if source.format == "event_log"]
     assert {source.id for source in log_sources} == {"agent"}
     assert all(source.location == run_log_dir / "worker.log" for source in log_sources)
@@ -499,14 +487,16 @@ def test_eval_cases_cover_every_route_and_step() -> None:
         for app in ("change_watch", "transcript", "video_log")
         for operation in ("start", "stop", "status")
     }
-    routed_actions = {
-        f"workflow__{name}" for name in ("start", "advance", "reset", "restart", "status")
-    } | {"desktop__status"} | background_actions
+    routed_actions = (
+        {f"workflow__{name}" for name in ("start", "advance", "reset", "restart", "status")}
+        | {"application_manager__status", "application_context__query"}
+        | background_actions
+    )
     assert {case["expected_tool"] for case in cases["routes"]} == {"answer"} | routed_actions
     matrix = cases["route_state_matrix"]
     assert set(matrix["active_steps"]) == set(workflow.steps)
-    active_actions = {
-        f"workflow__{name}" for name in ("advance", "reset", "restart", "status")
+    active_actions = {f"workflow__{name}" for name in ("advance", "reset", "restart", "status")} | {
+        "application_context__query"
     }
     assert {case["expected_tool"] for case in matrix["active_cases"]} == {"answer"} | active_actions
     assert {case["expected_tool"] for case in matrix["idle_cases"]} == {
@@ -514,13 +504,12 @@ def test_eval_cases_cover_every_route_and_step() -> None:
         "change_watch__start",
         "transcript__start",
         "video_log__start",
-        "desktop__status",
+        "application_manager__status",
+        "application_context__query",
         "answer",
     }
     assert {
-        case["expected_advanced"]
-        for case in matrix["active_cases"]
-        if case["expected_tool"] == "workflow__advance"
+        case["expected_advanced"] for case in matrix["active_cases"] if case["expected_tool"] == "workflow__advance"
     } == {False, True}
     assert cases["general_queries"]["tea_knowledge"]["expected_tools"] == ["rag_lookup"]
     assert cases["general_queries"]["visible_scene"]["expected_tools"] == ["current_view"]
@@ -528,6 +517,7 @@ def test_eval_cases_cover_every_route_and_step() -> None:
         "current_view",
         "rag_lookup",
     ]
+    assert cases["general_queries"]["background_context"]["expected_tools"] == ["application_context__query"]
     assert cases["general_queries"]["safety"] == {
         "state_updates": False,
         "lifecycle_tools": False,

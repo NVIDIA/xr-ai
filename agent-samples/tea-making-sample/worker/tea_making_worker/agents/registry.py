@@ -21,6 +21,7 @@ from .invoke import invoke_with_tool_retry
 from .prompts import HUMAN, STEP, TEA, VOICE
 
 _COMMIT = FunctionRef("workflow__commit")
+_BACKGROUND_CONTEXT = FunctionRef("application_context__query")
 _TEA_MANAGEMENT_TOOLS = tuple(
     FunctionRef(f"workflow__{name}") for name in ("advance", "reset", "restart", "status")
 )
@@ -56,7 +57,11 @@ class AgentRegistry:
                 name=f"foreground_tea_{step.id}",
                 llm_ref=llm_ref,
                 prompt=f"{TEA}\n{VOICE}\n{context}\n{step.voice.prompt}\n{HUMAN}".strip(),
-                tools=(*_TEA_MANAGEMENT_TOOLS, *map(FunctionRef, step.voice.tools)),
+                tools=(
+                    *_TEA_MANAGEMENT_TOOLS,
+                    _BACKGROUND_CONTEXT,
+                    *map(FunctionRef, step.voice.tools),
+                ),
                 return_direct=_TEA_MANAGEMENT_TOOLS,
             )
 

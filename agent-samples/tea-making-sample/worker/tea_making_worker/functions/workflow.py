@@ -10,7 +10,7 @@ from typing import Any, Literal
 from nat.plugin_api import Builder, FunctionBaseConfig, FunctionInfo, register_function
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..desktop.runtime import DesktopRuntime
+from ..applications.manager.runtime import ApplicationOwnership
 from ..runtime.scope import current_invocation
 from ..runtime.state import SessionStore
 
@@ -52,13 +52,13 @@ class WorkflowFunctionConfig(FunctionBaseConfig, name="tea_guidance_workflow_fun
 
     operation: Operation
     store: Any = Field(exclude=True, repr=False)
-    desktop: Any = Field(exclude=True, repr=False)
+    application_ownership: Any = Field(exclude=True, repr=False)
 
 
 @register_function(config_type=WorkflowFunctionConfig)
 async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
     store: SessionStore = config.store
-    desktop: DesktopRuntime = config.desktop
+    application_ownership: ApplicationOwnership = config.application_ownership
 
     async def commit(request: CommitRequest) -> str:
         call = current_invocation()
@@ -68,7 +68,7 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
         call = current_invocation()
         call.route_operation = "start"
         result = store.start(call.session)
-        desktop.capture(call.session, "tea")
+        application_ownership.capture(call.session, "tea")
         return result
 
     async def advance(request: AdvanceRequest) -> str:
@@ -76,14 +76,14 @@ async def workflow_function(config: WorkflowFunctionConfig, _builder: Builder):
         call.route_operation = "advance"
         result = store.advance(call.session, skip=request.skip)
         if not call.session.active:
-            desktop.release(call.session, "tea")
+            application_ownership.release(call.session, "tea")
         return result
 
     async def reset(request: GuideRequest) -> str:
         call = current_invocation()
         call.route_operation = "reset"
         result = store.reset(call.session)
-        desktop.release(call.session, "tea")
+        application_ownership.release(call.session, "tea")
         return result
 
     async def restart(request: GuideRequest) -> str:
@@ -121,12 +121,16 @@ async def add_workflow_functions(
     builder: Builder,
     *,
     store: SessionStore,
-    desktop: DesktopRuntime,
+    application_ownership: ApplicationOwnership,
 ) -> None:
     for operation in ("commit", "start", "advance", "reset", "restart", "status"):
         await builder.add_function(
             f"workflow__{operation}",
-            WorkflowFunctionConfig(operation=operation, store=store, desktop=desktop),
+            WorkflowFunctionConfig(
+                operation=operation,
+                store=store,
+                application_ownership=application_ownership,
+            ),
         )
 
 

@@ -16,7 +16,6 @@ from .jsonl import append_records, session_path, timestamp
 @dataclass(slots=True)
 class TranscriptState:
     path: Path
-    next_summary: float
     turns: list[str] = field(default_factory=list)
     writes: list[dict[str, Any]] = field(default_factory=list)
     active: bool = True

@@ -42,6 +42,52 @@ agent graph, function registry, schemas, and tracing; the adapter translates
 messages and tools while every model request still goes through
 `xr-ai-models`.
 
+## Typed application events
+
+`xr_ai_nat.events` connects independently composed NAT functions without
+introducing another workflow runtime. An `EventTopic` pairs a stable name with
+a Pydantic payload type. `EventDispatcher` validates the payload, adds
+participant, producer, event, correlation, causation, and timestamp metadata,
+then invokes explicitly registered NAT `Function` subscribers in registration
+order.
+
+```python
+from pydantic import BaseModel
+from xr_ai_nat.events import EventDispatcher, EventTopic, add_event_handler
+
+class Changed(BaseModel):
+    summary: str
+
+changed = EventTopic("monitor.changed", Changed)
+events = EventDispatcher(observer=record_delivery)
+consumer = await add_event_handler(
+    builder,
+    name="monitor__consume_change",
+    handler=handle_change,
+)
+events.subscribe(changed, subscriber_id="monitor", function=consumer)
+await events.publish(
+    changed,
+    participant_id="alice",
+    producer="camera",
+    payload=Changed(summary="A parcel moved."),
+    subscribers={"monitor"},
+    correlation_id="turn-12",
+)
+```
+
+The dispatcher does not own prompts, tool loops, schedules, retries,
+application state, or foreground selection. Sources such as STT and clocks may
+publish through this adapter, while every executable consumer remains a NAT
+function. The optional observer exposes the event and selected subscriber ids
+for application logging.
+
+`PeriodicEventSource` is a separate lifecycle adapter for applications that
+need time-based triggers. Each instance targets one NAT subscriber at its own
+configured interval and runs only for explicitly started participants.
+`run()` supervises publisher failures; `stop()` and `close()` cancel schedules
+without leaving detached tasks.
+
 ## Spatial math
 
 The `xr_spatial_math` function group contains deterministic coordinate
@@ -111,21 +157,26 @@ it wired up, recall is empty.
 
 ## Voice adapters
 
-Install `xr-ai-nat[voice]` to drive a native function from a voice session. Both
-adapters are exported from `xr_ai_nat.adapters` (resolved lazily, so importing
-that package without the extra still works):
+Install `xr-ai-nat[voice]` to connect a voice session to native functions or
+typed application events. The adapters are exported from
+`xr_ai_nat.adapters` and resolved lazily, so importing that package without the
+extra still works:
 
 ```python
-from xr_ai_nat.adapters import as_voice_handler, record_voice_transcripts
+from xr_ai_nat.adapters import as_voice_event_handler, as_voice_handler
 
-handler = as_voice_handler(
-    some_function,
-    request=lambda query: MyRequest(text=query.text),
-    response=str,
+handler = as_voice_event_handler(
+    events,
+    application_request,
+    payload=lambda query: ApplicationRequest(text=query.text),
+    subscribers={"application.manager"},
 )
-observer = record_voice_transcripts(add_transcript)
 ```
 
+- `as_voice_event_handler(dispatcher, topic, *, payload, ...)` makes accepted
+  voice turns a transport-neutral typed event. Its NAT subscribers own
+  application routing, invocation state, and reply production; Pipecat and
+  `VoiceSession` remain realtime ingress details.
 - `as_voice_handler(function, *, request, response, streaming=False)` wraps a
   native function as a voice handler: it maps a `VoiceQuery` onto the function's
   request model and maps the result back to text. With `streaming=True` it

@@ -37,6 +37,20 @@ A handler may also return an `AsyncIterator[str]` to stream the reply token by
 token. Typed messages route through the same path via `TextMessageInput`; data
 received outside an active `run()` is ignored.
 
+An application may also submit assistant output without manufacturing a user
+query:
+
+```python
+await session.enqueue_response("alice", "The timer finished.")
+await session.enqueue_response("alice", "Move your hand away.", interrupt=True)
+```
+
+Direct responses share the participant's query/output queue, so normal output
+is spoken serially after the active turn. `interrupt=True` cancels that
+participant's active and queued work and flushes downstream speech; reserve it
+for explicitly urgent output. The response also follows the normal assistant
+observer and data-channel completion path.
+
 `VoiceSession.run()` accepts participant lifecycle callbacks, observers, and
 explicit follow-up policies. `transcription_observer` receives every finalized
 user STT turn before wake-word gating, including utterances that are not
@@ -55,8 +69,10 @@ All per-turn state — pending TTS text, the synthesis/order queue, interruption
 and hub flush — is keyed by participant id, so concurrent participants on one
 hub never share a buffer or misroute each other's audio; a departing
 participant's transport sender is released on leave. NAT applications create
-the callable with `xr_ai_nat.adapters.as_voice_handler`; transcript recording
-is a separate observer rather than a side effect of function invocation.
+the callable with `xr_ai_nat.adapters.as_voice_handler`, or use
+`as_voice_event_handler` to publish accepted turns to transport-neutral NAT
+event subscribers. Transcript recording is a separate observer rather than a
+side effect of function invocation.
 
 When wake phrases and the listening chime are enabled, a command may contain up
 to two common speech fillers before its wake phrase. Arbitrary preceding speech

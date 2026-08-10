@@ -10,8 +10,12 @@ from nat.builder.workflow_builder import WorkflowBuilder
 from tea_making_worker.agents import AgentRegistry
 from tea_making_worker.agents.factory import add_guidance_llm
 from tea_making_worker.applications.compose import build_applications
-from tea_making_worker.desktop.runtime import DesktopRuntime
-from tea_making_worker.desktop.spec import load_desktop
+from tea_making_worker.applications.context import ApplicationContextFunctionsConfig, add_context_query
+from tea_making_worker.applications.events import BACKGROUND_FACT
+from tea_making_worker.applications.manager.runtime import ApplicationOwnership
+from tea_making_worker.applications.manager.spec import load_application_catalog
+from tea_making_worker.applications.manager.turn import ApplicationTurn
+from tea_making_worker.applications.output import UserOutputDelivery
 from tea_making_worker.functions import (
     CurrentViewConfig,
     RAGLookupConfig,
@@ -22,15 +26,12 @@ from tea_making_worker.functions import (
 from tea_making_worker.runtime.state import SessionStore
 from tea_making_worker.spec import load_workflow
 from xr_ai_models import Capabilities, ChatResponse
+from xr_ai_nat.events import EventDispatcher, add_event_handler
 from xr_ai_nat.functions.rag import RAGFunctionsConfig
 from xr_ai_nat.functions.vision import VisionToolsConfig
 
 _WORKFLOW = Path(__file__).parents[2] / "yaml" / "workflow.yaml"
 _APPLICATIONS = Path(__file__).parents[2] / "yaml" / "applications.yaml"
-
-
-async def _notice(*_args) -> None:
-    return None
 
 
 class _Endpoint:
@@ -58,11 +59,23 @@ class _VLM:
     capabilities = Capabilities(vision=True)
 
 
+class _Transport:
+    async def send_return_data(self, _message) -> None:
+        return None
+
+
+class _VoiceSession:
+    transport = _Transport()
+
+    async def enqueue_response(self, *_args, **_kwargs) -> None:
+        return None
+
+
 class NatBuildTest(unittest.IsolatedAsyncioTestCase):
     async def test_every_yaml_tool_resolves_during_nat_agent_build(self) -> None:
         workflow = load_workflow(_WORKFLOW)
-        desktop_spec = load_desktop(_APPLICATIONS)
-        desktop_runtime = DesktopRuntime(desktop_spec)
+        application_spec = load_application_catalog(_APPLICATIONS)
+        application_runtime = ApplicationOwnership(application_spec)
         store = SessionStore(workflow)
         agents = AgentRegistry(workflow)
         llm = _LLM()
@@ -87,26 +100,73 @@ class NatBuildTest(unittest.IsolatedAsyncioTestCase):
             )
             await add_clock_functions(builder)
             await add_temperature_functions(builder)
-            await add_workflow_functions(builder, store=store, desktop=desktop_runtime)
+            await add_workflow_functions(
+                builder,
+                store=store,
+                application_ownership=application_runtime,
+            )
+            context_group = await builder.add_function_group(
+                "context_store",
+                ApplicationContextFunctionsConfig(),
+            )
+            context_functions = await context_group.get_all_functions()
+            events = EventDispatcher()
+            events.subscribe(
+                BACKGROUND_FACT,
+                subscriber_id="context.recorder",
+                function=context_functions["context_store__record"],
+            )
+
+            async def reset_context(_event) -> None:
+                await context_functions["context_store__clear"].ainvoke({})
+
+            context_reset = await add_event_handler(
+                builder,
+                name="application__reset_context",
+                handler=reset_context,
+                description="Clear participant context when applications reset.",
+            )
+            self.assertIs(
+                context_reset,
+                await builder.get_function("application__reset_context"),
+            )
+            await add_context_query(builder, context_functions["context_store__query"])
+            output = UserOutputDelivery(events, _VoiceSession())  # type: ignore[arg-type]
+            await output.build(builder)
             llm_ref = await add_guidance_llm(builder, llm)
             await agents.build(builder, llm_ref)
             applications = await build_applications(
                 builder,
                 llm_ref=llm_ref,
-                spec=desktop_spec,
-                runtime=desktop_runtime,
+                spec=application_spec,
+                ownership=application_runtime,
                 tea=agents,
                 current_view=current_view,
-                notice=_notice,
-                text_output=_notice,
+                events=events,
+                output=output,
+                store=store,
             )
+            self.assertIs(
+                applications.manager.function,
+                await builder.get_function("application_manager__turn"),
+            )
+            self.assertIs(
+                applications.manager._foreground["tea"],
+                await builder.get_function("application__tea_turn"),
+            )
+            self.assertIs(applications.manager.function.input_schema, ApplicationTurn)
+            self.assertEqual(len(applications.periodic_sources), 3)
+            self.assertIs(applications.change_watch.periodic, applications.periodic_sources[0])
+            self.assertIs(applications.transcript.periodic, applications.periodic_sources[1])
+            self.assertIs(applications.video_log.periodic, applications.periodic_sources[2])
             self.assertEqual(
-                {function.name for function in applications.desktop.functions},
+                {function.name for function in applications.manager.functions},
                 {
                     "current_view",
                     "rag_lookup",
+                    "application_context__query",
                     "workflow__start",
-                    "desktop__status",
+                    "application_manager__status",
                     "change_watch__start",
                     "change_watch__stop",
                     "change_watch__status",

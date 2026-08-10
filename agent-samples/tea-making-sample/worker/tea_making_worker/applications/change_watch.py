@@ -5,7 +5,6 @@
 
 import asyncio
 import json
-import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
@@ -15,21 +14,29 @@ from typing import Any
 from nat.builder.function import Function
 from nat.builder.workflow_builder import WorkflowBuilder
 from nat.plugin_api import FunctionRef, LLMRef
+from xr_ai_nat.events import EventDispatcher, PeriodicEventSource
 from xr_ai_nat.functions.vision import LiveVisionResult
 
 from ..agents.factory import build_agent
 from ..agents.invoke import invoke_with_tool_retry
 from ..agents.prompts import HUMAN
-from ..desktop.runtime import DesktopRuntime
-from ..desktop.spec import ApplicationSpec
-from ..desktop.types import RoutedFunction
 from ..runtime.events import emit
 from ..runtime.scope import current_invocation, invocation_scope
 from ..runtime.state import Session
-from .background import TextOutput
 from .change_events import ChangeCommitRequest, add_change_commit
 from .controls import add_background_controls
+from .events import (
+    BACKGROUND_FACT,
+    USER_OUTPUT,
+    BackgroundFact,
+    OutputDestination,
+    UserOutput,
+)
 from .jsonl import append_records, session_path, timestamp
+from .manager.runtime import ApplicationOwnership
+from .manager.spec import ApplicationDescriptor
+from .manager.types import RoutedFunction
+from .output import UserOutputDelivery
 
 
 @dataclass(slots=True)
@@ -37,19 +44,30 @@ class _WatchState:
     path: Path
     captions: deque[str]
     instruction: str
-    next_tick: float = 0.0
     writes: list[dict[str, Any]] = field(default_factory=list)
     active: bool = True
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
+def _same_caption(left: str, right: str) -> bool:
+    return left.strip().casefold() == right.strip().casefold()
+
+
 class ChangeWatchApplication:
-    def __init__(self, spec: ApplicationSpec, runtime: DesktopRuntime, output: TextOutput) -> None:
+    def __init__(
+        self,
+        spec: ApplicationDescriptor,
+        runtime: ApplicationOwnership,
+        events: EventDispatcher,
+        *,
+        periodic: PeriodicEventSource | None = None,
+    ) -> None:
         if spec.mode != "background":
             raise ValueError("change watch must be a background application")
         self.spec = spec
         self.runtime = runtime
-        self.output = output
+        self.events = events
+        self.periodic = periodic
         self.output_dir = Path(spec.settings["output_dir"])
         self.interval_s = float(spec.settings.get("interval_s", 2))
         self.history_size = int(spec.settings.get("history_size", 2))
@@ -102,6 +120,8 @@ class ChangeWatchApplication:
         )
         self._states[session.participant_id] = state
         await self._flush(state)
+        if self.periodic is not None:
+            self.periodic.start(session.participant_id)
         emit(
             "change_watch.started",
             participant_id=session.participant_id,
@@ -113,6 +133,8 @@ class ChangeWatchApplication:
     async def stop(self, session: Session) -> str:
         if not self.runtime.stop_background(session, self.app_id):
             return f"{self.spec.title} is not running."
+        if self.periodic is not None:
+            await self.periodic.stop(session.participant_id)
         state = self._states.pop(session.participant_id, None)
         if state is not None:
             async with state.lock:
@@ -131,18 +153,16 @@ class ChangeWatchApplication:
     async def on_transcription(self, session: Session, text: str, trace_id: str) -> None:
         return None
 
-    async def tick(self, session: Session) -> None:
+    async def tick(self, session: Session, trace_id: str | None = None) -> None:
         state = self._states.get(session.participant_id)
         if state is None or self._view is None or self._agent is None:
             return
-        now = time.monotonic()
-        if state.next_tick > now or state.lock.locked():
+        if state.lock.locked():
             return
         async with state.lock:
             if not state.active:
                 return
-            state.next_tick = now + self.interval_s
-            trace_id = uuid.uuid4().hex[:12]
+            trace_id = trace_id or uuid.uuid4().hex[:12]
             with invocation_scope(session, trace_id):
                 result = await self._view.ainvoke(
                     {"question": f"{self.caption_prompt}\nFocus: {state.instruction}"},
@@ -218,10 +238,12 @@ class ChangeWatchApplication:
                     )
         await self._flush(state)
 
-    async def commit(self, session: Session, caption: str, request: ChangeCommitRequest) -> None:
+    async def commit(self, session: Session, caption: str, request: ChangeCommitRequest) -> bool:
         state = self._states[session.participant_id]
+        duplicate = bool(state.captions and _same_caption(state.captions[-1], caption))
         state.captions.append(caption)
-        summary = request.summary.strip() if request.important else ""
+        important = request.important and not duplicate
+        summary = request.summary.strip() if important else ""
         trace_id = current_invocation().trace_id
         state.writes.append(
             {
@@ -230,21 +252,47 @@ class ChangeWatchApplication:
                 "trace_id": trace_id,
                 "watch_for": state.instruction,
                 "caption": caption,
-                "important": request.important,
+                "important": important,
                 "summary": summary,
             }
         )
         emit(
             "change_watch.event",
             participant_id=session.participant_id,
-            important=request.important,
+            important=important,
+            duplicate=duplicate,
             summary=summary,
             history=list(state.captions),
         )
         if summary:
-            await self.output(session.participant_id, self.spec.title, summary)
+            await self.events.publish(
+                BACKGROUND_FACT,
+                participant_id=session.participant_id,
+                producer=self.spec.title,
+                payload=BackgroundFact(
+                    topic="change_watch.change",
+                    summary=summary,
+                    source_ref=str(state.path),
+                ),
+                correlation_id=trace_id,
+            )
+            await self.events.publish(
+                USER_OUTPUT,
+                participant_id=session.participant_id,
+                producer=self.spec.title,
+                payload=UserOutput(
+                    text=summary,
+                    label=self.spec.title,
+                    destinations=(OutputDestination.TEXT,),
+                ),
+                subscribers=(UserOutputDelivery.TEXT_SUBSCRIBER,),
+                correlation_id=trace_id,
+            )
+        return bool(summary)
 
     async def release(self, session: Session) -> None:
+        if self.periodic is not None:
+            await self.periodic.stop(session.participant_id)
         state = self._states.pop(session.participant_id, None)
         if state is None:
             return

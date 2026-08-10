@@ -28,7 +28,7 @@ class TranscriptSummarizer(Protocol):
     ) -> None: ...
 
 
-class TranscriptSummaryConfig(FunctionBaseConfig, name="voice_desktop_transcript_summary_commit"):
+class TranscriptSummaryConfig(FunctionBaseConfig, name="voice_application_transcript_summary_commit"):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     application: Any = Field(exclude=True, repr=False)

@@ -171,6 +171,28 @@ class VoiceSession:
             pts_us=pts_us,
         )
 
+    async def enqueue_response(
+        self,
+        participant_id: str,
+        text: str,
+        *,
+        interrupt: bool = False,
+        pts_us: int | None = None,
+    ) -> None:
+        """Queue assistant speech on the active participant output path.
+
+        Responses are serialized with participant queries. ``interrupt`` is
+        intended for urgent output that must replace queued or active speech.
+        """
+        if self._handler_processor is None:
+            raise RuntimeError("voice session is not running")
+        await self._handler_processor.enqueue_response(
+            participant_id,
+            text,
+            interrupt=interrupt,
+            pts_us=pts_us,
+        )
+
     async def __aexit__(self, *_exc: Any) -> None:
         await self.close()
 

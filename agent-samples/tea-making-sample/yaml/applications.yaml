@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 root_prompt: >-
-  Match tool; else answer briefly. Inline/background stay; foreground launches.
-  Inspect deictics. Never infer unseen facts.
+  Match tool; else answer briefly. Only foreground-marked tools capture future
+  turns. Inspect deictics. Never infer unseen facts.
 
 capabilities:
   current_view: live view or deictic
   rag_lookup: tea knowledge; not visual identity
+  application_context__query: recent background application output
 
 applications:
   tea:

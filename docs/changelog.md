@@ -9,6 +9,48 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-10 — NAT is the sole agent composition framework
+
+Typed NAT functions are the executable boundary for tools, agents, routers,
+pipelines, and application turns. Repository code may add thin transport or
+lifecycle adapters only for semantics NAT does not provide, such as persistent
+foreground ownership and background event subscriptions. Any broader framework
+proposal must first document the NAT gap, two concrete use cases, ownership,
+and dependency impact, then receive explicit maintainer approval. The tea
+sample now mounts root and tea turn handlers as the same typed NAT function and
+keeps its application manager limited to deterministic ownership selection.
+
+### 2026-08-10 — Timed background applications own their triggers
+
+The tea coordinator no longer broadcasts `application.tick` every 250
+milliseconds. Each timed background application owns a reusable
+`PeriodicEventSource` targeting only its NAT subscriber and starts or stops the
+participant schedule with its own lifecycle. Visual applications retain their
+two-second cadence, transcript summaries retain their two-minute cadence, and
+raw transcript records flush immediately. Source supervision propagates
+unexpected subscriber failures to the process task group.
+
+### 2026-08-10 — Voice is an event-producing transport adapter
+
+`VoiceSession` remains responsible only for realtime voice mechanics. The
+reusable `as_voice_event_handler` adapter publishes accepted turns as typed
+events, and NAT subscribers own application routing, participant invocation
+scope, and reply production. The tea sample now consumes the transport-neutral
+`application.request` topic, so another input source can drive the same
+application boundary without imitating a voice session or bypassing NAT.
+
+### 2026-08-10 — Typed events connect NAT application functions
+
+Cross-application communication uses typed, participant-scoped events delivered
+to NAT functions. The event dispatcher is a thin delivery adapter: it validates
+payloads, carries correlation and causation metadata, selects explicit
+subscribers, and invokes their NAT functions. It does not schedule agents,
+manage prompts, own application state, or introduce another workflow runtime.
+The first two consumers are background-context recording and user output. User
+output is split into independently selectable text and voice destinations;
+voice delivery is serialized per participant and may later accept a NAT policy
+function for prioritization or aggregation without changing producers.
+
 ### 2026-08-07 — Spoken output excludes formatting and internal syntax
 
 The tea sample's compact shared output contract now requires plain spoken prose
