@@ -459,7 +459,7 @@ either path to
 <code class="docutils literal notranslate"><span class="pre">load_models_config(...)</span></code> and constructs services via <code class="docutils literal notranslate"><span class="pre">make_llm</span></code> /
 <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code> / <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> / <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>.  Schema, preset
 table, and the explicit (no-preset) spec are in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/a2bb38454994214fac45febb3d7ed18da34581e3/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/8e2f0c8d1c065bc2df84328f70f8901d80019c2d/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
 <p>When the worker is small, keep its implementation in the package’s
 <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>. Split it once argument parsing, lifecycle, configuration, and
 workflow composition become distinct responsibilities.</p>
@@ -573,7 +573,7 @@ packages = [&quot;&lt;snake_name&gt;_worker&quot;]
 <p>Use this template when the worker talks directly to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code>. Native
 voice workers keep argument parsing in <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code> and delegate composition
 to sibling <code class="docutils literal notranslate"><span class="pre">app.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config.py</span></code> modules; see
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/a2bb38454994214fac45febb3d7ed18da34581e3/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/8e2f0c8d1c065bc2df84328f70f8901d80019c2d/agent-samples/simple-vlm-example/worker/simple_vlm_example_worker/"><code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code></a>
 for that shape. Fill in the sections marked <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">←</span> <span class="pre">FILL</span> <span class="pre">IN</span></code>.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;&quot;&quot;
 &lt;Name&gt; agent worker — &lt;one-line description&gt;.
