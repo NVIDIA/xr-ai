@@ -46,9 +46,9 @@ import zmq
 import zmq.asyncio
 
 from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
-                         ControlMessage, DataMessage, FrameData, FrameRequest, MsgType,
-                         ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
-                         decode, encode)
+                       ControlMessage, DataMessage, FrameData, MsgType,
+                       ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
+                       decode, encode)
 
 
 def _now_us() -> int:
