@@ -349,7 +349,7 @@ class TestRun:
             patch("xr_ai_vllm._docker._maybe_ngc_login"),
             patch("xr_ai_vllm._docker.build_run_argv", return_value=argv),
             patch("xr_ai_vllm._docker.subprocess.Popen", return_value=process) as popen,
-            patch("xr_ai_vllm._docker._start_log_streamer", return_value=(None, None)),
+            patch("xr_ai_vllm._docker._LogStreamer", return_value=MagicMock()),
             patch("xr_ai_vllm._docker._lifecycle.wait_until_healthy"),
             patch("xr_ai_vllm._docker._lifecycle.idle_until_stopped"),
             patch("xr_ai_vllm._docker.signal.getsignal", return_value=None),

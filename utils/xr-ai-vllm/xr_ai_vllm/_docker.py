@@ -27,7 +27,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import _lifecycle
@@ -379,7 +379,12 @@ class _LogStreamer:
                 log.info("container logs → %s", self.log_path)
             proc.wait()
             self._proc = None
-            self._since = datetime.now(timezone.utc).isoformat()
+            # Back-date the cursor: lines the dead follower never delivered
+            # would land before "now" and be skipped forever. A re-attach may
+            # duplicate up to 30 s of output; losing diagnostics is worse.
+            self._since = (
+                datetime.now(timezone.utc) - timedelta(seconds=30)
+            ).isoformat()
             # docker logs -f also exits when the container stops; pause so a
             # stopped-but-expected container doesn't spin the attach loop.
             self._stop_evt.wait(1.0)

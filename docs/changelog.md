@@ -393,8 +393,10 @@ exactly the declared fields, so their behaviour is unchanged.
 
 ### 2026-07-27 — STT transcription failures are 5xx, not empty 200s
 
-The STT endpoint lets backend exceptions propagate to an HTTP 500 with the
-error detail. The endpoint used to catch every backend exception and return
+The STT endpoint lets backend exceptions propagate to an HTTP 500 carrying a
+stable generic detail ("transcription failed"); the full exception is logged
+server-side only, so backend paths and runtime state stay out of responses.
+The endpoint used to catch every backend exception and return
 200 with an empty transcript, a deliberate guard against NeMo throwing on
 very short audio; in practice that guard made a fully broken backend look
 healthy while every transcription failed. The voice pipeline catches the

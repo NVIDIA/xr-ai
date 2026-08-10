@@ -37,28 +37,34 @@ All model weights land in `models/` at the repo root (gitignored, shared across
 all servers). Each YAML configures `model_cache` — resolved relative to the
 YAML file.
 
-## Two HuggingFace cache roots under `models/`
+## Two HuggingFace cache roots
 
 The servers use two different `HF_HOME` values, so HuggingFace weights live in
-two separate trees:
+two separate trees under the service's resolved `model_cache`:
 
 | Consumer | `HF_HOME` | Hub cache |
 |---|---|---|
-| vLLM-backed servers (pip and docker) | `models/` | `models/hub/` |
-| STT and Magpie TTS (NeMo host processes) | `models/huggingface/` | `models/huggingface/hub/` |
+| vLLM-backed servers (pip and docker) | `<model_cache>/` | `<model_cache>/hub/` |
+| STT and Magpie TTS (NeMo host processes) | `<model_cache>/huggingface/` | `<model_cache>/huggingface/hub/` |
 
-(The NeMo servers additionally cache non-HF artifacts under `models/nemo/`.)
+(The NeMo servers additionally cache non-HF artifacts under `<model_cache>/nemo/`.)
 
-A model downloaded into one tree is invisible to consumers of the other, so
-check both paths before concluding a model is missing. For a manual
-`hf download`, set `HF_HOME` to match the consumer that will load the model:
+`model_cache` itself is set per YAML and resolved relative to the YAML file,
+so it differs by launch layout: the model-servers profile YAMLs resolve it to
+`models/` at the repo root, while the standalone YAMLs shipped next to each
+service resolve it to `ai-services/models/`. A model downloaded into one tree
+is invisible to consumers of the others, so check the tree your YAML actually
+points at before concluding a model is missing. For a manual `hf download`,
+set `HF_HOME` to match both the consumer and the layout:
 
 ```bash
-# For a vLLM-served model (VLM / LLM servers):
-HF_HOME=models hf download nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+# vLLM-served model, launched via a model-servers profile
+# (model_cache resolves to models/ at the repo root):
+HF_HOME=models hf download nvidia/Cosmos-Reason1-7B
 
-# For the STT / Magpie TTS servers:
-HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
+# STT server launched from its standalone YAML
+# (model_cache resolves to ai-services/models/):
+HF_HOME=ai-services/models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 ```
 
 ## Adding a server to a sample
