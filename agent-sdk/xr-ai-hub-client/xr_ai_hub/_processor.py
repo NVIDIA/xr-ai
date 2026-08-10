@@ -55,6 +55,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from enum import Flag, auto
 from typing import Awaitable, Callable
 
@@ -62,9 +63,9 @@ import zmq
 import zmq.asyncio
 
 from ._codec import decode, encode
-from ._types import (AudioChunk, DataMessage, FrameData, FrameRequest,
-                     FrameSignal, MsgType, ParticipantEvent, ReturnAudioFlush,
-                     RosterRequest)
+from ._types import (AgentPresence, AudioChunk, DataMessage, FrameData,
+                     FrameRequest, FrameSignal, MsgType, ParticipantEvent,
+                     ReturnAudioFlush, RosterRequest, SubscriptionProbe)
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +79,15 @@ ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
 AGENT_STATUS_TOPIC = "_agent.status"
 
 _FRAME_REQUEST_TIMEOUT = 1.0  # seconds before request_frame() gives up
+
+# Topic prefix the hub echoes subscription probes on. Probes are pid-agnostic:
+# they confirm the SUB↔PUB command stream, not any one participant's topics.
+_PROBE_TOPIC_PREFIX = "_probe."
+
+# A probe can itself be lost to the slow-joiner window it exists to close, so
+# it is re-sent on this cadence until the echo arrives.
+_PROBE_RETRY_INTERVAL = 0.02
+_PROBE_TIMEOUT        = 5.0
 
 # Always-on global topics. ``participant`` is required for auto-subscribe to
 # work at all; ``control`` carries hub control messages and is cheap.
@@ -163,6 +173,7 @@ class ProcessorEndpoint:
         *,
         auto_subscribe:  bool = True,
         filter:          Subscribe = Subscribe.ALL,
+        agent_id:        str | None = None,
     ) -> None:
         ctx = zmq.asyncio.Context.instance()
 
@@ -197,11 +208,29 @@ class ProcessorEndpoint:
         self._running = False
         self._running_event = asyncio.Event()
 
+        self._agent_id = (
+            agent_id
+            or os.environ.get("XR_AI_AGENT_ID")
+            or f"agent-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        )
+
         # Per-participant state overrides the default until a global update.
         self._default_status: str | None = None
         self._participant_status: dict[str, str] = {}
 
+        # Bumped on every SUBSCRIBE/UNSUBSCRIBE; `_confirmed_generation` lags
+        # until a probe round-trip proves the hub applied them.
+        self._sub_generation       = 0
+        self._confirmed_generation = 0
+        self._probe_waiters: dict[str, asyncio.Future[None]] = {}
+        self._attached = False
+
     # ── participant roster ────────────────────────────────────────────────────
+
+    @property
+    def agent_id(self) -> str:
+        """Identity this endpoint's status updates are attributed to."""
+        return self._agent_id
 
     @property
     def connected_participants(self) -> frozenset[str]:
@@ -247,6 +276,8 @@ class ProcessorEndpoint:
             self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
         for pre in _prefixes(added, participant_id):
             self._sub.setsockopt(zmq.SUBSCRIBE, pre)
+        if added or removed:
+            self._sub_generation += 1
 
         if new_filter:
             self._subscribed[participant_id] = new_filter
@@ -258,6 +289,62 @@ class ProcessorEndpoint:
         old = self._subscribed.pop(participant_id, Subscribe(0))
         for pre in _prefixes(old, participant_id):
             self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
+        if old:
+            self._sub_generation += 1
+
+    async def wait_for_subscriptions(self, *, timeout: float = _PROBE_TIMEOUT) -> bool:
+        """Block until the hub has applied every subscription issued so far.
+
+        ZMQ SUBSCRIBEs are asynchronous: the hub drops matching traffic until
+        the command reaches it, so an agent that announces availability the
+        moment it calls :meth:`subscribe` invites the client's first request
+        into that gap. This closes it by round-tripping a token through the
+        hub — subscription commands from one socket are applied in order, so
+        the echo proves the preceding SUBSCRIBEs are live.
+
+        Returns ``False`` if *timeout* elapses first; callers should treat that
+        as "not confirmed" rather than an error, since the hub may simply be
+        an older build that does not answer probes.
+        """
+        deadline = asyncio.get_running_loop().time() + timeout
+        while self._confirmed_generation < self._sub_generation:
+            # Only the receive loop can observe the echo.
+            if not self._running:
+                return False
+            generation = self._sub_generation
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0 or not await self._probe(remaining):
+                return False
+            self._confirmed_generation = max(self._confirmed_generation, generation)
+        return True
+
+    async def _probe(self, timeout: float) -> bool:
+        """Round-trip one probe token through the hub. True if it came back."""
+        token = uuid.uuid4().hex
+        topic = f"{_PROBE_TOPIC_PREFIX}{token}".encode()
+        self._sub.setsockopt(zmq.SUBSCRIBE, topic)
+        fut: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self._probe_waiters[token] = fut
+        try:
+            deadline = asyncio.get_running_loop().time() + timeout
+            while not fut.done():
+                await self._push.send(
+                    encode(MsgType.SUBSCRIPTION_PROBE, SubscriptionProbe(token=token)),
+                )
+                wait = min(
+                    _PROBE_RETRY_INTERVAL,
+                    deadline - asyncio.get_running_loop().time(),
+                )
+                if wait <= 0:
+                    return False
+                try:
+                    await asyncio.wait_for(asyncio.shield(fut), timeout=wait)
+                except asyncio.TimeoutError:
+                    continue
+            return True
+        finally:
+            self._probe_waiters.pop(token, None)
+            self._sub.setsockopt(zmq.UNSUBSCRIBE, topic)
 
     # ── callback registration ─────────────────────────────────────────────────
 
@@ -310,11 +397,17 @@ class ProcessorEndpoint:
         and is intercepted client-side by the StreamKit SDK — it never surfaces
         as a raw ``onDataReceived`` message.
 
+        This is *this agent's* state, not the room's. The hub tags it with
+        :attr:`agent_id` and folds it together with every other attached
+        agent's state, so clients still see a single scalar.
+
         Parameters
         ----------
         status :
-            Arbitrary current-state string. Conventional values are
-            ``"idle"`` and ``"processing"``.
+            Current-state string. Recognised by the hub's aggregation, in
+            decreasing precedence: ``"loading"``, ``"processing"``,
+            ``"idle"``, ``"ready"``. Unrecognised values are treated as
+            ``"processing"`` — an unknown state is not an available one.
         participant_id :
             Target participant. If *None*, sets the endpoint default and
             broadcasts it to every currently connected participant.
@@ -334,6 +427,15 @@ class ProcessorEndpoint:
         for pid in targets:
             await self._send_status(pid, status)
 
+    async def mark_ready(self) -> None:
+        """Declare this agent available to serve requests.
+
+        Broadcasts ``"ready"`` and records it as the default, so participants
+        joining later are told as soon as their subscription is confirmed.
+        The client only sees ``ready`` once every attached agent has said so.
+        """
+        await self.set_status("ready")
+
     async def republish_statuses(self) -> None:
         """Re-send each connected participant's current agent-status state.
 
@@ -347,8 +449,20 @@ class ProcessorEndpoint:
                 await self._send_status(pid, status)
 
     async def _send_status(self, participant_id: str, status: str) -> None:
-        """Send one already-recorded status state to a connected participant."""
-        payload = json.dumps({"status": status}).encode()
+        """Publish one recorded status, once the hub can route the client to us.
+
+        Availability is only meaningful if the client's next request can reach
+        this endpoint, so the announcement waits behind the subscription
+        barrier rather than racing it.
+        """
+        if not await self.wait_for_subscriptions():
+            # Publish anyway rather than go silent, but stop re-probing this
+            # generation so the periodic re-announce doesn't stall on every
+            # pass against a hub that cannot answer.
+            log.warning("subscriptions unconfirmed; publishing %r for %s anyway",
+                        status, participant_id)
+            self._confirmed_generation = self._sub_generation
+        payload = json.dumps({"status": status, "agent_id": self._agent_id}).encode()
         await self.send_return_data(DataMessage(
             participant_id=participant_id,
             topic=AGENT_STATUS_TOPIC,
@@ -407,6 +521,11 @@ class ProcessorEndpoint:
         self._running = True
         self._running_event.set()
 
+        # Announce before any status is published so the hub counts this agent
+        # as unavailable while it starts up, instead of letting an already-ready
+        # peer make the room look ready on its behalf.
+        self._announce_presence(attached=True)
+
         # Ask the hub to replay PARTICIPANT_EVENTs for already-connected
         # pids so the auto-subscribe handler can scoop them up. Safe even
         # when there are none: the hub responds with zero events.
@@ -432,6 +551,26 @@ class ProcessorEndpoint:
         finally:
             self._running = False
             self._running_event.clear()
+            self._announce_presence(attached=False)
+
+    def _announce_presence(self, *, attached: bool) -> None:
+        """Tell the hub this agent is (or is no longer) part of the room.
+
+        Sent synchronously so the detach still goes out when ``run()`` is
+        unwinding under cancellation, where an await would never resume.
+        """
+        if attached == self._attached:
+            return
+        self._attached = attached
+        payload = encode(
+            MsgType.AGENT_PRESENCE,
+            AgentPresence(agent_id=self._agent_id, attached=attached),
+        )
+        try:
+            zmq.Socket.send(self._push, payload, zmq.NOBLOCK)
+        except zmq.ZMQError as exc:
+            log.warning("agent presence announcement failed (attached=%s): %s",
+                        attached, exc)
 
     async def _catch_up_roster(self) -> None:
         """Send a roster request after the SUB↔PUB handshake settles."""
@@ -488,6 +627,10 @@ class ProcessorEndpoint:
                 self._participant_status.pop(msg.participant_id, None)
             for cb in self._participant_cbs:
                 self._spawn(cb(msg))
+        elif type_id == MsgType.SUBSCRIPTION_PROBE:
+            fut = self._probe_waiters.get(msg.token)
+            if fut is not None and not fut.done():
+                fut.set_result(None)
         else:
             log.debug("Unhandled message type %d on processor endpoint", type_id)
 
@@ -508,6 +651,10 @@ class ProcessorEndpoint:
         await self._running_event.wait()
 
     def stop(self) -> None:
+        # Detach here rather than only when run() unwinds: run() blocks in
+        # recv() until the next message, so a stopped agent would otherwise
+        # keep the room at "loading" indefinitely.
+        self._announce_presence(attached=False)
         self._running = False
         self._running_event.clear()
 

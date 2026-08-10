@@ -38,19 +38,27 @@ return — do not hold the view beyond the callback boundary.
 from __future__ import annotations
 
 from loguru import logger
+import json
 import time
 from typing import Awaitable, Callable
 
 import zmq
 import zmq.asyncio
 
-from xr_ai_hub import (AudioChunk, ConnectorRegistration, ControlMessage,
-                         DataMessage, FrameData, FrameRequest, MsgType, ParticipantEvent,
-                         ReturnAudioFlush, ShmRingBuffer, SlotView, decode, encode)
+from xr_ai_hub import (AGENT_STATUS_TOPIC, AudioChunk, ConnectorRegistration,
+                         ControlMessage, DataMessage, FrameData, FrameRequest, MsgType,
+                         ParticipantEvent, ReturnAudioFlush, ShmRingBuffer, SlotView,
+                         decode, encode)
 
 
 def _now_us() -> int:
     return time.time_ns() // 1_000
+
+
+# Room availability is the availability of its least-available agent: an agent
+# that has not reported yet, or reports something unrecognised, counts as
+# "loading" and "processing" respectively.
+_STATUS_PRECEDENCE = ("loading", "processing", "idle", "ready")
 
 FrameCallback       = Callable[[SlotView],          Awaitable[None]]
 AudioCallback       = Callable[[AudioChunk],        Awaitable[None]]
@@ -113,6 +121,12 @@ class HubEndpoint:
         self._participant_cbs: list[ParticipantCallback] = []
         self._control_cbs:     list[ControlCallback]     = []
         self._running = False
+
+        # agent_id → {participant_id → status}. An attached agent with no entry
+        # for a participant has not reported for it yet.
+        self._agent_status: dict[str, dict[str, str]] = {}
+        # participant_id → last aggregate published, to suppress duplicates.
+        self._published_status: dict[str, str] = {}
 
     # ── callback registration ─────────────────────────────────────────────────
 
@@ -182,6 +196,65 @@ class HubEndpoint:
 
     def _is_connected(self, participant_id: str) -> bool:
         return participant_id in self._participant_connector
+
+    # ── agent status aggregation ─────────────────────────────────────────────
+
+    def _record_agent_status(self, msg: DataMessage) -> str | None:
+        """Record one agent's per-participant status. Returns its agent id.
+
+        Returns *None* when the payload does not identify an agent, which
+        means an SDK too old to participate in aggregation — those updates
+        are forwarded verbatim so the client is not left without a status.
+        """
+        try:
+            payload = json.loads(msg.data)
+            agent_id = payload["agent_id"]
+            status   = payload["status"]
+        except (ValueError, TypeError, KeyError, UnicodeDecodeError):
+            return None
+        self._agent_status.setdefault(agent_id, {})[msg.participant_id] = str(status)
+        return str(agent_id)
+
+    def _aggregate_status(self, participant_id: str) -> str:
+        """Fold every attached agent's state into the one status a client sees."""
+        if not self._agent_status:
+            return "loading"
+        worst = len(_STATUS_PRECEDENCE) - 1
+        for per_participant in self._agent_status.values():
+            status = per_participant.get(participant_id)
+            if status is None:
+                return _STATUS_PRECEDENCE[0]
+            rank = (
+                _STATUS_PRECEDENCE.index(status)
+                if status in _STATUS_PRECEDENCE
+                else _STATUS_PRECEDENCE.index("processing")
+            )
+            worst = min(worst, rank)
+        return _STATUS_PRECEDENCE[worst]
+
+    async def publish_agent_status(self, participant_id: str, *,
+                                   force: bool = False) -> None:
+        """Publish the aggregate agent status for *participant_id*.
+
+        Skips the send when the aggregate has not moved, so the agents'
+        periodic re-announcements do not become per-agent client traffic.
+        """
+        if not self._is_connected(participant_id):
+            return
+        status = self._aggregate_status(participant_id)
+        if not force and self._published_status.get(participant_id) == status:
+            return
+        self._published_status[participant_id] = status
+        await self.send_return_data(DataMessage(
+            participant_id=participant_id,
+            topic=AGENT_STATUS_TOPIC,
+            pts_us=_now_us(),
+            data=json.dumps({"status": status}).encode(),
+        ))
+
+    async def _republish_agent_status(self) -> None:
+        for pid in list(self._participant_connector):
+            await self.publish_agent_status(pid)
 
     # ── receive loop ─────────────────────────────────────────────────────────
 
@@ -283,6 +356,9 @@ class HubEndpoint:
                 self._participant_connector[msg.participant_id] = msg.connector_id
             else:
                 self._participant_connector.pop(msg.participant_id, None)
+                self._published_status.pop(msg.participant_id, None)
+                for per_participant in self._agent_status.values():
+                    per_participant.pop(msg.participant_id, None)
                 # Release any slots held for this participant's tracks. Without
                 # this the ring fills up after enough connect/publish/disconnect
                 # cycles and every subsequent frame is dropped (issue #143).
@@ -296,6 +372,11 @@ class HubEndpoint:
                 except Exception:
                     logger.exception("participant callback error")
             await self._pub.send_multipart([b"participant", encode(MsgType.PARTICIPANT_EVENT, msg)])
+            if msg.joined:
+                # A joining client has no status yet; publish the aggregate
+                # unconditionally so it starts from a real state instead of
+                # inheriting whatever the previous occupant of this pid saw.
+                await self.publish_agent_status(msg.participant_id, force=True)
 
         elif type_id == MsgType.CONTROL:
             for cb in self._control_cbs:
@@ -309,6 +390,12 @@ class HubEndpoint:
             await self.send_return_audio(msg)
 
         elif type_id == MsgType.RETURN_DATA:
+            # Agent status is per-agent state; the client's is the aggregate,
+            # so it is folded here rather than forwarded straight through.
+            if msg.topic == AGENT_STATUS_TOPIC:
+                if self._record_agent_status(msg) is not None:
+                    await self.publish_agent_status(msg.participant_id)
+                    return
             await self.send_return_data(msg)
 
         elif type_id == MsgType.RETURN_AUDIO_FLUSH:
@@ -316,6 +403,19 @@ class HubEndpoint:
 
         elif type_id == MsgType.ROSTER_REQUEST:
             await self._replay_roster()
+
+        elif type_id == MsgType.SUBSCRIPTION_PROBE:
+            await self._pub.send_multipart([
+                f"_probe.{msg.token}".encode(),
+                encode(MsgType.SUBSCRIPTION_PROBE, msg),
+            ])
+
+        elif type_id == MsgType.AGENT_PRESENCE:
+            if msg.attached:
+                self._agent_status.setdefault(msg.agent_id, {})
+            else:
+                self._agent_status.pop(msg.agent_id, None)
+            await self._republish_agent_status()
 
         else:
             logger.warning("Unknown message type {} — ignored", type_id)

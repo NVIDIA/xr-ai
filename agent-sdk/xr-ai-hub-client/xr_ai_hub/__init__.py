@@ -23,6 +23,7 @@ from ._live_frames import FrameUnavailable, LiveFrameSource
 from ._processor import AGENT_STATUS_TOPIC, ProcessorEndpoint, Subscribe
 from ._shm import ShmRingBuffer, SlotView
 from ._types import (
+    AgentPresence,
     AudioChunk,
     ConnectorRegistration,
     ControlMessage,
@@ -35,6 +36,7 @@ from ._types import (
     PixelFormat,
     ReturnAudioFlush,
     RosterRequest,
+    SubscriptionProbe,
 )
 
 __all__ = [
@@ -51,6 +53,7 @@ __all__ = [
     "register_encoder",
     "register_decoder",
     # data types
+    "AgentPresence",
     "AudioChunk",
     "ConnectorRegistration",
     "ControlMessage",
@@ -65,4 +68,5 @@ __all__ = [
     "PixelFormat",
     "ReturnAudioFlush",
     "RosterRequest",
+    "SubscriptionProbe",
 ]

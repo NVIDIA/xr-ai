@@ -37,6 +37,12 @@ class MsgType(IntEnum):
     # Roster (processor → hub → processor): used by an endpoint started
     # mid-session to learn about participants who joined before it did.
     ROSTER_REQUEST = 12
+    # Subscription barrier (processor → hub → processor): round-trip that
+    # proves the processor's pending SUBSCRIBEs have been applied by the hub.
+    SUBSCRIPTION_PROBE = 13
+    # Agent presence (processor → hub): tells the hub an agent exists so it
+    # can be counted as not-yet-available when aggregating agent status.
+    AGENT_PRESENCE = 14
     # Add new types here; existing code is unaffected.
 
 
@@ -147,3 +153,24 @@ class RosterRequest:
     participant topic, so other endpoints will see them too.
     """
     pass
+
+
+@dataclass(slots=True)
+class SubscriptionProbe:
+    """Round-trip token echoed by the hub on ``_probe.<token>``.
+
+    ZMQ applies SUBSCRIBEs from one socket in order, so receiving the echo
+    proves every subscription issued before the probe is live on the hub.
+    """
+    token: str
+
+
+@dataclass(slots=True)
+class AgentPresence:
+    """An agent endpoint has attached to (or detached from) the hub.
+
+    The hub counts every attached agent as unavailable until it publishes an
+    availability status, so one ready agent cannot make the room look ready.
+    """
+    agent_id: str
+    attached: bool

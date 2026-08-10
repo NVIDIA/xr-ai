@@ -16,9 +16,10 @@ from typing import Any, Callable, cast
 
 import msgpack
 
-from ._types import (AudioChunk, ConnectorRegistration, ControlMessage, DataMessage,
-                     FrameData, FrameRequest, FrameSignal, MsgType, ParticipantEvent,
-                     PixelFormat, ReturnAudioFlush, RosterRequest)
+from ._types import (AgentPresence, AudioChunk, ConnectorRegistration, ControlMessage,
+                     DataMessage, FrameData, FrameRequest, FrameSignal, MsgType,
+                     ParticipantEvent, PixelFormat, ReturnAudioFlush, RosterRequest,
+                     SubscriptionProbe)
 
 _TYPE_HDR = struct.Struct("=B")
 
@@ -103,3 +104,9 @@ register_decoder(MsgType.RETURN_AUDIO_FLUSH, lambda p: ReturnAudioFlush(p[0]))
 
 register_encoder(MsgType.ROSTER_REQUEST, lambda _m: [])
 register_decoder(MsgType.ROSTER_REQUEST, lambda _p: RosterRequest())
+
+register_encoder(MsgType.SUBSCRIPTION_PROBE, lambda m: [m.token])
+register_decoder(MsgType.SUBSCRIPTION_PROBE, lambda p: SubscriptionProbe(p[0]))
+
+register_encoder(MsgType.AGENT_PRESENCE, lambda m: [m.agent_id, m.attached])
+register_decoder(MsgType.AGENT_PRESENCE, lambda p: AgentPresence(p[0], p[1]))
