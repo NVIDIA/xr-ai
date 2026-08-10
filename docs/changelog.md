@@ -9,6 +9,30 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-10 — Client readiness is hub-owned and routability-gated
+
+Process readiness and client readiness were the same signal, and both were
+wrong at the protocol level.
+
+A worker touched its ready file and broadcast availability from the same point,
+before the hub had applied the SUBSCRIBE for a joining participant. A client
+acting on that signal could have its first request dropped in the PUB/SUB
+slow-joiner window. `set_status` now publishes behind `wait_for_subscriptions`,
+a `SUBSCRIPTION_PROBE` round trip through the hub; because ZMQ applies one
+socket's subscription commands in order, the echo proves the preceding
+SUBSCRIBEs are live. Process readiness is unchanged and still releases on IPC
+start — it is a launcher concern, not a client-facing one.
+
+Availability was also per-agent while the client's `_agent.status` is a single
+scalar, so in the supported one-hub/many-agents topology a ready agent's
+periodic re-announcement could overwrite a busy peer, and a hub-generated
+global `loading` could not disambiguate. Ownership moved to the hub: agents
+report only their own state tagged with an `agent_id`, announce presence with
+`AGENT_PRESENCE`, and the hub folds the room down to the least available state
+(`loading` > `processing` > `idle` > `ready`). An attached agent that has not
+reported counts as `loading`. Clients keep a scalar and gain no aggregation
+logic; payloads without an `agent_id` are forwarded verbatim for older SDKs.
+
 ### 2026-08-10 — Voice-worker ready files wait for inbound IPC
 
 `VoiceSession` and the direct `run_voice_pipeline` compatibility path release a

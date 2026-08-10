@@ -56,6 +56,10 @@ def run() -> None:
   before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
+- **Process readiness is not client readiness.** The ready file says the
+  process can serve requests; the client is told the room is ready only once
+  the hub sees every attached agent available and each agent's subscription
+  for that client confirmed. See `docs/source/components/agent-sdk.md`.
 - **Native voice workers** pass the ready file to `VoiceSession`; `run()`
   touches it only after the input transport's hub IPC receive loop has started.
 - **Pipecat workers** build their voice pipeline, then call
