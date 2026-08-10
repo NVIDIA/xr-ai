@@ -130,10 +130,11 @@ as you like without reloading weights.
 
 Every sample worker depends on `agent-sdk/xr-ai-models` — one SDK that
 abstracts the OpenAI-compatible HTTP wire format for LLM / VLM / STT / TTS /
-embeddings behind typed service protocols. Each sample ships a model config that names the
-logical models the worker needs (`llm`, `vlm`, `stt`, …) with
-preset references that pre-fill model-specific quirks (reasoning-field
-aliasing, `chat_template_kwargs`, served-model-name strings).  Workers call
+embeddings behind typed service protocols. Model profiles name the logical roles
+(`llm`, `vlm`, `stt`, …) and separate adapter behavior, endpoint connectivity,
+and deployment ownership. Presets pre-fill model-specific quirks
+(reasoning-field aliasing, `chat_template_kwargs`, served-model-name strings).
+Workers call
 `make_llm(config, "llm")` / `make_vlm(config, "vlm")` / `make_stt(config,
 "stt")` / `make_tts(config, "tts")` / `make_embedding(config, "embedding")` — no hand-rolled httpx clients, no model
 quirks leaking out of the SDK.  Full quickstart and the built-in preset
@@ -284,7 +285,7 @@ process automatically.
 
 **Hosted NVIDIA NIM** — run the VLM on hosted NIM
 ([build.nvidia.com](https://build.nvidia.com)) instead of locally (STT/TTS
-stay local) by setting **one key** in `simple_vlm_example_worker.yaml`:
+stay local) by selecting the shipped profile:
 
 ```yaml
 models_config: models.hosted.json
