@@ -32,9 +32,10 @@ tool-calling, reasoning, and hardware trade-offs documented below.
 | `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded service + live hub IPC |
 | `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 | — | FastMCP → vlm-server (`ask_image` tool) |
 
-All model weights land in `models/` at the repository root (not checked into version control, shared across
-all servers). Each YAML configures `model_cache` — resolved relative to the
-YAML file.
+All model weights land in the service's `model_cache` directory, set per YAML
+and resolved relative to the YAML file (every `models/` tree is excluded from
+version control). The model-servers profiles share `models/` at the
+repository root; the exact layout per launch style is below.
 
 ## Two HuggingFace cache roots
 
