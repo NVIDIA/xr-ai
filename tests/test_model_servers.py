@@ -27,6 +27,16 @@ assert _OMNI_SPEC and _OMNI_SPEC.loader
 _omni = importlib.util.module_from_spec(_OMNI_SPEC)
 _OMNI_SPEC.loader.exec_module(_omni)
 
+_EMBEDDING_PATH = (
+    _REPO_ROOT / "services/embedding-server/embedding_server/__main__.py"
+)
+_EMBEDDING_SPEC = importlib.util.spec_from_file_location(
+    "embedding_server_main", _EMBEDDING_PATH
+)
+assert _EMBEDDING_SPEC and _EMBEDDING_SPEC.loader
+_embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
+_EMBEDDING_SPEC.loader.exec_module(_embedding)
+
 
 def test_default_stack_uses_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
@@ -216,6 +226,28 @@ def test_omni_forwards_configured_moe_backend(monkeypatch: pytest.MonkeyPatch) -
 
     args = captured["extra_serve_args"]
     assert args[args.index("--moe-backend") + 1] == "triton"
+
+
+def test_embedding_default_cache_tracks_service_depth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolved: list[Path] = []
+    project = _REPO_ROOT / "services/embedding-server"
+
+    def resolve_cache(_cfg: dict, yaml_dir: Path, *, default: str) -> Path:
+        path = (yaml_dir / default).resolve()
+        resolved.append(path)
+        return path
+
+    monkeypatch.setattr(_embedding, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(_embedding, "load_config", lambda: ({}, project, None))
+    monkeypatch.setattr(_embedding, "resolve_model_cache", resolve_cache)
+    monkeypatch.setattr(_embedding, "setup_hf_env", lambda *_a, **_k: None)
+    monkeypatch.setattr(_embedding, "serve", lambda **_kwargs: None)
+
+    _embedding.run()
+
+    assert resolved == [_REPO_ROOT / "models"]
 
 
 def test_stop_needs_no_stack_selection(monkeypatch: pytest.MonkeyPatch) -> None:

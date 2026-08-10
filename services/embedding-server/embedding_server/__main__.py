@@ -73,7 +73,7 @@ def run() -> None:
     backend      = cfg.get("vllm_backend",         "pip")
     image        = cfg.get("vllm_image",           DEFAULT_IMAGE)
 
-    model_cache = resolve_model_cache(cfg, yaml_dir, default="../models")
+    model_cache = resolve_model_cache(cfg, yaml_dir, default="../../models")
     cuda_devices = setup_hf_env(cfg, model_cache)
 
     extra_serve_args = [
