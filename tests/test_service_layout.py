@@ -2,9 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Repository contract for direct-child model services."""
+import ast
+import importlib.util
 import subprocess
 from pathlib import Path
 
+import pytest
 import tomllib
 import yaml
 
@@ -42,26 +45,81 @@ _LEGACY_PROJECTS = (
     "ai-services/tts/magpie",
 )
 _ALLOWED_LEGACY_REFERENCES = {
-    Path("docs/changelog.md"),
     Path("tests/test_service_layout.py"),
+}
+_ALLOWED_LEGACY_LINES = {
+    Path("docs/changelog.md"): {
+        "the 8B held is freed. The standalone `ai-services/llm/llama_nemotron` server",
+    },
 }
 
 
 def _tracked_paths() -> list[Path]:
-    output = subprocess.run(
-        ["git", "-C", str(_ROOT), "ls-files", "-z"],
-        check=True,
-        capture_output=True,
-    ).stdout
+    try:
+        output = subprocess.run(
+            ["git", "-C", str(_ROOT), "ls-files", "-z"],
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pytest.skip("service-layout tracked-path checks require a git checkout")
     return [Path(path.decode()) for path in output.split(b"\0") if path]
+
+
+def _load_module(name: str, relative: str):
+    path = _ROOT / relative
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _model_cache_default(path: Path) -> str:
+    defaults: list[str] = []
+
+    for node in ast.walk(ast.parse(path.read_text())):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name) and node.func.id == "resolve_model_cache":
+            defaults.extend(
+                ast.literal_eval(keyword.value)
+                for keyword in node.keywords
+                if keyword.arg == "default"
+            )
+        elif (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "model_cache"
+        ):
+            defaults.append(ast.literal_eval(node.args[1]))
+
+    assert len(defaults) == 1, f"expected one model_cache default in {path}"
+    return defaults[0]
 
 
 def test_model_services_are_direct_children() -> None:
     services = _ROOT / "services"
 
-    assert _MODEL_SERVICES.keys() <= {
-        path.name for path in services.iterdir() if path.is_dir()
+    discovered = {
+        project.name
+        for project in services.iterdir()
+        if project.is_dir()
+        and any(
+            "model_cache" in (yaml.safe_load(config.read_text()) or {})
+            for config in project.glob("*.yaml")
+        )
     }
+    assert _MODEL_SERVICES.keys() == discovered
+    nested_projects = sorted(
+        path.relative_to(services)
+        for path in services.rglob("pyproject.toml")
+        if path.parent.parent != services
+    )
+    assert not nested_projects, f"nested service projects remain: {nested_projects}"
+
     legacy_projects = tuple(Path(project) for project in _LEGACY_PROJECTS)
     stale = [
         path
@@ -81,12 +139,53 @@ def test_model_service_projects_preserve_their_public_contracts() -> None:
         assert command in metadata["project"]["scripts"]
         assert config["port"] == port
         assert (project / config["model_cache"]).resolve() == _ROOT / "models"
+        default = _model_cache_default(project / command / "__main__.py")
+        assert (project / default).resolve() == _ROOT / "models"
 
         for source in metadata.get("tool", {}).get("uv", {}).get("sources", {}).values():
             if path := source.get("path"):
                 assert (project / path).resolve().exists(), (
                     f"{directory}: missing editable source {path}"
                 )
+
+
+def test_sample_process_projects_resolve(monkeypatch) -> None:
+    model_servers = _load_module(
+        "service_layout_model_servers",
+        "agent-samples/model-servers/main.py",
+    )
+    simple_vlm = _load_module(
+        "service_layout_simple_vlm",
+        "agent-samples/simple-vlm-example/main.py",
+    )
+    render_demo = _load_module(
+        "service_layout_render_demo",
+        "agent-samples/xr-render-demo/main.py",
+    )
+    monkeypatch.setattr(model_servers, "detect_gpu_config", lambda: "spark")
+
+    declarations = [
+        (
+            _ROOT / "agent-samples/model-servers",
+            model_servers._build_processes("vlm-llm")
+            + model_servers._build_processes("omni"),
+        ),
+        (
+            _ROOT / "agent-samples/simple-vlm-example",
+            simple_vlm._MODEL_PROCESSES.values(),
+        ),
+        (
+            _ROOT / "agent-samples/xr-render-demo",
+            render_demo._build_processes(),
+        ),
+    ]
+
+    for sample_root, processes in declarations:
+        for process in processes:
+            project = (sample_root / process.project).resolve()
+            assert (project / "pyproject.toml").is_file(), (
+                f"{process.name}: process project does not resolve: {project}"
+            )
 
 
 def test_tracked_text_has_no_retired_model_service_paths() -> None:
@@ -105,10 +204,12 @@ def test_tracked_text_has_no_retired_model_service_paths() -> None:
             text = data.decode()
         except UnicodeDecodeError:
             continue
+        allowed_lines = _ALLOWED_LEGACY_LINES.get(relative, set())
         stale.extend(
-            (str(relative), legacy)
+            (f"{relative}:{line_number}", legacy)
+            for line_number, line in enumerate(text.splitlines(), start=1)
             for legacy in _LEGACY_PROJECTS
-            if legacy in text
+            if legacy in line and line not in allowed_lines
         )
 
     assert not stale, f"retired model-service paths remain: {stale}"

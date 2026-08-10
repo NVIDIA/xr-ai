@@ -13,9 +13,10 @@ Multiple reusable HTTP servers are available as launchable peers of
 `server-runtime/`. All expose an OpenAI-compatible REST API so agent workers
 can call them with any OpenAI SDK client or plain `httpx` or `requests`.
 Reference services cover vision-language reasoning, speech recognition,
-text-to-speech, embeddings, and large language models. The projects are direct children of
-`services/`; pick an LLM per sample based on the tool-calling, reasoning, and
-hardware trade-offs documented below.
+text-to-speech, embeddings, and large language models. The projects are direct
+children of the [services source index](https://github.com/NVIDIA/xr-ai/blob/main/services/README.md);
+pick an LLM per sample based on the tool-calling, reasoning, and hardware
+trade-offs documented below.
 
 | Server | Command | Port | Model | Backend |
 |---|---|---|---|---|
@@ -77,18 +78,23 @@ locations:
 | Magpie TTS, Piper TTS | `ai-services/tts/models/` | `models/` |
 
 Stop the model services, then run the following from the repository root before
-starting the relocated services offline. `--no-clobber` preserves any files
-already present in the current cache while copying missing legacy entries.
+starting the relocated services offline. The short options work with GNU and
+macOS `cp`: `-l` hard-links regular files so the migration does not duplicate
+model data, while `-n` preserves entries already present in the current cache.
 
 ```bash
 mkdir -p models
 if [ -d ai-services/models ]; then
-  cp -a --no-clobber ai-services/models/. models/
+  cp -a -l -n ai-services/models/. models/
 fi
 if [ -d ai-services/tts/models ]; then
-  cp -a --no-clobber ai-services/tts/models/. models/
+  cp -a -l -n ai-services/tts/models/. models/
 fi
 ```
+
+Hard links require both paths to be on the same filesystem. If `models/` points
+to another filesystem, omit `-l` and make sure free space is at least the size
+of the legacy cache before copying.
 
 Keep the legacy directories until the relocated services have started
 successfully with network access disabled. Project virtual environments are not
@@ -145,6 +151,12 @@ cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./yaml/tran
 cp ../../services/video-memory-service/video_memory_service.yaml ./yaml/video_memory_service.yaml
 cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./yaml/video_mcp_server.yaml
 ```
+
+The standalone model-service YAMLs contain `model_cache: ../../models` for their
+original `services/<project>/` location. After copying them one level deeper
+into `agent-samples/<name>/yaml/`, change that value to `../../../models` so
+the cache still resolves to the repository-root `models/` directory. Capability
+and MCP configurations without a `model_cache` key need no change.
 
 Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 `yaml/<command>.yaml` in the sample root and passes it as `--config`.
@@ -412,5 +424,6 @@ cleanup.
   service and preserves the existing conditional tool surface.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
-  Copy them to your sample root and adjust `model_cache` (`../../models` resolves
-  to `xr-ai/models/` from any `agent-samples/<name>/` directory).
+  Copy them to your sample's `yaml/` directory and set `model_cache` to
+  `../../../models`, which resolves to `xr-ai/models/` from
+  `agent-samples/<name>/yaml/`.

@@ -623,6 +623,7 @@ updated in the same commit**.
 | `server-runtime/` config fields (`LiveKitConnectorConfig`) | `server-runtime/xr_media_hub.yaml` (reference copy), each sample's `xr_media_hub.yaml`, `AGENTS.md` Config section |
 | `utils/xr-ai-launcher/` `Process` / `run_stack` API | `AGENTS.md` orchestrator boilerplate and process model section |
 | `utils/xr-ai-vllm/` API (`serve`, `stop_persistent_servers`, `resolve_model_cache`, `load_config`, `setup_hf_env`, `gpu_compute_major`) | All vLLM wrappers (`services/vlm-server/`, `services/embedding-server/`, `services/llama-nemotron-llm/`, `services/nemotron3-nano-llm/`, `services/nemotron-omni-llm/`), model-server orchestrators |
+| Model-service package, command, port, or responsibility | `services/README.md`, the AI inference tables in this file and `docs/ai-services.md`, and the Sphinx mirror |
 | `vllm_backend` / `vllm_image` YAML keys | `services/{vlm-server,embedding-server,llama-nemotron-llm,nemotron3-nano-llm,nemotron-omni-llm}/<server>.yaml`, every per-profile copy in `agent-samples/`, `docs/ai-services.md` |
 | Container name used by a vllm wrapper | `_CONTAINER_NAME` in the wrapper's `__main__.py`, `stop_persistent_servers` names in `agent-samples/model-servers/main.py` |
 | vlm-server model class or supported architectures | `services/vlm-server/vlm_server.yaml` comments |
