@@ -418,7 +418,7 @@ sample’s <code class="docutils literal notranslate"><span class="pre">yaml/mod
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>               <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/my_agent_worker.yaml&quot;</span><span class="p">),</span>
     <span class="c1"># Optional shared components — add as needed:</span>
-    <span class="c1"># Process(&quot;cloudxr&quot;, &quot;../../cloudxr-runtime&quot;,       &quot;cloudxr_runtime&quot;,</span>
+    <span class="c1"># Process(&quot;cloudxr&quot;, &quot;../../services/cloudxr-runtime&quot;, &quot;cloudxr_runtime&quot;,</span>
     <span class="c1">#         config=&quot;yaml/cloudxr_runtime.yaml&quot;),</span>
     <span class="c1"># Process(&quot;mcp&quot;,     &quot;../../agent-mcp-servers/oxr-mcp&quot;, &quot;oxr_mcp_server&quot;,</span>
     <span class="c1">#         config=&quot;yaml/oxr_mcp_server.yaml&quot;),</span>
@@ -446,8 +446,10 @@ same IPC-start readiness boundary.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: if any process exits, the rest are terminated.</p></li>
 <li><p>A process declared with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">readiness=&quot;health&quot;</span></code> must
-declare either an explicit <code class="docutils literal notranslate"><span class="pre">health_url</span></code> or an HTTP <code class="docutils literal notranslate"><span class="pre">port</span></code> fallback. Before
-spawning anything, <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> requires that endpoint to return HTTP 200.
+declare either an explicit <code class="docutils literal notranslate"><span class="pre">health_url</span></code> or an HTTP <code class="docutils literal notranslate"><span class="pre">port</span></code> fallback. Remote
+or otherwise external dependencies can be passed as <code class="docutils literal notranslate"><span class="pre">EndpointProbe</span></code> values.
+Before spawning anything, <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> requires each endpoint to return a 2xx
+response and sends a bearer token when <code class="docutils literal notranslate"><span class="pre">api_key_env</span></code> is configured.
 Profile-driven stacks use the selected model endpoint; <code class="docutils literal notranslate"><span class="pre">readiness=&quot;none&quot;</span></code>
 skips the probe.</p></li>
 </ul>
@@ -519,8 +521,8 @@ shutdown. Use for heavy model servers that should survive stack restarts
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;reuse&quot;</span></code> — the launcher does <strong>not</strong> spawn this process; it is assumed to be
 already running (e.g. started by <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>). The entry in the process
 list documents the dependency; the launcher skips it entirely and does not
-kill it on shutdown. Its <code class="docutils literal notranslate"><span class="pre">port</span></code> is required so the launcher can verify
-<code class="docutils literal notranslate"><span class="pre">/health</span></code> before it starts any owned process.</p></li>
+kill it on shutdown. Its explicit <code class="docutils literal notranslate"><span class="pre">health_url</span></code> or <code class="docutils literal notranslate"><span class="pre">port</span></code> fallback lets the
+launcher verify readiness before it starts any owned process.</p></li>
 </ul>
 <p>On a clean ready-exit, <code class="docutils literal notranslate"><span class="pre">persist</span></code> and <code class="docutils literal notranslate"><span class="pre">reuse</span></code> processes are left running. On an
 abort during startup (Ctrl-C, or a process exiting before it signals ready)
