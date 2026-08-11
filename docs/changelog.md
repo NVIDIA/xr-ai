@@ -13,11 +13,14 @@ preserved and not re-litigated.
 
 NeMo Agent Toolkit is being retired from XR AI in focused migrations rather
 than a framework-wide swap. `xr-ai-nat` is the public, toolkit-independent
-native tools layer: typed tools and bounded tool-driven agents. A model is a
-private implementation dependency of a model-backed tool or agent, reached only
-through `xr-ai-models`; voice, text, and background triggers invoke registered
-tools rather than model clients. NeMo Relay runs the tool and model lifecycles,
-supplying middleware, guardrails, and telemetry.
+native tools layer: typed tools, an `AgentRunner` async-turn protocol, and a
+bounded default tool loop. A model is a private implementation dependency of a
+model-backed tool or agent, reached only through `xr-ai-models`; voice, text,
+and background triggers invoke registered tools rather than model clients. NeMo
+Relay runs the tool and model lifecycles, supplying middleware, guardrails, and
+telemetry. `as_agent_tool` lets a custom or future Fabric-backed runner use the
+same registered-tool path without making a framework part of the public trigger
+boundary.
 
 The existing NeMo Agent Toolkit function groups remain behind legacy extras
 while they migrate. Relay does not own XR application routing, participant

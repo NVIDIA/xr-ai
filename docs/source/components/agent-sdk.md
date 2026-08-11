@@ -21,9 +21,9 @@ from:
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
-- **`xr-ai-nat`** — Relay-managed native tools and tool-driven agents. Its
-  legacy extras retain existing NeMo Agent Toolkit function groups while their
-  concrete capabilities migrate.
+- **`xr-ai-nat`** — Relay-managed native tools, the generic `AgentRunner`
+  protocol, and a basic tool-driven agent. Its legacy extras retain existing
+  NeMo Agent Toolkit function groups while their concrete capabilities migrate.
 
 ---
 
@@ -139,7 +139,8 @@ class LLMService(Protocol):
     capabilities: Capabilities
     async def chat(self, messages, *, tools=None, max_tokens=None,
                    temperature=None, enable_thinking=False,
-                   thinking_budget=None, timeout=None) -> ChatResponse: ...
+                   thinking_budget=None, timeout=None,
+                   headers=None) -> ChatResponse: ...
     def stream(self, messages, *, ...) -> AsyncIterator[str]: ...
     async def health(self) -> bool: ...
     async def close(self) -> None: ...
@@ -206,15 +207,16 @@ The clients can be exercised without a GPU.
 
 `xr-ai-nat` is the native migration target for model-driven XR composition.
 `Tool` declares Pydantic request and response boundaries and executes its
-handler through NeMo Relay. `xr_ai_nat.agents.Agent` builds OpenAI-compatible
-tool definitions from those schemas, sends each model request through an
-injected `LLMService`, and limits the number of model calls in one stateless
-turn.
+handler through NeMo Relay. `AgentRunner` is the generic async-turn protocol;
+`xr_ai_nat.agents.Agent` is its bounded, stateless tool-loop implementation.
+It builds OpenAI-compatible tool definitions from those schemas and sends each
+model request through an injected `LLMService`.
 
 Relay scopes each turn and manages the LLM and tool lifecycles. The base package
 does not add an HTTP client, a Hub transport, or an implicit conversation store.
-Applications expose agents as registered tools; foreground selection, workflow
-state, and background work stay explicit in application code.
+Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
+registered tool; foreground selection, workflow state, and background work stay
+explicit in application code.
 
 ## xr-ai-nat model bridge
 

@@ -262,6 +262,30 @@ async def test_llm_chat_no_auth_header_without_api_key_env() -> None:
     assert "Authorization" not in stub.last_request().headers
 
 
+async def test_llm_chat_forwards_controlled_per_call_headers() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(),
+    ) as llm:
+        await llm.chat(
+            [ChatMessage(role="user", content="x")],
+            headers={"X-Relay-Session": "turn-7"},
+        )
+    assert stub.last_request().headers["X-Relay-Session"] == "turn-7"
+
+
+async def test_llm_chat_rejects_per_call_authorization_header() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatLLM(
+        "http://stub", "llm", client=stub.client(),
+    ) as llm:
+        with pytest.raises(ValueError, match="cannot override Authorization"):
+            await llm.chat(
+                [ChatMessage(role="user", content="x")],
+                headers={"Authorization": "Bearer untrusted"},
+            )
+
+
 async def test_llm_chat_raises_on_http_error() -> None:
     import httpx
     stub = StubOpenAI()

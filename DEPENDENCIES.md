@@ -107,7 +107,9 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     and OpenAI-compatible HTTP clients that cover every in-tree model backend
     (vLLM-served VLM/LLMs, NeMo Parakeet STT, Piper/Magpie TTS).  Per-model
     profiles separate adapter behavior, endpoint connectivity/readiness, and
-    launcher-facing deployment ownership. Per-model quirks remain behind one
+    launcher-facing deployment ownership. Relay may pass controlled per-call
+    context headers; configured model credentials remain non-overridable.
+    Per-model quirks remain behind one
     seam: reasoning-field aliasing (nano_v3 →
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
@@ -128,8 +130,9 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── [vision] nvidia-nat-core ==1.8.0, httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
     └── [voice] nvidia-nat-core ==1.8.0, xr-ai-voice [editable: ../xr-ai-voice]
     The base package is the toolkit-independent native tools layer: Pydantic
-    request and response models, Relay-managed execution, and a bounded
-    tool-driven agent over `xr-ai-models`. The ``[relay]`` and
+    request and response models, Relay-managed execution, the generic
+    ``AgentRunner`` protocol, and a bounded default tool loop over
+    `xr-ai-models`. The ``[relay]`` and
     ``[live-vision]`` extras add model-backed tools without selecting NeMo Agent
     Toolkit. The existing function groups remain behind legacy compatibility
     extras while they migrate. The ``xr_spatial_math`` function group accepts

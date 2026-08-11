@@ -16,7 +16,7 @@ import json
 import os
 import wave
 from pathlib import Path
-from typing import Any, AsyncIterator, Sequence
+from typing import Any, AsyncIterator, Mapping, Sequence
 from urllib.parse import urlparse
 
 import httpx
@@ -72,6 +72,22 @@ def _warn_if_cleartext_key(base_url: str, api_key: str | None) -> None:
 
 def _auth_headers(api_key: str | None) -> dict[str, str]:
     return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+
+def _request_headers(
+    api_key: str | None,
+    headers: Mapping[str, str] | None,
+) -> dict[str, str]:
+    """Merge per-call context while keeping model credentials configuration-owned."""
+    result: dict[str, str] = {}
+    for name, value in (headers or {}).items():
+        if not isinstance(name, str) or not isinstance(value, str):
+            raise TypeError("LLM request headers must be strings")
+        if name.lower() == "authorization":
+            raise ValueError("LLM request headers cannot override Authorization")
+        result[name] = value
+    result.update(_auth_headers(api_key))
+    return result
 
 
 async def _http_health(client: httpx.AsyncClient, url: str, enabled: bool) -> bool:
@@ -322,6 +338,7 @@ class OpenAICompatLLM:
         enable_thinking: bool = False,
         thinking_budget: int | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
         payload = self._build_payload(
             messages,
@@ -329,7 +346,7 @@ class OpenAICompatLLM:
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
             stream=False,
         )
-        kwargs: dict[str, Any] = {"json": payload, "headers": _auth_headers(self._api_key)}
+        kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
         resp = await self._client.post(self._chat_url, **kwargs)
@@ -348,6 +365,7 @@ class OpenAICompatLLM:
         enable_thinking: bool = False,
         thinking_budget: int | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
         payload = self._build_payload(
             messages,
@@ -355,7 +373,7 @@ class OpenAICompatLLM:
             enable_thinking=enable_thinking, thinking_budget=thinking_budget,
             stream=True,
         )
-        kwargs: dict[str, Any] = {"json": payload, "headers": _auth_headers(self._api_key)}
+        kwargs: dict[str, Any] = {"json": payload, "headers": _request_headers(self._api_key, headers)}
         if timeout is not None:
             kwargs["timeout"] = timeout
         async with self._client.stream("POST", self._chat_url, **kwargs) as resp:

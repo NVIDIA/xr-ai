@@ -10,10 +10,11 @@ from collections.abc import AsyncIterator
 
 import nemo_relay
 import pytest
+from nemo_relay.codecs import OpenAIChatCodec
 from pydantic import BaseModel
 from xr_ai_models import Capabilities, ChatMessage, ChatResponse, ToolCall, ToolDef
-from xr_ai_nat import Tool, ToolSet
-from xr_ai_nat.agents import Agent, ToolLoopLimitError, as_agent_tool
+from xr_ai_nat import AgentRunner, Tool, ToolSet, as_agent_tool
+from xr_ai_nat.agents import Agent, ToolLoopLimitError, _response_from_openai
 
 
 class AddRequest(BaseModel):
@@ -166,6 +167,106 @@ async def test_agent_can_be_exposed_as_a_normal_native_tool() -> None:
     assert await tool.execute(AskRequest(text="Hello")) == AskResult(
         text="Handled by the agent tool.",
     )
+
+
+async def test_custom_agent_runner_can_be_exposed_as_a_normal_native_tool() -> None:
+    class _CustomRunner:
+        async def run(self, request: str) -> AskResult:
+            return AskResult(text=f"Custom runner: {request}")
+
+    runner: AgentRunner[str, AskResult] = _CustomRunner()
+    tool = as_agent_tool(
+        name="custom_delegate",
+        description="Delegate one request to a custom agent runner.",
+        agent=runner,
+        request_model=AskRequest,
+        result_model=AskResult,
+        request=lambda value: value.text,
+        response=lambda result: result,
+    )
+
+    assert await tool.execute(AskRequest(text="Hello")) == AskResult(
+        text="Custom runner: Hello",
+    )
+
+
+async def test_agent_forwards_relay_rewritten_request_to_the_model(monkeypatch) -> None:
+    class _RecordingLLM:
+        capabilities = Capabilities()
+
+        def __init__(self) -> None:
+            self.messages: list[ChatMessage] = []
+            self.headers: dict[str, str] = {}
+
+        async def chat(self, messages, *, headers=None, **_kwargs) -> ChatResponse:
+            self.messages = list(messages)
+            self.headers = dict(headers or {})
+            return ChatResponse("Rewritten.", None, None, "stop", {})
+
+        async def health(self) -> bool:
+            return True
+
+        async def close(self) -> None:
+            return None
+
+        async def stream(self, *_args, **_kwargs) -> AsyncIterator[str]:
+            if False:
+                yield ""
+
+    llm = _RecordingLLM()
+    observed: dict[str, object] = {}
+
+    async def execute(_name, request, invoke, **kwargs):
+        observed["content"] = request.content
+        observed["codec"] = kwargs["codec"]
+        observed["response_codec"] = kwargs["response_codec"]
+        rewritten = dict(request.content)
+        rewritten["messages"] = [
+            {"role": "system", "content": "Answer directly."},
+            {"role": "user", "content": "rewritten request"},
+        ]
+        return await invoke(nemo_relay.LLMRequest({"X-Relay-Session": "turn-7"}, rewritten))
+
+    monkeypatch.setattr(nemo_relay.llm, "execute", execute)
+    result = await Agent(
+        name="relay-boundary",
+        llm=llm,
+        system_prompt="Answer directly.",
+        tools=(),
+    ).run("original request")
+
+    assert result.text == "Rewritten."
+    initial_content = observed["content"]
+    assert isinstance(initial_content, dict)
+    assert "tools" not in initial_content
+    assert isinstance(observed["codec"], OpenAIChatCodec)
+    assert isinstance(observed["response_codec"], OpenAIChatCodec)
+    assert llm.headers == {"X-Relay-Session": "turn-7"}
+    assert llm.messages[-1].content == "rewritten request"
+
+
+def test_agent_accepts_null_content_for_tool_call_only_response() -> None:
+    response = _response_from_openai(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "lookup-1",
+                                "function": {"name": "lookup", "arguments": "{}"},
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        }
+    )
+
+    assert response.content == ""
+    assert response.tool_calls == [ToolCall(id="lookup-1", name="lookup", arguments="{}")]
 
 
 async def test_invalid_tool_arguments_are_returned_to_the_model_for_repair() -> None:

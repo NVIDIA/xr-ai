@@ -140,7 +140,8 @@ class LLMService(Protocol):
     capabilities: Capabilities
     async def chat(self, messages, *, tools=None, max_tokens=None,
                    temperature=None, enable_thinking=False,
-                   thinking_budget=None, timeout=None) -> ChatResponse: ...
+                   thinking_budget=None, timeout=None,
+                   headers=None) -> ChatResponse: ...
     def stream(self, messages, *, ...) -> AsyncIterator[str]: ...
     async def health(self) -> bool: ...
     async def close(self) -> None: ...
@@ -173,6 +174,11 @@ class EmbeddingService(Protocol):
 `ChatResponse.reasoning` is the canonical reasoning field — the
 `reasoning_field` knob normalizes `reasoning_content` (nemotron_v3 parser)
 into the same surface.
+
+`LLMService.chat` and `LLMService.stream` accept optional string-valued
+per-call headers for execution context such as Relay session lineage. The
+model profile remains the authority for credentials: callers cannot supply an
+`Authorization` header.
 
 ## Remote / hosted-NIM endpoints
 

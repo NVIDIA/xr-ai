@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncIterator, Literal, Protocol, Sequence, runtime_checkable
+from typing import Any, AsyncIterator, Literal, Mapping, Protocol, Sequence, runtime_checkable
 
 
 ImageInput = bytes | Path | str
@@ -109,6 +109,7 @@ class LLMService(Protocol):
         enable_thinking: bool = False,
         thinking_budget: int | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse: pass
 
     def stream(
@@ -121,6 +122,7 @@ class LLMService(Protocol):
         enable_thinking: bool = False,
         thinking_budget: int | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]: pass
 
     async def health(self) -> bool: pass

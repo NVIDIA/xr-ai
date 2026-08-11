@@ -6,19 +6,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any
 
 import nemo_relay
 from nemo_relay.codecs import OpenAIChatCodec
-from pydantic import BaseModel
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolCall, ToolDef
 
+from .agent_runner import AgentRunner, as_agent_tool
 from .tools import Tool, ToolSet
-
-AgentRequestT = TypeVar("AgentRequestT", bound=BaseModel)
-AgentToolResultT = TypeVar("AgentToolResultT", bound=BaseModel)
 
 
 class ToolLoopLimitError(RuntimeError):
@@ -33,8 +30,8 @@ class AgentResult:
     messages: tuple[ChatMessage, ...]
 
 
-class Agent:
-    """Run one stateless bounded agent turn over a catalog of native tools."""
+class Agent(AgentRunner[str, AgentResult]):
+    """Run one small stateless tool-calling turn over a catalog of native tools."""
 
     def __init__(
         self,
@@ -115,17 +112,20 @@ class Agent:
         )
 
     async def _chat(self, messages: Sequence[ChatMessage]) -> ChatResponse:
+        tool_definitions = list(self.tools.definitions)
+        content: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": [_message_to_openai(message) for message in messages],
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "enable_thinking": self.enable_thinking,
+            "thinking_budget": self.thinking_budget,
+        }
+        if tool_definitions:
+            content["tools"] = tool_definitions
         relay_request = nemo_relay.LLMRequest(
             {},
-            {
-                "model": self.model_name,
-                "messages": [_message_to_openai(message) for message in messages],
-                "tools": list(self.tools.definitions) or None,
-                "max_tokens": self.max_tokens,
-                "temperature": self.temperature,
-                "enable_thinking": self.enable_thinking,
-                "thinking_budget": self.thinking_budget,
-            },
+            content,
         )
 
         async def invoke(request: nemo_relay.LLMRequest) -> dict[str, Any]:
@@ -137,6 +137,7 @@ class Agent:
                 temperature=_optional_float(content.get("temperature")),
                 enable_thinking=bool(content.get("enable_thinking", False)),
                 thinking_budget=_optional_int(content.get("thinking_budget")),
+                headers=_headers_from_relay(request.headers),
             )
             return _response_to_openai(response)
 
@@ -145,41 +146,19 @@ class Agent:
             relay_request,
             invoke,
             model_name=self.model_name,
+            codec=OpenAIChatCodec(),
             response_codec=OpenAIChatCodec(),
         )
         return _response_from_openai(raw_response)
 
 
-def as_agent_tool(
-    *,
-    name: str,
-    description: str,
-    agent: Agent,
-    request_model: type[AgentRequestT],
-    result_model: type[AgentToolResultT],
-    request: Callable[[AgentRequestT], str],
-    response: Callable[[AgentResult], AgentToolResultT],
-    return_direct: bool = False,
-) -> Tool[AgentRequestT, AgentToolResultT]:
-    """Expose a model-backed ``Agent`` through the same ``Tool`` interface as every capability."""
-
-    async def invoke(value: AgentRequestT) -> AgentToolResultT:
-        return response(await agent.run(request(value)))
-
-    return Tool(
-        name,
-        description,
-        request_model,
-        result_model,
-        invoke,
-        return_direct=return_direct,
-    )
-
-
 def _message_to_openai(message: ChatMessage) -> dict[str, Any]:
     if not isinstance(message.content, str):
         raise TypeError("the native agent accepts text-only LLM messages")
-    result: dict[str, Any] = {"role": message.role, "content": message.content}
+    content: str | None = message.content
+    if message.role == "assistant" and not content and message.tool_calls:
+        content = None
+    result: dict[str, Any] = {"role": message.role, "content": content}
     if message.tool_calls:
         result["tool_calls"] = [
             {
@@ -205,6 +184,9 @@ def _messages_from_openai(raw: object) -> list[ChatMessage]:
         if role not in {"system", "user", "assistant", "tool"}:
             raise ValueError(f"unsupported Relay LLM role: {role!r}")
         content = item.get("content", "")
+        tool_calls = _tool_calls_from_openai(item.get("tool_calls")) or None
+        if content is None and tool_calls:
+            content = ""
         if not isinstance(content, str):
             raise TypeError("the native agent accepts text-only LLM messages")
         tool_call_id = item.get("tool_call_id")
@@ -214,7 +196,7 @@ def _messages_from_openai(raw: object) -> list[ChatMessage]:
             ChatMessage(
                 role=role,
                 content=content,
-                tool_calls=_tool_calls_from_openai(item.get("tool_calls")) or None,
+                tool_calls=tool_calls,
                 tool_call_id=tool_call_id,
             )
         )
@@ -261,6 +243,17 @@ def _tools_from_openai(raw: object) -> list[ToolDef] | None:
     return definitions
 
 
+def _headers_from_relay(raw: object) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        raise TypeError("Relay LLM request headers must be an object")
+    headers: dict[str, str] = {}
+    for name, value in raw.items():
+        if not isinstance(name, str) or not isinstance(value, str):
+            raise TypeError("Relay LLM request headers must be strings")
+        headers[name] = value
+    return headers
+
+
 def _response_to_openai(response: ChatResponse) -> dict[str, Any]:
     message = _message_to_openai(
         ChatMessage(role="assistant", content=response.content, tool_calls=response.tool_calls),
@@ -284,6 +277,9 @@ def _response_from_openai(raw: object) -> ChatResponse:
     if not isinstance(message, dict):
         raise TypeError("Relay LLM response choice must contain a message")
     content = message.get("content", "")
+    tool_calls = _tool_calls_from_openai(message.get("tool_calls")) or None
+    if content is None and tool_calls:
+        content = ""
     if not isinstance(content, str):
         raise TypeError("Relay LLM response content must be a string")
     finish_reason = choice.get("finish_reason")
@@ -295,7 +291,7 @@ def _response_from_openai(raw: object) -> ChatResponse:
     return ChatResponse(
         content=content,
         reasoning=reasoning,
-        tool_calls=_tool_calls_from_openai(message.get("tool_calls")) or None,
+        tool_calls=tool_calls,
         finish_reason=finish_reason,
         raw=raw,
     )
@@ -317,4 +313,4 @@ def _optional_float(value: object) -> float | None:
     return float(value)
 
 
-__all__ = ["Agent", "AgentResult", "ToolLoopLimitError", "as_agent_tool"]
+__all__ = ["Agent", "AgentResult", "AgentRunner", "ToolLoopLimitError", "as_agent_tool"]

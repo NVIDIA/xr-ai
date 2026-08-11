@@ -17,8 +17,8 @@ not the destination for new tools.
 
 ## Native tools and tool-driven agents
 
-The base install supplies `Tool`; install `xr-ai-nat[relay]` for the bounded
-tool-driven `Agent`:
+The base install supplies `Tool`, `AgentRunner`, and `as_agent_tool`. Install
+`xr-ai-nat[relay]` for the bundled bounded tool-driven `Agent`:
 
 ```python
 from pydantic import BaseModel
@@ -53,10 +53,12 @@ agent = Agent(
 )
 ```
 
-Use `xr_ai_nat.agents.as_agent_tool(...)` to expose an agent through a normal
-registered `Tool`. That keeps voice, text, and autonomous background work on one
-invocation path. Relay observes the model calls inside that tool-backed agent;
-the application never calls an LLM client as a separate control path.
+`AgentRunner` is the small async turn protocol behind `as_agent_tool(...)`.
+The bundled `Agent` is the basic stateless tool loop; applications can expose a
+custom, Fabric-backed, or framework-backed runner through the same registered
+`Tool`. That keeps voice, text, and autonomous background work on one
+invocation path. Relay observes model calls inside a tool-backed runner; the
+application never calls an LLM client as a separate control path.
 
 ## Legacy NAT compatibility
 

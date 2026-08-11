@@ -12,10 +12,12 @@ for all model HTTP, and reach clients only through the Hub IPC SDK.
 ## Target architecture
 
 NeMo Relay is the local execution boundary. The XR-owned `xr-ai-nat` package
-is becoming a toolkit-independent tools layer: Pydantic tool schemas, a bounded
-tool-driven agent, and trigger dispatch. Relay owns LLM and tool lifecycles,
-middleware, guardrails, and telemetry. Existing NeMo Agent Toolkit function
-groups remain compatibility extras until their concrete tools migrate.
+is becoming a toolkit-independent tools layer: Pydantic tool schemas, trigger
+dispatch, and the generic `AgentRunner` protocol. Its bundled agent is a
+bounded tool loop, while `as_agent_tool(...)` lets custom or future
+Fabric-backed runners use the same trigger path. Relay owns LLM and tool
+lifecycles, middleware, guardrails, and telemetry. Existing NeMo Agent Toolkit
+function groups remain compatibility extras until their concrete tools migrate.
 
 NeMo Platform and NeMo Fabric are deployment and evaluation integrations, not
 worker dependencies. Platform currently requires Python 3.12 or 3.13 and owns
@@ -48,8 +50,9 @@ acceptance behavior rather than an implementation dependency.
 ## Focused PR sequence
 
 1. **Native tools foundation** — make `xr-ai-nat` independent of NeMo Agent
-   Toolkit by default, add Relay-managed tools and a bounded tool-driven agent,
-   and retain existing function groups behind legacy extras.
+   Toolkit by default, add Relay-managed tools, the generic `AgentRunner`
+   seam, and a bounded default tool loop, and retain existing function groups
+   behind legacy extras.
 2. **Simple VLM tool** — move the single-turn streaming-vision path to a normal
    native tool and prove the lightweight voice sample selects no legacy extra.
 3. **Native event dispatcher** — port tea-making's typed participant-scoped
