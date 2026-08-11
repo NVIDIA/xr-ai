@@ -23,7 +23,7 @@ class AgentRunner(Protocol[RunnerRequestT, RunnerResultT]):
 
     async def run(self, request: RunnerRequestT) -> RunnerResultT:
         """Run one turn and return the implementation-specific result."""
-        ...
+        raise NotImplementedError
 
 
 def as_agent_tool(
