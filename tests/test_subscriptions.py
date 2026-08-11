@@ -400,7 +400,7 @@ async def test_status_republishes_current_state_to_connected_clients(
     hub, make_connector, make_processor, settle,
 ):
     """Status is stored as state so a later publish can repair a missed update."""
-    agent = make_processor()
+    agent = make_processor(announces_readiness=True)
     await settle()
     await agent.set_status("idle")
 

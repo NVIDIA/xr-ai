@@ -125,6 +125,8 @@ class HubEndpoint:
         # agent_id → {participant_id → status}. An attached agent with no entry
         # for a participant has not reported for it yet.
         self._agent_status: dict[str, dict[str, str]] = {}
+        # agent_id → participants it answers for; None means all of them.
+        self._agent_scope: dict[str, set[str] | None] = {}
         # participant_id → last aggregate published, to suppress duplicates.
         self._published_status: dict[str, str] = {}
 
@@ -215,13 +217,26 @@ class HubEndpoint:
         self._agent_status.setdefault(agent_id, {})[msg.participant_id] = str(status)
         return str(agent_id)
 
+    def _responsible_agents(self, participant_id: str) -> list[str]:
+        """Agent ids that answer for *participant_id*."""
+        return [
+            agent_id
+            for agent_id, scope in self._agent_scope.items()
+            if scope is None or participant_id in scope
+        ]
+
     def _aggregate_status(self, participant_id: str) -> str:
-        """Fold every attached agent's state into the one status a client sees."""
-        if not self._agent_status:
+        """Fold the responsible agents' states into the one status a client sees.
+
+        Agents scoped to other participants are excluded, and a passive
+        processor never registers at all — neither can hold this client back.
+        """
+        responsible = self._responsible_agents(participant_id)
+        if not responsible:
             return "loading"
         worst = len(_STATUS_PRECEDENCE) - 1
-        for per_participant in self._agent_status.values():
-            status = per_participant.get(participant_id)
+        for agent_id in responsible:
+            status = self._agent_status.get(agent_id, {}).get(participant_id)
             if status is None:
                 return _STATUS_PRECEDENCE[0]
             rank = (
@@ -413,8 +428,12 @@ class HubEndpoint:
         elif type_id == MsgType.AGENT_PRESENCE:
             if msg.attached:
                 self._agent_status.setdefault(msg.agent_id, {})
+                self._agent_scope[msg.agent_id] = (
+                    None if msg.scope is None else set(msg.scope)
+                )
             else:
                 self._agent_status.pop(msg.agent_id, None)
+                self._agent_scope.pop(msg.agent_id, None)
             await self._republish_agent_status()
 
         else:

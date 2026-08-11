@@ -372,6 +372,7 @@ class HubVoiceTransport(BaseTransport):
             sub_addr=_HUB_PUB,
             push_addr=_HUB_PUSH,
             filter=Subscribe.AUDIO | Subscribe.DATA | Subscribe.VIDEO,
+            announces_readiness=True,
         )
 
         params = TransportParams(

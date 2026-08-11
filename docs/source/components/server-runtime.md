@@ -189,11 +189,16 @@ drain to interrupt playback.
 `_agent.status` is the one exception to straight-through return data. The hub
 does not forward an agent's status to the client — it records it per
 `(agent_id, participant_id)` and publishes the aggregate, taking the least
-available state across every attached agent: `loading` > `processing` >
-`idle` > `ready`. Agents announce themselves with `AGENT_PRESENCE` when their
-receive loop starts and detach when it stops, so an agent that is still
-loading holds the room at `loading` rather than being masked by a peer that is
-already ready. Repeat aggregates are suppressed, so the agents' periodic
+available state across the agents *responsible for that participant*:
+`loading` > `processing` > `idle` > `ready`. Agents that opt into readiness
+announce themselves with `AGENT_PRESENCE` when their receive loop starts and
+detach when it stops, so an agent that is still loading holds the room at
+`loading` rather than being masked by a peer that is already ready.
+
+`AGENT_PRESENCE` carries the agent's scope — the participants it answers for,
+or *None* for all of them. A participant with no responsible agent reads
+`loading`. Passive processors never register, and an agent scoped to one pid
+is excluded from every other pid's aggregate. Repeat aggregates are suppressed, so the agents' periodic
 re-announcements do not become per-agent client traffic.
 
 A status payload without an `agent_id` comes from an SDK predating

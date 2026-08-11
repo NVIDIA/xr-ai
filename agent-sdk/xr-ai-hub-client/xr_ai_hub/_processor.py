@@ -174,6 +174,7 @@ class ProcessorEndpoint:
         auto_subscribe:  bool = True,
         filter:          Subscribe = Subscribe.ALL,
         agent_id:        str | None = None,
+        announces_readiness: bool = False,
     ) -> None:
         ctx = zmq.asyncio.Context.instance()
 
@@ -223,7 +224,10 @@ class ProcessorEndpoint:
         self._sub_generation       = 0
         self._confirmed_generation = 0
         self._probe_waiters: dict[str, asyncio.Future[None]] = {}
-        self._attached = False
+
+        self._announces_readiness = announces_readiness
+        # Last (attached, scope) told to the hub; None until the first announce.
+        self._announced: tuple[bool, list[str] | None] | None = None
 
     # ── participant roster ────────────────────────────────────────────────────
 
@@ -283,6 +287,8 @@ class ProcessorEndpoint:
             self._subscribed[participant_id] = new_filter
         else:
             self._subscribed.pop(participant_id, None)
+        if added or removed:
+            self._reannounce_scope()
 
     def unsubscribe(self, participant_id: str) -> None:
         """Drop every subscription for *participant_id*. Idempotent."""
@@ -291,6 +297,7 @@ class ProcessorEndpoint:
             self._sub.setsockopt(zmq.UNSUBSCRIBE, pre)
         if old:
             self._sub_generation += 1
+            self._reannounce_scope()
 
     async def wait_for_subscriptions(self, *, timeout: float = _PROBE_TIMEOUT) -> bool:
         """Block until the hub has applied every subscription issued so far.
@@ -414,11 +421,16 @@ class ProcessorEndpoint:
             When provided, has no effect if the participant is not currently
             in ``connected_participants``; call after its join callback fires.
         """
+        if not self._announces_readiness:
+            log.warning("set_status(%r) ignored: endpoint was not constructed "
+                        "with announces_readiness=True", status)
+            return
+
         if participant_id is None:
             self._default_status = status
             self._participant_status.clear()
-            targets = list(self._participants)
-        elif participant_id in self._participants:
+            targets = [p for p in self._participants if self._answers_for(p)]
+        elif participant_id in self._participants and self._answers_for(participant_id):
             self._participant_status[participant_id] = status
             targets = [participant_id]
         else:
@@ -444,6 +456,8 @@ class ProcessorEndpoint:
         without coupling process readiness to participant discovery.
         """
         for pid in list(self._participants):
+            if not self._answers_for(pid):
+                continue
             status = self._participant_status.get(pid, self._default_status)
             if status is not None:
                 await self._send_status(pid, status)
@@ -455,6 +469,8 @@ class ProcessorEndpoint:
         this endpoint, so the announcement waits behind the subscription
         barrier rather than racing it.
         """
+        if not self._answers_for(participant_id):
+            return
         if not await self.wait_for_subscriptions():
             # Publish anyway rather than go silent, but stop re-probing this
             # generation so the periodic re-announce doesn't stall on every
@@ -553,24 +569,53 @@ class ProcessorEndpoint:
             self._running_event.clear()
             self._announce_presence(attached=False)
 
+    def _answers_for(self, participant_id: str) -> bool:
+        """Whether this endpoint may speak to *participant_id* about readiness.
+
+        Availability is a claim that the client's next request will arrive, so
+        only a live subscription for that pid earns the right to make it.
+        """
+        return participant_id in self._subscribed
+
+    def _readiness_scope(self) -> list[str] | None:
+        """Participants this endpoint answers for; *None* means all of them.
+
+        An auto-subscribing endpoint takes on every participant that joins.
+        Otherwise responsibility is exactly what the caller subscribed to —
+        an endpoint pinned to one pid must not be counted against, or speak
+        for, anyone else.
+        """
+        if self._auto_subscribe:
+            return None
+        return sorted(self._subscribed)
+
     def _announce_presence(self, *, attached: bool) -> None:
-        """Tell the hub this agent is (or is no longer) part of the room.
+        """Tell the hub this agent's readiness participation and scope.
 
         Sent synchronously so the detach still goes out when ``run()`` is
         unwinding under cancellation, where an await would never resume.
         """
-        if attached == self._attached:
+        if not self._announces_readiness:
             return
-        self._attached = attached
+        state = (attached, self._readiness_scope())
+        if state == self._announced:
+            return
+        self._announced = state
         payload = encode(
             MsgType.AGENT_PRESENCE,
-            AgentPresence(agent_id=self._agent_id, attached=attached),
+            AgentPresence(agent_id=self._agent_id,
+                          attached=attached, scope=state[1]),
         )
         try:
             zmq.Socket.send(self._push, payload, zmq.NOBLOCK)
         except zmq.ZMQError as exc:
             log.warning("agent presence announcement failed (attached=%s): %s",
                         attached, exc)
+
+    def _reannounce_scope(self) -> None:
+        """Push a scope change to the hub, once attached."""
+        if self._announced is not None and self._announced[0]:
+            self._announce_presence(attached=True)
 
     async def _catch_up_roster(self) -> None:
         """Send a roster request after the SUB↔PUB handshake settles."""
@@ -616,7 +661,7 @@ class ProcessorEndpoint:
                 status = self._participant_status.get(
                     msg.participant_id, self._default_status,
                 )
-                if status is not None:
+                if status is not None and self._answers_for(msg.participant_id):
                     self._spawn(self._send_status(msg.participant_id, status))
             else:
                 if msg.participant_id not in self._participants:

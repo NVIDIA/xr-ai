@@ -37,9 +37,12 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **Agents talk to the hub via IPC only.** LiveKit is an internal transport
   detail — never surface it to agents.
 - **Client readiness is owned by the hub, not by any one agent.** An agent
-  reports only its own `_agent.status`; the hub aggregates across every
-  attached agent and gates the result on a confirmed subscription. Don't
-  publish availability straight to clients from a worker.
+  reports only its own `_agent.status`; the hub aggregates across the agents
+  responsible for that participant and gates the result on a confirmed
+  subscription. Readiness participation is opt-in
+  (`announces_readiness=True`) and an endpoint answers only for participants
+  it subscribes to — a passive `ProcessorEndpoint` must not gate any client.
+  Don't publish availability straight to clients from a worker.
 - **`agent-sdk/xr-ai-hub-client` depends only on `pyzmq` + `msgpack`.** No
   LiveKit, FastAPI, or uvicorn. `agent-sdk/xr-ai-pipecat` is a separate
   optional package with heavier deps (pipecat-ai, scipy, numpy, httpx,

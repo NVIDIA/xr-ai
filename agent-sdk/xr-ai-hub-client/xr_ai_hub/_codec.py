@@ -108,5 +108,7 @@ register_decoder(MsgType.ROSTER_REQUEST, lambda _p: RosterRequest())
 register_encoder(MsgType.SUBSCRIPTION_PROBE, lambda m: [m.token])
 register_decoder(MsgType.SUBSCRIPTION_PROBE, lambda p: SubscriptionProbe(p[0]))
 
-register_encoder(MsgType.AGENT_PRESENCE, lambda m: [m.agent_id, m.attached])
-register_decoder(MsgType.AGENT_PRESENCE, lambda p: AgentPresence(p[0], p[1]))
+register_encoder(MsgType.AGENT_PRESENCE, lambda m: [m.agent_id, m.attached, m.scope])
+register_decoder(MsgType.AGENT_PRESENCE,
+                 lambda p: AgentPresence(p[0], p[1],
+                                         None if p[2] is None else list(p[2])))

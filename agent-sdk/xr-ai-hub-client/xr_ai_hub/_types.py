@@ -169,8 +169,14 @@ class SubscriptionProbe:
 class AgentPresence:
     """An agent endpoint has attached to (or detached from) the hub.
 
-    The hub counts every attached agent as unavailable until it publishes an
-    availability status, so one ready agent cannot make the room look ready.
+    Only endpoints that opt into readiness send this. The hub counts every
+    attached agent as unavailable until it publishes an availability status,
+    so one ready agent cannot make the room look ready.
+
+    ``scope`` names the participants this agent answers for — *None* means
+    every participant. A participant's readiness aggregates only over the
+    agents whose scope covers it.
     """
     agent_id: str
     attached: bool
+    scope:    list[str] | None = None

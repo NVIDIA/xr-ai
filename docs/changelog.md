@@ -33,6 +33,15 @@ report only their own state tagged with an `agent_id`, announce presence with
 reported counts as `loading`. Clients keep a scalar and gain no aggregation
 logic; payloads without an `agent_id` are forwarded verbatim for older SDKs.
 
+Readiness participation is opt-in (`announces_readiness=True`) and scope
+follows subscription. `ProcessorEndpoint` is the generic downstream endpoint,
+so registering every instance would let a passive processor — video-MCP,
+analytics, a recorder — pin every client at `loading` forever; and an endpoint
+pinned to one pid would otherwise mark unrelated clients ready, since the probe
+proves only that *issued* subscriptions are live, not that one was issued for
+that participant. An endpoint answers for exactly the participants it
+subscribes to, and the hub aggregates only those agents.
+
 ### 2026-08-10 — Voice-worker ready files wait for inbound IPC
 
 `VoiceSession` and the direct `run_voice_pipeline` compatibility path release a
