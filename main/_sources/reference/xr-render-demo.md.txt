@@ -22,10 +22,10 @@ exit terminates the whole stack.
 |---|---|---|---|
 | hub | `server-runtime/` | `xr_media_hub` | 8080 (https + wss /rtc proxy); LiveKit 7880 stays on 127.0.0.1 |
 | cloudxr | `cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
-| stt | `ai-services/stt-server/` | `stt_server` | 8103 |
-| tts | `ai-services/tts/piper/` | `piper_tts_server` | 8105 |
-| vlm | `ai-services/vlm-server/` | `vlm_server` | 8100 |
-| agent-llm | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 |
+| stt | `services/stt-server/` | `stt_server` | 8103 |
+| tts | `services/piper-tts/` | `piper_tts_server` | 8105 |
+| vlm | `services/vlm-server/` | `vlm_server` | 8100 |
+| agent-llm | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 |
 | video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
 | scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
 | openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |

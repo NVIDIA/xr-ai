@@ -686,7 +686,7 @@ must exist.</p>
 <section id="vlm-mcp">
 <h2>vlm-mcp<a class="headerlink" href="#vlm-mcp" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">vlm-mcp</span></code> is a thin FastMCP wrapper around the vision-language model in
-<code class="docutils literal notranslate"><span class="pre">ai-services/vlm-server/</span></code> (Cosmos-Reason1-7B via vLLM). It has no hub IPC
+<code class="docutils literal notranslate"><span class="pre">services/vlm-server/</span></code> (Cosmos-Reason1-7B via vLLM). It has no hub IPC
 subscription and no <code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code> dependency: it just reads a local image and
 forwards it to the VLM’s OpenAI-compatible chat-completions endpoint via the
 <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> SDK.</p>
@@ -710,7 +710,7 @@ live-frame and vision functions behind <code class="docutils literal notranslate
 <span class="nt">port</span><span class="p">:</span><span class="w">                  </span><span class="l l-Scalar l-Scalar-Plain">8240</span>
 <span class="nt">models</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">vlm</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:cosmos_vlm</span><span class="w">   </span><span class="c1"># targets ai-services/vlm-server/</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">preset:cosmos_vlm</span><span class="w">   </span><span class="c1"># targets services/vlm-server/</span>
 <span class="w">    </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:8100</span>
 <span class="nt">vlm_request_timeout_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60.0</span><span class="w">       </span><span class="c1"># per-call httpx timeout</span>
 <span class="nt">enable_thinking</span><span class="p">:</span><span class="w">       </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">      </span><span class="c1"># true enables VLM chain-of-thought (slower, more accurate)</span>
