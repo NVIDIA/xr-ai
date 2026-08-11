@@ -937,10 +937,16 @@ wake pending requests; wait state is removed when each request completes.</p>
 <td><p>drops audio queued at the hub for <code class="docutils literal notranslate"><span class="pre">pid</span></code> — interrupts the agent’s own playback</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set_status(status,</span> <span class="pre">pid=None)</span></code></p></td>
-<td><p>records and publishes agent status (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;idle&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;processing&quot;</span></code>) on the reserved <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> channel; broadcasts when <code class="docutils literal notranslate"><span class="pre">pid</span></code> is omitted</p></td>
+<td><p>records and publishes <em>this agent’s</em> status (<code class="docutils literal notranslate"><span class="pre">&quot;loading&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;processing&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;idle&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;ready&quot;</span></code>) on the reserved <code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> channel; broadcasts when <code class="docutils literal notranslate"><span class="pre">pid</span></code> is omitted</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">republish_statuses()</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mark_ready()</span></code></p></td>
+<td><p>shorthand for <code class="docutils literal notranslate"><span class="pre">set_status(&quot;ready&quot;)</span></code> — declares this agent available to serve requests</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">republish_statuses()</span></code></p></td>
 <td><p>re-sends each connected participant’s current agent status so a missed one-shot update self-heals</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions(timeout=5.0)</span></code></p></td>
+<td><p>blocks until the hub has applied every subscription issued so far; returns <code class="docutils literal notranslate"><span class="pre">False</span></code> on timeout</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">request_roster()</span></code></p></td>
 <td><p>asks the hub to replay “joined” events for all current pids</p></td>
@@ -1010,9 +1016,51 @@ without breaking existing code.</p>
 <td><p>processor → hub</p></td>
 <td><p>replay joined-events for the current roster</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SUBSCRIPTION_PROBE</span></code></p></td>
+<td><p>processor → hub → processor</p></td>
+<td><p>round-trip token proving pending SUBSCRIBEs are live</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code></p></td>
+<td><p>processor → hub</p></td>
+<td><p>readiness participation, plus the participants the agent answers for</p></td>
+</tr>
 </tbody>
 </table>
 </div>
+</section>
+<section id="readiness-contract">
+<h3>Readiness contract<a class="headerlink" href="#readiness-contract" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> carries one scalar per client, and the hub owns it. Each agent
+reports only its own state, tagged with its <code class="docutils literal notranslate"><span class="pre">agent_id</span></code>; the hub folds every
+<em>responsible</em> agent’s state into the status a client sees, taking the least
+available: <code class="docutils literal notranslate"><span class="pre">loading</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">processing</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">idle</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">ready</span></code>. An agent that has
+registered but not yet reported counts as <code class="docutils literal notranslate"><span class="pre">loading</span></code>, so one ready agent cannot
+make the room look ready while another is still starting up or busy.</p>
+<p>Two things bound who gets a say:</p>
+<ul class="simple">
+<li><p><strong>Participation is opt-in.</strong> Only endpoints constructed with
+<code class="docutils literal notranslate"><span class="pre">announces_readiness=True</span></code> register. <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> is the generic
+downstream endpoint — analytics, recorders, MCP servers — and a processor
+that never reports status must not hold clients at <code class="docutils literal notranslate"><span class="pre">loading</span></code>. The voice
+transports opt in; passive processors leave it off, and <code class="docutils literal notranslate"><span class="pre">set_status</span></code> is a
+logged no-op for them.</p></li>
+<li><p><strong>Scope follows subscription.</strong> An endpoint answers for exactly the
+participants it has a live subscription for: every participant when
+<code class="docutils literal notranslate"><span class="pre">auto_subscribe=True</span></code>, otherwise the pids passed to <code class="docutils literal notranslate"><span class="pre">subscribe()</span></code>. Scope
+travels to the hub on <code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> and is re-announced when it changes.
+An agent pinned to one pid neither marks another client ready nor holds that
+client back.</p></li>
+</ul>
+<p>Availability also implies routability. <code class="docutils literal notranslate"><span class="pre">set_status</span></code> publishes only for
+participants in scope, and waits behind <code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions</span></code> before doing
+so, so a client is told <code class="docutils literal notranslate"><span class="pre">ready</span></code> only once the hub has applied this endpoint’s
+SUBSCRIBE for it — otherwise the client’s first request would land in the
+PUB/SUB slow-joiner window and be dropped. The barrier proves issued
+subscriptions are live; the scope check proves one was issued for that
+participant. Agents that need the barrier for their own purposes can await
+<code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions()</span></code> directly.</p>
+<p><code class="docutils literal notranslate"><span class="pre">agent_id</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">$XR_AI_AGENT_ID</span></code>, falling back to a per-process value;
+pass <code class="docutils literal notranslate"><span class="pre">agent_id=</span></code> to <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> to set it explicitly.</p>
 </section>
 <section id="shared-memory">
 <h3>Shared memory<a class="headerlink" href="#shared-memory" title="Link to this heading">#</a></h3>
@@ -1104,6 +1152,7 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ipc-message-types">IPC message types</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#readiness-contract">Readiness contract</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-memory">Shared memory</a></li>
 </ul>
 </li>

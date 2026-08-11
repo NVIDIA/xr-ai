@@ -445,9 +445,11 @@ same IPC-start readiness boundary.</p></li>
 <li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">server-runtime</span></code> or <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: if any process exits, the rest are terminated.</p></li>
-<li><p>A process declared with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code> must declare its HTTP <code class="docutils literal notranslate"><span class="pre">port</span></code>.
-Before spawning anything, <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> requires <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/health</span></code> on that port to
-return HTTP 200.</p></li>
+<li><p>A process declared with <code class="docutils literal notranslate"><span class="pre">launch_mode=&quot;reuse&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">readiness=&quot;health&quot;</span></code> must
+declare either an explicit <code class="docutils literal notranslate"><span class="pre">health_url</span></code> or an HTTP <code class="docutils literal notranslate"><span class="pre">port</span></code> fallback. Before
+spawning anything, <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> requires that endpoint to return HTTP 200.
+Profile-driven stacks use the selected model endpoint; <code class="docutils literal notranslate"><span class="pre">readiness=&quot;none&quot;</span></code>
+skips the probe.</p></li>
 </ul>
 </section>
 <section id="serial-and-parallel-items">
@@ -464,8 +466,8 @@ launcher shuts everything down, just as it would for a serial process.</p></li>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span> <span class="s2">&quot;../../ai-services/stt-server&quot;</span><span class="p">,</span> <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span> <span class="s2">&quot;../../ai-services/tts/piper&quot;</span><span class="p">,</span>  <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/stt-server&quot;</span><span class="p">,</span> <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/piper-tts&quot;</span><span class="p">,</span>  <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
     <span class="p">]),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
 <span class="p">]</span>
