@@ -413,12 +413,12 @@ sample’s <code class="docutils literal notranslate"><span class="pre">yaml/mod
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">_BASE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>   <span class="c1"># sample root</span>
 
 <span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">,</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/xr-media-hub&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/xr_media_hub.yaml&quot;</span><span class="p">),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>               <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/my_agent_worker.yaml&quot;</span><span class="p">),</span>
     <span class="c1"># Optional shared components — add as needed:</span>
-    <span class="c1"># Process(&quot;cloudxr&quot;, &quot;../../cloudxr-runtime&quot;,       &quot;cloudxr_runtime&quot;,</span>
+    <span class="c1"># Process(&quot;cloudxr&quot;, &quot;../../services/cloudxr-runtime&quot;, &quot;cloudxr_runtime&quot;,</span>
     <span class="c1">#         config=&quot;yaml/cloudxr_runtime.yaml&quot;),</span>
     <span class="c1"># Process(&quot;mcp&quot;,     &quot;../../agent-mcp-servers/oxr-mcp&quot;, &quot;oxr_mcp_server&quot;,</span>
     <span class="c1">#         config=&quot;yaml/oxr_mcp_server.yaml&quot;),</span>
@@ -442,7 +442,7 @@ touches it only after the input transport’s hub IPC receive loop has started.<
 <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline(worker,</span> <span class="pre">transport,</span> <span class="pre">on_ready=ready_file.touch)</span></code> to use the
 same IPC-start readiness boundary.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
-<li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">server-runtime</span></code> or <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>.</p></li>
+<li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> or <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code>.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">run_stack</span></code> is fail-fast: if any process exits, the rest are terminated.</p></li>
 </ul>
@@ -459,7 +459,7 @@ in the sequence begins. If any member exits before signaling ready, the
 launcher shuts everything down, just as it would for a serial process.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/xr-media-hub&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
         <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/stt-server&quot;</span><span class="p">,</span> <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
         <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/piper-tts&quot;</span><span class="p">,</span>  <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>

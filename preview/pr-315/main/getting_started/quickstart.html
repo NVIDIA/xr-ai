@@ -521,7 +521,7 @@ it is not stored in YAML; the overlay only names the env var via
 <code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code>. Refer to the credentials and AI-services guides for
 full details (and self-hosted NIM containers).</p>
 <p>Each sample has its own <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> controlling the hub; refer to
-<code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub.yaml</span></code> for the full option list.</p>
+<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> for the full option list.</p>
 </section>
 </section>
 <section id="xr-render-demo-voice-driven-sphere-in-cloudxr">
@@ -601,15 +601,15 @@ prompt — not in YAML) and just don’t start the local <code class="docutils l
 model-servers. Refer to the AI-services guide.</p>
 </section>
 </section>
-<section id="hub-only-server-runtime-standalone">
-<h2>Hub only (server-runtime standalone)<a class="headerlink" href="#hub-only-server-runtime-standalone" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>server-runtime
+<section id="hub-only-standalone">
+<h2>Hub only (standalone)<a class="headerlink" href="#hub-only-standalone" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>services/xr-media-hub
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>xr_media_hub
 </pre></div>
 </div>
 <p>Useful for development or when running an agent in a separate terminal. The
-XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub.yaml</span></code>.</p>
+XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code>.</p>
 </section>
 </section>
 
@@ -673,7 +673,7 @@ XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span cla
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-start-the-demo">Step 2 — Start the demo</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-only-server-runtime-standalone">Hub only (server-runtime standalone)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-only-standalone">Hub only (standalone)</a></li>
 </ul>
   </nav></div>
 

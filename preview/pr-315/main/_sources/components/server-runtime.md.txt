@@ -5,7 +5,7 @@
 
 # Server runtime
 
-The `server-runtime/` package hosts the **XR-Media-Hub** — the single process
+The `services/xr-media-hub/` package hosts the **XR-Media-Hub** — the single process
 clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
 return path, and the same-origin `wss://` proxy that fronts LiveKit signaling.
@@ -19,7 +19,7 @@ python -m xr_media_hub                    # equivalent module form
 ```
 
 Configuration comes from a `xr_media_hub.yaml` file (defaults are used when
-none is found). `server-runtime/xr_media_hub.yaml` is the reference copy
+none is found). `services/xr-media-hub/xr_media_hub.yaml` is the reference copy
 documenting every field; each sample ships its own copy under its `yaml/`
 directory. Relative paths inside the YAML (such as `web_client_dir`) resolve
 against the YAML file's own directory, not the working directory.
@@ -103,7 +103,7 @@ checks at startup.
 ## IPC boundary to agents
 
 The hub and its producers and consumers communicate over ZMQ using msgpack-encoded
-messages. The layer lives in `server-runtime/xr_media_hub/ipc/` and defines
+messages. The layer lives in `services/xr-media-hub/xr_media_hub/ipc/` and defines
 three endpoints:
 
 | Endpoint | Role | Who |
@@ -153,7 +153,7 @@ registered at import time via `register_encoder` and `register_decoder`.
 Agent code should import the IPC types and `ProcessorEndpoint` from
 `xr_ai_hub` directly, **not** from `xr_media_hub.ipc`. The agent SDK's only
 runtime dependencies are `pyzmq` and `msgpack` — importing from the agent SDK
-avoids pulling in the full server-runtime dependency tree (LiveKit, FastAPI,
+avoids pulling in the full XR-Media-Hub dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). `xr_media_hub.ipc` re-exports the same names for the
 server side.
 ```
