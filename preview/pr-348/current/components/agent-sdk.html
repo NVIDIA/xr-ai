@@ -392,12 +392,9 @@ the same IPC-start request-readiness boundary as <code class="docutils literal n
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code></strong> — the minimal pyzmq + msgpack IPC library every agent uses
 to talk to the XR-Media-Hub (refer to <a class="reference internal" href="server-runtime.html"><span class="doc">Server runtime</span></a>). No LiveKit or
 FastAPI dependency.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code></strong> — Relay-instrumented typed tools and a bounded
-native tool-calling turn. It preserves <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> as the only model I/O
-surface and leaves participant state plus application ownership to samples.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — typed in-process XR functions and the model bridge used by
-existing NAT-built agents. It remains a compatibility surface while those
-callers migrate to <code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — Relay-managed native tools and tool-driven agents. Its
+legacy extras retain existing NeMo Agent Toolkit function groups while their
+concrete capabilities migrate.</p></li>
 </ul>
 <hr class="docutils" />
 <section id="xr-ai-models">
@@ -593,17 +590,18 @@ protocols or callers.</p>
 </section>
 </section>
 <hr class="docutils" />
-<section id="xr-ai-agent-runtime">
-<h2>xr-ai-agent-runtime<a class="headerlink" href="#xr-ai-agent-runtime" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> is the native migration target for model-driven XR
-composition. <code class="docutils literal notranslate"><span class="pre">Tool</span></code> declares Pydantic request and response boundaries and
-executes its handler through NeMo Relay. <code class="docutils literal notranslate"><span class="pre">Agent</span></code> builds OpenAI-compatible tool
-definitions from those schemas, sends each model request through an injected
-<code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, and limits the number of model calls in one stateless turn.</p>
-<p>Relay scopes each turn and manages the LLM and tool lifecycles. The package does
-not add an HTTP client, a Hub transport, or an implicit conversation store.
-Application-manager foreground selection, workflow state, and background work
-stay explicit in application code.</p>
+<section id="native-tools-and-agents">
+<h2>Native tools and agents<a class="headerlink" href="#native-tools-and-agents" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code> is the native migration target for model-driven XR composition.
+<code class="docutils literal notranslate"><span class="pre">Tool</span></code> declares Pydantic request and response boundaries and executes its
+handler through NeMo Relay. <code class="docutils literal notranslate"><span class="pre">xr_ai_nat.agents.Agent</span></code> builds OpenAI-compatible
+tool definitions from those schemas, sends each model request through an
+injected <code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, and limits the number of model calls in one stateless
+turn.</p>
+<p>Relay scopes each turn and manages the LLM and tool lifecycles. The base package
+does not add an HTTP client, a Hub transport, or an implicit conversation store.
+Applications expose agents as registered tools; foreground selection, workflow
+state, and background work stay explicit in application code.</p>
 </section>
 <section id="xr-ai-nat-model-bridge">
 <h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>
@@ -1146,7 +1144,7 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-agent-runtime">xr-ai-agent-runtime</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-agents">Native tools and agents</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-nat-model-bridge">xr-ai-nat model bridge</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-voice">xr-ai-voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-pipecat">xr-ai-pipecat</a><ul class="nav section-nav flex-column">
