@@ -218,6 +218,13 @@ Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
 registered tool; foreground selection, workflow state, and background work stay
 explicit in application code.
 
+`StreamingTool` keeps one Relay tool lifecycle open while a capability yields
+typed response chunks. `xr_ai_nat.live_vision.LiveVisionTool` is one such tool:
+it acquires a participant-scoped hub frame and calls its injected `VLMService`
+through a nested Relay LLM stream. Vision is therefore not a runtime special
+case or a model-control path; it is a capability implementation behind the same
+tool interface used by deterministic tools and agent tools.
+
 ## xr-ai-nat model bridge
 
 Unmigrated workflows install `xr-ai-nat[agents]` when they use NAT's built-in

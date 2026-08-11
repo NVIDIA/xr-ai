@@ -554,16 +554,18 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[vision,voice] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-nat[vision]` pulls in httpx, numpy, and Pillow) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[relay,live-vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-nat[live-vision]` pulls in numpy and Pillow) |
 
-The packaged worker registers `StreamingVisionConfig` in-process and maps it to
-`VoiceSession` with `xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` owns
-readiness, hub transport, signals, the private Pipecat pipeline, and cleanup;
-`TextMessageInput` routes `"ping"` and ad-hoc text through the same
-participant-aware path as speech. Voice-gate behavior (magic phrases, follow-up
-grace, listening chime, stop acknowledgement), VAD/STT, and sentence-batched TTS
-remain provided by the shared voice runtime. The sample has no direct
-`xr-ai-pipecat` or MCP dependency.
+The packaged worker invokes `LiveVisionTool` directly and maps its streamed
+participant-scoped response to `VoiceSession`. The tool acquires a current frame
+through `xr-ai-hub-client` and runs both its tool lifecycle and nested VLM stream
+through NeMo Relay. `VoiceSession` owns readiness, hub transport, signals, the
+private Pipecat pipeline, and cleanup; `TextMessageInput` routes `"ping"` and
+ad-hoc text through the same participant-aware path as speech. Voice-gate
+behavior (magic phrases, follow-up grace, listening chime, stop acknowledgement),
+VAD/STT, and sentence-batched TTS remain provided by the shared voice runtime.
+The sample has no direct `xr-ai-pipecat` or MCP dependency and selects no legacy
+NeMo Agent Toolkit extra.
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded

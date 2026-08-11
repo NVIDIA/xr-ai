@@ -13,7 +13,7 @@ import pytest
 from nemo_relay.codecs import OpenAIChatCodec
 from pydantic import BaseModel
 from xr_ai_models import Capabilities, ChatMessage, ChatResponse, ToolCall, ToolDef
-from xr_ai_nat import AgentRunner, Tool, ToolSet, as_agent_tool
+from xr_ai_nat import AgentRunner, StreamingTool, Tool, ToolSet, as_agent_tool
 from xr_ai_nat.agents import Agent, ToolLoopLimitError, _response_from_openai
 
 
@@ -42,8 +42,25 @@ class AskResult(BaseModel):
     text: str
 
 
+class CountRequest(BaseModel):
+    """One requested stream count."""
+
+    limit: int
+
+
+class CountChunk(BaseModel):
+    """One streamed count value."""
+
+    value: int
+
+
 async def add(request: AddRequest) -> AddResult:
     return AddResult(total=request.left + request.right)
+
+
+async def count(request: CountRequest) -> AsyncIterator[CountChunk]:
+    for value in range(request.limit):
+        yield CountChunk(value=value)
 
 
 class _ToolCallingLLM:
@@ -267,6 +284,27 @@ def test_agent_accepts_null_content_for_tool_call_only_response() -> None:
 
     assert response.content == ""
     assert response.tool_calls == [ToolCall(id="lookup-1", name="lookup", arguments="{}")]
+
+
+async def test_streaming_tools_preserve_the_native_tool_lifecycle() -> None:
+    tool = StreamingTool(
+        "count",
+        "Count from zero to one less than the requested limit.",
+        CountRequest,
+        CountChunk,
+        count,
+    )
+    events = []
+    subscriber = "xr-ai-native-streaming-tool"
+    nemo_relay.subscribers.register(subscriber, events.append)
+    try:
+        chunks = [chunk async for chunk in tool.stream(CountRequest(limit=3))]
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.subscribers.deregister(subscriber)
+
+    assert chunks == [CountChunk(value=0), CountChunk(value=1), CountChunk(value=2)]
+    assert "tool" in {getattr(event, "category", None) for event in events}
 
 
 async def test_invalid_tool_arguments_are_returned_to_the_model_for_repair() -> None:

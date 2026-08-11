@@ -18,11 +18,11 @@ The worker is a package under `worker/simple_vlm_example_worker/`:
 - `prompts/system.txt` owns the VLM system prompt.
 
 `VoiceSession` owns STT/TTS/VLM readiness, the hub voice transport, voice-gate
-processing, streaming TTS, signals, and cleanup. The application registers
-`StreamingVisionConfig` in-process and adapts that native function with
-`xr_ai_nat.adapters.as_voice_handler`. Typed text uses the same participant-aware
-turn path as speech. Participant leave events release cached live-frame state,
-and a newer turn cancels and interrupts a superseded response.
+processing, streaming TTS, signals, and cleanup. The application invokes the
+native `LiveVisionTool` directly; it acquires the participant's current frame
+and streams an injected VLM through Relay. Typed text uses the same
+participant-aware turn path as speech. Participant leave events release cached
+live-frame state, and a newer turn cancels and interrupts a superseded response.
 
 No MCP client or MCP tool invocation is part of this sample.
 

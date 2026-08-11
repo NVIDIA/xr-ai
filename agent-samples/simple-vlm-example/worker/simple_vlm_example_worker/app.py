@@ -9,31 +9,29 @@ from collections.abc import Callable
 from pathlib import Path
 
 from loguru import logger
-from nat.builder.workflow_builder import WorkflowBuilder
-from nat.plugin_api import Function
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_nat.adapters import as_voice_handler
-from xr_ai_nat.functions.vision import (
-    StreamingVisionConfig,
-    VisionRequest,
-)
+from xr_ai_nat.live_vision import LiveVisionTool, VisionRequest
 from xr_ai_voice import TextMessageInput, VadConfig, VoiceHandler, VoiceSession
 from xr_ai_voicegate import load_voice_gate_config
 
 from .config import WorkerConfig
 
 
-def _make_vision_handler(vision: Function) -> VoiceHandler:
-    return as_voice_handler(
-        vision,
-        request=lambda turn: VisionRequest(
-            participant_id=turn.participant_id,
-            query=turn.text,
-        ),
-        response=lambda chunk: chunk.text,
-        streaming=True,
-    )
+def _make_vision_handler(vision: LiveVisionTool) -> VoiceHandler:
+    async def handle(turn):
+        async def response():
+            async for chunk in vision.stream(
+                VisionRequest(
+                    participant_id=turn.participant_id,
+                    query=turn.text,
+                )
+            ):
+                yield chunk.text
+
+        return response()
+
+    return handle
 
 
 def _text_transform(default_prompt: str) -> Callable[[str], str]:
@@ -70,15 +68,14 @@ async def run_app(
         idle_timeout_secs=config.idle_timeout_secs,
     )
 
-    async with session, WorkflowBuilder() as builder:
-        vision_config = StreamingVisionConfig(
+    async with session:
+        vision = LiveVisionTool(
             endpoint=session.transport.endpoint,
             vlm=vlm,
             system_prompt=config.system_prompt,
             frame_max_age_s=config.frame_max_age_s,
             frame_timeout_s=config.frame_timeout_s,
         )
-        vision = await builder.add_function("perception", vision_config)
         TextMessageInput(
             session=session,
             transform=_text_transform(config.default_prompt),
@@ -88,7 +85,7 @@ async def run_app(
         logger.info("simple-vlm-example starting")
         await session.run(
             _make_vision_handler(vision),
-            on_participant_left=vision_config.release,
+            on_participant_left=vision.release,
             interrupt_on_supersede=True,
         )
         logger.info("simple-vlm-example stopped")
