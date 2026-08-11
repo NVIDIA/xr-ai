@@ -21,12 +21,9 @@ from:
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
-- **`xr-ai-agent-runtime`** — Relay-instrumented typed tools and a bounded
-  native tool-calling turn. It preserves `xr-ai-models` as the only model I/O
-  surface and leaves participant state plus application ownership to samples.
-- **`xr-ai-nat`** — typed in-process XR functions and the model bridge used by
-  existing NAT-built agents. It remains a compatibility surface while those
-  callers migrate to `xr-ai-agent-runtime`.
+- **`xr-ai-nat`** — Relay-managed native tools and tool-driven agents. Its
+  legacy extras retain existing NeMo Agent Toolkit function groups while their
+  concrete capabilities migrate.
 
 ---
 
@@ -205,23 +202,26 @@ The clients can be exercised without a GPU.
 
 ---
 
-## xr-ai-agent-runtime
+## Native tools and agents
 
-`xr-ai-agent-runtime` is the native migration target for model-driven XR
-composition. `Tool` declares Pydantic request and response boundaries and
-executes its handler through NeMo Relay. `Agent` builds OpenAI-compatible tool
-definitions from those schemas, sends each model request through an injected
-`LLMService`, and limits the number of model calls in one stateless turn.
+`xr-ai-nat` is the native migration target for model-driven XR composition.
+`Tool` declares Pydantic request and response boundaries and executes its
+handler through NeMo Relay. `xr_ai_nat.agents.Agent` builds OpenAI-compatible
+tool definitions from those schemas, sends each model request through an
+injected `LLMService`, and limits the number of model calls in one stateless
+turn.
 
-Relay scopes each turn and manages the LLM and tool lifecycles. The package does
-not add an HTTP client, a Hub transport, or an implicit conversation store.
-Application-manager foreground selection, workflow state, and background work
-stay explicit in application code.
+Relay scopes each turn and manages the LLM and tool lifecycles. The base package
+does not add an HTTP client, a Hub transport, or an implicit conversation store.
+Applications expose agents as registered tools; foreground selection, workflow
+state, and background work stay explicit in application code.
 
-The optional `vision` extra adds `StreamingVision`, which owns raw current-frame
-acquisition through `xr-ai-hub-client`, JPEG conversion, participant release,
-and VLM calls through Relay. It stays a direct application primitive rather than
-a tool graph, so a `VoiceSession` can stream its answer without a NAT adapter.
+`StreamingTool` keeps one Relay tool lifecycle open while a capability yields
+typed response chunks. `xr_ai_nat.live_vision.LiveVisionTool` is one such tool:
+it acquires a participant-scoped hub frame and calls its injected `VLMService`
+through a nested Relay LLM stream. Vision is therefore not a runtime special
+case or a model-control path; it is a capability implementation behind the same
+tool interface used by deterministic tools and agent tools.
 
 ## xr-ai-nat model bridge
 
