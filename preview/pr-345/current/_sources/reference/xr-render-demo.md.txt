@@ -1,0 +1,234 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+# xr-render-demo — architecture
+
+This page describes the architecture of the xr-render-demo sample. For the
+user-facing
+quickstart, refer to the [repository README](https://github.com/NVIDIA/xr-ai/blob/main/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr).
+For inference-server mechanics shared with other samples, refer to
+[`docs/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/ai-services.md).
+
+## Process stack
+
+The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) starts
+its processes concurrently. There is no startup ordering — every process
+must tolerate peers that are not yet ready. `run_stack` is fail-fast: any
+exit terminates the whole stack.
+
+| Role | Directory | Command | Port |
+|---|---|---|---|
+| hub | `server-runtime/` | `xr_media_hub` | 8080 (https + wss /rtc proxy); LiveKit 7880 stays on 127.0.0.1 |
+| cloudxr | `cloudxr-runtime/` | `cloudxr_runtime` | 48322 (WSS proxy) |
+| stt | `ai-services/stt-server/` | `stt_server` | 8103 |
+| tts | `ai-services/tts/piper/` | `piper_tts_server` | 8105 |
+| vlm | `ai-services/vlm-server/` | `vlm_server` | 8100 |
+| agent-llm | `ai-services/llm/nemotron3_nano/` | `nemotron3_nano_llm_server` | 8107 |
+| video-memory | `services/video-memory-service/` | `video_memory_service` | 8310 (recorded-video typed RPC) |
+| scene | `agent-samples/xr-render-demo/scene/` | `xr_render_scene` | 8320 (typed RPC) |
+| openxr-service | `services/openxr-service/` | `openxr_service` | 8330 (typed RPC) |
+| worker | `agent-samples/xr-render-demo/worker/` | `xr_render_demo_worker` | — |
+
+Before starting the stack, the orchestrator runs two setup steps:
+
+- **Web vendor bundle** — builds the CloudXR + LiveKit ESM bundle via
+  `client-samples/web-xr-build/build.sh` (skipped if already present;
+  requires `npm`). Built only for WebRTC device profiles; native profiles
+  never serve the web page, so the build (and its npm dependency) is skipped.
+- **LOVR binary** — auto-downloads LOVR v0.18.0 AppImage to `deps/lovr/` if
+  not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
+  `lovr_bin:` in `scene/scene_service.yaml` → cached AppImage → fresh download.
+
+## GPU pinning for the XR side
+
+`gpu_index` (int) in `yaml/cloudxr_runtime.yaml` selects the physical GPU
+that the CloudXR compositor pins to. The cloudxr-runtime wrapper translates
+the index to a PCI bus address via `nvidia-smi` and sets three selectors
+(`CUDA_VISIBLE_DEVICES`, `VK_LOADER_DEVICE_SELECT`, `DRI_PRIME`) on its own
+environment before spawning the native service. All three are required: the
+compositor runs on Vulkan and needs the matching CUDA device for interop,
+so on a multi-GPU host Vulkan and CUDA can otherwise land on different
+physical GPUs.
+
+The same three selectors are appended to `cloudxr.env` (under
+`~/.cloudxr/run/`). The scene process sources that file when it spawns LOVR, so
+LOVR inherits the pin; `openxr-service` picks it up the same way.
+
+If `nvidia-smi` is missing, fails, reports no GPUs, or does not list the
+requested index, the wrapper logs a warning and skips pinning rather than
+failing startup.
+
+The corresponding model-side fields live under
+`agent-samples/model-servers/yaml/<profile>/`. Set them to different GPUs so
+the XR compositor and the agentic LLM do not share a card.
+
+## Worker configuration
+
+The worker reads two YAML files:
+
+- `yaml/xr_render_demo_worker.yaml` — native capability endpoints, text-memory directory, and VAD tunables.
+- `yaml/models.yaml` (path set by `models_yaml:` in the worker YAML) — model
+  endpoint declarations consumed by `xr-ai-models`.  Each entry maps a logical
+  name (`llm`, `agent_llm`, `stt`, `tts`, `vlm`) to a `kind: preset:<name>`
+  and a `base_url`.  Edit this file to change which model runs where without
+  touching the worker code.
+
+## The LLM server
+
+### NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4 — port 8107
+
+A vLLM `execvp` shim: a small Python wrapper that reads YAML configuration,
+sets `HF_HOME` and token environment variables, then `os.execvp`s into `vllm serve`. The
+Python process is replaced by vLLM; vLLM owns the HTTP API, weight loading,
+and tool calling from that point on.
+
+`vllm serve` with `--tool-call-parser qwen3_coder` and
+`--reasoning-parser nano_v3` (plugin auto-fetched from the model card into
+`model_cache`). `enforce_eager` defaults to `true`: CUDA graph capture +
+FlashInfer FP4 MoE autotune silently takes 3–8 minutes on cold start without
+it. Requires a Blackwell GPU (B200, RTX PRO 6000, or Jetson Thor) for native
+FP4; swap to the BF16 variant for Hopper or Ampere.
+
+The server backs the `agent_llm` role in `yaml/models.yaml`, which the
+supervisor and all five subagents share as `scene_llm`.
+
+## VLM — Cosmos-Reason1-7B
+
+Port 8100 (`vlm-server`).
+
+Loaded in-process by `vlm-server` via HuggingFace transformers
+(Qwen2.5-VL architecture). `<think>…</think>` blocks are stripped before
+returning. Native vision functions read recorded images or acquire a current
+participant frame, encode it as an image URL, and invoke the shared
+`xr-ai-models` VLM service.
+
+There is a deliberate startup ordering constraint: the worker's
+`wait_for_services` probe blocks on the VLM's `/health` endpoint, which
+returns 200 only after weights are fully loaded. This ensures GPU 0 memory
+has settled before LOVR starts its Vulkan device, preventing a transient
+OOM race.
+
+## STT — parakeet-tdt-0.6b-v3
+
+Served on port 8103. The voice runtime's VAD segments utterances and sends
+16 kHz int16 audio for transcription; transcripts feed the voice gate and
+then the supervisor.
+
+## TTS — Piper
+
+Served on port 8105. The voice runtime streams the supervisor's final
+reply to Piper and returns the audio to the participant.
+
+## Voice runtime
+
+The worker runs on `xr-ai-voice`'s `VoiceSession`: hub audio → VAD → STT →
+voice gate → handler → streaming TTS → return audio. The scene supervisor is
+attached with `as_voice_handler`, and `record_voice_transcripts` persists
+each completed turn into native text memory, which `recall_conversation`
+reads back as the `[Recent conversation]` block. A new utterance while TTS
+is playing supersedes the previous turn.
+
+## Supervisor and subagents
+
+At worker startup, a NAT `WorkflowBuilder` constructs the sample-local scene
+function groups plus tracking, spatial-math, vision, video-memory, and
+text-memory functions, then registers five focused subagents and one
+supervisor over them (`worker/xr_render_demo_worker/`):
+
+- **placement_agent** moves existing objects: user-relative moves, nudges,
+  anchored moves, containment, midpoints, swaps, undo via `[Recent moves]`.
+- **object_agent** creates, removes, resizes, duplicates, and reshapes.
+- **appearance_agent** recolors.
+- **vision_agent** answers physical-world questions through the VLM (live or
+  recorded frames) and degrades to "no visual fact available" when the
+  camera is absent.
+- **memory_agent** recalls conversation older than the recent-turns block.
+
+The supervisor is a `ToolCallAgentWorkflow` whose tools are the five
+subagents. Each turn it receives the scene state, the participant's recent
+moves, and the recent conversation, then delegates focused instructions.
+When a turn ends with no verified scene change and was not a pure
+conversational question, one verification pass re-runs the supervisor with
+that fact.
+
+## Deterministic operations layer
+
+Subagents do not call leaf scene functions directly for mutations; they call
+composed operations (`spatial_ops.py`) that take only semantic arguments and
+do the resolution and geometry in code:
+
+- **Reference resolution**: object arguments (`object_words`,
+  `anchor_words`) accept the instruction's own words. Ids resolve exactly;
+  descriptions resolve by shape word, transcription-mangled noun
+  (difflib), and color (nearest RGB with a rejection threshold); an id with
+  a synonym prefix ("cube-39" for box-39) maps to the real id. Nothing
+  matching or several matching returns an error the agent relays as a
+  question.
+- **Color and shape resolution**: `color_words` and `prim_type` are quoted
+  verbatim from the instruction and mapped to RGB / renderer primitives in
+  code, including misspellings ("blew", "spear"), numeric RGB triples from
+  vision facts, and copies ("same as cone-7").
+- **Guards**: a `TurnGuard` halts further mutations of existing objects in
+  a delegation after any failed lookup, a turn-scoped `CreationLedger`
+  dedupes retried creations, and self-anchored moves are rejected.
+- **Truncation handling**: a transcript ending in a dangling article or
+  preposition ("Put the sphere on the") never reaches the model; the
+  supervisor asks for the missing words in code, and the follow-up turn is
+  spliced back onto the cut-off request (cancellations and fresh commands
+  are recognized and handled directly).
+- **Geometry**: user-relative and anchored positions come from the shared
+  spatial-math functions; no coordinate round-trips through the model.
+
+## Prompt structure
+
+Each agent has its own prompt (`supervisor_prompt.txt`,
+`agents/*/prompt.txt`), loaded once at worker startup. Restart the stack
+after any prompt change. The prompts are template- and contrast-pair-driven;
+the current agent model follows worked examples and ignores prohibitions, so
+every refuse-example is paired with a proceed-example, and prompt examples
+must stay disjoint from eval-case vocabulary (enforced by the eval's startup
+audit).
+
+## XR session lifecycle
+
+CloudXR returns `XR_ERROR_FORM_FACTOR_UNAVAILABLE` from `xrGetSystem` until
+a streaming client connects. LOVR cannot start before then.
+
+```
+1. User opens https://<host>:8080, grants mic + XR permissions
+2. User clicks "Launch XR"
+3. Client sends `xr.session.started` data message → hub IPC → worker
+4. Worker invokes native `start_xr`
+   → scene process spawns LOVR + waits for CloudXR in a background task
+5. Worker polls `get_health` every 500 ms (up to 120s)
+   lovr_started: true  → send `render.ready` to client → XR session unlocked
+   spawn_error: "..."  → log + abort
+6. On reconnect / refresh: `xr.session.started` arrives again
+   → `_xr_started` is already True → skip spawn, send `render.ready`
+   immediately
+```
+
+## Eval harness
+
+Four regression tiers run against the live agent LLM. The three offline
+tiers never touch LOVR; the live tier drives the running stack and does
+mutate the scene: supervisor routing (faked subagents), subagent components (one
+real agent over faked leaf functions), the end-to-end corpus plus a basics
+battery, and live drivers that join the running stack as synthetic
+participants. See
+`agent-samples/xr-render-demo/eval/README.md`
+for tiers, commands, and case formats. Run the corpus with:
+
+```bash
+uv run --project agent-samples/xr-render-demo/eval xr_render_demo_eval
+```
+
+### Prompt/eval overlap audit
+
+Per `AGENTS.md` "Prompt-driven samples", the harness audits every worker
+prompt against every tier's case inputs at startup and warns on overlap:
+verbatim case utterances, case fixture ids, and any quoted prompt example
+pairing an eval-vocabulary color with an eval-vocabulary shape. Clearing a
+warning means changing the prompt, not the case.
