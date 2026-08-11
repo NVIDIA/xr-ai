@@ -61,6 +61,10 @@ _BANNER = "━" * 56
 
 _CONTAINER_NAME = "xr-ai-livekit-server"
 
+# Pinned LiveKit server image so builds are reproducible instead of tracking
+# the floating ":latest" tag. Bump deliberately after validating a release.
+_LIVEKIT_IMAGE = "livekit/livekit-server:v1.13.5"
+
 
 class LiveKitDocker:
     def __init__(self, cfg: LiveKitConnectorConfig) -> None:
@@ -95,7 +99,7 @@ class LiveKitDocker:
                 "--name", _CONTAINER_NAME,
                 "--network", "host",
                 "-v", f"{cfg_path}:/etc/livekit.yaml:ro",
-                "livekit/livekit-server:latest",
+                _LIVEKIT_IMAGE,
                 "--config", "/etc/livekit.yaml",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
