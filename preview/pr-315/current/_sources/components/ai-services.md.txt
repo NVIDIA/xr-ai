@@ -272,15 +272,27 @@ The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 **survive stack restarts by design**. Each persistent wrapper script checks its
 health endpoint before spawning vLLM:
 
-- **Already running** → touch the ready file immediately, then idle. Stack is
-  ready in seconds; no model reload.
-- **Not running** → spawn vLLM normally, wait for `/health`, touch ready file.
+- **Already running with a matching launch fingerprint** → touch the ready file
+  immediately, then idle. Stack is ready in seconds; no model reload.
+- **Already running with changed or legacy configuration** → stop the
+  repository-owned runtime and recreate it from the current YAML.
+- **Healthy endpoint without xr-ai ownership markers** → fail without stopping
+  or reusing the listener.
+- **Matching Docker container still starting or stopped** → continue waiting or
+  restart it without issuing a conflicting `docker run`.
+- **Not running** → spawn vLLM normally, wait for `/health`, then touch the
+  ready file.
 
 In pip mode, vLLM is spawned with `start_new_session=True` so the launcher's
-`killpg()` does not reach it on shutdown. In docker mode, the container is
-launched detached (`docker run -d --name xr-ai-vllm-<service>`) so it
-similarly outlives the wrapper. Either way the wrapper exits cleanly and
-vLLM keeps running.
+`killpg()` does not reach it on shutdown. In Docker mode, the foreground
+`docker run` client uses a separate session and the container remains owned by
+Docker. Either way vLLM keeps running after the orchestrator exits.
+
+The fingerprint covers the backend, model and complete vLLM command, model
+cache, GPU selection, and Docker image/bootstrap settings. Docker stores it as
+a container label; pip mode stores it in the managed process environment.
+Changing the default model therefore replaces a persisted older model instead
+of silently reusing it under the same served-model alias.
 
 **Stopping the persisted servers** — run from the sample directory:
 
@@ -344,8 +356,9 @@ Existing `~/.docker/config.json` entries take priority and are not overwritten.
 - Container is launched with `--network host --ipc host --runtime nvidia`
   (forwarding `NVIDIA_VISIBLE_DEVICES`), and `/bin/bash` overrides the image
   entrypoint so setup installs run before `vllm serve`.
-- Failed stopped containers are recreated because Docker cannot change their
-  recorded entrypoint or command.
+- A stopped container is restarted only when its fingerprint still matches;
+  stale or unlabeled containers are recreated because Docker cannot change
+  their recorded entrypoint or command.
 - The host `model_cache` is bind-mounted at the same path inside the
   container and `HF_HOME` is set to it, so weights cached by pip mode are
   reused by docker mode and vice versa.
