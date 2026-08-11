@@ -489,8 +489,10 @@ frame = await frames.get("participant-1")
 | `send_return_data(msg)`              | a `DataMessage` back to a client (text or binary on a topic) |
 | `send_return_audio(chunk)`           | an `AudioChunk` of agent or TTS audio to a client |
 | `flush_return_audio(pid)`            | drops audio queued at the hub for `pid` — interrupts the agent's own playback |
-| `set_status(status, pid=None)`       | records and publishes agent status (e.g. `"idle"`, `"processing"`) on the reserved `_agent.status` channel; broadcasts when `pid` is omitted |
+| `set_status(status, pid=None)`       | records and publishes *this agent's* status (`"loading"`, `"processing"`, `"idle"`, `"ready"`) on the reserved `_agent.status` channel; broadcasts when `pid` is omitted |
+| `mark_ready()`                       | shorthand for `set_status("ready")` — declares this agent available to serve requests |
 | `republish_statuses()`               | re-sends each connected participant's current agent status so a missed one-shot update self-heals |
+| `wait_for_subscriptions(timeout=5.0)`| blocks until the hub has applied every subscription issued so far; returns `False` on timeout |
 | `request_roster()`                   | asks the hub to replay "joined" events for all current pids |
 
 ### IPC message types
@@ -512,6 +514,44 @@ without breaking existing code.
 | `FRAME_DATA`         | hub → processor | pixel data delivered to the requester |
 | `RETURN_AUDIO_FLUSH` | processor → hub | drop audio queued for a participant's return track |
 | `ROSTER_REQUEST`     | processor → hub | replay joined-events for the current roster |
+| `SUBSCRIPTION_PROBE` | processor → hub → processor | round-trip token proving pending SUBSCRIBEs are live |
+| `AGENT_PRESENCE`     | processor → hub | readiness participation, plus the participants the agent answers for |
+
+### Readiness contract
+
+`_agent.status` carries one scalar per client, and the hub owns it. Each agent
+reports only its own state, tagged with its `agent_id`; the hub folds every
+*responsible* agent's state into the status a client sees, taking the least
+available: `loading` > `processing` > `idle` > `ready`. An agent that has
+registered but not yet reported counts as `loading`, so one ready agent cannot
+make the room look ready while another is still starting up or busy.
+
+Two things bound who gets a say:
+
+- **Participation is opt-in.** Only endpoints constructed with
+  `announces_readiness=True` register. `ProcessorEndpoint` is the generic
+  downstream endpoint — analytics, recorders, MCP servers — and a processor
+  that never reports status must not hold clients at `loading`. The voice
+  transports opt in; passive processors leave it off, and `set_status` is a
+  logged no-op for them.
+- **Scope follows subscription.** An endpoint answers for exactly the
+  participants it has a live subscription for: every participant when
+  `auto_subscribe=True`, otherwise the pids passed to `subscribe()`. Scope
+  travels to the hub on `AGENT_PRESENCE` and is re-announced when it changes.
+  An agent pinned to one pid neither marks another client ready nor holds that
+  client back.
+
+Availability also implies routability. `set_status` publishes only for
+participants in scope, and waits behind `wait_for_subscriptions` before doing
+so, so a client is told `ready` only once the hub has applied this endpoint's
+SUBSCRIBE for it — otherwise the client's first request would land in the
+PUB/SUB slow-joiner window and be dropped. The barrier proves issued
+subscriptions are live; the scope check proves one was issued for that
+participant. Agents that need the barrier for their own purposes can await
+`wait_for_subscriptions()` directly.
+
+`agent_id` defaults to `$XR_AI_AGENT_ID`, falling back to a per-process value;
+pass `agent_id=` to `ProcessorEndpoint` to set it explicitly.
 
 ### Shared memory
 

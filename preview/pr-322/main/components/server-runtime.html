@@ -581,6 +581,29 @@ to the target participant, so it is never broadcast to peers. Return audio is
 paced into LiveKit at audio rate by a per-participant pipe, which a flush can
 drain to interrupt playback.</p>
 </section>
+<section id="agent-status-aggregation">
+<h2>Agent status aggregation<a class="headerlink" href="#agent-status-aggregation" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> is the one exception to straight-through return data. The hub
+does not forward an agent’s status to the client — it records it per
+<code class="docutils literal notranslate"><span class="pre">(agent_id,</span> <span class="pre">participant_id)</span></code> and publishes the aggregate, taking the least
+available state across the agents <em>responsible for that participant</em>:
+<code class="docutils literal notranslate"><span class="pre">loading</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">processing</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">idle</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">ready</span></code>. Agents that opt into readiness
+announce themselves with <code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> when their receive loop starts and
+detach when it stops, so an agent that is still loading holds the room at
+<code class="docutils literal notranslate"><span class="pre">loading</span></code> rather than being masked by a peer that is already ready.</p>
+<p><code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> carries the agent’s scope — the participants it answers for,
+or <em>None</em> for all of them. A participant with no responsible agent reads
+<code class="docutils literal notranslate"><span class="pre">loading</span></code>. Passive processors never register, and an agent scoped to one pid
+is excluded from every other pid’s aggregate. Repeat aggregates are suppressed, so the agents’ periodic
+re-announcements do not become per-agent client traffic.</p>
+<p>A status payload without an <code class="docutils literal notranslate"><span class="pre">agent_id</span></code> comes from an SDK predating
+aggregation and is forwarded verbatim.</p>
+<p>The hub also answers <code class="docutils literal notranslate"><span class="pre">SUBSCRIPTION_PROBE</span></code> by echoing the token on
+<code class="docutils literal notranslate"><span class="pre">_probe.{token}</span></code>. Subscription commands from one socket are applied in order,
+so the echo tells a processor that its pending SUBSCRIBEs are live — that is
+what keeps a client from being told <code class="docutils literal notranslate"><span class="pre">ready</span></code> before its traffic can reach the
+agent.</p>
+</section>
 <section id="same-origin-wss-proxy">
 <h2>Same-origin wss proxy<a class="headerlink" href="#same-origin-wss-proxy" title="Link to this heading">#</a></h2>
 <p>LiveKit server itself runs plain <code class="docutils literal notranslate"><span class="pre">ws://</span></code> on the loopback interface
@@ -668,6 +691,7 @@ returns a plain
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#internal-livekit-transport">Internal LiveKit transport</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ipc-boundary-to-agents">IPC boundary to agents</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-participant-return-path">Per-participant return path</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-status-aggregation">Agent status aggregation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#same-origin-wss-proxy">Same-origin wss proxy</a></li>
 </ul>
   </nav></div>

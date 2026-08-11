@@ -184,6 +184,32 @@ to the target participant, so it is never broadcast to peers. Return audio is
 paced into LiveKit at audio rate by a per-participant pipe, which a flush can
 drain to interrupt playback.
 
+## Agent status aggregation
+
+`_agent.status` is the one exception to straight-through return data. The hub
+does not forward an agent's status to the client — it records it per
+`(agent_id, participant_id)` and publishes the aggregate, taking the least
+available state across the agents *responsible for that participant*:
+`loading` > `processing` > `idle` > `ready`. Agents that opt into readiness
+announce themselves with `AGENT_PRESENCE` when their receive loop starts and
+detach when it stops, so an agent that is still loading holds the room at
+`loading` rather than being masked by a peer that is already ready.
+
+`AGENT_PRESENCE` carries the agent's scope — the participants it answers for,
+or *None* for all of them. A participant with no responsible agent reads
+`loading`. Passive processors never register, and an agent scoped to one pid
+is excluded from every other pid's aggregate. Repeat aggregates are suppressed, so the agents' periodic
+re-announcements do not become per-agent client traffic.
+
+A status payload without an `agent_id` comes from an SDK predating
+aggregation and is forwarded verbatim.
+
+The hub also answers `SUBSCRIPTION_PROBE` by echoing the token on
+`_probe.{token}`. Subscription commands from one socket are applied in order,
+so the echo tells a processor that its pending SUBSCRIBEs are live — that is
+what keeps a client from being told `ready` before its traffic can reach the
+agent.
+
 ## Same-origin wss proxy
 
 LiveKit server itself runs plain `ws://` on the loopback interface
