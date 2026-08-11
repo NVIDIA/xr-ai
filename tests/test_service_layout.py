@@ -102,6 +102,7 @@ def _model_cache_default(path: Path) -> str:
 
 def test_model_services_are_direct_children() -> None:
     services = _ROOT / "services"
+    tracked_paths = _tracked_paths()
 
     discovered = {
         project.name
@@ -113,17 +114,20 @@ def test_model_services_are_direct_children() -> None:
         )
     }
     assert _MODEL_SERVICES.keys() == discovered
+    services_path = Path("services")
     nested_projects = sorted(
-        path.relative_to(services)
-        for path in services.rglob("pyproject.toml")
-        if path.parent.parent != services
+        path.relative_to(services_path)
+        for path in tracked_paths
+        if path.name == "pyproject.toml"
+        and path.is_relative_to(services_path)
+        and path.parent.parent != services_path
     )
     assert not nested_projects, f"nested service projects remain: {nested_projects}"
 
     legacy_projects = tuple(Path(project) for project in _LEGACY_PROJECTS)
     stale = [
         path
-        for path in _tracked_paths()
+        for path in tracked_paths
         if any(path.is_relative_to(project) for project in legacy_projects)
     ]
     assert not stale, f"tracked legacy model-service files remain: {stale}"
