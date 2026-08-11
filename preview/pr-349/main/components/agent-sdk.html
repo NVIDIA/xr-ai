@@ -415,9 +415,9 @@ the same IPC-start request-readiness boundary as <code class="docutils literal n
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code></strong> — the minimal pyzmq + msgpack IPC library every agent uses
 to talk to the XR-Media-Hub (refer to <a class="reference internal" href="server-runtime.html"><span class="doc">Server runtime</span></a>). No LiveKit or
 FastAPI dependency.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — typed in-process XR functions and the model bridge used by
-NAT’s built-in agents. NAT composition stays in process while all model I/O
-continues through <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — Relay-managed native tools, the generic <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code>
+protocol, and a basic tool-driven agent. Its legacy extras retain existing
+NeMo Agent Toolkit function groups while their concrete capabilities migrate.</p></li>
 </ul>
 <hr class="docutils" />
 <section id="xr-ai-models">
@@ -554,7 +554,8 @@ legacy flat attributes remain available as read-only compatibility aliases.</p>
     <span class="n">capabilities</span><span class="p">:</span> <span class="n">Capabilities</span>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">chat</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                    <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">enable_thinking</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                   <span class="n">thinking_budget</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
+                   <span class="n">thinking_budget</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                   <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">health</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
@@ -613,9 +614,24 @@ protocols or callers.</p>
 </section>
 </section>
 <hr class="docutils" />
+<section id="native-tools-and-agents">
+<h2>Native tools and agents<a class="headerlink" href="#native-tools-and-agents" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code> is the native migration target for model-driven XR composition.
+<code class="docutils literal notranslate"><span class="pre">Tool</span></code> declares Pydantic request and response boundaries and executes its
+handler through NeMo Relay. <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> is the generic async-turn protocol;
+<code class="docutils literal notranslate"><span class="pre">xr_ai_nat.agents.Agent</span></code> is its bounded, stateless tool-loop implementation.
+It builds OpenAI-compatible tool definitions from those schemas and sends each
+model request through an injected <code class="docutils literal notranslate"><span class="pre">LLMService</span></code>.</p>
+<p>Relay scopes each turn and manages the LLM and tool lifecycles. The base package
+does not add an HTTP client, a Hub transport, or an implicit conversation store.
+Applications use <code class="docutils literal notranslate"><span class="pre">as_agent_tool(...)</span></code> to expose any <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> as a
+registered tool; foreground selection, workflow state, and background work stay
+explicit in application code.</p>
+</section>
 <section id="xr-ai-nat-model-bridge">
 <h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>
-<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-nat[agents]</span></code> when a workflow uses NAT’s built-in agent graphs.
+<p>Unmigrated workflows install <code class="docutils literal notranslate"><span class="pre">xr-ai-nat[agents]</span></code> when they use NAT’s built-in
+agent graphs.
 <code class="docutils literal notranslate"><span class="pre">ModelsLLMConfig</span></code> adapts an <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> <code class="docutils literal notranslate"><span class="pre">LLMService</span></code> to NAT’s LangChain
 client contract:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nat.plugin_api</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMRef</span>
@@ -1153,6 +1169,7 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-agents">Native tools and agents</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-nat-model-bridge">xr-ai-nat model bridge</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-voice">xr-ai-voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-pipecat">xr-ai-pipecat</a><ul class="nav section-nav flex-column">

@@ -572,7 +572,7 @@ owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voic
 <section id="browser-client-connects-but-no-audio-or-no-video">
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
 <p><strong>Most common cause:</strong> firewall blocking WebRTC media on UDP 7882 (LiveKit).</p>
-<p><strong>Fix:</strong> open ports per <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/05c2619a68fee78a926f214aaf8d6601550c9772/docs/networking.md"><code class="docutils literal notranslate"><span class="pre">docs/networking.md</span></code></a>. The web client
+<p><strong>Fix:</strong> open ports per <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/3dc056e20302dbb6af334ab8ebc2e7417758029f/docs/networking.md"><code class="docutils literal notranslate"><span class="pre">docs/networking.md</span></code></a>. The web client
 will appear to connect (signaling on 7880 succeeds) but media frames are
 silently dropped without 7882.</p>
 </section>
@@ -670,7 +670,7 @@ flip <code class="docutils literal notranslate"><span class="pre">enforce_eager:
 <p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
 restarts so model weights stay loaded across worker crashes and debug
-restarts. See <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/05c2619a68fee78a926f214aaf8d6601550c9772/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a> → <em>vLLM model
+restarts. See <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/3dc056e20302dbb6af334ab8ebc2e7417758029f/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a> → <em>vLLM model
 persistence</em>.</p>
 <p><strong>Fix:</strong> to fully release VRAM:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai/agent-samples/xr-render-demo
@@ -692,7 +692,7 @@ the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).</p>
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can
 stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart
-(see <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/05c2619a68fee78a926f214aaf8d6601550c9772/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>).</p>
+(see <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/3dc056e20302dbb6af334ab8ebc2e7417758029f/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>).</p>
 </section>
 </section>
 </section>
