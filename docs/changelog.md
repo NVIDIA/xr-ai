@@ -9,6 +9,23 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-11 — Native tools own agent composition; Relay owns their execution
+
+NeMo Agent Toolkit is being retired from XR AI in focused migrations rather
+than a framework-wide swap. `xr-ai-nat` is the public, toolkit-independent
+native tools layer: typed tools and bounded tool-driven agents. A model is a
+private implementation dependency of a model-backed tool or agent, reached only
+through `xr-ai-models`; voice, text, and background triggers invoke registered
+tools rather than model clients. NeMo Relay runs the tool and model lifecycles,
+supplying middleware, guardrails, and telemetry.
+
+The existing NeMo Agent Toolkit function groups remain behind legacy extras
+while they migrate. Relay does not own XR application routing, participant
+state, media IPC, or deployment. The tea-making sample defines the required
+foreground/background application behavior for the migration, while NeMo
+Platform and NeMo Fabric remain optional evaluation and harness deployment
+targets outside the local worker dependency graph.
+
 ### 2026-08-10 — Client readiness is hub-owned and routability-gated
 
 Process readiness and client readiness were the same signal, and both were

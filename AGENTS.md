@@ -17,7 +17,7 @@ agent-sdk/          # Five packages:
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
                     #   xr-ai-voice        — voice runtime (VoiceSession); introduced alongside xr-ai-pipecat
-                    #   xr-ai-nat          — typed, in-process NAT functions for XR capabilities
+                    #   xr-ai-nat          — native Relay-managed tools; legacy NAT compatibility during migration
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 services/           # XR hub, CloudXR, model-serving, and typed capability services
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, vec, video, vlm
@@ -60,9 +60,12 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **Workers never import from `xr_media_hub` or `xr_ai_launcher`.** Use the
   public `xr_ai_hub`, `xr_ai_models`, `xr_ai_nat`, and `xr_ai_voice` SDK
   surfaces plus task-specific libraries (numpy, torch, …).
-- **Agentic functions are NAT-first and in-process.** Reusable deterministic
-  functions live in `xr-ai-nat` as typed NAT function groups. Existing MCP
-  servers remain compatibility surfaces while their capabilities migrate.
+- **Agentic functions are native and in-process.** New and migrated tools live
+  in `xr-ai-nat`; every tool and tool-driven agent lifecycle passes through
+  NeMo Relay, and all model I/O remains in `xr-ai-models`. Its legacy extras
+  retain NeMo Agent Toolkit compatibility only while existing function groups
+  migrate. Existing MCP servers remain compatibility surfaces while their
+  capabilities migrate.
 - **RAG is a native typed capability.** `rag-service` owns document chunking,
   embedding caches, and dense retrieval behind private msgpack/ZMQ;
   `RAGFunctionsConfig` exposes it as the `xr_rag` NAT function group.

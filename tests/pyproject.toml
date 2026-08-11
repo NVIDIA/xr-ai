@@ -14,7 +14,7 @@ dependencies = [
     # Pulled in via editable installs of the workspace packages.
     "xr-ai-hub-client",
     "xr-ai-models",
-    "xr-ai-nat[agents,services,vision]",
+    "xr-ai-nat[agents,relay,services,vision]",
     "xr-ai-pipecat",
     "xr-ai-voice",
     "xr-media-hub",

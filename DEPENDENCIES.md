@@ -118,15 +118,22 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     metadata while the existing flat YAML schema remains valid.
 
 xr-ai-nat  (agent-sdk/xr-ai-nat/)
-    └── nvidia-nat-core ==1.8.0
+    └── nemo-relay >=0.7.2,<0.8
     └── pydantic >=2.10
-    └── [agents] nvidia-nat-langchain ==1.8.0, xr-ai-models [editable: ../xr-ai-models]
-    └── [mcp] fastmcp >=3.4,<4
-    └── [services] msgpack >=1.0, pyzmq >=27.0
-    └── [vision] httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
-    └── [voice] xr-ai-voice [editable: ../xr-ai-voice]
-    Typed, in-process NeMo Agent Toolkit functions for XR capabilities. The
-    ``xr_spatial_math`` function group accepts explicit coordinate frames and
+    └── [relay] xr-ai-models [editable: ../xr-ai-models]
+    └── [live-vision] numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
+    └── [agents] nvidia-nat-core ==1.8.0, nvidia-nat-langchain ==1.8.0, xr-ai-models [editable: ../xr-ai-models]
+    └── [mcp] nvidia-nat-core ==1.8.0, fastmcp >=3.4,<4
+    └── [services] nvidia-nat-core ==1.8.0, msgpack >=1.0, pyzmq >=27.0
+    └── [vision] nvidia-nat-core ==1.8.0, httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
+    └── [voice] nvidia-nat-core ==1.8.0, xr-ai-voice [editable: ../xr-ai-voice]
+    The base package is the toolkit-independent native tools layer: Pydantic
+    request and response models, Relay-managed execution, and a bounded
+    tool-driven agent over `xr-ai-models`. The ``[relay]`` and
+    ``[live-vision]`` extras add model-backed tools without selecting NeMo Agent
+    Toolkit. The existing function groups remain behind legacy compatibility
+    extras while they migrate. The ``xr_spatial_math`` function group accepts
+    explicit coordinate frames and
     performs deterministic spatial calculations without OpenXR, model, or MCP
     dependencies. ``xr_text_memory`` owns persistent per-source JSONL text
     history, and ``xr_conversation_memory`` composes it into a participant-
@@ -324,7 +331,7 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
 xr-ai-tests  (tests/)
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub-client]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
-    └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
+    └── xr-ai-nat[agents,relay,services,vision] [editable: ../agent-sdk/xr-ai-nat]
     └── xr-rag-service [editable: ../services/rag-service]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]

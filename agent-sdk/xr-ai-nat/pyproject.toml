@@ -8,19 +8,21 @@ build-backend = "hatchling.build"
 [project]
 name = "xr-ai-nat"
 version = "0.1.0"
-description = "NVIDIA NeMo Agent Toolkit functions for XR AI."
+description = "Native Relay-managed tools and legacy NeMo Agent Toolkit compatibility for XR AI."
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "nvidia-nat-core==1.8.0",
+    "nemo-relay>=0.7.2,<0.8",
     "pydantic>=2.10",
 ]
 
 [project.optional-dependencies]
-agents = ["nvidia-nat-langchain==1.8.0", "xr-ai-models"]
-mcp = ["fastmcp>=3.4,<4"]
-services = ["msgpack>=1.0", "pyzmq>=27.0"]
-vision = ["httpx>=0.27", "numpy>=1.24", "Pillow>=10.0", "xr-ai-hub-client", "xr-ai-models"]
-voice = ["xr-ai-voice"]
+relay = ["xr-ai-models"]
+live-vision = ["numpy>=1.24", "Pillow>=10.0", "xr-ai-hub-client", "xr-ai-models"]
+agents = ["nvidia-nat-core==1.8.0", "nvidia-nat-langchain==1.8.0", "xr-ai-models"]
+mcp = ["nvidia-nat-core==1.8.0", "fastmcp>=3.4,<4"]
+services = ["nvidia-nat-core==1.8.0", "msgpack>=1.0", "pyzmq>=27.0"]
+vision = ["nvidia-nat-core==1.8.0", "httpx>=0.27", "numpy>=1.24", "Pillow>=10.0", "xr-ai-hub-client", "xr-ai-models"]
+voice = ["nvidia-nat-core==1.8.0", "xr-ai-voice"]
 
 [project.entry-points."nat.plugins"]
 xr_ai_nat_llm = "xr_ai_nat.llm.config"

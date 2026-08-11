@@ -21,9 +21,9 @@ from:
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
-- **`xr-ai-nat`** — typed in-process XR functions and the model bridge used by
-  NAT's built-in agents. NAT composition stays in process while all model I/O
-  continues through `xr-ai-models`.
+- **`xr-ai-nat`** — Relay-managed native tools and tool-driven agents. Its
+  legacy extras retain existing NeMo Agent Toolkit function groups while their
+  concrete capabilities migrate.
 
 ---
 
@@ -202,9 +202,24 @@ The clients can be exercised without a GPU.
 
 ---
 
+## Native tools and agents
+
+`xr-ai-nat` is the native migration target for model-driven XR composition.
+`Tool` declares Pydantic request and response boundaries and executes its
+handler through NeMo Relay. `xr_ai_nat.agents.Agent` builds OpenAI-compatible
+tool definitions from those schemas, sends each model request through an
+injected `LLMService`, and limits the number of model calls in one stateless
+turn.
+
+Relay scopes each turn and manages the LLM and tool lifecycles. The base package
+does not add an HTTP client, a Hub transport, or an implicit conversation store.
+Applications expose agents as registered tools; foreground selection, workflow
+state, and background work stay explicit in application code.
+
 ## xr-ai-nat model bridge
 
-Install `xr-ai-nat[agents]` when a workflow uses NAT's built-in agent graphs.
+Unmigrated workflows install `xr-ai-nat[agents]` when they use NAT's built-in
+agent graphs.
 `ModelsLLMConfig` adapts an `xr-ai-models` `LLMService` to NAT's LangChain
 client contract:
 
