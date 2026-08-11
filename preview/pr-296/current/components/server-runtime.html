@@ -563,11 +563,15 @@ drain to interrupt playback.</p>
 <p><code class="docutils literal notranslate"><span class="pre">_agent.status</span></code> is the one exception to straight-through return data. The hub
 does not forward an agent’s status to the client — it records it per
 <code class="docutils literal notranslate"><span class="pre">(agent_id,</span> <span class="pre">participant_id)</span></code> and publishes the aggregate, taking the least
-available state across every attached agent: <code class="docutils literal notranslate"><span class="pre">loading</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">processing</span></code> &gt;
-<code class="docutils literal notranslate"><span class="pre">idle</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">ready</span></code>. Agents announce themselves with <code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> when their
-receive loop starts and detach when it stops, so an agent that is still
-loading holds the room at <code class="docutils literal notranslate"><span class="pre">loading</span></code> rather than being masked by a peer that is
-already ready. Repeat aggregates are suppressed, so the agents’ periodic
+available state across the agents <em>responsible for that participant</em>:
+<code class="docutils literal notranslate"><span class="pre">loading</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">processing</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">idle</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">ready</span></code>. Agents that opt into readiness
+announce themselves with <code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> when their receive loop starts and
+detach when it stops, so an agent that is still loading holds the room at
+<code class="docutils literal notranslate"><span class="pre">loading</span></code> rather than being masked by a peer that is already ready.</p>
+<p><code class="docutils literal notranslate"><span class="pre">AGENT_PRESENCE</span></code> carries the agent’s scope — the participants it answers for,
+or <em>None</em> for all of them. A participant with no responsible agent reads
+<code class="docutils literal notranslate"><span class="pre">loading</span></code>. Passive processors never register, and an agent scoped to one pid
+is excluded from every other pid’s aggregate. Repeat aggregates are suppressed, so the agents’ periodic
 re-announcements do not become per-agent client traffic.</p>
 <p>A status payload without an <code class="docutils literal notranslate"><span class="pre">agent_id</span></code> comes from an SDK predating
 aggregation and is forwarded verbatim.</p>

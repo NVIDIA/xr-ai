@@ -461,8 +461,8 @@ launcher shuts everything down, just as it would for a serial process.</p></li>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
     <span class="n">Parallel</span><span class="p">([</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span> <span class="s2">&quot;../../ai-services/stt-server&quot;</span><span class="p">,</span> <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
-        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span> <span class="s2">&quot;../../ai-services/tts/piper&quot;</span><span class="p">,</span>  <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/stt-server&quot;</span><span class="p">,</span> <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
+        <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/piper-tts&quot;</span><span class="p">,</span>  <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
     <span class="p">]),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
 <span class="p">]</span>
