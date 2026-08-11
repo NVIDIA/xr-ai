@@ -106,7 +106,7 @@ setups:
   was not exercised in the report.
 - **Mirrored networking collides with the token server**: Windows' IP Helper
   service occupies port 8000. Refer to the `token_server_port` note in
-  `server-runtime/xr_media_hub.yaml`.
+  `services/xr-media-hub/xr_media_hub.yaml`.
 
 ## Running on other GPUs
 

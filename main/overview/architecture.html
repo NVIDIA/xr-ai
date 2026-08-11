@@ -403,10 +403,9 @@
 <section id="top-level-layout">
 <h2>Top-level layout<a class="headerlink" href="#top-level-layout" title="Link to this heading">#</a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">-</span><span class="n">samples</span><span class="o">/</span>     <span class="c1"># Platform clients (Android, iOS/visionOS, Web)</span>
-<span class="n">server</span><span class="o">-</span><span class="n">runtime</span><span class="o">/</span>     <span class="c1"># XR-Media-Hub core + LiveKit transport</span>
 <span class="n">agent</span><span class="o">-</span><span class="n">sdk</span><span class="o">/</span>          <span class="c1"># IPC, model, NAT-function, and voice-pipeline SDK packages</span>
 <span class="n">utils</span><span class="o">/</span>              <span class="c1"># Shared infra: launcher, logging, vad, vllm, voicegate</span>
-<span class="n">services</span><span class="o">/</span>           <span class="c1"># CloudXR, model-serving, and long-running typed XR capability services</span>
+<span class="n">services</span><span class="o">/</span>           <span class="c1"># XR hub, CloudXR, model-serving, and typed XR capability services</span>
 <span class="n">agent</span><span class="o">-</span><span class="n">mcp</span><span class="o">-</span><span class="n">servers</span><span class="o">/</span>  <span class="c1"># Optional MCP compatibility adapters for non-NAT consumers</span>
 <span class="n">agent</span><span class="o">-</span><span class="n">samples</span><span class="o">/</span>      <span class="c1"># End-to-end agent demos</span>
 <span class="n">tests</span><span class="o">/</span>              <span class="c1"># Multi-client / multi-agent integration tests</span>
@@ -469,7 +468,7 @@ enforcement details.</p>
 <h2>Hub configuration<a class="headerlink" href="#hub-configuration" title="Link to this heading">#</a></h2>
 <p>Each sample provides its own <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> in its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory
 (e.g. <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/xr_media_hub.yaml</span></code>).
-<code class="docutils literal notranslate"><span class="pre">server-runtime/</span></code> also contains a reference copy documenting all available
+<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> also contains a reference copy documenting all available
 fields.</p>
 <p>Paths inside the YAML (e.g. <code class="docutils literal notranslate"><span class="pre">web_client_dir</span></code>) resolve relative to the YAML
 file’s own directory, not CWD. <code class="docutils literal notranslate"><span class="pre">HubLauncher</span></code> finds the YAML automatically by
