@@ -242,7 +242,7 @@ JSON profile is consumed by both the worker and orchestrator, so the local
 VLM process is omitted and `NGC_API_KEY` is requested automatically. Select
 `models.local.json` to switch back.
 
-### Self-hosted NIM containers (`models.nim_local.json`)
+### Self-hosted NIM containers (`models.vlm_llm_nim.json`)
 
 The same models can be pulled from NGC and served as **optimized NIM
 containers on your own GPUs**: same APIs as hosted NIM, no network hop, and
@@ -250,29 +250,34 @@ speech included. Self-hosted Riva speech NIMs are reached through the
 `riva_grpc` model kind (requires the `xr-ai-models[riva]` extra, already a
 dependency of the sample workers).
 
-Select the profile with `models_config: models.nim_local.json` in the worker
-YAML. Each entry in that profile deploys as a `nim_server` process
-(`services/nim-server`, a generic wrapper; the sample's
-`yaml/nim_<role>_server.yaml` picks the image and ports) in place of its
-local server, and the worker reads the role's entry from the same profile
-(`openai_compat` for LLM/VLM, `riva_grpc` with no `function_id` for speech).
-Both files ship ready-made in each sample. The container `image:` is the
-model, so swapping models is a `nim_<role>_server.yaml` edit plus the
-matching profile entry.
+The NIM containers are owned by the shared model-servers stack, exactly
+like the local vLLM servers. Its deployment profiles pick the mix: every
+`managed` entry launches as a `nim_server` process (`services/nim-server`, a
+generic wrapper; the per-GPU-profile `nim_<role>_server.yaml` picks the
+image and ports) or as a local server:
 
-Selection is per entry, not per profile: each model role independently picks
-a local server, a self-hosted NIM container, or a hosted endpoint through
-its own `adapter`/`endpoint`/`deployment` sections. The shipped profiles are
-presets, not a closed set; a mixed setup (say, local speech, hosted LLMs,
-and only the VLM as a NIM container) is a copy of a shipped profile with the
-relevant entries changed, saved under any name and selected with
-`models_config`. When mixing with entries `reused` from the
-model-servers stack, mind port overlaps: model-servers always starts all
-four servers, so give a NIM container a free port or drop the overlapping
-local server from the mix. Profiles size to the box: simple-vlm-example hosts
-speech as Riva NIM containers, while xr-render-demo's profile keeps speech
-local: Riva speech NIMs don't fit next to CloudXR + LOVR + the LLM/VLM
-NIMs on 2x48 GB.
+```bash
+uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
+```
+
+- `vlm_llm_nim`: the LLM and VLM as NIM containers, STT and embedding local. Pairs
+  with each sample's `models.vlm_llm_nim.json` (the sample marks the NIM
+  services `reused` and owns only its piper TTS).
+- `vlm_speech_nim`: Riva speech NIM containers plus the Cosmos NIM. Pairs with
+  simple-vlm-example's `models.vlm_speech_nim.json`. Mutually exclusive with
+  `vlm_llm_nim` on 2x48 GB: Riva speech NIMs don't fit next to CloudXR + LOVR + the
+  LLM/VLM NIMs there.
+
+The container `image:` is the model, so swapping models is a
+`nim_<role>_server.yaml` edit plus the matching profile entry. Selection is
+per entry, not per profile: each model role independently picks a local
+server, a self-hosted NIM container, or a hosted endpoint through its own
+`adapter`/`endpoint`/`deployment` sections. The shipped profiles are
+presets, not a closed set; a mixed setup is a copy of a shipped profile
+with the relevant entries changed, saved under any name and selected with
+`--models` (model-servers) or `models_config` (workers). When mixing, mind
+port overlaps: give a NIM container a free port or drop the overlapping
+local server from the profile.
 
 A self-hosted speech entry uses the Riva gRPC kind:
 
@@ -292,8 +297,9 @@ Requirements: docker + NVIDIA Container Toolkit, `NGC_API_KEY` (used for the
 `nvcr.io` image pull *and* by the container itself to download the
 GPU-matched optimized engine from NGC on first start; multi-GB, cached
 under `models/nim/` for later runs), and GPU capacity for every container.
-Set `cuda_visible_devices` in the `nim_*_server.yaml` files to spread
-containers across GPUs. Readiness gates on each container's
+`cuda_visible_devices` placement lives in the per-GPU-profile
+`nim_*_server.yaml` files (dual_48G_ada values are live-validated; the
+other profiles ship estimates). Readiness gates on each container's
 `/v1/health/ready`.
 
 A NIM container serving something the samples don't ship is the same
@@ -301,17 +307,25 @@ mechanism by hand: point an `openai_compat` entry's `base_url` at its port
 (its health route is `/v1/health/ready`, so keep `health_check: false` and
 let the container gate readiness), or a `riva_grpc` entry at its gRPC port.
 With `ownership: external` (you run the container yourself) that is the
-whole change. For the orchestrator to launch or expect it, the entry's
-`deployment.service` must name a process row in the sample's `main.py`
-(`_MODEL_PROCESSES`); a service name with no row fails fast at startup, and
-adding one row plus its config YAML is the only `main.py` edit the profile
-system ever needs.
+whole change. For an orchestrator to launch or expect it, the entry's
+`deployment.service` must name a process row in that orchestrator's service
+table (`_MODEL_SERVICES` in model-servers, `_MODEL_PROCESSES` in a sample);
+a service name with no row fails fast at startup, and adding one row plus
+its config YAML is the only orchestrator edit the profile system ever
+needs.
 
-## vLLM model persistence
+## Model-server persistence
 
 The persistent vLLM-backed servers (`vlm_server`, `llama_nemotron_llm_server`,
 `nemotron3_nano_llm_server`, `nemotron_omni_llm_server`, `embedding_server`)
-**survive stack restarts by design**. Each persistent wrapper script checks its
+and self-hosted NIM containers (`nim_server`)
+**survive stack restarts by design**, including when a deployment profile
+marks them `managed`: the stack starts them, but a clean shutdown leaves them
+serving so the next start reuses hot weights. `model_servers --stop` is the
+teardown. Switching profiles needs no manual teardown: at startup a wrapper
+that finds a *different* persistent xr-ai container holding its port (found
+by the `xr-ai-vllm.port=<port>` label) stops and removes it before launching
+its own. Each persistent wrapper script checks its
 health endpoint before spawning vLLM:
 
 - **Already running with a matching launch fingerprint** → touch the ready

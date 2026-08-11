@@ -1,0 +1,43 @@
+{
+  "models": {
+    "stt": {
+      "adapter": {
+        "preset": "parakeet_stt"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8103",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "stt"
+      }
+    },
+    "omni": {
+      "adapter": {
+        "preset": "nemotron_omni"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8108",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "omni"
+      }
+    },
+    "embedding": {
+      "adapter": {
+        "preset": "nemotron_embedding"
+      },
+      "endpoint": {
+        "base_url": "http://localhost:8109",
+        "readiness": "health"
+      },
+      "deployment": {
+        "ownership": "managed",
+        "service": "embedding"
+      }
+    }
+  }
+}

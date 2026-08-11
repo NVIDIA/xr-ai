@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-from xr_ai_launcher import load_model_deployment
+from xr_ai_launcher import load_deployment_profile, load_model_deployment
 from xr_ai_models import load_models_config
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -107,7 +107,8 @@ def test_effectively_empty_profile_selection_uses_default(
         "models.local.json",
         "models.hosted.json",
         "models.omni.json",
-        "models.nim_local.json",
+        "models.vlm_llm_nim.json",
+        "models.vlm_speech_nim.json",
     ],
 )
 def test_bundled_simple_vlm_profiles_have_launcher_sdk_parity(
@@ -192,7 +193,8 @@ def test_launcher_rejects_worker_only_flat_json_profile(tmp_path) -> None:
         "models.local.json",
         "models.hosted.json",
         "models.omni.json",
-        "models.nim_local.json",
+        "models.vlm_llm_nim.json",
+        "models.vlm_speech_nim.json",
     ],
 )
 def test_bundled_simple_vlm_profiles_support_worker_accessors(profile_name) -> None:
@@ -205,7 +207,7 @@ def test_bundled_simple_vlm_profiles_support_worker_accessors(profile_name) -> N
 
 @pytest.mark.parametrize(
     "profile_name",
-    ["models.local.json", "models.hosted.json", "models.nim_local.json"],
+    ["models.local.json", "models.hosted.json", "models.vlm_llm_nim.json"],
 )
 def test_bundled_render_profiles_have_launcher_sdk_parity(
     tmp_path, profile_name
@@ -234,7 +236,7 @@ def test_bundled_render_profiles_have_launcher_sdk_parity(
 
 @pytest.mark.parametrize(
     "profile_name",
-    ["models.local.json", "models.hosted.json", "models.nim_local.json"],
+    ["models.local.json", "models.hosted.json", "models.vlm_llm_nim.json"],
 )
 def test_bundled_render_profiles_support_worker_accessors(profile_name) -> None:
     models = load_models_config(_RENDER_YAML / profile_name)
@@ -258,20 +260,26 @@ def test_bundled_simple_vlm_profiles_select_expected_ownership(tmp_path) -> None
     local = load("models.local.json")
     hosted = load("models.hosted.json")
     omni = load("models.omni.json")
-    nim_local = load("models.nim_local.json")
+    vlm_llm_nim = load("models.vlm_llm_nim.json")
+    vlm_speech_nim = load("models.vlm_speech_nim.json")
 
     assert local.services == {"stt": "own", "vlm": "own", "tts": "own"}
     assert hosted.services == {"stt": "own", "tts": "own"}
     assert hosted.required_credentials == ("NGC_API_KEY",)
     assert omni.services == {"stt": "own", "vlm-omni": "reuse", "tts": "own"}
-    assert nim_local.services == {
-        "stt-nim": "own", "tts-nim": "own", "vlm-nim": "own",
+    # NIM services are reused from the model-servers vlm_llm_nim / vlm_speech_nim
+    # stacks; the sample launches only its own piper TTS and needs no
+    # credentials of its own.
+    assert vlm_llm_nim.services == {"stt": "reuse", "vlm-nim": "reuse", "tts": "own"}
+    assert vlm_llm_nim.required_credentials == ()
+    assert vlm_speech_nim.services == {
+        "stt-nim": "reuse", "tts-nim": "reuse", "vlm-nim": "reuse",
     }
-    assert nim_local.required_credentials == ("NGC_API_KEY",)
+    assert vlm_speech_nim.required_credentials == ()
 
 
 def test_deployment_credentials_are_collected(tmp_path) -> None:
-    profile = tmp_path / "models.nim_local.json"
+    profile = tmp_path / "models.vlm_llm_nim.json"
     profile.write_text(
         json.dumps({
             "models": {
@@ -289,7 +297,7 @@ def test_deployment_credentials_are_collected(tmp_path) -> None:
         encoding="utf-8",
     )
     config = tmp_path / "worker.yaml"
-    config.write_text("models_config: models.nim_local.json\n", encoding="utf-8")
+    config.write_text("models_config: models.vlm_llm_nim.json\n", encoding="utf-8")
 
     deployment = load_model_deployment(config)
 
@@ -307,7 +315,7 @@ def test_deployment_credentials_are_collected(tmp_path) -> None:
 def test_invalid_deployment_credentials_rejected(
     tmp_path, credentials, match
 ) -> None:
-    profile = tmp_path / "models.nim_local.json"
+    profile = tmp_path / "models.vlm_llm_nim.json"
     profile.write_text(
         json.dumps({
             "models": {
@@ -325,10 +333,49 @@ def test_invalid_deployment_credentials_rejected(
         encoding="utf-8",
     )
     config = tmp_path / "worker.yaml"
-    config.write_text("models_config: models.nim_local.json\n", encoding="utf-8")
+    config.write_text("models_config: models.vlm_llm_nim.json\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match=match):
         load_model_deployment(config)
+
+
+_MODEL_SERVERS_YAML = _ROOT / "agent-samples" / "model-servers" / "yaml"
+
+
+@pytest.mark.parametrize(
+    "profile_name",
+    [
+        "models.vlm_llm.json",
+        "models.omni.json",
+        "models.vlm_llm_nim.json",
+        "models.vlm_speech_nim.json",
+    ],
+)
+def test_bundled_model_servers_profiles_have_launcher_sdk_parity(
+    profile_name,
+) -> None:
+    profile = _MODEL_SERVERS_YAML / profile_name
+    deployment = load_deployment_profile(profile)
+    models = load_models_config(profile)
+    expected_services = {
+        spec.deployment.service: (
+            "own" if spec.deployment.ownership == "managed" else "reuse"
+        )
+        for spec in models.entries.values()
+        if spec.deployment.ownership != "external"
+    }
+
+    expected_credentials = set(models.required_credentials)
+    for spec in models.entries.values():
+        expected_credentials.update(spec.deployment.credentials)
+
+    assert deployment.services == expected_services
+    assert deployment.required_credentials == tuple(sorted(expected_credentials))
+
+
+def test_load_deployment_profile_rejects_non_json(tmp_path) -> None:
+    with pytest.raises(ValueError, match="must use a .json file"):
+        load_deployment_profile(tmp_path / "models.local.yaml")
 
 
 def test_bundled_worker_selects_local_profile() -> None:

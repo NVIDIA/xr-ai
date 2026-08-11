@@ -43,6 +43,12 @@ def load_model_deployment(worker_config: Path) -> ModelDeployment:
     profile_path = Path(raw_path)
     if not profile_path.is_absolute():
         profile_path = worker_config.parent / profile_path
+    return load_deployment_profile(profile_path)
+
+
+def load_deployment_profile(profile_path: Path) -> ModelDeployment:
+    """Load a JSON deployment profile directly (no worker YAML indirection)."""
+
     if profile_path.suffix.lower() != ".json":
         raise ValueError(
             f"{profile_path}: launcher model profiles must use a .json file; "

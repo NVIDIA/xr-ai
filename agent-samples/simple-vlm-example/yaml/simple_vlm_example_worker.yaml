@@ -7,8 +7,10 @@
 # Model deployment profile, resolved relative to this file. The local profile
 # starts STT, VLM, and TTS; models.hosted.json uses NVIDIA NIM for the VLM;
 # models.omni.json reuses a Nemotron-Omni server on port 8108;
-# models.nim_local.json serves every role from self-hosted NIM containers
-# (yaml/nim_*_server.yaml; requires docker + NGC_API_KEY).
+# models.vlm_llm_nim.json reuses the model-servers nim stack (VLM as a NIM
+# container, shared STT, own piper TTS); models.vlm_speech_nim.json reuses the
+# vlm_speech_nim stack (VLM + Riva speech NIM containers). Start the matching
+# stack first: `model_servers --models vlm_llm_nim` / `--models vlm_speech_nim`.
 models_config: models.local.json
 
 # Path to the voice-gate config (resolved relative to this file's

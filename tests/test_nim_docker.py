@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Unit tests for xr_ai_vllm._nim (self-hosted NIM container backend) and
-the samples' nim_local model overlays. Pure argv/config coverage — no
+the shipped NIM deployment profiles. Pure argv/config coverage — no
 docker daemon or GPU."""
 from __future__ import annotations
 
@@ -112,27 +112,58 @@ def test_serve_nim_exits_without_ngc_key(tmp_path, monkeypatch):
 # ── shipped profiles parse through the real loader ─────────────────────────
 
 
-@pytest.mark.parametrize("sample", ["xr-render-demo", "simple-vlm-example"])
-def test_sample_nim_local_profiles_parse(sample: str) -> None:
-    path = _REPO_ROOT / "agent-samples" / sample / "yaml" / "models.nim_local.json"
-    cfg = load_models_config(path)
-    if sample == "simple-vlm-example":
-        # Speech rides the Riva gRPC kind: local container, no NVCF function
-        # id, and a real channel-ready health probe (the default).
-        for spec in (cfg.stt("stt"), cfg.tts("tts")):
-            assert spec.kind == "riva_grpc"
-            assert spec.function_id is None
-            assert spec.health_check is True
-    else:
-        # xr-render-demo keeps speech local: Riva speech NIMs don't fit next
-        # to CloudXR + LOVR + the LLM/VLM NIMs on 2x48 GB.
-        assert cfg.stt("stt").kind == "openai_compat"
-        assert cfg.stt("stt").base_url == "http://localhost:8103"
-        assert cfg.tts("tts").kind == "openai_compat"
-        assert cfg.tts("tts").base_url == "http://localhost:8105"
+_MS_YAML = _REPO_ROOT / "agent-samples" / "model-servers" / "yaml"
+
+
+def test_model_servers_nim_profile_parses() -> None:
+    cfg = load_models_config(_MS_YAML / "models.vlm_llm_nim.json")
+    llm = cfg.llm("llm")
+    assert llm.kind == "openai_compat"
+    assert llm.model_name == "nvidia/nemotron-3-nano"
+    # The NIM chat template defaults thinking ON (local vLLM off); without
+    # the pin, non-thinking agent calls truncate mid-reasoning.
+    assert llm.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
     vlm = cfg.vlm("vlm")
-    assert vlm.kind == "openai_compat"
-    assert vlm.model_name
-    # NIM's health route is /v1/health/ready, not /health — the orchestrator
+    assert vlm.model_name == "nvidia/cosmos-reason1-7b"
+    # NIM's health route is /v1/health/ready, not /health; the container
     # gates readiness, so the client must not probe.
     assert vlm.health_check is False
+    assert cfg.stt("stt").kind == "openai_compat"
+
+
+def test_model_servers_vlm_speech_nim_profile_parses() -> None:
+    cfg = load_models_config(_MS_YAML / "models.vlm_speech_nim.json")
+    # Speech rides the Riva gRPC kind: local container, no NVCF function id,
+    # and a real channel-ready health probe (the default).
+    for spec in (cfg.stt("stt"), cfg.tts("tts")):
+        assert spec.kind == "riva_grpc"
+        assert spec.function_id is None
+        assert spec.health_check is True
+    assert cfg.tts("tts").voice == "Magpie-Multilingual.EN-US.Sofia"
+
+
+@pytest.mark.parametrize("sample", ["xr-render-demo", "simple-vlm-example"])
+def test_sample_vlm_llm_nim_profiles_reuse_the_nim_stack(sample: str) -> None:
+    path = _REPO_ROOT / "agent-samples" / sample / "yaml" / "models.vlm_llm_nim.json"
+    cfg = load_models_config(path)
+    vlm = cfg.vlm("vlm")
+    assert vlm.kind == "openai_compat"
+    assert vlm.health_check is False
+    assert vlm.deployment.ownership == "reused"
+    assert vlm.deployment.service == "vlm-nim"
+    # Speech stays on the shared local servers in the 2x48 GB nim stack.
+    assert cfg.stt("stt").deployment.ownership == "reused"
+    assert cfg.tts("tts").deployment.ownership == "managed"
+
+
+def test_simple_vlm_speech_nim_profile_reuses_riva_containers() -> None:
+    path = (
+        _REPO_ROOT / "agent-samples" / "simple-vlm-example"
+        / "yaml" / "models.vlm_speech_nim.json"
+    )
+    cfg = load_models_config(path)
+    for name, service in (("stt", "stt-nim"), ("tts", "tts-nim")):
+        spec = cfg.stt(name) if name == "stt" else cfg.tts(name)
+        assert spec.kind == "riva_grpc"
+        assert spec.deployment.ownership == "reused"
+        assert spec.deployment.service == service

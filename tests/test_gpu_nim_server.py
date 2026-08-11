@@ -32,7 +32,7 @@ from _helpers_subprocess import pick_free_port
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_NIM_SERVER_DIR = _REPO_ROOT / "ai-services" / "nim-server"
+_NIM_SERVER_DIR = _REPO_ROOT / "services" / "nim-server"
 
 _IMAGE = "nvcr.io/nim/meta/llama-3.1-8b-instruct:latest"
 _MODEL_NAME = "meta/llama-3.1-8b-instruct"

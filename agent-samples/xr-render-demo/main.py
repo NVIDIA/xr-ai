@@ -20,13 +20,12 @@ Prerequisites
 Model entries the selected profile marks `reused` must already be served
 before this demo starts; everything marked `managed` is launched by this
 orchestrator itself, and `external` entries need no local process. The
-shipped models.local.json reuses the shared AI inference servers from:
+shipped profiles reuse the matching model-servers stack:
 
-    uv run --project agent-samples/model-servers model_servers
+    uv run --project agent-samples/model-servers model_servers               # models.local.json
+    uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim  # models.vlm_llm_nim.json
 
-The shipped hosted and nim_local profiles have no `reused` entries, so
-nothing must be pre-started for them (they still need NGC_API_KEY, and
-nim_local needs docker; see yaml/xr_render_demo_worker.yaml).
+models.hosted.json pre-starts nothing (hosted NIM; needs NGC_API_KEY).
 
 How to run (from the repo root or any directory):
     uv run --project agent-samples/xr-render-demo xr_render_demo
@@ -78,30 +77,18 @@ _NO_WEB_CLIENT_ENV = "XR_MEDIA_HUB_NO_WEB_CLIENT"
 # ── Process stack ─────────────────────────────────────────────────────────────
 #
 # The deployment profile selected by models_config in the worker YAML decides
-# which of these launch. Local model servers resolve to launch_mode="reuse";
-# they are started and owned by model-servers, not this demo; start them
-# first with:
-#   uv run --project agent-samples/model-servers model_servers
-#
-# NIM containers precede the local servers: speech NIMs allocate fixed VRAM,
-# while the LLM/VLM NIMs grab most of the free VRAM on their GPU at startup
-# for KV cache. The one llm-nim container serves both llm and agent_llm.
+# which of these the launcher expects or starts. Model servers resolve to
+# launch_mode="reuse"; they are started and owned by model-servers, not this
+# demo; start the matching stack first:
+#   uv run --project agent-samples/model-servers model_servers            # local
+#   uv run --project agent-samples/model-servers model_servers --models vlm_llm_nim
+# The one llm-nim container serves both llm and agent_llm.
 _MODEL_PROCESSES = {
-    "stt-nim": Process(
-        "stt-nim", "../../services/nim-server", "nim_server",
-        config="yaml/nim_stt_server.yaml",
-    ),
-    "tts-nim": Process(
-        "tts-nim", "../../services/nim-server", "nim_server",
-        config="yaml/nim_tts_server.yaml",
-    ),
     "llm-nim": Process(
         "llm-nim", "../../services/nim-server", "nim_server",
-        config="yaml/nim_llm_server.yaml",
     ),
     "vlm-nim": Process(
         "vlm-nim", "../../services/nim-server", "nim_server",
-        config="yaml/nim_vlm_server.yaml",
     ),
     "stt": Process(
         "stt", "../../services/stt-server", "stt_server",

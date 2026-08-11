@@ -1,10 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for the shared model-server topology."""
+"""Unit tests for the shared, profile-driven model-server stack."""
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -38,39 +39,79 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def test_default_stack_uses_omni_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_profile_uses_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
 
-    processes = _model_servers._build_processes()
+    processes, credentials = _model_servers._build_processes("vlm_llm")
 
-    assert [process.name for process in processes] == ["stt", "omni", "vlm", "embedding"]
-    assert [process.port for process in processes] == [8103, 8108, 8100, 8109]
+    assert [process.name for process in processes] == ["stt", "agent-llm", "vlm", "embedding"]
+    assert [process.port for process in processes] == [8103, 8107, 8100, 8109]
+    assert credentials == ()
 
 
-def test_dual_ada_places_omni_opposite_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_omni_profile_replaces_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
 
-    processes = _model_servers._build_processes()
-    configs = {
-        process.name: yaml.safe_load(
-            (_REPO_ROOT / "agent-samples/model-servers" / str(process.config)).read_text()
-        )
-        for process in processes
-        if process.name in {"omni", "vlm"}
-    }
+    processes, _ = _model_servers._build_processes("omni")
 
-    assert configs["omni"]["cuda_visible_devices"] == "1"
-    assert configs["vlm"]["cuda_visible_devices"] == "0"
+    assert [process.name for process in processes] == ["stt", "omni", "embedding"]
+    assert [process.port for process in processes] == [8103, 8108, 8109]
+    assert str(processes[1].config) == "yaml/dual_48G_ada/nemotron_omni_llm_server.yaml"
 
 
-def test_dual_ada_embedding_stays_with_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_nim_profile_mixes_nim_containers_and_local_servers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
 
-    process = next(p for p in _model_servers._build_processes() if p.name == "embedding")
+    processes, credentials = _model_servers._build_processes("vlm_llm_nim")
+
+    assert [process.name for process in processes] == [
+        "llm-nim", "vlm-nim", "stt", "embedding",
+    ]
+    assert [process.port for process in processes] == [8106, 8100, 8103, 8109]
+    assert credentials == ("NGC_API_KEY",)
+
+
+def test_vlm_speech_nim_profile_serves_speech_from_riva_containers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+
+    processes, credentials = _model_servers._build_processes("vlm_speech_nim")
+
+    assert [process.name for process in processes] == [
+        "stt-nim", "tts-nim", "vlm-nim", "embedding",
+    ]
+    assert credentials == ("NGC_API_KEY",)
+
+
+@pytest.mark.parametrize(
+    ("selection", "service", "config_name", "gpu"),
+    [
+        ("vlm_llm", "embedding", "embedding_server.yaml", "0"),
+        ("omni", "embedding", "embedding_server_omni.yaml", "1"),
+        ("vlm_llm_nim", "embedding", "embedding_server.yaml", "0"),
+        ("vlm_llm_nim", "stt", "stt_server.yaml", "1"),
+        ("vlm_llm_nim", "vlm-nim", "nim_vlm_server.yaml", "0"),
+        ("vlm_speech_nim", "vlm-nim", "nim_vlm_server_vlm_speech_nim.yaml", "1"),
+    ],
+)
+def test_dual_ada_configs_follow_profile_gpu_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    selection: str,
+    service: str,
+    config_name: str,
+    gpu: str,
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+
+    processes, _ = _model_servers._build_processes(selection)
+    process = next(p for p in processes if p.name == service)
     config_path = _REPO_ROOT / "agent-samples/model-servers" / str(process.config)
 
-    assert config_path.name == "embedding_server.yaml"
-    assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == "0"
+    assert config_path.name == config_name
+    assert yaml.safe_load(config_path.read_text())["cuda_visible_devices"] == gpu
 
 
 @pytest.mark.parametrize("profile", ["96G_blackwell", "dual_48G_ada", "spark"])
@@ -93,7 +134,7 @@ def test_omni_profiles_select_supported_vllm_images(profile: str) -> None:
         assert "moe_backend" not in config
 
 
-def test_stop_cleans_every_stack(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stop_cleans_every_service(monkeypatch: pytest.MonkeyPatch) -> None:
     stopped: list[tuple[str, int]] = []
     monkeypatch.setattr(
         _model_servers,
@@ -103,16 +144,34 @@ def test_stop_cleans_every_stack(monkeypatch: pytest.MonkeyPatch) -> None:
 
     _model_servers._stop_models()
 
-    assert stopped == [
+    assert set(stopped) == {
+        ("stt-nim", 9010),
+        ("tts-nim", 9011),
+        ("llm-nim", 8106),
+        ("vlm-nim", 8100),
         ("stt", 8103),
         ("agent-llm", 8107),
-        ("vlm", 8100),
         ("omni", 8108),
+        ("vlm", 8100),
         ("embedding", 8109),
-    ]
+    }
 
 
-def test_starting_stack_stops_only_replaced_nano(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("selection", "expected_stopped_ports"),
+    [
+        # The selected profile's ports are kept; everything else is stopped.
+        ("omni", {9010, 9011, 8106, 8100, 8107}),
+        ("vlm_llm", {9010, 9011, 8106, 8108}),
+        ("vlm_llm_nim", {9010, 9011, 8107, 8108}),
+    ],
+)
+def test_starting_profile_stops_unselected_services(
+    monkeypatch: pytest.MonkeyPatch,
+    selection: str,
+    expected_stopped_ports: set[int],
+) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
     stopped: list[tuple[str, int]] = []
     monkeypatch.setattr(
         _model_servers,
@@ -120,70 +179,106 @@ def test_starting_stack_stops_only_replaced_nano(monkeypatch: pytest.MonkeyPatch
         lambda services: stopped.extend(services) or True,
     )
 
-    _model_servers._stop_replaced_models()
+    processes, _ = _model_servers._build_processes(selection)
+    _model_servers._stop_unselected_services(processes)
 
-    assert stopped == [("agent-llm", 8107)]
-
-
-def test_cli_starts_single_default_stack(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
-    monkeypatch.setattr(_model_servers, "_stop_replaced_models", lambda: calls.append("stop"))
-    monkeypatch.setattr(_model_servers, "_build_processes", lambda: calls.append("build") or [])
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: calls.append("run"))
-    monkeypatch.setattr(sys, "argv", ["model_servers"])
-
-    _model_servers.run()
-
-    assert calls == ["stop", "build", "run"]
+    assert {port for _, port in stopped} == expected_stopped_ports
 
 
-@pytest.mark.parametrize("removed_arg", ["--vlm-llm-stack", "--omni-stack"])
-def test_cli_rejects_removed_stack_arguments(
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        ([], "vlm_llm"),
+        (["--vlm-llm-stack"], "vlm_llm"),
+        (["--omni-stack"], "omni"),
+        (["--models", "vlm_llm_nim"], "vlm_llm_nim"),
+    ],
+)
+def test_cli_selects_requested_profile(
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    removed_arg: str,
+    argv: list[str],
+    expected: str,
 ) -> None:
-    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
-    monkeypatch.setattr(sys, "argv", ["model_servers", removed_arg])
-
-    with pytest.raises(SystemExit) as exc_info:
-        _model_servers.run()
-
-    assert exc_info.value.code == 2
-    assert f"unrecognized arguments: {removed_arg}" in capsys.readouterr().err
-
-
-def test_cli_stops_nano_before_starting(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[object] = []
+    selected: list[str] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
+    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
     monkeypatch.setattr(
-        _model_servers,
-        "stop_persistent_servers",
-        lambda services: calls.append(list(services)) or True,
+        _model_servers, "_build_processes",
+        lambda selection: (selected.append(selection) or [], ()),
     )
-    monkeypatch.setattr(_model_servers, "_build_processes", lambda: [])
-    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: calls.append("run"))
-    monkeypatch.setattr(sys, "argv", ["model_servers"])
+    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
+    monkeypatch.setattr(sys, "argv", ["model_servers", *argv])
 
     _model_servers.run()
 
-    assert calls == [[("agent-llm", 8107)], "run"]
+    assert selected == [expected]
 
 
-def test_cli_aborts_when_replaced_model_cannot_stop(
+def test_build_processes_rejects_unknown_services(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    profile = tmp_path / "models.custom.json"
+    profile.write_text(json.dumps({"models": {"vision": {
+        "adapter": {"preset": "cosmos_vlm"},
+        "endpoint": {"base_url": "http://localhost:8100"},
+        "deployment": {"ownership": "managed", "service": "no-such-service"},
+    }}}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unknown services"):
+        _model_servers._build_processes(str(profile))
+
+
+def test_profile_path_argument_loads_custom_profile(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "dual_48G_ada")
+    profile = tmp_path / "models.custom.json"
+    profile.write_text(json.dumps({"models": {"vision": {
+        "adapter": {"preset": "cosmos_vlm"},
+        "endpoint": {"base_url": "http://localhost:8100"},
+        "deployment": {"ownership": "managed", "service": "vlm"},
+    }}}), encoding="utf-8")
+
+    processes, _ = _model_servers._build_processes(str(profile))
+
+    assert [process.name for process in processes] == ["vlm"]
+    # Config variants key off the profile filename stem; a custom name has
+    # no variants and falls back to the service defaults.
+    assert str(processes[0].config) == "yaml/dual_48G_ada/vlm_server.yaml"
+
+
+def test_cli_requires_profile_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    required: list[str] = []
+    monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        _model_servers, "require_credentials",
+        lambda name, **kw: required.append(name),
+    )
+    monkeypatch.setattr(_model_servers, "_stop_unselected_services", lambda _p: None)
+    monkeypatch.setattr(
+        _model_servers, "_build_processes",
+        lambda _selection: ([], ("NGC_API_KEY",)),
+    )
+    monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: None)
+    monkeypatch.setattr(sys, "argv", ["model_servers", "--models", "vlm_llm_nim"])
+
+    _model_servers.run()
+
+    assert required == ["HF_TOKEN", "NGC_API_KEY"]
+
+
+def test_cli_aborts_when_unselected_services_cannot_stop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     started: list[bool] = []
     monkeypatch.setattr(_model_servers, "setup_logging", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "require_credentials", lambda *_a, **_k: None)
     monkeypatch.setattr(_model_servers, "stop_persistent_servers", lambda _services: False)
+    monkeypatch.setattr(
+        _model_servers, "_build_processes", lambda _selection: ([], ()),
+    )
     monkeypatch.setattr(_model_servers, "run_stack", lambda *_a, **_k: started.append(True))
-    monkeypatch.setattr(sys, "argv", ["model_servers"])
+    monkeypatch.setattr(sys, "argv", ["model_servers", "--omni-stack"])
 
-    with pytest.raises(RuntimeError, match="could not stop replaced"):
+    with pytest.raises(RuntimeError, match="could not stop persistent servers"):
         _model_servers.run()
 
     assert started == []

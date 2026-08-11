@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Config parsing / dispatch coverage for the ai-services nim-server command.
+"""Config parsing / dispatch coverage for the nim-server command.
 
 The package is not an editable dependency of the test project, so it is
 imported off the source tree directly; ``serve_nim`` is stubbed, so nothing
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_REPO_ROOT / "ai-services" / "nim-server"))
+sys.path.insert(0, str(_REPO_ROOT / "services" / "nim-server"))
 
 import nim_server.__main__ as nim_main  # noqa: E402
 

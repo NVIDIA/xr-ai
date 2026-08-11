@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Self-hosted NIM: LLM (serves both the `llm` and `agent_llm` roles).
+# Nemotron-3-Nano is the same agent model the local vlm_llm profile runs;
+# its A3B MoE decode is fast enough to cover the reactive role too. Swap in
+# any LLM NIM from https://catalog.ngc.nvidia.com.
+# UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
+image:     nvcr.io/nim/nvidia/nemotron-3-nano:latest
+http_port: 8106
+
+nim_cache: ../../../../models/nim
+
+cuda_visible_devices: "0"
+env:
+  NIM_MAX_MODEL_LEN: "32768"
+  NIM_KVCACHE_PERCENT: "0.4"
+  # nemotron_v3 is the parser built into this NIM (nano_v3 is absent);
+  # without tool-calling flags the agentic loop gets no tool calls.
+  NIM_PASSTHROUGH_ARGS: "--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser nemotron_v3"

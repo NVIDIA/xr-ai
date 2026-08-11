@@ -249,7 +249,10 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
     declarations = [
         (
             _ROOT / "agent-samples/model-servers",
-            model_servers._build_processes(),
+            model_servers._build_processes("vlm_llm")[0]
+            + model_servers._build_processes("omni")[0]
+            + model_servers._build_processes("vlm_llm_nim")[0]
+            + model_servers._build_processes("vlm_speech_nim")[0],
         ),
         (
             _ROOT / "agent-samples/simple-vlm-example",
@@ -257,7 +260,7 @@ def test_sample_process_projects_resolve(monkeypatch) -> None:
         ),
         (
             _ROOT / "agent-samples/xr-render-demo",
-            render_demo._build_processes(),
+            render_demo._build_processes()[0],
         ),
     ]
 

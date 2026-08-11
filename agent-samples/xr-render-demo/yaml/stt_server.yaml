@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # STT server configuration for xr-render-demo. Used when a profile marks the
-# stt service `managed` (models.nim_local.json); the default profile reuses
+# stt service `managed` (models.vlm_llm_nim.json); the default profile reuses
 # the model-servers stack's STT instead.
 
 model:       nvidia/parakeet-tdt-0.6b-v3
