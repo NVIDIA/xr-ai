@@ -399,7 +399,7 @@
 -->
 <section id="adding-cloudxr-to-a-sample">
 <h1>Adding CloudXR to a sample<a class="headerlink" href="#adding-cloudxr-to-a-sample" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">cloudxr-runtime/</span></code> is a shared top-level component, like <code class="docutils literal notranslate"><span class="pre">server-runtime/</span></code>.
+<p><code class="docutils literal notranslate"><span class="pre">services/cloudxr-runtime/</span></code> is the shared CloudXR service.
 Any sample can stream XR content to a device by adding one line to its
 orchestrator and a configuration file in the sample root. For the broader
 orchestrator pattern, refer to <a class="reference internal" href="adding-a-sample.html"><span class="doc">adding-a-sample</span></a>.</p>
@@ -407,7 +407,7 @@ orchestrator pattern, refer to <a class="reference internal" href="adding-a-samp
 <h2>1 — Add the process to the orchestrator<a class="headerlink" href="#add-the-process-to-the-orchestrator" title="Link to this heading">#</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>     <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span>  <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;cloudxr&quot;</span><span class="p">,</span> <span class="s2">&quot;../../cloudxr-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;cloudxr_runtime&quot;</span><span class="p">),</span>  <span class="c1"># ← add this</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;cloudxr&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/cloudxr-runtime&quot;</span><span class="p">,</span> <span class="s2">&quot;cloudxr_runtime&quot;</span><span class="p">),</span>  <span class="c1"># ← add this</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span>  <span class="s2">&quot;worker&quot;</span><span class="p">,</span>                <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
