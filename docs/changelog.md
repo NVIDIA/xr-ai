@@ -88,6 +88,17 @@ Since AGENTS.md asks for a changelog entry alongside most changes, that fired on
 a large share of PRs. `Build (strict)` is not a required status check, so
 skipping it does not gate merges.
 
+### 2026-08-11 — Nightly GPU test runs on an always-on `gpu` runner
+
+The nightly workflow no longer brackets its pytest job with Brev lifecycle
+management. The `start` and `stop` jobs, the `brev-controller` runner, the
+`BREV_INSTANCE_NAME`/`BREV_ORG` secrets, and the `keep_running` dispatch input
+are gone; `pytest` runs directly on `runs-on: gpu` and `notify` depends on it
+alone. This supersedes the 2026-06-11 entry below: the GPU host is no longer a
+per-run billed instance, so the start/stop bracket bought nothing and added two
+failure modes (a start timeout that queued pytest indefinitely, and a stop
+failure that had to be loud to avoid a cost leak).
+
 ### 2026-08-10 — Voice-worker ready files wait for inbound IPC
 
 `VoiceSession` and the direct `run_voice_pipeline` compatibility path release a
