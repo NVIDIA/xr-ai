@@ -55,6 +55,11 @@ correlation metadata on `AgentContext` applies to pub/sub. The runtime cancels
 work created through `ctx.start_task()`, while external callers must finish
 direct tool calls before the agent's runtime scope exits.
 
+A failed runtime-owned background task transitions the runtime to a failed
+state, cancels its remaining owned work, and is surfaced by later operations
+and shutdown. `publish()` settles all fan-out deliveries before propagating
+subscriber failures.
+
 ---
 
 ## xr-ai-models

@@ -422,6 +422,10 @@ by direct execution belongs in the tool’s request schema; participant and
 correlation metadata on <code class="docutils literal notranslate"><span class="pre">AgentContext</span></code> applies to pub/sub. The runtime cancels
 work created through <code class="docutils literal notranslate"><span class="pre">ctx.start_task()</span></code>, while external callers must finish
 direct tool calls before the agent’s runtime scope exits.</p>
+<p>A failed runtime-owned background task transitions the runtime to a failed
+state, cancels its remaining owned work, and is surfaced by later operations
+and shutdown. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> settles all fan-out deliveries before propagating
+subscriber failures.</p>
 </section>
 <hr class="docutils" />
 <section id="xr-ai-models">
