@@ -21,9 +21,10 @@ from:
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
-- **`xr-ai-nat`** — Relay-managed native tools, the generic `AgentRunner`
-  protocol, and a basic tool-driven agent. Its legacy extras retain existing
-  NeMo Agent Toolkit function groups while their concrete capabilities migrate.
+- **`xr-ai-tools`** — Relay-managed native tools, the generic `AgentRunner`
+  protocol, and a basic tool-driven agent.
+- **`xr-ai-nat`** — legacy NeMo Agent Toolkit function groups retained while
+  their concrete capabilities migrate.
 
 ---
 
@@ -208,10 +209,10 @@ The clients can be exercised without a GPU.
 
 ## Native tools and agents
 
-`xr-ai-nat` is the native migration target for model-driven XR composition.
+`xr-ai-tools` is the native migration target for model-driven XR composition.
 `Tool` declares Pydantic request and response boundaries and executes its
 handler through NeMo Relay. `AgentRunner` is the generic async-turn protocol;
-`xr_ai_nat.agents.Agent` is its bounded, stateless tool-loop implementation.
+`xr_ai_tools.agents.Agent` is its bounded, stateless tool-loop implementation.
 It builds OpenAI-compatible tool definitions from those schemas and sends each
 model request through an injected `LLMService`.
 
@@ -221,7 +222,7 @@ Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
 registered tool; foreground selection, workflow state, and background work stay
 explicit in application code.
 
-`xr_ai_nat.live_vision.LiveVisionTool` acquires a participant-scoped hub frame
+`xr_ai_tools.live_vision.LiveVisionTool` acquires a participant-scoped hub frame
 and returns one complete observation through Relay's finite tool and LLM
 boundaries. Direct voice can wrap the same tool with `LiveVisionResponder`,
 whose provider response uses Relay's managed streaming LLM path under an Agent

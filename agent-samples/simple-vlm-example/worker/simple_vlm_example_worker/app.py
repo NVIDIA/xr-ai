@@ -11,7 +11,7 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_nat.live_vision import LiveVisionResponder, LiveVisionTool, VisionRequest
+from xr_ai_tools.live_vision import LiveVisionResponder, LiveVisionTool, VisionRequest
 from xr_ai_voice import TextMessageInput, VadConfig, VoiceHandler, VoiceSession
 from xr_ai_voicegate import load_voice_gate_config
 

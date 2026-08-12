@@ -13,8 +13,8 @@ import pytest
 from nemo_relay.codecs import OpenAIChatCodec
 from pydantic import BaseModel
 from xr_ai_models import Capabilities, ChatMessage, ChatResponse, ToolCall, ToolDef
-from xr_ai_nat import AgentRunner, Tool, ToolSet, as_agent_tool
-from xr_ai_nat.agents import Agent, ToolLoopLimitError, _response_from_openai
+from xr_ai_tools import AgentRunner, Tool, ToolSet, as_agent_tool
+from xr_ai_tools.agents import Agent, ToolLoopLimitError, _response_from_openai
 
 
 class AddRequest(BaseModel):

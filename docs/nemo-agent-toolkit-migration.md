@@ -11,8 +11,8 @@ for all model HTTP, and reach clients only through the Hub IPC SDK.
 
 ## Target architecture
 
-NeMo Relay is the local execution boundary. The XR-owned `xr-ai-nat` package
-is becoming a toolkit-independent tools layer: Pydantic tool schemas, trigger
+NeMo Relay is the local execution boundary. The XR-owned `xr-ai-tools` package
+is the toolkit-independent tools layer: Pydantic tool schemas, trigger
 dispatch, and the generic `AgentRunner` protocol. Its bundled agent is a
 bounded tool loop, while `as_agent_tool(...)` lets custom or future
 Fabric-backed runners use the same trigger path. Relay owns LLM and tool
@@ -28,7 +28,7 @@ remain optional launch targets after the local runtime has migrated.
 
 ```text
 XR worker
-  -> xr-ai-nat: typed tools and trigger dispatch
+  -> xr-ai-tools: typed tools and trigger dispatch
   -> NeMo Relay: managed tool and agent execution, guardrails, telemetry
   -> xr-ai-models: private model boundary used by model-backed tools
   -> Hub IPC: media and client data
@@ -49,10 +49,9 @@ acceptance behavior rather than an implementation dependency.
 
 ## Focused PR sequence
 
-1. **Native tools foundation** — make `xr-ai-nat` independent of NeMo Agent
-   Toolkit by default, add Relay-managed tools, the generic `AgentRunner`
-   seam, and a bounded default tool loop, and retain existing function groups
-   behind legacy extras.
+1. **Native tools foundation** — add `xr-ai-tools` with Relay-managed
+   tools, the generic `AgentRunner` seam, and a bounded default tool loop, and retain
+   existing function groups behind legacy extras.
 2. **Simple VLM tool** — add a finite current-frame tool for agentic flows,
    retain streaming only for its direct-voice responder, and prove the
    lightweight sample selects no legacy extra.
@@ -79,6 +78,6 @@ hand-rolled model HTTP client behind.
 
 The retirement is complete only when repository-wide search finds no runtime
 imports from `nat` and no `nvidia-nat-*` dependency, worker requirements select
-only toolkit-independent `xr-ai-nat` extras, all migrated samples pass their
+`xr-ai-tools` for toolkit-independent tools, all migrated samples pass their
 unit and evaluation suites, and `THIRD_PARTY_NOTICES.md` no longer lists NeMo
 Agent Toolkit.

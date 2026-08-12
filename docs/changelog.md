@@ -9,6 +9,12 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — Native tools live outside the NAT compatibility package
+
+The Relay-managed tool, agent-runner, and live-vision modules moved unchanged
+from `xr-ai-nat` to the dedicated `xr-ai-tools` package. `xr-ai-nat` now remains
+only as the NeMo Agent Toolkit compatibility surface during migration.
+
 ### 2026-08-12 — Agentic vision is finite; direct voice may stream
 
 Relay's managed tool API accepts completed JSON results; it does not define a

@@ -117,7 +117,8 @@ frames are dropped if it is closed.
 | Hub service | `services/xr-media-hub/` | XR-Media-Hub + LiveKit internal transport |
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
-| Agent tools | `agent-sdk/xr-ai-nat/` | Relay-managed native tools and legacy NAT compatibility during migration |
+| Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools |
+| Legacy NAT | `agent-sdk/xr-ai-nat/` | NeMo Agent Toolkit compatibility during migration |
 | Reusable services | `services/` | Model-serving and typed capability processes |
 | Agent interfaces | `agent-mcp-servers/` | MCP compatibility processes for XR data & rendering |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |

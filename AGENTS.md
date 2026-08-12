@@ -12,12 +12,13 @@ historical decisions in `docs/changelog.md`.
 
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-agent-sdk/          # Five packages:
+agent-sdk/          # Six packages:
                     #   xr-ai-hub-client   — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
                     #   xr-ai-voice        — voice runtime (VoiceSession); introduced alongside xr-ai-pipecat
-                    #   xr-ai-nat          — native Relay-managed tools; legacy NAT compatibility during migration
+                    #   xr-ai-tools        — toolkit-independent Relay-managed tools
+                    #   xr-ai-nat          — legacy NeMo Agent Toolkit compatibility during migration
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 services/           # XR hub, CloudXR, model-serving, and typed capability services
 agent-mcp-servers/  # MCP adapters: oxr, render, transcript, vec, video, vlm
@@ -58,12 +59,12 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   `anthropic`, no `litellm`); all in-tree backends speak
   OpenAI-compatible HTTP.
 - **Workers never import from `xr_media_hub` or `xr_ai_launcher`.** Use the
-  public `xr_ai_hub`, `xr_ai_models`, `xr_ai_nat`, and `xr_ai_voice` SDK
-  surfaces plus task-specific libraries (numpy, torch, …).
+  public `xr_ai_hub`, `xr_ai_models`, `xr_ai_tools`, `xr_ai_nat`, and
+  `xr_ai_voice` SDK surfaces plus task-specific libraries (numpy, torch, …).
 - **Agentic functions are native and in-process.** New and migrated tools live
-  in `xr-ai-nat`; every tool and tool-driven agent lifecycle passes through
-  NeMo Relay, and all model I/O remains in `xr-ai-models`. Its legacy extras
-  retain NeMo Agent Toolkit compatibility only while existing function groups
+  in `xr-ai-tools`; every tool and tool-driven agent lifecycle passes through
+  NeMo Relay, and all model I/O remains in `xr-ai-models`. `xr-ai-nat` retains
+  NeMo Agent Toolkit compatibility only while existing function groups
   migrate. Existing MCP servers remain compatibility surfaces while their
   capabilities migrate.
 - **RAG is a native typed capability.** `rag-service` owns document chunking,

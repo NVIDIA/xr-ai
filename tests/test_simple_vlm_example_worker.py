@@ -28,7 +28,7 @@ sys.path.insert(0, str(_WORKER_DIR))
 from simple_vlm_example_worker import __main__ as worker_main  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from xr_ai_nat.live_vision import (  # noqa: E402
+from xr_ai_tools.live_vision import (  # noqa: E402
     LiveVisionResponder,
     LiveVisionTool,
     VisionRequest,
@@ -149,7 +149,7 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"] == (
         "../../../agent-sdk/xr-ai-hub-client"
     )
-    assert "xr-ai-nat[relay,live-vision]" in dependencies
+    assert "xr-ai-tools[relay,live-vision]" in dependencies
     assert all("[vision" not in dependency and "[voice" not in dependency for dependency in dependencies)
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-pipecat" not in dependencies
