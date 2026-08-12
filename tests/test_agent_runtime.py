@@ -1,14 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Contracts for agent-owned tools, resource lifetimes, and typed pub/sub."""
+"""Contracts for agent-owned tools, state, and typed pub/sub."""
 
 from __future__ import annotations
 
 import asyncio
-from builtins import BaseExceptionGroup, ExceptionGroup
+from builtins import ExceptionGroup
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import assert_type
 
 import pytest
@@ -19,7 +18,6 @@ from xr_ai_runtime import (
     AgentRuntime,
     RuntimeClosedError,
     RuntimeContext,
-    RuntimeFailedError,
     Topic,
     subscribe,
 )
@@ -339,101 +337,11 @@ async def test_agent_can_serialize_tools_and_subscriptions_internally() -> None:
     assert agent.max_active == 1
 
 
-class _BackgroundAgent(Agent):
-    def __init__(self) -> None:
-        super().__init__()
-        self.started = asyncio.Event()
-        self.stopped = asyncio.Event()
-
-    @asynccontextmanager
-    async def lifespan(self, ctx: RuntimeContext) -> AsyncIterator[None]:
-        ctx.start_task(self._run(), name="background-agent")
-        yield
-
-    async def _run(self) -> None:
-        self.started.set()
-        try:
-            await asyncio.Event().wait()
-        finally:
-            self.stopped.set()
-
-
-async def test_lifespan_owns_background_work() -> None:
-    agent = _BackgroundAgent()
-    runtime = AgentRuntime()
-    runtime.register("background", agent)
-
-    async with runtime:
-        await agent.started.wait()
-
-    assert agent.stopped.is_set()
-
-
-class _FailingBackgroundAgent(Agent):
-    def __init__(self) -> None:
-        super().__init__()
-        self.release = asyncio.Event()
-        self.companion_started = asyncio.Event()
-        self.companion_stopped = asyncio.Event()
-
-    @asynccontextmanager
-    async def lifespan(self, ctx: RuntimeContext) -> AsyncIterator[None]:
-        ctx.start_task(self._fail(), name="failing-background")
-        ctx.start_task(self._companion(), name="background-companion")
-        yield
-
-    async def _fail(self) -> None:
-        await self.release.wait()
-        raise RuntimeError("background failed")
-
-    async def _companion(self) -> None:
-        self.companion_started.set()
-        try:
-            await asyncio.Event().wait()
-        finally:
-            self.companion_stopped.set()
-
-
-async def test_background_failure_transitions_runtime_and_surfaces_on_stop() -> None:
-    agent = _FailingBackgroundAgent()
-    runtime = AgentRuntime()
-    runtime.register("background", agent)
-    await runtime.start()
-    await agent.companion_started.wait()
-
-    agent.release.set()
-    for _ in range(10):
-        if not runtime.running:
-            break
-        await asyncio.sleep(0)
-
-    assert not runtime.running
-    await asyncio.wait_for(agent.companion_stopped.wait(), timeout=1)
-    with pytest.raises(RuntimeFailedError) as raised:
-        await runtime.publish(
-            OBSERVATIONS,
-            _Observation(labels=[]),
-            participant_id="alice",
-        )
-    assert isinstance(raised.value.__cause__, RuntimeError)
-    with pytest.raises(ExceptionGroup, match="agent runtime") as stopped:
-        await runtime.stop()
-    assert [str(error) for error in stopped.value.exceptions] == ["background failed"]
-
-
 class _SlowSubscriber(Agent):
     def __init__(self) -> None:
         super().__init__()
         self.started = asyncio.Event()
         self.stopped = asyncio.Event()
-        self.cleanup_saw_stopped_delivery = False
-
-    @asynccontextmanager
-    async def lifespan(self, _ctx: RuntimeContext) -> AsyncIterator[None]:
-        try:
-            yield
-        finally:
-            self.cleanup_saw_stopped_delivery = self.stopped.is_set()
 
     @subscribe(OBSERVATIONS)
     async def observe(self, _event: _Observation, _ctx: RuntimeContext) -> None:
@@ -444,7 +352,7 @@ class _SlowSubscriber(Agent):
             self.stopped.set()
 
 
-async def test_stop_cancels_deliveries_before_exiting_lifespans() -> None:
+async def test_stop_cancels_in_flight_deliveries() -> None:
     agent = _SlowSubscriber()
     runtime = AgentRuntime()
     runtime.register("slow", agent)
@@ -461,82 +369,7 @@ async def test_stop_cancels_deliveries_before_exiting_lifespans() -> None:
     await runtime.stop()
     await asyncio.gather(publication, return_exceptions=True)
 
-    assert agent.cleanup_saw_stopped_delivery
-
-
-class _LifecycleAgent(Agent):
-    def __init__(
-        self,
-        *,
-        enter_error: BaseException | None = None,
-        exit_error: BaseException | None = None,
-    ) -> None:
-        super().__init__()
-        self.enter_error = enter_error
-        self.exit_error = exit_error
-        self.entries = 0
-        self.exits = 0
-
-    @asynccontextmanager
-    async def lifespan(self, _ctx: RuntimeContext) -> AsyncIterator[None]:
-        self.entries += 1
-        if self.enter_error is not None:
-            raise self.enter_error
-        try:
-            yield
-        finally:
-            self.exits += 1
-            if self.exit_error is not None:
-                raise self.exit_error
-
-
-async def test_lifespan_entry_failure_exits_only_entered_agents() -> None:
-    entered = _LifecycleAgent()
-    failed = _LifecycleAgent(enter_error=RuntimeError("enter failed"))
-    not_entered = _LifecycleAgent()
-    runtime = AgentRuntime()
-    runtime.register("entered", entered)
-    runtime.register("failed", failed)
-    runtime.register("not-entered", not_entered)
-
-    with pytest.raises(RuntimeError, match="enter failed"):
-        await runtime.start()
-
-    assert (entered.entries, entered.exits) == (1, 1)
-    assert (failed.entries, failed.exits) == (1, 0)
-    assert (not_entered.entries, not_entered.exits) == (0, 0)
-
-
-async def test_stop_reports_every_lifespan_exit_failure() -> None:
-    first = _LifecycleAgent(exit_error=ValueError("first exit failed"))
-    second = _LifecycleAgent(exit_error=RuntimeError("second exit failed"))
-    runtime = AgentRuntime()
-    runtime.register("first", first)
-    runtime.register("second", second)
-    await runtime.start()
-
-    with pytest.raises(ExceptionGroup) as raised:
-        await runtime.stop()
-
-    assert [str(error) for error in raised.value.exceptions] == [
-        "second exit failed",
-        "first exit failed",
-    ]
-
-
-async def test_cancelled_lifespan_exit_does_not_skip_remaining_cleanup() -> None:
-    first = _LifecycleAgent()
-    second = _LifecycleAgent(exit_error=asyncio.CancelledError())
-    runtime = AgentRuntime()
-    runtime.register("first", first)
-    runtime.register("second", second)
-    await runtime.start()
-
-    with pytest.raises(BaseExceptionGroup) as raised:
-        await runtime.stop()
-
-    assert isinstance(raised.value.exceptions[0], asyncio.CancelledError)
-    assert (first.exits, second.exits) == (1, 1)
+    assert agent.stopped.is_set()
 
 
 class _PartiallyInvalidSubscriber(Agent):

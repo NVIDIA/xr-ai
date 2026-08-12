@@ -5,7 +5,7 @@
 
 from .agent import Agent
 from .events import MessageMetadata, Topic, subscribe
-from .runtime import AgentRuntime, RuntimeClosedError, RuntimeContext, RuntimeFailedError
+from .runtime import AgentRuntime, RuntimeClosedError, RuntimeContext
 
 __all__ = [
     "Agent",
@@ -13,7 +13,6 @@ __all__ = [
     "MessageMetadata",
     "RuntimeClosedError",
     "RuntimeContext",
-    "RuntimeFailedError",
     "Topic",
     "subscribe",
 ]

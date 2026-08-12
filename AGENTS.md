@@ -72,11 +72,10 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **Agents expose the existing tools from `xr-ai-tools`.** Each `Agent` owns
   state and a set of `Tool` or `AsyncTool` instances. Agents call one another's
   tools directly through `execute()` or `stream()`; model-selected calls use
-  the same normal tool-calling helpers. `xr-ai-agent-runtime` manages optional
-  `lifespan()` contexts, background tasks, and typed `publish()` fan-out only.
-  Agents own their concurrency policy and synchronize shared state when needed.
-  Model loops, planning, memory, and raw media transport remain outside the
-  runtime.
+  the same normal tool-calling helpers. `xr-ai-agent-runtime` manages typed
+  `publish()` fan-out and only the delivery tasks it creates. Agents own their
+  resources, tasks, lifecycle, and concurrency policy. Model loops, planning,
+  memory, and raw media transport remain outside the runtime.
 - **RAG is a native typed capability.** `rag-service` owns document chunking,
   embedding caches, and dense retrieval behind private msgpack/ZMQ;
   `RAGFunctionsConfig` exposes it as the `xr_rag` NAT function group.

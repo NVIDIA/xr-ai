@@ -5,9 +5,9 @@
 
 # XR AI agent runtime
 
-`xr-ai-agent-runtime` manages resource lifetimes, background tasks, and typed
-pub/sub for composable XR AI agents. An `Agent` owns private state and exposes
-ordinary `Tool` or `AsyncTool` instances from `xr-ai-tools`.
+`xr-ai-agent-runtime` provides typed pub/sub for composable XR AI agents. An
+`Agent` owns private state and exposes ordinary `Tool` or `AsyncTool` instances
+from `xr-ai-tools`.
 
 Tools have one invocation path everywhere:
 
@@ -77,19 +77,11 @@ tool's typed request. Relay supplies nested execution tracing, while runtime
 message metadata applies only to pub/sub.
 
 `publish(topic, event)` is the separate asynchronous fan-out operation for
-events. `ctx.start_task()` starts background work owned by the current agent's
-runtime lifetime. An agent that owns resources implements the optional
-`lifespan()` async context; most agents need no lifecycle code.
-
-The runtime cancels tasks created through `ctx.start_task()` before resources
-are released. An external caller is responsible for finishing or cancelling
-direct tool calls before leaving the runtime scope.
-
-If a runtime-owned background task fails, the runtime stops accepting work,
-cancels its remaining owned tasks, and raises `RuntimeFailedError` from the
-original failure on later operations. Shutdown surfaces the original failure.
-`publish()` waits for every fan-out delivery to settle before propagating any
-subscriber failures.
+events. An agent that owns resources or background work is responsible for
+controlling them, including creating, cancelling, and awaiting its own tasks.
+The runtime neither knows nor controls whether an agent's internal work is
+running. `publish()` waits for every fan-out delivery to settle before
+propagating any subscriber failures.
 
 Tools and subscription callbacks may run concurrently. An agent whose mutable
 state is shared between them owns the appropriate synchronization, such as an

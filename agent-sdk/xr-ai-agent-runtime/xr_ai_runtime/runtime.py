@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Runtime lifecycle, background work, and typed event routing."""
+"""Typed event routing between agents."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import inspect
 import time
 import uuid
 from builtins import BaseExceptionGroup
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias, TypeVar, cast, get_type_hints
 
@@ -20,7 +20,6 @@ from .agent import Agent
 from .events import MessageMetadata, Topic
 
 MessageT = TypeVar("MessageT", bound=BaseModel)
-TaskResultT = TypeVar("TaskResultT")
 AgentT = TypeVar("AgentT", bound="Agent")
 
 BoundSubscriber: TypeAlias = Callable[[BaseModel, "RuntimeContext"], Awaitable[None]]
@@ -30,50 +29,37 @@ class RuntimeClosedError(RuntimeError):
     """Raised when work is submitted to a runtime that is not running."""
 
 
-class RuntimeFailedError(RuntimeError):
-    """Raised when runtime-owned background work has failed."""
-
-
 @dataclass(slots=True)
 class _AgentState:
     name: str
-    agent: Agent
-    subscriptions: list[tuple[Topic[Any], BoundSubscriber]] = field(
-        default_factory=list
-    )
-    background: set[asyncio.Task[Any]] = field(default_factory=set)
     deliveries: set[asyncio.Task[None]] = field(default_factory=set)
-    lifetime: Any = None
-    entered: bool = False
 
 
 class RuntimeContext:
-    """Runtime operations available to an agent lifecycle or subscriber."""
+    """Runtime operations available during a subscription delivery."""
 
-    __slots__ = ("_runtime", "_state", "_metadata")
+    __slots__ = ("_runtime", "_agent_name", "_metadata")
 
     def __init__(
         self,
         runtime: AgentRuntime,
-        state: _AgentState,
-        metadata: MessageMetadata | None,
+        agent_name: str,
+        metadata: MessageMetadata,
     ) -> None:
         self._runtime = runtime
-        self._state = state
+        self._agent_name = agent_name
         self._metadata = metadata
 
     @property
     def agent_name(self) -> str:
         """Return this agent's runtime-local name."""
 
-        return self._state.name
+        return self._agent_name
 
     @property
     def metadata(self) -> MessageMetadata:
         """Return metadata for the current subscription delivery."""
 
-        if self._metadata is None:
-            raise RuntimeError("lifecycle context has no message metadata")
         return self._metadata
 
     async def publish(
@@ -89,47 +75,19 @@ class RuntimeContext:
             topic,
             message,
             participant_id=self._resolve_participant(participant_id),
-            source=self._state.name,
-            correlation_id=self._metadata.correlation_id if self._metadata else None,
-            parent_message_id=self._metadata.message_id if self._metadata else None,
+            source=self._agent_name,
+            correlation_id=self._metadata.correlation_id,
+            parent_message_id=self._metadata.message_id,
         )
-
-    def start_task(
-        self,
-        work: Coroutine[Any, Any, TaskResultT],
-        *,
-        name: str | None = None,
-    ) -> asyncio.Task[TaskResultT]:
-        """Start background work owned by this agent's runtime lifetime."""
-
-        try:
-            self._runtime._ensure_running()
-        except RuntimeError:
-            work.close()
-            raise
-        task = asyncio.create_task(work, name=name)
-        tracked = cast(asyncio.Task[Any], task)
-        self._state.background.add(tracked)
-        tracked.add_done_callback(self._background_done)
-        return task
 
     def _resolve_participant(self, participant_id: str | None) -> str:
         if participant_id is not None:
             return participant_id
-        if self._metadata is None:
-            raise ValueError("participant_id is required outside a subscriber")
         return self._metadata.participant_id
-
-    def _background_done(self, task: asyncio.Task[Any]) -> None:
-        self._state.background.discard(task)
-        if task.cancelled():
-            return
-        if error := task.exception():
-            self._runtime._background_failed(error)
 
 
 class AgentRuntime:
-    """Own agent lifetimes, background tasks, and typed pub/sub routing."""
+    """Provide typed pub/sub routing between registered agents."""
 
     def __init__(self) -> None:
         self._agents: dict[str, _AgentState] = {}
@@ -137,18 +95,17 @@ class AgentRuntime:
         self._subscribers: dict[str, list[tuple[_AgentState, BoundSubscriber]]] = {}
         self._running = False
         self._closed = False
-        self._failures: list[BaseException] = []
 
     @property
     def running(self) -> bool:
         """Whether the runtime currently accepts event work."""
 
-        return self._running and not self._closed and not self._failures
+        return self._running and not self._closed
 
     def register(self, name: str, agent: AgentT) -> AgentT:
         """Register one agent before startup and return the same typed object."""
 
-        if self._running or self._closed or self._failures:
+        if self._running or self._closed:
             raise RuntimeError("agents must be registered before the runtime starts")
         if not name.strip():
             raise ValueError("agent name must not be empty")
@@ -161,37 +118,28 @@ class AgentRuntime:
         except AttributeError as exc:
             raise TypeError("Agent subclasses must call super().__init__()") from exc
 
-        state = _AgentState(name=name, agent=agent)
-        state.subscriptions = self._discover_subscriptions(agent)
+        state = _AgentState(name=name)
+        subscriptions = self._discover_subscriptions(agent)
         known_topics = dict(self._topics)
-        for topic, _method in state.subscriptions:
+        for topic, _method in subscriptions:
             known = known_topics.setdefault(topic.name, topic)
             if known.message_type is not topic.message_type:
                 raise ValueError(f"topic {topic.name!r} already uses another message type")
 
         self._agents[name] = state
-        for topic, method in state.subscriptions:
+        for topic, method in subscriptions:
             self._register_topic(topic)
             self._subscribers.setdefault(topic.name, []).append((state, method))
         return agent
 
     async def start(self) -> None:
-        """Enter every registered agent resource scope."""
+        """Start accepting event publications."""
 
         if self._closed:
             raise RuntimeClosedError("agent runtime is closed")
-        self._raise_if_failed()
         if self._running:
             return
         self._running = True
-        try:
-            for state in self._agents.values():
-                state.lifetime = state.agent.lifespan(RuntimeContext(self, state, None))
-                await state.lifetime.__aenter__()
-                state.entered = True
-        except (asyncio.CancelledError, Exception):
-            await self.stop()
-            raise
 
     async def publish(
         self,
@@ -211,36 +159,19 @@ class AgentRuntime:
         )
 
     async def stop(self) -> None:
-        """Cancel runtime-owned work and then exit every agent scope."""
+        """Stop accepting events and cancel in-flight deliveries."""
 
         if self._closed:
             return
         self._running = False
         tasks = tuple(
-            task
-            for state in self._agents.values()
-            for task in (*state.background, *state.deliveries)
+            task for state in self._agents.values() for task in state.deliveries
         )
         for task in tasks:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-
-        errors = list(self._failures)
-        for state in reversed(tuple(self._agents.values())):
-            if not state.entered:
-                continue
-            try:
-                await state.lifetime.__aexit__(None, None, None)
-            except asyncio.CancelledError as exc:
-                errors.append(exc)
-            except Exception as exc:
-                errors.append(exc)
-            finally:
-                state.entered = False
         self._closed = True
-        if errors:
-            raise BaseExceptionGroup("errors during agent runtime", errors)
 
     async def __aenter__(self) -> AgentRuntime:
         await self.start()
@@ -295,7 +226,7 @@ class AgentRuntime:
         message: BaseModel,
         metadata: MessageMetadata,
     ) -> None:
-        await method(message, RuntimeContext(self, state, metadata))
+        await method(message, RuntimeContext(self, state.name, metadata))
 
     def _discover_subscriptions(
         self,
@@ -334,23 +265,8 @@ class AgentRuntime:
             raise ValueError(f"topic {topic.name!r} already uses another message type")
 
     def _ensure_running(self) -> None:
-        self._raise_if_failed()
         if not self.running:
             raise RuntimeClosedError("agent runtime is not running")
-
-    def _raise_if_failed(self) -> None:
-        if self._failures:
-            raise RuntimeFailedError("agent runtime background work failed") from (
-                self._failures[0]
-            )
-
-    def _background_failed(self, error: BaseException) -> None:
-        self._failures.append(error)
-        self._running = False
-        for state in self._agents.values():
-            for task in (*state.background, *state.deliveries):
-                if not task.done():
-                    task.cancel()
 
     @staticmethod
     def _metadata(
@@ -379,5 +295,4 @@ __all__ = [
     "AgentRuntime",
     "RuntimeClosedError",
     "RuntimeContext",
-    "RuntimeFailedError",
 ]

@@ -31,19 +31,19 @@ leave Relay state or participant status unfinished.
 
 ### 2026-08-12 — Agents own existing tools and their concurrency policy
 
-`xr-ai-agent-runtime` defines an `Agent` as a runtime-managed resource scope
-containing private state and ordinary `Tool` or `AsyncTool` instances from
+`xr-ai-agent-runtime` defines an `Agent` as a plain object containing private
+state and ordinary `Tool` or `AsyncTool` instances from
 `xr-ai-tools`. There is no separate function contract, agent address, runtime
 call API, or tool adapter. Direct callers and other agents use `execute()` or
 `stream()`; model-selected calls use the same `ToolSet` and
 `handle_tool_call()` path as standalone tools.
 
-The runtime enters an optional `lifespan()` async context, owns background
-tasks, quiesces in-flight subscription deliveries, and then exits the scope.
-It also retains typed, participant-scoped `publish()` fan-out. Tool handlers and
-subscription callbacks may run concurrently; each agent owns any lock or
-private queue needed for its state instead of receiving a mandatory mailbox.
-This avoids implicit head-of-line blocking, especially for streams.
+The runtime owns typed, participant-scoped `publish()` fan-out and quiesces only
+the in-flight subscription deliveries it creates. Agent resources, background
+tasks, and lifecycle remain entirely agent-owned. Tool handlers and subscription
+callbacks may run concurrently; each agent owns any lock or private queue needed
+for its state instead of receiving a mandatory mailbox. This avoids implicit
+head-of-line blocking, especially for streams.
 
 Unary tools now permit `None` for acknowledged side effects. Streaming tools
 remain `AsyncTool` instances and are never silently buffered into model tool

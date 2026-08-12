@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 [project]
 name = "xr-ai-agent-runtime"
 version = "0.1.0"
-description = "Resource lifetime and pub/sub runtime for XR AI agents."
+description = "Typed pub/sub runtime for XR AI agents."
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "pydantic>=2.10",

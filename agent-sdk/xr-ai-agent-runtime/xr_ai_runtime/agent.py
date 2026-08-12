@@ -1,22 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Agent resource scopes and their exposed native tools."""
+"""Agents and their exposed native tools."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterable
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable
+from typing import Any
 
 from xr_ai_tools import AsyncTool, Tool
 
-if TYPE_CHECKING:
-    from .runtime import RuntimeContext
-
 
 class Agent:
-    """A runtime-managed resource scope that exposes ordinary native tools."""
+    """An object that owns state and exposes ordinary native tools."""
 
     def __init__(
         self,
@@ -37,12 +33,5 @@ class Agent:
         """Return the existing native tools exposed by this agent."""
 
         return self._tools
-
-    @asynccontextmanager
-    async def lifespan(self, _ctx: RuntimeContext) -> AsyncIterator[None]:
-        """Optionally acquire resources for this agent's runtime lifetime."""
-
-        yield
-
 
 __all__ = ["Agent"]
