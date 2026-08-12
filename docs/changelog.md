@@ -9,6 +9,26 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — Streaming tools isolate Relay scopes in producer tasks
+
+`AsyncTool` runs each handler in a forked producer task that exclusively owns
+its Relay tool scope and closes the handler in that same task and context.
+Chunks cross a one-item queue and are yielded in the consumer's context. The
+consumer races the queue against producer completion so normal completion,
+exceptions (including `BaseExceptionGroup`), and cancellation cannot leave it
+waiting forever. Abandoning or cancelling the consumer cancels and awaits the
+producer. Voice handlers explicitly close streaming responses, and the simple
+VLM adapter also closes its nested tool stream, so cleanup does not depend on
+async-generator garbage collection.
+
+This boundary deliberately means callers do not run inside the tool scope and
+parent scope-local registrations are not copied into the producer context.
+Cancellation records the tool scope as an error; the producer may stay one
+chunk ahead of the consumer, and its span may end before the final buffered
+chunk is consumed. Producer cleanup remains unbounded: a timeout and detached
+cleanup policy requires a separate decision because abandoning cleanup could
+leave Relay state or participant status unfinished.
+
 ### 2026-08-12 — Tool-call handling is not an agent runtime
 
 `agents.py`, `agent_runner.py`, `Agent`, and `AgentRunner` are removed.

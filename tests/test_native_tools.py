@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from builtins import BaseExceptionGroup
 from collections.abc import AsyncIterator
 
 import nemo_relay
@@ -53,6 +54,106 @@ async def test_async_tool_validates_and_yields_typed_chunks() -> None:
     assert chunks == [AddResult(total=2), AddResult(total=5)]
 
 
+async def test_async_tool_yields_chunk_buffered_before_producer_completion() -> None:
+    async def single_chunk(request: AddRequest) -> AsyncIterator[AddResult]:
+        yield AddResult(total=request.left)
+
+    tool = AsyncTool(
+        "stream_add",
+        "Stream a running total.",
+        AddRequest,
+        AddResult,
+        single_chunk,
+    )
+
+    chunks = [chunk async for chunk in tool.stream({"left": 2, "right": 3})]
+
+    assert chunks == [AddResult(total=2)]
+
+
+async def test_async_tool_propagates_handler_failure_after_buffered_chunks() -> None:
+    emitted = []
+
+    async def failing_stream(request: AddRequest) -> AsyncIterator[AddResult]:
+        yield AddResult(total=request.left)
+        raise RuntimeError("stream failed")
+
+    tool = AsyncTool(
+        "stream_add",
+        "Stream a running total.",
+        AddRequest,
+        AddResult,
+        failing_stream,
+    )
+
+    with pytest.raises(RuntimeError, match="stream failed"):
+        async for chunk in tool.stream({"left": 2, "right": 3}):
+            emitted.append(chunk)
+
+    assert emitted == [AddResult(total=2)]
+
+
+async def test_async_tool_propagates_base_exception_group_without_hanging() -> None:
+    class FatalStreamError(BaseException):
+        pass
+
+    async def fatal_stream(_request: AddRequest) -> AsyncIterator[AddResult]:
+        if False:
+            yield AddResult(total=0)
+        raise BaseExceptionGroup("stream failed", [FatalStreamError()])
+
+    tool = AsyncTool(
+        "stream_add",
+        "Stream a running total.",
+        AddRequest,
+        AddResult,
+        fatal_stream,
+    )
+
+    async def consume() -> None:
+        async for _chunk in tool.stream({"left": 2, "right": 3}):
+            pass
+
+    with pytest.raises(BaseExceptionGroup, match="stream failed"):
+        await asyncio.wait_for(consume(), timeout=1.0)
+
+
+async def test_async_tool_consumer_cancellation_closes_handler() -> None:
+    started = asyncio.Event()
+    closed = asyncio.Event()
+    blocked = asyncio.Event()
+
+    async def blocking_stream(_request: AddRequest) -> AsyncIterator[AddResult]:
+        started.set()
+        try:
+            await blocked.wait()
+            if False:
+                yield AddResult(total=0)
+        finally:
+            closed.set()
+
+    tool = AsyncTool(
+        "stream_add",
+        "Stream a running total.",
+        AddRequest,
+        AddResult,
+        blocking_stream,
+    )
+
+    async def consume() -> None:
+        async for _chunk in tool.stream({"left": 2, "right": 3}):
+            pass
+
+    consumer = asyncio.create_task(consume())
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    consumer.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await consumer
+
+    assert closed.is_set()
+
+
 async def test_async_tool_closes_an_abandoned_stream_in_its_relay_context() -> None:
     closed = asyncio.Event()
     blocked = asyncio.Event()
@@ -71,8 +172,7 @@ async def test_async_tool_closes_an_abandoned_stream_in_its_relay_context() -> N
         AddResult,
         blocking_stream,
     )
-    parent_scope = nemo_relay.scope.get_handle()
-    consumer_scope_unchanged = []
+    consumer_scope_unchanged: list[bool] = []
 
     async def abandon_stream() -> None:
         consumer_scope = nemo_relay.scope.get_handle()
@@ -85,14 +185,15 @@ async def test_async_tool_closes_an_abandoned_stream_in_its_relay_context() -> N
                 nemo_relay.scope.get_handle().uuid == consumer_scope.uuid
             )
 
+    # A forked consumer reproduces finalization outside the caller's Relay context.
     await asyncio.create_task(
         abandon_stream(),
         context=nemo_relay.fork_asyncio_context(),
     )
     await asyncio.wait_for(closed.wait(), timeout=1.0)
 
+    # This is the assertion that fails when the tool scope leaks across a yield.
     assert consumer_scope_unchanged == [True]
-    assert nemo_relay.scope.get_handle().uuid == parent_scope.uuid
 
 
 def test_tool_definitions_adapt_native_tools_for_model_services() -> None:

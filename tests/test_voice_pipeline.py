@@ -1245,6 +1245,51 @@ async def test_assistant_cancels_inflight_on_interruption_frame():
 
 
 @pytest.mark.asyncio
+async def test_assistant_closes_stream_on_interruption() -> None:
+    started = asyncio.Event()
+    blocked = asyncio.Event()
+
+    class HeldStream:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self) -> str:
+            started.set()
+            await blocked.wait()
+            raise StopAsyncIteration
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    stream = HeldStream()
+
+    async def handle(_query: VoiceQuery) -> AsyncIterator[str]:
+        return stream
+
+    assistant = _VoiceHandlerProcessor(handle)
+    await _run_chain(
+        assistant,
+        sends=[
+            GatedQueryFrame(
+                participant_id="pid-1",
+                text="hi",
+                fresh_match=True,
+                pts_us=0,
+            ),
+            InterruptionFrame(),
+        ],
+        settle_s=0.2,
+        per_send_delay_s=0.05,
+    )
+
+    assert started.is_set()
+    assert stream.closed is True
+
+
+@pytest.mark.asyncio
 async def test_interruption_cancels_active_task_and_clears_queued_queries():
     started: list[str] = []
     cancelled: list[str] = []

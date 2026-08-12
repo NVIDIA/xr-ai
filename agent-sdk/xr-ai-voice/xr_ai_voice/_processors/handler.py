@@ -243,11 +243,16 @@ class _VoiceHandlerProcessor(FrameProcessor):
                     accumulated.append(result)
                     await self._push_text(result, pid=pid)
                 return
-            async for chunk in result:
-                if not chunk or self._turn_tokens.get(pid) is not token:
-                    continue
-                accumulated.append(chunk)
-                await self._push_text(chunk, pid=pid)
+            try:
+                async for chunk in result:
+                    if not chunk or self._turn_tokens.get(pid) is not token:
+                        continue
+                    accumulated.append(chunk)
+                    await self._push_text(chunk, pid=pid)
+            finally:
+                close = getattr(result, "aclose", None)
+                if close is not None:
+                    await close()
         except asyncio.CancelledError:
             cancelled = True
             raise

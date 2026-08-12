@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import time
 from pathlib import Path
@@ -283,6 +284,36 @@ def test_config_rejects_a_non_mapping_yaml_document(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="must be a YAML mapping"):
         load_config(config_path)
+
+
+async def test_vision_handler_closes_nested_tool_stream() -> None:
+    closed = asyncio.Event()
+    blocked = asyncio.Event()
+
+    class Vision:
+        async def stream(self, _request):
+            try:
+                yield SimpleNamespace(text="first")
+                await blocked.wait()
+            finally:
+                closed.set()
+
+    handler = app._make_vision_handler(Vision())  # pyright: ignore[reportArgumentType]
+    response = await handler(
+        VoiceQuery(
+            participant_id="alice",
+            text="What is shown?",
+            fresh_match=True,
+            timestamp_us=123,
+        )
+    )
+    assert not isinstance(response, str)
+
+    assert await anext(response) == "first"
+    close = getattr(response, "aclose")
+    await close()
+
+    assert closed.is_set()
 
 
 async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(

@@ -21,13 +21,18 @@ from .config import WorkerConfig
 def _make_vision_handler(vision: StreamingVisionTool) -> VoiceHandler:
     async def handle(turn):
         async def response():
-            async for chunk in vision.stream(
-                VisionRequest(
-                    participant_id=turn.participant_id,
-                    query=turn.text,
-                )
-            ):
-                yield chunk.text
+            request = VisionRequest(
+                participant_id=turn.participant_id,
+                query=turn.text,
+            )
+            stream = vision.stream(request)
+            try:
+                async for chunk in stream:
+                    yield chunk.text
+            finally:
+                close = getattr(stream, "aclose", None)
+                if close is not None:
+                    await close()
 
         return response()
 
