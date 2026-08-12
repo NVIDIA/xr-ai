@@ -125,8 +125,8 @@ xr-ai-tools  (agent-sdk/xr-ai-tools/)
     └── [relay] xr-ai-models [editable: ../xr-ai-models]
     └── [live-vision] numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
     Toolkit-independent native tools: Pydantic request and response models,
-    Relay-managed execution, the generic ``AgentRunner`` protocol, a bounded
-    default tool loop, and participant-scoped live vision.
+    Relay-managed finite and async execution, model tool-call workflow helpers,
+    and participant-scoped live vision.
 
 xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── nvidia-nat-core ==1.8.0
@@ -155,9 +155,8 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     ``xr_vision_tools`` exposes ``look_at_current_frame`` and
     ``look_at_past_frame`` over the always-on live-frame source, acquiring the
     frame itself and calling an injected xr-ai-models VLM; recorded lookups
-    resolve through the ``xr_video_memory`` group. A separate
-    ``xr_streaming_vision`` function composes current-frame acquisition with
-    complete or streaming VLM invocation. ``xr_tracking`` calls
+    resolve through the ``xr_video_memory`` group. The replaced NAT
+    streaming function has moved to ``xr-ai-tools``. ``xr_tracking`` calls
     the typed OpenXR service and returns a complete user coordinate frame.
     ``xr_video_memory`` calls the typed video-memory service for recorded-video
     discovery, queries, and frame extraction. ``xr_rag`` calls the typed RAG

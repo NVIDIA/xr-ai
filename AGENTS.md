@@ -62,8 +62,8 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   public `xr_ai_hub`, `xr_ai_models`, `xr_ai_tools`, `xr_ai_nat`, and
   `xr_ai_voice` SDK surfaces plus task-specific libraries (numpy, torch, …).
 - **Agentic functions are native and in-process.** New and migrated tools live
-  in `xr-ai-tools`; every tool and tool-driven agent lifecycle passes through
-  NeMo Relay, and all model I/O remains in `xr-ai-models`. `xr-ai-nat` retains
+  in `xr-ai-tools`; every tool execution passes through NeMo Relay, and all
+  model I/O remains in `xr-ai-models`. `xr-ai-nat` retains
   NeMo Agent Toolkit compatibility only while existing function groups
   migrate. Existing MCP servers remain compatibility surfaces while their
   capabilities migrate.
@@ -173,9 +173,8 @@ itself. `XRTrackingFunctionsConfig` exposes the current user frame through
 the typed OpenXR service without routing native agents through MCP.
 `VideoMemoryFunctionsConfig` exposes recorded-video discovery, queries, and
 frame extraction through a typed service while keeping MCP optional; callers
-obtain current frames through the hub client. `StreamingVisionConfig` composes
-raw frame acquisition with VLM streaming behind one native function for voice
-workflows. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
+obtain current frames through the hub client. `StreamingVisionTool` in `xr-ai-tools` composes raw frame
+acquisition with VLM streaming and stays independent of voice. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
 NAT's built-in LangChain-backed agent types; applications install
 `xr-ai-nat[agents]` rather than calling LangChain model clients directly.
 

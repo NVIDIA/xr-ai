@@ -7,19 +7,18 @@
 
 `xr-ai-tools` is the toolkit-independent native tools layer for XR AI.
 `Tool` gives voice, background triggers, and model-driven agents one typed
-Pydantic invocation interface. NeMo Relay manages every new tool execution;
-model-backed tools use injected `xr-ai-models` services rather than exposing a
-model client to an application trigger.
+Pydantic invocation interface. NeMo Relay manages every tool execution;
+model-backed tools use injected `xr-ai-models` services.
 
-## Native tools and tool-driven agents
+## Native tools and model tool calls
 
-The base install supplies `Tool`, `AgentRunner`, and `as_agent_tool`. Install
-`xr-ai-tools[relay]` for the bundled bounded tool-driven `Agent`:
+The base install supplies finite `Tool` and streaming `AsyncTool` types. Install
+`xr-ai-tools[relay]` for the small model tool-call helpers:
 
 ```python
 from pydantic import BaseModel
-from xr_ai_tools import Tool
-from xr_ai_tools.agents import Agent
+from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
 
 
 class LookupRequest(BaseModel):
@@ -41,20 +40,20 @@ lookup_tool = Tool(
     LookupResult,
     lookup,
 )
-agent = Agent(
-    name="assistant",
-    llm=llm,
-    system_prompt="Use the available tools.",
-    tools=(lookup_tool,),
-)
+tools = (lookup_tool,)
+tool_set = ToolSet(tools)
+
+response = await llm.chat(messages, tools=tool_definitions(tools))
+for call in response.tool_calls or ():
+    result = await handle_tool_call(call, tool_set)
+    messages.append(result.message)
 ```
 
-`AgentRunner` is the small async turn protocol behind `as_agent_tool(...)`.
-The bundled `Agent` is the basic stateless tool loop; applications can expose a
-custom, Fabric-backed, or framework-backed runner through the same registered
-`Tool`. That keeps voice, text, and autonomous background work on one
-invocation path. Relay observes model calls inside a tool-backed runner; the
-application never calls an LLM client as a separate control path.
+`tool_definitions(...)` adapts native tools to `xr-ai-models` `ToolDef` values.
+`handle_tool_call(...)` validates and invokes one model-produced `ToolCall`, then
+returns a tool-role `ChatMessage` plus its `return_direct` hint. The application
+or agent owns prompts, model calls, conversation state, iteration policy, and
+whether calls run sequentially or concurrently.
 
 ## Finite and streaming live vision tools
 

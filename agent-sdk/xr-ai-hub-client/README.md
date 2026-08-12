@@ -25,8 +25,8 @@ await endpoint.run()
 ```
 
 `LiveFrameSource` adds raw frame acquisition without adding image conversion or
-model dependencies. Use `xr_ai_nat.functions.vision.StreamingVisionConfig` when the desired
-interface is a model-facing vision function rather than raw pixels.
+model dependencies. Use `xr_ai_tools.streaming_vision.StreamingVisionTool` when the
+desired interface is a model-facing async vision tool rather than raw pixels.
 
 ## Migrating from `xr-ai-agent`
 

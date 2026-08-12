@@ -13,11 +13,10 @@ for all model HTTP, and reach clients only through the Hub IPC SDK.
 
 NeMo Relay is the local execution boundary. The XR-owned `xr-ai-tools` package
 is the toolkit-independent tools layer: Pydantic tool schemas, trigger
-dispatch, and the generic `AgentRunner` protocol. Its bundled agent is a
-bounded tool loop, while `as_agent_tool(...)` lets custom or future
-Fabric-backed runners use the same trigger path. Relay owns LLM and tool
-lifecycles, middleware, guardrails, and telemetry. Existing NeMo Agent Toolkit
-function groups remain compatibility extras until their concrete tools migrate.
+dispatch, and small helpers that adapt those tools to `xr-ai-models` tool-call
+types. Applications own their agents, model calls, history, and loop policy.
+Relay owns tool lifecycles, middleware, guardrails, and telemetry. Existing
+NeMo Agent Toolkit function groups remain compatibility extras until their concrete tools migrate.
 
 NeMo Platform and NeMo Fabric are deployment and evaluation integrations, not
 worker dependencies. Platform currently requires Python 3.12 or 3.13 and owns
@@ -29,7 +28,7 @@ remain optional launch targets after the local runtime has migrated.
 ```text
 XR worker
   -> xr-ai-tools: typed tools and trigger dispatch
-  -> NeMo Relay: managed tool and agent execution, guardrails, telemetry
+  -> NeMo Relay: managed tool execution, guardrails, telemetry
   -> xr-ai-models: private model boundary used by model-backed tools
   -> Hub IPC: media and client data
 
@@ -50,8 +49,8 @@ acceptance behavior rather than an implementation dependency.
 ## Focused PR sequence
 
 1. **Native tools foundation** — add `xr-ai-tools` with Relay-managed
-   tools, the generic `AgentRunner` seam, and a bounded default tool
-   loop, and retain existing function groups behind legacy extras.
+   tools plus model tool-call dispatch helpers, and retain existing function
+   groups behind legacy extras.
 2. **Simple VLM tool** — add a finite current-frame tool for agentic flows,
    retain streaming in a separate transport-independent async tool,
    and prove the lightweight sample selects no legacy extra.

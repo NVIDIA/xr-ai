@@ -7,10 +7,6 @@ from .functions import (
     HistoricalVisionRequest,
     LiveVisionRequest,
     LiveVisionResult,
-    StreamingVisionConfig,
-    VisionChunk,
-    VisionRequest,
-    VisionResult,
     VisionToolsConfig,
 )
 
@@ -18,9 +14,5 @@ __all__ = [
     "HistoricalVisionRequest",
     "LiveVisionRequest",
     "LiveVisionResult",
-    "StreamingVisionConfig",
-    "VisionChunk",
-    "VisionRequest",
-    "VisionResult",
     "VisionToolsConfig",
 ]

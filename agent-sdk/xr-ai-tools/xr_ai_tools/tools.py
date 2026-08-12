@@ -54,18 +54,6 @@ class Tool(Generic[RequestT, ResultT]):
         self._result_codec = typed.PydanticCodec(result_model)
         self._render_result = render_result or _json_result
 
-    def to_openai(self) -> dict[str, Any]:
-        """Return the OpenAI-compatible definition supplied to an agent model."""
-
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.request_model.model_json_schema(),
-            },
-        }
-
     async def execute(self, request: RequestT) -> ResultT:
         """Run one validated request through the shared Relay tool lifecycle."""
 
@@ -109,7 +97,7 @@ class Tool(Generic[RequestT, ResultT]):
 
 
 class ToolSet:
-    """A non-overlapping tool catalog used by one native agent."""
+    """A non-overlapping native tool catalog."""
 
     def __init__(self, tools: Iterable[Tool[Any, Any]]) -> None:
         by_name: dict[str, Tool[Any, Any]] = {}
@@ -118,12 +106,6 @@ class ToolSet:
                 raise ValueError(f"duplicate tool name: {tool.name}")
             by_name[tool.name] = tool
         self._by_name = by_name
-
-    @property
-    def definitions(self) -> tuple[dict[str, Any], ...]:
-        """Return model-visible schemas in registration order."""
-
-        return tuple(tool.to_openai() for tool in self._by_name.values())
 
     def get(self, name: str) -> Tool[Any, Any] | None:
         """Return the named tool when this catalog owns it."""

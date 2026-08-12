@@ -9,9 +9,20 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — Tool-call handling is not an agent runtime
+
+`agents.py`, `agent_runner.py`, `Agent`, and `AgentRunner` are removed.
+`tool_calling.py` only adapts native schemas to model `ToolDef` values and
+handles one model-produced `ToolCall` at a time. Applications own prompts, model
+calls, history, iteration, and concurrency.
+
+The unused NAT `StreamingVisionConfig` and its schemas are also removed because
+`StreamingVisionTool` replaces that surface. The still-used `VisionToolsConfig`
+remains in NAT because its recorded-frame tool has no native replacement yet.
+
 ### 2026-08-12 — Native tools live outside the NAT compatibility package
 
-The Relay-managed tool and agent-runner modules moved from `xr-ai-nat` to the
+The Relay-managed tool modules moved from `xr-ai-nat` to the
 dedicated `xr-ai-tools` package. Live vision is split into independent finite
 and streaming tool modules. `xr-ai-nat` now remains only as the NeMo Agent
 Toolkit compatibility surface during migration.

@@ -26,8 +26,6 @@ from xr_ai_nat.functions.video_memory import HistoricalFrameRequest, HistoricalF
 from xr_ai_nat.functions.vision import (
     HistoricalVisionRequest,
     LiveVisionRequest,
-    StreamingVisionConfig,
-    VisionRequest,
     VisionToolsConfig,
 )
 from xr_ai_nat.functions.vision._pixels import encode_image, frame_to_pil
@@ -41,11 +39,6 @@ class _Vlm:
     async def ask_image(self, image: Any, question: str, *, system_prompt: str = ""):
         self.calls.append((image, question, system_prompt))
         return SimpleNamespace(content=self.content)
-
-    async def stream(self, image: Any, question: str, *, system_prompt: str = ""):
-        self.calls.append((image, question, system_prompt))
-        for token in ("a ", "blue ", "square"):
-            yield token
 
 
 class _Endpoint:
@@ -159,61 +152,6 @@ def test_frame_to_pil_supports_non_rgb_frame_formats(pixel_format, data) -> None
     assert image.size == (2, 2)
 
 
-# ── StreamingVisionConfig (live-camera streaming) ─────────────────────────────
-
-
-async def test_streaming_vision_function_uses_current_participant_frame() -> None:
-    endpoint = _Endpoint()
-    vlm = _Vlm("a blue square")
-    config = StreamingVisionConfig(endpoint=endpoint, vlm=vlm, system_prompt="Answer briefly.")
-
-    async with WorkflowBuilder() as builder:
-        function = await builder.add_function("perception", config)
-        assert endpoint.frame_callback is not None
-        await endpoint.frame_callback(_seed_signal())
-        chunks = [
-            chunk.text
-            async for chunk in function.astream(VisionRequest(participant_id="alice", query="What is shown?"))
-        ]
-        answer = await function.ainvoke(VisionRequest(participant_id="alice", query="What is shown?"))
-
-    assert chunks == ["a ", "blue ", "square"]
-    assert answer.text == "a blue square"
-    assert answer.status == "ok"
-    assert endpoint.statuses == [
-        ("processing", "alice"),
-        ("idle", "alice"),
-        ("processing", "alice"),
-        ("idle", "alice"),
-    ]
-    assert vlm.calls[0][1:] == ("What is shown?", "Answer briefly.")
-    assert vlm.calls[0][0].startswith("data:image/jpeg;base64,")
-
-
-async def test_streaming_vision_function_reports_unavailable_frame(monkeypatch) -> None:
-    endpoint = _Endpoint()
-    vlm = _Vlm("unused")
-
-    async def unavailable_frame(*_args) -> str:
-        raise FrameUnavailable("No camera frame available — please try again.")
-
-    monkeypatch.setattr("xr_ai_nat.functions.vision.functions._current_image", unavailable_frame)
-
-    async with WorkflowBuilder() as builder:
-        function = await builder.add_function("perception", StreamingVisionConfig(endpoint=endpoint, vlm=vlm))
-        chunks = [
-            chunk.text
-            async for chunk in function.astream(VisionRequest(participant_id="alice", query="What is shown?"))
-        ]
-        answer = await function.ainvoke(VisionRequest(participant_id="alice", query="What is shown?"))
-
-    assert chunks == ["No camera frame available — please try again."]
-    assert answer.text == "No camera frame available — please try again."
-    assert answer.status == "unavailable"
-    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
-    assert vlm.calls == []
-
-
 # ── VisionToolsConfig — look_at_current_frame ─────────────────────────────────
 
 
@@ -323,10 +261,6 @@ def test_historical_vision_request_requires_a_positive_reference_time() -> None:
             reference_time_us=0,
         )
 
-
-def test_vision_request_rejects_unknown_arguments() -> None:
-    with pytest.raises(ValidationError):
-        VisionRequest(participant_id="alice", query="What is shown?", unsupported=True)
 
 
 def test_live_vision_request_rejects_unknown_arguments() -> None:

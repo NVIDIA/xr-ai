@@ -169,15 +169,6 @@ The `video_memory` reference is resolved lazily — only on the first
 `look_at_past_frame` call. A **live-only** consumer may omit `video_memory` (and
 need not register that group) as long as it never calls `look_at_past_frame`.
 
-For live voice workflows, `StreamingVisionConfig` (`xr_streaming_vision`) accepts
-a hub `ProcessorEndpoint` and exposes one native function with complete and
-streaming invocation modes. It owns fresh-frame acquisition and VLM invocation;
-Pipecat continues to own audio framing, interruption, and TTS.
-
-Its complete invocation returns a `VisionResult` with `status` set to `ok` or
-`unavailable`; callers must handle an unavailable result without treating its
-text as an answer about the scene.
-
 MCP-only agents that already hold a local image path can still reach the legacy
 file-path `ask_image` tool through the vlm-mcp compatibility server
 (`agent-mcp-servers/vlm-mcp/`), which now owns that path-based surface directly.
