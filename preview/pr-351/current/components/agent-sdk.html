@@ -379,18 +379,16 @@
 <p>The <code class="docutils literal notranslate"><span class="pre">agent-sdk/</span></code> workspace holds the libraries an xr-ai agent is built
 from:</p>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code></strong> — dependency-light agent resource scopes, named
-typed unary and streaming functions, model-tool adapters, and typed
-publish/subscribe.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code></strong> — agent resource lifetimes, runtime-owned
+background tasks, existing native tools, and typed publish/subscribe.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code></strong> — unified service protocols (<code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, <code class="docutils literal notranslate"><span class="pre">VLMService</span></code>,
 <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP clients, driven by a
 structured model deployment profile. Swapping a backend is a configuration
 edit, not a code edit.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes
 <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> and lifecycle events to application-named topics and consumes
-<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>; its named <code class="docutils literal notranslate"><span class="pre">SPEAK</span></code> function uses the same output path.
-<code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating, streaming
-responses, signals, and cleanup.</p></li>
+<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating,
+streaming responses, signals, and cleanup.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat surface retained for unmigrated
 consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>. Its <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> helper exposes
 the same IPC-start request-readiness boundary as <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>.</p></li>
@@ -405,20 +403,30 @@ their concrete capabilities migrate.</p></li>
 <hr class="docutils" />
 <section id="xr-ai-agent-runtime">
 <h2>xr-ai-agent-runtime<a class="headerlink" href="#xr-ai-agent-runtime" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> owns stable runtime-local agent addresses, optional scoped
-resource lifetimes, bounded per-agent mailboxes, participant scope,
-publish/subscribe, timeouts, stream cancellation, and background-task cleanup.
-An agent exposes any number of named typed <code class="docutils literal notranslate"><span class="pre">Function</span></code> implementations. Each
-function is either unary or streaming: unary functions return one validated
-response or <code class="docutils literal notranslate"><span class="pre">None</span></code> for a side effect, while streaming functions yield validated
-chunks without full-response buffering.</p>
-<p>One selected unary function can be adapted into one model-visible tool with
-<code class="docutils literal notranslate"><span class="pre">agent.function(FUNCTION).as_tool(...)</span></code>. Agent lifetime is not itself a tool;
-domain controls such as starting or stopping monitoring remain ordinary
-functions. Agents are registered before runtime startup, and most require no
-lifecycle code. An agent that owns resources implements the optional
-<code class="docutils literal notranslate"><span class="pre">lifespan()</span></code> async context. Model loops, planning, and memory remain agent
-implementations. Raw audio and video remain on the hub path.</p>
+<p><code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> owns optional resource lifetimes, runtime-owned background tasks,
+participant-scoped publish/subscribe, and cleanup. An agent exposes ordinary
+<code class="docutils literal notranslate"><span class="pre">Tool</span></code> and <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> instances from <code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code>. Direct callers use
+<code class="docutils literal notranslate"><span class="pre">execute()</span></code> or <code class="docutils literal notranslate"><span class="pre">stream()</span></code>, and model loops use the same <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> and
+<code class="docutils literal notranslate"><span class="pre">handle_tool_call()</span></code> path as standalone tools. There is no runtime call adapter.</p>
+<p>Agent lifetime is not itself a tool. Domain controls such as starting or
+stopping monitoring remain ordinary tools. Agents are registered before runtime
+startup, and most require no lifecycle code. An agent that owns resources
+implements the optional <code class="docutils literal notranslate"><span class="pre">lifespan()</span></code> async context. Agents also own their
+concurrency policy: shared state that is touched by tools and subscriptions
+must be protected by the agent’s lock or private queue. Model loops, planning,
+and memory remain agent implementations. Raw audio and video remain on the hub
+path.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ToolSet.namespaced({&quot;vision&quot;:</span> <span class="pre">vision.tools,</span> <span class="pre">&quot;planner&quot;:</span> <span class="pre">planner.tools})</span></code>
+assigns unique model-visible names when tools from multiple agents are combined;
+the agents and underlying tools remain unchanged. Participant identity needed
+by direct execution belongs in the tool’s request schema; participant and
+correlation metadata on <code class="docutils literal notranslate"><span class="pre">AgentContext</span></code> applies to pub/sub. The runtime cancels
+work created through <code class="docutils literal notranslate"><span class="pre">ctx.start_task()</span></code>, while external callers must finish
+direct tool calls before the agent’s runtime scope exits.</p>
+<p>A failed runtime-owned background task transitions the runtime to a failed
+state, cancels its remaining owned work, and is surfaced by later operations
+and shutdown. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> settles all fan-out deliveries before propagating
+subscriber failures.</p>
 </section>
 <hr class="docutils" />
 <section id="xr-ai-models">
@@ -636,7 +644,7 @@ boundary. It has no voice or output-transport dependency. Both tools own their
 own frame sources and redact inline camera data from Relay events without
 changing provider input.</p>
 <p>Applications place native tools and model loops inside an
-<code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> agent when they need scoped resources, named functions,
+<code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> agent when they need scoped resources, background tasks,
 or pub/sub. Relay remains responsible for tool and model execution inside that
 agent; the runtime does not duplicate the tool loop or model boundary.</p>
 </section>
@@ -667,7 +675,7 @@ input and lifecycle events with voice-owned schemas on application-named
 topics, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">SPEAK</span><span class="p">,</span>
+    <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
     <span class="n">UserQuery</span><span class="p">,</span>
     <span class="n">VadConfig</span><span class="p">,</span>
     <span class="n">VoiceAgent</span><span class="p">,</span>
@@ -692,13 +700,13 @@ topics, and subscribes to <code class="docutils literal notranslate"><span class
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
     <span class="n">participant_left_topic</span><span class="o">=</span><span class="n">participant_left</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">voice_ref</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">call</span><span class="p">(</span>
-        <span class="n">voice_ref</span><span class="p">,</span>
-        <span class="n">SPEAK</span><span class="p">,</span>
+    <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+        <span class="n">VOICE_OUTPUT_TOPIC</span><span class="p">,</span>
         <span class="n">VoiceOutput</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;The timer is done.&quot;</span><span class="p">),</span>
         <span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span>
+        <span class="n">source</span><span class="o">=</span><span class="s2">&quot;tea-timer&quot;</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 </pre></div>

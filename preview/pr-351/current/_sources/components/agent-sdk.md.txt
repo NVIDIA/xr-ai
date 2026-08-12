@@ -8,18 +8,16 @@
 The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
-- **`xr-ai-agent-runtime`** — dependency-light agent resource scopes, named
-  typed unary and streaming functions, model-tool adapters, and typed
-  publish/subscribe.
+- **`xr-ai-agent-runtime`** — agent resource lifetimes, runtime-owned
+  background tasks, existing native tools, and typed publish/subscribe.
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
   `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
   structured model deployment profile. Swapping a backend is a configuration
   edit, not a code edit.
 - **`xr-ai-voice`** — the native voice runtime. `VoiceAgent` publishes
   `UserQuery` and lifecycle events to application-named topics and consumes
-  `voice.output`; its named `SPEAK` function uses the same output path.
-  `VoiceSession` owns readiness, hub transport, voice gating, streaming
-  responses, signals, and cleanup.
+  `voice.output`. `VoiceSession` owns readiness, hub transport, voice gating,
+  streaming responses, signals, and cleanup.
 - **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
   consumers such as `xr-render-demo`. Its `run_voice_pipeline` helper exposes
   the same IPC-start request-readiness boundary as `VoiceSession`.
@@ -35,21 +33,33 @@ from:
 
 ## xr-ai-agent-runtime
 
-`AgentRuntime` owns stable runtime-local agent addresses, optional scoped
-resource lifetimes, bounded per-agent mailboxes, participant scope,
-publish/subscribe, timeouts, stream cancellation, and background-task cleanup.
-An agent exposes any number of named typed `Function` implementations. Each
-function is either unary or streaming: unary functions return one validated
-response or `None` for a side effect, while streaming functions yield validated
-chunks without full-response buffering.
+`AgentRuntime` owns optional resource lifetimes, runtime-owned background tasks,
+participant-scoped publish/subscribe, and cleanup. An agent exposes ordinary
+`Tool` and `AsyncTool` instances from `xr-ai-tools`. Direct callers use
+`execute()` or `stream()`, and model loops use the same `ToolSet` and
+`handle_tool_call()` path as standalone tools. There is no runtime call adapter.
 
-One selected unary function can be adapted into one model-visible tool with
-`agent.function(FUNCTION).as_tool(...)`. Agent lifetime is not itself a tool;
-domain controls such as starting or stopping monitoring remain ordinary
-functions. Agents are registered before runtime startup, and most require no
-lifecycle code. An agent that owns resources implements the optional
-`lifespan()` async context. Model loops, planning, and memory remain agent
-implementations. Raw audio and video remain on the hub path.
+Agent lifetime is not itself a tool. Domain controls such as starting or
+stopping monitoring remain ordinary tools. Agents are registered before runtime
+startup, and most require no lifecycle code. An agent that owns resources
+implements the optional `lifespan()` async context. Agents also own their
+concurrency policy: shared state that is touched by tools and subscriptions
+must be protected by the agent's lock or private queue. Model loops, planning,
+and memory remain agent implementations. Raw audio and video remain on the hub
+path.
+
+`ToolSet.namespaced({"vision": vision.tools, "planner": planner.tools})`
+assigns unique model-visible names when tools from multiple agents are combined;
+the agents and underlying tools remain unchanged. Participant identity needed
+by direct execution belongs in the tool's request schema; participant and
+correlation metadata on `AgentContext` applies to pub/sub. The runtime cancels
+work created through `ctx.start_task()`, while external callers must finish
+direct tool calls before the agent's runtime scope exits.
+
+A failed runtime-owned background task transitions the runtime to a failed
+state, cancels its remaining owned work, and is surfaced by later operations
+and shutdown. `publish()` settles all fan-out deliveries before propagating
+subscriber failures.
 
 ---
 
@@ -253,7 +263,7 @@ own frame sources and redact inline camera data from Relay events without
 changing provider input.
 
 Applications place native tools and model loops inside an
-`xr-ai-agent-runtime` agent when they need scoped resources, named functions,
+`xr-ai-agent-runtime` agent when they need scoped resources, background tasks,
 or pub/sub. Relay remains responsible for tool and model execution inside that
 agent; the runtime does not duplicate the tool loop or model boundary.
 
@@ -289,7 +299,7 @@ topics, and subscribes to `voice.output`:
 ```python
 from xr_ai_runtime import Topic
 from xr_ai_voice import (
-    SPEAK,
+    VOICE_OUTPUT_TOPIC,
     UserQuery,
     VadConfig,
     VoiceAgent,
@@ -314,13 +324,13 @@ voice = VoiceAgent(
     query_topic=queries,
     participant_left_topic=participant_left,
 )
-voice_ref = runtime.register("voice", voice)
+runtime.register("voice", voice)
 async with runtime:
-    await runtime.call(
-        voice_ref,
-        SPEAK,
+    await runtime.publish(
+        VOICE_OUTPUT_TOPIC,
         VoiceOutput(text="The timer is done."),
         participant_id="alice",
+        source="tea-timer",
     )
     await voice.wait()
 ```
