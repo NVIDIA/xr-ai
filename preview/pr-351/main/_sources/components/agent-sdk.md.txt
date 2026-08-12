@@ -8,6 +8,8 @@
 The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
+- **`xr-ai-agent-runtime`** — agents exposing existing native tools and typed
+  publish/subscribe.
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
   `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
   structured model deployment profile. Swapping a backend is a configuration
@@ -25,6 +27,31 @@ from:
   workflow helpers.
 - **`xr-ai-nat`** — legacy NeMo Agent Toolkit function groups retained while
   their concrete capabilities migrate.
+
+---
+
+## xr-ai-agent-runtime
+
+`AgentRuntime` provides participant-scoped publish/subscribe. An agent exposes
+ordinary `Tool` and `AsyncTool` instances from `xr-ai-tools`. Direct callers
+use `execute()` or `stream()`, and model loops use the same `ToolSet` and
+`handle_tool_call()` path as standalone tools. There is no runtime call
+adapter.
+
+Agent lifetime is not itself a runtime concern. Domain controls such as starting
+or stopping monitoring remain ordinary tools. Agents are registered before
+runtime startup and own their resources, tasks, and concurrency policy. Shared
+state that is touched by tools and subscriptions must be protected by the
+agent's lock or private queue. Model loops, planning, and memory remain agent
+implementations. Raw audio and video remain on the hub path.
+
+`ToolSet.namespaced({"vision": vision.tools, "planner": planner.tools})`
+assigns unique model-visible names when tools from multiple agents are combined;
+the agents and underlying tools remain unchanged. Participant identity needed
+by direct execution belongs in the tool's request schema; participant and
+correlation metadata on `RuntimeContext` applies to pub/sub. Agents create,
+cancel, and await their own background tasks. `publish()` settles all fan-out
+deliveries before propagating subscriber failures.
 
 ---
 
@@ -226,6 +253,11 @@ boundaries. `xr_ai_tools.streaming_vision.StreamingVisionTool` is a separate
 boundary. It has no voice or output-transport dependency. Both tools own their
 own frame sources and redact inline camera data from Relay events without
 changing provider input.
+
+Applications place native tools and model loops inside an agent to group tools
+with their state, and register the agent with `xr-ai-agent-runtime` when they
+need pub/sub. Relay remains responsible for tool and model execution; the
+runtime does not duplicate the tool loop or model boundary.
 
 ## xr-ai-nat model bridge
 
