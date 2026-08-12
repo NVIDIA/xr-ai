@@ -387,10 +387,10 @@ publish/subscribe.</p></li>
 structured model deployment profile. Swapping a backend is a configuration
 edit, not a code edit.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes
-<code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> to an application-named topic and consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>; its
-named <code class="docutils literal notranslate"><span class="pre">SPEAK</span></code> function uses the same output path. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns
-readiness, hub transport, voice gating, streaming responses, signals, and
-cleanup.</p></li>
+<code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> and lifecycle events to application-named topics and consumes
+<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>; its named <code class="docutils literal notranslate"><span class="pre">SPEAK</span></code> function uses the same output path.
+<code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating, streaming
+responses, signals, and cleanup.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat surface retained for unmigrated
 consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>. Its <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> helper exposes
 the same IPC-start request-readiness boundary as <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>.</p></li>
@@ -663,14 +663,15 @@ lifecycle ownership.</p>
 <h2>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h2>
 <p>Native voice applications work with participant-aware runtime topics rather
 than Pipecat processors. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>, publishes accepted
-speech and typed text as the voice-owned <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> schema on an
-application-named topic, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
+input and lifecycle events with voice-owned schemas on application-named
+topics, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">SPEAK</span><span class="p">,</span>
     <span class="n">UserQuery</span><span class="p">,</span>
     <span class="n">VadConfig</span><span class="p">,</span>
     <span class="n">VoiceAgent</span><span class="p">,</span>
+    <span class="n">VoiceParticipantLeft</span><span class="p">,</span>
     <span class="n">VoiceOutput</span><span class="p">,</span>
     <span class="n">VoiceSession</span><span class="p">,</span>
 <span class="p">)</span>
@@ -685,10 +686,11 @@ application-named topic, and subscribes to <code class="docutils literal notrans
     <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
 <span class="p">)</span>
 <span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.user-query&quot;</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
+<span class="n">participant_left</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.participant-left&quot;</span><span class="p">,</span> <span class="n">VoiceParticipantLeft</span><span class="p">)</span>
 <span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
     <span class="n">session</span><span class="p">,</span>
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
-    <span class="n">on_participant_left</span><span class="o">=</span><span class="n">release_participant</span><span class="p">,</span>
+    <span class="n">participant_left_topic</span><span class="o">=</span><span class="n">participant_left</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">voice_ref</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
@@ -706,9 +708,9 @@ readiness closes the session’s model clients without opening hub sockets. The
 ready file is touched only after the input transport enters its hub IPC receive
 loop. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant routing, cancels superseded or
 interrupted output, installs signal handlers, and closes its transport and
-model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> forwards
-<code class="docutils literal notranslate"><span class="pre">on_interrupted(pid)</span></code> so applications can cancel participant work; a pid-less
-interruption passes <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> turns transport lifecycle callbacks into typed
+runtime events; application agents subscribe and clean up their own state. A
+pid-less interruption is a global event.</p>
 </section>
 <section id="xr-ai-pipecat">
 <h2>xr-ai-pipecat<a class="headerlink" href="#xr-ai-pipecat" title="Link to this heading">#</a></h2>

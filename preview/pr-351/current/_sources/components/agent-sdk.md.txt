@@ -16,10 +16,10 @@ from:
   structured model deployment profile. Swapping a backend is a configuration
   edit, not a code edit.
 - **`xr-ai-voice`** — the native voice runtime. `VoiceAgent` publishes
-  `UserQuery` to an application-named topic and consumes `voice.output`; its
-  named `SPEAK` function uses the same output path. `VoiceSession` owns
-  readiness, hub transport, voice gating, streaming responses, signals, and
-  cleanup.
+  `UserQuery` and lifecycle events to application-named topics and consumes
+  `voice.output`; its named `SPEAK` function uses the same output path.
+  `VoiceSession` owns readiness, hub transport, voice gating, streaming
+  responses, signals, and cleanup.
 - **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
   consumers such as `xr-render-demo`. Its `run_voice_pipeline` helper exposes
   the same IPC-start request-readiness boundary as `VoiceSession`.
@@ -283,8 +283,8 @@ lifecycle ownership.
 
 Native voice applications work with participant-aware runtime topics rather
 than Pipecat processors. `VoiceAgent` owns `VoiceSession`, publishes accepted
-speech and typed text as the voice-owned `UserQuery` schema on an
-application-named topic, and subscribes to `voice.output`:
+input and lifecycle events with voice-owned schemas on application-named
+topics, and subscribes to `voice.output`:
 
 ```python
 from xr_ai_runtime import Topic
@@ -293,6 +293,7 @@ from xr_ai_voice import (
     UserQuery,
     VadConfig,
     VoiceAgent,
+    VoiceParticipantLeft,
     VoiceOutput,
     VoiceSession,
 )
@@ -307,10 +308,11 @@ session = VoiceSession(
     closeables=(vlm,),
 )
 queries = Topic("my-sample.user-query", UserQuery)
+participant_left = Topic("my-sample.participant-left", VoiceParticipantLeft)
 voice = VoiceAgent(
     session,
     query_topic=queries,
-    on_participant_left=release_participant,
+    participant_left_topic=participant_left,
 )
 voice_ref = runtime.register("voice", voice)
 async with runtime:
@@ -328,9 +330,9 @@ readiness closes the session's model clients without opening hub sockets. The
 ready file is touched only after the input transport enters its hub IPC receive
 loop. `VoiceSession` preserves participant routing, cancels superseded or
 interrupted output, installs signal handlers, and closes its transport and
-model clients. `VoiceAgent` forwards
-`on_interrupted(pid)` so applications can cancel participant work; a pid-less
-interruption passes `None`.
+model clients. `VoiceAgent` turns transport lifecycle callbacks into typed
+runtime events; application agents subscribe and clean up their own state. A
+pid-less interruption is a global event.
 
 ## xr-ai-pipecat
 
