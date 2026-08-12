@@ -28,6 +28,10 @@ class ModelsLLMConfig(LLMBaseConfig, name="xr_ai_models"):
         description="Path to an xr-ai-models deployment profile.",
     )
     role: str = Field(default="agent_llm", description="LLM role within the deployment profile.")
+    recover_tool_calls: bool = Field(
+        default=False,
+        description="Recover tool calls the serving layer leaked into message content.",
+    )
     service: Any | None = Field(
         default=None,
         exclude=True,
@@ -91,6 +95,7 @@ async def models_langchain_client(config: ModelsLLMConfig, _builder: Builder):
         max_tokens=config.max_tokens,
         enable_thinking=config.enable_thinking,
         thinking_budget=config.thinking_budget,
+        recover_tool_calls=config.recover_tool_calls,
     )
 
 

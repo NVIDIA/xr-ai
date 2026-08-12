@@ -251,7 +251,7 @@ async def run_case(case: RoutingCase) -> bool:
                 LLMRef("scene_llm"),
                 ModelsLLMConfig(
                     service=llm, model_name="xr-scene-agent", max_tokens=2048,
-                    temperature=0.0,
+                    temperature=0.0, recover_tool_calls=True,
                 ),
             )
             for agent_name, description in _DESCRIPTIONS.items():
