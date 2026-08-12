@@ -402,6 +402,8 @@
 <p>The <code class="docutils literal notranslate"><span class="pre">agent-sdk/</span></code> workspace holds the libraries an xr-ai agent is built
 from:</p>
 <ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code></strong> — agents exposing existing native tools and typed
+publish/subscribe.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code></strong> — unified service protocols (<code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, <code class="docutils literal notranslate"><span class="pre">VLMService</span></code>,
 <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP clients, driven by a
 structured model deployment profile. Swapping a backend is a configuration
@@ -420,6 +422,28 @@ workflow helpers.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — legacy NeMo Agent Toolkit function groups retained while
 their concrete capabilities migrate.</p></li>
 </ul>
+<hr class="docutils" />
+<section id="xr-ai-agent-runtime">
+<h2>xr-ai-agent-runtime<a class="headerlink" href="#xr-ai-agent-runtime" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> provides participant-scoped publish/subscribe. An agent exposes
+ordinary <code class="docutils literal notranslate"><span class="pre">Tool</span></code> and <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> instances from <code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code>. Direct callers
+use <code class="docutils literal notranslate"><span class="pre">execute()</span></code> or <code class="docutils literal notranslate"><span class="pre">stream()</span></code>, and model loops use the same <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> and
+<code class="docutils literal notranslate"><span class="pre">handle_tool_call()</span></code> path as standalone tools. There is no runtime call
+adapter.</p>
+<p>Agent lifetime is not itself a runtime concern. Domain controls such as starting
+or stopping monitoring remain ordinary tools. Agents are registered before
+runtime startup and own their resources, tasks, and concurrency policy. Shared
+state that is touched by tools and subscriptions must be protected by the
+agent’s lock or private queue. Model loops, planning, and memory remain agent
+implementations. Raw audio and video remain on the hub path.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ToolSet.namespaced({&quot;vision&quot;:</span> <span class="pre">vision.tools,</span> <span class="pre">&quot;planner&quot;:</span> <span class="pre">planner.tools})</span></code>
+assigns unique model-visible names when tools from multiple agents are combined;
+the agents and underlying tools remain unchanged. Participant identity needed
+by direct execution belongs in the tool’s request schema; participant and
+correlation metadata on <code class="docutils literal notranslate"><span class="pre">RuntimeContext</span></code> applies to pub/sub. Agents create,
+cancel, and await their own background tasks. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> settles all fan-out
+deliveries before propagating subscriber failures.</p>
+</section>
 <hr class="docutils" />
 <section id="xr-ai-models">
 <h2>xr-ai-models<a class="headerlink" href="#xr-ai-models" title="Link to this heading">#</a></h2>
@@ -635,6 +659,10 @@ boundaries. <code class="docutils literal notranslate"><span class="pre">xr_ai_t
 boundary. It has no voice or output-transport dependency. Both tools own their
 own frame sources and redact inline camera data from Relay events without
 changing provider input.</p>
+<p>Applications place native tools and model loops inside an agent to group tools
+with their state, and register the agent with <code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> when they
+need pub/sub. Relay remains responsible for tool and model execution; the
+runtime does not duplicate the tool loop or model boundary.</p>
 </section>
 <section id="xr-ai-nat-model-bridge">
 <h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>
@@ -1167,6 +1195,7 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-agent-runtime">xr-ai-agent-runtime</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-models">xr-ai-models</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#quickstart">Quickstart</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-presets">Built-in presets</a></li>
