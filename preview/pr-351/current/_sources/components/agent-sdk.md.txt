@@ -16,8 +16,9 @@ from:
   structured model deployment profile. Swapping a backend is a configuration
   edit, not a code edit.
 - **`xr-ai-voice`** — the native voice runtime. `VoiceAgent` publishes
-  `voice.input` and consumes `voice.output`; its `VoiceSession` owns readiness,
-  hub transport, voice gating, streaming responses, signals, and cleanup.
+  `UserQuery` to an injected application topic and consumes `voice.output`; its
+  `VoiceSession` owns readiness, hub transport, voice gating, streaming
+  responses, signals, and cleanup.
 - **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
   consumers such as `xr-render-demo`. Its `run_voice_pipeline` helper exposes
   the same IPC-start request-readiness boundary as `VoiceSession`.
@@ -281,9 +282,11 @@ lifecycle ownership.
 
 Native voice applications work with participant-aware runtime topics rather
 than Pipecat processors. `VoiceAgent` owns `VoiceSession`, publishes accepted
-speech and typed text to `voice.input`, and subscribes to `voice.output`:
+speech and typed text to an injected `Topic[UserQuery]`, and subscribes to
+`voice.output`:
 
 ```python
+from xr_ai_runtime import Topic, UserQuery
 from xr_ai_voice import VadConfig, VoiceAgent, VoiceSession
 
 session = VoiceSession(
@@ -295,7 +298,12 @@ session = VoiceSession(
     ready_file=ready_file,
     closeables=(vlm,),
 )
-voice = VoiceAgent(session, on_participant_left=release_participant)
+queries = Topic("my-sample.user-query", UserQuery)
+voice = VoiceAgent(
+    session,
+    query_topic=queries,
+    on_participant_left=release_participant,
+)
 runtime.register("voice", voice)
 async with runtime:
     await voice.wait()
