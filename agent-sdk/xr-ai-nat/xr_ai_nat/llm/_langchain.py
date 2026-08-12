@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import itertools
 import json
 from collections.abc import Callable, Sequence
 from typing import Any, cast
@@ -16,7 +15,6 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
-from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
 
@@ -145,7 +143,6 @@ class LangChainChatModel(BaseChatModel):
     max_tokens: int = 1024
     enable_thinking: bool = False
     thinking_budget: int | None = None
-    recover_tool_calls: bool = False
 
     @property
     def _llm_type(self) -> str:
@@ -188,28 +185,11 @@ class LangChainChatModel(BaseChatModel):
             except json.JSONDecodeError:
                 arguments = {}
             tool_calls.append({"name": call.name, "args": arguments, "id": call.id, "type": "tool_call"})
-        content = response.content
-        recovered_text = ""
-        if self.recover_tool_calls and not tool_calls and raw_tools:
-            offered = {definition.name: definition for definition in (_tool(tool) for tool in raw_tools)}
-            if (recovered := _content_tool_call(_text(content), offered)) is not None:
-                # The original text moves to additional_kwargs: left in
-                # content, the model imitates its own leaked JSON on later
-                # turns, and it becomes the final answer at the iteration
-                # cap; dropped entirely, a false-positive recovery is
-                # undiagnosable.
-                logger.warning("recovered tool call from content: {} ({!r})", recovered["name"], _text(content)[:200])
-                recovered_text = _text(content)
-                tool_calls = [recovered]
-                content = ""
-            elif _text(content).lstrip().startswith("{"):
-                logger.debug("unrecovered JSON-like content: {!r}", _text(content))
         usage = response.raw.get("usage", {}) if isinstance(response.raw, dict) else {}
         prompt_tokens = int(usage.get("prompt_tokens", 0))
         completion_tokens = int(usage.get("completion_tokens", 0))
         message = AIMessage(
-            content=content,
-            additional_kwargs={"recovered_from_content": recovered_text} if recovered_text else {},
+            content=response.content,
             tool_calls=tool_calls,
             usage_metadata={
                 "input_tokens": prompt_tokens,

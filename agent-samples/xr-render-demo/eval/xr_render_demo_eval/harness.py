@@ -592,7 +592,7 @@ _BASICS_HISTORY = (
     ("Add a cyan cube.", "Added a cyan cube."),
     ("Make a green sphere.", "Created a green sphere."),
 )
-_NO_MUTATION = frozenset({"add_primitive", "update_primitive", "remove_primitive"})
+_NO_MUTATION = _MUTATING
 
 BASICS = (
     Case(
@@ -917,13 +917,17 @@ def audit_prompts() -> None:
     # disjoint from prompt examples too.
     try:
         from . import subagents as eval_subagents
-        from . import supervisor as eval_supervisor
     except ImportError:
         pass
     else:
         utterances += [case.instruction for case in eval_subagents.CASES]
-        utterances += [case.request for case in eval_supervisor.CASES]
         fixture_ids |= {item["id"] for case in eval_subagents.CASES for item in case.scene}
+    try:
+        from . import supervisor as eval_supervisor
+    except ImportError:
+        pass
+    else:
+        utterances += [case.request for case in eval_supervisor.CASES]
         fixture_ids |= {item["id"] for case in eval_supervisor.CASES for item in case.scene}
     for prompt_path in prompts:
         label = str(prompt_path.relative_to(worker))

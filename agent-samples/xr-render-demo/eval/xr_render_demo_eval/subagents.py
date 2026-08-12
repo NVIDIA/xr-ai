@@ -554,7 +554,6 @@ async def run_case(case: SubagentCase) -> bool:
                     model_name="xr-scene-agent",
                     max_tokens=2048,
                     temperature=0.0,
-                    recover_tool_calls=True,
                 ),
             )
             scene_group = await builder.get_function_group("scene_state")

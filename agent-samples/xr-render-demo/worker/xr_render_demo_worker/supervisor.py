@@ -113,7 +113,6 @@ async def scene_supervisor(
             model_name="xr-scene-agent",
             max_tokens=2048,
             temperature=0.0,
-            recover_tool_calls=True,
         ),
     )
     if context is None:
