@@ -16,7 +16,7 @@ import pytest
 import tomllib
 import yaml
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat, ProcessorEndpoint
-from xr_ai_models import VLMService
+from xr_ai_models import ChatResponse, VLMService
 from xr_ai_voice import VoiceQuery, VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
 
@@ -28,7 +28,12 @@ sys.path.insert(0, str(_WORKER_DIR))
 from simple_vlm_example_worker import __main__ as worker_main  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from xr_ai_nat.live_vision import LiveVisionResponder  # noqa: E402
+from xr_ai_nat.live_vision import (  # noqa: E402
+    LiveVisionResponder,
+    LiveVisionTool,
+    VisionRequest,
+    VisionResponse,
+)
 
 
 class _Service:
@@ -53,8 +58,8 @@ class _Transport:
         self.shutdown_calls += 1
 
 
-class _LiveVisionResponder:
-    instances: list["_LiveVisionResponder"] = []
+class _LiveVisionTool:
+    instances: list["_LiveVisionTool"] = []
 
     def __init__(self, **kwargs) -> None:
         self.kwargs = kwargs
@@ -62,13 +67,18 @@ class _LiveVisionResponder:
         self.released: list[str] = []
         self.instances.append(self)
 
-    async def stream(self, request):
-        self.requests.append(request)
-        for text in ("a ", "blue square"):
-            yield SimpleNamespace(text=text)
-
     def release(self, participant_id: str) -> None:
         self.released.append(participant_id)
+
+
+class _LiveVisionResponder:
+    def __init__(self, tool: _LiveVisionTool) -> None:
+        self.tool = tool
+
+    async def stream(self, request):
+        self.tool.requests.append(request)
+        for text in ("a ", "blue square"):
+            yield SimpleNamespace(text=text)
 
 
 class _LiveEndpoint:
@@ -101,6 +111,18 @@ class _LiveEndpoint:
 class _StreamingVlm:
     def __init__(self) -> None:
         self.calls = []
+        self.ask_calls = []
+
+    async def ask_image(
+        self,
+        image,
+        question: str,
+        *,
+        system_prompt: str = "",
+        headers=None,
+    ) -> ChatResponse:
+        self.ask_calls.append((image, question, system_prompt, dict(headers or {})))
+        return ChatResponse("a blue square", None, None, "stop", {})
 
     async def stream(
         self,
@@ -289,6 +311,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
+    monkeypatch.setattr(app, "LiveVisionTool", _LiveVisionTool)
     monkeypatch.setattr(app, "LiveVisionResponder", _LiveVisionResponder)
 
     def make_session(**kwargs):
@@ -319,7 +342,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
     monkeypatch.setattr(app, "VoiceSession", make_session)
     monkeypatch.setattr(app, "TextMessageInput", CaptureTextInput)
-    _LiveVisionResponder.instances.clear()
+    _LiveVisionTool.instances.clear()
 
     await app.run_app(config, ready_file=ready_file)
 
@@ -328,17 +351,17 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
-    assert _LiveVisionResponder.instances[0].kwargs["endpoint"] is transport.endpoint
-    assert _LiveVisionResponder.instances[0].kwargs["system_prompt"] == config.system_prompt
-    assert _LiveVisionResponder.instances[0].kwargs["frame_max_age_s"] == (
+    assert _LiveVisionTool.instances[0].kwargs["endpoint"] is transport.endpoint
+    assert _LiveVisionTool.instances[0].kwargs["system_prompt"] == config.system_prompt
+    assert _LiveVisionTool.instances[0].kwargs["frame_max_age_s"] == (
         config.frame_max_age_s
     )
-    assert _LiveVisionResponder.instances[0].kwargs["frame_timeout_s"] == (
+    assert _LiveVisionTool.instances[0].kwargs["frame_timeout_s"] == (
         config.frame_timeout_s
     )
-    assert _LiveVisionResponder.instances[0].released == ["alice"]
-    assert _LiveVisionResponder.instances[0].requests[0].participant_id == "alice"
-    assert _LiveVisionResponder.instances[0].requests[0].query == "What is in front of me?"
+    assert _LiveVisionTool.instances[0].released == ["alice"]
+    assert _LiveVisionTool.instances[0].requests[0].participant_id == "alice"
+    assert _LiveVisionTool.instances[0].requests[0].query == "What is in front of me?"
     assert streamed == ["a ", "blue square"]
     assert run_options["interrupt_on_supersede"] is True
     assert text_inputs[0]["session"] is sessions[0]
@@ -347,16 +370,79 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert text_inputs[0]["transform"]("What is this?") == "What is this?"
 
 
+async def test_live_vision_tool_returns_a_complete_agent_observation() -> None:
+    endpoint = _LiveEndpoint()
+    vlm = _StreamingVlm()
+    vision = LiveVisionTool(
+        endpoint=cast(ProcessorEndpoint, endpoint),
+        vlm=cast(VLMService, vlm),
+        system_prompt="Answer briefly.",
+    )
+    assert endpoint.frame_callback is not None
+    await endpoint.frame_callback(
+        FrameSignal(
+            slot=0,
+            seq=1,
+            pts_us=time.time_ns() // 1_000,
+            width=2,
+            height=2,
+            fmt=PixelFormat.RGB24,
+            data_sz=12,
+            participant_id="alice",
+            track_id="camera",
+        )
+    )
+    events = []
+    subscriber = "simple-vlm-finite-vision"
+    intercept = "simple-vlm-finite-vision-header"
+
+    def add_header(_name, request, annotated):
+        headers = dict(request.headers)
+        headers["X-Relay-Session"] = "turn-8"
+        return nemo_relay.LLMRequestInterceptOutcome(
+            nemo_relay.LLMRequest(headers, request.content),
+            annotated,
+        )
+
+    nemo_relay.subscribers.register(subscriber, events.append)
+    nemo_relay.intercepts.register_llm_request(intercept, 0, False, add_header)
+    try:
+        result = await vision.execute(
+            VisionRequest(participant_id="alice", query="What is shown?"),
+        )
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.intercepts.deregister_llm_request(intercept)
+        nemo_relay.subscribers.deregister(subscriber)
+
+    assert result == VisionResponse(text="a blue square")
+    image, question, system_prompt, headers = vlm.ask_calls[0]
+    assert image.startswith("data:image/jpeg;base64,")
+    assert question == "What is shown?"
+    assert system_prompt == "Answer briefly."
+    assert headers["X-Relay-Session"] == "turn-8"
+    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
+    assert {"tool", "llm"} <= {getattr(event, "category", None) for event in events}
+    llm_events = [
+        event.to_json()
+        for event in events
+        if getattr(event, "category", None) == "llm"
+    ]
+    assert llm_events
+    assert all(image not in event for event in llm_events)
+    assert any("<redacted:live-camera-frame>" in event for event in llm_events)
+
+
 async def test_sample_handler_streams_a_live_frame_question() -> None:
     endpoint = _LiveEndpoint()
     vlm = _StreamingVlm()
-    vision = LiveVisionResponder(
+    vision = LiveVisionTool(
         endpoint=cast(ProcessorEndpoint, endpoint),
         vlm=cast(VLMService, vlm),
         system_prompt="Answer briefly.",
     )
 
-    handler = app._make_vision_handler(vision)
+    handler = app._make_vision_handler(LiveVisionResponder(vision))
     assert endpoint.frame_callback is not None
     await endpoint.frame_callback(
         FrameSignal(
@@ -394,6 +480,7 @@ async def test_sample_handler_streams_a_live_frame_question() -> None:
                 timestamp_us=123,
             )
         )
+        assert not isinstance(response, str)
         tokens = [token async for token in response]
         await nemo_relay.subscribers.flush_async()
     finally:

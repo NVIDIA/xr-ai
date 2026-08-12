@@ -221,14 +221,13 @@ Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
 registered tool; foreground selection, workflow state, and background work stay
 explicit in application code.
 
-`xr_ai_nat.live_vision.LiveVisionResponder` acquires a participant-scoped hub
-frame and calls its injected `VLMService` through Relay's managed streaming LLM
-path. Each response runs under an Agent scope, and a scope-local sanitizer
-replaces the inline camera frame in Relay events without changing provider
-input. Relay's managed tool API accepts completed JSON values, so finite tools
-use `Tool.execute()` while real-time model output remains an application-owned
-stream. This keeps Relay middleware on a supported managed boundary rather than
-reimplementing a partial streaming-tool lifecycle.
+`xr_ai_nat.live_vision.LiveVisionTool` acquires a participant-scoped hub frame
+and returns one complete observation through Relay's finite tool and LLM
+boundaries. Direct voice can wrap the same tool with `LiveVisionResponder`,
+whose provider response uses Relay's managed streaming LLM path under an Agent
+scope. Both paths replace the inline camera frame in Relay events without
+changing provider input. The split keeps token streaming out of ordinary
+agentic tool calls without reimplementing a partial streaming-tool lifecycle.
 
 ## xr-ai-nat model bridge
 

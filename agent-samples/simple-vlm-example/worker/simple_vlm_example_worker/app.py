@@ -11,7 +11,7 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_nat.live_vision import LiveVisionResponder, VisionRequest
+from xr_ai_nat.live_vision import LiveVisionResponder, LiveVisionTool, VisionRequest
 from xr_ai_voice import TextMessageInput, VadConfig, VoiceHandler, VoiceSession
 from xr_ai_voicegate import load_voice_gate_config
 
@@ -69,13 +69,14 @@ async def run_app(
     )
 
     async with session:
-        vision = LiveVisionResponder(
+        vision = LiveVisionTool(
             endpoint=session.transport.endpoint,
             vlm=vlm,
             system_prompt=config.system_prompt,
             frame_max_age_s=config.frame_max_age_s,
             frame_timeout_s=config.frame_timeout_s,
         )
+        voice = LiveVisionResponder(vision)
         TextMessageInput(
             session=session,
             transform=_text_transform(config.default_prompt),
@@ -84,7 +85,7 @@ async def run_app(
 
         logger.info("simple-vlm-example starting")
         await session.run(
-            _make_vision_handler(vision),
+            _make_vision_handler(voice),
             on_participant_left=vision.release,
             interrupt_on_supersede=True,
         )

@@ -53,8 +53,9 @@ acceptance behavior rather than an implementation dependency.
    Toolkit by default, add Relay-managed tools, the generic `AgentRunner`
    seam, and a bounded default tool loop, and retain existing function groups
    behind legacy extras.
-2. **Simple VLM tool** — move the single-turn streaming-vision path to a normal
-   native tool and prove the lightweight voice sample selects no legacy extra.
+2. **Simple VLM tool** — add a finite current-frame tool for agentic flows,
+   retain streaming only for its direct-voice responder, and prove the
+   lightweight sample selects no legacy extra.
 3. **Native event dispatcher** — port tea-making's typed participant-scoped
    subscriptions and periodic background sources so voice and autonomous work
    invoke the same registered tools.

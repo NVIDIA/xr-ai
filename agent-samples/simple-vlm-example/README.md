@@ -18,10 +18,11 @@ The worker is a package under `worker/simple_vlm_example_worker/`:
 - `prompts/system.txt` owns the VLM system prompt.
 
 `VoiceSession` owns STT/TTS/VLM readiness, the hub voice transport, voice-gate
-processing, streaming TTS, signals, and cleanup. The application invokes the
-native `LiveVisionResponder` directly; it acquires the participant's current
-frame and streams an injected VLM through Relay's managed LLM path. The camera
-frame is redacted from Relay telemetry. Typed text uses the same
+processing, streaming TTS, signals, and cleanup. The application constructs a
+finite `LiveVisionTool` and maps its separate `LiveVisionResponder` to voice;
+both share participant frame acquisition while only the direct voice response
+streams through Relay's managed LLM path. The camera frame is redacted from
+Relay telemetry. Typed text uses the same
 participant-aware turn path as speech. Participant leave events release cached
 live-frame state, and a newer turn cancels and interrupts a superseded response.
 

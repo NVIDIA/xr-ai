@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""A Relay-observed streaming responder for a participant's current frame."""
+"""Current-frame vision for agent tools and direct voice responses."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from xr_ai_models import VLMService
 
 from ._pixels import encode_image, frame_to_pil
 from ._relay import headers_from_relay
+from .tools import Tool
 
 _LOGGER = logging.getLogger(__name__)
 _VLM_CALL_NAME = "xr-ai-vlm"
@@ -34,14 +35,20 @@ class VisionRequest(BaseModel):
     query: str = Field(min_length=1, description="Question to answer from the camera frame.")
 
 
+class VisionResponse(BaseModel):
+    """A complete answer about the current frame."""
+
+    text: str = Field(description="Complete answer text.")
+
+
 class VisionChunk(BaseModel):
-    """One streamed text fragment from a current-frame answer."""
+    """One text fragment from a direct voice answer."""
 
-    text: str = Field(description="A partial fragment of the streamed answer text.")
+    text: str = Field(description="A partial fragment of the answer text.")
 
 
-class LiveVisionResponder:
-    """Stream one participant-scoped answer through Relay's managed LLM path."""
+class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
+    """A finite current-frame tool for agentic planning and tool loops."""
 
     def __init__(
         self,
@@ -64,29 +71,46 @@ class LiveVisionResponder:
             max_age_s=frame_max_age_s,
             timeout_s=frame_timeout_s,
         )
-
-    async def stream(self, request: VisionRequest) -> AsyncIterator[VisionChunk]:
-        """Run one live-vision turn without exposing camera bytes to telemetry."""
-
-        request = VisionRequest.model_validate(request)
-        with nemo_relay.scope.scope(
+        super().__init__(
             "look_at_current_frame",
-            nemo_relay.ScopeType.Agent,
-            input=request.model_dump(mode="json"),
-        ) as handle:
-            nemo_relay.scope_local.register_llm_sanitize_request(
-                handle,
-                "xr-ai-live-frame",
-                0,
-                _sanitize_live_frame,
-            )
-            async for chunk in self._stream_current(request):
-                yield VisionChunk.model_validate(chunk)
+            "Answer a question about a participant's current live camera view.",
+            VisionRequest,
+            VisionResponse,
+            self._answer_current,
+            render_result=lambda result: result.text,
+        )
 
     def release(self, participant_id: str) -> None:
         """Forget cached frame state after a participant disconnects."""
 
         self.frames.release(participant_id)
+
+    async def _answer_current(self, request: VisionRequest) -> VisionResponse:
+        try:
+            image_url = await self._current_image(request.participant_id)
+        except FrameUnavailable as exc:
+            return VisionResponse(text=str(exc))
+        except Exception:
+            _LOGGER.exception("Live frame conversion failed")
+            return VisionResponse(text="VLM server unavailable — please retry.")
+
+        await self.endpoint.set_status("processing", request.participant_id)
+        try:
+            _register_frame_sanitizer()
+            response = await nemo_relay.llm.execute(
+                _VLM_CALL_NAME,
+                self._relay_request(image_url, request.query),
+                self._ask_vlm,
+                model_name=_VLM_CALL_NAME,
+                codec=OpenAIChatCodec(),
+                response_codec=OpenAIChatCodec(),
+            )
+            return VisionResponse(text=_response_text(response))
+        except Exception:
+            _LOGGER.exception("Live VLM request failed")
+            return VisionResponse(text="VLM server unavailable — please retry.")
+        finally:
+            await self.endpoint.set_status("idle", request.participant_id)
 
     async def _stream_current(self, request: VisionRequest) -> AsyncIterator[VisionChunk]:
         try:
@@ -102,6 +126,7 @@ class LiveVisionResponder:
         await self.endpoint.set_status("processing", request.participant_id)
         fragments: list[str] = []
         try:
+            _register_frame_sanitizer()
             stream = await nemo_relay.llm.stream_execute(
                 _VLM_CALL_NAME,
                 self._relay_request(image_url, request.query),
@@ -144,6 +169,16 @@ class LiveVisionResponder:
             },
         )
 
+    async def _ask_vlm(self, request: nemo_relay.LLMRequest) -> dict[str, Any]:
+        image_url, query, system_prompt = _vision_inputs(request.content)
+        text = await self.vlm.ask_image(
+            image_url,
+            query,
+            system_prompt=system_prompt,
+            headers=headers_from_relay(request.headers),
+        )
+        return _openai_response(text.content)
+
     async def _stream_vlm(
         self,
         request: nemo_relay.LLMRequest,
@@ -156,6 +191,34 @@ class LiveVisionResponder:
             headers=headers_from_relay(request.headers),
         ):
             yield {"choices": [{"delta": {"content": token}}]}
+
+
+class LiveVisionResponder:
+    """Stream a direct voice answer without turning the stream into a tool result."""
+
+    def __init__(self, tool: LiveVisionTool) -> None:
+        self.tool = tool
+
+    async def stream(self, request: VisionRequest) -> AsyncIterator[VisionChunk]:
+        """Run one participant-scoped direct voice response."""
+
+        request = VisionRequest.model_validate(request)
+        with nemo_relay.scope.scope(
+            "speak_about_current_frame",
+            nemo_relay.ScopeType.Agent,
+            input=request.model_dump(mode="json"),
+        ):
+            async for chunk in self.tool._stream_current(request):
+                yield chunk
+
+
+def _register_frame_sanitizer() -> None:
+    nemo_relay.scope_local.register_llm_sanitize_request(
+        nemo_relay.scope.get_handle(),
+        "xr-ai-live-frame",
+        0,
+        _sanitize_live_frame,
+    )
 
 
 def _sanitize_live_frame(
@@ -240,6 +303,21 @@ def _openai_response(text: str) -> dict[str, Any]:
     }
 
 
+def _response_text(raw_response: object) -> str:
+    if not isinstance(raw_response, Mapping):
+        raise TypeError("Relay VLM response must be an object")
+    choices = raw_response.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
+        raise ValueError("Relay VLM response must contain one choice")
+    message = choices[0].get("message")
+    if not isinstance(message, Mapping):
+        raise TypeError("Relay VLM response choice must contain a message")
+    content = message.get("content", "")
+    if not isinstance(content, str):
+        raise TypeError("Relay VLM response content must be text")
+    return content
+
+
 def _stream_text(raw_chunk: object) -> str:
     if not isinstance(raw_chunk, Mapping):
         raise TypeError("Relay VLM stream chunk must be an object")
@@ -255,4 +333,10 @@ def _stream_text(raw_chunk: object) -> str:
     return content
 
 
-__all__ = ["LiveVisionResponder", "VisionChunk", "VisionRequest"]
+__all__ = [
+    "LiveVisionResponder",
+    "LiveVisionTool",
+    "VisionChunk",
+    "VisionRequest",
+    "VisionResponse",
+]
