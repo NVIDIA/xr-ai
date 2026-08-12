@@ -279,11 +279,12 @@ lifecycle ownership.
 
 ## xr-ai-voice
 
-Native voice applications work with participant-aware turns rather than
-Pipecat processors. A handler returns a string or an async stream of strings:
+Native voice applications work with participant-aware runtime topics rather
+than Pipecat processors. `VoiceAgent` owns `VoiceSession`, publishes accepted
+speech and typed text to `voice.input`, and subscribes to `voice.output`:
 
 ```python
-from xr_ai_voice import VadConfig, VoiceSession
+from xr_ai_voice import VadConfig, VoiceAgent, VoiceSession
 
 session = VoiceSession(
     stt=stt,
@@ -294,21 +295,21 @@ session = VoiceSession(
     ready_file=ready_file,
     closeables=(vlm,),
 )
-async with session:
-    await session.run(handler, on_participant_left=release_participant)
+voice = VoiceAgent(session, on_participant_left=release_participant)
+runtime.register("voice", voice)
+async with runtime:
+    await voice.wait()
 ```
 
-`TextMessageInput` routes typed messages through the same turn path as speech
-and ignores data received outside an active `run()`. The default hub transport
-is opened only after readiness probes succeed; failed readiness closes the
-session's model clients without opening hub sockets. The ready file is touched
-from `run()` only after the input transport enters its hub IPC receive loop.
-NAT applications create handlers with
+The default hub transport is opened only after readiness probes succeed; failed
+readiness closes the session's model clients without opening hub sockets. The
+ready file is touched only after the input transport enters its hub IPC receive
+loop. NAT applications that do not use the agent runtime create handlers with
 `xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` preserves participant
 routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients. Runtime-backed applications can
-pass `on_interrupted(pid)` to cancel participant work that runs outside the
-voice handler; a pid-less interruption passes `None`.
+and closes its transport and model clients. `VoiceAgent` forwards
+`on_interrupted(pid)` so applications can cancel participant work; a pid-less
+interruption passes `None`.
 
 ## xr-ai-pipecat
 

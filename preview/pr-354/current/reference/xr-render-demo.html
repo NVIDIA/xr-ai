@@ -377,9 +377,9 @@
 <h1>xr-render-demo — architecture<a class="headerlink" href="#xr-render-demo-architecture" title="Link to this heading">#</a></h1>
 <p>This page describes the architecture of the xr-render-demo sample. For the
 user-facing
-quickstart, refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/933c6e52c8bff1eb5aef16fcff9f305d789f85f7/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr">repository README</a>.
+quickstart, refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/1f829a18729febbd26af1ffe2dd235eeb11da90e/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr">repository README</a>.
 For inference-server mechanics shared with other samples, refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/933c6e52c8bff1eb5aef16fcff9f305d789f85f7/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/1f829a18729febbd26af1ffe2dd235eeb11da90e/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a>.</p>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
 <p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) starts
@@ -566,7 +566,7 @@ one is in-flight.</p>
 <p>Port 8105. <code class="docutils literal notranslate"><span class="pre">rhasspy/piper-voices</span></code> ONNX. Runs on CPU, ~100 ms per sentence. All
 synthesis runs in a thread pool so the asyncio loop is never blocked.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (agentic-loop quick-ack or final response)
-  → VoiceOutputAgent → VoiceSession TTS
+  → VoiceAgent → private VoiceSession TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
       RETURN_AUDIO IPC → hub → LiveKit → participant&#39;s headphones
@@ -579,16 +579,16 @@ render-agent task.</p>
 </section>
 <section id="agent-runtime-and-voice-topology">
 <h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceSession input → VAD/STT + VoiceGate ─┐
-typed hub text → TextMessageInput ────────┴→ user.query topic
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
+           → typed hub text ingress ──────────┴→ voice.input topic
   → RenderAgent → RenderSceneAgent → voice.output topic
-  → VoiceOutputAgent → VoiceSession TTS → hub return audio
+  → VoiceAgent → private VoiceSession TTS → hub return audio
 </pre></div>
 </div>
 <p>The render worker imports no <code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code> or <code class="docutils literal notranslate"><span class="pre">pipecat-ai</span></code> API. Pipecat is
 an internal implementation detail of <code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code>; application input,
 participant-scoped agent execution, and voice output use public SDK contracts.
-Lifecycle failures publish notices to the same <code class="docutils literal notranslate"><span class="pre">user.query</span></code> topic instead of
+Lifecycle failures publish notices to a sample-local runtime topic instead of
 manufacturing voice-pipeline frames.</p>
 </section>
 <section id="agentic-loop">
@@ -597,7 +597,7 @@ manufacturing voice-pipeline frames.</p>
 XR-tracking, spatial-math, vision, video-memory, and text-memory functions.
 The LLM tool schemas are derived from those Functions. <code class="docutils literal notranslate"><span class="pre">start_xr</span></code> and
 <code class="docutils literal notranslate"><span class="pre">get_health</span></code> remain worker-managed lifecycle operations.</p>
-<p>On each accepted <code class="docutils literal notranslate"><span class="pre">user.query</span></code> event:</p>
+<p>On each accepted <code class="docutils literal notranslate"><span class="pre">voice.input</span></code> event or lifecycle notice:</p>
 <ol class="arabic simple">
 <li><p><strong>Quick-ack</strong> runs first (<code class="docutils literal notranslate"><span class="pre">llm</span></code> :8107, awaited before the loop).</p></li>
 <li><p><strong>Still-working timer</strong> starts (fires at 5s, repeats every 10s, data
@@ -729,7 +729,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native NAT functions and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/933c6e52c8bff1eb5aef16fcff9f305d789f85f7/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/1f829a18729febbd26af1ffe2dd235eeb11da90e/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py
