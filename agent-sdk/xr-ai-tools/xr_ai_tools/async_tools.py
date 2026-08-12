@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import suppress
 from typing import Generic, TypeVar
 
 import nemo_relay
@@ -66,10 +67,8 @@ class AsyncTool(Generic[RequestT, ChunkT]):
                 finally:
                     if not next_chunk.done():
                         next_chunk.cancel()
-                        try:
+                        with suppress(asyncio.CancelledError):
                             await next_chunk
-                        except asyncio.CancelledError:
-                            pass
 
                 if next_chunk in done:
                     yield next_chunk.result()
@@ -80,15 +79,13 @@ class AsyncTool(Generic[RequestT, ChunkT]):
                     yield queue.get_nowait()
                     continue
 
-                await producer
+                producer.result()
                 return
         finally:
             if not producer.done():
                 producer.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await producer
-            except asyncio.CancelledError:
-                pass
 
     async def _produce(
         self,

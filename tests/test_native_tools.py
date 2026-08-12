@@ -149,7 +149,7 @@ async def test_async_tool_consumer_cancellation_closes_handler() -> None:
     consumer.cancel()
 
     with pytest.raises(asyncio.CancelledError):
-        await consumer
+        _ = await consumer
 
     assert closed.is_set()
 
