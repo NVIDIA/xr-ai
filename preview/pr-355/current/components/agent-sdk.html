@@ -608,13 +608,13 @@ does not add an HTTP client, a Hub transport, or an implicit conversation store.
 Applications use <code class="docutils literal notranslate"><span class="pre">as_agent_tool(...)</span></code> to expose any <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> as a
 registered tool; foreground selection, workflow state, and background work stay
 explicit in application code.</p>
-<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.live_vision.LiveVisionTool</span></code> acquires a participant-scoped hub frame
-and returns one complete observation through Relay’s finite tool and LLM
-boundaries. Direct voice can wrap the same tool with <code class="docutils literal notranslate"><span class="pre">LiveVisionResponder</span></code>,
-whose provider response uses Relay’s managed streaming LLM path under an Agent
-scope. Both paths replace the inline camera frame in Relay events without
-changing provider input. The split keeps token streaming out of ordinary
-agentic tool calls without reimplementing a partial streaming-tool lifecycle.</p>
+<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.live_vision.LiveVisionTool</span></code> is the finite current-frame tool; it
+returns one complete observation through Relay’s managed tool and LLM
+boundaries. <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.streaming_vision.StreamingVisionTool</span></code> is a separate
+<code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> that yields typed chunks around Relay’s managed streaming LLM
+boundary. It has no voice or output-transport dependency. Both tools own their
+own frame sources and redact inline camera data from Relay events without
+changing provider input.</p>
 </section>
 <section id="xr-ai-nat-model-bridge">
 <h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>

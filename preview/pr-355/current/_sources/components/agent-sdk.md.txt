@@ -222,13 +222,13 @@ Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
 registered tool; foreground selection, workflow state, and background work stay
 explicit in application code.
 
-`xr_ai_tools.live_vision.LiveVisionTool` acquires a participant-scoped hub frame
-and returns one complete observation through Relay's finite tool and LLM
-boundaries. Direct voice can wrap the same tool with `LiveVisionResponder`,
-whose provider response uses Relay's managed streaming LLM path under an Agent
-scope. Both paths replace the inline camera frame in Relay events without
-changing provider input. The split keeps token streaming out of ordinary
-agentic tool calls without reimplementing a partial streaming-tool lifecycle.
+`xr_ai_tools.live_vision.LiveVisionTool` is the finite current-frame tool; it
+returns one complete observation through Relay's managed tool and LLM
+boundaries. `xr_ai_tools.streaming_vision.StreamingVisionTool` is a separate
+`AsyncTool` that yields typed chunks around Relay's managed streaming LLM
+boundary. It has no voice or output-transport dependency. Both tools own their
+own frame sources and redact inline camera data from Relay events without
+changing provider input.
 
 ## xr-ai-nat model bridge
 
