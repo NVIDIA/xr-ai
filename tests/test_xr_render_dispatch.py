@@ -14,11 +14,11 @@ from xr_ai_runtime import (
     AgentContext,
     AgentRuntime,
     MessageMetadata,
-    UserQuery,
     subscribe,
 )
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
+    UserQuery,
     VoiceOutput,
 )
 
@@ -123,6 +123,7 @@ async def test_render_agent_publishes_incremental_voice_output() -> None:
     metadata = [event_metadata for _chunk, event_metadata in output.events]
     assert [chunk.text for chunk in chunks] == ["ack:hello", "done:hello", ""]
     assert [chunk.final for chunk in chunks] == [False, False, True]
+    assert [chunk.timestamp_us for chunk in chunks] == [1, 1, 1]
     assert len({chunk.response_id for chunk in chunks}) == 1
     assert chunks[0].response_id == metadata[0].parent_message_id
     assert {event.participant_id for event in metadata} == {"pid-1"}

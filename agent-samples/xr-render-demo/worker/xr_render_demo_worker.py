@@ -177,7 +177,7 @@ async def main(
             await runtime.call(
                 render_ref,
                 request,
-                participant_id=participant_id or "voice-runtime",
+                participant_id=participant_id,
                 source="voice.interruption",
             )
 

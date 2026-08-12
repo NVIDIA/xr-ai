@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 
-from loguru import logger
 from processors import RenderSceneAgent
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_runtime import (
@@ -16,12 +15,12 @@ from xr_ai_runtime import (
     AgentContext,
     RuntimeClosedError,
     Topic,
-    UserQuery,
     handler,
     subscribe,
 )
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
+    UserQuery,
     VoiceOutput,
 )
 
@@ -67,6 +66,7 @@ class RenderAgent(Agent):
             ctx,
             is_notice=False,
             interrupt_output=False,
+            timestamp_us=query.timestamp_us,
         )
 
     @subscribe(RENDER_NOTICE_TOPIC)
@@ -78,6 +78,7 @@ class RenderAgent(Agent):
             ctx,
             is_notice=True,
             interrupt_output=notice.interrupt_output,
+            timestamp_us=None,
         )
 
     async def _start_turn(
@@ -87,10 +88,13 @@ class RenderAgent(Agent):
         *,
         is_notice: bool,
         interrupt_output: bool,
+        timestamp_us: int | None,
     ) -> None:
         """Supersede and start one participant's render turn."""
 
         participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            raise ValueError("render turns require a participant")
         await self._cancel(participant_id)
         task = ctx.start_task(
             self._run_turn(
@@ -98,6 +102,7 @@ class RenderAgent(Agent):
                 ctx,
                 is_notice=is_notice,
                 interrupt_output=interrupt_output,
+                timestamp_us=timestamp_us,
             ),
             name=f"xr-render:{participant_id}",
         )
@@ -110,7 +115,10 @@ class RenderAgent(Agent):
     async def cancel(self, _request: CancelRender, ctx: AgentContext) -> None:
         """Cancel one participant's active render turn."""
 
-        await self._cancel(ctx.metadata.participant_id)
+        participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            raise ValueError("participant cancellation requires a participant")
+        await self._cancel(participant_id)
 
     @handler
     async def cancel_all(
@@ -134,15 +142,20 @@ class RenderAgent(Agent):
         *,
         is_notice: bool,
         interrupt_output: bool,
+        timestamp_us: int | None,
     ) -> None:
         metadata = ctx.metadata
+        participant_id = metadata.participant_id
+        if participant_id is None:
+            raise ValueError("render turns require a participant")
         response_id = metadata.message_id
+        opened = False
         try:
             if is_notice:
-                response = self.scene.handle_notice(metadata.participant_id, text)
+                response = self.scene.handle_notice(participant_id, text)
             else:
                 response = await self.scene.handle_query(
-                    metadata.participant_id,
+                    participant_id,
                     text,
                 )
             first = True
@@ -154,15 +167,21 @@ class RenderAgent(Agent):
                         response_id=response_id,
                         final=False,
                         interrupt=interrupt_output and first,
+                        timestamp_us=timestamp_us,
                     ),
                 )
                 first = False
+                opened = True
         finally:
-            with suppress(RuntimeClosedError):
-                await ctx.publish(
-                    VOICE_OUTPUT_TOPIC,
-                    VoiceOutput(response_id=response_id),
-                )
+            if opened:
+                with suppress(RuntimeClosedError):
+                    await ctx.publish(
+                        VOICE_OUTPUT_TOPIC,
+                        VoiceOutput(
+                            response_id=response_id,
+                            timestamp_us=timestamp_us,
+                        ),
+                    )
 
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)
@@ -182,8 +201,6 @@ class RenderAgent(Agent):
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(participant_id) is task:
             self._tasks.pop(participant_id, None)
-        if not task.cancelled() and (error := task.exception()) is not None:
-            logger.error("render agent failed pid={!r}: {}", participant_id, error)
 
 
 __all__ = [
