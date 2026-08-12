@@ -68,7 +68,7 @@ class AsyncTool(Generic[RequestT, ChunkT]):
                     if not next_chunk.done():
                         next_chunk.cancel()
                         with suppress(asyncio.CancelledError):
-                            await next_chunk
+                            _ = await next_chunk
 
                 if next_chunk in done:
                     yield next_chunk.result()
@@ -85,7 +85,7 @@ class AsyncTool(Generic[RequestT, ChunkT]):
             if not producer.done():
                 producer.cancel()
             with suppress(asyncio.CancelledError):
-                await producer
+                _ = await producer
 
     async def _produce(
         self,
