@@ -8,6 +8,9 @@
 The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
+- **`xr-ai-agent-runtime`** — dependency-light addressable-agent lifecycle,
+  typed request/response calls, and typed publish/subscribe for bounded and
+  long-running agents.
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
   `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
   structured model deployment profile. Swapping a backend is a configuration
@@ -24,6 +27,24 @@ from:
 - **`xr-ai-nat`** — Relay-managed native tools, the generic `AgentRunner`
   protocol, and a basic tool-driven agent. Its legacy extras retain existing
   NeMo Agent Toolkit function groups while their concrete capabilities migrate.
+
+---
+
+## xr-ai-agent-runtime
+
+`AgentRuntime` owns stable runtime-local agent addresses, lifecycle hooks,
+bounded per-agent mailboxes, participant-scoped calls, publish/subscribe, call
+timeouts, and background-task cleanup. The public communication surface has
+only two operations:
+
+- `call(agent, message)` sends one typed message and returns its handler result.
+  A side-effecting handler returns `None`.
+- `publish(topic, event)` fans out one typed event without collecting results.
+
+There is one `Agent` lifecycle. A one-shot agent implements only bounded
+handlers; a resident agent additionally starts runtime-owned background work.
+Jobs, streams, separate query/command classes, model loops, planning, and
+memory are not runtime primitives. Raw audio and video remain on the hub path.
 
 ---
 
@@ -229,15 +250,10 @@ scope. Both paths replace the inline camera frame in Relay events without
 changing provider input. The split keeps token streaming out of ordinary
 agentic tool calls without reimplementing a partial streaming-tool lifecycle.
 
-`xr_ai_nat.events.EventDispatcher` supplies application routing without adding a
-model or media runtime. Typed, participant-scoped named streams fan out into
-independent ordered mailboxes. Long-running applications may subscribe to
-several topics and publish observations, context updates, user output, or any
-other typed event. `ToolWorker` adapts a mailbox to a bounded Relay-managed
-`Tool` and publishes its result; `as_agent_tool(...)` puts any `AgentRunner` on
-that same path. `request(...)` adds correlation-based request/reply without
-bypassing pub/sub. Voice input is an ordinary publisher, and a long-running
-`voice.output` subscriber owns TTS delivery.
+Applications place native tools or an `AgentRunner` inside an
+`xr-ai-agent-runtime` agent when they need lifecycle, addressed calls, or
+pub/sub. Relay remains responsible for tool and model execution inside that
+agent; the runtime does not duplicate the tool loop or model boundary.
 
 ## xr-ai-nat model bridge
 
