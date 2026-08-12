@@ -16,7 +16,7 @@ from:
   structured model deployment profile. Swapping a backend is a configuration
   edit, not a code edit.
 - **`xr-ai-voice`** — the native voice runtime. `VoiceAgent` publishes
-  `UserQuery` to an injected application topic and consumes `voice.output`; its
+  `UserQuery` to an application-named topic and consumes `voice.output`; its
   `VoiceSession` owns readiness, hub transport, voice gating, streaming
   responses, signals, and cleanup.
 - **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
@@ -282,12 +282,12 @@ lifecycle ownership.
 
 Native voice applications work with participant-aware runtime topics rather
 than Pipecat processors. `VoiceAgent` owns `VoiceSession`, publishes accepted
-speech and typed text to an injected `Topic[UserQuery]`, and subscribes to
-`voice.output`:
+speech and typed text as the voice-owned `UserQuery` schema on an
+application-named topic, and subscribes to `voice.output`:
 
 ```python
-from xr_ai_runtime import Topic, UserQuery
-from xr_ai_voice import VadConfig, VoiceAgent, VoiceSession
+from xr_ai_runtime import Topic
+from xr_ai_voice import UserQuery, VadConfig, VoiceAgent, VoiceSession
 
 session = VoiceSession(
     stt=stt,
