@@ -8,9 +8,9 @@
 The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
-- **`xr-ai-agent-runtime`** — dependency-light addressable-agent lifecycle,
-  typed request/response calls, and typed publish/subscribe for bounded and
-  long-running agents.
+- **`xr-ai-agent-runtime`** — dependency-light agent resource scopes, named
+  typed unary and streaming functions, model-tool adapters, and typed
+  publish/subscribe.
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
   `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
   structured model deployment profile. Swapping a backend is a configuration
@@ -24,27 +24,30 @@ from:
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
-- **`xr-ai-nat`** — Relay-managed native tools, the generic `AgentRunner`
-  protocol, and a basic tool-driven agent. Its legacy extras retain existing
-  NeMo Agent Toolkit function groups while their concrete capabilities migrate.
+- **`xr-ai-tools`** — Relay-managed native tools and model tool-call
+  workflow helpers.
+- **`xr-ai-nat`** — legacy NeMo Agent Toolkit function groups retained while
+  their concrete capabilities migrate.
 
 ---
 
 ## xr-ai-agent-runtime
 
-`AgentRuntime` owns stable runtime-local agent addresses, lifecycle hooks,
-bounded per-agent mailboxes, participant-scoped calls, publish/subscribe, call
-timeouts, and background-task cleanup. The public communication surface has
-only two operations:
+`AgentRuntime` owns stable runtime-local agent addresses, optional scoped
+resource lifetimes, bounded per-agent mailboxes, participant scope,
+publish/subscribe, timeouts, stream cancellation, and background-task cleanup.
+An agent exposes any number of named typed `Function` implementations. Each
+function is either unary or streaming: unary functions return one validated
+response or `None` for a side effect, while streaming functions yield validated
+chunks without full-response buffering.
 
-- `call(agent, message)` sends one typed message and returns its handler result.
-  A side-effecting handler returns `None`.
-- `publish(topic, event)` fans out one typed event without collecting results.
-
-There is one `Agent` lifecycle. A one-shot agent implements only bounded
-handlers; a resident agent additionally starts runtime-owned background work.
-Jobs, streams, separate query/command classes, model loops, planning, and
-memory are not runtime primitives. Raw audio and video remain on the hub path.
+One selected unary function can be adapted into one model-visible tool with
+`agent.function(FUNCTION).as_tool(...)`. Agent lifetime is not itself a tool;
+domain controls such as starting or stopping monitoring remain ordinary
+functions. Agents are registered before runtime startup, and most require no
+lifecycle code. An agent that owns resources implements the optional
+`lifespan()` async context. Model loops, planning, and memory remain agent
+implementations. Raw audio and video remain on the hub path.
 
 ---
 
@@ -227,32 +230,29 @@ The clients can be exercised without a GPU.
 
 ---
 
-## Native tools and agents
+## Native tools and model tool calls
 
-`xr-ai-nat` is the native migration target for model-driven XR composition.
+`xr-ai-tools` is the native migration target for model-driven XR composition.
 `Tool` declares Pydantic request and response boundaries and executes its
-handler through NeMo Relay. `AgentRunner` is the generic async-turn protocol;
-`xr_ai_nat.agents.Agent` is its bounded, stateless tool-loop implementation.
-It builds OpenAI-compatible tool definitions from those schemas and sends each
-model request through an injected `LLMService`.
+handler through NeMo Relay. `tool_definitions(...)` adapts a native catalog to
+`xr-ai-models` definitions; `handle_tool_call(...)` invokes one model-selected
+call and returns the tool-role message.
 
-Relay scopes each turn and manages the LLM and tool lifecycles. The base package
-does not add an HTTP client, a Hub transport, or an implicit conversation store.
-Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
-registered tool; foreground selection, workflow state, and background work stay
-explicit in application code.
+The package does not implement an agent, model loop, Hub transport, or implicit
+conversation store. Applications own prompts, LLM calls, history, iteration,
+foreground selection, workflow state, and background work.
 
-`xr_ai_nat.live_vision.LiveVisionTool` acquires a participant-scoped hub frame
-and returns one complete observation through Relay's finite tool and LLM
-boundaries. Direct voice can wrap the same tool with `LiveVisionResponder`,
-whose provider response uses Relay's managed streaming LLM path under an Agent
-scope. Both paths replace the inline camera frame in Relay events without
-changing provider input. The split keeps token streaming out of ordinary
-agentic tool calls without reimplementing a partial streaming-tool lifecycle.
+`xr_ai_tools.live_vision.LiveVisionTool` is the finite current-frame tool; it
+returns one complete observation through Relay's managed tool and LLM
+boundaries. `xr_ai_tools.streaming_vision.StreamingVisionTool` is a separate
+`AsyncTool` that yields typed chunks around Relay's managed streaming LLM
+boundary. It has no voice or output-transport dependency. Both tools own their
+own frame sources and redact inline camera data from Relay events without
+changing provider input.
 
-Applications place native tools or an `AgentRunner` inside an
-`xr-ai-agent-runtime` agent when they need lifecycle, addressed calls, or
-pub/sub. Relay remains responsible for tool and model execution inside that
+Applications place native tools and model loops inside an
+`xr-ai-agent-runtime` agent when they need scoped resources, named functions,
+or pub/sub. Relay remains responsible for tool and model execution inside that
 agent; the runtime does not duplicate the tool loop or model boundary.
 
 ## xr-ai-nat model bridge
