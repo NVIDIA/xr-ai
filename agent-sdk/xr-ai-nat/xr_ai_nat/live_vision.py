@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""A normal streaming tool for questions about a participant's current frame."""
+"""A Relay-observed streaming responder for a participant's current frame."""
 
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
@@ -17,10 +18,11 @@ from xr_ai_hub import FrameUnavailable, LiveFrameSource, ProcessorEndpoint
 from xr_ai_models import VLMService
 
 from ._pixels import encode_image, frame_to_pil
-from .streaming import StreamingTool
+from ._relay import headers_from_relay
 
 _LOGGER = logging.getLogger(__name__)
 _VLM_CALL_NAME = "xr-ai-vlm"
+_FRAME_REDACTION = "<redacted:live-camera-frame>"
 
 
 class VisionRequest(BaseModel):
@@ -38,8 +40,8 @@ class VisionChunk(BaseModel):
     text: str = Field(description="A partial fragment of the streamed answer text.")
 
 
-class LiveVisionTool(StreamingTool[VisionRequest, VisionChunk]):
-    """A participant-scoped current-frame VLM tool with an injected model service."""
+class LiveVisionResponder:
+    """Stream one participant-scoped answer through Relay's managed LLM path."""
 
     def __init__(
         self,
@@ -62,13 +64,24 @@ class LiveVisionTool(StreamingTool[VisionRequest, VisionChunk]):
             max_age_s=frame_max_age_s,
             timeout_s=frame_timeout_s,
         )
-        super().__init__(
+
+    async def stream(self, request: VisionRequest) -> AsyncIterator[VisionChunk]:
+        """Run one live-vision turn without exposing camera bytes to telemetry."""
+
+        request = VisionRequest.model_validate(request)
+        with nemo_relay.scope.scope(
             "look_at_current_frame",
-            "Answer a question about a participant's current live camera view.",
-            VisionRequest,
-            VisionChunk,
-            self._stream_current,
-        )
+            nemo_relay.ScopeType.Agent,
+            input=request.model_dump(mode="json"),
+        ) as handle:
+            nemo_relay.scope_local.register_llm_sanitize_request(
+                handle,
+                "xr-ai-live-frame",
+                0,
+                _sanitize_live_frame,
+            )
+            async for chunk in self._stream_current(request):
+                yield VisionChunk.model_validate(chunk)
 
     def release(self, participant_id: str) -> None:
         """Forget cached frame state after a participant disconnects."""
@@ -140,8 +153,33 @@ class LiveVisionTool(StreamingTool[VisionRequest, VisionChunk]):
             image_url,
             query,
             system_prompt=system_prompt,
+            headers=headers_from_relay(request.headers),
         ):
             yield {"choices": [{"delta": {"content": token}}]}
+
+
+def _sanitize_live_frame(
+    request: nemo_relay.LLMRequest,
+    _context: nemo_relay.LlmSanitizeRequestContext,
+) -> nemo_relay.LLMRequest:
+    """Redact inline camera data from events without changing provider input."""
+
+    content = copy.deepcopy(request.content)
+    messages = content.get("messages")
+    if isinstance(messages, list):
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            parts = message.get("content")
+            if not isinstance(parts, list):
+                continue
+            for part in parts:
+                if not isinstance(part, dict) or part.get("type") != "image_url":
+                    continue
+                image = part.get("image_url")
+                if isinstance(image, dict) and isinstance(image.get("url"), str):
+                    image["url"] = _FRAME_REDACTION
+    return nemo_relay.LLMRequest(dict(request.headers), content)
 
 
 def _vision_inputs(content: Mapping[str, object]) -> tuple[str, str, str]:
@@ -217,4 +255,4 @@ def _stream_text(raw_chunk: object) -> str:
     return content
 
 
-__all__ = ["LiveVisionTool", "VisionChunk", "VisionRequest"]
+__all__ = ["LiveVisionResponder", "VisionChunk", "VisionRequest"]

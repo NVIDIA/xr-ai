@@ -556,10 +556,12 @@ the latest video frame via streaming VLM and replies with both
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
 | Worker | `simple-vlm-example-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-nat[relay,live-vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-nat[live-vision]` pulls in numpy and Pillow) |
 
-The packaged worker invokes `LiveVisionTool` directly and maps its streamed
-participant-scoped response to `VoiceSession`. The tool acquires a current frame
-through `xr-ai-hub-client` and runs both its tool lifecycle and nested VLM stream
-through NeMo Relay. `VoiceSession` owns readiness, hub transport, signals, the
+The packaged worker invokes `LiveVisionResponder` directly and maps its
+streamed participant-scoped response to `VoiceSession`. The responder acquires
+a current frame through `xr-ai-hub-client` and runs the model call through NeMo
+Relay's managed streaming LLM path under an Agent scope. Camera bytes are
+redacted from Relay telemetry while the provider receives the original frame.
+`VoiceSession` owns readiness, hub transport, signals, the
 private Pipecat pipeline, and cleanup; `TextMessageInput` routes `"ping"` and
 ad-hoc text through the same participant-aware path as speech. Voice-gate
 behavior (magic phrases, follow-up grace, listening chime, stop acknowledgement),

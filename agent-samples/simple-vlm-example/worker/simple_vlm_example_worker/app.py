@@ -11,14 +11,14 @@ from pathlib import Path
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
-from xr_ai_nat.live_vision import LiveVisionTool, VisionRequest
+from xr_ai_nat.live_vision import LiveVisionResponder, VisionRequest
 from xr_ai_voice import TextMessageInput, VadConfig, VoiceHandler, VoiceSession
 from xr_ai_voicegate import load_voice_gate_config
 
 from .config import WorkerConfig
 
 
-def _make_vision_handler(vision: LiveVisionTool) -> VoiceHandler:
+def _make_vision_handler(vision: LiveVisionResponder) -> VoiceHandler:
     async def handle(turn):
         async def response():
             async for chunk in vision.stream(
@@ -69,7 +69,7 @@ async def run_app(
     )
 
     async with session:
-        vision = LiveVisionTool(
+        vision = LiveVisionResponder(
             endpoint=session.transport.endpoint,
             vlm=vlm,
             system_prompt=config.system_prompt,

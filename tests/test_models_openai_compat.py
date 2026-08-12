@@ -448,6 +448,38 @@ async def test_vlm_default_extras_propagate() -> None:
     assert body["chat_template_kwargs"] == {"enable_thinking": False}
 
 
+async def test_vlm_stream_forwards_controlled_per_call_headers() -> None:
+    stub = StubOpenAI()
+    stub.set_stream_tokens(["visible"])
+    async with OpenAICompatVLM(
+        "http://stub", "vlm", client=stub.client(),
+    ) as vlm:
+        chunks = [
+            chunk
+            async for chunk in vlm.stream(
+                _PNG_HEADER,
+                "?",
+                headers={"X-Relay-Session": "turn-7"},
+            )
+        ]
+
+    assert chunks == ["visible"]
+    assert stub.last_request().headers["X-Relay-Session"] == "turn-7"
+
+
+async def test_vlm_rejects_per_call_authorization_header() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatVLM(
+        "http://stub", "vlm", client=stub.client(),
+    ) as vlm:
+        with pytest.raises(ValueError, match="cannot override Authorization"):
+            await vlm.ask_image(
+                _PNG_HEADER,
+                "?",
+                headers={"Authorization": "Bearer untrusted"},
+            )
+
+
 # ── VLM: video ────────────────────────────────────────────────────────────
 
 

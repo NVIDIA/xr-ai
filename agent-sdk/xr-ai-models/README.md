@@ -150,10 +150,13 @@ class VLMService(Protocol):
     capabilities: Capabilities
     async def ask_image(self, image, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
-                        timeout=None) -> ChatResponse: ...
+                        timeout=None, headers=None) -> ChatResponse: ...
     async def ask_video(self, video, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
-                        timeout=None) -> ChatResponse: ...
+                        timeout=None, headers=None) -> ChatResponse: ...
+    def stream(self, image, question, *, system_prompt="",
+               max_tokens=None, temperature=None,
+               timeout=None, headers=None) -> AsyncIterator[str]: ...
     async def health(self) -> bool: ...
 
 class STTService(Protocol):
@@ -175,9 +178,9 @@ class EmbeddingService(Protocol):
 `reasoning_field` knob normalizes `reasoning_content` (nemotron_v3 parser)
 into the same surface.
 
-`LLMService.chat` and `LLMService.stream` accept optional string-valued
-per-call headers for execution context such as Relay session lineage. The
-model profile remains the authority for credentials: callers cannot supply an
+`LLMService` and `VLMService` request methods accept optional string-valued
+per-call headers for execution context such as Relay session lineage. The model
+profile remains the authority for credentials: callers cannot supply an
 `Authorization` header.
 
 ## Remote / hosted-NIM endpoints

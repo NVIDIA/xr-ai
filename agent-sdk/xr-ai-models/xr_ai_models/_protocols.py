@@ -143,6 +143,7 @@ class VLMService(Protocol):
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse: pass
 
     async def ask_video(
@@ -154,6 +155,7 @@ class VLMService(Protocol):
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse: pass
 
     def stream(
@@ -165,6 +167,7 @@ class VLMService(Protocol):
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]: pass
 
     async def health(self) -> bool: pass

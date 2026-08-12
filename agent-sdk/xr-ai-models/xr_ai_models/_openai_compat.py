@@ -471,10 +471,12 @@ class OpenAICompatVLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
         return await self._llm.chat(
             self._build_messages(image, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            headers=headers,
         )
 
     def _build_video_messages(
@@ -501,6 +503,7 @@ class OpenAICompatVLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
         if not self.capabilities.video:
             raise ValueError(
@@ -511,6 +514,7 @@ class OpenAICompatVLM:
         return await self._llm.chat(
             self._build_video_messages(video, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            headers=headers,
         )
 
     async def stream(
@@ -522,10 +526,12 @@ class OpenAICompatVLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
         async for chunk in self._llm.stream(
             self._build_messages(image, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
+            headers=headers,
         ):
             yield chunk
 

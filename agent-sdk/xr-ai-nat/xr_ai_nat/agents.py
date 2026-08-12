@@ -14,6 +14,7 @@ import nemo_relay
 from nemo_relay.codecs import OpenAIChatCodec
 from xr_ai_models import ChatMessage, ChatResponse, LLMService, ToolCall, ToolDef
 
+from ._relay import headers_from_relay
 from .agent_runner import AgentRunner, as_agent_tool
 from .tools import Tool, ToolSet
 
@@ -137,7 +138,7 @@ class Agent(AgentRunner[str, AgentResult]):
                 temperature=_optional_float(content.get("temperature")),
                 enable_thinking=bool(content.get("enable_thinking", False)),
                 thinking_budget=_optional_int(content.get("thinking_budget")),
-                headers=_headers_from_relay(request.headers),
+                headers=headers_from_relay(request.headers),
             )
             return _response_to_openai(response)
 
@@ -241,17 +242,6 @@ def _tools_from_openai(raw: object) -> list[ToolDef] | None:
             raise TypeError("tool definition has invalid fields")
         definitions.append(ToolDef(name=name, description=description, parameters=parameters))
     return definitions
-
-
-def _headers_from_relay(raw: object) -> dict[str, str]:
-    if not isinstance(raw, dict):
-        raise TypeError("Relay LLM request headers must be an object")
-    headers: dict[str, str] = {}
-    for name, value in raw.items():
-        if not isinstance(name, str) or not isinstance(value, str):
-            raise TypeError("Relay LLM request headers must be strings")
-        headers[name] = value
-    return headers
 
 
 def _response_to_openai(response: ChatResponse) -> dict[str, Any]:

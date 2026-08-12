@@ -149,10 +149,13 @@ class VLMService(Protocol):
     capabilities: Capabilities
     async def ask_image(self, image, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
-                        timeout=None) -> ChatResponse: ...
+                        timeout=None, headers=None) -> ChatResponse: ...
     async def ask_video(self, video, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
-                        timeout=None) -> ChatResponse: ...
+                        timeout=None, headers=None) -> ChatResponse: ...
+    def stream(self, image, question, *, system_prompt="",
+               max_tokens=None, temperature=None,
+               timeout=None, headers=None) -> AsyncIterator[str]: ...
     async def health(self) -> bool: ...
 
 class STTService(Protocol):
@@ -218,12 +221,14 @@ Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
 registered tool; foreground selection, workflow state, and background work stay
 explicit in application code.
 
-`StreamingTool` keeps one Relay tool lifecycle open while a capability yields
-typed response chunks. `xr_ai_nat.live_vision.LiveVisionTool` is one such tool:
-it acquires a participant-scoped hub frame and calls its injected `VLMService`
-through a nested Relay LLM stream. Vision is therefore not a runtime special
-case or a model-control path; it is a capability implementation behind the same
-tool interface used by deterministic tools and agent tools.
+`xr_ai_nat.live_vision.LiveVisionResponder` acquires a participant-scoped hub
+frame and calls its injected `VLMService` through Relay's managed streaming LLM
+path. Each response runs under an Agent scope, and a scope-local sanitizer
+replaces the inline camera frame in Relay events without changing provider
+input. Relay's managed tool API accepts completed JSON values, so finite tools
+use `Tool.execute()` while real-time model output remains an application-owned
+stream. This keeps Relay middleware on a supported managed boundary rather than
+reimplementing a partial streaming-tool lifecycle.
 
 ## xr-ai-nat model bridge
 
