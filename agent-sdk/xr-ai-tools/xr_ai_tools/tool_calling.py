@@ -23,16 +23,23 @@ class ToolCallResult:
     return_direct: bool
 
 
-def tool_definitions(tools: Iterable[Tool[Any, Any]]) -> tuple[ToolDef, ...]:
+def tool_definitions(
+    tools: Iterable[Tool[Any, Any]] | ToolSet,
+) -> tuple[ToolDef, ...]:
     """Return model-service definitions for native tools."""
 
+    entries = (
+        tools.items()
+        if isinstance(tools, ToolSet)
+        else tuple((tool.name, tool) for tool in tools)
+    )
     return tuple(
         ToolDef(
-            name=tool.name,
+            name=name,
             description=tool.description,
             parameters=tool.request_model.model_json_schema(),
         )
-        for tool in tools
+        for name, tool in entries
     )
 
 

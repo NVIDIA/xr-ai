@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from inspect import isawaitable
 from typing import Any, Generic, TypeVar, cast
@@ -15,7 +15,7 @@ from nemo_relay import typed
 from pydantic import BaseModel, ValidationError
 
 RequestT = TypeVar("RequestT", bound=BaseModel)
-ResultT = TypeVar("ResultT", bound=BaseModel)
+ResultT = TypeVar("ResultT")
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +34,7 @@ class Tool(Generic[RequestT, ResultT]):
         name: str,
         description: str,
         request_model: type[RequestT],
-        result_model: type[ResultT],
+        result_model: type[BaseModel] | None,
         handler: Callable[[RequestT], Awaitable[ResultT] | ResultT],
         *,
         return_direct: bool = False,
@@ -51,7 +51,14 @@ class Tool(Generic[RequestT, ResultT]):
         self.handler = handler
         self.return_direct = return_direct
         self._request_codec = typed.PydanticCodec(request_model)
-        self._result_codec = typed.PydanticCodec(result_model)
+        self._result_codec: typed.Codec[ResultT]
+        if result_model is None:
+            self._result_codec = cast(typed.Codec[ResultT], _NoneCodec())
+        else:
+            self._result_codec = cast(
+                typed.Codec[ResultT],
+                typed.PydanticCodec(result_model),
+            )
         self._render_result = render_result or _json_result
 
     async def execute(self, request: RequestT) -> ResultT:
@@ -97,24 +104,79 @@ class Tool(Generic[RequestT, ResultT]):
 
 
 class ToolSet:
-    """A non-overlapping native tool catalog."""
+    """A native tool catalog with model-visible dispatch names."""
 
-    def __init__(self, tools: Iterable[Tool[Any, Any]]) -> None:
+    def __init__(
+        self,
+        tools: Iterable[Tool[Any, Any]] | Mapping[str, Tool[Any, Any]],
+    ) -> None:
         by_name: dict[str, Tool[Any, Any]] = {}
-        for tool in tools:
-            if tool.name in by_name:
-                raise ValueError(f"duplicate tool name: {tool.name}")
-            by_name[tool.name] = tool
+        if isinstance(tools, Mapping):
+            entries = tuple(
+                cast(Mapping[str, Tool[Any, Any]], tools).items()
+            )
+        else:
+            entries = tuple(
+                (tool.name, tool)
+                for tool in cast(Iterable[Tool[Any, Any]], tools)
+            )
+        for name, tool in entries:
+            if not name:
+                raise ValueError("tool alias must not be empty")
+            if not isinstance(tool, Tool):
+                raise TypeError("tool sets may contain only finite Tool instances")
+            if name in by_name:
+                raise ValueError(f"duplicate tool name: {name}")
+            by_name[name] = tool
         self._by_name = by_name
+
+    @classmethod
+    def namespaced(
+        cls,
+        namespaces: Mapping[str, Iterable[Tool[Any, Any]]],
+    ) -> ToolSet:
+        """Build a catalog named ``<namespace>__<tool>`` for each group."""
+
+        aliases: dict[str, Tool[Any, Any]] = {}
+        for namespace, tools in namespaces.items():
+            if not namespace:
+                raise ValueError("tool namespace must not be empty")
+            for tool in tools:
+                if not isinstance(tool, Tool):
+                    raise TypeError("tool sets may contain only finite Tool instances")
+                name = f"{namespace}__{tool.name}"
+                if name in aliases:
+                    raise ValueError(f"duplicate tool name: {name}")
+                aliases[name] = tool
+        return cls(aliases)
 
     def get(self, name: str) -> Tool[Any, Any] | None:
         """Return the named tool when this catalog owns it."""
 
         return self._by_name.get(name)
 
+    def items(self) -> tuple[tuple[str, Tool[Any, Any]], ...]:
+        """Return model-visible names paired with their underlying tools."""
 
-def _json_result(result: BaseModel) -> str:
-    return result.model_dump_json()
+        return tuple(self._by_name.items())
+
+
+class _NoneCodec(typed.Codec[None]):
+    def to_json(self, value: None) -> None:
+        if value is not None:
+            raise TypeError("side-effect tools must return None")
+        return None
+
+    def from_json(self, data: Any) -> None:
+        if data is not None:
+            raise TypeError("side-effect tools must return None")
+        return None
+
+
+def _json_result(result: Any) -> str:
+    if result is None:
+        return "null"
+    return cast(BaseModel, result).model_dump_json()
 
 
 __all__ = ["Tool", "ToolInvocationResult", "ToolSet"]

@@ -64,7 +64,30 @@ for call in response.tool_calls or ():
 `handle_tool_call(...)` validates and invokes one model-produced `ToolCall`, then
 returns a tool-role `ChatMessage` plus its `return_direct` hint. The application
 or agent owns prompts, model calls, conversation state, iteration policy, and
-whether calls run sequentially or concurrently.
+whether calls run sequentially or concurrently. A unary side-effect tool uses
+`result_model=None`, returns `None`, and produces `null` as its model-visible
+result.
+
+Tool catalogs can assign model-visible aliases without wrapping or changing the
+underlying tools:
+
+```python
+tools = ToolSet({"camera_status": vision.status})
+```
+
+When composing independently named tool groups, namespace them at the workflow
+boundary:
+
+```python
+tools = ToolSet.namespaced({
+    "vision": vision.tools,
+    "planner": planner.tools,
+})
+```
+
+This exposes names such as `vision__status` and `planner__status` to the model.
+Only finite `Tool` instances belong in a `ToolSet`; streaming `AsyncTool`
+instances are consumed explicitly with `stream()`.
 
 ## Finite and streaming live vision tools
 

@@ -12,7 +12,8 @@ historical decisions in `docs/changelog.md`.
 
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-agent-sdk/          # Six packages:
+agent-sdk/          # Seven packages:
+                    #   xr-ai-agent-runtime — agent lifecycles, tools + pub/sub
                     #   xr-ai-hub-client   — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
@@ -59,14 +60,23 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   `anthropic`, no `litellm`); all in-tree backends speak
   OpenAI-compatible HTTP.
 - **Workers never import from `xr_media_hub` or `xr_ai_launcher`.** Use the
-  public `xr_ai_hub`, `xr_ai_models`, `xr_ai_tools`, `xr_ai_nat`, and
-  `xr_ai_voice` SDK surfaces plus task-specific libraries (numpy, torch, …).
+  public `xr_ai_runtime`, `xr_ai_hub`, `xr_ai_models`, `xr_ai_tools`,
+  `xr_ai_nat`, and `xr_ai_voice` SDK surfaces plus task-specific libraries
+  (numpy, torch, …).
 - **Agentic functions are native and in-process.** New and migrated tools live
   in `xr-ai-tools`; every tool execution passes through NeMo Relay, and all
   model I/O remains in `xr-ai-models`. `xr-ai-nat` retains
   NeMo Agent Toolkit compatibility only while existing function groups
   migrate. Existing MCP servers remain compatibility surfaces while their
   capabilities migrate.
+- **Agents expose the existing tools from `xr-ai-tools`.** Each `Agent` owns
+  state and a set of `Tool` or `AsyncTool` instances. Agents call one another's
+  tools directly through `execute()` or `stream()`; model-selected calls use
+  the same normal tool-calling helpers. `xr-ai-agent-runtime` manages optional
+  `lifespan()` contexts, background tasks, and typed `publish()` fan-out only.
+  Agents own their concurrency policy and synchronize shared state when needed.
+  Model loops, planning, memory, and raw media transport remain outside the
+  runtime.
 - **RAG is a native typed capability.** `rag-service` owns document chunking,
   embedding caches, and dense retrieval behind private msgpack/ZMQ;
   `RAGFunctionsConfig` exposes it as the `xr_rag` NAT function group.

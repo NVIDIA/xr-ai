@@ -13,7 +13,7 @@ design decisions see `docs/changelog.md`.
 
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-agent-sdk/          # IPC, model, NAT-function, capability, and voice SDK packages
+agent-sdk/          # Agent runtime, IPC, model, NAT-function, capability, and voice SDK packages
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 services/           # XR hub, CloudXR, model-serving, and typed XR capability services
 agent-mcp-servers/  # Optional MCP compatibility adapters for non-NAT consumers
@@ -37,9 +37,16 @@ docs/               # Design docs and topic deep-dives
 - **`agent-sdk/xr-ai-hub-client`** contains only the agent-facing IPC layer. Its
   sole runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI,
   or uvicorn.
-- **Native agents compose typed NAT functions in process.** Runtime-backed
-  functions call typed capability services, while deterministic functions run
-  locally. MCP adapters only republish selected functions for MCP consumers.
+- **`agent-sdk/xr-ai-agent-runtime`** owns agent resource lifetimes,
+  runtime-owned background tasks, and typed publish/subscribe. Agents expose
+  existing `Tool` and `AsyncTool` instances from `xr-ai-tools`; direct callers
+  and model loops use those tools without a second runtime dispatch API. Each
+  agent owns its concurrency policy, including any locks or private queues
+  needed to coordinate tools and subscriptions. Model loops, planning, memory,
+  and raw media transport remain outside the runtime.
+- **Native agents compose typed tools in process.** Model-backed tools call
+  typed capability services, while deterministic tools run locally. MCP
+  adapters only republish selected tools for MCP consumers.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml` (see `docs/credentials.md`).
 

@@ -14,9 +14,12 @@ for all model HTTP, and reach clients only through the Hub IPC SDK.
 NeMo Relay is the local execution boundary. The XR-owned `xr-ai-tools` package
 is the toolkit-independent tools layer: Pydantic tool schemas, trigger
 dispatch, and small helpers that adapt those tools to `xr-ai-models` tool-call
-types. Applications own their agents, model calls, history, and loop policy.
-Relay owns tool lifecycles, middleware, guardrails, and telemetry. Existing
-NeMo Agent Toolkit function groups remain compatibility extras until their concrete tools migrate.
+types. `xr-ai-agent-runtime` separately owns agent resource lifetimes,
+runtime-owned background tasks, and fan-out `publish()`. Agents expose the
+existing `Tool` and `AsyncTool` objects directly and own their synchronization.
+Applications own their model calls, history, and loop policy. Relay owns tool
+lifecycles, middleware, guardrails, and telemetry. Existing NeMo Agent Toolkit
+function groups remain compatibility extras until their concrete tools migrate.
 
 NeMo Platform and NeMo Fabric are deployment and evaluation integrations, not
 worker dependencies. Platform currently requires Python 3.12 or 3.13 and owns
@@ -27,6 +30,7 @@ remain optional launch targets after the local runtime has migrated.
 
 ```text
 XR worker
+  -> xr-ai-agent-runtime: agent lifetimes, background tasks, and publish
   -> xr-ai-tools: typed tools and trigger dispatch
   -> NeMo Relay: managed tool execution, guardrails, telemetry
   -> xr-ai-models: private model boundary used by model-backed tools
@@ -57,21 +61,28 @@ acceptance behavior rather than an implementation dependency.
 3. **Native event dispatcher** — port tea-making's typed participant-scoped
    subscriptions and periodic background sources so voice and autonomous work
    invoke the same registered tools.
-4. **Deterministic and service capabilities** — port spatial math, text memory,
+4. **Agent runtime** — add runtime-owned agent resource lifetimes, background
+   tasks, typed `publish()`, and agents that expose existing unary and streaming
+   tools directly while owning their concurrency policy.
+5. **Deterministic and service capabilities** — port spatial math, text memory,
    RAG, vision, XR tracking, and video memory to the native tool surface; keep
    MCP adapters as explicit compatibility publishers.
-5. **Existing agent workflows** — port render-demo's tool catalog and evaluation
+6. **Existing agent workflows** — port render-demo's tool catalog and evaluation
    harness to the tools layer, then replace its NAT builder and LangChain bridge.
-6. **Tea-making sample** — land the sample in slices: workflow/state core,
-   foreground/background application manager, observation applications, then
-   activity viewer and end-to-end evaluations.
-7. **Retirement and operations** — remove all `nat.*`, `nvidia-nat-*`, and
+7. **Tea-making sample** — land the sample in slices: workflow/state core,
+   foreground and resident agents, observation applications, then activity
+   viewer and end-to-end evaluations.
+8. **Retirement and operations** — remove all `nat.*`, `nvidia-nat-*`, and
    `nemo_toolkit` legacy references; remove lockfile and notice entries;
    add opt-in Platform evaluation/deployment and Fabric harness profiles.
 
 Every migration PR must preserve participant scoping, add or update the direct
 tests for the surface it changes, update `DEPENDENCIES.md`, and leave no
 hand-rolled model HTTP client behind.
+
+Fabric integration should adapt the runtime lifetime at the hosting boundary
+or provide an `Agent` implementation. It must use the existing tool APIs rather
+than introduce a second application invocation path alongside `publish()`.
 
 ## Exit criteria
 

@@ -40,6 +40,10 @@ async def add_stream(request: AddRequest) -> AsyncIterator[AddResult]:
     yield AddResult(total=request.left + request.right)
 
 
+async def acknowledge(_request: AddRequest) -> None:
+    return None
+
+
 async def test_async_tool_validates_and_yields_typed_chunks() -> None:
     tool = AsyncTool(
         "stream_add",
@@ -224,6 +228,16 @@ async def test_handle_tool_call_returns_a_model_ready_tool_message() -> None:
     assert result.return_direct is False
 
 
+async def test_side_effect_tool_returns_none_and_renders_null() -> None:
+    tool = Tool("acknowledge", "Acknowledge input.", AddRequest, None, acknowledge)
+
+    direct = await tool.execute(AddRequest(left=2, right=3))
+    model = await tool.invoke('{"left":2,"right":3}')
+
+    assert direct is None
+    assert model.content == "null"
+
+
 async def test_handled_tool_calls_use_the_relay_tool_lifecycle() -> None:
     tool = Tool("add", "Add two integers.", AddRequest, AddResult, add)
     events = []
@@ -294,3 +308,41 @@ def test_tool_sets_reject_duplicate_names() -> None:
 
     with pytest.raises(ValueError, match="duplicate tool name"):
         ToolSet((tool, tool))
+
+
+async def test_tool_set_aliases_remap_model_definition_and_dispatch_names() -> None:
+    tool = Tool("add", "Add two integers.", AddRequest, AddResult, add)
+    tools = ToolSet({"sum": tool})
+
+    assert tool_definitions(tools) == (
+        ToolDef(
+            name="sum",
+            description="Add two integers.",
+            parameters=AddRequest.model_json_schema(),
+        ),
+    )
+    result = await handle_tool_call(
+        ToolCall(id="sum-call", name="sum", arguments='{"left":2,"right":3}'),
+        tools,
+    )
+
+    assert result.message.content == '{"total":5}'
+    assert tool.name == "add"
+
+
+def test_tool_set_namespaces_similarly_named_tool_groups() -> None:
+    vision_status = Tool("status", "Vision status.", AddRequest, AddResult, add)
+    planner_status = Tool("status", "Planner status.", AddRequest, AddResult, add)
+    tools = ToolSet.namespaced(
+        {
+            "vision": (vision_status,),
+            "planner": (planner_status,),
+        }
+    )
+
+    assert [definition.name for definition in tool_definitions(tools)] == [
+        "vision__status",
+        "planner__status",
+    ]
+    assert tools.get("vision__status") is vision_status
+    assert tools.get("planner__status") is planner_status

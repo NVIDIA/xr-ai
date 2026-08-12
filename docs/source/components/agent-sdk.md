@@ -8,6 +8,8 @@
 The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
+- **`xr-ai-agent-runtime`** — agent resource lifetimes, runtime-owned
+  background tasks, existing native tools, and typed publish/subscribe.
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
   `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
   structured model deployment profile. Swapping a backend is a configuration
@@ -25,6 +27,38 @@ from:
   workflow helpers.
 - **`xr-ai-nat`** — legacy NeMo Agent Toolkit function groups retained while
   their concrete capabilities migrate.
+
+---
+
+## xr-ai-agent-runtime
+
+`AgentRuntime` owns optional resource lifetimes, runtime-owned background tasks,
+participant-scoped publish/subscribe, and cleanup. An agent exposes ordinary
+`Tool` and `AsyncTool` instances from `xr-ai-tools`. Direct callers use
+`execute()` or `stream()`, and model loops use the same `ToolSet` and
+`handle_tool_call()` path as standalone tools. There is no runtime call adapter.
+
+Agent lifetime is not itself a tool. Domain controls such as starting or
+stopping monitoring remain ordinary tools. Agents are registered before runtime
+startup, and most require no lifecycle code. An agent that owns resources
+implements the optional `lifespan()` async context. Agents also own their
+concurrency policy: shared state that is touched by tools and subscriptions
+must be protected by the agent's lock or private queue. Model loops, planning,
+and memory remain agent implementations. Raw audio and video remain on the hub
+path.
+
+`ToolSet.namespaced({"vision": vision.tools, "planner": planner.tools})`
+assigns unique model-visible names when tools from multiple agents are combined;
+the agents and underlying tools remain unchanged. Participant identity needed
+by direct execution belongs in the tool's request schema; participant and
+correlation metadata on `AgentContext` applies to pub/sub. The runtime cancels
+work created through `ctx.start_task()`, while external callers must finish
+direct tool calls before the agent's runtime scope exits.
+
+A failed runtime-owned background task transitions the runtime to a failed
+state, cancels its remaining owned work, and is surfaced by later operations
+and shutdown. `publish()` settles all fan-out deliveries before propagating
+subscriber failures.
 
 ---
 
@@ -226,6 +260,11 @@ boundaries. `xr_ai_tools.streaming_vision.StreamingVisionTool` is a separate
 boundary. It has no voice or output-transport dependency. Both tools own their
 own frame sources and redact inline camera data from Relay events without
 changing provider input.
+
+Applications place native tools and model loops inside an
+`xr-ai-agent-runtime` agent when they need scoped resources, background tasks,
+or pub/sub. Relay remains responsible for tool and model execution inside that
+agent; the runtime does not duplicate the tool loop or model boundary.
 
 ## xr-ai-nat model bridge
 

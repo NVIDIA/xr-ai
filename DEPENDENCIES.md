@@ -37,6 +37,15 @@ CI matrices:
 ## Internal packages
 
 ```
+xr-ai-agent-runtime  (agent-sdk/xr-ai-agent-runtime/)
+    └── pydantic >=2.10
+    └── xr-ai-tools [editable: ../xr-ai-tools]
+    In-process runtime for agent resource lifetimes, runtime-owned background
+    tasks, and typed ``publish`` fan-out. Agents expose ordinary ``Tool`` and
+    ``AsyncTool`` instances from ``xr-ai-tools`` and own their synchronization.
+    Tool execution, model clients, tool loops, planning, memory, and raw media
+    transport are not runtime responsibilities.
+
 xr-ai-hub-client  (agent-sdk/xr-ai-hub-client/)
     └── pyzmq >=27.0
     └── msgpack >=1.0
@@ -333,6 +342,7 @@ vec-mcp-server  (agent-mcp-servers/vec-mcp/)
     remains compatibility-only and is not part of the native function group.
 
 xr-ai-tests  (tests/)
+    └── xr-ai-agent-runtime       [editable: ../agent-sdk/xr-ai-agent-runtime]
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub-client]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
     └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
