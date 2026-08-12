@@ -97,6 +97,54 @@ def test_serve_nim_uses_world_writable_per_container_cache(tmp_path, monkeypatch
     assert f"{leaf}:/opt/nim/.cache" in captured["argv"]
 
 
+def test_serve_nim_tolerates_foreign_cache_dir_if_world_writable(
+    tmp_path, monkeypatch,
+):
+    # Shared machine: the per-container cache dir belongs to another OS user
+    # (chmod raises), but they already made it world-writable — proceed.
+    monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+    cache = tmp_path / "nim" / "xr-ai-nim-llama"
+    cache.mkdir(parents=True)
+    cache.chmod(0o777)
+    monkeypatch.setattr(
+        Path, "chmod",
+        lambda self, mode: (_ for _ in ()).throw(PermissionError()),
+    )
+    captured: dict = {}
+    monkeypatch.setattr(_docker, "run_container", lambda **kw: captured.update(kw))
+    serve_nim(
+        image="nvcr.io/nim/meta/llama-3.1-8b-instruct:latest",
+        container_name="xr-ai-nim-llama",
+        log_prefix="x",
+        http_port=8106,
+        nim_cache=tmp_path / "nim",
+    )
+    assert f"{cache}:/opt/nim/.cache" in captured["argv"]
+
+
+def test_serve_nim_exits_on_unwritable_foreign_cache_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("NGC_API_KEY", "nvapi-test")
+    cache = tmp_path / "nim" / "xr-ai-nim-llama"
+    cache.mkdir(parents=True)
+    cache.chmod(0o755)
+    real_chmod = Path.chmod
+
+    def _deny(self, mode):
+        if self == cache:
+            raise PermissionError()
+        return real_chmod(self, mode)
+
+    monkeypatch.setattr(Path, "chmod", _deny)
+    with pytest.raises(SystemExit):
+        serve_nim(
+            image="nvcr.io/nim/meta/llama-3.1-8b-instruct:latest",
+            container_name="xr-ai-nim-llama",
+            log_prefix="x",
+            http_port=8106,
+            nim_cache=tmp_path / "nim",
+        )
+
+
 def test_serve_nim_exits_without_ngc_key(tmp_path, monkeypatch):
     monkeypatch.delenv("NGC_API_KEY", raising=False)
     with pytest.raises(SystemExit):
