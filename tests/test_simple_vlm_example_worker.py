@@ -144,7 +144,7 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"] == (
         "../../../agent-sdk/xr-ai-hub-client"
     )
-    assert "xr-ai-tools[relay,live-vision]" in dependencies
+    assert "xr-ai-tools[live-vision]" in dependencies
     assert all("[vision" not in dependency and "[voice" not in dependency for dependency in dependencies)
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-pipecat" not in dependencies
@@ -494,3 +494,94 @@ async def test_streaming_vision_tool_yields_typed_chunks() -> None:
     assert llm_events
     assert all(image not in event for event in llm_events)
     assert any("<redacted:live-camera-frame>" in event for event in llm_events)
+
+
+async def test_streaming_vision_stops_after_a_partial_stream_failure(monkeypatch) -> None:
+    class _PartialFailureVlm:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def stream(
+            self,
+            image,
+            question: str,
+            *,
+            system_prompt: str = "",
+            headers=None,
+        ):
+            self.calls.append((image, question, system_prompt, dict(headers or {})))
+            yield "The object is "
+            raise RuntimeError("stream disconnected")
+
+    endpoint = _LiveEndpoint()
+    vision = StreamingVisionTool(
+        endpoint=cast(ProcessorEndpoint, endpoint),
+        vlm=cast(VLMService, _PartialFailureVlm()),
+    )
+
+    async def current_image(_participant_id: str) -> str:
+        return "data:image/jpeg;base64,frame"
+
+    monkeypatch.setattr(vision, "_current_image", current_image)
+
+    chunks = [
+        chunk.text
+        async for chunk in vision.stream(
+            VisionRequest(participant_id="alice", query="What is shown?"),
+        )
+    ]
+
+    assert chunks == ["The object is "]
+    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
+
+
+async def test_streaming_vision_reports_failure_before_any_output(monkeypatch) -> None:
+    class _ImmediateFailureVlm:
+        async def stream(self, *_args, **_kwargs):
+            if False:
+                yield ""
+            raise RuntimeError("stream unavailable")
+
+    endpoint = _LiveEndpoint()
+    vision = StreamingVisionTool(
+        endpoint=cast(ProcessorEndpoint, endpoint),
+        vlm=cast(VLMService, _ImmediateFailureVlm()),
+    )
+
+    async def current_image(_participant_id: str) -> str:
+        return "data:image/jpeg;base64,frame"
+
+    monkeypatch.setattr(vision, "_current_image", current_image)
+
+    chunks = [
+        chunk.text
+        async for chunk in vision.stream(
+            VisionRequest(participant_id="alice", query="What is shown?"),
+        )
+    ]
+
+    assert chunks == ["VLM server unavailable — please retry."]
+    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
+
+
+async def test_vision_tools_propagate_frame_conversion_errors(monkeypatch) -> None:
+    endpoint = _LiveEndpoint()
+    vlm = _StreamingVlm()
+    finite = LiveVisionTool(
+        endpoint=cast(ProcessorEndpoint, endpoint),
+        vlm=cast(VLMService, vlm),
+    )
+    streaming = StreamingVisionTool(
+        endpoint=cast(ProcessorEndpoint, endpoint),
+        vlm=cast(VLMService, vlm),
+    )
+
+    async def malformed_frame(_participant_id: str) -> str:
+        raise ValueError("malformed pixels")
+
+    monkeypatch.setattr(finite, "_current_image", malformed_frame)
+    monkeypatch.setattr(streaming, "_current_image", malformed_frame)
+    request = VisionRequest(participant_id="alice", query="What is shown?")
+
+    with pytest.raises(RuntimeError, match="malformed pixels"):
+        await finite.execute(request)

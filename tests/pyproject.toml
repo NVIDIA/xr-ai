@@ -15,7 +15,7 @@ dependencies = [
     "xr-ai-hub-client",
     "xr-ai-models",
     "xr-ai-nat[agents,services,vision]",
-    "xr-ai-tools[relay,live-vision]",
+    "xr-ai-tools[live-vision]",
     "xr-ai-pipecat",
     "xr-ai-voice",
     "xr-media-hub",

@@ -78,13 +78,10 @@ class StreamingVisionTool(AsyncTool[VisionRequest, VisionChunk]):
         except FrameUnavailable as exc:
             yield VisionChunk(text=str(exc))
             return
-        except Exception:
-            _LOGGER.exception("Live frame conversion failed")
-            yield VisionChunk(text="VLM server unavailable — please retry.")
-            return
 
         await self.endpoint.set_status("processing", request.participant_id)
         fragments: list[str] = []
+        emitted_output = False
         try:
             register_frame_sanitizer()
             stream = await nemo_relay.llm.stream_execute(
@@ -100,10 +97,12 @@ class StreamingVisionTool(AsyncTool[VisionRequest, VisionChunk]):
             async for chunk in stream:
                 text = stream_text(chunk)
                 if text:
+                    emitted_output = True
                     yield VisionChunk(text=text)
         except Exception:
             _LOGGER.exception("Live VLM stream failed")
-            yield VisionChunk(text="VLM server unavailable — please retry.")
+            if not emitted_output:
+                yield VisionChunk(text="VLM server unavailable — please retry.")
         finally:
             await self.endpoint.set_status("idle", request.participant_id)
 

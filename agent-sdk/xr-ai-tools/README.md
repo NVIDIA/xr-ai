@@ -17,6 +17,7 @@ The base install supplies finite `Tool` and streaming `AsyncTool` types. Install
 
 ```python
 from pydantic import BaseModel
+from xr_ai_models import ChatMessage
 from xr_ai_tools import Tool, ToolSet
 from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
 
@@ -44,9 +45,19 @@ tools = (lookup_tool,)
 tool_set = ToolSet(tools)
 
 response = await llm.chat(messages, tools=tool_definitions(tools))
+messages.append(
+    ChatMessage(
+        role="assistant",
+        content=response.content,
+        tool_calls=response.tool_calls,
+    )
+)
 for call in response.tool_calls or ():
     result = await handle_tool_call(call, tool_set)
     messages.append(result.message)
+    if result.return_direct:
+        final_answer = result.message.content
+        break
 ```
 
 `tool_definitions(...)` adapts native tools to `xr-ai-models` `ToolDef` values.
@@ -57,7 +68,7 @@ whether calls run sequentially or concurrently.
 
 ## Finite and streaming live vision tools
 
-Install `xr-ai-tools[relay,live-vision]` for two independent current-frame
+Install `xr-ai-tools[live-vision]` for two independent current-frame
 tools. `LiveVisionTool` is a finite `Tool` that returns one complete
 `VisionResponse` for agentic planning. `StreamingVisionTool` is an `AsyncTool`
 that yields typed `VisionChunk` values. It has no voice dependency or output

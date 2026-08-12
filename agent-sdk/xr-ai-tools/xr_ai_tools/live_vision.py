@@ -74,9 +74,6 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
             image_url = await self._current_image(request.participant_id)
         except FrameUnavailable as exc:
             return VisionResponse(text=str(exc))
-        except Exception:
-            _LOGGER.exception("Live frame conversion failed")
-            return VisionResponse(text="VLM server unavailable — please retry.")
 
         await self.endpoint.set_status("processing", request.participant_id)
         try:
