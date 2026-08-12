@@ -15,9 +15,9 @@ from:
   `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
   structured model deployment profile. Swapping a backend is a configuration
   edit, not a code edit.
-- **`xr-ai-voice`** — the native voice runtime. `VoiceSession` owns readiness,
-  hub transport, voice gating, streaming responses, signals, and cleanup while
-  applications provide a `VoiceHandler`.
+- **`xr-ai-voice`** — the native voice runtime. `VoiceAgent` publishes
+  `voice.input` and consumes `voice.output`; its `VoiceSession` owns readiness,
+  hub transport, voice gating, streaming responses, signals, and cleanup.
 - **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
   consumers such as `xr-render-demo`. Its `run_voice_pipeline` helper exposes
   the same IPC-start request-readiness boundary as `VoiceSession`.
@@ -304,10 +304,9 @@ async with runtime:
 The default hub transport is opened only after readiness probes succeed; failed
 readiness closes the session's model clients without opening hub sockets. The
 ready file is touched only after the input transport enters its hub IPC receive
-loop. NAT applications that do not use the agent runtime create handlers with
-`xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` preserves participant
-routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients. `VoiceAgent` forwards
+loop. `VoiceSession` preserves participant routing, cancels superseded or
+interrupted output, installs signal handlers, and closes its transport and
+model clients. `VoiceAgent` forwards
 `on_interrupted(pid)` so applications can cancel participant work; a pid-less
 interruption passes `None`.
 
