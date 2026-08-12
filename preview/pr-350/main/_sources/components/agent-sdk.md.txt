@@ -149,10 +149,13 @@ class VLMService(Protocol):
     capabilities: Capabilities
     async def ask_image(self, image, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
-                        timeout=None) -> ChatResponse: ...
+                        timeout=None, headers=None) -> ChatResponse: ...
     async def ask_video(self, video, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
-                        timeout=None) -> ChatResponse: ...
+                        timeout=None, headers=None) -> ChatResponse: ...
+    def stream(self, image, question, *, system_prompt="",
+               max_tokens=None, temperature=None,
+               timeout=None, headers=None) -> AsyncIterator[str]: ...
     async def health(self) -> bool: ...
 
 class STTService(Protocol):
@@ -217,6 +220,14 @@ does not add an HTTP client, a Hub transport, or an implicit conversation store.
 Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
 registered tool; foreground selection, workflow state, and background work stay
 explicit in application code.
+
+`xr_ai_nat.live_vision.LiveVisionTool` acquires a participant-scoped hub frame
+and returns one complete observation through Relay's finite tool and LLM
+boundaries. Direct voice can wrap the same tool with `LiveVisionResponder`,
+whose provider response uses Relay's managed streaming LLM path under an Agent
+scope. Both paths replace the inline camera frame in Relay events without
+changing provider input. The split keeps token streaming out of ordinary
+agentic tool calls without reimplementing a partial streaming-tool lifecycle.
 
 ## xr-ai-nat model bridge
 
