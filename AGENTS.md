@@ -205,10 +205,9 @@ pipecat internally):
   `yaml/voice_gate.yaml` (`magic_phrases: ["hey agent"]`, or `[]` for
   always-on). No sample code — config only.
 
-`xr-ai-pipecat` remains available for samples that still subclass its
-`BrainProcessor`; those workers run the assembled pipeline with
-`run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` so they use
-the same IPC-start readiness boundary.
+`xr-ai-pipecat` remains a compatibility package, but current samples use
+`VoiceSession` and do not import its processors or pipeline assembly APIs.
+Pipecat stays private inside `xr-ai-voice`.
 
 A native voice sample registers `VoiceAgent` and application agents on the same
 runtime; wake-word behavior comes from config alone.

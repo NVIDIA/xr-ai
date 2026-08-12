@@ -137,8 +137,8 @@ returning. Native vision functions read recorded images or acquire a current
 participant frame, encode it as an image URL, and invoke the shared
 `xr-ai-models` VLM service. Only invoked when the user asks a visual question.
 
-There is a deliberate startup ordering constraint: the worker's
-`wait_for_services` probe blocks on the VLM's `/health` endpoint, which
+There is a deliberate startup ordering constraint: `VoiceSession` readiness
+blocks on the VLM's `/health` endpoint, which
 returns 200 only after weights are fully loaded. This ensures GPU 0 memory
 has settled before LOVR starts its Vulkan device, preventing a transient
 OOM race.
@@ -148,8 +148,8 @@ OOM race.
 Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.
 
 ```
-LiveKit mic (int16 PCM) → hub IPC (float32) → XRMediaHubTransport.input()
-  → SttProcessor
+LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceSession
+  → VAD/STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
                          so the first word's attack isn't clipped
@@ -161,7 +161,7 @@ LiveKit mic (int16 PCM) → hub IPC (float32) → XRMediaHubTransport.input()
       filler filter      drops single- and multi-word filler utterances
                          ("um", "uh", "yeah", "okay", "mm-hmm", etc.)
       STT call           POST multipart/form-data WAV → stt-server :8103
-  → TranscriptionFrame pushed downstream
+  → accepted participant query
 ```
 
 STT calls are serialized — an `stt_busy` flag prevents a new finalize while
@@ -173,27 +173,32 @@ Port 8105. `rhasspy/piper-voices` ONNX. Runs on CPU, ~100 ms / sentence. All
 synthesis runs in a thread pool so the asyncio loop is never blocked.
 
 ```
-TextFrame (from agentic loop final response or quick-ack)
-  → TtsProcessor
+voice.output topic (agentic-loop quick-ack or final response)
+  → VoiceAgent → private VoiceSession TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
       RETURN_AUDIO IPC → hub → LiveKit → participant's headphones
 ```
 
-`allow_interruptions=True` in the Pipecat pipeline. A new utterance while TTS
-is playing triggers `ReturnAudioFlush` → hub clears the LiveKit audio queue
-for that participant.
+`VoiceSession` owns interruption handling. A new utterance while TTS is playing
+triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
+participant. Its interruption callback also cancels the participant's active
+render-agent task.
 
-## Pipecat pipeline
+## Agent runtime and voice topology
 
 ```
-XRMediaHubTransport.input()
-  → SttProcessor          (Silero VAD → utterance → parakeet STT
-                           → TranscriptionFrame)
-  → RenderSceneProcessor  (quick-ack + agentic loop → TextFrame)
-  → TtsProcessor          (TextFrame → Piper TTS → return audio)
-  → XRMediaHubTransport.output()
+VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
+           → typed hub text ingress ──────────┴→ xr-render.user-query topic
+  → RenderAgent → RenderSceneAgent → voice.output topic
+  → VoiceAgent → private VoiceSession TTS → hub return audio
 ```
+
+The render worker imports no `xr-ai-pipecat` or `pipecat-ai` API. Pipecat is
+an internal implementation detail of `xr-ai-voice`; application input,
+participant-scoped agent execution, and voice output use public SDK contracts.
+Lifecycle failures publish notices to a sample-local runtime topic instead of
+manufacturing voice-pipeline frames.
 
 ## Agentic loop
 
@@ -203,7 +208,7 @@ The LLM tool schemas are derived from those Functions and held in memory.
 `start_xr` and `get_health` are excluded from the model tool list because the
 worker owns the XR lifecycle.
 
-On each `TranscriptionFrame`:
+On each accepted `xr-render.user-query` event or lifecycle notice:
 
 1. **Quick-ack** runs first (`llm` :8107, awaited before the loop).
 2. **Still-working timer** starts (fires at 5s, repeats every 10s, data
@@ -228,8 +233,8 @@ On each `TranscriptionFrame`:
      `needs_thinking=False`.
    - If the model outputs a bare tool name as text instead of a proper tool
      call: worker synthesizes a no-arg tool call and continues.
-5. **Final response** sent on `agent.response` topic and as a `TextFrame`
-   downstream to TTS.
+5. **Final response** sent on `agent.response` and published as correlated
+   `voice.output` chunks for the voice subscriber and TTS.
 6. **Turn appended** to a rolling 4-turn history buffer — injected as
    context in future turns so the model understands "fix that", "undo",
    "the one I just added". Final user and assistant messages are also written

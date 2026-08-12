@@ -628,12 +628,12 @@ user-relative requests such as "to my left".
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
 | Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-nat` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
-| Worker | `xr-render-demo-worker` | `xr-ai-hub-client`, `xr-ai-models` [editable], `xr-ai-nat[services,vision]` [editable], `xr-ai-pipecat` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pyyaml >=6.0, pipecat-ai >=1.3 (native scene, tracking, spatial-math, video-memory, vision, and text-memory functions replace capability MCP clients; silero-vad via xr-ai-pipecat → xr-ai-vad). |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent-runtime` [editable], `xr-ai-hub-client`, `xr-ai-models` [editable], `xr-ai-nat[services,vision]` [editable], `xr-ai-voice` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pydantic >=2.12, pyyaml >=6.0 (native scene, tracking, spatial-math, video-memory, vision, and text-memory functions replace capability MCP clients; `xr-ai-voice` privately supplies VAD and speech-pipeline dependencies). |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
 `make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
-a transitive dep of `xr-ai-pipecat` and `xr-ai-nat[vision]`.
+a transitive dep of `xr-ai-voice` and `xr-ai-nat[vision]`.
 
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency

@@ -1,22 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""
-xr-render-demo agent worker — voice-driven XR scene control via Pipecat.
-
-Voice pipeline (assembled by ``xr_ai_pipecat.make_voice_pipeline``):
-  transport.input → VadStt → VoiceGate → RenderSceneProcessor (brain)
-                  → StreamingTts → transport.output
-
-Launched as a subprocess by ``uv run xr_render_demo``.
-"""
+"""xr-render-demo worker with runtime-routed agent input and voice output."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import pathlib
-import signal
 from pathlib import Path
 
 from loguru import logger
@@ -25,19 +16,28 @@ from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
 from xr_ai_models import ChatMessage, load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
-from xr_ai_pipecat import VadConfig, make_voice_pipeline, run_voice_pipeline
-from xr_ai_pipecat.services import wait_for_services
-from xr_ai_pipecat.transport import XRMediaHubTransport
+from xr_ai_runtime import AgentRuntime
+from xr_ai_voice import (
+    VadConfig,
+    VoiceAgent,
+    VoiceSession,
+)
 from xr_ai_voicegate import load_voice_gate_config
 
 from agent import RenderDemoAgent
 from capabilities import build_native_toolbox
 from config import WorkerConfig, load_config
+from dispatch import (
+    CancelAllRender,
+    CancelRender,
+    RenderAgent,
+    USER_QUERY_TOPIC,
+)
 from processors import (
     _LIVE_PERCEPTION_TOOL,
     _PAST_PERCEPTION_TOOL,
     _PERCEPTION_TOOL_DEFS,
-    RenderSceneProcessor,
+    RenderSceneAgent,
 )
 
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
@@ -88,42 +88,45 @@ async def main(
     tts = make_tts(models_cfg, "tts")
     vlm_service = make_vlm(models_cfg, "vlm")
 
-    # VLM /health only returns 200 after weights are fully loaded — this ensures
-    # GPU 0 memory has settled before LOVR starts its Vulkan device, preventing
-    # the transient OOM race condition.
-    probes = {
-        "LLM": llm.health,
-        "agent-LLM": agent_llm.health,
-        "STT": stt.health,
-        "TTS": tts.health,
-        "VLM": vlm_service.health,
-    }
-    await wait_for_services(probes)
-
-    # A cold vLLM engine pays kernel-autotune costs on its first inference
-    # that can exceed the quick-ack timeout; absorb them before the first
-    # turn with a request shaped like a real quick-ack. Hosted backends
-    # (health_check: false, e.g. NIM) are always warm — skip the paid call.
-    if models_cfg.llm("llm").health_check:
-        try:
-            await llm.chat(
-                [ChatMessage(role="user", content="Add a small cube.")],
-                max_tokens=40,
-                timeout=120.0,
-            )
-        except Exception:
-            logger.opt(exception=True).warning("LLM warmup failed")
-
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
+    session = VoiceSession(
+        stt=stt,
+        tts=tts,
+        vad=VadConfig(
+            silence_duration=cfg.silence_duration,
+            min_speech=cfg.min_speech,
+            silero_threshold=cfg.silero_threshold,
+        ),
+        voice_gate=voice_gate_cfg,
+        probes={
+            "LLM": llm.health,
+            "agent-LLM": agent_llm.health,
+            "VLM": vlm_service.health,
+        },
+        ready_file=ready_file,
+        closeables=(llm, agent_llm, vlm_service),
+        text_topic="",
+        idle_timeout_secs=cfg.idle_timeout_secs,
+    )
 
-    transport = XRMediaHubTransport()
     async with WorkflowBuilder() as builder:
+        # VLM readiness must settle GPU memory before LOVR creates its Vulkan device.
+        if models_cfg.llm("llm").health_check:
+            try:
+                await llm.chat(
+                    [ChatMessage(role="user", content="Add a small cube.")],
+                    max_tokens=40,
+                    timeout=120.0,
+                )
+            except Exception:
+                logger.opt(exception=True).warning("LLM warmup failed")
+
         toolbox, vision_config = await build_native_toolbox(
             builder,
             scene_endpoint=cfg.scene_endpoint,
             openxr_endpoint=cfg.openxr_endpoint,
             video_memory_endpoint=cfg.video_memory_endpoint,
-            frame_endpoint=transport.endpoint,
+            frame_endpoint=session.transport.endpoint,
             vlm=vlm_service,
         )
         await builder.add_function_group(
@@ -141,8 +144,8 @@ async def main(
         tools.extend(_PERCEPTION_TOOL_DEFS)
         logger.info("native tool-calling functions: {}", [tool.name for tool in tools])
 
-        brain = RenderSceneProcessor(
-            transport=transport,
+        scene_agent = RenderSceneAgent(
+            transport=session.transport,
             cfg=cfg,
             toolbox=toolbox,
             release_vision=vision_config.release,
@@ -152,61 +155,45 @@ async def main(
             llm=llm,
             agent_llm=agent_llm,
         )
-        # The endpoint retains the agent's bound callbacks for the worker lifetime.
-        RenderDemoAgent(transport=transport, brain=brain, tools=toolbox)
-
-        _, task = make_voice_pipeline(
-            transport=transport,
-            stt=stt,
-            tts=tts,
-            brain=brain,
-            vad_cfg=VadConfig(
-                silence_duration=cfg.silence_duration,
-                min_speech=cfg.min_speech,
-                silero_threshold=cfg.silero_threshold,
-            ),
-            voice_gate_cfg=voice_gate_cfg,
-            # Brain pushes its own per-turn ``agent.response`` data
-            # message with the sanitized "display" string (see
-            # ``RenderDemoBrain._run_turn``); opting out of the
-            # pipeline-level echo here avoids a duplicate send.
-            text_topic="",
-            # Idle-timeout auto-cancel — disabled unless set in the worker YAML.
-            idle_timeout_secs=cfg.idle_timeout_secs,
+        runtime = AgentRuntime()
+        render_ref = runtime.register("xr-render", RenderAgent(scene_agent))
+        RenderDemoAgent(
+            transport=session.transport,
+            scene_agent=scene_agent,
+            tools=toolbox,
+            runtime=runtime,
         )
+        async def participant_left(participant_id: str) -> None:
+            await runtime.call(
+                render_ref,
+                CancelRender(),
+                participant_id=participant_id,
+                source="voice.participant-left",
+            )
+            await scene_agent.on_participant_left(participant_id)
 
-        loop = asyncio.get_running_loop()
-        cancel_requested = False
+        async def interrupted(participant_id: str | None) -> None:
+            request = CancelRender() if participant_id is not None else CancelAllRender()
+            await runtime.call(
+                render_ref,
+                request,
+                participant_id=participant_id or "voice-runtime",
+                source="voice.interruption",
+            )
 
-        def _request_cancel() -> None:
-            # PipelineTask.cancel is a coroutine; add_signal_handler needs a
-            # sync callable. Guard against a second signal (e.g. double
-            # ctrl-c) spawning a redundant cancel task while the first is
-            # still draining the pipeline.
-            nonlocal cancel_requested
-            if cancel_requested:
-                return
-            cancel_requested = True
-            asyncio.create_task(task.cancel())
-
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, _request_cancel)
+        voice = VoiceAgent(
+            session,
+            query_topic=USER_QUERY_TOPIC,
+            text_ignore_topics={"xr.session.started"},
+            on_participant_left=participant_left,
+            on_interrupted=interrupted,
+            interrupt_on_supersede=True,
+        )
+        runtime.register("voice", voice)
 
         logger.info("xr_render_demo starting")
-        try:
-            await run_voice_pipeline(
-                task,
-                transport,
-                on_ready=ready_file.touch if ready_file else None,
-            )
-        finally:
-            transport.shutdown()
-            await brain.close()
-            for service in (stt, tts, vlm_service):
-                try:
-                    await service.close()
-                except Exception:
-                    logger.opt(exception=True).warning("service close failed")
+        async with runtime:
+            await voice.wait()
     logger.info("xr_render_demo stopped")
 
 

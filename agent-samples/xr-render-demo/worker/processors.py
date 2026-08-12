@@ -1,13 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""
-Brain processor for xr-render-demo.
-
-The voice pipeline (input → VadStt → VoiceGate → brain → StreamingTts → output)
-is assembled by ``xr_ai_pipecat.make_voice_pipeline``. This module supplies
-the sample-specific brain — a multi-step agentic loop over native NAT
-functions for scene, tracking, spatial math, vision, and video memory.
+"""Multi-step xr-render-demo agent over native NAT functions.
 
 Agentic loop (max ``_MAX_LOOP`` iterations):
   - Nemotron-3-Nano emits an OpenAI ``tool_calls`` payload → execute tool,
@@ -38,8 +32,7 @@ from nat.builder.function import Function
 from xr_ai_hub import DataMessage
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
-from xr_ai_pipecat import BrainProcessor
-from xr_ai_pipecat.transport import XRMediaHubTransport
+from xr_ai_voice import HubVoiceTransport
 
 from config import WorkerConfig
 from capabilities import NativeToolbox
@@ -164,10 +157,10 @@ def _now_us() -> int:
     return time.time_ns() // 1_000
 
 
-# ── RenderSceneProcessor ──────────────────────────────────────────────────────
+# ── RenderSceneAgent ──────────────────────────────────────────────────────────
 
 
-class RenderSceneProcessor(BrainProcessor):
+class RenderSceneAgent:
     """
     Multi-step agentic loop over native NAT functions.
 
@@ -186,7 +179,7 @@ class RenderSceneProcessor(BrainProcessor):
     def __init__(
         self,
         *,
-        transport: XRMediaHubTransport,
+        transport: HubVoiceTransport,
         cfg: WorkerConfig,
         toolbox: NativeToolbox,
         release_vision: Callable[[str], None],
@@ -196,7 +189,6 @@ class RenderSceneProcessor(BrainProcessor):
         llm: LLMService,
         agent_llm: LLMService,
     ):
-        super().__init__()
         self._transport = transport
         self._cfg = cfg
         self._toolbox = toolbox
@@ -224,69 +216,15 @@ class RenderSceneProcessor(BrainProcessor):
         # Per-turn snapshot used to compute prev→new pairs on update_primitive.
         self._pre_move_positions: dict[str, tuple[float, float, float]] = {}
 
-        # Canned spoken notices the agent (XR lifecycle, outside handle_query)
-        # asks us to deliver. Keyed by pid → list of exact strings. Drained in
-        # handle_query, which short-circuits the LLM loop for a matching entry.
-        # See enqueue_notice / _emit_notice.
-        self._pending_notices: dict[str, list[str]] = {}
+    def reset_history(self) -> None:
+        """Clear conversation state when a new XR session starts."""
 
-    # ── public: text-channel entry ────────────────────────────────────────────
-
-    async def enqueue_text_query(self, pid: str, text: str) -> None:
-        """Run a typed text query through the same path as a spoken utterance.
-
-        The web client's "Send" button posts on the data channel; the brain
-        needs to fire ``handle_query`` for it identically to a transcript
-        that passed the voice gate. The base class' ``_spawn_query`` owns
-        the per-pid in-flight task and cancellation semantics, so we route
-        through a synthesized ``GatedQueryFrame``.
-        """
-        from xr_ai_pipecat import GatedQueryFrame
-
-        await self._spawn_query(
-            GatedQueryFrame(
-                participant_id=pid,
-                text=text,
-                fresh_match=False,
-                pts_us=_now_us(),
-            )
-        )
-
-    async def enqueue_notice(self, pid: str, text: str) -> None:
-        """Speak a canned, agent-authored notice through the normal turn path.
-
-        XR-lifecycle failures (start_xr error, LOVR never ready) happen in
-        ``RenderDemoAgent``, outside ``handle_query``'s yield→TTS path. To
-        surface them with voice *and* a panel line — the same delivery shape
-        as a normal final answer (``_send(agent.response)`` + ``yield``) —
-        the agent hands us the message here. We register it as pending for
-        *pid* and inject a ``GatedQueryFrame`` through the same
-        ``_spawn_query`` machinery a typed/spoken query uses, so the base
-        class owns the per-pid in-flight task and its cancellation. The text
-        is matched (and consumed) by ``handle_query`` below, which yields it
-        verbatim instead of running the agentic loop. Matching on the exact
-        string — not just pid — means a real query that interleaves before
-        the notice task runs is never mistaken for the notice.
-        """
-        from xr_ai_pipecat import GatedQueryFrame
-
-        self._pending_notices.setdefault(pid, []).append(text)
-        await self._spawn_query(
-            GatedQueryFrame(
-                participant_id=pid,
-                text=text,
-                fresh_match=False,
-                pts_us=_now_us(),
-            )
-        )
-
-    # ── BrainProcessor overrides ──────────────────────────────────────────────
+        self._history.clear()
 
     async def handle_query(
         self,
         pid: str,
         text: str,
-        fresh_match: bool,
     ) -> AsyncIterator[str]:
         """Drive one full turn of the agentic loop for *text* from *pid*.
 
@@ -302,20 +240,10 @@ class RenderSceneProcessor(BrainProcessor):
         play after the real reply. The single spoken ack covers "I'm on it";
         the panel carries the detailed progress.
         """
-        # Canned agent notice (XR-lifecycle failure) — speak it verbatim and
-        # skip the LLM loop. Exact-text match guards against a real query
-        # interleaving before the notice task runs. See enqueue_notice.
-        pending = self._pending_notices.get(pid)
-        if pending and text in pending:
-            pending.remove(text)
-            if not pending:
-                self._pending_notices.pop(pid, None)
-            return self._emit_notice(pid, text)
         return self._run_turn(pid, text)
 
-    async def _emit_notice(self, pid: str, text: str) -> AsyncIterator[str]:
-        """Deliver a canned notice with the same shape as a final answer:
-        a panel line on ``agent.response`` plus a spoken (yielded) line."""
+    async def handle_notice(self, pid: str, text: str) -> AsyncIterator[str]:
+        """Deliver one lifecycle notice to the panel and voice output."""
         send_pid = pid or self._transport.target_participant
         if send_pid:
             await self._send(send_pid, text, topic=_AGENT_RESPONSE_TOPIC)
@@ -1063,7 +991,3 @@ class RenderSceneProcessor(BrainProcessor):
     async def on_participant_left(self, pid: str) -> None:
         """Release cached native live-frame state after participant cleanup."""
         self._release_vision(pid)
-
-    async def close(self) -> None:
-        await self._llm.close()
-        await self._agent_llm.close()

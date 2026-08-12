@@ -9,6 +9,18 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — xr-render-demo uses the shared agent runtime
+
+The xr-render-demo worker no longer subclasses `BrainProcessor` or imports
+`xr-ai-pipecat`. The shared `VoiceAgent` publishes `UserQuery` to the
+sample-owned `xr-render.user-query` topic; other input pathways can publish the
+same message. A resident `RenderAgent` owns runtime-tracked participant turns
+and publishes correlated `voice.output` chunks back to that same voice agent
+for TTS. XR launch failures use a sample-local notice topic, while voice
+interruption callbacks address the render agent to cancel participant or global
+work. Pipecat remains private inside `xr-ai-voice` rather than part of the
+sample's application API.
+
 ### 2026-08-12 — Runtime and agent telemetry uses Relay's local event stream
 
 `AgentRuntime` records every typed publication as a Relay function scope and

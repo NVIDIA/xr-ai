@@ -1,28 +1,20 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""
-RenderDemoAgent — XR session lifecycle owner.
-
-Wraps the ``RenderSceneProcessor`` brain with xr-render-demo-specific
-behavior (``xr.session.started`` → ``start_xr`` → poll LOVR → ack;
-typed-text input fed through the same path as STT).
-
-The voice pipeline itself is assembled by ``xr_ai_pipecat.make_voice_pipeline``;
-this class only owns the agent-to-hub bookkeeping that lives outside the
-generic pipeline.
-"""
+"""XR session lifecycle owner for xr-render-demo."""
 from __future__ import annotations
 
 import asyncio
 import time
 
 from loguru import logger
-from xr_ai_hub import AudioChunk, DataMessage, ParticipantEvent
+from xr_ai_hub import DataMessage
+from xr_ai_runtime import AgentRuntime
+from xr_ai_voice import HubVoiceTransport
 
-from processors import RenderSceneProcessor
 from capabilities import NativeToolbox
-from xr_ai_pipecat.transport import XRMediaHubTransport
+from dispatch import RENDER_NOTICE_TOPIC, RenderNotice
+from processors import RenderSceneAgent
 
 _XR_SESSION_STARTED_TOPIC = "xr.session.started"
 _RENDER_READY_TOPIC       = "render.ready"
@@ -33,44 +25,33 @@ def _now_us() -> int:
 
 
 class RenderDemoAgent:
-    """Owns the XR session lifecycle on top of the unified voice pipeline.
-
-    The voice pipeline (``transport.input() → VadStt → VoiceGate → brain
-    → StreamingTts → transport.output()``) is built by
-    :func:`xr_ai_pipecat.make_voice_pipeline`; this class subscribes the
-    hub callbacks that the foundation does not handle (XR session start,
-    typed-text input, target-participant tracking).
-    """
+    """Own XR launch and readiness while queries flow through the runtime."""
 
     def __init__(
         self,
         *,
-        transport: XRMediaHubTransport,
-        brain:     RenderSceneProcessor,
-        tools:     NativeToolbox,
+        transport: HubVoiceTransport,
+        scene_agent: RenderSceneAgent,
+        tools: NativeToolbox,
+        runtime: AgentRuntime,
     ) -> None:
         self._transport = transport
-        self._brain     = brain
-        self._tools     = tools
+        self._scene_agent = scene_agent
+        self._tools = tools
+        self._runtime = runtime
 
         self._xr_started = False
 
-        # Subscribe to hub events the pipecat pipeline doesn't surface to us:
-        # data messages (text input + xr.session.started), audio (lazy
-        # target-pid set), and participant events.
         self._transport.endpoint.on_data(self._on_data)
-        self._transport.endpoint.on_audio(self._on_audio)
-        self._transport.endpoint.on_participant(self._on_participant)
 
     # ── XR session lifecycle ──────────────────────────────────────────────────
 
     async def _on_data(self, msg: DataMessage) -> None:
         if msg.topic != _XR_SESSION_STARTED_TOPIC:
-            await self._handle_text_input(msg)
             return
 
         self._transport.set_target_participant(msg.participant_id)
-        self._brain._history.clear()
+        self._scene_agent.reset_history()
 
         if self._xr_started:
             await self._transport.send_return_data(DataMessage(
@@ -105,38 +86,17 @@ class RenderDemoAgent:
         ))
 
     async def _notify_launch_failed(self, pid: str) -> None:
-        """Surface an XR-launch failure to the user, spoken + on the panel.
+        """Publish a launch failure through the same agent mailbox as queries."""
 
-        ``start_xr`` and the LOVR-spawn poll run here, outside the brain's
-        ``handle_query``/yield→TTS path, so a bare ``logger.warning`` would
-        leave the user staring at a "Launch XR" button that silently did
-        nothing. Route a short, actionable message through the brain's
-        ``enqueue_notice`` so it reaches TTS *and* the ``agent.response``
-        panel exactly like a normal answer — the same delivery the in-loop
-        "scene not ready" case already gets. One generic message covers
-        both the start_xr-error and never-ready/spawn-error cases; the log
-        lines above retain the specific cause for operators.
-        """
-        await self._brain.enqueue_notice(
-            pid, "I couldn't start the XR session — try Launch XR again."
+        await self._runtime.publish(
+            RENDER_NOTICE_TOPIC,
+            RenderNotice(
+                text="I couldn't start the XR session — try Launch XR again.",
+                interrupt_output=True,
+            ),
+            participant_id=pid,
+            source="xr-session",
         )
-
-    async def _handle_text_input(self, msg: DataMessage) -> None:
-        """Feed a typed text message into the same path STT uses.
-
-        The web client's "Send" button publishes typed text on the data
-        channel with no topic, mirroring simple-vlm-example.  We hand the
-        text to the brain via a synthesized ``GatedQueryFrame`` so the
-        agentic loop fires identically to a spoken utterance, bypassing
-        VAD/STT and the voice gate entirely.
-        """
-        text = (msg.data or b"").decode("utf-8", errors="replace").strip()
-        if not text:
-            return
-        if not self._transport.target_participant:
-            self._transport.set_target_participant(msg.participant_id)
-        logger.info("text input  pid={!r}  {!r}", msg.participant_id, text[:80])
-        await self._brain.enqueue_text_query(msg.participant_id, text)
 
     async def _wait_lovr(self, timeout_s: float = 120.0) -> bool:
         deadline = asyncio.get_running_loop().time() + timeout_s
@@ -151,20 +111,6 @@ class RenderDemoAgent:
             await asyncio.sleep(0.5)
         logger.warning("lovr_started never true within {:.0f}s", timeout_s)
         return False
-
-    # ── participant tracking ───────────────────────────────────────────────────
-
-    async def _on_audio(self, chunk: AudioChunk) -> None:
-        # Lazily set target participant from the first audio chunk so TTS
-        # can respond even if the xr.session.started message was missed.
-        if chunk.participant_id and not self._transport.target_participant:
-            self._transport.set_target_participant(chunk.participant_id)
-
-    async def _on_participant(self, event: ParticipantEvent) -> None:
-        if event.joined:
-            self._transport.set_target_participant(event.participant_id)
-        else:
-            self._transport.cleanup_participant(event.participant_id)
 
     # ── native scene helper ───────────────────────────────────────────────────
 
