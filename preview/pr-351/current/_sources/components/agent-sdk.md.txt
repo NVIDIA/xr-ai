@@ -306,7 +306,9 @@ from `run()` only after the input transport enters its hub IPC receive loop.
 NAT applications create handlers with
 `xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` preserves participant
 routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients.
+and closes its transport and model clients. Runtime-backed applications can
+pass `on_interrupted(pid)` to cancel participant work that runs outside the
+voice handler; a pid-less interruption passes `None`.
 
 ## xr-ai-pipecat
 

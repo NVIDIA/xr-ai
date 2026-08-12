@@ -685,7 +685,9 @@ from <code class="docutils literal notranslate"><span class="pre">run()</span></
 NAT applications create handlers with
 <code class="docutils literal notranslate"><span class="pre">xr_ai_nat.adapters.as_voice_handler</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant
 routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients.</p>
+and closes its transport and model clients. Runtime-backed applications can
+pass <code class="docutils literal notranslate"><span class="pre">on_interrupted(pid)</span></code> to cancel participant work that runs outside the
+voice handler; a pid-less interruption passes <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </section>
 <section id="xr-ai-pipecat">
 <h2>xr-ai-pipecat<a class="headerlink" href="#xr-ai-pipecat" title="Link to this heading">#</a></h2>
