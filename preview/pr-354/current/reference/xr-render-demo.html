@@ -377,9 +377,9 @@
 <h1>xr-render-demo — architecture<a class="headerlink" href="#xr-render-demo-architecture" title="Link to this heading">#</a></h1>
 <p>This page describes the architecture of the xr-render-demo sample. For the
 user-facing
-quickstart, refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/740af31ca7cd1b3acbb972bbb94988d7fd1639da/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr">repository README</a>.
+quickstart, refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/74729aadddeca4f6159125a88f909bab883551d9/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr">repository README</a>.
 For inference-server mechanics shared with other samples, refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/740af31ca7cd1b3acbb972bbb94988d7fd1639da/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/74729aadddeca4f6159125a88f909bab883551d9/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a>.</p>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
 <p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) starts
@@ -580,7 +580,7 @@ render-agent task.</p>
 <section id="agent-runtime-and-voice-topology">
 <h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
-           → typed hub text ingress ──────────┴→ voice.input topic
+           → typed hub text ingress ──────────┴→ xr-render.user-query topic
   → RenderAgent → RenderSceneAgent → voice.output topic
   → VoiceAgent → private VoiceSession TTS → hub return audio
 </pre></div>
@@ -597,7 +597,7 @@ manufacturing voice-pipeline frames.</p>
 XR-tracking, spatial-math, vision, video-memory, and text-memory functions.
 The LLM tool schemas are derived from those Functions. <code class="docutils literal notranslate"><span class="pre">start_xr</span></code> and
 <code class="docutils literal notranslate"><span class="pre">get_health</span></code> remain worker-managed lifecycle operations.</p>
-<p>On each accepted <code class="docutils literal notranslate"><span class="pre">voice.input</span></code> event or lifecycle notice:</p>
+<p>On each accepted <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code> event or lifecycle notice:</p>
 <ol class="arabic simple">
 <li><p><strong>Quick-ack</strong> runs first (<code class="docutils literal notranslate"><span class="pre">llm</span></code> :8107, awaited before the loop).</p></li>
 <li><p><strong>Still-working timer</strong> starts (fires at 5s, repeats every 10s, data
@@ -729,7 +729,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native NAT functions and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/740af31ca7cd1b3acbb972bbb94988d7fd1639da/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/74729aadddeca4f6159125a88f909bab883551d9/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py

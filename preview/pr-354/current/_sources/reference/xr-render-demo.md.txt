@@ -171,7 +171,7 @@ render-agent task.
 
 ```
 VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
-           → typed hub text ingress ──────────┴→ voice.input topic
+           → typed hub text ingress ──────────┴→ xr-render.user-query topic
   → RenderAgent → RenderSceneAgent → voice.output topic
   → VoiceAgent → private VoiceSession TTS → hub return audio
 ```
@@ -189,7 +189,7 @@ XR-tracking, spatial-math, vision, video-memory, and text-memory functions.
 The LLM tool schemas are derived from those Functions. `start_xr` and
 `get_health` remain worker-managed lifecycle operations.
 
-On each accepted `voice.input` event or lifecycle notice:
+On each accepted `xr-render.user-query` event or lifecycle notice:
 
 1. **Quick-ack** runs first (`llm` :8107, awaited before the loop).
 2. **Still-working timer** starts (fires at 5s, repeats every 10s, data

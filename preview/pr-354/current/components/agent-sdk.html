@@ -387,8 +387,9 @@ long-running agents.</p></li>
 structured model deployment profile. Swapping a backend is a configuration
 edit, not a code edit.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes
-<code class="docutils literal notranslate"><span class="pre">voice.input</span></code> and consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>; its <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness,
-hub transport, voice gating, streaming responses, signals, and cleanup.</p></li>
+<code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> to an injected application topic and consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>; its
+<code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating, streaming
+responses, signals, and cleanup.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat surface retained for unmigrated
 consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>. Its <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> helper exposes
 the same IPC-start request-readiness boundary as <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>.</p></li>
@@ -662,8 +663,10 @@ lifecycle ownership.</p>
 <h2>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h2>
 <p>Native voice applications work with participant-aware runtime topics rather
 than Pipecat processors. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>, publishes accepted
-speech and typed text to <code class="docutils literal notranslate"><span class="pre">voice.input</span></code>, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">VoiceSession</span>
+speech and typed text to an injected <code class="docutils literal notranslate"><span class="pre">Topic[UserQuery]</span></code>, and subscribes to
+<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span><span class="p">,</span> <span class="n">UserQuery</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">VoiceSession</span>
 
 <span class="n">session</span> <span class="o">=</span> <span class="n">VoiceSession</span><span class="p">(</span>
     <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
@@ -674,7 +677,12 @@ speech and typed text to <code class="docutils literal notranslate"><span class=
     <span class="n">ready_file</span><span class="o">=</span><span class="n">ready_file</span><span class="p">,</span>
     <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
 <span class="p">)</span>
-<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">on_participant_left</span><span class="o">=</span><span class="n">release_participant</span><span class="p">)</span>
+<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.user-query&quot;</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
+<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
+    <span class="n">session</span><span class="p">,</span>
+    <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
+    <span class="n">on_participant_left</span><span class="o">=</span><span class="n">release_participant</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
