@@ -415,9 +415,10 @@ the same IPC-start request-readiness boundary as <code class="docutils literal n
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code></strong> — the minimal pyzmq + msgpack IPC library every agent uses
 to talk to the XR-Media-Hub (refer to <a class="reference internal" href="server-runtime.html"><span class="doc">Server runtime</span></a>). No LiveKit or
 FastAPI dependency.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — Relay-managed native tools, the generic <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code>
-protocol, and a basic tool-driven agent. Its legacy extras retain existing
-NeMo Agent Toolkit function groups while their concrete capabilities migrate.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code></strong> — Relay-managed native tools and model tool-call
+workflow helpers.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — legacy NeMo Agent Toolkit function groups retained while
+their concrete capabilities migrate.</p></li>
 </ul>
 <hr class="docutils" />
 <section id="xr-ai-models">
@@ -617,26 +618,23 @@ protocols or callers.</p>
 </section>
 </section>
 <hr class="docutils" />
-<section id="native-tools-and-agents">
-<h2>Native tools and agents<a class="headerlink" href="#native-tools-and-agents" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code> is the native migration target for model-driven XR composition.
+<section id="native-tools-and-model-tool-calls">
+<h2>Native tools and model tool calls<a class="headerlink" href="#native-tools-and-model-tool-calls" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code> is the native migration target for model-driven XR composition.
 <code class="docutils literal notranslate"><span class="pre">Tool</span></code> declares Pydantic request and response boundaries and executes its
-handler through NeMo Relay. <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> is the generic async-turn protocol;
-<code class="docutils literal notranslate"><span class="pre">xr_ai_nat.agents.Agent</span></code> is its bounded, stateless tool-loop implementation.
-It builds OpenAI-compatible tool definitions from those schemas and sends each
-model request through an injected <code class="docutils literal notranslate"><span class="pre">LLMService</span></code>.</p>
-<p>Relay scopes each turn and manages the LLM and tool lifecycles. The base package
-does not add an HTTP client, a Hub transport, or an implicit conversation store.
-Applications use <code class="docutils literal notranslate"><span class="pre">as_agent_tool(...)</span></code> to expose any <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> as a
-registered tool; foreground selection, workflow state, and background work stay
-explicit in application code.</p>
-<p><code class="docutils literal notranslate"><span class="pre">xr_ai_nat.live_vision.LiveVisionTool</span></code> acquires a participant-scoped hub frame
-and returns one complete observation through Relay’s finite tool and LLM
-boundaries. Direct voice can wrap the same tool with <code class="docutils literal notranslate"><span class="pre">LiveVisionResponder</span></code>,
-whose provider response uses Relay’s managed streaming LLM path under an Agent
-scope. Both paths replace the inline camera frame in Relay events without
-changing provider input. The split keeps token streaming out of ordinary
-agentic tool calls without reimplementing a partial streaming-tool lifecycle.</p>
+handler through NeMo Relay. <code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code> adapts a native catalog to
+<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> definitions; <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> invokes one model-selected
+call and returns the tool-role message.</p>
+<p>The package does not implement an agent, model loop, Hub transport, or implicit
+conversation store. Applications own prompts, LLM calls, history, iteration,
+foreground selection, workflow state, and background work.</p>
+<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.live_vision.LiveVisionTool</span></code> is the finite current-frame tool; it
+returns one complete observation through Relay’s managed tool and LLM
+boundaries. <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.streaming_vision.StreamingVisionTool</span></code> is a separate
+<code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> that yields typed chunks around Relay’s managed streaming LLM
+boundary. It has no voice or output-transport dependency. Both tools own their
+own frame sources and redact inline camera data from Relay events without
+changing provider input.</p>
 </section>
 <section id="xr-ai-nat-model-bridge">
 <h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>
@@ -1179,7 +1177,7 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-agents">Native tools and agents</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-model-tool-calls">Native tools and model tool calls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-nat-model-bridge">xr-ai-nat model bridge</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-voice">xr-ai-voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-pipecat">xr-ai-pipecat</a><ul class="nav section-nav flex-column">
