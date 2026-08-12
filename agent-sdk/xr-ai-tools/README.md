@@ -56,18 +56,16 @@ custom, Fabric-backed, or framework-backed runner through the same registered
 invocation path. Relay observes model calls inside a tool-backed runner; the
 application never calls an LLM client as a separate control path.
 
-## Live vision tool and direct voice responder
+## Finite and streaming live vision tools
 
-Install `xr-ai-tools[relay,live-vision]` for `LiveVisionTool`. The finite
-`look_at_current_frame` tool acquires a participant's current frame and returns
-one complete `VisionResponse` for agentic planning. `LiveVisionResponder`
-shares that tool's frame source and streams only the direct voice path. Both
-call an injected `VLMService` through Relay's matching managed LLM boundary,
-forward controlled Relay headers, and redact the inline camera frame from
-events while the provider receives the original. `LiveVisionTool.release()`
-clears participant frame state.
+Install `xr-ai-tools[relay,live-vision]` for two independent current-frame
+tools. `LiveVisionTool` is a finite `Tool` that returns one complete
+`VisionResponse` for agentic planning. `StreamingVisionTool` is an `AsyncTool`
+that yields typed `VisionChunk` values. It has no voice dependency or output
+transport; applications decide how to consume its async stream.
 
-Relay's managed tool API accepts completed JSON results, while its managed LLM
-API supports streaming. Agentic vision therefore uses `Tool.execute()` and a
-complete result; direct voice remains an application-owned response stream
-with Relay managing the nested model call.
+Each tool owns its own participant frame source and calls an injected
+`VLMService`. Both forward controlled Relay headers and redact inline camera
+frames from events while preserving provider input. The finite path uses
+Relay's managed tool and LLM boundaries; the streaming path uses a typed tool
+scope around Relay's managed streaming LLM boundary.

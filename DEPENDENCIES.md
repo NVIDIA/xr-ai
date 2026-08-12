@@ -559,12 +559,11 @@ the latest video frame via streaming VLM and replies with both
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
 | Worker | `simple-vlm-example-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-tools[relay,live-vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-tools[live-vision]` pulls in numpy and Pillow) |
 
-The packaged worker constructs the finite `LiveVisionTool` used by agentic
-flows, then maps its separate direct-voice `LiveVisionResponder` to
-`VoiceSession`. They share current-frame acquisition through
-`xr-ai-hub-client`; only the direct voice response uses NeMo Relay's managed
-streaming LLM path under an Agent scope. Camera bytes are redacted from Relay
-telemetry while the provider receives the original frame.
+The packaged worker constructs a transport-independent `StreamingVisionTool`
+and adapts its typed async chunks to `VoiceSession` locally. The tool owns
+current-frame acquisition through `xr-ai-hub-client`, has no voice dependency,
+and uses NeMo Relay's managed streaming LLM path. Camera bytes are redacted from
+Relay telemetry while the provider receives the original frame.
 `VoiceSession` owns readiness, hub transport, signals, the
 private Pipecat pipeline, and cleanup; `TextMessageInput` routes `"ping"` and
 ad-hoc text through the same participant-aware path as speech. Voice-gate

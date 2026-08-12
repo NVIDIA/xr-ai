@@ -29,11 +29,11 @@ from simple_vlm_example_worker import __main__ as worker_main  # noqa: E402  # p
 from simple_vlm_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from xr_ai_tools.live_vision import (  # noqa: E402
-    LiveVisionResponder,
     LiveVisionTool,
     VisionRequest,
     VisionResponse,
 )
+from xr_ai_tools.streaming_vision import StreamingVisionTool  # noqa: E402
 
 
 class _Service:
@@ -58,8 +58,8 @@ class _Transport:
         self.shutdown_calls += 1
 
 
-class _LiveVisionTool:
-    instances: list["_LiveVisionTool"] = []
+class _StreamingVisionTool:
+    instances: list["_StreamingVisionTool"] = []
 
     def __init__(self, **kwargs) -> None:
         self.kwargs = kwargs
@@ -70,13 +70,8 @@ class _LiveVisionTool:
     def release(self, participant_id: str) -> None:
         self.released.append(participant_id)
 
-
-class _LiveVisionResponder:
-    def __init__(self, tool: _LiveVisionTool) -> None:
-        self.tool = tool
-
     async def stream(self, request):
-        self.tool.requests.append(request)
+        self.requests.append(request)
         for text in ("a ", "blue square"):
             yield SimpleNamespace(text=text)
 
@@ -311,8 +306,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
-    monkeypatch.setattr(app, "LiveVisionTool", _LiveVisionTool)
-    monkeypatch.setattr(app, "LiveVisionResponder", _LiveVisionResponder)
+    monkeypatch.setattr(app, "StreamingVisionTool", _StreamingVisionTool)
 
     def make_session(**kwargs):
         session = VoiceSession(transport=transport, **kwargs)  # type: ignore[arg-type]
@@ -342,7 +336,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
     monkeypatch.setattr(app, "VoiceSession", make_session)
     monkeypatch.setattr(app, "TextMessageInput", CaptureTextInput)
-    _LiveVisionTool.instances.clear()
+    _StreamingVisionTool.instances.clear()
 
     await app.run_app(config, ready_file=ready_file)
 
@@ -351,17 +345,17 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
-    assert _LiveVisionTool.instances[0].kwargs["endpoint"] is transport.endpoint
-    assert _LiveVisionTool.instances[0].kwargs["system_prompt"] == config.system_prompt
-    assert _LiveVisionTool.instances[0].kwargs["frame_max_age_s"] == (
+    assert _StreamingVisionTool.instances[0].kwargs["endpoint"] is transport.endpoint
+    assert _StreamingVisionTool.instances[0].kwargs["system_prompt"] == config.system_prompt
+    assert _StreamingVisionTool.instances[0].kwargs["frame_max_age_s"] == (
         config.frame_max_age_s
     )
-    assert _LiveVisionTool.instances[0].kwargs["frame_timeout_s"] == (
+    assert _StreamingVisionTool.instances[0].kwargs["frame_timeout_s"] == (
         config.frame_timeout_s
     )
-    assert _LiveVisionTool.instances[0].released == ["alice"]
-    assert _LiveVisionTool.instances[0].requests[0].participant_id == "alice"
-    assert _LiveVisionTool.instances[0].requests[0].query == "What is in front of me?"
+    assert _StreamingVisionTool.instances[0].released == ["alice"]
+    assert _StreamingVisionTool.instances[0].requests[0].participant_id == "alice"
+    assert _StreamingVisionTool.instances[0].requests[0].query == "What is in front of me?"
     assert streamed == ["a ", "blue square"]
     assert run_options["interrupt_on_supersede"] is True
     assert text_inputs[0]["session"] is sessions[0]
@@ -433,16 +427,14 @@ async def test_live_vision_tool_returns_a_complete_agent_observation() -> None:
     assert any("<redacted:live-camera-frame>" in event for event in llm_events)
 
 
-async def test_sample_handler_streams_a_live_frame_question() -> None:
+async def test_streaming_vision_tool_yields_typed_chunks() -> None:
     endpoint = _LiveEndpoint()
     vlm = _StreamingVlm()
-    vision = LiveVisionTool(
+    vision = StreamingVisionTool(
         endpoint=cast(ProcessorEndpoint, endpoint),
         vlm=cast(VLMService, vlm),
         system_prompt="Answer briefly.",
     )
-
-    handler = app._make_vision_handler(LiveVisionResponder(vision))
     assert endpoint.frame_callback is not None
     await endpoint.frame_callback(
         FrameSignal(
@@ -472,29 +464,28 @@ async def test_sample_handler_streams_a_live_frame_question() -> None:
     nemo_relay.subscribers.register(subscriber, events.append)
     nemo_relay.intercepts.register_llm_request(intercept, 0, False, add_header)
     try:
-        response = await handler(
-            VoiceQuery(
-                participant_id="alice",
-                text="What is shown?",
-                fresh_match=True,
-                timestamp_us=123,
+        chunks = [
+            chunk
+            async for chunk in vision.stream(
+                VisionRequest(
+                    participant_id="alice",
+                    query="What is shown?",
+                )
             )
-        )
-        assert not isinstance(response, str)
-        tokens = [token async for token in response]
+        ]
         await nemo_relay.subscribers.flush_async()
     finally:
         nemo_relay.intercepts.deregister_llm_request(intercept)
         nemo_relay.subscribers.deregister(subscriber)
 
-    assert tokens == ["a ", "blue ", "square"]
+    assert [chunk.text for chunk in chunks] == ["a ", "blue ", "square"]
     image, question, system_prompt, headers = vlm.calls[0]
     assert image.startswith("data:image/jpeg;base64,")
     assert question == "What is shown?"
     assert system_prompt == "Answer briefly."
     assert headers["X-Relay-Session"] == "turn-7"
     assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
-    assert {"agent", "llm"} <= {getattr(event, "category", None) for event in events}
+    assert {"tool", "llm"} <= {getattr(event, "category", None) for event in events}
     llm_events = [
         event.to_json()
         for event in events

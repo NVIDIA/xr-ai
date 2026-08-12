@@ -19,9 +19,9 @@ The worker is a package under `worker/simple_vlm_example_worker/`:
 
 `VoiceSession` owns STT/TTS/VLM readiness, the hub voice transport, voice-gate
 processing, streaming TTS, signals, and cleanup. The application constructs a
-finite `LiveVisionTool` and maps its separate `LiveVisionResponder` to voice;
-both share participant frame acquisition while only the direct voice response
-streams through Relay's managed LLM path. The camera frame is redacted from
+transport-independent `StreamingVisionTool` and adapts its async chunks to the
+voice handler locally. The tool has no voice dependency and sends its provider
+stream through Relay's managed LLM path. The camera frame is redacted from
 Relay telemetry. Typed text uses the same
 participant-aware turn path as speech. Participant leave events release cached
 live-frame state, and a newer turn cancels and interrupts a superseded response.

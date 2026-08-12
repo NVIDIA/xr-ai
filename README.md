@@ -196,7 +196,7 @@ channel, or send the literal text `"ping"` — all routes go through the
 same VLM pipeline against the latest video frame.  Replies arrive as
 streaming Piper TTS audio plus a `vlm.response` text message.
 
-The packaged worker composes the NAT-native streaming vision function with
+The packaged worker adapts the transport-independent `StreamingVisionTool` to
 `xr-ai-voice`'s `VoiceSession`; Pipecat remains private to that runtime and no
 MCP client is involved. See the
 [sample README](agent-samples/simple-vlm-example/README.md) for the worker

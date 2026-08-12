@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Finite current-frame vision for ordinary agent tool calls."""
+"""Streaming current-frame vision as a standalone async tool."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 import nemo_relay
@@ -18,21 +19,21 @@ from ._pixels import encode_image, frame_to_pil
 from ._relay import headers_from_relay
 from ._vision import (
     VLM_CALL_NAME,
+    VisionChunk,
     VisionRequest,
-    VisionResponse,
     openai_response,
     register_frame_sanitizer,
     relay_request,
-    response_text,
+    stream_text,
     vision_inputs,
 )
-from .tools import Tool
+from .async_tools import AsyncTool
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
-    """A finite current-frame tool for agentic planning and tool loops."""
+class StreamingVisionTool(AsyncTool[VisionRequest, VisionChunk]):
+    """A typed current-frame tool that yields answer fragments asynchronously."""
 
     def __init__(
         self,
@@ -56,12 +57,11 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
             timeout_s=frame_timeout_s,
         )
         super().__init__(
-            "look_at_current_frame",
-            "Answer a question about a participant's current live camera view.",
+            "stream_current_frame",
+            "Stream an answer about a participant's current live camera view.",
             VisionRequest,
-            VisionResponse,
-            self._answer_current,
-            render_result=lambda result: result.text,
+            VisionChunk,
+            self._stream_current,
         )
 
     def release(self, participant_id: str) -> None:
@@ -69,30 +69,41 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
 
         self.frames.release(participant_id)
 
-    async def _answer_current(self, request: VisionRequest) -> VisionResponse:
+    async def _stream_current(
+        self,
+        request: VisionRequest,
+    ) -> AsyncIterator[VisionChunk]:
         try:
             image_url = await self._current_image(request.participant_id)
         except FrameUnavailable as exc:
-            return VisionResponse(text=str(exc))
+            yield VisionChunk(text=str(exc))
+            return
         except Exception:
             _LOGGER.exception("Live frame conversion failed")
-            return VisionResponse(text="VLM server unavailable — please retry.")
+            yield VisionChunk(text="VLM server unavailable — please retry.")
+            return
 
         await self.endpoint.set_status("processing", request.participant_id)
+        fragments: list[str] = []
         try:
             register_frame_sanitizer()
-            response = await nemo_relay.llm.execute(
+            stream = await nemo_relay.llm.stream_execute(
                 VLM_CALL_NAME,
                 relay_request(self.system_prompt, image_url, request.query),
-                self._ask_vlm,
+                self._stream_vlm,
+                lambda chunk: fragments.append(stream_text(chunk)),
+                lambda: openai_response("".join(fragments)),
                 model_name=VLM_CALL_NAME,
                 codec=OpenAIChatCodec(),
                 response_codec=OpenAIChatCodec(),
             )
-            return VisionResponse(text=response_text(response))
+            async for chunk in stream:
+                text = stream_text(chunk)
+                if text:
+                    yield VisionChunk(text=text)
         except Exception:
-            _LOGGER.exception("Live VLM request failed")
-            return VisionResponse(text="VLM server unavailable — please retry.")
+            _LOGGER.exception("Live VLM stream failed")
+            yield VisionChunk(text="VLM server unavailable — please retry.")
         finally:
             await self.endpoint.set_status("idle", request.participant_id)
 
@@ -100,15 +111,18 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
         frame = await self.frames.get(participant_id)
         return await asyncio.to_thread(lambda: encode_image(frame_to_pil(frame)))
 
-    async def _ask_vlm(self, request: nemo_relay.LLMRequest) -> dict[str, Any]:
+    async def _stream_vlm(
+        self,
+        request: nemo_relay.LLMRequest,
+    ) -> AsyncIterator[dict[str, Any]]:
         image_url, query, system_prompt = vision_inputs(request.content)
-        text = await self.vlm.ask_image(
+        async for token in self.vlm.stream(
             image_url,
             query,
             system_prompt=system_prompt,
             headers=headers_from_relay(request.headers),
-        )
-        return openai_response(text.content)
+        ):
+            yield {"choices": [{"delta": {"content": token}}]}
 
 
-__all__ = ["LiveVisionTool", "VisionRequest", "VisionResponse"]
+__all__ = ["StreamingVisionTool", "VisionChunk", "VisionRequest"]

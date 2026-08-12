@@ -13,7 +13,7 @@ import pytest
 from nemo_relay.codecs import OpenAIChatCodec
 from pydantic import BaseModel
 from xr_ai_models import Capabilities, ChatMessage, ChatResponse, ToolCall, ToolDef
-from xr_ai_tools import AgentRunner, Tool, ToolSet, as_agent_tool
+from xr_ai_tools import AgentRunner, AsyncTool, Tool, ToolSet, as_agent_tool
 from xr_ai_tools.agents import Agent, ToolLoopLimitError, _response_from_openai
 
 
@@ -44,6 +44,25 @@ class AskResult(BaseModel):
 
 async def add(request: AddRequest) -> AddResult:
     return AddResult(total=request.left + request.right)
+
+
+async def add_stream(request: AddRequest) -> AsyncIterator[AddResult]:
+    yield AddResult(total=request.left)
+    yield AddResult(total=request.left + request.right)
+
+
+async def test_async_tool_validates_and_yields_typed_chunks() -> None:
+    tool = AsyncTool(
+        "stream_add",
+        "Stream a running total.",
+        AddRequest,
+        AddResult,
+        add_stream,
+    )
+
+    chunks = [chunk async for chunk in tool.stream({"left": 2, "right": 3})]
+
+    assert chunks == [AddResult(total=2), AddResult(total=5)]
 
 
 class _ToolCallingLLM:

@@ -11,20 +11,21 @@ preserved and not re-litigated.
 
 ### 2026-08-12 — Native tools live outside the NAT compatibility package
 
-The Relay-managed tool, agent-runner, and live-vision modules moved unchanged
-from `xr-ai-nat` to the dedicated `xr-ai-tools` package. `xr-ai-nat` now remains
-only as the NeMo Agent Toolkit compatibility surface during migration.
+The Relay-managed tool and agent-runner modules moved from `xr-ai-nat` to the
+dedicated `xr-ai-tools` package. Live vision is split into independent finite
+and streaming tool modules. `xr-ai-nat` now remains only as the NeMo Agent
+Toolkit compatibility surface during migration.
 
-### 2026-08-12 — Agentic vision is finite; direct voice may stream
+### 2026-08-12 — Agentic vision is finite; streaming vision is asynchronous
 
 Relay's managed tool API accepts completed JSON results; it does not define a
 streaming tool execution contract. XR AI does not reproduce Relay's guardrail
 and intercept pipeline around an async generator. `LiveVisionTool` therefore
 returns one complete observation through `Tool.execute()` for normal agentic
-planning. Its shared `LiveVisionResponder` is reserved for direct voice, where
-an application-owned stream under an Agent scope sends the provider call
-through Relay's managed streaming LLM API. This keeps streaming out of ordinary
-tool flows without delaying direct speech.
+planning. `StreamingVisionTool` is a separate, transport-independent
+`AsyncTool` that yields typed chunks while its provider call uses Relay's
+managed streaming LLM API. Applications may adapt that stream to voice or any
+other consumer; the tool itself has no voice behavior.
 
 Live camera frames remain provider input but are replaced in emitted Relay
 events by a scope-local sanitizer. Relay request-intercept headers cross the
