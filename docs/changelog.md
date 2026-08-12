@@ -78,6 +78,16 @@ proves only that *issued* subscriptions are live, not that one was issued for
 that participant. An endpoint answers for exactly the participants it
 subscribes to, and the hub aggregates only those agents.
 
+### 2026-08-11 — Changelog edits don't trigger a docs preview
+
+`docs/changelog.md` is excluded from the `Docs` workflow's path filters. It sits
+outside the Sphinx source tree (`docs/source/`) — `reference/changelog.md` only
+links out to it on GitHub — so a changelog-only edit rebuilt the whole versioned
+site and published a per-PR preview that was byte-identical to the last one.
+Since AGENTS.md asks for a changelog entry alongside most changes, that fired on
+a large share of PRs. `Build (strict)` is not a required status check, so
+skipping it does not gate merges.
+
 ### 2026-08-10 — Voice-worker ready files wait for inbound IPC
 
 `VoiceSession` and the direct `run_voice_pipeline` compatibility path release a
