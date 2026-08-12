@@ -660,9 +660,10 @@ lifecycle ownership.</p>
 <hr class="docutils" />
 <section id="xr-ai-voice">
 <h2>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h2>
-<p>Native voice applications work with participant-aware turns rather than
-Pipecat processors. A handler returns a string or an async stream of strings:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceSession</span>
+<p>Native voice applications work with participant-aware runtime topics rather
+than Pipecat processors. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>, publishes accepted
+speech and typed text to <code class="docutils literal notranslate"><span class="pre">voice.input</span></code>, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">VoiceSession</span>
 
 <span class="n">session</span> <span class="o">=</span> <span class="n">VoiceSession</span><span class="p">(</span>
     <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
@@ -673,21 +674,21 @@ Pipecat processors. A handler returns a string or an async stream of strings:</p
     <span class="n">ready_file</span><span class="o">=</span><span class="n">ready_file</span><span class="p">,</span>
     <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
 <span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="p">:</span>
-    <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">on_participant_left</span><span class="o">=</span><span class="n">release_participant</span><span class="p">)</span>
+<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">on_participant_left</span><span class="o">=</span><span class="n">release_participant</span><span class="p">)</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">TextMessageInput</span></code> routes typed messages through the same turn path as speech
-and ignores data received outside an active <code class="docutils literal notranslate"><span class="pre">run()</span></code>. The default hub transport
-is opened only after readiness probes succeed; failed readiness closes the
-session’s model clients without opening hub sockets. The ready file is touched
-from <code class="docutils literal notranslate"><span class="pre">run()</span></code> only after the input transport enters its hub IPC receive loop.
-NAT applications create handlers with
+<p>The default hub transport is opened only after readiness probes succeed; failed
+readiness closes the session’s model clients without opening hub sockets. The
+ready file is touched only after the input transport enters its hub IPC receive
+loop. NAT applications that do not use the agent runtime create handlers with
 <code class="docutils literal notranslate"><span class="pre">xr_ai_nat.adapters.as_voice_handler</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant
 routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients. Runtime-backed applications can
-pass <code class="docutils literal notranslate"><span class="pre">on_interrupted(pid)</span></code> to cancel participant work that runs outside the
-voice handler; a pid-less interruption passes <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+and closes its transport and model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> forwards
+<code class="docutils literal notranslate"><span class="pre">on_interrupted(pid)</span></code> so applications can cancel participant work; a pid-less
+interruption passes <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </section>
 <section id="xr-ai-pipecat">
 <h2>xr-ai-pipecat<a class="headerlink" href="#xr-ai-pipecat" title="Link to this heading">#</a></h2>
