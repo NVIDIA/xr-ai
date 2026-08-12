@@ -21,7 +21,7 @@ from xr_ai_nat.functions.xr_tracking import HeadPose, HeadPoseRequest
 from xr_render_demo_worker.config import load_config
 from xr_render_demo_worker.models import SceneRequest
 from xr_render_demo_worker.scene import SceneContext
-from xr_render_demo_worker.supervisor import scene_supervisor
+from xr_render_demo_worker.supervisor import SceneSupervisorConfig
 from xr_render_scene import (
     AddPrimitiveRequest,
     AddPrimitiveResult,
@@ -551,10 +551,8 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
                 f"{object_id}: previously at {before}, now at {after}"
                 for object_id, before, after in case.get("recent_moves", ())
             ]
-            supervisor = await scene_supervisor(
-                builder=builder,
-                llm=llm,
-                context=context,
+            supervisor = await builder.add_function(
+                "scene_supervisor", SceneSupervisorConfig(llm=llm, context=context)
             )
             # A crashed rollout is a case result, not an eval abort: score
             # whatever calls it made before failing.
@@ -817,9 +815,8 @@ async def run_case(case: Case) -> bool:
     try:
         async with WorkflowBuilder() as builder:
             await scene.bind(builder)
-            supervisor = await scene_supervisor(
-                builder=builder,
-                llm=llm,
+            supervisor = await builder.add_function(
+                "scene_supervisor", SceneSupervisorConfig(llm=llm)
             )
             try:
                 reply = await supervisor.ainvoke(
