@@ -50,7 +50,7 @@ class CancelAllRender(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class RenderAgent(Agent):
+class RenderAgent(Agent[None]):
     """Run participant-scoped render turns and publish their spoken chunks."""
 
     def __init__(self, scene: RenderSceneAgent) -> None:
