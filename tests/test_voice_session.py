@@ -7,8 +7,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from xr_ai_hub import DataMessage
-from xr_ai_voice import TextMessageInput, VadConfig, VoiceSession
+from xr_ai_voice import VadConfig, VoiceSession
 from xr_ai_voice import _session as session_module
 from xr_ai_voicegate import VoiceGateConfig
 
@@ -48,21 +47,19 @@ class _Transport:
         self.shutdown_called = True
 
 
-class _Session:
+class _HandlerProcessor:
     def __init__(self) -> None:
-        self.transport = _Transport()
-        self.queries: list[tuple[str, str, bool, int | None]] = []
-        self.is_running = True
+        self.responses: list[tuple[str, object, bool, int | None]] = []
 
-    async def enqueue_query(
+    async def enqueue_response(
         self,
         participant_id: str,
-        text: str,
+        response: object,
         *,
-        fresh_match: bool = False,
+        interrupt: bool = False,
         pts_us: int | None = None,
     ) -> None:
-        self.queries.append((participant_id, text, fresh_match, pts_us))
+        self.responses.append((participant_id, response, interrupt, pts_us))
 
 
 class _Service:
@@ -76,46 +73,25 @@ class _Service:
         self.closed += 1
 
 
-async def test_data_query_adapter_routes_text_and_ignores_control_topics() -> None:
-    session = _Session()
-    TextMessageInput(
-        session=session,  # type: ignore[arg-type]
-        ignore_topics={"control"},
-        transform=str.upper,
-        fresh_match=True,
+async def test_voice_session_queues_external_responses_through_active_processor() -> None:
+    service = _Service()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+    )
+    processor = _HandlerProcessor()
+    session._io_processor = processor  # type: ignore[assignment]  # noqa: SLF001
+
+    await session._enqueue_response(  # noqa: SLF001
+        "alice",
+        "Careful.",
+        interrupt=True,
+        pts_us=12,
     )
 
-    await session.transport.endpoint.callback(DataMessage(
-        participant_id="alice",
-        topic="control",
-        pts_us=1,
-        data=b"ignored",
-    ))
-    await session.transport.endpoint.callback(DataMessage(
-        participant_id="alice",
-        topic="",
-        pts_us=2,
-        data=b"hello",
-    ))
-
-    assert session.transport.target_participant == "alice"
-    assert session.queries == [("alice", "HELLO", True, 2)]
-
-
-async def test_data_query_adapter_drops_text_while_session_is_stopped() -> None:
-    session = _Session()
-    session.is_running = False
-    TextMessageInput(session=session)  # type: ignore[arg-type]
-
-    await session.transport.endpoint.callback(DataMessage(
-        participant_id="alice",
-        topic="",
-        pts_us=2,
-        data=b"hello",
-    ))
-
-    assert session.transport.target_participant == ""
-    assert session.queries == []
+    assert processor.responses == [("alice", "Careful.", True, 12)]
 
 
 async def test_voice_session_owns_readiness_ready_file_and_cleanup(
@@ -157,12 +133,12 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(
         transport=transport,  # type: ignore[arg-type]
     )
 
-    async def handler(_query) -> str:
-        return "unused"
+    async def input_sink(_query) -> None:
+        pass
 
     async with session:
         assert not ready_file.exists()
-        run_task = asyncio.create_task(session.run(handler))
+        run_task = asyncio.create_task(session._run(input_sink))  # noqa: SLF001
         await runner_started.wait()
         await asyncio.sleep(0)
         assert not ready_file.exists()
@@ -236,6 +212,7 @@ async def test_voice_session_cleans_up_when_readiness_fails(monkeypatch) -> None
     with pytest.raises(RuntimeError, match="unavailable"):
         async with session:
             pass
+    await session.close()
 
     assert transports == []
     assert stt.closed == 1

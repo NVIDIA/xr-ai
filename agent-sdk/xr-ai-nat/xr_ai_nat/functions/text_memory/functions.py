@@ -284,7 +284,7 @@ async def conversation_memory_functions(config: ConversationMemoryFunctionsConfi
     """Build participant conversation recall over the transcript store.
 
     Reads the ``{participant_id}:user`` and ``{participant_id}:agent`` transcript
-    sources produced by ``xr_ai_nat.adapters.voice.record_voice_transcripts``.
+    role-scoped sources written by the application.
     """
 
     text_memory = await builder.get_function_group(config.text_memory)

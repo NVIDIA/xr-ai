@@ -37,13 +37,12 @@ docs/               # Design docs and topic deep-dives
 - **`agent-sdk/xr-ai-hub-client`** contains only the agent-facing IPC layer. Its
   sole runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI,
   or uvicorn.
-- **`agent-sdk/xr-ai-agent-runtime`** owns agent resource lifetimes,
-  runtime-owned background tasks, and typed publish/subscribe. Agents expose
-  existing `Tool` and `AsyncTool` instances from `xr-ai-tools`; direct callers
-  and model loops use those tools without a second runtime dispatch API. Each
-  agent owns its concurrency policy, including any locks or private queues
-  needed to coordinate tools and subscriptions. Model loops, planning, memory,
-  and raw media transport remain outside the runtime.
+- **`agent-sdk/xr-ai-agent-runtime`** provides typed publish/subscribe routing.
+  Agents expose existing `Tool` and `AsyncTool` instances from `xr-ai-tools`;
+  direct callers and model loops use those tools without a second runtime
+  dispatch API. Each agent owns its resources, background tasks, lifecycle,
+  and concurrency policy. Model loops, planning, memory, and raw media
+  transport remain outside the runtime.
 - **Native agents compose typed tools in process.** Model-backed tools call
   typed capability services, while deterministic tools run locally. MCP
   adapters only republish selected tools for MCP consumers.

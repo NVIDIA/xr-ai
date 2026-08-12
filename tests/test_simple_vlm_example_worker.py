@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -18,7 +19,8 @@ import tomllib
 import yaml
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService
-from xr_ai_voice import VoiceQuery, VoiceSession
+from xr_ai_runtime import AgentRuntime
+from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,11 @@ sys.path.insert(0, str(_WORKER_DIR))
 
 from simple_vlm_example_worker import __main__ as worker_main  # noqa: E402  # pyright: ignore[reportMissingImports]
 from simple_vlm_example_worker import app  # noqa: E402  # pyright: ignore[reportMissingImports]
+from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    INTERRUPTED_TOPIC,
+    USER_QUERY_TOPIC,
+    SimpleVlmAgent,
+)
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
 from xr_ai_tools.live_vision import (  # noqa: E402
     LiveVisionTool,
@@ -52,11 +59,16 @@ class _Service:
 
 class _Transport:
     def __init__(self) -> None:
-        self.endpoint = object()
+        self.endpoint = _DataEndpoint()
         self.shutdown_calls = 0
 
     def shutdown(self) -> None:
         self.shutdown_calls += 1
+
+
+class _DataEndpoint:
+    def on_data(self, callback) -> None:
+        self.data_callback = callback
 
 
 class _StreamingVisionTool:
@@ -142,6 +154,10 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
         "simple_vlm_example_worker.__main__:run"
     )
     assert "xr-ai-hub-client" in dependencies
+    assert "xr-ai-agent-runtime" in dependencies
+    assert project["tool"]["uv"]["sources"]["xr-ai-agent-runtime"]["path"] == (
+        "../../../agent-sdk/xr-ai-agent-runtime"
+    )
     assert project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"] == (
         "../../../agent-sdk/xr-ai-hub-client"
     )
@@ -156,6 +172,7 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert {
         "__init__.py",
         "__main__.py",
+        "agent.py",
         "app.py",
         "config.py",
         "prompts/system.txt",
@@ -286,32 +303,41 @@ def test_config_rejects_a_non_mapping_yaml_document(tmp_path) -> None:
         load_config(config_path)
 
 
-async def test_vision_handler_closes_nested_tool_stream() -> None:
+async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> None:
     closed = asyncio.Event()
-    blocked = asyncio.Event()
+
+    class Stream:
+        def __init__(self) -> None:
+            self.sent = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self.sent:
+                await asyncio.Event().wait()
+            self.sent = True
+            return SimpleNamespace(text="first")
+
+        async def aclose(self) -> None:
+            closed.set()
 
     class Vision:
-        async def stream(self, _request):
-            try:
-                yield SimpleNamespace(text="first")
-                await blocked.wait()
-            finally:
-                closed.set()
+        def stream(self, _request):
+            return Stream()
 
-    handler = app._make_vision_handler(Vision())  # pyright: ignore[reportArgumentType]
-    response = await handler(
-        VoiceQuery(
-            participant_id="alice",
-            text="What is shown?",
-            fresh_match=True,
-            timestamp_us=123,
+    class Context:
+        metadata = SimpleNamespace(message_id="turn-1", participant_id="alice")
+
+        async def publish(self, *_args, **_kwargs) -> None:
+            raise RuntimeError("runtime stopped")
+
+    agent = SimpleVlmAgent(Vision())  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError, match="runtime stopped"):
+        await agent._stream(  # noqa: SLF001
+            UserQuery(text="What is shown?", timestamp_us=123),
+            Context(),  # type: ignore[arg-type]
         )
-    )
-    assert not isinstance(response, str)
-
-    assert await anext(response) == "first"
-    close = getattr(response, "aclose")
-    await close()
 
     assert closed.is_set()
 
@@ -327,9 +353,10 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     tts = _Service()
     transport = _Transport()
     sessions: list[VoiceSession] = []
-    text_inputs = []
     run_options = {}
-    streamed = []
+    responses = []
+    response_tasks: list[asyncio.Task[None]] = []
+    response_complete = asyncio.Event()
 
     monkeypatch.setattr(app, "setup_logging", lambda _name: None)
     monkeypatch.setattr(app, "load_models_config", lambda path: path)
@@ -347,26 +374,41 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             if session.ready_file:
                 session.ready_file.touch()
             run_options.update(options)
-            response = await handler(
-                VoiceQuery(
+            assert await handler(
+                SimpleNamespace(
                     participant_id="alice",
                     text="What is in front of me?",
-                    fresh_match=True,
                     timestamp_us=123,
                 )
-            )
-            streamed.extend([chunk async for chunk in response])
-            options["on_participant_left"]("alice")
+            ) is None
+            await asyncio.wait_for(response_complete.wait(), 1.0)
+            await options["on_participant_left"]("alice")
+            while not _StreamingVisionTool.instances[0].released:
+                await asyncio.sleep(0)
 
-        session.run = run  # type: ignore[method-assign]
+        async def enqueue_response(
+            participant_id: str,
+            response: str | AsyncIterator[str],
+            *,
+            interrupt: bool = False,
+            pts_us: int | None = None,
+        ) -> None:
+            async def consume() -> None:
+                text = (
+                    response
+                    if isinstance(response, str)
+                    else "".join([chunk async for chunk in response])
+                )
+                responses.append((participant_id, text, interrupt, pts_us))
+                response_complete.set()
+
+            response_tasks.append(asyncio.create_task(consume()))
+
+        session._run = run  # type: ignore[method-assign]  # noqa: SLF001
+        session._enqueue_response = enqueue_response  # type: ignore[method-assign]  # noqa: SLF001
         return session
 
-    class CaptureTextInput:
-        def __init__(self, **kwargs) -> None:
-            text_inputs.append(kwargs)
-
     monkeypatch.setattr(app, "VoiceSession", make_session)
-    monkeypatch.setattr(app, "TextMessageInput", CaptureTextInput)
     _StreamingVisionTool.instances.clear()
 
     await app.run_app(config, ready_file=ready_file)
@@ -387,12 +429,12 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert _StreamingVisionTool.instances[0].released == ["alice"]
     assert _StreamingVisionTool.instances[0].requests[0].participant_id == "alice"
     assert _StreamingVisionTool.instances[0].requests[0].query == "What is in front of me?"
-    assert streamed == ["a ", "blue square"]
+    assert responses == [("alice", "a blue square", True, 123)]
+    assert all(task.done() for task in response_tasks)
     assert run_options["interrupt_on_supersede"] is True
-    assert text_inputs[0]["session"] is sessions[0]
-    assert text_inputs[0]["fresh_match"] is True
-    assert text_inputs[0]["transform"]("PING") == config.default_prompt
-    assert text_inputs[0]["transform"]("What is this?") == "What is this?"
+    assert callable(run_options["on_interrupted"])
+    assert app._text_transform(config.default_prompt)("PING") == config.default_prompt
+    assert app._text_transform(config.default_prompt)("What is this?") == "What is this?"
 
 
 async def test_live_vision_tool_returns_a_complete_agent_observation() -> None:
@@ -616,3 +658,159 @@ async def test_vision_tools_propagate_frame_conversion_errors(monkeypatch) -> No
 
     with pytest.raises(RuntimeError, match="malformed pixels"):
         await finite.execute(request)
+
+
+async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
+    endpoint = _LiveEndpoint()
+    vlm = _StreamingVlm()
+    vision = StreamingVisionTool(
+        endpoint=cast(ProcessorEndpoint, endpoint),
+        vlm=cast(VLMService, vlm),
+        system_prompt="Answer briefly.",
+    )
+
+    class Session:
+        def __init__(self) -> None:
+            self.text = ""
+            self.complete = asyncio.Event()
+            self.started = asyncio.Event()
+
+        async def __aenter__(self):
+            return self
+
+        async def _run(self, _handler, **_options) -> None:
+            self.started.set()
+            await asyncio.Event().wait()
+
+        async def _enqueue_response(
+            self,
+            participant_id: str,
+            response: str | AsyncIterator[str],
+            *,
+            interrupt: bool = False,
+            pts_us: int | None = None,
+        ) -> None:
+            assert participant_id == "alice"
+            assert interrupt is True
+            assert pts_us == 123
+
+            async def consume() -> None:
+                self.text = (
+                    response
+                    if isinstance(response, str)
+                    else "".join([chunk async for chunk in response])
+                )
+                self.complete.set()
+
+            asyncio.create_task(consume())
+
+        async def close(self) -> None:
+            pass
+
+    session = Session()
+    runtime = AgentRuntime()
+    runtime.register("simple-vlm", SimpleVlmAgent(vision))
+    runtime.register(
+        "voice",
+        VoiceAgent(  # type: ignore[arg-type]
+            session,
+            query_topic=USER_QUERY_TOPIC,
+            text_input=False,
+        ),
+    )
+    assert endpoint.frame_callback is not None
+    await endpoint.frame_callback(
+        FrameSignal(
+            slot=0,
+            seq=1,
+            pts_us=time.time_ns() // 1_000,
+            width=2,
+            height=2,
+            fmt=PixelFormat.RGB24,
+            data_sz=12,
+            participant_id="alice",
+            track_id="camera",
+        )
+    )
+    events = []
+    subscriber = "simple-vlm-agent-vision"
+    intercept = "simple-vlm-agent-vision-header"
+
+    def add_header(_name, request, annotated):
+        headers = dict(request.headers)
+        headers["X-Relay-Session"] = "turn-9"
+        return nemo_relay.LLMRequestInterceptOutcome(
+            nemo_relay.LLMRequest(headers, request.content),
+            annotated,
+        )
+
+    nemo_relay.subscribers.register(subscriber, events.append)
+    nemo_relay.intercepts.register_llm_request(intercept, 0, False, add_header)
+    try:
+        async with runtime:
+            await runtime.publish(
+                USER_QUERY_TOPIC,
+                UserQuery(text="What is shown?", timestamp_us=123),
+                participant_id="alice",
+                source="test-input",
+            )
+            await asyncio.wait_for(session.complete.wait(), 1.0)
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.intercepts.deregister_llm_request(intercept)
+        nemo_relay.subscribers.deregister(subscriber)
+
+    assert session.text == "a blue square"
+    image, question, system_prompt, headers = vlm.calls[0]
+    assert image.startswith("data:image/jpeg;base64,")
+    assert question == "What is shown?"
+    assert system_prompt == "Answer briefly."
+    assert headers["X-Relay-Session"] == "turn-9"
+    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
+    assert {"tool", "llm"} <= {
+        getattr(event, "category", None) for event in events
+    }
+    llm_events = [
+        event.to_json()
+        for event in events
+        if getattr(event, "category", None) == "llm"
+    ]
+    assert llm_events
+    assert all(image not in event for event in llm_events)
+    assert any("<redacted:live-camera-frame>" in event for event in llm_events)
+
+
+async def test_simple_vlm_agent_handles_global_interruption_event() -> None:
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    class BlockingVision:
+        async def stream(self, _request):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            yield SimpleNamespace(text="unreachable")
+
+    runtime = AgentRuntime()
+    runtime.register(
+        "simple-vlm",
+        SimpleVlmAgent(BlockingVision()),  # type: ignore[arg-type]
+    )
+
+    async with runtime:
+        await runtime.publish(
+            USER_QUERY_TOPIC,
+            UserQuery(text="What is shown?", timestamp_us=123),
+            participant_id="alice",
+            source="test-input",
+        )
+        await asyncio.wait_for(started.wait(), 1.0)
+        await runtime.publish(
+            INTERRUPTED_TOPIC,
+            VoiceInterrupted(),
+            source="voice.interruption",
+        )
+        await asyncio.wait_for(cancelled.wait(), 1.0)

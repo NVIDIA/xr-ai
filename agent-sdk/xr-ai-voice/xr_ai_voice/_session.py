@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared lifecycle host for participant-aware voice handlers."""
+"""Media lifecycle for the runtime voice agent."""
 from __future__ import annotations
 
 import asyncio
@@ -16,12 +16,12 @@ from pipecat.pipeline.runner import PipelineRunner
 from xr_ai_models import STTService, TTSService
 from xr_ai_voicegate import VoiceGateConfig
 
-from ._handler import VoiceHandler, VoiceTurn
 from ._pipeline import _build_voice_pipeline
-from ._processors.handler import _VoiceHandlerProcessor
+from ._processors.io import _VoiceIOProcessor
 from ._processors.vad_stt import VadConfig
 from ._readiness import ProbeFn, wait_for_services
 from ._transport import HubVoiceTransport
+from ._types import VoiceInputSink, VoiceResponse
 
 _STATUS_REANNOUNCE_INTERVAL_S = 2.0
 
@@ -63,7 +63,8 @@ class VoiceSession:
         self.text_topic = text_topic
         self.idle_timeout_secs = idle_timeout_secs
         self._transport = transport
-        self._handler_processor: _VoiceHandlerProcessor | None = None
+        self._io_processor: _VoiceIOProcessor | None = None
+        self._closed = False
 
     @property
     def transport(self) -> HubVoiceTransport:
@@ -75,9 +76,11 @@ class VoiceSession:
     @property
     def is_running(self) -> bool:
         """Whether the session currently accepts voice or text queries."""
-        return self._handler_processor is not None
+        return self._io_processor is not None
 
     async def __aenter__(self) -> "VoiceSession":
+        if self._closed:
+            raise RuntimeError("voice session is closed")
         probes = {
             "stt": self.stt.health,
             "tts": self.tts.health,
@@ -91,44 +94,30 @@ class VoiceSession:
             raise
         return self
 
-    async def run(
+    async def _run(
         self,
-        handler: VoiceHandler,
+        input_sink: VoiceInputSink,
         *,
-        observer: Callable[[VoiceTurn], Awaitable[None]] | None = None,
-        on_participant_joined: Callable[[str], Awaitable[None] | None] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
-        on_user_started_speaking: Callable[[str], Awaitable[None] | None] | None = None,
-        on_query_superseded: Callable[[str], Awaitable[None] | None] | None = None,
+        on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
         interrupt_on_supersede: bool = False,
-        queue_queries: bool = False,
     ) -> None:
-        """Run a voice handler with explicit turn and participant callbacks.
-
-        ``queue_queries`` runs participant queries sequentially instead of
-        cancelling the active query. With ``interrupt_on_supersede``, the next
-        queued query flushes speech left from the preceding response as it
-        starts.
-        """
-        if self._handler_processor is not None:
+        """Run media input/output until the pipeline exits."""
+        if self._io_processor is not None:
             raise RuntimeError("voice session is already running")
-        handler_processor = _VoiceHandlerProcessor(
-            handler,
+        io_processor = _VoiceIOProcessor(
+            input_sink,
             transport=self.transport,
-            observer=observer,
-            on_participant_joined=on_participant_joined,
             on_participant_left=on_participant_left,
-            on_user_started_speaking=on_user_started_speaking,
-            on_query_superseded=on_query_superseded,
+            on_interrupted=on_interrupted,
             interrupt_on_supersede=interrupt_on_supersede,
-            queue_queries=queue_queries,
         )
-        self._handler_processor = handler_processor
+        self._io_processor = io_processor
         _, task = _build_voice_pipeline(
             transport=self.transport,
             stt=self.stt,
             tts=self.tts,
-            handler_processor=handler_processor,
+            io_processor=io_processor,
             vad_cfg=self.vad,
             voice_gate_cfg=self.voice_gate,
             text_topic=self.text_topic,
@@ -192,25 +181,42 @@ class VoiceSession:
                 started_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 _ = await started_task
-            self._handler_processor = None
+            self._io_processor = None
             for sig in installed:
                 loop.remove_signal_handler(sig)
 
-    async def enqueue_query(
+    async def _enqueue_query(
         self,
         participant_id: str,
         text: str,
         *,
-        fresh_match: bool = False,
         pts_us: int | None = None,
     ) -> None:
         """Submit typed text through the active participant-aware voice path."""
-        if self._handler_processor is None:
+        if self._io_processor is None:
             raise RuntimeError("voice session is not running")
-        await self._handler_processor.enqueue_query(
+        await self._io_processor.enqueue_query(
             participant_id,
             text,
-            fresh_match=fresh_match,
+            pts_us=pts_us,
+        )
+
+    async def _enqueue_response(
+        self,
+        participant_id: str,
+        response: VoiceResponse,
+        *,
+        interrupt: bool = False,
+        pts_us: int | None = None,
+    ) -> None:
+        """Queue finite or incremental output on the active participant voice path."""
+
+        if self._io_processor is None:
+            raise RuntimeError("voice session is not running")
+        await self._io_processor.enqueue_response(
+            participant_id,
+            response,
+            interrupt=interrupt,
             pts_us=pts_us,
         )
 
@@ -219,6 +225,9 @@ class VoiceSession:
 
     async def close(self) -> None:
         """Release transport and model clients; safe to call without a context manager."""
+        if self._closed:
+            return
+        self._closed = True
         if self._transport is not None:
             self._transport.shutdown()
         seen: set[int] = set()

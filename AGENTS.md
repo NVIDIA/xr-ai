@@ -192,14 +192,14 @@ NAT's built-in LangChain-backed agent types; applications install
 The public **native voice runtime** lives in `xr-ai-voice` (it depends on
 pipecat internally):
 
-- **Voice session** — `VoiceSession.run(handler)` privately assembles
-  `input → VadStt → VoiceGate → handler → StreamingTts → output`, owns model
-  readiness and ready-file semantics, installs signal handlers, and closes the
-  transport and model clients. It touches the ready file only after the input
-  transport has entered its hub IPC receive loop.
-- **Native handler** — `xr_ai_nat.adapters.as_voice_handler` maps a typed NAT
-  function onto `VoiceSession`; `TextMessageInput` routes participant text
-  through the same turn path as speech.
+- **Voice agent** — `VoiceAgent` owns `VoiceSession`, publishes accepted speech
+  and typed text as its `UserQuery` schema on a sample-named topic, publishes
+  participant and interruption events on sample-named topics, and subscribes
+  to `voice.output`. Application agents subscribe to lifecycle events and own
+  their cleanup; the application entry point only composes them. Runtime
+  publication provides acknowledged delivery through the same output path. The
+  private session owns model readiness, ready-file semantics, signals, the
+  media pipeline, and cleanup.
 - **Wake word / speech gate** — `xr-ai-voicegate` (the `VoiceGate` state
   machine) wired in as `VoiceGateProcessor`; per-sample config in
   `yaml/voice_gate.yaml` (`magic_phrases: ["hey agent"]`, or `[]` for
@@ -210,8 +210,8 @@ pipecat internally):
 `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` so they use
 the same IPC-start readiness boundary.
 
-A native voice sample adapts its NAT function to `VoiceSession`; wake-word
-behavior comes from config alone.
+A native voice sample registers `VoiceAgent` and application agents on the same
+runtime; wake-word behavior comes from config alone.
 
 ### Scope decision and named follow-ups
 

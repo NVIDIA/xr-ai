@@ -10,6 +10,8 @@ name = "xr-ai-voice"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "pydantic>=2.10",
+    "xr-ai-agent-runtime",
     "xr-ai-hub-client",
     "xr-ai-logging",
     "xr-ai-models",
@@ -23,6 +25,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+xr-ai-agent-runtime = { path = "../xr-ai-agent-runtime", editable = true }
 xr-ai-hub-client      = { path = "../xr-ai-hub-client",                         editable = true }
 xr-ai-logging    = { path = "../../utils/xr-ai-logging",   editable = true }
 xr-ai-models     = { path = "../xr-ai-models",             editable = true }

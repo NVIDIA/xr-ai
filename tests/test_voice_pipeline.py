@@ -41,7 +41,8 @@ from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.workers.runner import WorkerRunner
 
-from xr_ai_voice import VadConfig, VoiceQuery, VoiceTurn
+from xr_ai_voice import VadConfig
+from xr_ai_voice._types import VoiceQuery
 from xr_ai_voice._pipeline import _build_voice_pipeline
 from xr_ai_voice._frames import (
     AssistantResponseEndFrame,
@@ -50,7 +51,7 @@ from xr_ai_voice._frames import (
     ParticipantLeftFrame,
 )
 from xr_ai_voice._processors import (
-    _VoiceHandlerProcessor,
+    _VoiceIOProcessor,
     StreamingTtsProcessor,
     VadSttProcessor,
     VoiceGateProcessor,
@@ -1037,23 +1038,27 @@ async def test_voice_gate_processor_phrase_only_falls_back_to_final_chime():
 # ════════════════════════════════════════════════════════════════════════════
 
 
-class _StringAssistant(_VoiceHandlerProcessor):
+class _StringAssistant(_VoiceIOProcessor):
     def __init__(self, **callbacks: Any) -> None:
         super().__init__(self.handle, **callbacks)
-        self.handle_calls: list[tuple[str, str, bool]] = []
+        self.handle_calls: list[tuple[str, str]] = []
 
-    async def handle(self, query: VoiceQuery):
-        self.handle_calls.append((query.participant_id, query.text, query.fresh_match))
-        return f"answer: {query.text}"
+    async def handle(self, query: VoiceQuery) -> None:
+        self.handle_calls.append((query.participant_id, query.text))
+        await self.enqueue_response(
+            query.participant_id,
+            f"answer: {query.text}",
+            pts_us=query.timestamp_us,
+        )
 
 
-class _IterAssistant(_VoiceHandlerProcessor):
+class _IterAssistant(_VoiceIOProcessor):
     def __init__(self, chunks: list[str], **callbacks: Any) -> None:
         super().__init__(self.handle, **callbacks)
         self._chunks = chunks
         self.cancelled = False
 
-    async def handle(self, _query: VoiceQuery) -> AsyncIterator[str]:
+    async def handle(self, query: VoiceQuery) -> None:
         async def _gen():
             try:
                 for c in self._chunks:
@@ -1062,36 +1067,39 @@ class _IterAssistant(_VoiceHandlerProcessor):
             except asyncio.CancelledError:
                 self.cancelled = True
                 raise
-        return _gen()
 
-
-class _LifecycleAssistant(_VoiceHandlerProcessor):
-    def __init__(self) -> None:
-        self.joined:           list[str] = []
-        self.left:             list[str] = []
-        self.started_speaking: list[str] = []
-        super().__init__(
-            self.handle,
-            on_participant_joined=self.on_participant_joined,
-            on_participant_left=self.on_participant_left,
-            on_user_started_speaking=self.on_user_started_speaking,
+        await self.enqueue_response(
+            query.participant_id,
+            _gen(),
+            pts_us=query.timestamp_us,
         )
 
-    async def handle(self, _query: VoiceQuery):
-        return ""
 
-    async def on_participant_joined(self, pid: str) -> None:
-        self.joined.append(pid)
+class _LifecycleAssistant(_VoiceIOProcessor):
+    def __init__(self) -> None:
+        self.left:             list[str] = []
+        super().__init__(
+            self.handle,
+            on_participant_left=self.on_participant_left,
+        )
+
+    async def handle(self, _query: VoiceQuery) -> None:
+        pass
 
     async def on_participant_left(self, pid: str) -> None:
         self.left.append(pid)
 
-    async def on_user_started_speaking(self, pid: str) -> None:
-        self.started_speaking.append(pid)
+class _InputOnlyAssistant(_VoiceIOProcessor):
+    def __init__(self) -> None:
+        self.queries: list[VoiceQuery] = []
+        super().__init__(self.handle)
+
+    async def handle(self, query: VoiceQuery) -> None:
+        self.queries.append(query)
 
 
 @pytest.mark.asyncio
-async def test_assistant_string_return_pushes_single_text_frame():
+async def test_runtime_input_can_enqueue_finite_voice_output():
     assistant = _StringAssistant()
     sink = await _run_chain(
         assistant,
@@ -1100,30 +1108,11 @@ async def test_assistant_string_return_pushes_single_text_frame():
 
     texts = [f for f in sink.frames if isinstance(f, TextFrame)]
     assert [t.text for t in texts] == ["answer: hi"]
-    assert assistant.handle_calls == [("pid-1", "hi", True)]
+    assert assistant.handle_calls == [("pid-1", "hi")]
 
 
 @pytest.mark.asyncio
-async def test_voice_turn_observer_receives_user_and_completed_agent_text():
-    turns: list[VoiceTurn] = []
-
-    async def observe(turn: VoiceTurn) -> None:
-        turns.append(turn)
-
-    assistant = _StringAssistant(observer=observe)
-    await _run_chain(
-        assistant,
-        sends=[GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=42)],
-    )
-
-    assert [(turn.role, turn.text, turn.timestamp_us) for turn in turns] == [
-        ("user", "hi", 42),
-        ("agent", "answer: hi", 42),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_assistant_async_iter_return_pushes_text_frame_per_chunk():
+async def test_runtime_input_can_enqueue_incremental_voice_output():
     assistant = _IterAssistant(chunks=["alpha ", "beta ", "gamma."])
     sink = await _run_chain(
         assistant,
@@ -1132,6 +1121,100 @@ async def test_assistant_async_iter_return_pushes_text_frame_per_chunk():
     )
     texts = [f.text for f in sink.frames if isinstance(f, TextFrame)]
     assert texts == ["alpha ", "beta ", "gamma."]
+
+
+@pytest.mark.asyncio
+async def test_external_response_stream_uses_normal_assistant_output_frames() -> None:
+    frames: list[Frame] = []
+
+    async def input_sink(_query: VoiceQuery) -> None:
+        pass
+
+    async def chunks() -> AsyncIterator[str]:
+        yield "The kettle "
+        yield "is boiling."
+
+    assistant = _VoiceIOProcessor(input_sink)
+
+    async def capture(frame: Frame, _direction: FrameDirection = FrameDirection.DOWNSTREAM) -> None:
+        frames.append(frame)
+
+    assistant.push_frame = capture  # type: ignore[method-assign]
+    await assistant.enqueue_response("pid-1", chunks(), pts_us=42)
+    task = assistant._inflight["pid-1"]  # noqa: SLF001
+    await task
+
+    assert [frame.text for frame in frames if isinstance(frame, TextFrame)] == [
+        "The kettle ",
+        "is boiling.",
+    ]
+    end = next(frame for frame in frames if isinstance(frame, AssistantResponseEndFrame))
+    assert (end.pid, end.text, end.pts_us) == ("pid-1", "The kettle is boiling.", 42)
+
+
+@pytest.mark.asyncio
+async def test_external_response_preserves_chunks_before_iterator_failure() -> None:
+    frames: list[Frame] = []
+
+    async def input_sink(_query: VoiceQuery) -> None:
+        pass
+
+    async def chunks() -> AsyncIterator[str]:
+        yield "Partial response."
+        raise RuntimeError("producer failed")
+
+    assistant = _VoiceIOProcessor(input_sink)
+
+    async def capture(
+        frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        frames.append(frame)
+
+    assistant.push_frame = capture  # type: ignore[method-assign]
+    await assistant.enqueue_response("pid-1", chunks(), pts_us=42)
+    await assistant._inflight["pid-1"]  # noqa: SLF001
+
+    end = next(frame for frame in frames if isinstance(frame, AssistantResponseEndFrame))
+    assert end.text == "Partial response."
+
+
+@pytest.mark.asyncio
+async def test_external_responses_preserve_participant_fifo() -> None:
+    frames: list[Frame] = []
+    release_first = asyncio.Event()
+
+    async def input_sink(_query: VoiceQuery) -> None:
+        pass
+
+    async def first_response() -> AsyncIterator[str]:
+        yield "first "
+        await release_first.wait()
+        yield "done"
+
+    assistant = _VoiceIOProcessor(input_sink)
+
+    async def capture(
+        frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        frames.append(frame)
+
+    assistant.push_frame = capture  # type: ignore[method-assign]
+    await assistant.enqueue_response("pid-1", first_response())
+    await asyncio.sleep(0)
+    await assistant.enqueue_response("pid-1", "second")
+
+    assert len(assistant._queued["pid-1"]) == 1  # noqa: SLF001
+    release_first.set()
+    while assistant._inflight:  # noqa: SLF001
+        await asyncio.gather(*tuple(assistant._inflight.values()))  # noqa: SLF001
+
+    assert [frame.text for frame in frames if isinstance(frame, TextFrame)] == [
+        "first ",
+        "done",
+        "second",
+    ]
 
 
 @pytest.mark.asyncio
@@ -1179,57 +1262,6 @@ async def test_assistant_cancels_inflight_on_new_query_for_same_pid():
 
 
 @pytest.mark.asyncio
-async def test_assistant_queues_queries_and_interrupts_audio_when_next_turn_starts():
-    order: list[str] = []
-    cancelled: list[str] = []
-    release_first = asyncio.Event()
-
-    async def handle(query: VoiceQuery) -> str:
-        order.append(f"start:{query.text}")
-        try:
-            if query.text == "first":
-                await release_first.wait()
-            order.append(f"finish:{query.text}")
-            return f"answer: {query.text}"
-        except asyncio.CancelledError:
-            cancelled.append(query.text)
-            raise
-
-    async def release_first_later() -> None:
-        await asyncio.sleep(0.12)
-        release_first.set()
-
-    assistant = _VoiceHandlerProcessor(
-        handle,
-        interrupt_on_supersede=True,
-        queue_queries=True,
-    )
-    release = asyncio.create_task(release_first_later())
-    sink = await _run_chain(
-        assistant,
-        sends=[
-            GatedQueryFrame(participant_id="pid-1", text="first", fresh_match=True, pts_us=0),
-            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
-        ],
-        settle_s=0.3,
-        per_send_delay_s=0.03,
-    )
-    await release
-
-    assert order == ["start:first", "finish:first", "start:second", "finish:second"]
-    assert cancelled == []
-    assert [frame.text for frame in sink.frames if isinstance(frame, TextFrame)] == [
-        "answer: first",
-        "answer: second",
-    ]
-    text_indices = [index for index, frame in enumerate(sink.frames) if isinstance(frame, TextFrame)]
-    interrupt_index = next(
-        index for index, frame in enumerate(sink.frames) if isinstance(frame, InterruptionFrame)
-    )
-    assert text_indices[0] < interrupt_index < text_indices[1]
-
-
-@pytest.mark.asyncio
 async def test_assistant_cancels_inflight_on_interruption_frame():
     assistant = _IterAssistant(chunks=[f"chunk{i} " for i in range(200)])
     await _run_chain(
@@ -1245,7 +1277,7 @@ async def test_assistant_cancels_inflight_on_interruption_frame():
 
 
 @pytest.mark.asyncio
-async def test_assistant_closes_stream_on_interruption() -> None:
+async def test_voice_io_closes_cancelled_response_stream() -> None:
     started = asyncio.Event()
     blocked = asyncio.Event()
 
@@ -1266,154 +1298,44 @@ async def test_assistant_closes_stream_on_interruption() -> None:
 
     stream = HeldStream()
 
-    async def handle(_query: VoiceQuery) -> AsyncIterator[str]:
-        return stream
+    async def handle(_query: VoiceQuery) -> None:
+        return None
 
-    assistant = _VoiceHandlerProcessor(handle)
-    await _run_chain(
-        assistant,
-        sends=[
-            GatedQueryFrame(
-                participant_id="pid-1",
-                text="hi",
-                fresh_match=True,
-                pts_us=0,
-            ),
-            InterruptionFrame(),
-        ],
-        settle_s=0.2,
-        per_send_delay_s=0.05,
-    )
+    assistant = _VoiceIOProcessor(handle)
 
-    assert started.is_set()
+    async def capture(
+        _frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        return None
+
+    assistant.push_frame = capture  # type: ignore[method-assign]
+    await assistant.enqueue_response("pid-1", stream)
+    task = assistant._inflight["pid-1"]  # noqa: SLF001
+    await asyncio.wait_for(started.wait(), 1.0)
+    await assistant._cancel_pid("pid-1")  # noqa: SLF001
+    await asyncio.gather(task, return_exceptions=True)
+
     assert stream.closed is True
 
 
 @pytest.mark.asyncio
-async def test_interruption_cancels_active_task_and_clears_queued_queries():
-    started: list[str] = []
-    cancelled: list[str] = []
+async def test_assistant_notifies_external_runtime_on_interruption_frame():
+    interrupted: list[str | None] = []
 
-    async def handle(query: VoiceQuery) -> str:
-        started.append(query.text)
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            cancelled.append(query.text)
-            raise
-        return "unreachable"
+    async def handle(_query: VoiceQuery) -> str:
+        return "unused"
 
-    assistant = _VoiceHandlerProcessor(handle, queue_queries=True)
-    await _run_chain(
-        assistant,
-        sends=[
-            GatedQueryFrame(participant_id="pid-1", text="first", fresh_match=True, pts_us=0),
-            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
-            InterruptionFrame(),
-        ],
-        settle_s=0.2,
-        per_send_delay_s=0.05,
-    )
+    async def on_interrupted(pid: str | None) -> None:
+        interrupted.append(pid)
 
-    assert started == ["first"]
-    assert cancelled == ["first"]
-    assert assistant._queued == {}  # noqa: SLF001
+    assistant = _VoiceIOProcessor(handle, on_interrupted=on_interrupted)
+    participant_frame = InterruptionFrame()
+    participant_frame.transport_source = "pid-1"
+    global_frame = InterruptionFrame()
+    await _run_chain(assistant, sends=[participant_frame, global_frame])
 
-
-@pytest.mark.asyncio
-async def test_assistant_on_query_superseded_fires_on_second_query_while_inflight():
-    """When a fresh ``GatedQueryFrame`` arrives while a prior query's
-    task is still in-flight, ``on_query_superseded`` must fire so an
-    agent can decide what to do with the previous response's queued
-    downstream state (e.g. push an InterruptionFrame to drain queued
-    TTS audio). The library default is a no-op; this test only checks
-    the hook is invoked."""
-    class _SupersedeRecorder(_IterAssistant):
-        def __init__(self) -> None:
-            self.supersede_calls: list[str] = []
-            super().__init__(
-                chunks=[f"chunk{i} " for i in range(200)],
-                on_query_superseded=self.on_query_superseded,
-            )
-
-        async def on_query_superseded(self, pid: str) -> None:
-            self.supersede_calls.append(pid)
-
-    assistant = _SupersedeRecorder()
-    await _run_chain(
-        assistant,
-        sends=[
-            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
-            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
-        ],
-        settle_s=0.2,
-        per_send_delay_s=0.05,
-    )
-    assert assistant.supersede_calls == ["pid-1"]
-    assert assistant.cancelled is True
-
-
-@pytest.mark.asyncio
-async def test_assistant_on_query_superseded_not_fired_when_prior_task_done():
-    """The supersede hook fires only for an ACTUAL replacement — a new query
-    that lands while the prior turn is still in flight. When the prior assistant
-    task has already completed before the next query arrives, there is nothing
-    to supersede, so the hook must NOT fire even though the participant has
-    spoken before. (Clearing any lingering TTS is handled by the downstream
-    interrupt, not by this callback.)"""
-    class _SupersedeRecorder(_StringAssistant):
-        def __init__(self) -> None:
-            self.supersede_calls: list[str] = []
-            super().__init__(on_query_superseded=self.on_query_superseded)
-
-        async def on_query_superseded(self, pid: str) -> None:
-            self.supersede_calls.append(pid)
-
-    assistant = _SupersedeRecorder()
-    await _run_chain(
-        assistant,
-        sends=[
-            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
-            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
-        ],
-        # Long enough that the one-shot ``_StringAssistant`` response for the
-        # first query has fully run before the second query is queued.
-        settle_s=0.3,
-        per_send_delay_s=0.2,
-    )
-    assert assistant.supersede_calls == []
-    # Both queries still ran end-to-end.
-    handled = [t for _pid, t, _fm in assistant.handle_calls]
-    assert "first"  in handled
-    assert "second" in handled
-
-
-@pytest.mark.asyncio
-async def test_assistant_on_query_superseded_not_fired_on_serial_queries():
-    """Serial queries — each completing before the next arrives — are not
-    supersedes. Four serial queries fire the hook zero times; it fires only when
-    a new query replaces a still-in-flight turn."""
-    class _SupersedeRecorder(_StringAssistant):
-        def __init__(self) -> None:
-            self.supersede_calls: list[str] = []
-            super().__init__(on_query_superseded=self.on_query_superseded)
-
-        async def on_query_superseded(self, pid: str) -> None:
-            self.supersede_calls.append(pid)
-
-    assistant = _SupersedeRecorder()
-    await _run_chain(
-        assistant,
-        sends=[
-            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
-            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
-            GatedQueryFrame(participant_id="pid-1", text="third",  fresh_match=True, pts_us=2),
-            GatedQueryFrame(participant_id="pid-1", text="fourth", fresh_match=True, pts_us=3),
-        ],
-        settle_s=0.3,
-        per_send_delay_s=0.1,
-    )
-    assert assistant.supersede_calls == []
+    assert interrupted == ["pid-1", None]
 
 
 @pytest.mark.asyncio
@@ -1435,59 +1357,6 @@ async def test_assistant_cancels_inflight_turn_on_pipeline_shutdown():
     # _run_chain drains with an EndFrame; the turn must be torn down by then.
     assert assistant._inflight == {}          # noqa: SLF001
     assert assistant.cancelled, "the in-flight handler task must be cancelled"
-
-
-@pytest.mark.asyncio
-async def test_assistant_on_query_superseded_seen_state_cleared_on_participant_left():
-    """``_seen_query`` is per-pid and must be cleared on
-    ``ParticipantLeftFrame`` so a rejoin's first query is treated
-    as cold (no supersede) rather than as a follow-up. Without
-    this, an override that pushes ``InterruptionFrame`` on
-    supersede would flush unrelated audio on every fresh session."""
-    class _SupersedeRecorder(_StringAssistant):
-        def __init__(self) -> None:
-            self.supersede_calls: list[str] = []
-            super().__init__(on_query_superseded=self.on_query_superseded)
-
-        async def on_query_superseded(self, pid: str) -> None:
-            self.supersede_calls.append(pid)
-
-    assistant = _SupersedeRecorder()
-    await _run_chain(
-        assistant,
-        sends=[
-            GatedQueryFrame(participant_id="pid-1",  text="first",  fresh_match=True, pts_us=0),
-            ParticipantLeftFrame(participant_id="pid-1"),
-            # Same pid rejoins (or different session): the first
-            # query after the left frame must NOT fire the hook.
-            GatedQueryFrame(participant_id="pid-1",  text="second", fresh_match=True, pts_us=1),
-        ],
-        settle_s=0.3,
-        per_send_delay_s=0.1,
-    )
-    assert assistant.supersede_calls == []
-
-
-@pytest.mark.asyncio
-async def test_assistant_on_query_superseded_not_called_on_cold_path_first_query():
-    """The cold path — first query, no in-flight task — must NOT call
-    ``on_query_superseded``. There is nothing to supersede, and agents
-    that override to push an InterruptionFrame would otherwise flush
-    unrelated in-flight audio (e.g. a voice-gate chime)."""
-    class _SupersedeRecorder(_StringAssistant):
-        def __init__(self) -> None:
-            self.supersede_calls: list[str] = []
-            super().__init__(on_query_superseded=self.on_query_superseded)
-
-        async def on_query_superseded(self, pid: str) -> None:
-            self.supersede_calls.append(pid)
-
-    assistant = _SupersedeRecorder()
-    await _run_chain(
-        assistant,
-        sends=[GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=0)],
-    )
-    assert assistant.supersede_calls == []
 
 
 @pytest.mark.asyncio
@@ -1513,45 +1382,6 @@ async def test_handler_can_request_audio_interruption_when_superseded():
     assert any(isinstance(f, InterruptionFrame) for f in sink.frames), (
         "handler request must push an interruption downstream"
     )
-
-
-@pytest.mark.asyncio
-async def test_assistant_on_query_superseded_exception_is_swallowed_and_spawn_proceeds():
-    """A misbehaving override must not break the supersede contract:
-    the previous task is still cancelled and the new query still
-    spawns. The exception is logged at the library boundary."""
-    class _RaisingAssistant(_IterAssistant):
-        def __init__(self) -> None:
-            self.handle_calls: list[str] = []
-            self.supersede_calls: list[str] = []
-            super().__init__(
-                chunks=[f"chunk{i} " for i in range(200)],
-                on_query_superseded=self.on_query_superseded,
-            )
-
-        async def handle(self, query: VoiceQuery):
-            self.handle_calls.append(query.text)
-            return await super().handle(query)
-
-        async def on_query_superseded(self, pid: str) -> None:
-            self.supersede_calls.append(pid)
-            raise RuntimeError("boom")
-
-    assistant = _RaisingAssistant()
-    await _run_chain(
-        assistant,
-        sends=[
-            GatedQueryFrame(participant_id="pid-1", text="first",  fresh_match=True, pts_us=0),
-            GatedQueryFrame(participant_id="pid-1", text="second", fresh_match=True, pts_us=1),
-        ],
-        settle_s=0.2,
-        per_send_delay_s=0.05,
-    )
-    assert assistant.supersede_calls == ["pid-1"]
-    # Previous task still cancelled; new query still ran.
-    assert assistant.cancelled is True
-    assert "first"  in assistant.handle_calls
-    assert "second" in assistant.handle_calls
 
 
 @pytest.mark.asyncio
@@ -1604,7 +1434,7 @@ async def test_assistant_no_transport_steering_when_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_assistant_participant_lifecycle_hooks_fire():
+async def test_assistant_participant_left_callback_fires():
     assistant = _LifecycleAssistant()
     sink = await _run_chain(
         assistant,
@@ -1614,59 +1444,10 @@ async def test_assistant_participant_lifecycle_hooks_fire():
         ],
     )
 
-    assert assistant.joined == ["p1"]
     assert assistant.left   == ["p1"]
     kinds = [type(f).__name__ for f in sink.frames]
     assert "ParticipantJoinedFrame" in kinds
     assert "ParticipantLeftFrame"   in kinds
-
-
-@pytest.mark.asyncio
-async def test_assistant_user_started_speaking_hook_fires_for_joined_pids():
-    """on_user_started_speaking fires for every joined pid (NOT just the
-    in-flight ones), so the cold path — first utterance, nothing in
-    flight yet — still gets the speculative-warmup hook. Tracking
-    in-flight tasks here would mean the very first turn never sees
-    camera warmup, which is precisely the case it was designed for."""
-    started_for: list[str] = []
-
-    async def speech_hook(pid: str) -> None:
-        started_for.append(pid)
-
-    assistant = _IterAssistant(chunks=[], on_user_started_speaking=speech_hook)
-
-    await _run_chain(
-        assistant,
-        sends=[
-            ParticipantJoinedFrame(participant_id="pid-1"),
-            UserStartedSpeakingFrame(),
-        ],
-        settle_s=0.1,
-        per_send_delay_s=0.05,
-    )
-    assert started_for == ["pid-1"]
-
-
-@pytest.mark.asyncio
-async def test_assistant_user_started_speaking_hook_skipped_after_leave():
-    started_for: list[str] = []
-
-    async def speech_hook(pid: str) -> None:
-        started_for.append(pid)
-
-    assistant = _IterAssistant(chunks=[], on_user_started_speaking=speech_hook)
-
-    await _run_chain(
-        assistant,
-        sends=[
-            ParticipantJoinedFrame(participant_id="pid-1"),
-            ParticipantLeftFrame(participant_id="pid-1"),
-            UserStartedSpeakingFrame(),
-        ],
-        settle_s=0.1,
-        per_send_delay_s=0.05,
-    )
-    assert started_for == []
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -2090,12 +1871,16 @@ async def test_input_transport_drops_participant_event_before_start():
 # ════════════════════════════════════════════════════════════════════════════
 
 
-class _EchoAssistant(_VoiceHandlerProcessor):
+class _EchoAssistant(_VoiceIOProcessor):
     def __init__(self) -> None:
         super().__init__(self.handle)
 
-    async def handle(self, query: VoiceQuery) -> str:
-        return f"echo {query.text}."
+    async def handle(self, query: VoiceQuery) -> None:
+        await self.enqueue_response(
+            query.participant_id,
+            f"echo {query.text}.",
+            pts_us=query.timestamp_us,
+        )
 
 
 @pytest.mark.asyncio
@@ -2129,7 +1914,7 @@ async def test_private_pipeline_assembly_connects_audio_in_to_audio_out(monkeypa
             transport      = transport,
             stt            = stt,
             tts            = tts,
-            handler_processor  = _EchoAssistant(),
+            io_processor       = _EchoAssistant(),
             vad_cfg        = VadConfig(),
             voice_gate_cfg = VoiceGateConfig(),
         )
@@ -2183,7 +1968,7 @@ def test_private_pipeline_assembly_wires_early_wake_ack_for_chime_config():
             transport=transport,
             stt=_FakeStt(),
             tts=_FakeTts(),
-            handler_processor=_EchoAssistant(),
+            io_processor=_EchoAssistant(),
             vad_cfg=VadConfig(),
             voice_gate_cfg=VoiceGateConfig(
                 magic_phrases=("hey agent",),
@@ -2216,7 +2001,7 @@ def test_private_pipeline_assembly_disables_idle_timeout_by_default():
             transport      = transport,
             stt            = _FakeStt(),
             tts            = _FakeTts(),
-            handler_processor  = _EchoAssistant(),
+            io_processor       = _EchoAssistant(),
             vad_cfg        = VadConfig(),
             voice_gate_cfg = VoiceGateConfig(),
         )
@@ -2237,7 +2022,7 @@ def test_private_pipeline_assembly_accepts_idle_timeout():
             transport      = transport,
             stt            = _FakeStt(),
             tts            = _FakeTts(),
-            handler_processor  = _EchoAssistant(),
+            io_processor       = _EchoAssistant(),
             vad_cfg        = VadConfig(),
             voice_gate_cfg = VoiceGateConfig(),
             idle_timeout_secs = 300.0,
@@ -2254,7 +2039,7 @@ def test_private_pipeline_assembly_accepts_idle_timeout():
 
 
 @pytest.mark.asyncio
-async def test_assistant_tags_text_frame_with_pid_for_string_return():
+async def test_assistant_tags_finite_output_with_pid():
     """The assistant MUST set ``transport_destination`` on every TextFrame.
 
     Downstream ``StreamingTtsProcessor`` reads
@@ -2275,7 +2060,7 @@ async def test_assistant_tags_text_frame_with_pid_for_string_return():
 
 
 @pytest.mark.asyncio
-async def test_assistant_tags_text_frame_with_pid_for_async_iter_return():
+async def test_assistant_tags_incremental_output_with_pid():
     assistant = _IterAssistant(chunks=["alpha ", "beta."])
     sink = await _run_chain(
         assistant,
@@ -2293,7 +2078,7 @@ async def test_assistant_tags_text_frame_with_pid_for_async_iter_return():
 
 
 @pytest.mark.asyncio
-async def test_assistant_emits_response_end_after_string_turn():
+async def test_assistant_emits_response_end_after_finite_output():
     """One ``AssistantResponseEndFrame`` per completed turn carries the full
     assembled text and pid — the downstream data-channel echo keys off
     this marker."""
@@ -2310,7 +2095,7 @@ async def test_assistant_emits_response_end_after_string_turn():
 
 
 @pytest.mark.asyncio
-async def test_assistant_emits_response_end_after_streamed_turn():
+async def test_assistant_emits_response_end_after_streamed_output():
     assistant = _IterAssistant(chunks=["one ", "two ", "three."])
     sink = await _run_chain(
         assistant,
@@ -2321,6 +2106,26 @@ async def test_assistant_emits_response_end_after_streamed_turn():
     assert len(ends) == 1
     assert ends[0].text == "one two three."
     assert ends[0].pid  == "pid-1"
+
+
+@pytest.mark.asyncio
+async def test_input_only_handler_does_not_emit_an_empty_agent_response():
+    assistant = _InputOnlyAssistant()
+    sink = await _run_chain(
+        assistant,
+        sends=[
+            GatedQueryFrame(
+                participant_id="pid-1",
+                text="publish this",
+                fresh_match=True,
+                pts_us=7,
+            )
+        ],
+    )
+
+    assert [query.text for query in assistant.queries] == ["publish this"]
+    assert not any(isinstance(frame, TextFrame) for frame in sink.frames)
+    assert not any(isinstance(frame, AssistantResponseEndFrame) for frame in sink.frames)
 
 
 @pytest.mark.asyncio
@@ -2348,44 +2153,6 @@ async def test_assistant_does_not_emit_response_end_on_cancel():
 # ════════════════════════════════════════════════════════════════════════════
 # Regression: handler async method returning an async iterator works
 # ════════════════════════════════════════════════════════════════════════════
-
-
-class _StreamMethodAssistant(_VoiceHandlerProcessor):
-    """Lock in a handler method returning an async iterator:
-
-        async def handle(...) -> AsyncIterator[str]:
-            return self._stream(...)
-
-    where ``_stream`` is itself an async-generator function. Awaiting
-    ``handle`` resolves to the async-generator object the processor consumes.
-    """
-
-    def __init__(self, chunks: list[str]) -> None:
-        super().__init__(self.handle)
-        self._chunks = chunks
-
-    async def handle(self, query: VoiceQuery) -> AsyncIterator[str]:
-        return self._stream(query.participant_id, query.text)
-
-    async def _stream(self, pid: str, text: str) -> AsyncIterator[str]:
-        for c in self._chunks:
-            yield c
-            await asyncio.sleep(0.001)
-
-
-@pytest.mark.asyncio
-async def test_assistant_supports_handler_returning_async_generator_method():
-    assistant = _StreamMethodAssistant(chunks=["foo ", "bar."])
-    sink = await _run_chain(
-        assistant,
-        sends=[GatedQueryFrame(participant_id="pid-1", text="hi", fresh_match=True, pts_us=0)],
-        settle_s=0.15,
-    )
-    texts = [f.text for f in sink.frames if isinstance(f, TextFrame)]
-    assert texts == ["foo ", "bar."]
-    ends = [f for f in sink.frames if isinstance(f, AssistantResponseEndFrame)]
-    assert len(ends) == 1
-    assert ends[0].text == "foo bar."
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -2951,7 +2718,7 @@ async def test_private_pipeline_assembly_routes_text_through_streaming_tts(monke
             transport      = transport,
             stt            = _FakeStt(),
             tts            = _FakeTts(),
-            handler_processor  = _StringAssistant(),
+            io_processor       = _StringAssistant(),
             vad_cfg        = VadConfig(),
             voice_gate_cfg = VoiceGateConfig(),
             text_topic     = "vlm.response",

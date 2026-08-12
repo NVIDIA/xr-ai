@@ -13,18 +13,23 @@ topic. Sending the literal text `ping` uses the configured default question,
 The worker is a package under `worker/simple_vlm_example_worker/`:
 
 - `__main__.py` parses launcher arguments.
+- `agent.py` owns participant-scoped vision turns and cancellation.
 - `config.py` resolves worker, model-profile, voice-gate, and prompt settings.
 - `app.py` composes the native runtime.
 - `prompts/system.txt` owns the VLM system prompt.
 
-`VoiceSession` owns STT/TTS/VLM readiness, the hub voice transport, voice-gate
-processing, streaming TTS, signals, and cleanup. The application constructs a
-transport-independent `StreamingVisionTool` and adapts its async chunks to the
-voice handler locally. The tool has no voice dependency and sends its provider
-stream through Relay's managed LLM path. The camera frame is redacted from
-Relay telemetry. Typed text uses the same
-participant-aware turn path as speech. Participant leave events release cached
-live-frame state, and a newer turn cancels and interrupts a superseded response.
+`VoiceAgent` owns `VoiceSession`, which provides STT/TTS/VLM readiness, the hub
+voice transport, voice-gate processing, streaming TTS, signals, and cleanup.
+It publishes accepted speech and typed text as `UserQuery` on this sample's
+topic. `SimpleVlmAgent` subscribes to that topic, owns participant-scoped
+streaming and cancellation around the transport-independent
+`StreamingVisionTool`, and publishes chunks to `voice.output`. The tool has no
+voice dependency and sends its provider stream through Relay's managed LLM
+path. The camera frame is redacted from Relay telemetry. `VoiceAgent` publishes
+participant departure and interruption on sample-named topics;
+`SimpleVlmAgent` subscribes and releases its own cached frames and tasks. A
+newer turn cancels and interrupts a superseded response. `app.py` only composes
+the two agents and their dependencies.
 
 No MCP client or MCP tool invocation is part of this sample.
 

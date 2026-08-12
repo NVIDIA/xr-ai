@@ -39,7 +39,7 @@ class MessageMetadata:
 
     message_id: str
     correlation_id: str
-    participant_id: str
+    participant_id: str | None
     source: str
     parent_message_id: str | None
     timestamp_us: int

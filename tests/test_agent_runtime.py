@@ -165,7 +165,7 @@ class _VoiceOutput(Agent):
     def __init__(self, *, mutate: bool = False) -> None:
         super().__init__()
         self.mutate = mutate
-        self.received: list[tuple[str, str, list[str]]] = []
+        self.received: list[tuple[str | None, str, list[str]]] = []
 
     @subscribe(OBSERVATIONS)
     async def observe(self, event: _Observation, ctx: RuntimeContext) -> None:
@@ -274,6 +274,19 @@ async def test_nested_publish_preserves_participant_and_trace_context() -> None:
     assert speaker.metadata.source == "forwarder"
     assert speaker.metadata.parent_message_id == forwarder.input_message_id
     assert speaker.metadata.correlation_id == forwarder.input_message_id
+
+
+async def test_publish_can_broadcast_without_participant_scope() -> None:
+    speaker = _Speaker()
+    runtime = AgentRuntime()
+    runtime.register("speaker", speaker)
+
+    async with runtime:
+        await runtime.publish(VOICE_OUTPUT, _Speak(text="Stop all."))
+
+    assert speaker.metadata is not None
+    assert speaker.metadata.participant_id is None
+    assert speaker.metadata.source == "application"
 
 
 class _SerializedAgent(Agent):

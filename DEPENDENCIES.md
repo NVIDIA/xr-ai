@@ -40,10 +40,10 @@ CI matrices:
 xr-ai-agent-runtime  (agent-sdk/xr-ai-agent-runtime/)
     └── pydantic >=2.10
     └── xr-ai-tools [editable: ../xr-ai-tools]
-    In-process runtime for agent resource lifetimes, runtime-owned background
-    tasks, and typed ``publish`` fan-out. Agents expose ordinary ``Tool`` and
-    ``AsyncTool`` instances from ``xr-ai-tools`` and own their synchronization.
-    Tool execution, model clients, tool loops, planning, memory, and raw media
+    In-process typed ``publish`` fan-out for agents that expose ordinary
+    ``Tool`` and ``AsyncTool`` instances from ``xr-ai-tools``. Agents own their
+    resources, background tasks, lifecycle, and synchronization. Tool
+    execution, model clients, tool loops, planning, memory, and raw media
     transport are not runtime responsibilities.
 
 xr-ai-hub-client  (agent-sdk/xr-ai-hub-client/)
@@ -76,6 +76,8 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     Not a dep of xr-ai-hub-client itself — import only in workers that use Pipecat.
 
 xr-ai-voice  (agent-sdk/xr-ai-voice/)
+    └── pydantic >=2.10
+    └── xr-ai-agent-runtime [editable: ../xr-ai-agent-runtime]
     └── xr-ai-hub-client [editable: ../xr-ai-hub-client]
     └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models    [editable: ../xr-ai-models]
@@ -85,13 +87,14 @@ xr-ai-voice  (agent-sdk/xr-ai-voice/)
     └── nltk !=3.10.1       (3.10.1 rejects deps in in-project venvs)
     └── numpy >=1.24
     └── scipy >=1.11
-    Native voice runtime used by simple-vlm-example. Exposes the
-    ``VoiceSession`` public API plus the ``VoiceHandler`` / ``VoiceQuery`` /
-    ``VoiceResponse`` / ``VoiceTurn`` handler surface, ``HubVoiceTransport``,
-    ``VadConfig``, and ``TextMessageInput``; Pipecat, audio framing, and
-    pipeline processors are implementation details. Service health gates
-    transport construction, while ``VoiceSession.run`` touches its ready file
-    only after the input transport starts its hub IPC receive loop. The
+    Native voice runtime used by simple-vlm-example. Exposes ``VoiceAgent``,
+    its ``UserQuery`` / ``VoiceOutput`` / participant-lifecycle schemas,
+    ``VoiceSession``, ``HubVoiceTransport``, and
+    ``VadConfig``. Voice lifecycle events enter application-named topics so
+    application agents own their cleanup. Pipecat, audio framing, and pipeline
+    processors are implementation details. Service health gates transport
+    construction, while the session touches its ready file only after the input
+    transport starts its hub IPC receive loop. The
     readiness contract is split across the ``_readiness`` / ``_session``
     modules. Not a dep of xr-ai-hub-client itself — import only in workers that
     opt into the voice runtime.
@@ -566,16 +569,18 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-tools[live-vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-tools[live-vision]` pulls in numpy and Pillow) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent-runtime [editable]`, `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-tools[live-vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-tools[live-vision]` pulls in numpy and Pillow) |
 
-The packaged worker constructs a transport-independent `StreamingVisionTool`
-and adapts its typed async chunks to `VoiceSession` locally. The tool owns
-current-frame acquisition through `xr-ai-hub-client`, has no voice dependency,
-and uses NeMo Relay's managed streaming LLM path. Camera bytes are redacted from
-Relay telemetry while the provider receives the original frame.
-`VoiceSession` owns readiness, hub transport, signals, the
-private Pipecat pipeline, and cleanup; `TextMessageInput` routes `"ping"` and
-ad-hoc text through the same participant-aware path as speech. Voice-gate
+The packaged worker runs a transport-independent `StreamingVisionTool` inside
+`SimpleVlmAgent` and publishes its typed async chunks to `VoiceAgent`. The tool
+owns current-frame acquisition through `xr-ai-hub-client`, has no voice
+dependency, and uses NeMo Relay's managed streaming LLM path. Camera bytes are
+redacted from Relay telemetry while the provider receives the original frame.
+`VoiceAgent` owns `VoiceSession`, readiness, hub transport, signals, and the
+private Pipecat pipeline; it routes `"ping"` and ad-hoc text through the same
+sample-named `UserQuery` topic as speech and publishes lifecycle events on
+sample-named topics. `SimpleVlmAgent` handles cancellation and frame cleanup
+inside its own subscriber methods. Voice-gate
 behavior (magic phrases, follow-up grace, listening chime, stop acknowledgement),
 VAD/STT, and sentence-batched TTS remain provided by the shared voice runtime.
 The sample has no direct `xr-ai-pipecat` or MCP dependency and selects no legacy

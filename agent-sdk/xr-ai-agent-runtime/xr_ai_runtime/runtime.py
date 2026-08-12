@@ -34,7 +34,6 @@ class _AgentState:
     name: str
     deliveries: set[asyncio.Task[None]] = field(default_factory=set)
 
-
 class RuntimeContext:
     """Runtime operations available during a subscription delivery."""
 
@@ -69,7 +68,7 @@ class RuntimeContext:
         *,
         participant_id: str | None = None,
     ) -> None:
-        """Publish an event while preserving current trace context."""
+        """Publish an event, preserving delivery scope when one exists."""
 
         await self._runtime._publish(
             topic,
@@ -80,7 +79,7 @@ class RuntimeContext:
             parent_message_id=self._metadata.message_id,
         )
 
-    def _resolve_participant(self, participant_id: str | None) -> str:
+    def _resolve_participant(self, participant_id: str | None) -> str | None:
         if participant_id is not None:
             return participant_id
         return self._metadata.participant_id
@@ -146,7 +145,7 @@ class AgentRuntime:
         topic: Topic[MessageT],
         message: MessageT | dict[str, Any],
         *,
-        participant_id: str,
+        participant_id: str | None = None,
         source: str = "application",
     ) -> None:
         """Validate and deliver one event to every topic subscriber."""
@@ -185,7 +184,7 @@ class AgentRuntime:
         topic: Topic[MessageT],
         message: MessageT | dict[str, Any],
         *,
-        participant_id: str,
+        participant_id: str | None,
         source: str,
         correlation_id: str | None = None,
         parent_message_id: str | None = None,
@@ -271,12 +270,12 @@ class AgentRuntime:
     @staticmethod
     def _metadata(
         *,
-        participant_id: str,
+        participant_id: str | None,
         source: str,
         correlation_id: str | None,
         parent_message_id: str | None,
     ) -> MessageMetadata:
-        if not participant_id.strip():
+        if participant_id is not None and not participant_id.strip():
             raise ValueError("participant_id must not be empty")
         if not source.strip():
             raise ValueError("message source must not be empty")

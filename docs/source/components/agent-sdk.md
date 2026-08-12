@@ -14,9 +14,10 @@ from:
   `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
   structured model deployment profile. Swapping a backend is a configuration
   edit, not a code edit.
-- **`xr-ai-voice`** — the native voice runtime. `VoiceSession` owns readiness,
-  hub transport, voice gating, streaming responses, signals, and cleanup while
-  applications provide a `VoiceHandler`.
+- **`xr-ai-voice`** — the native voice runtime. `VoiceAgent` publishes
+  `UserQuery` and lifecycle events to application-named topics and consumes
+  `voice.output`. `VoiceSession` owns readiness, hub transport, voice gating,
+  streaming responses, signals, and cleanup.
 - **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
   consumers such as `xr-render-demo`. Its `run_voice_pipeline` helper exposes
   the same IPC-start request-readiness boundary as `VoiceSession`.
@@ -283,11 +284,20 @@ lifecycle ownership.
 
 ## xr-ai-voice
 
-Native voice applications work with participant-aware turns rather than
-Pipecat processors. A handler returns a string or an async stream of strings:
+Native voice applications work with participant-aware runtime topics rather
+than Pipecat processors. `VoiceAgent` owns `VoiceSession`, publishes accepted
+input and lifecycle events with voice-owned schemas on application-named
+topics, and subscribes to `voice.output`:
 
 ```python
-from xr_ai_voice import VadConfig, VoiceSession
+from xr_ai_runtime import Topic
+from xr_ai_voice import (
+    UserQuery,
+    VadConfig,
+    VoiceAgent,
+    VoiceParticipantLeft,
+    VoiceSession,
+)
 
 session = VoiceSession(
     stt=stt,
@@ -298,19 +308,26 @@ session = VoiceSession(
     ready_file=ready_file,
     closeables=(vlm,),
 )
-async with session:
-    await session.run(handler, on_participant_left=release_participant)
+queries = Topic("my-sample.user-query", UserQuery)
+participant_left = Topic("my-sample.participant-left", VoiceParticipantLeft)
+voice = VoiceAgent(
+    session,
+    query_topic=queries,
+    participant_left_topic=participant_left,
+)
+runtime.register("voice", voice)
+async with runtime:
+    await voice.run(runtime)
 ```
 
-`TextMessageInput` routes typed messages through the same turn path as speech
-and ignores data received outside an active `run()`. The default hub transport
-is opened only after readiness probes succeed; failed readiness closes the
-session's model clients without opening hub sockets. The ready file is touched
-from `run()` only after the input transport enters its hub IPC receive loop.
-NAT applications create handlers with
-`xr_ai_nat.adapters.as_voice_handler`. `VoiceSession` preserves participant
-routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients.
+The default hub transport is opened only after readiness probes succeed; failed
+readiness closes the session's model clients without opening hub sockets. The
+ready file is touched only after the input transport enters its hub IPC receive
+loop. `VoiceSession` preserves participant routing, cancels superseded or
+interrupted output, installs signal handlers, and closes its transport and
+model clients. `VoiceAgent` turns transport lifecycle callbacks into typed
+runtime events; application agents subscribe and clean up their own state. A
+pid-less interruption is a global event.
 
 ## xr-ai-pipecat
 

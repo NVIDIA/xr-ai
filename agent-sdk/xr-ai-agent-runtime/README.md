@@ -77,11 +77,11 @@ tool's typed request. Relay supplies nested execution tracing, while runtime
 message metadata applies only to pub/sub.
 
 `publish(topic, event)` is the separate asynchronous fan-out operation for
-events. An agent that owns resources or background work is responsible for
-controlling them, including creating, cancelling, and awaiting its own tasks.
-The runtime neither knows nor controls whether an agent's internal work is
-running. `publish()` waits for every fan-out delivery to settle before
-propagating any subscriber failures.
+participant-scoped or global events. An agent that owns resources or background
+work is responsible for controlling them, including creating, cancelling, and
+awaiting its own tasks. The runtime neither knows nor controls whether an
+agent's internal work is running. `publish()` waits for every fan-out delivery
+to settle before propagating any subscriber failures.
 
 Tools and subscription callbacks may run concurrently. An agent whose mutable
 state is shared between them owns the appropriate synchronization, such as an

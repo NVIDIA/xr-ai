@@ -29,6 +29,20 @@ chunk is consumed. Producer cleanup remains unbounded: a timeout and detached
 cleanup policy requires a separate decision because abandoning cleanup could
 leave Relay state or participant status unfinished.
 
+### 2026-08-12 — Voice output is a subscriber, not a privileged side channel
+
+`VoiceAgent` owns `VoiceSession`, subscribes to the typed `voice.output` topic,
+and serializes output through its participant-aware delivery path. Producers
+may publish one finite message or a sequence of chunks sharing a response ID;
+both use the same TTS aggregation, data echo, turn observation, and interruption
+path. Voice delivery is one runtime agent among the other application tasks
+rather than a privileged dispatcher side channel.
+
+Participant departure and interruption follow the same rule: `VoiceAgent`
+publishes voice-owned schemas on application-named topics, and each application
+agent handles its own tasks and resources. `app.py` remains
+the composition root and contains no transport callbacks or resource logic.
+
 ### 2026-08-12 — Agents own existing tools and their concurrency policy
 
 `xr-ai-agent-runtime` defines an `Agent` as a plain object containing private

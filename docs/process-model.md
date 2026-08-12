@@ -60,8 +60,9 @@ def run() -> None:
   process can serve requests; the client is told the room is ready only once
   the hub sees every attached agent available and each agent's subscription
   for that client confirmed. See `docs/source/components/agent-sdk.md`.
-- **Native voice workers** pass the ready file to `VoiceSession`; `run()`
-  touches it only after the input transport's hub IPC receive loop has started.
+- **Native voice workers** pass the ready file to the `VoiceSession` owned by
+  `VoiceAgent`; the session touches it only after the input transport's hub IPC
+  receive loop has started.
 - **Pipecat workers** build their voice pipeline, then call
   `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)`. The
   callback runs only after the input transport's hub IPC receive loop has

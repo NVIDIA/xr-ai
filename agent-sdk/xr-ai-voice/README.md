@@ -5,54 +5,78 @@
 
 # xr-ai-voice
 
-The public voice-session API for XR agents. Pipecat implements the pipeline,
-but applications work with XR concepts rather than Pipecat modules:
+The voice runtime for XR agents. Pipecat implements the media pipeline, but
+applications work with XR concepts rather than Pipecat modules:
 
+- `VoiceAgent` publishes accepted speech, text, participant departure, and
+  interruption as voice-owned schemas on application-named topics; it
+  subscribes to `voice.output`.
 - `VoiceSession` owns readiness, hub transport, private pipeline assembly,
-  signals, execution, and cleanup. Its default hub transport opens only after
-  service probes succeed.
-- `VoiceHandler` is an async callable from `VoiceQuery` to text or a text stream.
-- `TextMessageInput` routes typed participant messages through the same turn path as speech.
+  signals, execution, and cleanup behind `VoiceAgent`.
 - `HubVoiceTransport` is available when an application needs to share one transport explicitly.
 
 ## Usage
 
+Applications register one `VoiceAgent` with the shared runtime:
+
 ```python
-from xr_ai_voice import VadConfig, VoiceQuery, VoiceSession
+from xr_ai_runtime import Topic
+from xr_ai_voice import (
+    UserQuery,
+    VadConfig,
+    VoiceAgent,
+    VoiceInterrupted,
+    VoiceSession,
+)
 from xr_ai_voicegate import VoiceGateConfig
 
-async def handle(query: VoiceQuery) -> str:
-    # query.participant_id / .text / .fresh_match / .timestamp_us
-    # timestamp_us is Unix-epoch µs anchored to when the user spoke.
-    return f"You said: {query.text}"
-
 session = VoiceSession(
-    stt=stt, tts=tts, vad=VadConfig(), voice_gate=VoiceGateConfig(),
+    stt=stt,
+    tts=tts,
+    vad=VadConfig(),
+    voice_gate=VoiceGateConfig(),
 )
-async with session:            # awaits STT/TTS readiness
-    await session.run(handle)  # starts hub IPC, touches ready_file, then runs
+queries = Topic("my-sample.user-query", UserQuery)
+interruptions = Topic("my-sample.interrupted", VoiceInterrupted)
+voice = VoiceAgent(
+    session,
+    query_topic=queries,
+    interrupted_topic=interruptions,
+)
+runtime.register("voice", voice)
+
+async with runtime:
+    await voice.run(runtime)
 ```
 
-A handler may also return an `AsyncIterator[str]` to stream the reply token by
-token. Typed messages route through the same path via `TextMessageInput`; data
-received outside an active `run()` is ignored.
+`VoiceAgent` publishes accepted speech, typed text, participant departure, and
+interruption on application-named topics. Application agents subscribe to the
+events they own, perform cleanup in their own subscriber methods, and may
+publish finite or incremental `VoiceOutput` messages:
 
-`VoiceSession.run()` accepts participant lifecycle callbacks, a turn observer,
-and explicit follow-up policies. `queue_queries` preserves FIFO execution per
-participant instead of cancelling the active handler. With
-`interrupt_on_supersede`, each queued turn flushes speech left from the
-preceding response when it starts. Explicit interruption frames such as stop
-cancel the active turn and clear its participant queue. The `on_query_superseded`
-callback fires only when a new query actually replaces a still-in-flight turn —
-a follow-up that arrives after the previous turn finished, or that is queued, is
-not a supersede.
+```python
+from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceOutput
 
-All per-turn state — pending TTS text, the synthesis/order queue, interruption,
-and hub flush — is keyed by participant id, so concurrent participants on one
-hub never share a buffer or misroute each other's audio; a departing
-participant's transport sender is released on leave. NAT applications create
-the callable with `xr_ai_nat.adapters.as_voice_handler`; transcript recording
-is a separate observer rather than a side effect of function invocation.
+await runtime.publish(
+    VOICE_OUTPUT_TOPIC,
+    VoiceOutput(text="Move your hand away.", interrupt=True),
+    participant_id="alice",
+    source="safety-monitor",
+)
+```
+
+Incremental producers reuse a `response_id`, set `final=False` while more
+chunks remain, and end with `final=True`. Aggregation is private to voice/TTS,
+and producer identity is part of the response key so independent agents cannot
+merge output accidentally. Output is serialized per participant; urgent output
+sets `interrupt=True` to replace active and queued speech. Producers may copy
+the originating query's `timestamp_us` into `VoiceOutput` so the TTS response
+preserves the input timestamp.
+
+`VoiceSession` is the media engine owned by `VoiceAgent`. It manages
+readiness, hub transport, VAD/STT, voice gating, TTS, signals, and cleanup. It
+does not execute application handlers. Typed-text ingress is also internal to
+`VoiceAgent`.
 
 When wake phrases and the listening chime are enabled, the VAD/STT stage probes
 the opening audio while the user is still speaking. A recognized phrase emits

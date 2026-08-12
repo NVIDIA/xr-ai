@@ -109,34 +109,6 @@ observer below: it stores each turn under the role-scoped source
 `{participant_id}:{role}`, exactly the pair `recall_conversation` reads. Without
 it wired up, recall is empty.
 
-## Voice adapters
-
-Install `xr-ai-nat[voice]` to drive a native function from a voice session. Both
-adapters are exported from `xr_ai_nat.adapters` (resolved lazily, so importing
-that package without the extra still works):
-
-```python
-from xr_ai_nat.adapters import as_voice_handler, record_voice_transcripts
-
-handler = as_voice_handler(
-    some_function,
-    request=lambda query: MyRequest(text=query.text),
-    response=str,
-)
-observer = record_voice_transcripts(add_transcript)
-```
-
-- `as_voice_handler(function, *, request, response, streaming=False)` wraps a
-  native function as a voice handler: it maps a `VoiceQuery` onto the function's
-  request model and maps the result back to text. With `streaming=True` it
-  forwards the function's `astream` output chunk by chunk for incremental
-  speech.
-- `record_voice_transcripts(add_transcript)` returns a turn observer that
-  persists each completed turn under `{participant_id}:{role}`, feeding
-  `recall_conversation` above. Recording is an observer rather than a side
-  effect of invoking a function, so a session records turns even when the agent
-  did not handle them.
-
 ## Vision
 
 Install `xr-ai-nat[vision]` to use the `xr_vision_tools` function group. The
