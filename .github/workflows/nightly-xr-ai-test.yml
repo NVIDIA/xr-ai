@@ -120,9 +120,10 @@ jobs:
         # budget downloading the new Cosmos3-capable runtime.
         run: docker pull nvcr.io/nvidia/vllm:26.07-py3
 
-      - name: Purge leftover xr-ai-vllm containers (pre)
-        # Containers are named `xr-ai-vllm-*` by the vLLM launcher. On a
-        # persistent self-hosted runner these can survive a previous run
+      - name: Purge leftover xr-ai containers (pre)
+        # Containers are named `xr-ai-vllm-*` by the vLLM launcher and
+        # `xr-ai-nim-*` by nim_server. On a persistent self-hosted runner
+        # these can survive a previous run
         # — most commonly the `test_nemotron3_nano_persistent` test,
         # which intentionally leaves a long-lived vLLM container — and
         # squat on GPU memory before this run's first test even starts.
