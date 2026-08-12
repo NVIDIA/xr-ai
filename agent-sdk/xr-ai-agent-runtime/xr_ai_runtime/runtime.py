@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Agent resource lifetimes, background work, and typed event routing."""
+"""Runtime lifecycle, background work, and typed event routing."""
 
 from __future__ import annotations
 
@@ -10,20 +10,20 @@ import inspect
 import time
 import uuid
 from builtins import BaseExceptionGroup
-from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterable
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeAlias, TypeVar, cast, get_type_hints
+from typing import Any, TypeAlias, TypeVar, cast, get_type_hints
 
 from pydantic import BaseModel
-from xr_ai_tools import AsyncTool, Tool
+
+from .agent import Agent
+from .events import MessageMetadata, Topic
 
 MessageT = TypeVar("MessageT", bound=BaseModel)
 TaskResultT = TypeVar("TaskResultT")
 AgentT = TypeVar("AgentT", bound="Agent")
 
-AgentTool: TypeAlias = Tool[Any, Any] | AsyncTool[Any, Any]
-BoundSubscriber: TypeAlias = Callable[[BaseModel, "AgentContext"], Awaitable[None]]
+BoundSubscriber: TypeAlias = Callable[[BaseModel, "RuntimeContext"], Awaitable[None]]
 
 
 class RuntimeClosedError(RuntimeError):
@@ -32,77 +32,6 @@ class RuntimeClosedError(RuntimeError):
 
 class RuntimeFailedError(RuntimeError):
     """Raised when runtime-owned background work has failed."""
-
-
-@dataclass(frozen=True, slots=True)
-class Topic(Generic[MessageT]):
-    """A stable publish/subscribe name paired with its payload model."""
-
-    name: str
-    message_type: type[MessageT]
-
-    def __post_init__(self) -> None:
-        if not self.name.strip():
-            raise ValueError("topic name must not be empty")
-        if not issubclass(self.message_type, BaseModel):
-            raise TypeError("topic messages must be Pydantic models")
-
-    def validate(self, message: MessageT | dict[str, Any]) -> MessageT:
-        """Validate a message before delivery."""
-
-        return self.message_type.model_validate(message)
-
-
-@dataclass(frozen=True, slots=True)
-class MessageMetadata:
-    """Routing and trace context for one published event."""
-
-    message_id: str
-    correlation_id: str
-    participant_id: str
-    source: str
-    parent_message_id: str | None
-    timestamp_us: int
-
-
-def subscribe(
-    topic: Topic[MessageT],
-) -> Callable[[Callable[..., Awaitable[None]]], Callable[..., Awaitable[None]]]:
-    """Register an agent method as a typed topic subscriber."""
-
-    def decorate(method: Callable[..., Awaitable[None]]) -> Callable[..., Awaitable[None]]:
-        topics = (*getattr(method, "__xr_ai_topics__", ()), topic)
-        setattr(method, "__xr_ai_topics__", topics)
-        return method
-
-    return decorate
-
-
-class Agent:
-    """A runtime-managed resource scope that exposes ordinary native tools."""
-
-    def __init__(self, tools: Iterable[AgentTool] = ()) -> None:
-        owned = tuple(tools)
-        names: set[str] = set()
-        for tool in owned:
-            if not isinstance(tool, (Tool, AsyncTool)):
-                raise TypeError("agents may expose only Tool or AsyncTool instances")
-            if tool.name in names:
-                raise ValueError(f"duplicate agent tool name: {tool.name}")
-            names.add(tool.name)
-        self._tools = owned
-
-    @property
-    def tools(self) -> tuple[AgentTool, ...]:
-        """Return the existing native tools exposed by this agent."""
-
-        return self._tools
-
-    @asynccontextmanager
-    async def lifespan(self, _ctx: AgentContext) -> AsyncIterator[None]:
-        """Optionally acquire resources for this agent's runtime lifetime."""
-
-        yield
 
 
 @dataclass(slots=True)
@@ -118,7 +47,7 @@ class _AgentState:
     entered: bool = False
 
 
-class AgentContext:
+class RuntimeContext:
     """Runtime operations available to an agent lifecycle or subscriber."""
 
     __slots__ = ("_runtime", "_state", "_metadata")
@@ -257,7 +186,7 @@ class AgentRuntime:
         self._running = True
         try:
             for state in self._agents.values():
-                state.lifetime = state.agent.lifespan(AgentContext(self, state, None))
+                state.lifetime = state.agent.lifespan(RuntimeContext(self, state, None))
                 await state.lifetime.__aenter__()
                 state.entered = True
         except (asyncio.CancelledError, Exception):
@@ -366,7 +295,7 @@ class AgentRuntime:
         message: BaseModel,
         metadata: MessageMetadata,
     ) -> None:
-        await method(message, AgentContext(self, state, metadata))
+        await method(message, RuntimeContext(self, state, metadata))
 
     def _discover_subscriptions(
         self,
@@ -444,13 +373,11 @@ class AgentRuntime:
             parent_message_id=parent_message_id,
             timestamp_us=time.time_ns() // 1_000,
         )
+
+
 __all__ = [
-    "Agent",
-    "AgentContext",
     "AgentRuntime",
-    "MessageMetadata",
     "RuntimeClosedError",
+    "RuntimeContext",
     "RuntimeFailedError",
-    "Topic",
-    "subscribe",
 ]

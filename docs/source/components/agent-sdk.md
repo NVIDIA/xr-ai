@@ -51,7 +51,7 @@ path.
 assigns unique model-visible names when tools from multiple agents are combined;
 the agents and underlying tools remain unchanged. Participant identity needed
 by direct execution belongs in the tool's request schema; participant and
-correlation metadata on `AgentContext` applies to pub/sub. The runtime cancels
+correlation metadata on `RuntimeContext` applies to pub/sub. The runtime cancels
 work created through `ctx.start_task()`, while external callers must finish
 direct tool calls before the agent's runtime scope exits.
 

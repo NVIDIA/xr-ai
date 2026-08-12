@@ -3,23 +3,16 @@
 
 """Typed in-process runtime for composable XR AI agents."""
 
-from .runtime import (
-    Agent,
-    AgentContext,
-    AgentRuntime,
-    MessageMetadata,
-    RuntimeClosedError,
-    RuntimeFailedError,
-    Topic,
-    subscribe,
-)
+from .agent import Agent
+from .events import MessageMetadata, Topic, subscribe
+from .runtime import AgentRuntime, RuntimeClosedError, RuntimeContext, RuntimeFailedError
 
 __all__ = [
     "Agent",
-    "AgentContext",
     "AgentRuntime",
     "MessageMetadata",
     "RuntimeClosedError",
+    "RuntimeContext",
     "RuntimeFailedError",
     "Topic",
     "subscribe",

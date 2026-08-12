@@ -16,9 +16,9 @@ from pydantic import BaseModel
 from xr_ai_models import ChatMessage, ToolCall
 from xr_ai_runtime import (
     Agent,
-    AgentContext,
     AgentRuntime,
     RuntimeClosedError,
+    RuntimeContext,
     RuntimeFailedError,
     Topic,
     subscribe,
@@ -170,7 +170,7 @@ class _VoiceOutput(Agent):
         self.received: list[tuple[str, str, list[str]]] = []
 
     @subscribe(OBSERVATIONS)
-    async def observe(self, event: _Observation, ctx: AgentContext) -> None:
+    async def observe(self, event: _Observation, ctx: RuntimeContext) -> None:
         self.received.append(
             (ctx.metadata.participant_id, ctx.metadata.source, list(event.labels))
         )
@@ -207,7 +207,7 @@ class _FailingSubscriber(Agent):
         self.completed = False
 
     @subscribe(OBSERVATIONS)
-    async def observe(self, _event: _Observation, _ctx: AgentContext) -> None:
+    async def observe(self, _event: _Observation, _ctx: RuntimeContext) -> None:
         await asyncio.sleep(0)
         self.completed = True
         if self.failure is not None:
@@ -241,7 +241,7 @@ class _EventForwarder(Agent):
         self.input_message_id = ""
 
     @subscribe(OBSERVATIONS)
-    async def forward(self, _event: _Observation, ctx: AgentContext) -> None:
+    async def forward(self, _event: _Observation, ctx: RuntimeContext) -> None:
         self.input_message_id = ctx.metadata.message_id
         await ctx.publish(VOICE_OUTPUT, _Speak(text="Seen."))
 
@@ -252,7 +252,7 @@ class _Speaker(Agent):
         self.metadata = None
 
     @subscribe(VOICE_OUTPUT)
-    async def speak(self, _event: _Speak, ctx: AgentContext) -> None:
+    async def speak(self, _event: _Speak, ctx: RuntimeContext) -> None:
         self.metadata = ctx.metadata
 
 
@@ -310,7 +310,7 @@ class _SerializedAgent(Agent):
         return _Counted(count=self.count)
 
     @subscribe(OBSERVATIONS)
-    async def observe(self, _event: _Observation, _ctx: AgentContext) -> None:
+    async def observe(self, _event: _Observation, _ctx: RuntimeContext) -> None:
         await self._mutate(1)
 
 
@@ -346,7 +346,7 @@ class _BackgroundAgent(Agent):
         self.stopped = asyncio.Event()
 
     @asynccontextmanager
-    async def lifespan(self, ctx: AgentContext) -> AsyncIterator[None]:
+    async def lifespan(self, ctx: RuntimeContext) -> AsyncIterator[None]:
         ctx.start_task(self._run(), name="background-agent")
         yield
 
@@ -377,7 +377,7 @@ class _FailingBackgroundAgent(Agent):
         self.companion_stopped = asyncio.Event()
 
     @asynccontextmanager
-    async def lifespan(self, ctx: AgentContext) -> AsyncIterator[None]:
+    async def lifespan(self, ctx: RuntimeContext) -> AsyncIterator[None]:
         ctx.start_task(self._fail(), name="failing-background")
         ctx.start_task(self._companion(), name="background-companion")
         yield
@@ -429,14 +429,14 @@ class _SlowSubscriber(Agent):
         self.cleanup_saw_stopped_delivery = False
 
     @asynccontextmanager
-    async def lifespan(self, _ctx: AgentContext) -> AsyncIterator[None]:
+    async def lifespan(self, _ctx: RuntimeContext) -> AsyncIterator[None]:
         try:
             yield
         finally:
             self.cleanup_saw_stopped_delivery = self.stopped.is_set()
 
     @subscribe(OBSERVATIONS)
-    async def observe(self, _event: _Observation, _ctx: AgentContext) -> None:
+    async def observe(self, _event: _Observation, _ctx: RuntimeContext) -> None:
         self.started.set()
         try:
             await asyncio.Event().wait()
@@ -478,7 +478,7 @@ class _LifecycleAgent(Agent):
         self.exits = 0
 
     @asynccontextmanager
-    async def lifespan(self, _ctx: AgentContext) -> AsyncIterator[None]:
+    async def lifespan(self, _ctx: RuntimeContext) -> AsyncIterator[None]:
         self.entries += 1
         if self.enter_error is not None:
             raise self.enter_error
@@ -544,11 +544,11 @@ class _PartiallyInvalidSubscriber(Agent):
         super().__init__()
 
     @subscribe(TRANSACTIONAL_ECHO)
-    async def a_valid(self, _message: _Echo, _ctx: AgentContext) -> None:
+    async def a_valid(self, _message: _Echo, _ctx: RuntimeContext) -> None:
         return None
 
     @subscribe(TRANSACTIONAL_ECHO)
-    async def z_invalid(self, _message: str, _ctx: AgentContext) -> None:
+    async def z_invalid(self, _message: str, _ctx: RuntimeContext) -> None:
         return None
 
 
@@ -557,7 +557,7 @@ class _TransactionalSubscriber(Agent):
         super().__init__()
 
     @subscribe(TRANSACTIONAL_COUNT)
-    async def receive(self, _message: _Count, _ctx: AgentContext) -> None:
+    async def receive(self, _message: _Count, _ctx: RuntimeContext) -> None:
         return None
 
 
