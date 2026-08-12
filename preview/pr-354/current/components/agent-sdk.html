@@ -386,9 +386,9 @@ long-running agents.</p></li>
 <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP clients, driven by a
 structured model deployment profile. Swapping a backend is a configuration
 edit, not a code edit.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness,
-hub transport, voice gating, streaming responses, signals, and cleanup while
-applications provide a <code class="docutils literal notranslate"><span class="pre">VoiceHandler</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes
+<code class="docutils literal notranslate"><span class="pre">voice.input</span></code> and consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>; its <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness,
+hub transport, voice gating, streaming responses, signals, and cleanup.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat surface retained for unmigrated
 consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>. Its <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> helper exposes
 the same IPC-start request-readiness boundary as <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>.</p></li>
@@ -683,10 +683,9 @@ speech and typed text to <code class="docutils literal notranslate"><span class=
 <p>The default hub transport is opened only after readiness probes succeed; failed
 readiness closes the session’s model clients without opening hub sockets. The
 ready file is touched only after the input transport enters its hub IPC receive
-loop. NAT applications that do not use the agent runtime create handlers with
-<code class="docutils literal notranslate"><span class="pre">xr_ai_nat.adapters.as_voice_handler</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant
-routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> forwards
+loop. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant routing, cancels superseded or
+interrupted output, installs signal handlers, and closes its transport and
+model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> forwards
 <code class="docutils literal notranslate"><span class="pre">on_interrupted(pid)</span></code> so applications can cancel participant work; a pid-less
 interruption passes <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </section>
