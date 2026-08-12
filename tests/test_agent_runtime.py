@@ -331,7 +331,7 @@ async def test_agent_can_serialize_tools_and_subscriptions_internally() -> None:
         assert agent.max_active == 1
         agent._release.set()
         assert await tool_call == _Counted(count=2)
-        await publication
+        assert await publication is None
 
     assert agent.count == 3
     assert agent.max_active == 1
@@ -412,17 +412,13 @@ def test_agent_rejects_duplicate_or_non_tool_members() -> None:
         Agent((object(),))  # type: ignore[arg-type]
 
 
-class _MissingSuperAgent(Agent):
-    def __init__(self) -> None:
-        pass
-
-
 async def test_runtime_rejects_invalid_registration_and_publication() -> None:
     runtime = AgentRuntime()
     runtime.register("agent", Agent())
+    uninitialized_agent = Agent.__new__(Agent)
 
     with pytest.raises(TypeError, match=r"super\(\)"):
-        AgentRuntime().register("invalid", _MissingSuperAgent())
+        AgentRuntime().register("invalid", uninitialized_agent)
     with pytest.raises(ValueError, match="already registered"):
         runtime.register("agent", Agent())
     with pytest.raises(RuntimeClosedError):
