@@ -125,9 +125,10 @@ mechanically:
 
 **Worker code rules** (apply to every sample worker):
 
-- Import IPC types from `xr_ai_hub`; native agent functions come from
-  `xr_ai_nat`, model clients from `xr_ai_models`, and the native voice runtime
-  from `xr_ai_voice`.
+- Import IPC types from `xr_ai_hub`; new and migrated native agent tools come
+  from `xr_ai_tools`, model clients from `xr_ai_models`, and the native voice
+  runtime from `xr_ai_voice`. Use `xr_ai_nat` only for compatibility surfaces
+  that have not migrated yet.
 - Raw IPC workers keep `_HUB_PUB` / `_HUB_PUSH` as module-level constants,
   wire `SIGINT` and `SIGTERM` to a synchronous `shutdown()`, cancel asyncio
   tasks first, then call `ep.stop()` + `ep.close()`. Voice workers delegate
@@ -162,7 +163,8 @@ Reference implementation: `agent-samples/simple-vlm-example/`.
 Samples must **reuse** the shared building blocks rather than re-implement
 them. They split across SDK packages by what they depend on:
 
-Typed agent functions live in `xr-ai-nat`. `SpatialMathFunctionsConfig`
+New and migrated typed agent tools live in `xr-ai-tools`; `xr-ai-nat` retains
+compatibility function groups while they migrate. `SpatialMathFunctionsConfig`
 registers deterministic coordinate operations that receive an explicit spatial
 frame; tracking and process boundaries remain outside the math functions.
 `TextMemoryFunctionsConfig` provides persistent timestamped text without a
@@ -205,7 +207,8 @@ behavior comes from config alone.
 ### Scope decision and named follow-ups
 
 The function/pipeline boundary is explicit: `xr-ai-pipecat` stays "voice
-pipeline plumbing", while reusable typed agent functions live in `xr-ai-nat`.
+pipeline plumbing", while new and migrated reusable typed agent tools live in
+`xr-ai-tools`.
 Application-specific capabilities stay with their application;
 `xr-ai-pipecat` must not become a catch-all.
 Planned structural follow-ups (own PRs):

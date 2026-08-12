@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 
@@ -50,6 +51,48 @@ async def test_async_tool_validates_and_yields_typed_chunks() -> None:
     chunks = [chunk async for chunk in tool.stream({"left": 2, "right": 3})]
 
     assert chunks == [AddResult(total=2), AddResult(total=5)]
+
+
+async def test_async_tool_closes_an_abandoned_stream_in_its_relay_context() -> None:
+    closed = asyncio.Event()
+    blocked = asyncio.Event()
+
+    async def blocking_stream(request: AddRequest) -> AsyncIterator[AddResult]:
+        try:
+            yield AddResult(total=request.left)
+            await blocked.wait()
+        finally:
+            closed.set()
+
+    tool = AsyncTool(
+        "stream_add",
+        "Stream a running total.",
+        AddRequest,
+        AddResult,
+        blocking_stream,
+    )
+    parent_scope = nemo_relay.scope.get_handle()
+    consumer_scope_unchanged = []
+
+    async def abandon_stream() -> None:
+        consumer_scope = nemo_relay.scope.get_handle()
+        try:
+            async for chunk in tool.stream({"left": 2, "right": 3}):
+                assert chunk == AddResult(total=2)
+                raise RuntimeError("consumer failed")
+        except RuntimeError:
+            consumer_scope_unchanged.append(
+                nemo_relay.scope.get_handle().uuid == consumer_scope.uuid
+            )
+
+    await asyncio.create_task(
+        abandon_stream(),
+        context=nemo_relay.fork_asyncio_context(),
+    )
+    await asyncio.wait_for(closed.wait(), timeout=1.0)
+
+    assert consumer_scope_unchanged == [True]
+    assert nemo_relay.scope.get_handle().uuid == parent_scope.uuid
 
 
 def test_tool_definitions_adapt_native_tools_for_model_services() -> None:
