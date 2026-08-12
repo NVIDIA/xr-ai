@@ -230,12 +230,15 @@ changing provider input. The split keeps token streaming out of ordinary
 agentic tool calls without reimplementing a partial streaming-tool lifecycle.
 
 `xr_ai_nat.events.EventDispatcher` supplies application routing without adding a
-runtime layer. Topics carry typed, participant-scoped envelopes; a subscription
-maps its envelope into a registered finite `Tool` request or an explicit
-application-owned response stream. The voice adapter and `PeriodicEventSource`
-are merely producers, so foreground voice/text turns and autonomous background
-schedules use the same routing mechanism while Relay owns the actual tool and
-model lifecycles.
+model or media runtime. Typed, participant-scoped named streams fan out into
+independent ordered mailboxes. Long-running applications may subscribe to
+several topics and publish observations, context updates, user output, or any
+other typed event. `ToolWorker` adapts a mailbox to a bounded Relay-managed
+`Tool` and publishes its result; `as_agent_tool(...)` puts any `AgentRunner` on
+that same path. `request(...)` adds correlation-based request/reply without
+bypassing pub/sub. Voice input is an ordinary publisher, and a long-running
+`voice.output` subscriber owns TTS delivery.
+
 ## xr-ai-nat model bridge
 
 Unmigrated workflows install `xr-ai-nat[agents]` when they use NAT's built-in

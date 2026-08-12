@@ -379,10 +379,10 @@
 <p>The conventions every change to xr-ai must satisfy. The authoritative
 sources live at the repository root and override anything summarized here:</p>
 <ul class="simple">
-<li><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<li><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 — how to build, test, and submit changes, plus the PR process and the
 Developer Certificate of Origin (DCO) sign-off requirement.</p></li>
-<li><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> — despite
+<li><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> — despite
 the name (which follows the <a class="reference external" href="https://agents.md">agents.md</a> convention), this
 is the working-conventions doc for <strong>both human developers and AI
 assistants</strong>: architecture, the process model, sample layout, license-header
@@ -433,13 +433,13 @@ relevant sub-repository docs), <code class="docutils literal notranslate"><span 
 commit</strong> as the code change. This applies to new packages, changed entry
 points, new quickstart flows, renamed commands, and new configuration files.</p>
 <p>Record significant new decisions in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/docs/changelog.md"><code class="docutils literal notranslate"><span class="pre">docs/changelog.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/docs/changelog.md"><code class="docutils literal notranslate"><span class="pre">docs/changelog.md</span></code></a>
 (reverse chronological). Architectural rationale and historical context belong
 in the changelog, not in source comments.</p>
 </section>
 <section id="dependency-discipline">
 <h2>Dependency discipline<a class="headerlink" href="#dependency-discipline" title="Link to this heading">#</a></h2>
-<p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+<p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
 at the repository root is the authoritative dependency map. <strong>Any change to a
 <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> must update <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> in the same commit</strong> — a change
 is not complete until <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> reflects it. Several hard rules follow
@@ -460,7 +460,7 @@ choices and edge cases.</p>
 </pre></div>
 </div>
 <p>The Apache-2.0 license text lives in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/LICENSE"><code class="docutils literal notranslate"><span class="pre">LICENSE</span></code></a>. REUSE does not
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/LICENSE"><code class="docutils literal notranslate"><span class="pre">LICENSE</span></code></a>. REUSE does not
 auto-update the copyright year when you touch a file; include the current year
 when adding or editing headers.</p>
 </section>
@@ -508,13 +508,13 @@ wrapper files (<code class="docutils literal notranslate"><span class="pre">grad
 <section id="enforcement">
 <h3>Enforcement<a class="headerlink" href="#enforcement" title="Link to this heading">#</a></h3>
 <p>Headers are enforced locally by
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/.github/scripts/check_spdx_headers.py"><code class="docutils literal notranslate"><span class="pre">.github/scripts/check_spdx_headers.py</span></code></a>,
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/.github/scripts/check_spdx_headers.py"><code class="docutils literal notranslate"><span class="pre">.github/scripts/check_spdx_headers.py</span></code></a>,
 wired into
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/.pre-commit-config.yaml"><code class="docutils literal notranslate"><span class="pre">.pre-commit-config.yaml</span></code></a>.
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/.pre-commit-config.yaml"><code class="docutils literal notranslate"><span class="pre">.pre-commit-config.yaml</span></code></a>.
 Run <code class="docutils literal notranslate"><span class="pre">pre-commit</span> <span class="pre">install</span></code> once after cloning to enable it;
 <code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">.github/scripts/check_spdx_headers.py</span></code> audits the whole tree at any
 time. The same check runs in CI as a backstop:
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/.github/workflows/spdx.yml"><code class="docutils literal notranslate"><span class="pre">.github/workflows/spdx.yml</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/.github/workflows/spdx.yml"><code class="docutils literal notranslate"><span class="pre">.github/workflows/spdx.yml</span></code></a>.</p>
 </section>
 </section>
 <section id="pull-requests">
@@ -522,7 +522,7 @@ time. The same check runs in CI as a backstop:
 <p>Create a feature branch, keep code and docs in the same commit, ensure builds
 and tests pass locally and in CI, and describe motivation, changes, and testing
 in the PR. All commits must be signed off (<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">commit</span> <span class="pre">-s</span></code>) per the DCO. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/51131e5c59a807b2ccf27c9ff3abf656560228d8/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/2107dd87f929a4320bb608012a6a4c0bc58ddbe4/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
 for the full PR process and the DCO text.</p>
 </section>
 </section>

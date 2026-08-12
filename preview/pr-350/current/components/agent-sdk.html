@@ -615,12 +615,14 @@ scope. Both paths replace the inline camera frame in Relay events without
 changing provider input. The split keeps token streaming out of ordinary
 agentic tool calls without reimplementing a partial streaming-tool lifecycle.</p>
 <p><code class="docutils literal notranslate"><span class="pre">xr_ai_nat.events.EventDispatcher</span></code> supplies application routing without adding a
-runtime layer. Topics carry typed, participant-scoped envelopes; a subscription
-maps its envelope into a registered finite <code class="docutils literal notranslate"><span class="pre">Tool</span></code> request or an explicit
-application-owned response stream. The voice adapter and <code class="docutils literal notranslate"><span class="pre">PeriodicEventSource</span></code>
-are merely producers, so foreground voice/text turns and autonomous background
-schedules use the same routing mechanism while Relay owns the actual tool and
-model lifecycles.</p>
+model or media runtime. Typed, participant-scoped named streams fan out into
+independent ordered mailboxes. Long-running applications may subscribe to
+several topics and publish observations, context updates, user output, or any
+other typed event. <code class="docutils literal notranslate"><span class="pre">ToolWorker</span></code> adapts a mailbox to a bounded Relay-managed
+<code class="docutils literal notranslate"><span class="pre">Tool</span></code> and publishes its result; <code class="docutils literal notranslate"><span class="pre">as_agent_tool(...)</span></code> puts any <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> on
+that same path. <code class="docutils literal notranslate"><span class="pre">request(...)</span></code> adds correlation-based request/reply without
+bypassing pub/sub. Voice input is an ordinary publisher, and a long-running
+<code class="docutils literal notranslate"><span class="pre">voice.output</span></code> subscriber owns TTS delivery.</p>
 </section>
 <section id="xr-ai-nat-model-bridge">
 <h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>
