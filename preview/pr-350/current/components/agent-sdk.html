@@ -541,10 +541,13 @@ legacy flat attributes remain available as read-only compatibility aliases.</p>
     <span class="n">capabilities</span><span class="p">:</span> <span class="n">Capabilities</span>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">ask_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">question</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
                         <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
+                        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">ask_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video</span><span class="p">,</span> <span class="n">question</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
                         <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
+                        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span> <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">question</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+               <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+               <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">health</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">STTService</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
@@ -604,18 +607,20 @@ does not add an HTTP client, a Hub transport, or an implicit conversation store.
 Applications use <code class="docutils literal notranslate"><span class="pre">as_agent_tool(...)</span></code> to expose any <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> as a
 registered tool; foreground selection, workflow state, and background work stay
 explicit in application code.</p>
-<p><code class="docutils literal notranslate"><span class="pre">StreamingTool</span></code> keeps one Relay tool lifecycle open while a capability yields
-typed response chunks. <code class="docutils literal notranslate"><span class="pre">xr_ai_nat.live_vision.LiveVisionTool</span></code> is one such tool:
-it acquires a participant-scoped hub frame and calls its injected <code class="docutils literal notranslate"><span class="pre">VLMService</span></code>
-through a nested Relay LLM stream. Vision is therefore not a runtime special
-case or a model-control path; it is a capability implementation behind the same
-tool interface used by deterministic tools and agent tools.</p>
+<p><code class="docutils literal notranslate"><span class="pre">xr_ai_nat.live_vision.LiveVisionTool</span></code> acquires a participant-scoped hub frame
+and returns one complete observation through Relay’s finite tool and LLM
+boundaries. Direct voice can wrap the same tool with <code class="docutils literal notranslate"><span class="pre">LiveVisionResponder</span></code>,
+whose provider response uses Relay’s managed streaming LLM path under an Agent
+scope. Both paths replace the inline camera frame in Relay events without
+changing provider input. The split keeps token streaming out of ordinary
+agentic tool calls without reimplementing a partial streaming-tool lifecycle.</p>
 <p><code class="docutils literal notranslate"><span class="pre">xr_ai_nat.events.EventDispatcher</span></code> supplies application routing without adding a
 runtime layer. Topics carry typed, participant-scoped envelopes; a subscription
-maps its envelope into a registered <code class="docutils literal notranslate"><span class="pre">Tool</span></code> or <code class="docutils literal notranslate"><span class="pre">StreamingTool</span></code> request. The voice
-adapter and <code class="docutils literal notranslate"><span class="pre">PeriodicEventSource</span></code> are merely producers, so foreground voice/text
-turns and autonomous background schedules select the same agent tools and share
-the same Relay lifecycles.</p>
+maps its envelope into a registered finite <code class="docutils literal notranslate"><span class="pre">Tool</span></code> request or an explicit
+application-owned response stream. The voice adapter and <code class="docutils literal notranslate"><span class="pre">PeriodicEventSource</span></code>
+are merely producers, so foreground voice/text turns and autonomous background
+schedules use the same routing mechanism while Relay owns the actual tool and
+model lifecycles.</p>
 </section>
 <section id="xr-ai-nat-model-bridge">
 <h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>
