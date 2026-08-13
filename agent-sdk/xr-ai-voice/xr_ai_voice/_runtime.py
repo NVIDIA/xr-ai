@@ -336,7 +336,7 @@ class VoiceAgent(Agent):
                 if self._streams.get(key) is stream:
                     self._finish_response_trace(key, status="completed")
                     await stream.aclose()
-                    await stream.aclose()
+
     async def _publish_input(self, query: VoiceQuery) -> None:
         runtime = self._running_runtime()
         await runtime.publish(
