@@ -15,7 +15,6 @@ its own environment and README.
 | [`xr-ai-runtime`](xr-ai-runtime/) | `xr_ai_runtime` | `xr-ai-agent-runtime` | Agent registration and typed publish/fan-out |
 | [`xr-ai-tools`](xr-ai-tools/) | `xr_ai_tools` | `xr-ai-tools` | Relay-managed tools and model tool-call helpers |
 | [`xr-ai-voice`](xr-ai-voice/) | `xr_ai_voice` | `xr-ai-voice` | Voice agent, session, transport, and pipeline |
-| [`xr-ai-pipecat`](xr-ai-pipecat/) | `xr_ai_pipecat` | `xr-ai-pipecat` | Direct Pipecat compatibility API |
 
 Start with `xr_ai_hub` for raw media/data IPC, or compose `xr_ai_runtime`,
 `xr_ai_tools`, `xr_ai_models`, and `xr_ai_voice` for a tool-using voice agent.

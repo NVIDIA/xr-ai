@@ -50,31 +50,7 @@ xr-ai-agent-runtime  (agent-sdk/xr-ai-runtime/)
 xr-ai-hub-client  (agent-sdk/xr-ai-hub/)
     └── pyzmq >=27.0
     └── msgpack >=1.0
-    Ships the canonical ``xr_ai_hub`` package plus a deprecated ``xr_ai_agent``
-    forwarding alias (warns on import) for the former ``xr-ai-agent`` name.
-
-xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
-    └── xr-ai-hub-client     [editable: ../xr-ai-hub]
-    └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-models    [editable: ../xr-ai-models]
-    └── xr-ai-vad       [editable: ../../utils/xr-ai-vad]
-    └── xr-ai-voicegate [editable: ../../utils/xr-ai-voicegate]
-    └── pipecat-ai >=1.3
-    └── nltk !=3.10.1       (3.10.1 rejects deps in in-project venvs)
-    └── numpy >=1.24
-    └── scipy >=1.11
-    └── httpx >=0.27
-    └── fastmcp >=2.0
-    Unified Pipecat voice pipeline. Owns the transport bridge to
-    ProcessorEndpoint (ZMQ IPC) plus the library FrameProcessors —
-    VadSttProcessor, VoiceGateProcessor, BrainProcessor, StreamingTtsProcessor —
-    composed by ``make_voice_pipeline``. Resamples hub float32 audio →
-    16 kHz int16 for STT, converts TTS int16 PCM back to float32 AudioChunks
-    for return. SttClient / TtsClient are thin wrappers around xr-ai-models'
-    OpenAICompatSTT / OpenAICompatTTS; httpx is retained for http_probe()
-    readiness checks. ``run_voice_pipeline`` releases a launcher's ready-file
-    callback only after the input transport starts its hub IPC receive loop.
-    Not a dep of xr-ai-hub-client itself — import only in workers that use Pipecat.
+    Ships the canonical ``xr_ai_hub`` package.
 
 xr-ai-voice  (agent-sdk/xr-ai-voice/)
     └── nemo-relay >=0.7.2,<0.8
@@ -250,7 +226,6 @@ xr-ai-tests  (tests/)
     └── xr-ai-tools[live-vision,services] [editable: ../agent-sdk/xr-ai-tools]
     └── xr-rag-service [editable: ../services/rag-service]
     └── xr-video-memory-service [editable: ../services/video-memory-service]
-    └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
     └── xr-media-hub            [editable: ../services/xr-media-hub]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
     └── xr-ai-launcher          [editable: ../utils/xr-ai-launcher]
@@ -464,8 +439,7 @@ sample-named topics. `SimpleVlmAgent` handles cancellation and frame cleanup
 inside its own subscriber methods. Voice-gate
 behavior (magic phrases, follow-up grace, listening chime, stop acknowledgement),
 VAD/STT, and sentence-batched TTS remain provided by the shared voice runtime.
-The sample has no direct `xr-ai-pipecat`, MCP, or legacy agent-framework
-dependency.
+The sample has no MCP or legacy agent-framework dependency.
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded

@@ -69,6 +69,14 @@ _SAMPLE_WEB_CLIENTS = {
     "simple-vlm-example": _ROOT / "client-samples" / "web",
     "xr-render-demo": _ROOT / "client-samples" / "web-xr",
 }
+_RETIRED_AGENT_SDK_PATHS = (
+    "agent-sdk/xr-ai-pipecat",
+    "agent-sdk/xr-ai-hub/xr_ai_agent",
+    "agent-sdk/xr-ai-models/xr_ai_models/config.py",
+    "agent-sdk/xr-ai-models/xr_ai_models/factory.py",
+    "agent-sdk/xr-ai-models/xr_ai_models/openai_compat.py",
+    "agent-sdk/xr-ai-models/xr_ai_models/protocols.py",
+)
 
 
 def _tracked_paths() -> list[Path]:
@@ -115,6 +123,11 @@ def _model_cache_default(path: Path) -> str:
 
     assert len(defaults) == 1, f"expected one model_cache default in {path}"
     return defaults[0]
+
+
+def test_retired_agent_sdk_surfaces_are_absent() -> None:
+    for relative in _RETIRED_AGENT_SDK_PATHS:
+        assert not (_ROOT / relative).exists(), relative
 
 
 def test_reusable_services_are_direct_children() -> None:

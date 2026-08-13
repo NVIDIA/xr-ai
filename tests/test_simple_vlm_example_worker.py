@@ -164,7 +164,6 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert "xr-ai-tools[live-vision]" in dependencies
     assert all("[vision" not in dependency and "[voice" not in dependency for dependency in dependencies)
     assert "xr-ai-voice" in dependencies
-    assert "xr-ai-pipecat" not in dependencies
     assert all("mcp" not in dependency.lower() for dependency in dependencies)
     assert project["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
         "simple_vlm_example_worker"

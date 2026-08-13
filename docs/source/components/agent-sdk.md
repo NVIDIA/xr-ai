@@ -16,7 +16,6 @@ installation.
 | `xr-ai-runtime` | `xr_ai_runtime` | Agent registration and typed participant-scoped fan-out |
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
 | `xr-ai-voice` | `xr_ai_voice` | Voice agent, session, transport, and pipeline |
-| `xr-ai-pipecat` | `xr_ai_pipecat` | Compatibility API for direct Pipecat composition |
 
 See each package's README under
 [`agent-sdk/`](https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk) for its
@@ -158,9 +157,3 @@ Video pixels are pulled on demand with `request_frame()` or
 `LiveFrameSource`; frame signals do not copy pixels. Readiness participation
 is opt-in and scoped to subscribed participants. The hub aggregates each
 responsible agent's status and gates readiness on confirmed subscriptions.
-
-## Direct Pipecat compatibility
-
-`xr_ai_pipecat` exposes `make_voice_pipeline`, `run_voice_pipeline`, and
-processor-level composition for consumers that construct Pipecat pipelines
-directly. Current samples use `xr_ai_voice.VoiceSession`.

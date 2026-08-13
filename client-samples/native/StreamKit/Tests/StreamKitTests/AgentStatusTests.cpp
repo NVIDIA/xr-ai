@@ -23,7 +23,7 @@ int main() {
     using streamkit::test::Expect;
     using streamkit::test::ExpectEq;
 
-    // Canonical payload shipped by xr-ai-pipecat's set_status:
+    // Canonical payload shipped by xr-ai-hub's set_status:
     {
         auto r = ExtractAgentStatus(bytes_of(R"({"status": "idle"})"));
         Expect(r.has_value());

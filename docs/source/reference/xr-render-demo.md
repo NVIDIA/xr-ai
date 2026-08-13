@@ -179,9 +179,8 @@ VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
   → VoiceAgent → private VoiceSession TTS → hub return audio
 ```
 
-The render worker imports no `xr-ai-pipecat` or `pipecat-ai` API. Pipecat is
-an internal implementation detail of `xr-ai-voice`; application input,
-participant-scoped agent execution, and voice output use public SDK contracts.
+Pipecat is an internal implementation detail of `xr-ai-voice`; application
+input, participant-scoped agent execution, and voice output use public SDK contracts.
 Lifecycle failures publish notices to a sample-local runtime topic instead of
 manufacturing voice-pipeline frames.
 

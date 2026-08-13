@@ -15,6 +15,4 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-# ``xr_ai_agent`` is a deprecated forwarding alias for ``xr_ai_hub``; it is
-# shipped alongside the canonical package so existing imports keep working.
-packages = ["xr_ai_hub", "xr_ai_agent"]
+packages = ["xr_ai_hub"]
