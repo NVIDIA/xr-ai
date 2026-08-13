@@ -5,11 +5,9 @@
 
 # xr-render-demo — architecture
 
-This page describes the architecture of the xr-render-demo sample. For the
-user-facing
-quickstart, refer to the [repository README](https://github.com/NVIDIA/xr-ai/blob/main/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr).
-For inference-server mechanics shared with other samples, refer to
-[`docs/source/components/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/components/ai-services.md).
+This page describes the architecture of the xr-render-demo sample. Start with
+{doc}`/getting_started/quickstart` to run it. For inference-server mechanics
+shared with other samples, see {doc}`/components/ai-services`.
 
 ## Process stack
 
@@ -40,6 +38,22 @@ Before starting the stack, the orchestrator runs two setup steps:
 - **LOVR binary** — auto-downloads LOVR v0.18.0 AppImage to `deps/lovr/` if
   not present and sets `$LOVR_BIN`. Resolution order: `$LOVR_BIN` env var →
   `lovr_bin:` in `scene/scene_service.yaml` → cached AppImage → fresh download.
+
+## Selecting the client type (WebRTC vs native)
+
+`NV_DEVICE_PROFILE` selects which XR clients can connect. For the native iOS
+and visionOS apps, set it to `auto-native`:
+
+```bash
+NV_DEVICE_PROFILE=auto-native uv run xr_render_demo
+```
+
+The environment value takes precedence over YAML. The `cloudxr_env` value in
+`yaml/cloudxr_runtime.yaml` supplies the default only when the variable is
+unset; `auto-webrtc` serves WebRTC and web XR clients. Native profiles omit the
+static web page and its npm build but keep `/token`, `/cert`, and `/rtc` on the
+hub, so the Apple Vision Pro app's default
+`https://<host>:8080/token` request continues to work.
 
 ## GPU pinning for the XR side
 

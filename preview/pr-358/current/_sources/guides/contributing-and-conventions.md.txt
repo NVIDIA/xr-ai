@@ -22,6 +22,7 @@ uv tool run ruff check <changed-python-files>
 ```
 
 Update the relevant README and this documentation with user-visible changes.
-A `pyproject.toml` change also requires its `uv.lock` and
-`DEPENDENCIES.md`. New source files require an SPDX header; see
+A `pyproject.toml` change also requires a `DEPENDENCIES.md` update; regenerate
+the affected project's gitignored `uv.lock` locally. New source files require an
+SPDX header; see
 [SPDX headers](spdx-headers.md).

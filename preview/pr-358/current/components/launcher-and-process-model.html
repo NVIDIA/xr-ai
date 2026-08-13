@@ -312,6 +312,12 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -436,9 +442,6 @@ when it is fully initialized and ready to serve requests.</p></li>
 <li><p><strong>Native voice workers</strong> pass the ready file to the <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owned by
 <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; the session touches it only after the input transport’s hub IPC
 receive loop has started.</p></li>
-<li><p><strong>Direct Pipecat workers</strong> call
-<code class="docutils literal notranslate"><span class="pre">run_voice_pipeline(worker,</span> <span class="pre">transport,</span> <span class="pre">on_ready=ready_file.touch)</span></code> to use the
-same IPC-start readiness boundary.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
 <li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> or <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code>.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>

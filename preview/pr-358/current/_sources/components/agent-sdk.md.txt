@@ -17,9 +17,10 @@ installation.
 | `xr-ai-tools` | `xr_ai_tools` | Relay-managed tools and model tool-call helpers |
 | `xr-ai-voice` | `xr_ai_voice` | Voice agent, session, transport, and pipeline |
 
-See each package's README under
-[`agent-sdk/`](https://github.com/NVIDIA/xr-ai/tree/main/agent-sdk) for its
-complete public surface.
+The complete package references are versioned with this site:
+{doc}`/reference/agent-sdk-hub`, {doc}`/reference/agent-sdk-models`,
+{doc}`/reference/agent-sdk-runtime`, {doc}`/reference/agent-sdk-tools`, and
+{doc}`/reference/agent-sdk-voice`.
 
 ## Runtime and tools
 
@@ -106,7 +107,6 @@ implementation detail for current samples.
 ```python
 voice = VoiceAgent(
     VoiceSession(
-        endpoint=endpoint,
         stt=stt,
         tts=tts,
         vad=VadConfig(),
