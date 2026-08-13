@@ -54,6 +54,23 @@ correlation metadata on `RuntimeContext` applies to pub/sub. Agents create,
 cancel, and await their own background tasks. `publish()` settles all fan-out
 deliveries before propagating subscriber failures.
 
+Relay records each publication and receiving-agent callback as nested runtime
+and agent scopes. These scopes include the topic plus message, correlation,
+participant, source, and subscriber metadata. Agent-owned work that outlives a
+subscription callback starts a fresh Relay scope stack and adds its own agent
+scope, preserving logical correlation in metadata without retaining an ended
+callback as its parent.
+
+`Topic.telemetry` controls runtime cardinality without changing delivery. Keep
+`"full"` for commands, state changes, and lifecycle events. High-volume
+transport streams use `"none"`; their receiving agent records one semantic
+scope after aggregation. The voice output topic follows this pattern, producing
+one `voice.response` scope for either a finite response or a completed stream.
+Voice records provider work separately: `voice.stt` covers final and bounded
+partial-probe transcription, while `voice.tts` covers each sentence synthesis.
+Audio is summarized rather than stored, and playback on the remote client is
+outside these spans.
+
 ---
 
 ## xr-ai-models

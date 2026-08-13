@@ -421,6 +421,21 @@ by direct execution belongs in the tool’s request schema; participant and
 correlation metadata on <code class="docutils literal notranslate"><span class="pre">RuntimeContext</span></code> applies to pub/sub. Agents create,
 cancel, and await their own background tasks. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> settles all fan-out
 deliveries before propagating subscriber failures.</p>
+<p>Relay records each publication and receiving-agent callback as nested runtime
+and agent scopes. These scopes include the topic plus message, correlation,
+participant, source, and subscriber metadata. Agent-owned work that outlives a
+subscription callback starts a fresh Relay scope stack and adds its own agent
+scope, preserving logical correlation in metadata without retaining an ended
+callback as its parent.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Topic.telemetry</span></code> controls runtime cardinality without changing delivery. Keep
+<code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> for commands, state changes, and lifecycle events. High-volume
+transport streams use <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>; their receiving agent records one semantic
+scope after aggregation. The voice output topic follows this pattern, producing
+one <code class="docutils literal notranslate"><span class="pre">voice.response</span></code> scope for either a finite response or a completed stream.
+Voice records provider work separately: <code class="docutils literal notranslate"><span class="pre">voice.stt</span></code> covers final and bounded
+partial-probe transcription, while <code class="docutils literal notranslate"><span class="pre">voice.tts</span></code> covers each sentence synthesis.
+Audio is summarized rather than stored, and playback on the remote client is
+outside these spans.</p>
 </section>
 <hr class="docutils" />
 <section id="xr-ai-models">
