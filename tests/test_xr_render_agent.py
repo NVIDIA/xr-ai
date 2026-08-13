@@ -33,13 +33,13 @@ _WORKER_DIR = (
 )
 sys.path.insert(0, str(_WORKER_DIR))
 
-from agent import RenderDemoAgent  # noqa: E402
-from dispatch import (  # noqa: E402
+from xr_render_demo_worker.agent import (  # noqa: E402
     RENDER_NOTICE_TOPIC,
     USER_QUERY_TOPIC,
     RenderAgent,
     RenderNotice,
 )
+from xr_render_demo_worker.lifecycle import XRSessionLifecycle  # noqa: E402
 
 
 class _Scene:
@@ -161,9 +161,9 @@ async def test_launch_failure_notice_enters_the_render_notice_topic() -> None:
     runtime = AgentRuntime()
     queries = _QueryRecorder()
     runtime.register("test-query", queries)
-    lifecycle = RenderDemoAgent(
+    lifecycle = XRSessionLifecycle(
         transport=_Transport(),  # type: ignore[arg-type]
-        scene_agent=_Scene(),  # type: ignore[arg-type]
+        scene_loop=_Scene(),  # type: ignore[arg-type]
         tools=ToolSet(
             (
                 Tool(

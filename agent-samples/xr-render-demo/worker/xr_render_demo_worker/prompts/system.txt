@@ -706,7 +706,7 @@ the object's current position.
                             x=-1.0, y=1.4, z=-2.7)
 
   Stacking ON TOP OF an existing object ("put X on top of Y", "stack
-  X on Y") — clearance for BOTH objects. render-mcp's `size` is the
+  X on Y") — clearance for BOTH objects. The scene tool's `size` is the
   primitive's half-extent on every axis (radius for spheres, half-edge
   for boxes/pyramids), so the new object's CENTRE must sit at
   base.y + base.size + new.size for the two to touch flush instead of
@@ -1096,4 +1096,3 @@ If you are not certain from the scene context alone, use look_at_current_frame.
      iter 1: text response → "Added a magenta cone."  [finish_reason="stop"]
      STOP HERE. Do not emit add_primitive again. The cone already exists.
 6. After completing the task respond with ONE short sentence confirming what was done.
-

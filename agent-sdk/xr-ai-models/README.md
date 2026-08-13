@@ -13,7 +13,7 @@ in callers, no model quirks leaking out of this package.
 
 ## Why
 
-Before this package, every consumer (vlm-mcp, simple-vlm-example worker,
+Before this package, every consumer (the simple-vlm-example worker,
 xr-render-demo worker, xr-ai-pipecat) rolled its own httpx wrappers and
 hard-coded model quirks (`chat_template_kwargs`, served-model-name strings,
 the `reasoning` vs `reasoning_content` field difference between

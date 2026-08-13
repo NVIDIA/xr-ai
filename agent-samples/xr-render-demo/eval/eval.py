@@ -11,7 +11,7 @@ Usage:
   uv run --project ../worker python eval.py "Move it down"  # one query
   uv run --project ../worker python eval.py --prompt PATH   # alternate prompt
 
-By default reads ../worker/prompts/system.txt (the live xr-render-demo
+By default reads ../worker/xr_render_demo_worker/prompts/system.txt (the live xr-render-demo
 prompt). Edit it and re-run; no stack restart needed.
 """
 from __future__ import annotations
@@ -32,18 +32,18 @@ import yaml
 from xr_ai_tools.tool_calling import tool_definitions
 
 _HERE       = Path(__file__).resolve().parent
-SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
+SYS_PROMPT  = (_HERE / "../worker/xr_render_demo_worker/prompts/system.txt").resolve()
 
 # Borrow the worker's config and native-tool assembly so the eval advertises
 # the same model-facing function schemas as the live worker.
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
-from capabilities import NativeCapabilities  # noqa: E402
-from config import load_config  # noqa: E402  — must follow sys.path tweak
-from processors import (  # noqa: E402  — must follow sys.path tweak
+from xr_render_demo_worker.config import load_config  # noqa: E402
+from xr_render_demo_worker.scene_loop import (  # noqa: E402
     _LIVE_PERCEPTION_TOOL,
     _PAST_PERCEPTION_TOOL,
     _PERCEPTION_TOOL_DEFS,
 )
+from xr_render_demo_worker.tools import NativeCapabilities  # noqa: E402
 _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
 
 def _agent_llm_base_url() -> str:
@@ -1974,7 +1974,7 @@ def _check(actual: dict, case: dict) -> tuple[bool, str]:
     return True, f"matched {len(wanted)} mutation(s)"
 
 
-# max LLM iterations per turn (mirrors processors.py _MAX_LOOP).
+# max LLM iterations per turn (mirrors scene_loop.py _MAX_LOOP).
 _MAX_STEPS = 10
 
 

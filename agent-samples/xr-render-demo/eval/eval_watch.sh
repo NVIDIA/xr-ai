@@ -11,7 +11,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_PROMPT="$HERE/../worker/prompts/system.txt"
+DEFAULT_PROMPT="$HERE/../worker/xr_render_demo_worker/prompts/system.txt"
 
 PROMPT="${1:-$DEFAULT_PROMPT}"
 LOG=/tmp/eval_loop.log

@@ -33,15 +33,7 @@ xr-ai-logging      = { path = "../../../utils/xr-ai-logging",          editable 
 xr-render-scene    = { path = "../scene",                              editable = true }
 
 [project.scripts]
-xr_render_demo_worker = "xr_render_demo_worker:run"
+xr_render_demo_worker = "xr_render_demo_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = [
-    "xr_render_demo_worker.py",
-    "agent.py",
-    "capabilities.py",
-    "dispatch.py",
-    "processors.py",
-    "tooling.py",
-    "config.py",
-]
+only-include = ["xr_render_demo_worker"]

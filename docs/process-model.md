@@ -41,8 +41,6 @@ PROCESSES = [
     # Optional shared components — add as needed:
     # Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",
     #         config="yaml/cloudxr_runtime.yaml"),
-    # Process("mcp",     "../../agent-mcp-servers/oxr-mcp", "oxr_mcp_server",
-    #         config="yaml/oxr_mcp_server.yaml"),
 ]
 
 def run() -> None:
@@ -53,7 +51,7 @@ def run() -> None:
 
 - **Processes start serially** — each process must create its `--ready-file`
   before the next one starts. Declare processes in dependency order (hub
-  before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).
+  before workers and application processes after the services they call).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
 - **Process readiness is not client readiness.** The ready file says the

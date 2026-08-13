@@ -61,7 +61,7 @@ pull request:
 - In general, prefer clarity over clever tricks, and keep the codebase friendly for contributors.
 
 **Python** (`agent-sdk/`, `utils/`, `services/`,
-`agent-mcp-servers/`, `agent-samples/`, `tests/`)
+`agent-samples/`, `tests/`)
 - Target Python 3.11+ (CI matrix runs 3.11 and 3.12).
 - Follow PEP 8 for style.
 - Use type annotations (PEP 484) and prefer formatted string literals (f-strings).

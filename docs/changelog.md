@@ -9,6 +9,21 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — Native tools replace the in-tree MCP compatibility servers
+
+The OXR, render, transcript, vector, video, and VLM MCP server packages are no
+longer shipped. Native agents invoke the corresponding `xr-ai-tools` or
+sample-local tools directly, while reusable process boundaries remain typed
+msgpack/ZMQ services. The generic `xr-ai-nat[mcp]` adapter remains available to
+applications that must expose an explicit native tool list to an external
+MCP-only consumer.
+
+The xr-render worker now follows the named-package convention. Its resident
+runtime agent lives in `agent.py`; XR startup and readiness live in
+`lifecycle.py`; model orchestration, tool composition, and model-I/O helpers
+live in `scene_loop.py`, `tools.py`, and `model_io.py`, respectively. The
+sample-specific tracking-plus-spatial tool group lives in `spatial_tools.py`.
+
 ### 2026-08-12 — xr-render-demo uses native Relay-managed tools
 
 The render worker and its sample-local scene process no longer depend on

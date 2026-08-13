@@ -121,7 +121,6 @@ frames are dropped if it is closed.
 | Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools |
 | Legacy NAT | `agent-sdk/xr-ai-nat/` | NeMo Agent Toolkit compatibility during migration |
 | Reusable services | `services/` | Model-serving and typed capability processes |
-| Agent interfaces | `agent-mcp-servers/` | MCP compatibility processes for XR data & rendering |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |
 
@@ -319,10 +318,9 @@ web client for desktop dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
 endpoints, typed capability processes, and the worker. The worker calls those
-processes through native NAT functions; MCP adapters remain optional outward
-compatibility surfaces and are not in the sample's execution path. The Pipecat pipeline runs
+processes through Relay-managed native tools. The voice runtime runs
 quick-acks and a Nemotron-30B agentic tool-calling loop over
-scene, XR tracking, spatial math, vision, and video-memory functions. Full process map,
+scene, XR tracking, spatial math, vision, and video-memory tools. Full process map,
 agentic-loop details, and the XR session lifecycle:
 [`docs/xr-render-demo.md`](docs/xr-render-demo.md).
 

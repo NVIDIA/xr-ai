@@ -536,7 +536,7 @@ final class AppModel {
 
     #if os(visionOS)
 
-    /// Topic the worker watches to unlock LOVR (`render-mcp.start_xr`).
+    /// Topic the render worker watches to unlock LOVR.
     /// Must match `client-samples/web-xr/App/app.js`.
     private static let xrSessionStartedTopic = "xr.session.started"
 

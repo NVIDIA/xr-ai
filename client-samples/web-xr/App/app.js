@@ -277,7 +277,7 @@ function wireEvents() {
       if (state === 'idle')  model.xrError = null;
 
       // Notify the agent that an XR client is now connected to CloudXR.
-      // render-mcp gates its LOVR launch on this signal.
+      // The render worker gates its LOVR launch on this signal.
       if (state === 'streaming') {
         model.session?.send(new Uint8Array(0), { topic: 'xr.session.started' })
           .catch(() => {});

@@ -35,8 +35,8 @@ Per-chunk sidecar JSON keys:
     height      int   frame height in pixels
     size_bytes  int   .264 file size
 
-The video MCP server reads this directory directly for historical
-queries. Latest-frame queries use a separate path: video-mcp connects
+The video-memory service reads this directory directly for historical
+queries. Latest-frame queries use a separate path: a caller connects
 to the hub as a ``ProcessorEndpoint`` and pulls live frames over IPC.
 """
 from __future__ import annotations

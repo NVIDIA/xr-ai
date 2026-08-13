@@ -5,7 +5,7 @@
 Shared loguru setup for the xr-ai monorepo.
 
 Every process in a sample run (orchestrator, worker, hub, AI services,
-MCP servers, cloudxr) calls :func:`setup_logging` once at startup. The
+typed services, cloudxr) calls :func:`setup_logging` once at startup. The
 result is a single, unified logging stack:
 
 * **stderr sink** — level controlled by ``XR_AI_VERBOSE`` (DEBUG when

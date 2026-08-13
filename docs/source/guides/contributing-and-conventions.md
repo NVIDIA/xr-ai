@@ -29,7 +29,7 @@ Per-language specifics:
 
 | Language | Locations | Conventions |
 |---|---|---|
-| Python | `agent-sdk/`, `utils/`, `services/`, `agent-mcp-servers/`, `agent-samples/`, `tests/` | Target Python 3.11+ (CI runs 3.11 and 3.12); follow PEP 8; use type annotations and f-strings; manage environments with `uv` (each sub-project is its own uv project — run `uv sync` in its directory). |
+| Python | `agent-sdk/`, `utils/`, `services/`, `agent-samples/`, `tests/` | Target Python 3.11+ (CI runs 3.11 and 3.12); follow PEP 8; use type annotations and f-strings; manage environments with `uv` (each sub-project is its own uv project — run `uv sync` in its directory). |
 | Swift | `client-samples/ios-visionos/` | Use the toolchain pinned by `// swift-tools-version:` in `Package.swift`; stick to Xcode's default formatting. |
 | Kotlin | `client-samples/android/` | Use the Kotlin and Android Gradle Plugin versions pinned in `gradle/libs.versions.toml`; follow the Kotlin official style. |
 | JavaScript | `client-samples/web/` | Plain ES modules, no build step; keep dependencies minimal. |

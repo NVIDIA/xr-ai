@@ -22,21 +22,21 @@ from xr_ai_voice import (
 )
 from xr_ai_voicegate import load_voice_gate_config
 
-from agent import RenderDemoAgent
-from capabilities import NativeCapabilities
-from config import WorkerConfig, load_config
-from dispatch import (
+from .agent import (
     INTERRUPTED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
     RenderAgent,
     USER_QUERY_TOPIC,
 )
-from processors import (
+from .config import WorkerConfig, load_config
+from .lifecycle import XRSessionLifecycle
+from .scene_loop import (
     _LIVE_PERCEPTION_TOOL,
     _PAST_PERCEPTION_TOOL,
     _PERCEPTION_TOOL_DEFS,
-    RenderSceneAgent,
+    SceneModelLoop,
 )
+from .tools import NativeCapabilities
 
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
 
@@ -122,7 +122,7 @@ async def main(
         model_tools.extend(_PERCEPTION_TOOL_DEFS)
         logger.info("native model tools: {}", [tool.name for tool in model_tools])
 
-        scene_agent = RenderSceneAgent(
+        scene_loop = SceneModelLoop(
             transport=session.transport,
             cfg=cfg,
             tools=capabilities.all,
@@ -135,10 +135,10 @@ async def main(
         )
         runtime = AgentRuntime()
         owned_tools = tuple(tool for _name, tool in capabilities.all.items())
-        render = runtime.register("xr-render", RenderAgent(scene_agent, owned_tools))
-        RenderDemoAgent(
+        render = runtime.register("xr-render", RenderAgent(scene_loop, owned_tools))
+        XRSessionLifecycle(
             transport=session.transport,
-            scene_agent=scene_agent,
+            scene_loop=scene_loop,
             tools=capabilities.all,
             runtime=runtime,
         )

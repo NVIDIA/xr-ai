@@ -36,7 +36,7 @@ from xr_ai_models import (
     load_models_config,
 )
 from xr_ai_tools import ToolSet
-from xr_ai_tools.capabilities import TrackingTools
+from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.tool_calling import tool_definitions
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ def test_models_yaml_loads() -> None:
 def test_worker_config_idle_timeout_disabled_by_default() -> None:
     """The shipped worker YAML ships idle_timeout_secs: 0, which the loader
     maps to None (disabled) so a quiet session is never auto-cancelled."""
-    from config import load_config
+    from xr_render_demo_worker.config import load_config
 
     worker_yaml = (
         Path(__file__).resolve().parent.parent
@@ -117,7 +117,7 @@ def test_worker_config_idle_timeout_disabled_by_default() -> None:
 
 def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
     """A positive idle_timeout_secs in the YAML is parsed to a float."""
-    from config import load_config
+    from xr_render_demo_worker.config import load_config
 
     y = tmp_path / "w.yaml"
     y.write_text("idle_timeout_secs: 300\n")
@@ -378,12 +378,12 @@ def test_tool_def_to_openai_wire_shape() -> None:
 
 # ── XR-launch-failure notice delivery (runtime voice + panel) ─────────────────
 #
-# When start_xr / the LOVR-spawn poll fails, RenderDemoAgent calls
-# RenderSceneAgent.handle_notice(pid, msg). The notice must be delivered with
+# When start_xr / the LOVR-spawn poll fails, XRSessionLifecycle publishes a
+# notice. The scene loop must deliver it with
 # the same shape as a normal final answer: a yielded voice chunk and an
 # agent.response data message for the panel.
 
-_PROMPTS_DIR = _WORKER_DIR / "prompts"
+_PROMPTS_DIR = _WORKER_DIR / "xr_render_demo_worker" / "prompts"
 _SYSTEM_PROMPT = _PROMPTS_DIR / "system.txt"
 
 _LAUNCH_FAIL_MSG = "I couldn't start the XR session — try Launch XR again."
@@ -405,13 +405,13 @@ class _CaptureTransport:
 
 
 def _make_brain(transport: _CaptureTransport, llm=None):
-    """Build a real RenderSceneAgent whose service clients are unused.
+    """Build a real SceneModelLoop whose service clients are unused.
 
     The notice path never dereferences them. The constructor eagerly reads
     the real prompt files, so point at the bundled prompts/ directory.
     Pass ``llm`` to exercise the real _quick_ack parse paths against a stub.
     """
-    return _proc.RenderSceneAgent(
+    return _loop.SceneModelLoop(
         transport   = transport,
         cfg         = None,
         tools       = ToolSet(()),
@@ -447,7 +447,7 @@ async def test_quick_ack_spoken_on_non_thinking_turn() -> None:
     including a non-thinking one, so a tool-using turn is never silent until
     the final reply. Pre-change the ack was spoken only when needs_thinking.
 
-    _quick_ack and _agentic_loop are stubbed so no LLM/MCP client is touched.
+    _quick_ack and _agentic_loop are stubbed so no LLM or tool execution is touched.
     """
     transport = _CaptureTransport()
     transport.set_target_participant("pid-1")
@@ -477,7 +477,7 @@ def test_tool_result_json_is_sanitized() -> None:
     """A final response that is nothing but a JSON object (e.g. an echoed
     tool result) must be flagged so it never reaches TTS; prose that merely
     contains JSON passes."""
-    from tooling import looks_like_leaked_tool_call
+    from xr_render_demo_worker.model_io import looks_like_leaked_tool_call
 
     assert looks_like_leaked_tool_call('{"id": "box-1", "ok": true, "reason": null}')
     assert looks_like_leaked_tool_call('[{"id": "box-1", "ok": true}]')
@@ -607,15 +607,16 @@ async def test_unpunctuated_ack_gets_terminal_period() -> None:
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat  # noqa: E402
 from xr_ai_models import ChatResponse, ToolCall  # noqa: E402
 
-import processors as _proc  # noqa: E402
-import capabilities as _caps  # noqa: E402
+from xr_render_demo_worker import scene_loop as _loop  # noqa: E402
+from xr_render_demo_worker import spatial_tools as _spatial_tools  # noqa: E402
+from xr_render_demo_worker import tools as _tools  # noqa: E402
 
 
 async def test_render_spatial_native_toolbox_builds() -> None:
     """The sample's prompt-compatible spatial surface uses native Tool schemas."""
     tracking = TrackingTools("tcp://127.0.0.1:65530", timeout_s=0.1)
     try:
-        spatial = _caps.RenderSpatialTools(tracking)
+        spatial = _spatial_tools.RenderSpatialTools(tracking)
         definitions = {tool.name: tool for tool in tool_definitions(spatial.tools)}
         expected_parameters = {
             "along_direction": {
@@ -646,7 +647,7 @@ async def test_render_spatial_native_toolbox_builds() -> None:
 
 async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
     """NativeCapabilities exposes the complete runtime tool surface without MCP."""
-    capabilities = _caps.NativeCapabilities(
+    capabilities = _tools.NativeCapabilities(
         scene_endpoint="tcp://127.0.0.1:65527",
         openxr_endpoint="tcp://127.0.0.1:65528",
         video_memory_endpoint="tcp://127.0.0.1:65529",
@@ -693,7 +694,7 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
     for recorded lookups); exposing them verbatim would tell the model to fill a
     required ``participant_id`` it cannot know and whose value is discarded.
     Guards the do-not-reverse of main's trimmed ``{question}`` contract."""
-    capabilities = _caps.NativeCapabilities(
+    capabilities = _tools.NativeCapabilities(
         scene_endpoint="tcp://127.0.0.1:65527",
         openxr_endpoint="tcp://127.0.0.1:65528",
         video_memory_endpoint="tcp://127.0.0.1:65529",
@@ -712,9 +713,9 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
         tools = [
             tool
             for tool in tool_definitions(capabilities.model)
-            if tool.name not in {_proc._LIVE_PERCEPTION_TOOL, _proc._PAST_PERCEPTION_TOOL}
+            if tool.name not in {_loop._LIVE_PERCEPTION_TOOL, _loop._PAST_PERCEPTION_TOOL}
         ]
-        tools.extend(_proc._PERCEPTION_TOOL_DEFS)
+        tools.extend(_loop._PERCEPTION_TOOL_DEFS)
     finally:
         await capabilities.close()
 
@@ -813,7 +814,7 @@ def _now_us_test() -> int:
 
 @asynccontextmanager
 async def _perception_brain(transport, vlm: _FakeVLM):
-    capabilities = _caps.NativeCapabilities(
+    capabilities = _tools.NativeCapabilities(
         scene_endpoint="tcp://127.0.0.1:65527",
         openxr_endpoint="tcp://127.0.0.1:65528",
         video_memory_endpoint="tcp://127.0.0.1:65529",
@@ -824,7 +825,7 @@ async def _perception_brain(transport, vlm: _FakeVLM):
         frame_timeout_s=0.2,
     )
     try:
-        yield _proc.RenderSceneAgent(
+        yield _loop.SceneModelLoop(
             transport=transport,
             cfg=None,
             tools=capabilities.all,
@@ -888,10 +889,10 @@ async def test_perception_unavailable_frame_ends_turn_gracefully() -> None:
     transport = _CaptureTransport()
     brain = _make_brain(transport)  # _UnusedToolbox.invoke raises on call
 
-    with pytest.raises(_proc._PerceptionUnavailableError) as excinfo:
+    with pytest.raises(_loop._PerceptionUnavailableError) as excinfo:
         await brain._look_at_current_frame("pid-1", "What is shown?")  # noqa: SLF001
 
-    assert excinfo.value.spoken == _proc._NO_FRAME_MSG
+    assert excinfo.value.spoken == _loop._NO_FRAME_MSG
 
 
 def _stub_turn(brain, loop) -> None:
@@ -1052,7 +1053,7 @@ async def test_perception_no_frame_yields_graceful_message() -> None:
         )
 
     # Graceful spoken message, not a hang or a generic "Done." fallback.
-    assert answer == _proc._NO_FRAME_MSG
+    assert answer == _loop._NO_FRAME_MSG
     # Camera is always-on streaming — no startCamera/stopCamera messages sent.
     controls = [m for m in transport.sent if m.topic == "clientControl"]
     assert not any(b'"startCamera"' in m.data for m in controls)

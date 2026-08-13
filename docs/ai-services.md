@@ -27,11 +27,8 @@ tool-calling / reasoning / hardware trade-offs documented below.
 | `services/nemotron3-nano-llm/` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4 / FP8 / BF16, GPU-selected) | vLLM (pip or docker) — multimodal (text + video) |
 | `services/embedding-server/` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
-| `agent-mcp-servers/transcript-mcp/` | `transcript_mcp_server` | 8200 | — | JSONL + FastMCP |
 | `services/video-memory-service/` | `video_memory_service` | 8310 | — | Typed recorded-video capability |
 | `services/rag-service/` | `rag_service` | 8340 | — | Typed dense document retrieval capability |
-| `agent-mcp-servers/video-mcp/` | `video_mcp_server` | 8210 | — | FastMCP → recorded-video service + live hub IPC |
-| `agent-mcp-servers/vlm-mcp/` | `vlm_mcp_server` | 8240 | — | FastMCP → vlm-server (`ask_image` tool) |
 
 All model weights land in the service's `model_cache` directory, set per YAML
 and resolved relative to the YAML file (every `models/` tree is gitignored).
@@ -145,17 +142,14 @@ cp ../../services/rag-service/rag_service.yaml ./yaml/rag_service.yaml
 cp ../../services/piper-tts/piper_tts_server.yaml ./yaml/piper_tts_server.yaml
 # Or for Magpie (multilingual, GPU, ~2-5 s/sentence):
 cp ../../services/magpie-tts/magpie_tts_server.yaml ./yaml/magpie_tts_server.yaml
-# MCP servers:
-cp ../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml ./yaml/transcript_mcp_server.yaml
 cp ../../services/video-memory-service/video_memory_service.yaml ./yaml/video_memory_service.yaml
-cp ../../agent-mcp-servers/video-mcp/video_mcp_server.yaml ./yaml/video_mcp_server.yaml
 ```
 
 The standalone model-service YAMLs contain `model_cache: ../../models` for their
 original `services/<project>/` location. After copying them one level deeper
 into `agent-samples/<name>/yaml/`, change that value to `../../../models` so
 the cache still resolves to the repository-root `models/` directory. Capability
-and MCP configurations without a `model_cache` key need no change.
+and capability configurations without a `model_cache` key need no change.
 
 Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 `yaml/<command>.yaml` in the sample root and passes it as `--config`.
@@ -408,20 +402,10 @@ cleanup.
 - **magpie-tts** loads magpie_tts_multilingual_357m via NeMo TTS in-process.
 - **piper-tts** serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
   All inference runs in a thread pool so the asyncio loop is never blocked.
-- **transcript-mcp-server** is pure FastMCP at `/mcp` on port 8200.
-  Records are keyed by free-form `source_id` (live participant identity
-  *or* an internal source name like `"agent-vlm"`). Tools:
-  `query_transcripts`, `add_transcript` (worker ingest), `list_sources`,
-  `get_transcript_stats`. Transcripts persist as JSONL alongside a
-  `.identity` sidecar so list/query round-trip raw IDs cleanly even
-  when sanitized filenames collide.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
   `video_recording.out_dir`. Current frames stay with the caller's hub client.
-- **video-mcp-server** is the optional FastMCP compatibility adapter at
-  `/mcp` on port 8210. It discovers whether recording is enabled from the
-  service and preserves the existing conditional tool surface.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample's `yaml/` directory and set `model_cache` to

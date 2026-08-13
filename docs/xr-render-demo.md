@@ -190,7 +190,7 @@ render-agent task.
 ```
 VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
            → typed hub text ingress ──────────┴→ xr-render.user-query topic
-  → RenderAgent → RenderSceneAgent → voice.output topic
+  → RenderAgent → SceneModelLoop → voice.output topic
   → VoiceAgent → private VoiceSession TTS → hub return audio
 ```
 
@@ -288,7 +288,7 @@ is bad at while keeping pose-dependent math in one place:
 
 ## Prompt structure
 
-The system prompt at `worker/prompts/system.txt` is worked-example heavy.
+The system prompt at `worker/xr_render_demo_worker/prompts/system.txt` is worked-example heavy.
 It opens with pronoun/reference resolution, then routes placement
 utterances through sequential checks before the LLM picks a tool:
 

@@ -212,12 +212,12 @@ async def test_passive_processor_does_not_hold_the_room_at_loading(
 ):
     """A processor that never reports status must not gate readiness.
 
-    ProcessorEndpoint is the generic downstream endpoint — video-MCP,
+    ProcessorEndpoint is the generic downstream endpoint — video processors,
     analytics, recorders. None of them call set_status, so counting them as
     unreported agents would pin every client at loading forever.
     """
     voice = make_processor(announces_readiness=True, agent_id="voice")
-    make_processor(agent_id="video-mcp", filter=Subscribe.VIDEO)
+    make_processor(agent_id="passive-video", filter=Subscribe.VIDEO)
     await voice.wait_until_running()
     await voice.mark_ready()
 

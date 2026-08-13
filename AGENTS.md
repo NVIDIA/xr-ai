@@ -22,7 +22,6 @@ agent-sdk/          # Seven packages:
                     #   xr-ai-nat          — legacy NeMo Agent Toolkit compatibility during migration
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 services/           # XR hub, CloudXR, model-serving, and typed capability services
-agent-mcp-servers/  # MCP adapters: oxr, render, transcript, vec, video, vlm
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
 docs/               # Topic deep-dives + changelog
@@ -67,8 +66,7 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   in `xr-ai-tools`; every tool execution passes through NeMo Relay, and all
   model I/O remains in `xr-ai-models`. `xr-ai-nat` retains
   NeMo Agent Toolkit compatibility only while existing function groups
-  migrate. Existing MCP servers remain compatibility surfaces while their
-  capabilities migrate.
+  migrate. The repository does not ship MCP compatibility servers.
 - **Agents expose the existing tools from `xr-ai-tools`.** Each `Agent` owns
   state and a set of `Tool` or `AsyncTool` instances. Agents call one another's
   tools directly through `execute()` or `stream()`; model-selected calls use
@@ -79,25 +77,18 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
 - **RAG is a native typed capability.** `rag-service` owns document chunking,
   embedding caches, and dense retrieval behind private msgpack/ZMQ;
   `RAGFunctionsConfig` exposes it as the `xr_rag` NAT function group.
-- **A process boundary does not imply MCP.** `xr-ai-nat[mcp]` may expose an
-  application's explicit native-function list to MCP-only agents, but native
-  applications invoke the functions directly. XR tracking calls the typed
-  OpenXR service; OXR MCP only republishes the tracking and spatial functions.
-  Video memory calls its typed service for recorded history; live frames stay
-  with the caller's hub client and Video MCP keeps its temporary live adapter.
-  Text-memory owns transcript
-  JSONL storage; transcript MCP only republishes that capability.
+- **A process boundary does not imply MCP.** Native applications invoke tools
+  directly. XR tracking and video memory call typed services; live frames stay
+  with the caller's hub client. Text memory owns participant-scoped JSONL
+  storage in process.
 - **Application-specific capabilities stay with their application.** XR render
-  scene state, native scene functions, and the LOVR app live together under
+  scene state, native scene tools, and the LOVR app live together under
   `agent-samples/xr-render-demo/scene`; they are not exported from `xr-ai-nat`.
-  Render MCP only republishes that sample-local typed capability.
-- **Native vision tools own frame acquisition; the file-path adapter stays
-  separate.** The native `xr_vision_tools` group (`look_at_current_frame` /
-  `look_at_past_frame`) acquires the participant's live or recorded frame itself
+- **Native vision tools own frame acquisition.** The native vision tools
+  (`look_at_current_frame` /
+  `look_at_past_frame`) acquire the participant's live or recorded frame themselves
   and calls a `VLMService` from `xr-ai-models`; recorded lookups resolve through
-  the `xr_video_memory` group. The legacy file-path `ask_image` tool is not part
-  of the native surface — it lives self-contained in VLM MCP for MCP-only clients
-  that already hold an image path.
+  the video-memory tools.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml`. See `docs/credentials.md`.
 
@@ -183,8 +174,8 @@ injected `xr-ai-models` VLM, acquiring the participant's live or recorded frame
 itself. `XRTrackingFunctionsConfig` exposes the current user frame through
 the typed OpenXR service without routing native agents through MCP.
 `VideoMemoryFunctionsConfig` exposes recorded-video discovery, queries, and
-frame extraction through a typed service while keeping MCP optional; callers
-obtain current frames through the hub client. `StreamingVisionTool` in `xr-ai-tools` composes raw frame
+frame extraction through a typed service; callers obtain current frames through
+the hub client. `StreamingVisionTool` in `xr-ai-tools` composes raw frame
 acquisition with VLM streaming and stays independent of voice. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
 NAT's built-in LangChain-backed agent types; applications install
 `xr-ai-nat[agents]` rather than calling LangChain model clients directly.
@@ -219,22 +210,9 @@ pipeline plumbing", while new and migrated reusable typed agent tools live in
 `xr-ai-tools`.
 Application-specific capabilities stay with their application;
 `xr-ai-pipecat` must not become a catch-all.
-Planned structural follow-ups (own PRs):
+Planned structural follow-up:
 
-1. **`MCPToolset`.** `RenderSceneProcessor` still takes one `McpClient` per MCP
-   server and routes via a hardcoded `_execute_tool` switch — adding a server
-   means a new arg + frozenset + branch, reusable by nothing. Replace it with a
-   toolset that pairs a client with the tool names it owns, so a brain accepts a
-   list and auto-routes:
-
-   ```python
-   brain = AgentBrain(
-       transport=transport, llm=llm,
-       toolsets=[MCPToolset(oxr, _OXR_TOOLS), MCPToolset(render)],  # render = catch-all
-   )
-   ```
-
-2. **Hardware-capability gating.** A declared `HardwareProfile` → derived
+1. **Hardware-capability gating.** A declared `HardwareProfile` → derived
    features → a pipeline that auto-includes only the stages the device supports
    (no mic → text input; no camera → vision off). Prototyped and deferred.
 

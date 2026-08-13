@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from typing import Literal
 
-from .capabilities import SpatialFrame, Vector3
+from .types import SpatialFrame, Vector3
 
 
 def _position(x: float, y: float, z: float) -> Vector3:

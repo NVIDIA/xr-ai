@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Multi-step xr-render-demo agent over native Relay-managed tools.
+"""Multi-step model loop for the xr-render scene agent.
 
 Agentic loop (max ``_MAX_LOOP`` iterations):
   - Nemotron-3-Nano emits an OpenAI ``tool_calls`` payload → execute tool,
@@ -31,12 +31,12 @@ from xr_ai_hub import DataMessage
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
 from xr_ai_tools import ToolSet
-from xr_ai_tools.capabilities import AddTranscriptRequest, TextMemoryTool
+from xr_ai_tools.text_memory import AddTranscriptRequest, TextMemoryTool
 from xr_ai_tools.tool_calling import handle_tool_call
 from xr_ai_voice import HubVoiceTransport
 
-from config import WorkerConfig
-from tooling import (
+from .config import WorkerConfig
+from .model_io import (
     extract_json,
     looks_like_leaked_tool_call,
     normalize_tool_args,
@@ -46,7 +46,7 @@ from tooling import (
 # Key events: user speech, pre-fetched context, think flag, tool calls +
 # results, agent response, validation.  Records bound with this binding
 # are routed to ``/tmp/xr-agent-trace.log`` by the sink installed in
-# ``xr_render_demo_worker.main()``; everything else is unaffected.
+# ``xr_render_demo_worker.__main__.main()``; everything else is unaffected.
 _trace_log = logger.bind(trace=True)
 
 _MAX_LOOP = 10  # visual queries need up to 5 steps; give headroom
@@ -157,10 +157,10 @@ def _now_us() -> int:
     return time.time_ns() // 1_000
 
 
-# ── RenderSceneAgent ──────────────────────────────────────────────────────────
+# ── scene model loop ──────────────────────────────────────────────────────────
 
 
-class RenderSceneAgent:
+class SceneModelLoop:
     """
     Multi-step agentic loop over native Relay-managed tools.
 

@@ -14,10 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 import video_memory_service.__main__ as video_memory_main
-from fastmcp import Client as McpClient
 from nat.builder.workflow_builder import WorkflowBuilder
-from video_mcp_server import __main__ as video_mcp_main
-from video_mcp_server.live import _frame_to_rgb
 from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
 from xr_ai_hub import (
@@ -37,44 +34,8 @@ from xr_ai_nat.functions.video_memory._client import (
     ListRecordedParticipantsRequest,
     ListRecordedParticipantsResult,
     VideoHealthResult,
-    VideoMemoryClient,
     VideoStatsRequest,
 )
-
-
-class _LiveFrames:
-    def participants(self) -> list[str]:
-        return ["connected-user"]
-
-    async def get_latest(self, participant_id: str) -> dict:
-        return {
-            "path": f"/tmp/{participant_id}.png",
-            "width": 1,
-            "height": 1,
-            "timestamp_us": 1,
-        }
-
-
-class _BrokenLiveFrames:
-    def participants(self) -> list[str]:
-        return []
-
-    async def get_latest(self, _participant_id: str) -> dict:
-        raise OSError("cannot write live PNG")
-
-
-class _UnusedClient:
-    pass
-
-
-class _UnavailableRecordedClient:
-    async def list_recorded_participants(self, _request=None):
-        raise RPCError("video service unavailable", code="connection_error")
-
-
-class _UnavailableStartupClient:
-    async def get_health(self):
-        raise RPCError("video service unavailable", code="connection_error")
 
 
 class _FrameEndpoint:
@@ -183,70 +144,6 @@ def test_chunk_store_does_not_follow_identity_or_directory_symlinks(tmp_path: Pa
 
 
 @pytest.mark.asyncio
-async def test_video_mcp_preserves_conditional_tool_sets() -> None:
-    live_only = video_mcp_main.build_mcp(
-        _UnusedClient(), _LiveFrames(), recording_enabled=False
-    )
-    recorded = video_mcp_main.build_mcp(
-        _UnusedClient(), _LiveFrames(), recording_enabled=True
-    )
-
-    async with McpClient(live_only) as client:
-        live_names = {tool.name for tool in await client.list_tools()}
-    async with McpClient(recorded) as client:
-        recorded_names = {tool.name for tool in await client.list_tools()}
-
-    assert live_names == {
-        "get_frame_from_time",
-        "get_latest_frame",
-        "list_live_participants",
-    }
-    assert recorded_names == {
-        "get_frame_from_time",
-        "get_video_stats",
-        "list_live_participants",
-        "list_recorded_participants",
-        "query_video",
-    }
-
-
-@pytest.mark.asyncio
-async def test_video_mcp_recorded_discovery_reports_service_failures() -> None:
-    mcp = video_mcp_main.build_mcp(
-        _UnavailableRecordedClient(), _LiveFrames(), recording_enabled=True
-    )
-
-    async with McpClient(mcp) as client:
-        result = await client.call_tool("list_recorded_participants", {})
-
-    assert result.data == {"error": "video service unavailable"}
-
-
-@pytest.mark.asyncio
-async def test_video_mcp_lists_recorded_participants_over_a_real_client() -> None:
-    def dispatch(operation: str, arguments: dict) -> dict:
-        if operation == "list_recorded_participants":
-            return {"participants": ["recorded-user"]}
-        raise RPCError("unknown operation", code="unknown_operation")
-
-    endpoint = f"ipc:///tmp/video-mcp-{uuid.uuid4().hex}"
-    client = VideoMemoryClient(endpoint)
-    try:
-        async with _running_server(endpoint, dispatch):
-            # The compatibility no-argument client call (client builds the typed
-            # request internally, like get_health).
-            direct = await client.list_recorded_participants()
-            assert direct.participants == ["recorded-user"]
-            mcp = video_mcp_main.build_mcp(client, _LiveFrames(), recording_enabled=True)
-            async with McpClient(mcp) as mcp_client:
-                result = await mcp_client.call_tool("list_recorded_participants", {})
-    finally:
-        await client.close()
-
-    assert result.data == ["recorded-user"]
-
-
-@pytest.mark.asyncio
 async def test_list_recorded_participants_tool_schema_is_strict_empty() -> None:
     """The native tool must expose a strict empty-object input, not the client's
     optional/nullable `request` compatibility parameter."""
@@ -262,37 +159,15 @@ async def test_list_recorded_participants_tool_schema_is_strict_empty() -> None:
     assert "request" not in schema.get("properties", {})
 
 
-@pytest.mark.asyncio
-async def test_video_mcp_starts_live_only_when_recorded_service_is_unavailable() -> None:
-    assert await video_mcp_main._recording_enabled(_UnavailableStartupClient()) is False
-
-
-@pytest.mark.asyncio
-async def test_video_mcp_returns_live_export_failures_as_data() -> None:
-    mcp = video_mcp_main.build_mcp(
-        _UnusedClient(), _BrokenLiveFrames(), recording_enabled=False
-    )
-
-    async with McpClient(mcp) as client:
-        frame_from_time = await client.call_tool(
-            "get_frame_from_time", {"participant_id": "live-user"}
-        )
-        latest = await client.call_tool("get_latest_frame", {"participant_id": "live-user"})
-
-    assert frame_from_time.data == {"error": "cannot write live PNG"}
-    assert latest.data == {"error": "cannot write live PNG"}
-
-
-@pytest.mark.parametrize("entrypoint", [video_mcp_main, video_memory_main])
 def test_video_entrypoints_use_defaults_when_packaged_config_is_absent(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entrypoint
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     missing = tmp_path / "missing.yaml"
-    monkeypatch.setattr(entrypoint, "_DEFAULT_CONFIG", missing)
+    monkeypatch.setattr(video_memory_main, "_DEFAULT_CONFIG", missing)
 
-    assert entrypoint._load_config(None) == {}
+    assert video_memory_main._load_config(None) == {}
     with pytest.raises(SystemExit, match="config file not found"):
-        entrypoint._load_config(missing)
+        video_memory_main._load_config(missing)
 
 
 @pytest.mark.asyncio
@@ -384,21 +259,6 @@ async def test_live_frame_source_releases_departed_participants() -> None:
 
     assert await waiter == frame
     assert source._events == {}
-
-
-def test_live_png_export_converts_nv12_planes() -> None:
-    frame = FrameData(
-        seq=1,
-        pts_us=1,
-        width=2,
-        height=2,
-        fmt=PixelFormat.NV12,
-        data=bytes([16, 16, 16, 16, 128, 128]),
-    )
-
-    rgb = _frame_to_rgb(frame)
-
-    assert rgb.shape == (2, 2, 3)
 
 
 @pytest.mark.asyncio

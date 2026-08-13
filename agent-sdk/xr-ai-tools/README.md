@@ -97,6 +97,10 @@ building blocks. Applications compose these finite tools into their own
 `ToolSet`; service processes use the matching RPC primitives without pulling
 in an agent framework or HTTP server.
 
+Each capability has a focused import surface: `tracking`, `video_memory`,
+`historical_vision`, `text_memory`, `spatial`, and their shared request types in
+`types`. RPC transport remains isolated in `rpc`.
+
 ## Finite and streaming live vision tools
 
 Install `xr-ai-tools[live-vision]` for two independent current-frame

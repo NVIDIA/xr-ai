@@ -1,23 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""
-Module-level tool-call helpers for the xr-render-demo brain.
-
-Pure functions shared between ``processors.py`` (the agentic loop) and
-``agent.py`` (the XR-lifecycle render-mcp calls): unwrapping FastMCP tool
-results, detecting leaked tool-call JSON in model text, extracting the first
-balanced JSON object from a string, and flattening nested position/color args.
-"""
+"""Model-output guards and tool-argument normalization for xr-render-demo."""
 from __future__ import annotations
 
 import json
-
-
-def tool_payload(result) -> dict | list | None:
-    if hasattr(result, "data") and result.data is not None:
-        return result.data
-    return getattr(result, "structured_content", None)
 
 
 _TOOL_CALL_KEY_SHAPES: tuple[frozenset[str], ...] = (
@@ -87,7 +74,7 @@ def normalize_tool_args(args: dict) -> dict:
 
     The LLM may produce {"position": {"x":0,"y":1.6,"z":-1.5}} because it
     pattern-matches the get_scene_state output format. Flatten to scalar kwargs
-    so FastMCP validation passes.
+    so native tool validation passes.
     """
     args = dict(args)
 

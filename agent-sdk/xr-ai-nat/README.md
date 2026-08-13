@@ -141,10 +141,6 @@ The `video_memory` reference is resolved lazily — only on the first
 `look_at_past_frame` call. A **live-only** consumer may omit `video_memory` (and
 need not register that group) as long as it never calls `look_at_past_frame`.
 
-MCP-only agents that already hold a local image path can still reach the legacy
-file-path `ask_image` tool through the vlm-mcp compatibility server
-(`agent-mcp-servers/vlm-mcp/`), which now owns that path-based surface directly.
-
 ## XR tracking
 
 Install `xr-ai-nat[services]` and configure `xr_tracking` with the private

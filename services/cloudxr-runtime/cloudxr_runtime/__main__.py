@@ -136,8 +136,7 @@ def _xr_gpu_env(idx: int) -> dict[str, str] | None:
 
 def _append_env_to_file(path: Path, env: dict[str, str]) -> None:
     """Append ``export KEY=value`` lines to *path* so consumers that source
-    the cloudxr env file (e.g. render-mcp via ``load_cloudxr_env``) inherit
-    *env*."""
+    the cloudxr env file inherit *env*."""
     lines = [f"export {k}={shlex.quote(v)}\n" for k, v in env.items()]
     with open(path, "a", encoding="utf-8") as f:
         f.writelines(lines)
@@ -173,9 +172,8 @@ async def _run(
 
     env_cfg = EnvConfig.from_args(install_dir, env_file)
 
-    # Propagate pinning into cloudxr.env so peers that source it (render-mcp,
-    # oxr-mcp) inherit the same GPU selectors when they spawn their own
-    # children (e.g. LOVR).
+    # Propagate pinning into cloudxr.env so the scene process inherits the same
+    # GPU selectors when it spawns LOVR.
     if pinning is not None:
         _append_env_to_file(Path(env_cfg.env_filepath()), pinning)
 

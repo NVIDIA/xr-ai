@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""XR session lifecycle owner for xr-render-demo."""
+"""XR launch and readiness lifecycle for xr-render-demo."""
 from __future__ import annotations
 
 import asyncio
@@ -17,8 +17,8 @@ from xr_ai_tools import ToolSet
 from xr_ai_tools.tool_calling import handle_tool_call
 from xr_ai_voice import HubVoiceTransport
 
-from dispatch import RENDER_NOTICE_TOPIC, RenderNotice
-from processors import RenderSceneAgent
+from .agent import RENDER_NOTICE_TOPIC, RenderNotice
+from .scene_loop import SceneModelLoop
 
 _XR_SESSION_STARTED_TOPIC = "xr.session.started"
 _RENDER_READY_TOPIC       = "render.ready"
@@ -28,19 +28,19 @@ def _now_us() -> int:
     return time.time_ns() // 1_000
 
 
-class RenderDemoAgent:
+class XRSessionLifecycle:
     """Own XR launch and readiness while queries flow through the runtime."""
 
     def __init__(
         self,
         *,
         transport: HubVoiceTransport,
-        scene_agent: RenderSceneAgent,
+        scene_loop: SceneModelLoop,
         tools: ToolSet,
         runtime: AgentRuntime,
     ) -> None:
         self._transport = transport
-        self._scene_agent = scene_agent
+        self._scene_loop = scene_loop
         self._tools = tools
         self._runtime = runtime
 
@@ -55,7 +55,7 @@ class RenderDemoAgent:
             return
 
         self._transport.set_target_participant(msg.participant_id)
-        self._scene_agent.reset_history()
+        self._scene_loop.reset_history()
 
         if self._xr_started:
             await self._transport.send_return_data(DataMessage(

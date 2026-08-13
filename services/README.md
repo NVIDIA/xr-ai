@@ -27,8 +27,7 @@ dependency paths, operational ownership, and standalone commands predictable.
 
 Model servers expose OpenAI-compatible HTTP and are consumed through
 `xr-ai-models`. XR capability services expose typed RPC and are consumed by
-native functions in `xr-ai-nat`. MCP compatibility adapters remain under
-`agent-mcp-servers/`.
+native tools in `xr-ai-tools`.
 
 Sample-specific orchestrators and workers remain together under
 `agent-samples/`; they are application processes rather than reusable

@@ -166,8 +166,7 @@ xr-ai-nat  (agent-sdk/xr-ai-nat/)
     persists each completed turn under ``{participant_id}:{role}`` — the
     producer that ``recall_conversation`` reads. Each
     capability module is its own ``nat.plugins`` discovery entry point; there
-    is no package-wide registration aggregator. The spatial pure math core is
-    also used by the transitional Vec and OpenXR MCP compatibility surfaces.
+    is no package-wide registration aggregator.
     ``xr_vision_tools`` exposes ``look_at_current_frame`` and
     ``look_at_past_frame`` over the always-on live-frame source, acquiring the
     frame itself and calling an injected xr-ai-models VLM; recorded lookups
@@ -256,42 +255,6 @@ xr-media-hub  (services/xr-media-hub/)
     └── cryptography >=42.0
     PyNvVideoCodec >=2.2 (NVENC H.264 encoder; used when video_recording.enabled: true)
 
-transcript-mcp-server  (agent-mcp-servers/transcript-mcp/)
-    └── uvicorn[standard] >=0.29
-    └── pyyaml >=6.0
-    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-nat[mcp] [editable: ../../agent-sdk/xr-ai-nat]
-    Thin MCP compatibility process at /mcp (no REST). It republishes the four
-    native ``xr_text_memory`` functions under their existing MCP tool names;
-    JSONL storage and source identity handling live in xr-ai-nat.
-
-vlm-mcp-server  (agent-mcp-servers/vlm-mcp/)
-    └── uvicorn[standard] >=0.29
-    └── pyyaml >=6.0
-    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-models   [editable: ../../agent-sdk/xr-ai-models]
-    └── xr-ai-nat[mcp,vision] [editable: ../../agent-sdk/xr-ai-nat]
-    Thin MCP compatibility process with one tool at /mcp (no REST). It owns a
-    self-contained file-path ``ask_image`` tool: image normalization (Pillow,
-    hence the ``[vision]`` extra) and the VLM call live in the server's own
-    ``xr_vlm_ask_image`` group, not in the native vision surface — which is now
-    the path-free, always-on ``xr_vision_tools``. MCP-only agents that hold an
-    image path use this tool; the legacy ``vlm_server:`` URL key remains
-    accepted with a warning.
-
-video-mcp-server  (agent-mcp-servers/video-mcp/)
-    └── uvicorn[standard] >=0.29
-    └── fastmcp >=2.0
-    └── pyyaml >=6.0
-    └── numpy >=1.24
-    └── Pillow >=10.0
-    └── xr-ai-hub-client [editable: ../../agent-sdk/xr-ai-hub-client]
-    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
-    Pure FastMCP compatibility adapter at /mcp. Preserves the conditional
-    legacy tool list; recorded operations delegate to video-memory-service and
-    live compatibility operations acquire raw hub frames locally.
-
 xr-video-memory-service  (services/video-memory-service/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
@@ -308,15 +271,6 @@ cloudxr-runtime  (services/cloudxr-runtime/)
     └── xr-ai-launcher  [editable: ../../utils/xr-ai-launcher] (is_native_profile + read_device_profile)
     └── xr-ai-logging   [editable: ../../utils/xr-ai-logging]
 
-render-mcp-server  (agent-mcp-servers/render-mcp/)
-    └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-render-scene [editable: ../../agent-samples/xr-render-demo/scene]
-    └── pyyaml >=6.0
-    └── uvicorn[standard] >=0.29
-    └── fastmcp >=2.0
-    FastMCP compatibility adapter at /mcp. Preserves the legacy render tool
-    surface while delegating to the sample-local typed scene process.
-
 xr-render-scene  (agent-samples/xr-render-demo/scene/)
     └── xr-ai-launcher [editable: ../../../utils/xr-ai-launcher]
     └── xr-ai-logging [editable: ../../../utils/xr-ai-logging]
@@ -326,27 +280,6 @@ xr-render-scene  (agent-samples/xr-render-demo/scene/)
     └── pyyaml >=6.0
     Owns scene state, sample-local native tools, LOVR lifecycle, and the
     LOVR Lua app. Exposes typed msgpack/ZMQ at port 8320.
-
-oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
-    └── pyyaml >=6.0
-    └── uvicorn[standard] >=0.29
-    └── fastmcp >=2.0
-    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
-    Pure FastMCP at /mcp. Preserves the existing OXR tool schemas while
-    delegating pose acquisition to xr-openxr-service and coordinate operations
-    to the native spatial-math core.
-
-vec-mcp-server  (agent-mcp-servers/vec-mcp/)
-    └── uvicorn[standard] >=0.29
-    └── fastmcp >=2.0
-    └── pyyaml >=6.0
-    └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-nat      [editable: ../../agent-sdk/xr-ai-nat]
-    Pure FastMCP at /mcp. Deterministic spatial-math primitives
-    (between_anchors, world_offset, along_direction, scale_value).
-    Preserves the existing MCP tool names while delegating coordinate
-    calculations to the shared native spatial-math core. ``scale_value``
-    remains compatibility-only and is not part of the native function group.
 
 xr-ai-tests  (tests/)
     └── xr-ai-agent-runtime       [editable: ../agent-sdk/xr-ai-agent-runtime]
@@ -363,41 +296,31 @@ xr-ai-tests  (tests/)
     └── xr-ai-vad               [editable: ../utils/xr-ai-vad]
     └── xr-ai-voicegate         [editable: ../utils/xr-ai-voicegate]
     └── xr-ai-vllm              [editable: ../utils/xr-ai-vllm]
-    └── transcript-mcp-server   [editable: ../agent-mcp-servers/transcript-mcp]
-    └── vlm-mcp-server          [editable: ../agent-mcp-servers/vlm-mcp]
-    └── render-mcp              [editable: ../agent-mcp-servers/render-mcp]
     └── xr-render-scene         [editable: ../agent-samples/xr-render-demo/scene]
-    └── video-mcp-server        [editable: ../agent-mcp-servers/video-mcp]
-    └── vec-mcp-server          [editable: ../agent-mcp-servers/vec-mcp]
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
-    └── fastmcp >=3.4,<4 (CPU MCP adapter contracts and GPU MCP tests)
+    └── fastmcp >=3.4,<4 (generic NAT-to-MCP adapter contracts)
     └── Pillow >=10.0   (CPU native-vision and GPU image tests)
     └── pyyaml >=6.0    (CPU subprocess/service configs and GPU service tests)
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages
-    (launcher, logging, vllm), a CI-viable subprocess test for
-    CPU-viable subprocess smoke tests for transcript-mcp-server and
-    vec-mcp-server (fastmcp pulled in transitively), native spatial-math and
-    text-memory and vision function-group tests, generic NAT-to-MCP adapter
-    tests, the vlm-mcp adapter, and the sample-local scene native groups plus
-    render-mcp adapter surface (LOVR is stubbed). oxr-mcp is not
-    included: it needs native isaacteleop + a CloudXR runtime, so its
-    smoke test self-skips on CPU (see tests/README.md). Root pytest adds
+    (launcher, logging, vllm), native spatial-math, text-memory, and vision
+    function-group tests, generic NAT-to-MCP adapter tests, and the
+    sample-local scene native tools (LOVR is stubbed). Root pytest adds
     services/stt-server to its Python path (not a dependency) so the
     endpoint tests can import its FastAPI app with a mocked backend,
     avoiding a test-time NeMo installation.
 
     Tests marked `@pytest.mark.gpu` are the local-only set (skipped by
     `-m "not gpu"` in CI). They spawn real model services via `uv run` (e.g.
-    `test_gpu_stt_server.py`, `test_gpu_video_mcp.py`), import
+    `test_gpu_stt_server.py`), import
     `livekit.rtc` directly to drive `_room_client.py`, exercise NVENC /
     NVDEC via PyNvVideoCodec, and shell out to `docker` to manage a
     LiveKit container — `livekit`, `livekit-api`, `PyNvVideoCodec`, and
-    `docker` all come in transitively via `xr-media-hub` /
-    `video-mcp-server` rather than redeclared here.
+    `docker` all come in transitively via the media hub and video-memory
+    service rather than being redeclared here.
 
 vlm-server  (services/vlm-server/)
     └── vllm >=0.12.0
@@ -507,16 +430,10 @@ piper-tts-server  (services/piper-tts/)
 | `services/nemotron3-nano-llm/` | `nemotron3-nano-llm-server` | `nemotron3_nano_llm_server` | 8107 | NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8} (GPU-selected) | vLLM (pip or docker) |
 | `services/nemotron-omni-llm/` | `nemotron-omni-llm-server` | `nemotron_omni_llm_server` | 8108 | Nemotron-3-Nano-Omni-30B-A3B-Reasoning-{NVFP4,FP8,BF16} | vLLM (pip or docker) — multimodal text+video |
 | `services/embedding-server/` | `embedding-server` | `embedding_server` | 8109 | llama-nemotron-embed-1b-v2 | vLLM (pip or docker) |
-| `agent-mcp-servers/transcript-mcp/` | `transcript-mcp-server` | `transcript_mcp_server` | 8200 | — | Pure FastMCP (JSONL storage) |
 | `services/video-memory-service/` | `xr-video-memory-service` | `video_memory_service` | 8310 | — | Typed msgpack/ZMQ → recorded H.264 queries |
-| `agent-mcp-servers/video-mcp/` | `video-mcp-server` | `video_mcp_server` | 8210 | — | FastMCP compatibility adapter → recorded service + live hub IPC |
 | `agent-samples/xr-render-demo/scene/` | `xr-render-scene` | `xr_render_scene` | 8320 | — | Sample-local typed scene service → LOVR |
-| `agent-mcp-servers/render-mcp/` | `render-mcp` | `render_mcp` | 8220 | — | FastMCP compatibility adapter → xr-render-scene |
 | `services/openxr-service/` | `xr-openxr-service` | `openxr_service` | 8330 | — | Typed msgpack/ZMQ → headless OpenXR / CloudXR |
 | `services/rag-service/` | `xr-rag-service` | `rag_service` | 8340 | — | Typed msgpack/ZMQ → dense document retrieval |
-| `agent-mcp-servers/oxr-mcp/` | `oxr-mcp-server` | `oxr_mcp_server` | 8230 | — | FastMCP compatibility adapter → openxr-service |
-| `agent-mcp-servers/vlm-mcp/` | `vlm-mcp-server` | `vlm_mcp_server` | 8240 | — | Pure FastMCP; forwards images to vlm-server via xr-ai-models |
-| `agent-mcp-servers/vec-mcp/` | `vec-mcp-server` | `vec_mcp_server` | 8250 | — | Pure FastMCP; deterministic spatial-math primitives (no model) |
 
 All model weights are cached under `models/` at the repo root (gitignored except
 `.gitkeep`).  Cache path is configured via `model_cache` in each YAML, resolved
@@ -665,10 +582,8 @@ updated in the same commit**.
 | vlm-server model class or supported architectures | `services/vlm-server/vlm_server.yaml` comments |
 | vlm-server YAML config keys (`model`, `model_cache`, …) | `services/vlm-server/vlm_server.yaml`, `agent-samples/simple-vlm-example/vlm_server.yaml` |
 | cloudxr-runtime YAML config keys | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, `docs/adding-cloudxr.md` |
-| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | xr-render-scene + oxr-mcp + `services/cloudxr-runtime/cloudxr_runtime/__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `docs/adding-cloudxr.md`, `docs/xr-render-demo.md` (client-type section) |
+| `utils/xr-ai-launcher/xr_ai_launcher/_cloudxr_env.py` API | xr-render-scene + `services/cloudxr-runtime/cloudxr_runtime/__main__.py` imports, `agent-samples/xr-render-demo/main.py` (native-profile gate), `docs/adding-cloudxr.md`, `docs/xr-render-demo.md` (client-type section) |
 | scene service YAML config keys | `agent-samples/xr-render-demo/scene/scene_service.yaml`, orchestrator process declaration, `docs/xr-render-demo.md` |
-| render-mcp YAML config keys | `agent-mcp-servers/render-mcp/render_mcp.yaml`, worker URL constants |
-| oxr-mcp YAML config keys | `agent-mcp-servers/oxr-mcp/oxr_mcp_server.yaml`, sample copies, worker URL constants |
 | Any `pyproject.toml` dependency | `DEPENDENCIES.md` (this file) |
 | Any new sample added | `DEPENDENCIES.md`, `AGENTS.md`, `README.md` |
 | Any new reusable service added under `services/` | `services/README.md`, `AGENTS.md` Architecture section, `DEPENDENCIES.md` |

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Runtime messages and the resident xr-render agent."""
+"""Typed topics and the resident xr-render runtime agent."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import asyncio
 from contextlib import suppress
 
 import nemo_relay
-from processors import RenderSceneAgent
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_runtime import (
     Agent,
@@ -26,6 +25,8 @@ from xr_ai_voice import (
     VoiceOutput,
     VoiceParticipantLeft,
 )
+
+from .scene_loop import SceneModelLoop
 
 
 class RenderNotice(BaseModel):
@@ -46,7 +47,7 @@ INTERRUPTED_TOPIC = Topic("xr-render.interrupted", VoiceInterrupted)
 class RenderAgent(Agent):
     """Run participant-scoped render turns and publish their spoken chunks."""
 
-    def __init__(self, scene: RenderSceneAgent, tools: tuple[Tool, ...]) -> None:
+    def __init__(self, scene: SceneModelLoop, tools: tuple[Tool, ...]) -> None:
         super().__init__(tools)
         self.scene = scene
         self._tasks: dict[str, asyncio.Task[None]] = {}

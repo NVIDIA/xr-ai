@@ -16,7 +16,6 @@ client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 agent-sdk/          # Agent runtime, IPC, model, NAT-function, capability, and voice SDK packages
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 services/           # XR hub, CloudXR, model-serving, and typed XR capability services
-agent-mcp-servers/  # Optional MCP compatibility adapters for non-NAT consumers
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
 docs/               # Design docs and topic deep-dives
@@ -44,8 +43,7 @@ docs/               # Design docs and topic deep-dives
   and concurrency policy. Model loops, planning, memory, and raw media
   transport remain outside the runtime.
 - **Native agents compose typed tools in process.** Model-backed tools call
-  typed capability services, while deterministic tools run locally. MCP
-  adapters only republish selected tools for MCP consumers.
+  typed capability services, while deterministic tools run locally.
 - **No API keys or tokens in source files** — use env vars or
   `xr_media_hub.yaml` (see `docs/credentials.md`).
 
