@@ -68,9 +68,7 @@ This isolation is a property of the hub's routing, not a limitation of the
 transport. LiveKit natively supports client-to-client communication, and an
 application is free to use those native features directly for peer-to-peer
 media or data. Doing so is **outside the scope of XR AI**: the hub neither
-routes nor guarantees that traffic, and because the transport is an
-implementation detail, a future streaming backend may not offer the same
-client-to-client capability. Build on the hub's participant ↔ agent contract
+routes nor guarantees that traffic. This traffic is outside the hub contract and is not portable across transports. Build on the hub's participant ↔ agent contract
 for behavior that ports across backends.
 ```
 

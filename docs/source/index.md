@@ -10,7 +10,7 @@ in real time.
 
 XR AI is an open-source stack that connects web, iOS/visionOS, AR-glasses, and
 XR-headset clients to GPU-accelerated AI services and tool-using agents. An agent
-can perceive live physical context, call tools through MCP, and reply with audio
+can perceive live physical context, call native tools, and reply with audio
 or data in the same session. For remote-rendered AR and XR, XR AI integrates
 [NVIDIA CloudXR](https://developer.nvidia.com/cloudxr-sdk), as the `xr-render-demo`
 sample shows.

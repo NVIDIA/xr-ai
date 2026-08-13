@@ -22,7 +22,7 @@ services = ["msgpack>=1.0", "pyzmq>=27.0"]
 
 [tool.uv.sources]
 xr-ai-models = { path = "../xr-ai-models", editable = true }
-xr-ai-hub-client = { path = "../xr-ai-hub-client", editable = true }
+xr-ai-hub-client = { path = "../xr-ai-hub", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["xr_ai_tools"]

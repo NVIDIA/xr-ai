@@ -32,8 +32,3 @@ native tools in `xr-ai-tools`.
 Sample-specific orchestrators and workers remain together under
 `agent-samples/`; they are application processes rather than reusable
 services.
-
-The move from `ai-services/` changes where six standalone reference YAMLs
-resolve their ignored model caches. Before deleting a legacy checkout, follow
-the [cache migration procedure](../docs/ai-services.md#migrating-standalone-caches-from-ai-services)
-to merge existing weights into the repository-root `models/` directory.

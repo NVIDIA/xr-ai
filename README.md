@@ -21,7 +21,7 @@ discretion, and please report issues or feedback to help improve the project.
 
 XR AI is a developer stack for building powerful XR and AI systems across devices, platforms, and deployment environments. It connects web, iOS/visionOS, AR glasses, and XR headset clients to GPU-accelerated AI services, tool-using agents, and the CloudXR stack for remote rendering.
 
-With XR AI, developers can build agents that see and hear what the user experiences, reason over live physical context, call external tools through MCP, and respond with audio or data in the same XR session. The stack provides an end-to-end foundation for multimodal spatial computing applications: real-time media routing, participant-aware response handling, agent interfaces, AI service integration, remote rendering, and sample applications that show the pieces working together.
+With XR AI, developers can build agents that see and hear what the user experiences, reason over live physical context, call native tools, and respond with audio or data in the same XR session. The stack provides an end-to-end foundation for multimodal spatial computing applications: real-time media routing, participant-aware response handling, agent interfaces, AI service integration, remote rendering, and sample applications that show the pieces working together.
 
 The value is speed without lock-in. XR AI is designed to work quickly with NVIDIA open models for vision, language, and speech, plus swappable speech synthesis services, while still giving developers the flexibility to bring their own models, services, tools, and application logic. Because it is built around NVIDIA GPU infrastructure, the same architecture can be deployed where the workload needs to run: cloud, data center, workstation, or edge.
 
@@ -98,14 +98,14 @@ stack).  Networking caveats and workarounds:
 
 (All GPU profiles default to `vllm_backend: docker`, so the vLLM
 container ships nvcc + FlashInfer. If you switch a profile to
-`vllm_backend: pip`, see [`docs/troubleshooting.md`](docs/troubleshooting.md)
+`vllm_backend: pip`, see [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md)
 for the host CUDA toolchain prereq.)
 
 If `uv sync` or the VLM fails on first run, see
-[`docs/troubleshooting.md`](docs/troubleshooting.md).
+[`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md).
 
 **Network** — open the firewall ports listed in
-[`docs/networking.md`](docs/networking.md) before connecting from another
+[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) before connecting from another
 machine.  UDP 7882 is a silent-failure path: signaling succeeds but media
 frames are dropped if it is closed.
 
@@ -117,7 +117,10 @@ frames are dropped if it is closed.
 | Hub service | `services/xr-media-hub/` | XR-Media-Hub + LiveKit internal transport |
 | Launcher | `utils/xr-ai-launcher/` | stdlib-only process manager used by samples |
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
-| Agent runtime | `agent-sdk/xr-ai-agent-runtime/` | Agents with existing native tools and typed pub/sub routing |
+| Hub IPC | `agent-sdk/xr-ai-hub/` | Minimal agent-facing msgpack/ZMQ client |
+| Agent runtime | `agent-sdk/xr-ai-runtime/` | Agent registration and typed pub/sub routing |
+| Models | `agent-sdk/xr-ai-models/` | Typed model protocols and OpenAI-compatible clients |
+| Voice | `agent-sdk/xr-ai-voice/` | Voice agent, session, transport, and pipeline |
 | Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools |
 | Reusable services | `services/` | Model-serving and typed capability processes |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
@@ -177,7 +180,7 @@ uv run model_servers --omni-stack
 ```
 
 `HF_TOKEN` is required by default: without it the ~50 GB first-run download
-can stall indefinitely.  See [`docs/credentials.md`](docs/credentials.md)
+can stall indefinitely.  See [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)
 for how to set it, or pass `--allow-anonymous` to run without one.
 
 To stop all model servers when done:
@@ -217,7 +220,7 @@ uv run simple_vlm_example
 On the very first run weights download from HuggingFace (~23 GB; can take
 several minutes).  `HF_TOKEN` is required by default; pass
 `--allow-anonymous` to run without one (see
-[`docs/credentials.md`](docs/credentials.md)).
+[`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)).
 
 **With model-servers pre-running** — if VLM (port 8100) and STT (port 8103)
 are already up from `model-servers`, the demo detects them at startup and
@@ -247,7 +250,7 @@ on by default (a self-signed cert is generated on first run at
 `~/.local/share/xr-ai/web-server.crt`), so you'll see a "Your connection
 is not private" warning the first time — click **Advanced → Proceed**
 (Chrome/Edge) or **Accept the Risk and Continue** (Firefox).  See
-[`docs/networking.md`](docs/networking.md) for trusting the cert
+[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) for trusting the cert
 permanently or running over plain HTTP instead.
 
 Leave **Token URL** blank — the web client fetches a token from the server
@@ -297,9 +300,9 @@ an `NGC_API_KEY` as
 an **environment variable** (or save it once via the launcher credential
 prompt) — it is not stored in YAML; the overlay only names the env var via
 `api_key_env: NGC_API_KEY`. See
-[`docs/credentials.md`](docs/credentials.md). Full details (and self-hosted
+[`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md). Full details (and self-hosted
 NIM containers):
-[`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
+[`docs/source/components/ai-services.md`](docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
 
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`services/xr-media-hub/xr_media_hub.yaml`](services/xr-media-hub/xr_media_hub.yaml)
@@ -321,7 +324,7 @@ processes through Relay-managed native tools. The voice runtime runs
 quick-acks and a Nemotron-30B agentic tool-calling loop over
 scene, XR tracking, spatial math, vision, and video-memory tools. Full process map,
 agentic-loop details, and the XR session lifecycle:
-[`docs/xr-render-demo.md`](docs/xr-render-demo.md).
+[`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md).
 
 **Requires `model-servers` to be running first** — the demo does not start
 its own model services.
@@ -354,7 +357,7 @@ uv run xr_render_demo
 
 By default this serves the web / WebRTC client (`NV_DEVICE_PROFILE=auto-webrtc`).
 For a native Apple Vision Pro client, start it with `NV_DEVICE_PROFILE=auto-native`
-instead — see [`docs/xr-render-demo.md`](docs/xr-render-demo.md#selecting-the-client-type-webrtc-vs-native).
+instead — see [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md#selecting-the-client-type-webrtc-vs-native).
 
 On first run the orchestrator automatically downloads the pinned LOVR version to
 `deps/lovr/` inside the repo and builds the web vendor bundle (requires npm
@@ -363,7 +366,7 @@ and network access). Both steps are skipped on subsequent runs.
 **DGX Spark (aarch64):** LOVR does not publish a prebuilt aarch64 Linux
 binary, so the auto-download is not available — build LOVR from source and
 export `LOVR_BIN`. See
-[`docs/troubleshooting.md`](docs/troubleshooting.md#dgx-spark--lovr-auto-download-is-not-supported).
+[`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md#dgx-spark--lovr-auto-download-is-not-supported).
 
 To use a custom LOVR build:
 
@@ -376,7 +379,7 @@ uv run xr_render_demo
 `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`. cloudxr-runtime
 applies the pin to its own process and writes the selectors into
 `cloudxr.env`; the scene process and LOVR inherit from that file. See
-[`docs/xr-render-demo.md`](docs/xr-render-demo.md#gpu-pinning-for-the-xr-side)
+[`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md#gpu-pinning-for-the-xr-side)
 for full details.
 
 To stop the model servers when done:
@@ -399,7 +402,7 @@ no `main.py` edits. Provide
 an `NGC_API_KEY` as an **environment variable** (or via the launcher
 credential prompt — not in YAML) and just don't start the local
 `agent-llm` / `vlm` model-servers. See
-[`docs/ai-services.md`](docs/ai-services.md#hosting-models-on-nvidia-nim).
+[`docs/source/components/ai-services.md`](docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
 
 ---
 
@@ -421,7 +424,7 @@ The hub auto-discovers `services/xr-media-hub/xr_media_hub.yaml`.
 Open `https://localhost:8080` in a browser.  The samples ship with HTTPS
 on by default; the first connection shows a self-signed cert warning that
 you click through (or trust permanently — see
-[`docs/networking.md`](docs/networking.md)).  Leave **Token URL** blank to
+[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md)).  Leave **Token URL** blank to
 use the server's built-in `/token` endpoint, or paste the printed token
 directly.
 
@@ -475,7 +478,7 @@ wss /rtc proxy on 8080, WebRTC fallbacks on 7881/TCP + 7882/UDP, CloudXR
 WSS proxy on 48322). LiveKit's native 7880 stays on loopback — clients
 connect through the same-origin wss proxy, not directly. Full table and
 distro-specific `ufw` / `firewall-cmd` recipes are in
-[`docs/networking.md`](docs/networking.md). The same doc covers HTTPS for
+[`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md). The same doc covers HTTPS for
 the web client and self-signed certificate trust on each browser.
 
 ## Tests
@@ -506,17 +509,16 @@ For engineers and agents working in the repo:
 | [`AGENTS.md`](AGENTS.md) | Working contract — hard rules every change must satisfy |
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Authoritative dependency map (update with every `pyproject.toml` change) |
 | [Versioned documentation](https://nvidia.github.io/xr-ai/) | Latest release by default, plus `main` development and release-tag documentation |
-| [`docs/architecture.md`](docs/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
-| [`docs/process-model.md`](docs/process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
-| [`docs/ai-services.md`](docs/ai-services.md) | VLM / STT / TTS / LLM / embedding server reference + worker call examples |
-| [`docs/xr-render-demo.md`](docs/xr-render-demo.md) | xr-render-demo architecture: native functions, agentic loop, XR lifecycle |
-| [`docs/adding-a-sample.md`](docs/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
-| [`docs/adding-cloudxr.md`](docs/adding-cloudxr.md) | Wiring CloudXR into a sample |
-| [`docs/credentials.md`](docs/credentials.md) | HF / NGC token management |
-| [`docs/networking.md`](docs/networking.md) | Firewall ports + HTTPS for the web client |
-| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Known frictions and runtime symptoms |
-| [`docs/spdx-headers.md`](docs/spdx-headers.md) | SPDX header style and enforcement |
-| [`docs/changelog.md`](docs/changelog.md) | Significant design decisions, reverse chronological |
+| [`docs/source/overview/architecture.md`](docs/source/overview/architecture.md) | Hub ↔ transport ↔ agent boundaries; known limitations |
+| [`docs/source/components/launcher-and-process-model.md`](docs/source/components/launcher-and-process-model.md) | `Process` / `run_stack` mechanics; ready-file protocol |
+| [`docs/source/components/ai-services.md`](docs/source/components/ai-services.md) | VLM / STT / TTS / LLM / embedding server reference + worker call examples |
+| [`docs/source/reference/xr-render-demo.md`](docs/source/reference/xr-render-demo.md) | xr-render-demo architecture: native functions, agentic loop, XR lifecycle |
+| [`docs/source/guides/adding-a-sample.md`](docs/source/guides/adding-a-sample.md) | Boilerplate for scaffolding a new sample |
+| [`docs/source/guides/adding-cloudxr.md`](docs/source/guides/adding-cloudxr.md) | Wiring CloudXR into a sample |
+| [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md) | HF / NGC token management |
+| [`docs/source/getting_started/networking.md`](docs/source/getting_started/networking.md) | Firewall ports + HTTPS for the web client |
+| [`docs/source/guides/troubleshooting.md`](docs/source/guides/troubleshooting.md) | Known frictions and runtime symptoms |
+| [`docs/source/guides/spdx-headers.md`](docs/source/guides/spdx-headers.md) | SPDX header style and enforcement |
 
 ## Project meta
 

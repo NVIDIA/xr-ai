@@ -64,17 +64,6 @@ _LEGACY_ROOTS = {"ai-services", "cloudxr-runtime", "server-runtime"}
 _ALLOWED_LEGACY_REFERENCES = {
     Path("tests/test_service_layout.py"),
 }
-_ALLOWED_LEGACY_LINES = {
-    Path("docs/changelog.md"): {
-        "the 8B held is freed. The standalone `ai-services/llm/llama_nemotron` server",
-        "`server-runtime/xr_media_hub/transport/livekit/_docker.py` (the only other",
-        "`server-runtime/xr_media_hub/video/_recorder.py`:",
-        "**Hub NVENC video recording** (`server-runtime/xr_media_hub/video/_recorder.py`):",
-        "`ai-services/` added as a sibling of `server-runtime/`, containing three reusable",
-        "`cloudxr-runtime/` added as a peer of `server-runtime/`, wrapping",
-        "`server-runtime/xr_media_hub/ipc/__init__` re-exports everything for backwards compat.",
-    },
-}
 _HUB_PROJECT = _ROOT / "services" / "xr-media-hub"
 _SAMPLE_WEB_CLIENTS = {
     "simple-vlm-example": _ROOT / "client-samples" / "web",
@@ -312,17 +301,16 @@ def test_tracked_text_has_no_retired_service_paths() -> None:
             text = data.decode()
         except UnicodeDecodeError:
             continue
-        allowed_lines = _ALLOWED_LEGACY_LINES.get(relative, set())
         stale.extend(
             (f"{relative}:{line_number}", legacy)
             for line_number, line in enumerate(text.splitlines(), start=1)
             for legacy in _LEGACY_PROJECTS
-            if legacy in line and line not in allowed_lines
+            if legacy in line
         )
         stale.extend(
             (f"{relative}:{line_number}", "server-runtime/")
             for line_number, line in enumerate(text.splitlines(), start=1)
-            if "server-runtime/" in line and line not in allowed_lines
+            if "server-runtime/" in line
         )
 
     assert not stale, f"retired service paths remain: {stale}"

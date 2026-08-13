@@ -64,7 +64,7 @@ myst_enable_extensions = [
 ]
 myst_heading_anchors = 3
 
-# Don't choke the build on the bundled long-form changelog or build output.
+# Exclude generated documentation output.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # Keep release documentation immutable and publish main as development docs.

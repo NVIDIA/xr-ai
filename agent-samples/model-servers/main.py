@@ -135,7 +135,7 @@ def run() -> None:
         return
 
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
-    # docs/credentials.md.
+    # docs/source/getting_started/credentials.md.
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
     _stop_incompatible_stack(ns.stack)
     run_stack(_build_processes(ns.stack), _BASE, exit_after_ready=True)

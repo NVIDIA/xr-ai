@@ -5,8 +5,8 @@
 
 /*
  * Internal helper — parses the `_agent.status` topic payload. The contract is
- * a JSON object `{"status": "..."}` per xr-ai-pipecat's
- * `agent-sdk/xr-ai-hub-client/xr_ai_hub/_processor.py::set_status`. Inlined into a header
+ * a JSON object `{"status": "..."}` per xr-ai-hub's
+ * `agent-sdk/xr-ai-hub/xr_ai_hub/_processor.py::set_status`. Inlined into a header
  * so the unit tests can exercise it without exporting a public symbol.
  */
 

@@ -207,8 +207,7 @@ local install.
 
 **Cause:** NVDEC (`libnvcuvid.so`) and NVENC (`libnvidia-encode.so`) are
 required — the XR-Media-Hub refuses to start without them so it never silently falls
-back to OpenH264 (which is royalty-bearing). Refer to the
-{doc}`changelog <../reference/changelog>` entry **2026-04-21 — NVDEC/NVENC required**.
+back to OpenH264, which is royalty-bearing.
 
 **Fix:**
 - **Bare metal:** install or repair the NVIDIA driver. The libraries ship with the
@@ -237,7 +236,7 @@ owned by `xr_ai_voice.VoiceSession` or, for a direct Pipecat consumer,
 
 **Most common cause:** firewall blocking WebRTC media on UDP 7882 (LiveKit).
 
-**Fix:** open ports per [`docs/networking.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/networking.md). The web client
+**Fix:** open ports per [`docs/source/getting_started/networking.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/getting_started/networking.md). The web client
 will appear to connect (signaling on 7880 succeeds) but media frames are
 silently dropped without 7882.
 
@@ -350,7 +349,7 @@ flip `enforce_eager: false` unless you have a measured reason.
 **By design.** The vLLM-backed servers (`vlm_server`,
 `nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
-restarts. See [`docs/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/ai-services.md) → *vLLM model
+restarts. See [`docs/source/components/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/components/ai-services.md) → *vLLM model
 persistence*.
 
 **Fix:** to fully release VRAM:
@@ -377,4 +376,4 @@ the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (runs started with `--allow-anonymous`) are rate-limited and can
 stall indefinitely; set `HF_TOKEN` and restart
-(see [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)).
+(see [`docs/source/getting_started/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/getting_started/credentials.md)).

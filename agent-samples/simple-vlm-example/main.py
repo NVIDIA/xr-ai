@@ -97,7 +97,7 @@ def run() -> None:
 
     processes, credentials = _build_processes()
     # A missing HF_TOKEN silently stalls the multi-GB first-run download; see
-    # docs/credentials.md.
+    # docs/source/getting_started/credentials.md.
     require_credentials("HF_TOKEN", allow_missing=ns.allow_anonymous)
     for credential in credentials:
         ensure_credentials(credential)

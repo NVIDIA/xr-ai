@@ -62,41 +62,6 @@ HF_HOME=models hf download nvidia/Cosmos-Reason1-7B
 HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 ```
 
-## Migrating standalone caches from `ai-services/`
-
-Moving the standalone projects into `services/` also normalizes their reference
-YAMLs to the repository-root `models/` directory. Git does not move ignored
-model weights. Existing standalone caches may therefore remain in these legacy
-locations:
-
-| Services | Legacy cache | Current cache |
-|---|---|---|
-| VLM, STT, Nemotron 3 Nano, Nemotron Omni | `ai-services/models/` | `models/` |
-| Magpie TTS, Piper TTS | `ai-services/tts/models/` | `models/` |
-
-Stop the model services, then run the following from the repository root before
-starting the relocated services offline. The short options work with GNU and
-macOS `cp`: `-l` hard-links regular files so the migration does not duplicate
-model data, while `-n` preserves entries already present in the current cache.
-
-```bash
-mkdir -p models
-if [ -d ai-services/models ]; then
-  cp -a -l -n ai-services/models/. models/
-fi
-if [ -d ai-services/tts/models ]; then
-  cp -a -l -n ai-services/tts/models/. models/
-fi
-```
-
-Hard links require both paths to be on the same filesystem. If `models/` points
-to another filesystem, omit `-l` and make sure free space is at least the size
-of the legacy cache before copying.
-
-Keep the legacy directories until the relocated services have started
-successfully with network access disabled. Project virtual environments are not
-portable across the move; recreate them with `uv sync` in the corresponding
-`services/<project>/` directory instead of copying `.venv`.
 
 ## Adding a server to a sample
 
@@ -237,7 +202,7 @@ disables endpoint health probing, and declares external ownership:
 - **`api_key_env: NGC_API_KEY`** sends the environment value as a bearer
   token. The key is a
   managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
-  subprocess (refer to [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)); or export it.
+  subprocess (refer to [`docs/source/getting_started/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/getting_started/credentials.md)); or export it.
 - **`readiness: none`** is required when the hosted endpoint has no local
   `/health` route.
 - **`ownership: external`** keeps the launcher from starting or stopping the
@@ -322,7 +287,7 @@ another tag, an internal mirror, or a custom build.
 - **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
   `load_credentials()` from `~/.config/xr-ai/credentials.json` per
-  [`docs/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/credentials.md)). Otherwise, log in manually once:
+  [`docs/source/getting_started/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/getting_started/credentials.md)). Otherwise, log in manually once:
 
   ```bash
   docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY

@@ -135,7 +135,7 @@ reasoning-on; greedy decoding for reasoning-off.
 `vllm_backend: pip` (default) runs vLLM from the wrapper's venv;
 `vllm_backend: docker` runs `nvcr.io/nvidia/vllm:<tag> vllm serve …` in a
 container. Both honor identical config keys. See
-[`docs/ai-services.md`](../../docs/ai-services.md#choosing-the-vllm-runtime-pip-vs-docker)
+[`docs/source/components/ai-services.md`](../../docs/source/components/ai-services.md#choosing-the-vllm-runtime-pip-vs-docker)
 for prerequisites (Docker Engine, NVIDIA Container Toolkit, NGC auth) and
 runtime details.
 

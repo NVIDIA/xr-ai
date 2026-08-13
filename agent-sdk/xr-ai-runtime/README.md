@@ -3,9 +3,9 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# XR AI agent runtime
+# xr-ai-runtime
 
-`xr-ai-agent-runtime` provides typed pub/sub for composable XR AI agents. An
+The `xr-ai-agent-runtime` distribution provides typed pub/sub for composable XR AI agents. An
 `Agent` owns private state and exposes ordinary `Tool` or `AsyncTool` instances
 from `xr-ai-tools`.
 

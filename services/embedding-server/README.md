@@ -75,5 +75,5 @@ curl -s http://localhost:8109/v1/embeddings \
 `vllm_backend: pip` (default) runs vLLM from the wrapper's venv;
 `vllm_backend: docker` runs `nvcr.io/nvidia/vllm:<tag> vllm serve …` in a
 container. See
-[`docs/ai-services.md`](../../docs/ai-services.md#choosing-the-vllm-runtime-pip-vs-docker)
+[`docs/source/components/ai-services.md`](../../docs/source/components/ai-services.md#choosing-the-vllm-runtime-pip-vs-docker)
 for prerequisites.

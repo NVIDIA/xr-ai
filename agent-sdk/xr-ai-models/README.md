@@ -11,17 +11,11 @@ model layer. Worker code depends on the typed protocols `LLMService`,
 concrete clients from a model deployment profile — no hand-rolled httpx calls
 in callers, no model quirks leaking out of this package.
 
-## Why
+## Contract
 
-Before this package, every consumer (the simple-vlm-example worker,
-xr-render-demo worker, xr-ai-pipecat) rolled its own httpx wrappers and
-hard-coded model quirks (`chat_template_kwargs`, served-model-name strings,
-the `reasoning` vs `reasoning_content` field difference between
-nano_v3 and nemotron_v3 parsers).  Swapping an LLM meant editing N files.
-
-After: one selected profile per sample names the logical models the worker
-needs; `make_llm(config, "agent_llm")` returns something that satisfies
-`LLMService` regardless of which backend or quirks are involved.
+Model profiles name logical roles and keep endpoint and model-specific behavior
+inside this package. Callers depend on the typed protocol and can change models
+through configuration.
 
 ## Quickstart
 
@@ -212,10 +206,7 @@ are a profile change:
 without that route use `readiness: none`, which makes
 `health()` return `True` without a request — otherwise a worker's readiness
 gate would block forever. See
-[`docs/ai-services.md`](../../docs/ai-services.md#hosting-models-on-nvidia-nim).
-
-Future non-OpenAI-compat backends (LiteLLM, vendor SDKs) plug in as new
-`kind`s in `_factory.py::make_*`; the protocols and callers do not change.
+[`docs/source/components/ai-services.md`](../../docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
 
 ## Tests
 
