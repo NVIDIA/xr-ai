@@ -15,7 +15,11 @@ import numpy as np
 import pytest
 import video_memory_service.__main__ as video_memory_main
 from PIL import Image
-from video_memory_service.service import VideoMemoryService, select_decoded_frame
+from video_memory_service.service import (
+    VideoMemoryService,
+    sample_target_timestamps,
+    select_decoded_frame,
+)
 from video_memory_service.store import ChunkStore
 from xr_ai_hub import (
     FrameData,
@@ -29,6 +33,7 @@ from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.video_memory import (
     HistoricalFrameRequest,
     QueryVideoRequest,
+    SampleVideoRequest,
     VideoMemoryTools,
     VideoStatsRequest,
 )
@@ -78,6 +83,28 @@ def _recording(root: Path, participant_id: str) -> None:
         )
 
 
+def _sample_recording(root: Path, participant_id: str) -> None:
+    directory = root / "sample-user"
+    directory.mkdir(parents=True)
+    (directory / ".identity").write_text(participant_id, encoding="utf-8")
+    for start_us, end_us in ((1_000_000, 4_000_000), (5_000_000, 8_000_000)):
+        payload = str(start_us).encode()
+        (directory / f"{start_us}.264").write_bytes(payload)
+        (directory / f"{start_us}.json").write_text(
+            json.dumps(
+                {
+                    "start_us": start_us,
+                    "end_us": end_us,
+                    "num_frames": 4,
+                    "width": 2,
+                    "height": 2,
+                    "size_bytes": len(payload),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+
 @contextlib.asynccontextmanager
 async def _running_server(endpoint: str, dispatch):
     server = RPCServer(endpoint, dispatch)
@@ -104,6 +131,10 @@ def test_chunk_store_preserves_identities_and_windows(tmp_path: Path) -> None:
     assert store.stats("user/name")["total_bytes"] == len(b"firstsecond")
     assert store.query("user/name", 1_100_000, 2_100_000) == b"firstsecond"
     assert store.frame_chunk("user/name", 2_200_000)[0].name == "2000000.264"
+    assert [
+        path.name
+        for path, _metadata in store.overlapping_chunks("user/name", 1_500_000, 2_000_000)
+    ] == ["1000000.264", "2000000.264"]
 
 
 def test_chunk_store_path_escape_has_a_stable_rpc_error(tmp_path: Path) -> None:
@@ -291,6 +322,78 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
+async def test_sample_recorded_video_respects_total_frame_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recordings = tmp_path / "recordings"
+    _sample_recording(recordings, "sample/user")
+    decoded_chunks: list[bytes] = []
+    nv12 = np.array([[16, 16], [16, 16], [128, 128]], dtype=np.uint8)
+
+    def decode(data: bytes, _gpu_id: int) -> list[np.ndarray]:
+        decoded_chunks.append(data)
+        return [nv12.copy() for _ in range(4)]
+
+    monkeypatch.setattr("video_memory_service.service.decode_h264", decode)
+    service = VideoMemoryService(
+        store=ChunkStore(recordings),
+        out_dir=tmp_path / "output",
+        gpu_id=0,
+    )
+    endpoint = f"ipc:///tmp/video-{uuid.uuid4().hex}"
+
+    async with _running_server(endpoint, service.dispatch):
+        video = VideoMemoryTools(endpoint)
+        try:
+            result = await video.sample_recorded_video.execute(
+                SampleVideoRequest(
+                    participant_id="sample/user",
+                    reference_time_us=8_000_000,
+                    duration_seconds=7,
+                    frame_budget=4,
+                )
+            )
+        finally:
+            await video.close()
+
+    assert decoded_chunks == [b"1000000", b"5000000"]
+    assert [frame.timestamp_us for frame in result.frames] == [
+        1_000_000,
+        3_000_000,
+        6_000_000,
+        8_000_000,
+    ]
+    assert len(result.frames) == result.frame_budget == 4
+    assert result.start_us == 1_000_000
+    assert result.end_us == 8_000_000
+    for frame in result.frames:
+        with Image.open(frame.path) as image:
+            assert image.size == (2, 2)
+
+
+def test_sample_recorded_video_schema_bounds_work() -> None:
+    with pytest.raises(ValueError, match="less than or equal to 256"):
+        SampleVideoRequest(
+            participant_id="user",
+            reference_time_us=10_000_000,
+            duration_seconds=1,
+            frame_budget=257,
+        )
+    with pytest.raises(ValueError, match="before the Unix epoch"):
+        SampleVideoRequest(
+            participant_id="user",
+            reference_time_us=1_000_000,
+            duration_seconds=1,
+            frame_budget=1,
+        )
+
+    schema = SampleVideoRequest.model_json_schema()
+    assert schema["properties"]["duration_seconds"]["maximum"] == 300
+    assert schema["properties"]["frame_budget"]["maximum"] == 256
+
+
+@pytest.mark.asyncio
 async def test_video_memory_service_validation_and_disabled_mode(
     tmp_path: Path,
 ) -> None:
@@ -458,3 +561,17 @@ def test_select_decoded_frame_clamps_to_recorded_boundaries(
         decoded_frames=decoded_frames,
         target_us=target_us,
     ) == expected
+
+
+@pytest.mark.parametrize(
+    ("start_us", "end_us", "frame_budget", "expected"),
+    [
+        (1, 10, 1, [10]),
+        (1, 10, 2, [1, 10]),
+        (1, 10, 4, [1, 4, 7, 10]),
+    ],
+)
+def test_sample_target_timestamps_span_the_requested_window(
+    start_us: int, end_us: int, frame_budget: int, expected: list[int]
+) -> None:
+    assert sample_target_timestamps(start_us, end_us, frame_budget) == expected

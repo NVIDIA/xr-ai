@@ -767,6 +767,7 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
         "position_ahead",
         "position_relative",
         "query_video",
+        "sample_recorded_video",
         "remove_primitive",
         "scale_value",
         "start_xr",

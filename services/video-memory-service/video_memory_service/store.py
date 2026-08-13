@@ -108,6 +108,22 @@ class ChunkStore:
             "latest_us": int(chunks[-1][1].get("end_us", chunks[-1][0].stem)),
         }
 
+    def overlapping_chunks(
+        self,
+        participant_id: str,
+        start_us: int,
+        end_us: int,
+    ) -> list[tuple[Path, dict]]:
+        selected = [
+            (path, metadata)
+            for path, metadata in self.chunks(participant_id)
+            if int(metadata.get("start_us", path.stem)) <= end_us
+            and int(metadata.get("end_us", metadata.get("start_us", path.stem))) >= start_us
+        ]
+        if not selected:
+            raise RPCError("No video in requested time window", code="not_found")
+        return selected
+
     def query(self, participant_id: str, start_us: int, end_us: int) -> bytes:
         selected: list[Path] = []
         anchor: Path | None = None

@@ -12,11 +12,15 @@ extracts PNG frames with NVDEC, and writes requested clips or frames to
 
 Applications construct `xr_ai_tools.video_memory.VideoMemoryTools` with the
 private service endpoint. The native tool group
-contains four recorded-history operations:
+contains five recorded-history operations:
 
 - `list_recorded_participants` returns exact participant identities.
 - `get_video_stats` returns the available Unix-epoch microsecond range.
 - `query_video` writes a clip for an absolute Unix-epoch microsecond window.
+- `sample_recorded_video` returns evenly distributed PNG frames from the
+  `duration_seconds` ending at `reference_time_us`. `frame_budget` is a hard
+  total cap; sparse recordings may return fewer frames. Requests are bounded to
+  300 seconds and 256 frames.
 - `get_frame_from_time` selects a frame at `reference_time_us - second_ago`
   seconds, where `reference_time_us` is the workflow's event timestamp.
 

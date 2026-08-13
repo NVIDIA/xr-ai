@@ -48,6 +48,49 @@ class QueryVideoResult(BaseModel):
     end_us: int
 
 
+class SampleVideoRequest(StrictRequest):
+    participant_id: str = Field(
+        min_length=1,
+        description="Exact participant identity whose recorded video should be sampled.",
+    )
+    reference_time_us: int = Field(
+        gt=0,
+        description="Unix-epoch timestamp in microseconds at the end of the requested window.",
+    )
+    duration_seconds: int = Field(
+        gt=0,
+        le=300,
+        description="Whole seconds of recorded history ending at reference_time_us.",
+    )
+    frame_budget: int = Field(
+        gt=0,
+        le=256,
+        description="Maximum total number of evenly distributed frames to return.",
+    )
+
+    @model_validator(mode="after")
+    def validate_window(self) -> SampleVideoRequest:
+        start_us = self.reference_time_us - self.duration_seconds * 1_000_000
+        if start_us <= 0:
+            raise ValueError("duration_seconds extends before the Unix epoch")
+        return self
+
+
+class SampledVideoFrame(BaseModel):
+    path: str
+    width: int
+    height: int
+    timestamp_us: int
+
+
+class SampleVideoResult(BaseModel):
+    frames: list[SampledVideoFrame]
+    start_us: int
+    end_us: int
+    duration_seconds: int
+    frame_budget: int
+
+
 class HistoricalFrameRequest(StrictRequest):
     participant_id: str = Field(
         min_length=1,
@@ -104,6 +147,13 @@ class VideoMemoryTools:
             QueryVideoResult,
             self._query_video,
         )
+        self.sample_recorded_video = Tool(
+            "sample_recorded_video",
+            "Sample up to a total frame budget across the recorded seconds ending at reference_time_us.",
+            SampleVideoRequest,
+            SampleVideoResult,
+            self._sample_recorded_video,
+        )
         self.get_frame_from_time = Tool(
             "get_frame_from_time",
             "Extract the recorded PNG frame nearest reference_time_us minus second_ago whole seconds.",
@@ -115,6 +165,7 @@ class VideoMemoryTools:
             self.list_recorded_participants,
             self.get_video_stats,
             self.query_video,
+            self.sample_recorded_video,
             self.get_frame_from_time,
         )
 
@@ -134,6 +185,14 @@ class VideoMemoryTools:
     async def _query_video(self, request: QueryVideoRequest) -> QueryVideoResult:
         return QueryVideoResult.model_validate(
             await self._rpc.call("query_video", request.model_dump())
+        )
+
+    async def _sample_recorded_video(
+        self,
+        request: SampleVideoRequest,
+    ) -> SampleVideoResult:
+        return SampleVideoResult.model_validate(
+            await self._rpc.call("sample_recorded_video", request.model_dump())
         )
 
     async def _get_frame_from_time(
@@ -165,6 +224,9 @@ __all__ = [
     "ListRecordedParticipantsResult",
     "QueryVideoRequest",
     "QueryVideoResult",
+    "SampledVideoFrame",
+    "SampleVideoRequest",
+    "SampleVideoResult",
     "VideoHealthResult",
     "VideoMemoryTools",
     "VideoStatsRequest",
