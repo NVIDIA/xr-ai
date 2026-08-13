@@ -322,7 +322,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -553,11 +552,11 @@ to avoid stacking up in the TTS queue behind the real response.</p></li>
 <p>Port 8100 (<code class="docutils literal notranslate"><span class="pre">vlm-server</span></code>).</p>
 <p>Loaded in-process by <code class="docutils literal notranslate"><span class="pre">vlm-server</span></code> via HuggingFace transformers
 (Qwen2.5-VL architecture). <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;…&lt;/think&gt;</span></code> blocks are stripped before
-returning. Native vision functions read recorded images or acquire a current
+returning. Native vision tools read recorded images or acquire a current
 participant frame, encode it as an image URL, and invoke the shared
 <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> VLM service.</p>
-<p>There is a deliberate startup ordering constraint: the worker’s
-<code class="docutils literal notranslate"><span class="pre">wait_for_services</span></code> probe blocks on the VLM’s <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint, which
+<p>There is a deliberate startup ordering constraint: <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> readiness
+blocks on the VLM’s <code class="docutils literal notranslate"><span class="pre">/health</span></code> endpoint, which
 returns 200 only after weights are fully loaded. This ensures GPU 0 memory
 has settled before LOVR starts its Vulkan device, preventing a transient
 OOM race.</p>
@@ -565,8 +564,8 @@ OOM race.</p>
 <section id="stt-parakeet-tdt-0-6b-v3">
 <h2>STT — parakeet-tdt-0.6b-v3<a class="headerlink" href="#stt-parakeet-tdt-0-6b-v3" title="Link to this heading">#</a></h2>
 <p>Port 8103. NeMo ASR in-process. English-only, ~1.5 GB VRAM.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LiveKit mic (int16 PCM) → hub IPC (float32) → XRMediaHubTransport.input()
-  → SttProcessor
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LiveKit mic (int16 PCM) → hub IPC (float32) → VoiceSession
+  → VAD/STT
       pre-roll buffer    last 10 chunks (~320 ms) kept at all times;
                          prepended to the utterance buffer on speech onset
                          so the first word&#39;s attack isn&#39;t clipped
@@ -578,7 +577,7 @@ OOM race.</p>
       filler filter      drops single- and multi-word filler utterances
                          (&quot;um&quot;, &quot;uh&quot;, &quot;yeah&quot;, &quot;okay&quot;, &quot;mm-hmm&quot;, etc.)
       STT call           POST multipart/form-data WAV → stt-server :8103
-  → TranscriptionFrame pushed downstream
+  → accepted participant query
 </pre></div>
 </div>
 <p>STT calls are serialized — an <code class="docutils literal notranslate"><span class="pre">stt_busy</span></code> flag prevents a new finalize while
@@ -588,35 +587,43 @@ one is in-flight.</p>
 <h2>TTS — Piper<a class="headerlink" href="#tts-piper" title="Link to this heading">#</a></h2>
 <p>Port 8105. <code class="docutils literal notranslate"><span class="pre">rhasspy/piper-voices</span></code> ONNX. Runs on CPU, ~100 ms per sentence. All
 synthesis runs in a thread pool so the asyncio loop is never blocked.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>TextFrame (from agentic loop final response or quick-ack)
-  → TtsProcessor
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>voice.output topic (agentic-loop quick-ack or final response)
+  → VoiceAgent → private VoiceSession TTS
       sentence-batched synthesis
       POST text → tts-server :8105 → WAV bytes
       RETURN_AUDIO IPC → hub → LiveKit → participant&#39;s headphones
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">allow_interruptions=True</span></code> in the Pipecat pipeline. A new utterance while TTS
-is playing triggers <code class="docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code> → hub clears the LiveKit audio queue
-for that participant.</p>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns interruption handling. A new utterance while TTS is playing
+triggers <code class="docutils literal notranslate"><span class="pre">ReturnAudioFlush</span></code>, so the hub clears the LiveKit audio queue for that
+participant. Its interruption callback also cancels the participant’s active
+render-agent task without waiting on its cleanup in the media processor. A
+consumer-aborted render stream closes its scene generator without publishing a
+terminator to the already-closed voice stream; producer supersession completes
+the old stream before the replacement starts.</p>
 </section>
-<section id="pipecat-pipeline">
-<h2>Pipecat pipeline<a class="headerlink" href="#pipecat-pipeline" title="Link to this heading">#</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>XRMediaHubTransport.input()
-  → SttProcessor          (Silero VAD → utterance → parakeet STT
-                           → TranscriptionFrame)
-  → RenderSceneProcessor  (quick-ack + agentic loop → TextFrame)
-  → TtsProcessor          (TextFrame → Piper TTS → return audio)
-  → XRMediaHubTransport.output()
+<section id="agent-runtime-and-voice-topology">
+<h2>Agent runtime and voice topology<a class="headerlink" href="#agent-runtime-and-voice-topology" title="Link to this heading">#</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VoiceAgent → private VoiceSession → VAD/STT + VoiceGate ─┐
+           → typed hub text ingress ──────────┴→ xr-render.user-query topic
+  → RenderAgent → SceneModelLoop → voice.output topic
+  → VoiceAgent → private VoiceSession TTS → hub return audio
 </pre></div>
 </div>
+<p>The render worker imports no <code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code> or <code class="docutils literal notranslate"><span class="pre">pipecat-ai</span></code> API. Pipecat is
+an internal implementation detail of <code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code>; application input,
+participant-scoped agent execution, and voice output use public SDK contracts.
+Lifecycle failures publish notices to a sample-local runtime topic instead of
+manufacturing voice-pipeline frames.</p>
 </section>
 <section id="agentic-loop">
 <h2>Agentic loop<a class="headerlink" href="#agentic-loop" title="Link to this heading">#</a></h2>
-<p>At worker startup, a NAT <code class="docutils literal notranslate"><span class="pre">WorkflowBuilder</span></code> constructs sample-local scene,
-XR-tracking, spatial-math, vision, video-memory, and text-memory functions.
-The LLM tool schemas are derived from those Functions. <code class="docutils literal notranslate"><span class="pre">start_xr</span></code> and
-<code class="docutils literal notranslate"><span class="pre">get_health</span></code> remain worker-managed lifecycle operations.</p>
-<p>On each <code class="docutils literal notranslate"><span class="pre">TranscriptionFrame</span></code>:</p>
+<p>At worker startup, <code class="docutils literal notranslate"><span class="pre">NativeCapabilities</span></code> composes sample-local scene,
+XR-tracking, spatial-math, vision, video-memory, and text-memory <code class="docutils literal notranslate"><span class="pre">Tool</span></code>
+instances into a <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>. The LLM schemas come from
+<code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code>; <code class="docutils literal notranslate"><span class="pre">start_xr</span></code>, <code class="docutils literal notranslate"><span class="pre">get_health</span></code>, and raw frame extraction
+remain worker-managed lifecycle operations.</p>
+<p>On each accepted <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code> event or lifecycle notice:</p>
 <ol class="arabic simple">
 <li><p><strong>Quick-ack</strong> runs first (<code class="docutils literal notranslate"><span class="pre">llm</span></code> :8107, awaited before the loop).</p></li>
 <li><p><strong>Still-working timer</strong> starts (fires at 5s, repeats every 10s, data
@@ -626,11 +633,11 @@ channel only).</p></li>
 model skips those tool calls and goes straight to the operation.</p></li>
 <li><p><strong>Nemotron-30B :8107</strong> runs with <code class="docutils literal notranslate"><span class="pre">tools=[…]</span></code>, up to 10 iterations:</p>
 <ul class="simple">
-<li><p>Model emits <code class="docutils literal notranslate"><span class="pre">tool_calls</span></code> → worker invokes the matching NAT Function → result appended
-to conversation → next iteration.</p></li>
-<li><p>Runtime-backed Functions call scene, OpenXR, and video-memory typed
-services. Spatial math and text memory execute in process, and vision
-calls the configured <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> VLM service.</p></li>
+<li><p>Model emits <code class="docutils literal notranslate"><span class="pre">tool_calls</span></code> → <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> validates and invokes
+the matching native tool → its tool-role message is appended → next iteration.</p></li>
+<li><p>Service-backed tools call scene, OpenXR, and video-memory typed services.
+Spatial math and text memory execute in process, and vision calls the
+configured <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> VLM service.</p></li>
 <li><p>Progress message sent on <code class="docutils literal notranslate"><span class="pre">agent.progress</span></code> topic before each tool
 executes (data channel).</p></li>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">think=true</span></code>: reasoning preamble injected into system prompt
@@ -644,8 +651,8 @@ goes to the user. Token budget: 6144 total, 4096 thinking budget.</p></li>
 call: worker synthesizes a no-arg tool call and continues.</p></li>
 </ul>
 </li>
-<li><p><strong>Final response</strong> sent on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> topic and as a <code class="docutils literal notranslate"><span class="pre">TextFrame</span></code>
-downstream to TTS.</p></li>
+<li><p><strong>Final response</strong> sent on <code class="docutils literal notranslate"><span class="pre">agent.response</span></code> and published as correlated
+<code class="docutils literal notranslate"><span class="pre">voice.output</span></code> chunks for the voice subscriber and TTS.</p></li>
 <li><p><strong>Turn appended</strong> to a rolling 4-turn history buffer — injected as
 context in future turns so the model understands “fix that”, “undo”,
 “the one I just added”. Final messages are also persisted through native
@@ -656,12 +663,12 @@ text memory without model scratch output or tool traces.</p></li>
 <h2>Native capability composition<a class="headerlink" href="#native-capability-composition" title="Link to this heading">#</a></h2>
 <p>The sample-local scene process owns scene state and LOVR. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code>
 owns the headless tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded
-video decoding. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. NAT
-Functions provide the typed tool surface over those services; the demo does
+video decoding. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
+native tools provide the typed surface over those services; the demo does
 not launch or call MCP adapters.</p>
 <section id="spatial-tool-surface">
 <h3>Spatial tool surface<a class="headerlink" href="#spatial-tool-surface" title="Link to this heading">#</a></h3>
-<p>The worker composes XR tracking with shared spatial-math Functions. This
+<p>The worker composes XR tracking with shared spatial-math tools. This
 offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
 in one place:</p>
 <ul class="simple">
@@ -703,7 +710,7 @@ helpers can’t model.</p></li>
 </section>
 <section id="prompt-structure">
 <h2>Prompt structure<a class="headerlink" href="#prompt-structure" title="Link to this heading">#</a></h2>
-<p>The system prompt at <code class="docutils literal notranslate"><span class="pre">worker/prompts/system.txt</span></code> is worked-example heavy.
+<p>The system prompt at <code class="docutils literal notranslate"><span class="pre">worker/xr_render_demo_worker/prompts/system.txt</span></code> is worked-example heavy.
 It opens with pronoun and reference resolution, then routes placement
 utterances through sequential checks before the LLM picks a tool:</p>
 <ol class="arabic simple">
@@ -745,7 +752,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 <section id="eval-harness">
 <h2>Eval harness<a class="headerlink" href="#eval-harness" title="Link to this heading">#</a></h2>
 <p>Offline regression suite for the agentic loop, run against the live agent LLM.
-It derives schemas from the worker’s native NAT functions and evaluates tool
+It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
 <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
@@ -816,7 +823,7 @@ cases overfitting to the prompt’s worked examples.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vlm-cosmos-reason1-7b">VLM — Cosmos-Reason1-7B</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stt-parakeet-tdt-0-6b-v3">STT — parakeet-tdt-0.6b-v3</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tts-piper">TTS — Piper</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pipecat-pipeline">Pipecat pipeline</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-runtime-and-voice-topology">Agent runtime and voice topology</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#agentic-loop">Agentic loop</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-capability-composition">Native capability composition</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#spatial-tool-surface">Spatial tool surface</a></li>
