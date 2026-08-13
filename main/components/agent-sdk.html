@@ -408,9 +408,10 @@ publish/subscribe.</p></li>
 <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP clients, driven by a
 structured model deployment profile. Swapping a backend is a configuration
 edit, not a code edit.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness,
-hub transport, voice gating, streaming responses, signals, and cleanup while
-applications provide a <code class="docutils literal notranslate"><span class="pre">VoiceHandler</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes
+<code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> and lifecycle events to application-named topics and consumes
+<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating,
+streaming responses, signals, and cleanup.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat surface retained for unmigrated
 consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>. Its <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> helper exposes
 the same IPC-start request-readiness boundary as <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>.</p></li>
@@ -443,6 +444,21 @@ by direct execution belongs in the tool’s request schema; participant and
 correlation metadata on <code class="docutils literal notranslate"><span class="pre">RuntimeContext</span></code> applies to pub/sub. Agents create,
 cancel, and await their own background tasks. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> settles all fan-out
 deliveries before propagating subscriber failures.</p>
+<p>Relay records each publication and receiving-agent callback as nested runtime
+and agent scopes. These scopes include the topic plus message, correlation,
+participant, source, and subscriber metadata. Agent-owned work that outlives a
+subscription callback starts a fresh Relay scope stack and adds its own agent
+scope, preserving logical correlation in metadata without retaining an ended
+callback as its parent.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Topic.telemetry</span></code> controls runtime cardinality without changing delivery. Keep
+<code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> for commands, state changes, and lifecycle events. High-volume
+transport streams use <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>; their receiving agent records one semantic
+scope after aggregation. The voice output topic follows this pattern, producing
+one <code class="docutils literal notranslate"><span class="pre">voice.response</span></code> scope for either a finite response or a completed stream.
+Voice records provider work separately: <code class="docutils literal notranslate"><span class="pre">voice.stt</span></code> covers final and bounded
+partial-probe transcription, while <code class="docutils literal notranslate"><span class="pre">voice.tts</span></code> covers each sentence synthesis.
+Audio is summarized rather than stored, and playback on the remote client is
+outside these spans.</p>
 </section>
 <hr class="docutils" />
 <section id="xr-ai-models">
@@ -685,9 +701,18 @@ lifecycle ownership.</p>
 <hr class="docutils" />
 <section id="xr-ai-voice">
 <h2>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h2>
-<p>Native voice applications work with participant-aware turns rather than
-Pipecat processors. A handler returns a string or an async stream of strings:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceSession</span>
+<p>Native voice applications work with participant-aware runtime topics rather
+than Pipecat processors. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>, publishes accepted
+input and lifecycle events with voice-owned schemas on application-named
+topics, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">UserQuery</span><span class="p">,</span>
+    <span class="n">VadConfig</span><span class="p">,</span>
+    <span class="n">VoiceAgent</span><span class="p">,</span>
+    <span class="n">VoiceParticipantLeft</span><span class="p">,</span>
+    <span class="n">VoiceSession</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="n">session</span> <span class="o">=</span> <span class="n">VoiceSession</span><span class="p">(</span>
     <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
@@ -698,19 +723,26 @@ Pipecat processors. A handler returns a string or an async stream of strings:</p
     <span class="n">ready_file</span><span class="o">=</span><span class="n">ready_file</span><span class="p">,</span>
     <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
 <span class="p">)</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="p">:</span>
-    <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">on_participant_left</span><span class="o">=</span><span class="n">release_participant</span><span class="p">)</span>
+<span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.user-query&quot;</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
+<span class="n">participant_left</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.participant-left&quot;</span><span class="p">,</span> <span class="n">VoiceParticipantLeft</span><span class="p">)</span>
+<span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
+    <span class="n">session</span><span class="p">,</span>
+    <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
+    <span class="n">participant_left_topic</span><span class="o">=</span><span class="n">participant_left</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">TextMessageInput</span></code> routes typed messages through the same turn path as speech
-and ignores data received outside an active <code class="docutils literal notranslate"><span class="pre">run()</span></code>. The default hub transport
-is opened only after readiness probes succeed; failed readiness closes the
-session’s model clients without opening hub sockets. The ready file is touched
-from <code class="docutils literal notranslate"><span class="pre">run()</span></code> only after the input transport enters its hub IPC receive loop.
-NAT applications create handlers with
-<code class="docutils literal notranslate"><span class="pre">xr_ai_nat.adapters.as_voice_handler</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant
-routing, cancels superseded or interrupted turns, installs signal handlers,
-and closes its transport and model clients.</p>
+<p>The default hub transport is opened only after readiness probes succeed; failed
+readiness closes the session’s model clients without opening hub sockets. The
+ready file is touched only after the input transport enters its hub IPC receive
+loop. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant routing, cancels superseded or
+interrupted output, installs signal handlers, and closes its transport and
+model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> turns transport lifecycle callbacks into typed
+runtime events; application agents subscribe and clean up their own state. A
+pid-less interruption is a global event.</p>
 </section>
 <section id="xr-ai-pipecat">
 <h2>xr-ai-pipecat<a class="headerlink" href="#xr-ai-pipecat" title="Link to this heading">#</a></h2>
