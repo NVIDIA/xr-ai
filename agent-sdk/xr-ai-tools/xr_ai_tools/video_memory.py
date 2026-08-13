@@ -67,12 +67,24 @@ class SampleVideoRequest(StrictRequest):
         le=256,
         description="Maximum total number of evenly distributed frames to return.",
     )
+    max_width: int | None = Field(
+        default=None,
+        gt=0,
+        description="Optional maximum exported width; requires max_height.",
+    )
+    max_height: int | None = Field(
+        default=None,
+        gt=0,
+        description="Optional maximum exported height; requires max_width.",
+    )
 
     @model_validator(mode="after")
     def validate_window(self) -> SampleVideoRequest:
         start_us = self.reference_time_us - self.duration_seconds * 1_000_000
         if start_us <= 0:
             raise ValueError("duration_seconds extends before the Unix epoch")
+        if (self.max_width is None) != (self.max_height is None):
+            raise ValueError("max_width and max_height must be provided together")
         return self
 
 
@@ -89,6 +101,8 @@ class SampleVideoResult(BaseModel):
     end_us: int
     duration_seconds: int
     frame_budget: int
+    max_width: int | None
+    max_height: int | None
 
 
 class HistoricalFrameRequest(StrictRequest):
@@ -149,7 +163,7 @@ class VideoMemoryTools:
         )
         self.sample_recorded_video = Tool(
             "sample_recorded_video",
-            "Sample up to a total frame budget across the recorded seconds ending at reference_time_us.",
+            "Sample a bounded number and optional maximum resolution of recorded frames ending at reference_time_us.",
             SampleVideoRequest,
             SampleVideoResult,
             self._sample_recorded_video,

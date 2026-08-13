@@ -227,9 +227,14 @@ class VideoMemoryService:
                 seen_timestamps.add(timestamp_us)
                 width = int(metadata.get("width", frames[index].shape[1]))
                 height = int(metadata.get("height", frames[index].shape[0] * 2 // 3))
+                resolution = (
+                    "native"
+                    if request.max_width is None
+                    else f"{request.max_width}x{request.max_height}"
+                )
                 path = self._out_dir / (
                     f"{safe_name(request.participant_id)}_sample_"
-                    f"{start_us}_{end_us}_{chunk.stem}_{index}.png"
+                    f"{start_us}_{end_us}_{resolution}_{chunk.stem}_{index}.png"
                 )
                 try:
                     rgb = await asyncio.to_thread(
@@ -238,7 +243,13 @@ class VideoMemoryService:
                         width,
                         height,
                     )
-                    await asyncio.to_thread(save_png, rgb, path)
+                    width, height = await asyncio.to_thread(
+                        save_png,
+                        rgb,
+                        path,
+                        max_width=request.max_width,
+                        max_height=request.max_height,
+                    )
                 except Exception as error:
                     raise RPCError(
                         f"Frame export failed: {error}",
@@ -265,6 +276,8 @@ class VideoMemoryService:
             "end_us": end_us,
             "duration_seconds": request.duration_seconds,
             "frame_budget": request.frame_budget,
+            "max_width": request.max_width,
+            "max_height": request.max_height,
         }
 
     @staticmethod

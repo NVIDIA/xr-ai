@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 import video_memory_service.__main__ as video_memory_main
 from PIL import Image
+from video_memory_service.frames import save_png
 from video_memory_service.service import (
     VideoMemoryService,
     sample_target_timestamps,
@@ -96,7 +97,7 @@ def _sample_recording(root: Path, participant_id: str) -> None:
                     "start_us": start_us,
                     "end_us": end_us,
                     "num_frames": 4,
-                    "width": 2,
+                    "width": 4,
                     "height": 2,
                     "size_bytes": len(payload),
                 }
@@ -329,7 +330,10 @@ async def test_sample_recorded_video_respects_total_frame_budget(
     recordings = tmp_path / "recordings"
     _sample_recording(recordings, "sample/user")
     decoded_chunks: list[bytes] = []
-    nv12 = np.array([[16, 16], [16, 16], [128, 128]], dtype=np.uint8)
+    nv12 = np.array(
+        [[16, 16, 16, 16], [16, 16, 16, 16], [128, 128, 128, 128]],
+        dtype=np.uint8,
+    )
 
     def decode(data: bytes, _gpu_id: int) -> list[np.ndarray]:
         decoded_chunks.append(data)
@@ -352,6 +356,8 @@ async def test_sample_recorded_video_respects_total_frame_budget(
                     reference_time_us=8_000_000,
                     duration_seconds=7,
                     frame_budget=4,
+                    max_width=2,
+                    max_height=2,
                 )
             )
         finally:
@@ -367,9 +373,22 @@ async def test_sample_recorded_video_respects_total_frame_budget(
     assert len(result.frames) == result.frame_budget == 4
     assert result.start_us == 1_000_000
     assert result.end_us == 8_000_000
+    assert result.max_width == result.max_height == 2
     for frame in result.frames:
+        assert (frame.width, frame.height) == (2, 1)
         with Image.open(frame.path) as image:
-            assert image.size == (2, 2)
+            assert image.size == (2, 1)
+
+
+def test_sampled_png_fits_target_without_upscaling(tmp_path: Path) -> None:
+    rgb = np.zeros((2, 4, 3), dtype=np.uint8)
+
+    assert save_png(
+        rgb, tmp_path / "small.png", max_width=2, max_height=2
+    ) == (2, 1)
+    assert save_png(
+        rgb, tmp_path / "native.png", max_width=8, max_height=8
+    ) == (4, 2)
 
 
 def test_sample_recorded_video_schema_bounds_work() -> None:
@@ -388,9 +407,20 @@ def test_sample_recorded_video_schema_bounds_work() -> None:
             frame_budget=1,
         )
 
+    with pytest.raises(ValueError, match="must be provided together"):
+        SampleVideoRequest(
+            participant_id="user",
+            reference_time_us=10_000_000,
+            duration_seconds=1,
+            frame_budget=1,
+            max_width=640,
+        )
+
     schema = SampleVideoRequest.model_json_schema()
     assert schema["properties"]["duration_seconds"]["maximum"] == 300
     assert schema["properties"]["frame_budget"]["maximum"] == 256
+    assert schema["properties"]["max_width"]["anyOf"][0]["exclusiveMinimum"] == 0
+    assert schema["properties"]["max_height"]["anyOf"][0]["exclusiveMinimum"] == 0
 
 
 @pytest.mark.asyncio

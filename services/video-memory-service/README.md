@@ -20,7 +20,8 @@ contains five recorded-history operations:
 - `sample_recorded_video` returns evenly distributed PNG frames from the
   `duration_seconds` ending at `reference_time_us`. `frame_budget` is a hard
   total cap; sparse recordings may return fewer frames. Requests are bounded to
-  300 seconds and 256 frames.
+  300 seconds and 256 frames. Optional paired `max_width` and `max_height` values fit
+  each PNG within that box while preserving aspect ratio and never upscaling.
 - `get_frame_from_time` selects a frame at `reference_time_us - second_ago`
   seconds, where `reference_time_us` is the workflow's event timestamp.
 

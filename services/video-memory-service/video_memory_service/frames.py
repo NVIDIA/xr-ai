@@ -33,8 +33,18 @@ def nv12_to_rgb(frame: np.ndarray, width: int, height: int) -> np.ndarray:
     return _yuv_to_rgb(y, cb, cr)
 
 
-def save_png(rgb: np.ndarray, path: Path) -> None:
-    Image.fromarray(rgb, "RGB").save(path, "PNG")
+def save_png(
+    rgb: np.ndarray,
+    path: Path,
+    *,
+    max_width: int | None = None,
+    max_height: int | None = None,
+) -> tuple[int, int]:
+    image = Image.fromarray(rgb, "RGB")
+    if max_width is not None and max_height is not None:
+        image.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+    image.save(path, "PNG")
+    return image.size
 
 
 def _copy_decoded_frame(frame) -> np.ndarray:
