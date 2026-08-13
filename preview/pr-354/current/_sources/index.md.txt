@@ -48,7 +48,7 @@ How XR-Media-Hub, the transport, and agents fit together.
 :::{grid-item-card} 🛠️ Components
 :link: components/index
 :link-type: doc
-The server runtime, agent SDK, MCP servers, AI services, and the launcher.
+The server runtime, agent SDK, AI services, and the launcher.
 :::
 
 :::{grid-item-card} 📦 Build a sample

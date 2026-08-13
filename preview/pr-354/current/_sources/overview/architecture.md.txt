@@ -14,7 +14,6 @@ client-samples/     # Platform clients (Android, iOS/visionOS, Web)
 agent-sdk/          # IPC, model, NAT-function, and voice-pipeline SDK packages
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 services/           # XR hub, CloudXR, model-serving, and typed XR capability services
-agent-mcp-servers/  # Optional MCP compatibility adapters for non-NAT consumers
 agent-samples/      # End-to-end agent demos
 tests/              # Multi-client / multi-agent integration tests
 docs/               # Design docs and topic deep-dives
@@ -35,9 +34,8 @@ docs/               # Design docs and topic deep-dives
 - **`agent-sdk/xr-ai-hub-client`** contains only the agent-facing IPC layer. Its
   sole runtime dependencies are `pyzmq` and `msgpack` — no LiveKit, FastAPI,
   or uvicorn.
-- **Native agents compose typed NAT functions in process.** Runtime-backed
-  functions call typed capability services, while deterministic functions run
-  locally. MCP adapters only republish selected functions for MCP consumers.
+- **Native agents compose typed tools in process.** Service-backed tools call
+  typed capability services, while deterministic tools run locally.
 - **No API keys or tokens in source files** — use environment variables or
   `xr_media_hub.yaml` (refer to {doc}`/getting_started/credentials`).
 

@@ -300,7 +300,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -383,7 +382,6 @@
 <span class="n">agent</span><span class="o">-</span><span class="n">sdk</span><span class="o">/</span>          <span class="c1"># IPC, model, NAT-function, and voice-pipeline SDK packages</span>
 <span class="n">utils</span><span class="o">/</span>              <span class="c1"># Shared infra: launcher, logging, vad, vllm, voicegate</span>
 <span class="n">services</span><span class="o">/</span>           <span class="c1"># XR hub, CloudXR, model-serving, and typed XR capability services</span>
-<span class="n">agent</span><span class="o">-</span><span class="n">mcp</span><span class="o">-</span><span class="n">servers</span><span class="o">/</span>  <span class="c1"># Optional MCP compatibility adapters for non-NAT consumers</span>
 <span class="n">agent</span><span class="o">-</span><span class="n">samples</span><span class="o">/</span>      <span class="c1"># End-to-end agent demos</span>
 <span class="n">tests</span><span class="o">/</span>              <span class="c1"># Multi-client / multi-agent integration tests</span>
 <span class="n">docs</span><span class="o">/</span>               <span class="c1"># Design docs and topic deep-dives</span>
@@ -406,9 +404,8 @@ reason. Agents never need to know.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-hub-client</span></code></strong> contains only the agent-facing IPC layer. Its
 sole runtime dependencies are <code class="docutils literal notranslate"><span class="pre">pyzmq</span></code> and <code class="docutils literal notranslate"><span class="pre">msgpack</span></code> — no LiveKit, FastAPI,
 or uvicorn.</p></li>
-<li><p><strong>Native agents compose typed NAT functions in process.</strong> Runtime-backed
-functions call typed capability services, while deterministic functions run
-locally. MCP adapters only republish selected functions for MCP consumers.</p></li>
+<li><p><strong>Native agents compose typed tools in process.</strong> Service-backed tools call
+typed capability services, while deterministic tools run locally.</p></li>
 <li><p><strong>No API keys or tokens in source files</strong> — use environment variables or
 <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>).</p></li>
 </ul>

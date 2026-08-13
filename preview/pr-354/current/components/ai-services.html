@@ -300,7 +300,6 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -384,7 +383,7 @@ orchestrator pattern that wires servers into a sample, refer to
 can call them with any OpenAI SDK client or plain <code class="docutils literal notranslate"><span class="pre">httpx</span></code> or <code class="docutils literal notranslate"><span class="pre">requests</span></code>.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct
-children of the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/services/README.md">services source index</a>;
+children of the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/26485b0890642bfcb5bfe0c846653716a20ceebe/services/README.md">services source index</a>;
 pick an LLM per sample based on the tool-calling, reasoning, and hardware
 trade-offs documented below.</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -445,35 +444,17 @@ trade-offs documented below.</p>
 <td><p>llama-nemotron-embed-1b-v2</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/transcript-mcp/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">transcript_mcp_server</span></code></p></td>
-<td><p>8200</p></td>
-<td><p>—</p></td>
-<td><p>JSONL + FastMCP</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310</p></td>
 <td><p>—</p></td>
 <td><p>Typed recorded-video capability</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">rag_service</span></code></p></td>
 <td><p>8340</p></td>
 <td><p>—</p></td>
 <td><p>Typed dense document retrieval capability</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/video-mcp/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">video_mcp_server</span></code></p></td>
-<td><p>8210</p></td>
-<td><p>—</p></td>
-<td><p>FastMCP → recorded service + live hub IPC</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/vlm-mcp/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">vlm_mcp_server</span></code></p></td>
-<td><p>8240</p></td>
-<td><p>—</p></td>
-<td><p>FastMCP → vlm-server (<code class="docutils literal notranslate"><span class="pre">ask_image</span></code> tool)</p></td>
 </tr>
 </tbody>
 </table>
@@ -605,17 +586,14 @@ cp<span class="w"> </span>../../services/rag-service/rag_service.yaml<span class
 cp<span class="w"> </span>../../services/piper-tts/piper_tts_server.yaml<span class="w"> </span>./yaml/piper_tts_server.yaml
 <span class="c1"># Or for Magpie (multilingual, GPU, ~2-5 s/sentence):</span>
 cp<span class="w"> </span>../../services/magpie-tts/magpie_tts_server.yaml<span class="w"> </span>./yaml/magpie_tts_server.yaml
-<span class="c1"># MCP servers:</span>
-cp<span class="w"> </span>../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml<span class="w"> </span>./yaml/transcript_mcp_server.yaml
 cp<span class="w"> </span>../../services/video-memory-service/video_memory_service.yaml<span class="w"> </span>./yaml/video_memory_service.yaml
-cp<span class="w"> </span>../../agent-mcp-servers/video-mcp/video_mcp_server.yaml<span class="w"> </span>./yaml/video_mcp_server.yaml
 </pre></div>
 </div>
 <p>The standalone model-service YAMLs contain <code class="docutils literal notranslate"><span class="pre">model_cache:</span> <span class="pre">../../models</span></code> for their
 original <code class="docutils literal notranslate"><span class="pre">services/&lt;project&gt;/</span></code> location. After copying them one level deeper
 into <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>, change that value to <code class="docutils literal notranslate"><span class="pre">../../../models</span></code> so
 the cache still resolves to the repository-root <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory. Capability
-and MCP configurations without a <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> key need no change.</p>
+and capability configurations without a <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> key need no change.</p>
 <p>Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
 <code class="docutils literal notranslate"><span class="pre">yaml/&lt;command&gt;.yaml</span></code> in the sample root and passes it as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.
 For RAG, also point <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> at an application-owned document
@@ -624,7 +602,7 @@ directory and a model profile containing an <code class="docutils literal notran
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
 <p>Workers do not hand-roll <code class="docutils literal notranslate"><span class="pre">httpx</span></code> clients against these endpoints.  They
-depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
+depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/26485b0890642bfcb5bfe0c846653716a20ceebe/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
 load a per-sample model profile, and construct service clients via
 <code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
@@ -661,7 +639,7 @@ legacy entries and direct role mappings. A profile shared with the stdlib-only
 launcher must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/26485b0890642bfcb5bfe0c846653716a20ceebe/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
 </section>
 <section id="hosting-models-on-nvidia-nim">
 <h2>Hosting models on NVIDIA NIM<a class="headerlink" href="#hosting-models-on-nvidia-nim" title="Link to this heading">#</a></h2>
@@ -695,7 +673,7 @@ disables endpoint health probing, and declares external ownership:</p>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code></strong> sends the environment value as a bearer
 token. The key is a
 managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
-subprocess (refer to <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>); or export it.</p></li>
+subprocess (refer to <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/26485b0890642bfcb5bfe0c846653716a20ceebe/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>); or export it.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code></strong> is required when the hosted endpoint has no local
 <code class="docutils literal notranslate"><span class="pre">/health</span></code> route.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code></strong> keeps the launcher from starting or stopping the
@@ -788,7 +766,7 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <li><p><strong>NGC pull access</strong> for <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/26485b0890642bfcb5bfe0c846653716a20ceebe/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
@@ -845,7 +823,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/26485b0890642bfcb5bfe0c846653716a20ceebe/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -856,7 +834,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/26485b0890642bfcb5bfe0c846653716a20ceebe/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
@@ -871,20 +849,10 @@ English-only; the <code class="docutils literal notranslate"><span class="pre">l
 <li><p><strong>magpie-tts</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>
 <li><p><strong>piper-tts</strong> serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
 All inference runs in a thread pool so the asyncio loop is never blocked.</p></li>
-<li><p><strong>transcript-mcp-server</strong> is pure FastMCP at <code class="docutils literal notranslate"><span class="pre">/mcp</span></code> on port 8200.
-Records are keyed by free-form <code class="docutils literal notranslate"><span class="pre">source_id</span></code> (live participant identity
-<em>or</em> an internal source name like <code class="docutils literal notranslate"><span class="pre">&quot;agent-vlm&quot;</span></code>). Tools:
-<code class="docutils literal notranslate"><span class="pre">query_transcripts</span></code>, <code class="docutils literal notranslate"><span class="pre">add_transcript</span></code> (worker ingest), <code class="docutils literal notranslate"><span class="pre">list_sources</span></code>,
-<code class="docutils literal notranslate"><span class="pre">get_transcript_stats</span></code>. Transcripts persist as JSONL alongside a
-<code class="docutils literal notranslate"><span class="pre">.identity</span></code> sidecar so list and query round-trip raw IDs cleanly even
-when sanitized filenames collide.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack/ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s
 <code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. Current frames stay with the caller’s hub client.</p></li>
-<li><p><strong>video-mcp-server</strong> is the optional FastMCP compatibility adapter at
-<code class="docutils literal notranslate"><span class="pre">/mcp</span></code> on port 8210. It discovers whether recording is enabled from the
-service and preserves the existing conditional tool surface.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
 <li><p><strong>Sample YAMLs</strong> for each service ship in their own service directory.
 Copy them to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory and set <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to
