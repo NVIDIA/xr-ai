@@ -8,20 +8,23 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 
+import nemo_relay
 from processors import RenderSceneAgent
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_runtime import (
     Agent,
-    AgentContext,
     RuntimeClosedError,
+    RuntimeContext,
     Topic,
-    handler,
     subscribe,
 )
+from xr_ai_tools import Tool
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     UserQuery,
+    VoiceInterrupted,
     VoiceOutput,
+    VoiceParticipantLeft,
 )
 
 
@@ -36,29 +39,20 @@ class RenderNotice(BaseModel):
 
 USER_QUERY_TOPIC = Topic("xr-render.user-query", UserQuery)
 RENDER_NOTICE_TOPIC = Topic("xr-render.notice", RenderNotice)
+PARTICIPANT_LEFT_TOPIC = Topic("xr-render.participant-left", VoiceParticipantLeft)
+INTERRUPTED_TOPIC = Topic("xr-render.interrupted", VoiceInterrupted)
 
 
-class CancelRender(BaseModel):
-    """Cancel the active render turn in the metadata participant scope."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class CancelAllRender(BaseModel):
-    """Cancel every active render turn."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class RenderAgent(Agent[None]):
+class RenderAgent(Agent):
     """Run participant-scoped render turns and publish their spoken chunks."""
 
-    def __init__(self, scene: RenderSceneAgent) -> None:
+    def __init__(self, scene: RenderSceneAgent, tools: tuple[Tool, ...]) -> None:
+        super().__init__(tools)
         self.scene = scene
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     @subscribe(USER_QUERY_TOPIC)
-    async def answer_user(self, query: UserQuery, ctx: AgentContext) -> None:
+    async def answer_user(self, query: UserQuery, ctx: RuntimeContext) -> None:
         """Start a render turn from a user-facing input path."""
 
         await self._start_turn(
@@ -70,7 +64,7 @@ class RenderAgent(Agent[None]):
         )
 
     @subscribe(RENDER_NOTICE_TOPIC)
-    async def answer_notice(self, notice: RenderNotice, ctx: AgentContext) -> None:
+    async def answer_notice(self, notice: RenderNotice, ctx: RuntimeContext) -> None:
         """Start a render turn from an application-authored notice."""
 
         await self._start_turn(
@@ -84,7 +78,7 @@ class RenderAgent(Agent[None]):
     async def _start_turn(
         self,
         text: str,
-        ctx: AgentContext,
+        ctx: RuntimeContext,
         *,
         is_notice: bool,
         interrupt_output: bool,
@@ -96,7 +90,7 @@ class RenderAgent(Agent[None]):
         if participant_id is None:
             raise ValueError("render turns require a participant")
         await self._cancel(participant_id)
-        task = ctx.start_task(
+        task = asyncio.create_task(
             self._run_turn(
                 text,
                 ctx,
@@ -105,30 +99,40 @@ class RenderAgent(Agent[None]):
                 timestamp_us=timestamp_us,
             ),
             name=f"xr-render:{participant_id}",
+            context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
         task.add_done_callback(
             lambda completed, pid=participant_id: self._discard(pid, completed)
         )
 
-    @handler
-    async def cancel(self, _request: CancelRender, ctx: AgentContext) -> None:
-        """Cancel one participant's active render turn."""
+    @subscribe(PARTICIPANT_LEFT_TOPIC)
+    async def participant_left(
+        self,
+        _event: VoiceParticipantLeft,
+        ctx: RuntimeContext,
+    ) -> None:
+        """Cancel work and release state for a departed participant."""
 
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
-            raise ValueError("participant cancellation requires a participant")
+            raise ValueError("participant-left events require a participant")
         await self._cancel(participant_id)
+        await self.scene.on_participant_left(participant_id)
 
-    @handler
-    async def cancel_all(
+    @subscribe(INTERRUPTED_TOPIC)
+    async def interrupted(
         self,
-        _request: CancelAllRender,
-        _ctx: AgentContext,
+        _event: VoiceInterrupted,
+        ctx: RuntimeContext,
     ) -> None:
-        """Cancel every active render turn."""
+        """Cancel participant-scoped or global render work."""
 
-        await self._cancel_all()
+        participant_id = ctx.metadata.participant_id
+        if participant_id is None:
+            await self._cancel_all()
+            return
+        await self._cancel(participant_id)
 
     async def stop(self) -> None:
         """Cancel active turns before runtime shutdown."""
@@ -138,7 +142,36 @@ class RenderAgent(Agent[None]):
     async def _run_turn(
         self,
         text: str,
-        ctx: AgentContext,
+        ctx: RuntimeContext,
+        *,
+        is_notice: bool,
+        interrupt_output: bool,
+        timestamp_us: int | None,
+    ) -> None:
+        with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
+            with nemo_relay.scope.scope(
+                "xr-render.turn",
+                nemo_relay.ScopeType.Agent,
+                input={"text": text, "is_notice": is_notice},
+                metadata={
+                    "agent": ctx.agent_name,
+                    "message_id": ctx.metadata.message_id,
+                    "correlation_id": ctx.metadata.correlation_id,
+                    "participant_id": ctx.metadata.participant_id,
+                },
+            ):
+                await self._run_turn_scoped(
+                    text,
+                    ctx,
+                    is_notice=is_notice,
+                    interrupt_output=interrupt_output,
+                    timestamp_us=timestamp_us,
+                )
+
+    async def _run_turn_scoped(
+        self,
+        text: str,
+        ctx: RuntimeContext,
         *,
         is_notice: bool,
         interrupt_output: bool,
@@ -206,8 +239,8 @@ class RenderAgent(Agent[None]):
 __all__ = [
     "RENDER_NOTICE_TOPIC",
     "USER_QUERY_TOPIC",
-    "CancelAllRender",
-    "CancelRender",
+    "INTERRUPTED_TOPIC",
+    "PARTICIPANT_LEFT_TOPIC",
     "RenderAgent",
     "RenderNotice",
 ]

@@ -9,18 +9,21 @@ import asyncio
 import sys
 from pathlib import Path
 
+from pydantic import BaseModel
 from xr_ai_runtime import (
     Agent,
-    AgentContext,
     AgentRuntime,
     MessageMetadata,
+    RuntimeContext,
     subscribe,
 )
+from xr_ai_tools import Tool, ToolSet
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     UserQuery,
     VoiceOutput,
 )
+from xr_render_scene import EmptyRequest
 
 _WORKER_DIR = (
     Path(__file__).resolve().parent.parent
@@ -75,18 +78,18 @@ class _Transport:
         self.endpoint = _Endpoint()
 
 
-class _Tools:
-    async def invoke(self, _name: str, _arguments: dict):
-        raise AssertionError("unexpected scene invocation")
+class _ToolResult(BaseModel):
+    status: str = "ok"
 
 
 class _VoiceRecorder(Agent):
     def __init__(self) -> None:
+        super().__init__()
         self.events: list[tuple[VoiceOutput, MessageMetadata]] = []
         self.final = asyncio.Event()
 
     @subscribe(VOICE_OUTPUT_TOPIC)
-    async def record(self, output: VoiceOutput, ctx: AgentContext) -> None:
+    async def record(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
         self.events.append((output, ctx.metadata))
         if output.final:
             self.final.set()
@@ -94,11 +97,12 @@ class _VoiceRecorder(Agent):
 
 class _QueryRecorder(Agent):
     def __init__(self) -> None:
+        super().__init__()
         self.events: list[tuple[RenderNotice, MessageMetadata]] = []
         self.received = asyncio.Event()
 
     @subscribe(RENDER_NOTICE_TOPIC)
-    async def record(self, notice: RenderNotice, ctx: AgentContext) -> None:
+    async def record(self, notice: RenderNotice, ctx: RuntimeContext) -> None:
         self.events.append((notice, ctx.metadata))
         self.received.set()
 
@@ -107,7 +111,7 @@ async def test_render_agent_publishes_incremental_voice_output() -> None:
     scene = _Scene()
     output = _VoiceRecorder()
     runtime = AgentRuntime()
-    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
+    runtime.register("xr-render", RenderAgent(scene, ()))  # type: ignore[arg-type]
     runtime.register("test-output", output)
 
     async with runtime:
@@ -134,7 +138,7 @@ async def test_render_agent_publishes_incremental_voice_output() -> None:
 async def test_render_agent_supersedes_a_participant_turn() -> None:
     scene = _Scene()
     runtime = AgentRuntime()
-    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
+    runtime.register("xr-render", RenderAgent(scene, ()))  # type: ignore[arg-type]
 
     async with runtime:
         await runtime.publish(
@@ -160,7 +164,17 @@ async def test_launch_failure_notice_enters_the_render_notice_topic() -> None:
     lifecycle = RenderDemoAgent(
         transport=_Transport(),  # type: ignore[arg-type]
         scene_agent=_Scene(),  # type: ignore[arg-type]
-        tools=_Tools(),  # type: ignore[arg-type]
+        tools=ToolSet(
+            (
+                Tool(
+                    "start_xr",
+                    "Start XR.",
+                    EmptyRequest,
+                    _ToolResult,
+                    lambda _request: _ToolResult(),
+                ),
+            )
+        ),
         runtime=runtime,
     )
 

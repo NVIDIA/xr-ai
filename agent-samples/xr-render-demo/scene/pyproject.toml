@@ -13,19 +13,16 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "xr-ai-launcher",
     "xr-ai-logging",
-    "xr-ai-nat[services]",
+    "xr-ai-tools[services]",
     "msgpack>=1.0",
     "pyyaml>=6.0",
     "pyzmq>=27.0",
 ]
 
-[project.entry-points."nat.plugins"]
-xr_render_scene = "xr_render_scene.functions"
-
 [tool.uv.sources]
 xr-ai-launcher = { path = "../../../utils/xr-ai-launcher", editable = true }
 xr-ai-logging = { path = "../../../utils/xr-ai-logging", editable = true }
-xr-ai-nat = { path = "../../../agent-sdk/xr-ai-nat", editable = true }
+xr-ai-tools = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
 
 [project.scripts]
 xr_render_scene = "xr_render_scene.__main__:run"

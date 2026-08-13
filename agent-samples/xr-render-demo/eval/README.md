@@ -7,7 +7,7 @@
 
 End-to-end test of the agent LLM's tool-calling against the live model. Each
 case feeds a synthetic scene and head pose into the model with the same system
-prompt and native NAT function schemas as the live worker, executes tool
+prompt and native tool schemas as the live worker, executes tool
 effects against deterministic fixtures, then checks the resulting scene
 mutations against a per-case expectation.
 

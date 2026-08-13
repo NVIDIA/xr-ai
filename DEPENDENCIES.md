@@ -139,9 +139,10 @@ xr-ai-tools  (agent-sdk/xr-ai-tools/)
     └── pydantic >=2.10
     └── [relay] xr-ai-models [editable: ../xr-ai-models]
     └── [live-vision] numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
+    └── [services] msgpack >=1.0, pyzmq >=27.0, xr-ai-models [editable: ../xr-ai-models]
     Toolkit-independent native tools: Pydantic request and response models,
     Relay-managed finite and async execution, model tool-call workflow helpers,
-    and participant-scoped live vision.
+    participant-scoped live vision, typed capability clients, and service RPC.
 
 xr-ai-nat  (agent-sdk/xr-ai-nat/)
     └── nvidia-nat-core ==1.8.0
@@ -319,11 +320,11 @@ render-mcp-server  (agent-mcp-servers/render-mcp/)
 xr-render-scene  (agent-samples/xr-render-demo/scene/)
     └── xr-ai-launcher [editable: ../../../utils/xr-ai-launcher]
     └── xr-ai-logging [editable: ../../../utils/xr-ai-logging]
-    └── xr-ai-nat[services] [editable: ../../../agent-sdk/xr-ai-nat]
+    └── xr-ai-tools[services] [editable: ../../../agent-sdk/xr-ai-tools]
     └── pyzmq >=27.0
     └── msgpack >=1.0
     └── pyyaml >=6.0
-    Owns scene state, sample-local NAT function groups, LOVR lifecycle, and the
+    Owns scene state, sample-local native tools, LOVR lifecycle, and the
     LOVR Lua app. Exposes typed msgpack/ZMQ at port 8320.
 
 oxr-mcp-server  (agent-mcp-servers/oxr-mcp/)
@@ -352,7 +353,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub-client]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
     └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
-    └── xr-ai-tools[live-vision] [editable: ../agent-sdk/xr-ai-tools]
+    └── xr-ai-tools[live-vision,services] [editable: ../agent-sdk/xr-ai-tools]
     └── xr-rag-service [editable: ../services/rag-service]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
@@ -620,20 +621,20 @@ GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
 ### xr-render-demo  (agent-samples/xr-render-demo/)
 
 Voice-driven sphere rendered into a CloudXR session: web mic → STT → LLM
-tool calls → native NAT functions → typed scene/OpenXR/video services → LOVR.
-The worker composes tracking and spatial-math functions in process for
+tool calls → Relay-managed native tools → typed scene/OpenXR/video services → LOVR.
+The worker composes tracking and spatial-math tools in process for
 user-relative requests such as "to my left".
 
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
-| Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-nat` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent-runtime` [editable], `xr-ai-hub-client`, `xr-ai-models` [editable], `xr-ai-nat[services,vision]` [editable], `xr-ai-voice` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pydantic >=2.12, pyyaml >=6.0 (native scene, tracking, spatial-math, video-memory, vision, and text-memory functions replace capability MCP clients; `xr-ai-voice` privately supplies VAD and speech-pipeline dependencies). |
+| Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-tools[services]` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent-runtime` [editable], `xr-ai-hub-client`, `xr-ai-models` [editable], `xr-ai-tools[live-vision,services]` [editable], `xr-ai-voice` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pydantic >=2.12, pyyaml >=6.0 (native scene, tracking, spatial-math, video-memory, vision, and text-memory tools replace capability MCP clients; `xr-ai-voice` privately supplies VAD and speech-pipeline dependencies). |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
 `make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
-a transitive dep of `xr-ai-voice` and `xr-ai-nat[vision]`.
+a transitive dep of `xr-ai-voice` and `xr-ai-tools[live-vision]`.
 
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency

@@ -1,20 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""CPU-only contract tests for the sample-local native scene functions."""
+"""CPU-only contract tests for the sample-local native scene tools."""
 
 import asyncio
+import json
 import uuid
 
 import pytest
-from nat.builder.workflow_builder import WorkflowBuilder
-from xr_ai_nat.functions._service.rpc import RPCServer
-from xr_render_scene import (
-    SceneControlFunctionsConfig,
-    SceneObjectFunctionsConfig,
-    SceneStateFunctionsConfig,
-    SceneUpdateFunctionsConfig,
-)
+from xr_ai_models import ToolCall
+from xr_ai_tools import ToolSet
+from xr_ai_tools.rpc import RPCServer
+from xr_ai_tools.tool_calling import handle_tool_call
+from xr_render_scene import SceneTools
 from xr_render_scene.service import SceneService
 
 
@@ -90,51 +88,41 @@ class _BlockingStartDispatcher(_MemoryDispatcher):
 
 
 @pytest.mark.asyncio
-async def test_native_scene_groups_share_the_typed_scene_service() -> None:
+async def test_native_scene_tools_share_the_typed_scene_service() -> None:
     endpoint = f"ipc:///tmp/scene-functions-{uuid.uuid4().hex}"
     service = SceneService(_MemoryDispatcher())
     server = RPCServer(endpoint, service.dispatch)
     task = asyncio.create_task(server.serve())
+    scene = SceneTools(endpoint)
+    tools = ToolSet(scene.tools)
     await asyncio.sleep(0.02)
     try:
-        async with WorkflowBuilder() as builder:
-            await builder.add_function_group(
-                "objects",
-                SceneObjectFunctionsConfig(endpoint=endpoint),
+        async def call(name: str, arguments: dict) -> dict:
+            result = await handle_tool_call(
+                ToolCall(
+                    id=f"call_{uuid.uuid4().hex[:12]}",
+                    name=name,
+                    arguments=json.dumps(arguments),
+                ),
+                tools,
             )
-            await builder.add_function_group(
-                "updates",
-                SceneUpdateFunctionsConfig(endpoint=endpoint),
-            )
-            await builder.add_function_group(
-                "state",
-                SceneStateFunctionsConfig(endpoint=endpoint),
-            )
-            await builder.add_function_group(
-                "control",
-                SceneControlFunctionsConfig(endpoint=endpoint),
-            )
+            return json.loads(result.message.content)
 
-            objects = await (await builder.get_function_group("objects")).get_all_functions()
-            updates = await (await builder.get_function_group("updates")).get_all_functions()
-            state = await (await builder.get_function_group("state")).get_all_functions()
-            control = await (await builder.get_function_group("control")).get_all_functions()
+        created = await call(
+            "add_primitive",
+            {"prim_type": "sphere", "r": 1.0, "g": 0.0, "b": 0.0},
+        )
+        await call("update_primitive", {"obj_id": created["id"], "x": 0.5})
+        snapshot = await call("get_scene_state", {})
+        health = await call("get_health", {})
+        starting = await call("start_xr", {})
 
-            created = await objects["objects__add_primitive"].ainvoke(
-                {"prim_type": "sphere", "r": 1.0, "g": 0.0, "b": 0.0}
-            )
-            await updates["updates__update_primitive"].ainvoke(
-                {"obj_id": created.id, "x": 0.5}
-            )
-            snapshot = await state["state__get_scene_state"].ainvoke({})
-            health = await control["control__get_health"].ainvoke({})
-            starting = await control["control__start_xr"].ainvoke({})
-
-        assert snapshot.objects[0].id == created.id
-        assert snapshot.objects[0].position.x == 0.5
-        assert health.lovr_started is False
-        assert starting.status == "starting"
+        assert snapshot["objects"][0]["id"] == created["id"]
+        assert snapshot["objects"][0]["position"]["x"] == 0.5
+        assert health["lovr_started"] is False
+        assert starting["status"] == "starting"
     finally:
+        await scene.close()
         await service.close()
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

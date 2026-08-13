@@ -1,130 +1,318 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Sample-facing NAT functions used by the existing XR scene agent loop."""
+"""Native tool composition for the xr-render-demo application."""
 
+from __future__ import annotations
+
+import asyncio
+import json
 import math
 import time
-from typing import Annotated, Any, Literal
+from pathlib import Path
+from typing import Any, Literal
 
-from nat.builder.function import Function
-from nat.builder.workflow_builder import WorkflowBuilder
-from nat.plugin_api import (
-    Builder,
-    FunctionGroup,
-    FunctionGroupBaseConfig,
-    FunctionGroupRef,
-    register_function_group,
+from pydantic import BaseModel, ConfigDict, Field
+from xr_ai_models import VLMService
+from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools.capabilities import (
+    EmptyRequest,
+    HistoricalVisionTool,
+    SpatialFrame,
+    TextMemoryTool,
+    TrackingTools,
+    Vector3,
+    VideoMemoryTools,
 )
-from pydantic import BaseModel, Field
-from xr_ai_models import ToolDef
-from xr_ai_nat.functions.spatial_math import SpatialMathFunctionsConfig
-from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
-from xr_ai_nat.functions.vision import VisionToolsConfig
-from xr_ai_nat.functions.xr_tracking import XRTrackingFunctionsConfig
-from xr_render_scene import (
-    SceneControlFunctionsConfig,
-    SceneObjectFunctionsConfig,
-    SceneStateFunctionsConfig,
-    SceneUpdateFunctionsConfig,
+from xr_ai_tools.live_vision import LiveVisionTool
+from xr_ai_tools.spatial import (
+    anchor_relative,
+    gaze_target,
+    midpoint,
+    offset_user_frame,
+    toward,
+    user_relative,
 )
+from xr_render_scene import SceneTools
 
 
-class _EmptyRequest(BaseModel):
-    pass
+class _Request(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
-class RenderSpatialToolsConfig(FunctionGroupBaseConfig, name="xr_render_spatial_tools"):
-    """Compose tracking and spatial math into the demo's established tool vocabulary."""
-
-    tracking: FunctionGroupRef = FunctionGroupRef("tracking")
-    spatial_math: FunctionGroupRef = FunctionGroupRef("spatial_math")
+class PositionAheadRequest(_Request):
+    distance: float = Field(default=1.5, description="Distance along the user's gaze, in metres.")
 
 
-@register_function_group(config_type=RenderSpatialToolsConfig)
-async def render_spatial_tools(config: RenderSpatialToolsConfig, builder: Builder):
-    tracking_group = await builder.get_function_group(config.tracking)
-    tracking = await tracking_group.get_all_functions()
-    math_group = await builder.get_function_group(config.spatial_math)
-    spatial = await math_group.get_all_functions()
-    get_frame = tracking[f"{tracking_group.instance_name}__get_user_frame"]
+class PositionRelativeRequest(_Request):
+    forward: float = 0.0
+    right: float = 0.0
+    up: float = 0.0
+    origin_x: float | None = None
+    origin_y: float | None = None
+    origin_z: float | None = None
 
-    async def frame_dict() -> dict[str, Any]:
-        frame = await get_frame.ainvoke({})
-        return frame.model_dump(mode="python")
 
-    async def get_head_pose(request: _EmptyRequest) -> dict[str, Any]:
-        del request
-        frame = await frame_dict()
-        forward = frame["forward"]
-        return {
-            "is_valid": True,
-            "position": frame["origin"],
-            "forward": forward,
-            "right": frame["right"],
-            "up": frame["up"],
-            "yaw_deg": math.degrees(math.atan2(-forward["x"], -forward["z"])),
-            "pitch_deg": math.degrees(math.asin(max(-1.0, min(1.0, forward["y"])))),
-            "ts": time.time_ns() // 1_000_000,
-        }
+class PlaceUserRelativeRequest(_Request):
+    direction: Literal["front", "back", "left", "right", "above", "below"]
+    distance: float = 1.5
 
-    async def position_ahead(
-        distance: Annotated[float, Field(description="Distance along the user's gaze, in metres.")] = 1.5,
-    ) -> dict[str, float]:
-        result = await spatial[f"{math_group.instance_name}__compute_gaze_target"].ainvoke(
-            {"user_frame": await frame_dict(), "distance_meters": distance}
+
+class PlaceObjectRelativeRequest(_Request):
+    origin_x: float
+    origin_y: float
+    origin_z: float
+    direction: Literal["front", "back", "left", "right", "above", "below", "next_to"]
+    distance: float = 0.3
+
+
+class DisplaceObjectRequest(_Request):
+    current_x: float
+    current_y: float
+    current_z: float
+    right: float = 0.0
+    up: float = 0.0
+    forward: float = 0.0
+
+
+class DisplaceObjectsRequest(_Request):
+    object_ids: list[str]
+    current_xs: list[float]
+    current_ys: list[float]
+    current_zs: list[float]
+    right: float = 0.0
+    up: float = 0.0
+    forward: float = 0.0
+
+
+class PlaceInsideRequest(_Request):
+    movee_id: str
+    container_x: float
+    container_y: float
+    container_z: float
+
+
+class BetweenAnchorsRequest(_Request):
+    a_x: float
+    a_y: float
+    a_z: float
+    b_x: float
+    b_y: float
+    b_z: float
+
+
+class WorldOffsetRequest(_Request):
+    origin_x: float
+    origin_y: float
+    origin_z: float
+    dx: float = 0.0
+    dy: float = 0.0
+    dz: float = 0.0
+
+
+class AlongDirectionRequest(_Request):
+    origin_x: float
+    origin_y: float
+    origin_z: float
+    target_x: float
+    target_y: float
+    target_z: float
+    distance: float = 0.5
+
+
+class ScaleValueRequest(_Request):
+    current: float
+    factor: float
+
+
+class HeadPoseResult(BaseModel):
+    is_valid: bool = True
+    position: Vector3
+    forward: Vector3
+    right: Vector3
+    up: Vector3
+    yaw_deg: float
+    pitch_deg: float
+    ts: int
+
+
+class FlexibleResult(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    error: str | None = None
+
+
+class BatchResult(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    error: str | None = None
+
+
+class ScalarResult(BaseModel):
+    value: float
+
+
+def _render_flexible(result: FlexibleResult) -> str:
+    return result.model_dump_json(exclude_none=True)
+
+
+def _render_batch(result: BatchResult) -> str:
+    data = result.model_dump(exclude_none=True)
+    if result.error is not None:
+        data.pop("items", None)
+    return json.dumps(data)
+
+
+class RenderSpatialTools:
+    """Compose tracking and pure math into the demo's established vocabulary."""
+
+    def __init__(self, tracking: TrackingTools) -> None:
+        self.tracking = tracking
+        self.get_head_pose = Tool(
+            "get_head_pose",
+            "Return the current world-space head position and forward, right, and up axes.",
+            EmptyRequest,
+            HeadPoseResult,
+            self._get_head_pose,
         )
-        return result.model_dump(mode="python")
-
-    async def position_relative(
-        forward: float = 0.0,
-        right: float = 0.0,
-        up: float = 0.0,
-        origin_x: float | None = None,
-        origin_y: float | None = None,
-        origin_z: float | None = None,
-    ) -> dict[str, float]:
-        frame = await frame_dict()
-        origin = frame["origin"]
-        result = await spatial[f"{math_group.instance_name}__offset_position_in_user_frame"].ainvoke(
-            {
-                "user_frame": frame,
-                "start_position": {
-                    "x": origin["x"] if origin_x is None else origin_x,
-                    "y": origin["y"] if origin_y is None else origin_y,
-                    "z": origin["z"] if origin_z is None else origin_z,
-                },
-                "forward_meters": forward,
-                "right_meters": right,
-                "up_meters": up,
-            }
+        self.position_ahead = Tool(
+            "position_ahead",
+            "Compute a world position along the user's gaze for 'in front of me' requests.",
+            PositionAheadRequest,
+            Vector3,
+            self._position_ahead,
         )
-        return result.model_dump(mode="python")
-
-    async def place_user_relative(
-        direction: Literal["front", "back", "left", "right", "above", "below"],
-        distance: float = 1.5,
-    ) -> dict[str, Any]:
-        if distance < 0:
-            return {"error": "distance must be non-negative; flip the direction instead"}
-        result = await spatial[f"{math_group.instance_name}__compute_user_relative_position"].ainvoke(
-            {
-                "user_frame": await frame_dict(),
-                "direction_from_user": direction,
-                "distance_meters": distance,
-            }
+        self.position_relative = Tool(
+            "position_relative",
+            "Apply signed forward, right, and up user-frame offsets.",
+            PositionRelativeRequest,
+            Vector3,
+            self._position_relative,
         )
-        return result.model_dump(mode="python")
+        self.place_user_relative = Tool(
+            "place_user_relative",
+            "Compute a position in one named direction from the user.",
+            PlaceUserRelativeRequest,
+            FlexibleResult,
+            self._place_user_relative,
+            render_result=_render_flexible,
+        )
+        self.place_object_relative = Tool(
+            "place_object_relative",
+            "Compute a position in one named direction from an existing object's world position.",
+            PlaceObjectRelativeRequest,
+            FlexibleResult,
+            self._place_object_relative,
+            render_result=_render_flexible,
+        )
+        self.displace_object = Tool(
+            "displace_object",
+            "Shift one existing object by signed right, up, and forward user-frame offsets.",
+            DisplaceObjectRequest,
+            Vector3,
+            self._displace_object,
+        )
+        self.displace_objects = Tool(
+            "displace_objects",
+            "Apply one signed user-frame offset to parallel lists of existing objects.",
+            DisplaceObjectsRequest,
+            BatchResult,
+            self._displace_objects,
+            render_result=_render_batch,
+        )
+        self.place_inside_by_id = Tool(
+            "place_inside_by_id",
+            "Return the container position with the ID of the object that should move there.",
+            PlaceInsideRequest,
+            FlexibleResult,
+            self._place_inside,
+            render_result=_render_flexible,
+        )
+        self.between_anchors = Tool(
+            "between_anchors",
+            "Compute the world-space midpoint between exactly two anchor positions.",
+            BetweenAnchorsRequest,
+            Vector3,
+            self._between_anchors,
+        )
+        self.world_offset = Tool(
+            "world_offset",
+            "Apply signed world-axis dx, dy, and dz offsets to an origin position.",
+            WorldOffsetRequest,
+            Vector3,
+            self._world_offset,
+        )
+        self.along_direction = Tool(
+            "along_direction",
+            "Move an origin toward a target by positive distance or away by negative distance.",
+            AlongDirectionRequest,
+            Vector3,
+            self._along_direction,
+        )
+        self.scale_value = Tool(
+            "scale_value",
+            "Multiply a current numeric size by a scale factor.",
+            ScaleValueRequest,
+            ScalarResult,
+            lambda request: ScalarResult(value=round(request.current * request.factor, 3)),
+        )
+        self.tools = (
+            self.get_head_pose,
+            self.position_ahead,
+            self.position_relative,
+            self.place_user_relative,
+            self.place_object_relative,
+            self.displace_object,
+            self.displace_objects,
+            self.place_inside_by_id,
+            self.between_anchors,
+            self.world_offset,
+            self.along_direction,
+            self.scale_value,
+        )
 
-    async def place_object_relative(
-        origin_x: float,
-        origin_y: float,
-        origin_z: float,
-        direction: Literal["front", "back", "left", "right", "above", "below", "next_to"],
-        distance: float = 0.3,
-    ) -> dict[str, Any]:
-        if distance < 0:
-            return {"error": "distance must be non-negative; flip the direction instead"}
+    async def _frame(self) -> SpatialFrame:
+        return await self.tracking.get_user_frame.execute(EmptyRequest())
+
+    async def _get_head_pose(self, _request: EmptyRequest) -> HeadPoseResult:
+        frame = await self._frame()
+        return HeadPoseResult(
+            position=frame.origin,
+            forward=frame.forward,
+            right=frame.right,
+            up=frame.up,
+            yaw_deg=math.degrees(math.atan2(-frame.forward.x, -frame.forward.z)),
+            pitch_deg=math.degrees(math.asin(max(-1.0, min(1.0, frame.forward.y)))),
+            ts=time.time_ns() // 1_000_000,
+        )
+
+    async def _position_ahead(self, request: PositionAheadRequest) -> Vector3:
+        return gaze_target(await self._frame(), request.distance)
+
+    async def _position_relative(self, request: PositionRelativeRequest) -> Vector3:
+        frame = await self._frame()
+        origin = frame.origin
+        return offset_user_frame(
+            frame,
+            Vector3(
+                x=origin.x if request.origin_x is None else request.origin_x,
+                y=origin.y if request.origin_y is None else request.origin_y,
+                z=origin.z if request.origin_z is None else request.origin_z,
+            ),
+            forward=request.forward,
+            right=request.right,
+            up=request.up,
+        )
+
+    async def _place_user_relative(self, request: PlaceUserRelativeRequest) -> FlexibleResult:
+        if request.distance < 0:
+            return FlexibleResult(error="distance must be non-negative; flip the direction instead")
+        return FlexibleResult.model_validate(
+            user_relative(await self._frame(), request.direction, request.distance).model_dump()
+        )
+
+    async def _place_object_relative(self, request: PlaceObjectRelativeRequest) -> FlexibleResult:
+        if request.distance < 0:
+            return FlexibleResult(error="distance must be non-negative; flip the direction instead")
         relation = {
             "front": "toward_user",
             "back": "away_from_user",
@@ -133,286 +321,135 @@ async def render_spatial_tools(config: RenderSpatialToolsConfig, builder: Builde
             "next_to": "right_of",
             "above": "above",
             "below": "below",
-        }[direction]
-        frame = (
-            await frame_dict()
-            if direction in {"front", "back", "left", "right", "next_to"}
-            else {
-                "origin": {"x": 0.0, "y": 0.0, "z": 0.0},
-                "forward": {"x": 0.0, "y": 0.0, "z": -1.0},
-                "right": {"x": 1.0, "y": 0.0, "z": 0.0},
-                "up": {"x": 0.0, "y": 1.0, "z": 0.0},
-            }
+        }[request.direction]
+        frame = await self._frame()
+        result = anchor_relative(
+            frame,
+            Vector3(x=request.origin_x, y=request.origin_y, z=request.origin_z),
+            relation,
+            request.distance,
         )
-        result = await spatial[f"{math_group.instance_name}__compute_position_relative_to_anchor"].ainvoke(
-            {
-                "user_frame": frame,
-                "anchor_position": {"x": origin_x, "y": origin_y, "z": origin_z},
-                "relation_to_anchor": relation,
-                "distance_meters": distance,
-            }
-        )
-        return result.model_dump(mode="python")
+        return FlexibleResult.model_validate(result.model_dump())
 
-    async def displace_object(
-        current_x: float,
-        current_y: float,
-        current_z: float,
-        right: float = 0.0,
-        up: float = 0.0,
-        forward: float = 0.0,
-    ) -> dict[str, float]:
-        result = await spatial[f"{math_group.instance_name}__offset_position_in_user_frame"].ainvoke(
-            {
-                "user_frame": await frame_dict(),
-                "start_position": {"x": current_x, "y": current_y, "z": current_z},
-                "forward_meters": forward,
-                "right_meters": right,
-                "up_meters": up,
-            }
+    async def _displace_object(self, request: DisplaceObjectRequest) -> Vector3:
+        return offset_user_frame(
+            await self._frame(),
+            Vector3(x=request.current_x, y=request.current_y, z=request.current_z),
+            forward=request.forward,
+            right=request.right,
+            up=request.up,
         )
-        return result.model_dump(mode="python")
 
-    async def displace_objects(
-        object_ids: list[str],
-        current_xs: list[float],
-        current_ys: list[float],
-        current_zs: list[float],
-        right: float = 0.0,
-        up: float = 0.0,
-        forward: float = 0.0,
-    ) -> dict[str, Any]:
-        if not (len(object_ids) == len(current_xs) == len(current_ys) == len(current_zs)):
-            return {"error": ("object_ids / current_xs / current_ys / current_zs must all be the same length")}
-        frame = await frame_dict()
-        function = spatial[f"{math_group.instance_name}__offset_position_in_user_frame"]
+    async def _displace_objects(self, request: DisplaceObjectsRequest) -> BatchResult:
+        if not (
+            len(request.object_ids)
+            == len(request.current_xs)
+            == len(request.current_ys)
+            == len(request.current_zs)
+        ):
+            return BatchResult(error="object_ids / current_xs / current_ys / current_zs must all be the same length")
+        frame = await self._frame()
         items = []
-        for obj_id, x, y, z in zip(object_ids, current_xs, current_ys, current_zs, strict=True):
-            result = await function.ainvoke(
-                {
-                    "user_frame": frame,
-                    "start_position": {"x": x, "y": y, "z": z},
-                    "forward_meters": forward,
-                    "right_meters": right,
-                    "up_meters": up,
-                }
+        for obj_id, x, y, z in zip(
+            request.object_ids,
+            request.current_xs,
+            request.current_ys,
+            request.current_zs,
+            strict=True,
+        ):
+            result = offset_user_frame(
+                frame,
+                Vector3(x=x, y=y, z=z),
+                forward=request.forward,
+                right=request.right,
+                up=request.up,
             )
-            items.append({"obj_id": obj_id, **result.model_dump(mode="python")})
-        return {"items": items}
+            items.append({"obj_id": obj_id, **result.model_dump()})
+        return BatchResult(items=items)
 
-    async def place_inside_by_id(
-        movee_id: str,
-        container_x: float,
-        container_y: float,
-        container_z: float,
-    ) -> dict[str, Any]:
-        return {
-            "obj_id": movee_id,
-            "x": round(container_x, 3),
-            "y": round(container_y, 3),
-            "z": round(container_z, 3),
-        }
-
-    async def between_anchors(
-        a_x: float,
-        a_y: float,
-        a_z: float,
-        b_x: float,
-        b_y: float,
-        b_z: float,
-    ) -> dict[str, float]:
-        result = await spatial[f"{math_group.instance_name}__compute_midpoint"].ainvoke(
+    async def _place_inside(self, request: PlaceInsideRequest) -> FlexibleResult:
+        return FlexibleResult.model_validate(
             {
-                "first_position": {"x": a_x, "y": a_y, "z": a_z},
-                "second_position": {"x": b_x, "y": b_y, "z": b_z},
+                "obj_id": request.movee_id,
+                "x": round(request.container_x, 3),
+                "y": round(request.container_y, 3),
+                "z": round(request.container_z, 3),
             }
         )
-        return result.model_dump(mode="python")
 
-    async def world_offset(
-        origin_x: float,
-        origin_y: float,
-        origin_z: float,
-        dx: float = 0.0,
-        dy: float = 0.0,
-        dz: float = 0.0,
-    ) -> dict[str, float]:
-        return {"x": origin_x + dx, "y": origin_y + dy, "z": origin_z + dz}
-
-    async def along_direction(
-        origin_x: float,
-        origin_y: float,
-        origin_z: float,
-        target_x: float,
-        target_y: float,
-        target_z: float,
-        distance: float = 0.5,
-    ) -> dict[str, float]:
-        result = await spatial[f"{math_group.instance_name}__compute_position_toward_or_away_from_reference"].ainvoke(
-            {
-                "start_position": {"x": origin_x, "y": origin_y, "z": origin_z},
-                "reference_position": {"x": target_x, "y": target_y, "z": target_z},
-                "movement_direction": "toward" if distance >= 0 else "away",
-                "distance_meters": abs(distance),
-            }
+    async def _between_anchors(self, request: BetweenAnchorsRequest) -> Vector3:
+        return midpoint(
+            Vector3(x=request.a_x, y=request.a_y, z=request.a_z),
+            Vector3(x=request.b_x, y=request.b_y, z=request.b_z),
         )
-        return result.model_dump(mode="python")
 
-    async def scale_value(current: float, factor: float) -> dict[str, float]:
-        return {"value": round(current * factor, 3)}
+    async def _world_offset(self, request: WorldOffsetRequest) -> Vector3:
+        return Vector3(
+            x=request.origin_x + request.dx,
+            y=request.origin_y + request.dy,
+            z=request.origin_z + request.dz,
+        )
 
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "get_head_pose",
-        get_head_pose,
-        description="Return the current world-space head position and forward, right, and up axes.",
-    )
-    group.add_function(
-        "position_ahead",
-        position_ahead,
-        description="Compute a world position along the user's gaze for 'in front of me' requests.",
-    )
-    group.add_function(
-        "position_relative",
-        position_relative,
-        description=(
-            "Apply signed forward, right, and up user-frame offsets. Omit origin coordinates "
-            "to start at the user, or pass an object's current position to move it."
-        ),
-    )
-    group.add_function(
-        "place_user_relative",
-        place_user_relative,
-        description=(
-            "Compute a position in one named direction from the user. Distance is non-negative; "
-            "choose front, back, left, right, above, or below to set the direction."
-        ),
-    )
-    group.add_function(
-        "place_object_relative",
-        place_object_relative,
-        description="Compute a position in one named direction from an existing object's world position.",
-    )
-    group.add_function(
-        "displace_object",
-        displace_object,
-        description="Shift one existing object by signed right, up, and forward user-frame offsets.",
-    )
-    group.add_function(
-        "displace_objects",
-        displace_objects,
-        description="Apply one signed user-frame offset to parallel lists of existing objects.",
-    )
-    group.add_function(
-        "place_inside_by_id",
-        place_inside_by_id,
-        description="Return the container position with the ID of the object that should move there.",
-    )
-    group.add_function(
-        "between_anchors",
-        between_anchors,
-        description="Compute the world-space midpoint between exactly two anchor positions.",
-    )
-    group.add_function(
-        "world_offset",
-        world_offset,
-        description="Apply signed world-axis dx, dy, and dz offsets to an origin position.",
-    )
-    group.add_function(
-        "along_direction",
-        along_direction,
-        description="Move an origin toward a target by positive distance or away by negative distance.",
-    )
-    group.add_function(
-        "scale_value",
-        scale_value,
-        description="Multiply a current numeric size by a scale factor.",
-    )
-    yield group
+    async def _along_direction(self, request: AlongDirectionRequest) -> Vector3:
+        return toward(
+            Vector3(x=request.origin_x, y=request.origin_y, z=request.origin_z),
+            Vector3(x=request.target_x, y=request.target_y, z=request.target_z),
+            request.distance,
+        )
 
 
-class NativeToolbox:
-    """Present selected NAT functions to the existing model-service tool loop."""
+class NativeCapabilities:
+    """Own every native tool and service client used by the render worker."""
 
-    def __init__(self, functions: dict[str, Function]) -> None:
-        self._functions: dict[str, Function] = {}
-        for function in functions.values():
-            short_name = function.instance_name.rsplit("__", 1)[-1]
-            if short_name in self._functions:
-                raise ValueError(f"duplicate native tool name: {short_name}")
-            self._functions[short_name] = function
+    def __init__(
+        self,
+        *,
+        scene_endpoint: str,
+        openxr_endpoint: str,
+        video_memory_endpoint: str,
+        frame_endpoint: Any,
+        vlm: VLMService,
+        text_memory_dir: str | Path,
+        frame_max_age_s: float = 2.0,
+        frame_timeout_s: float = 5.0,
+    ) -> None:
+        self.scene = SceneTools(scene_endpoint)
+        self.tracking = TrackingTools(openxr_endpoint)
+        self.spatial = RenderSpatialTools(self.tracking)
+        self.video = VideoMemoryTools(video_memory_endpoint)
+        self.live_vision = LiveVisionTool(
+            endpoint=frame_endpoint,
+            vlm=vlm,
+            system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
+            frame_max_age_s=frame_max_age_s,
+            frame_timeout_s=frame_timeout_s,
+            manage_status=False,
+        )
+        self.past_vision = HistoricalVisionTool(video=self.video, vlm=vlm)
+        self.text_memory = TextMemoryTool(text_memory_dir)
+        all_tools = (
+            *self.scene.tools,
+            *self.spatial.tools,
+            *self.video.tools,
+            self.live_vision,
+            self.past_vision,
+        )
+        self.all = ToolSet(all_tools)
+        self.model = ToolSet(
+            tool
+            for tool in all_tools
+            if tool.name not in {"start_xr", "get_health", "get_frame_from_time"}
+        )
 
-    def definitions(self, *, exclude: set[str] | frozenset[str] = frozenset()) -> list[ToolDef]:
-        return [
-            ToolDef(
-                name=name,
-                description=(function.description or "").strip(),
-                parameters=function.input_schema.model_json_schema(),
-            )
-            for name, function in self._functions.items()
-            if name not in exclude
-        ]
+    def release(self, participant_id: str) -> None:
+        self.live_vision.release(participant_id)
 
-    async def invoke(self, name: str, arguments: dict[str, Any]) -> Any:
-        result = await self._functions[name].ainvoke(arguments)
-        return _plain(result)
-
-
-async def build_native_toolbox(
-    builder: WorkflowBuilder,
-    *,
-    scene_endpoint: str,
-    openxr_endpoint: str,
-    video_memory_endpoint: str,
-    frame_endpoint: Any,
-    vlm: Any,
-) -> tuple[NativeToolbox, VisionToolsConfig]:
-    """Build the model-facing toolbox shared by the live worker and eval.
-
-    Returns the toolbox and the vision config so the worker can release cached
-    live-frame state when a participant leaves.
-    """
-    vision_config = VisionToolsConfig(
-        endpoint=frame_endpoint,
-        vlm=vlm,
-        video_memory=FunctionGroupRef("video_memory"),
-    )
-    for name, config in (
-        ("scene_state", SceneStateFunctionsConfig(endpoint=scene_endpoint)),
-        ("scene_updates", SceneUpdateFunctionsConfig(endpoint=scene_endpoint)),
-        ("scene_objects", SceneObjectFunctionsConfig(endpoint=scene_endpoint)),
-        ("scene_control", SceneControlFunctionsConfig(endpoint=scene_endpoint)),
-        ("tracking", XRTrackingFunctionsConfig(endpoint=openxr_endpoint)),
-        ("spatial_math", SpatialMathFunctionsConfig()),
-        ("render_spatial", RenderSpatialToolsConfig()),
-        ("video_memory", VideoMemoryFunctionsConfig(endpoint=video_memory_endpoint)),
-        ("vision", vision_config),
-    ):
-        await builder.add_function_group(name, config)
-
-    functions: dict[str, Function] = {}
-    for name in (
-        "scene_state",
-        "scene_updates",
-        "scene_objects",
-        "scene_control",
-        "render_spatial",
-        "video_memory",
-        "vision",
-    ):
-        group = await builder.get_function_group(name)
-        functions.update(await group.get_all_functions())
-    return NativeToolbox(functions), vision_config
+    async def close(self) -> None:
+        await asyncio.gather(
+            self.scene.close(),
+            self.tracking.close(),
+            self.video.close(),
+        )
 
 
-def _plain(value: Any) -> Any:
-    if isinstance(value, BaseModel):
-        return value.model_dump(mode="python")
-    if isinstance(value, list):
-        return [_plain(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _plain(item) for key, item in value.items()}
-    return value
-
-
-__all__ = ["NativeToolbox", "RenderSpatialToolsConfig", "build_native_toolbox"]
+__all__ = ["NativeCapabilities"]

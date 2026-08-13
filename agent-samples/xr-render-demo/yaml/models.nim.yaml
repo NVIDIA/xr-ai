@@ -6,7 +6,7 @@
 #
 # To activate, set ONE key in xr_render_demo_worker.yaml:
 #   model_backend: nim
-# The worker loads this file for its native model-backed functions. Provide an
+# The worker loads this file for its native model-backed tools. Provide an
 # NGC API key (env NGC_API_KEY, or
 # the launcher credential prompt) — see docs/credentials.md. Then run the
 # demo without the local agent-llm / vlm model-servers. STT/TTS stay
@@ -38,7 +38,7 @@ agent_llm:
     tool_calls: true
     reasoning:  true
 
-# Visual question answering used by native vision functions.
+# Visual question answering used by native vision tools.
 # nvidia/cosmos-reason1-7b mirrors the local default (services/vlm-server
 # also runs Cosmos-Reason1-7B), so the render-demo's ask_image prompts behave
 # the same on NIM as locally. Swap to any hosted vision model on

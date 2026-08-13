@@ -42,6 +42,7 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
         system_prompt: str = "",
         frame_max_age_s: float = 2.0,
         frame_timeout_s: float = 5.0,
+        manage_status: bool = True,
     ) -> None:
         if frame_max_age_s <= 0.0:
             raise ValueError("frame_max_age_s must be positive")
@@ -50,6 +51,7 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
         self.endpoint = endpoint
         self.vlm = vlm
         self.system_prompt = system_prompt
+        self.manage_status = manage_status
         self.frames = LiveFrameSource(
             endpoint,
             max_age_s=frame_max_age_s,
@@ -75,7 +77,8 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
         except FrameUnavailable as exc:
             return VisionResponse(text=str(exc))
 
-        await self.endpoint.set_status("processing", request.participant_id)
+        if self.manage_status:
+            await self.endpoint.set_status("processing", request.participant_id)
         try:
             register_frame_sanitizer()
             response = await nemo_relay.llm.execute(
@@ -91,7 +94,8 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
             _LOGGER.exception("Live VLM request failed")
             return VisionResponse(text="VLM server unavailable — please retry.")
         finally:
-            await self.endpoint.set_status("idle", request.participant_id)
+            if self.manage_status:
+                await self.endpoint.set_status("idle", request.participant_id)
 
     async def _current_image(self, participant_id: str) -> str:
         frame = await self.frames.get(participant_id)

@@ -11,12 +11,10 @@ import pathlib
 from pathlib import Path
 
 from loguru import logger
-from nat.builder.function import Function
-from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
 from xr_ai_models import ChatMessage, load_models_config, make_llm, make_stt, make_tts, make_vlm
-from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
 from xr_ai_runtime import AgentRuntime
+from xr_ai_tools.tool_calling import tool_definitions
 from xr_ai_voice import (
     VadConfig,
     VoiceAgent,
@@ -25,11 +23,11 @@ from xr_ai_voice import (
 from xr_ai_voicegate import load_voice_gate_config
 
 from agent import RenderDemoAgent
-from capabilities import build_native_toolbox
+from capabilities import NativeCapabilities
 from config import WorkerConfig, load_config
 from dispatch import (
-    CancelAllRender,
-    CancelRender,
+    INTERRUPTED_TOPIC,
+    PARTICIPANT_LEFT_TOPIC,
     RenderAgent,
     USER_QUERY_TOPIC,
 )
@@ -41,21 +39,6 @@ from processors import (
 )
 
 _TRACE_FILE = "/tmp/xr-agent-trace.log"
-
-# Tools the worker calls directly (control-plane). Excluded from the LLM tool
-# list so the model can't trigger them — the worker manages XR lifecycle.
-# get_scene_state is intentionally absent: the model must call it to discover
-# object ids before any manipulation.
-_WORKER_MANAGED_TOOLS = frozenset({"start_xr", "get_health"})
-
-
-async def _group_functions(builder: WorkflowBuilder, *names: str) -> dict[str, Function]:
-    functions: dict[str, Function] = {}
-    for name in names:
-        group = await builder.get_function_group(name)
-        functions.update(await group.get_all_functions())
-    return functions
-
 
 _PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
 
@@ -109,91 +92,74 @@ async def main(
         idle_timeout_secs=cfg.idle_timeout_secs,
     )
 
-    async with WorkflowBuilder() as builder:
-        # VLM readiness must settle GPU memory before LOVR creates its Vulkan device.
-        if models_cfg.llm("llm").health_check:
-            try:
-                await llm.chat(
-                    [ChatMessage(role="user", content="Add a small cube.")],
-                    max_tokens=40,
-                    timeout=120.0,
-                )
-            except Exception:
-                logger.opt(exception=True).warning("LLM warmup failed")
+    # VLM readiness must settle GPU memory before LOVR creates its Vulkan device.
+    if models_cfg.llm("llm").health_check:
+        try:
+            await llm.chat(
+                [ChatMessage(role="user", content="Add a small cube.")],
+                max_tokens=40,
+                timeout=120.0,
+            )
+        except Exception:
+            logger.opt(exception=True).warning("LLM warmup failed")
 
-        toolbox, vision_config = await build_native_toolbox(
-            builder,
-            scene_endpoint=cfg.scene_endpoint,
-            openxr_endpoint=cfg.openxr_endpoint,
-            video_memory_endpoint=cfg.video_memory_endpoint,
-            frame_endpoint=session.transport.endpoint,
-            vlm=vlm_service,
-        )
-        await builder.add_function_group(
-            "text_memory", TextMemoryFunctionsConfig(directory=cfg.text_memory_dir)
-        )
-
-        text_memory_functions = await _group_functions(builder, "text_memory")
-        text_memory = text_memory_functions["text_memory__add_transcript"]
-        # The native perception request models carry participant/reference
-        # context the processor injects; present the model trimmed schemas
-        # (question, and question+second_ago) in place of the raw native ones.
-        tools = toolbox.definitions(
-            exclude=_WORKER_MANAGED_TOOLS | {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
-        )
-        tools.extend(_PERCEPTION_TOOL_DEFS)
-        logger.info("native tool-calling functions: {}", [tool.name for tool in tools])
+    capabilities = NativeCapabilities(
+        scene_endpoint=cfg.scene_endpoint,
+        openxr_endpoint=cfg.openxr_endpoint,
+        video_memory_endpoint=cfg.video_memory_endpoint,
+        frame_endpoint=session.transport.endpoint,
+        vlm=vlm_service,
+        text_memory_dir=cfg.text_memory_dir,
+    )
+    try:
+        # Participant and utterance context are injected by the render agent, so
+        # the model sees the established trimmed perception schemas.
+        model_tools = [
+            tool
+            for tool in tool_definitions(capabilities.model)
+            if tool.name not in {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
+        ]
+        model_tools.extend(_PERCEPTION_TOOL_DEFS)
+        logger.info("native model tools: {}", [tool.name for tool in model_tools])
 
         scene_agent = RenderSceneAgent(
             transport=session.transport,
             cfg=cfg,
-            toolbox=toolbox,
-            release_vision=vision_config.release,
-            text_memory=text_memory,
+            tools=capabilities.all,
+            release_vision=capabilities.release,
+            text_memory=capabilities.text_memory,
             prompt_path=_PROMPT_FILE,
-            tools=tools,
+            model_tools=model_tools,
             llm=llm,
             agent_llm=agent_llm,
         )
         runtime = AgentRuntime()
-        render_ref = runtime.register("xr-render", RenderAgent(scene_agent))
+        owned_tools = tuple(tool for _name, tool in capabilities.all.items())
+        render = runtime.register("xr-render", RenderAgent(scene_agent, owned_tools))
         RenderDemoAgent(
             transport=session.transport,
             scene_agent=scene_agent,
-            tools=toolbox,
+            tools=capabilities.all,
             runtime=runtime,
         )
-        async def participant_left(participant_id: str) -> None:
-            await runtime.call(
-                render_ref,
-                CancelRender(),
-                participant_id=participant_id,
-                source="voice.participant-left",
-            )
-            await scene_agent.on_participant_left(participant_id)
-
-        async def interrupted(participant_id: str | None) -> None:
-            request = CancelRender() if participant_id is not None else CancelAllRender()
-            await runtime.call(
-                render_ref,
-                request,
-                participant_id=participant_id,
-                source="voice.interruption",
-            )
-
         voice = VoiceAgent(
             session,
             query_topic=USER_QUERY_TOPIC,
             text_ignore_topics={"xr.session.started"},
-            on_participant_left=participant_left,
-            on_interrupted=interrupted,
+            participant_left_topic=PARTICIPANT_LEFT_TOPIC,
+            interrupted_topic=INTERRUPTED_TOPIC,
             interrupt_on_supersede=True,
         )
         runtime.register("voice", voice)
 
         logger.info("xr_render_demo starting")
         async with runtime:
-            await voice.wait()
+            try:
+                await voice.run(runtime)
+            finally:
+                await render.stop()
+    finally:
+        await capabilities.close()
     logger.info("xr_render_demo stopped")
 
 

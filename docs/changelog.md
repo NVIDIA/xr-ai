@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — xr-render-demo uses native Relay-managed tools
+
+The render worker and its sample-local scene process no longer depend on
+`xr-ai-nat`. `NativeCapabilities` composes scene, tracking, spatial,
+video-memory, current/historical vision, and text-memory `Tool` instances;
+model schemas use `tool_definitions()`, and model-selected execution uses
+`handle_tool_call()`. The established model-visible names, schemas, result
+shapes, prompt, routing, scene protocol, and voice behavior remain unchanged.
+Reusable typed service RPC and capability tools live in `xr-ai-tools`, while
+the render scene tools remain sample-local.
+
 ### 2026-08-12 — xr-render-demo uses the shared agent runtime
 
 The xr-render-demo worker no longer subclasses `BrainProcessor` or imports

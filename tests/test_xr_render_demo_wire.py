@@ -35,10 +35,9 @@ from xr_ai_models import (
     ToolDef,
     load_models_config,
 )
-from nat.builder.workflow_builder import WorkflowBuilder
-from nat.plugin_api import FunctionGroupRef
-from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
-from xr_ai_nat.functions.vision import VisionToolsConfig
+from xr_ai_tools import ToolSet
+from xr_ai_tools.capabilities import TrackingTools
+from xr_ai_tools.tool_calling import tool_definitions
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -405,11 +404,6 @@ class _CaptureTransport:
         self.sent.append(msg)
 
 
-class _UnusedToolbox:
-    async def invoke(self, name: str, arguments: dict):
-        raise AssertionError(f"unexpected native tool invocation: {name} {arguments}")
-
-
 def _make_brain(transport: _CaptureTransport, llm=None):
     """Build a real RenderSceneAgent whose service clients are unused.
 
@@ -420,11 +414,11 @@ def _make_brain(transport: _CaptureTransport, llm=None):
     return _proc.RenderSceneAgent(
         transport   = transport,
         cfg         = None,
-        toolbox     = _UnusedToolbox(),
+        tools       = ToolSet(()),
         release_vision = lambda _pid: None,
         text_memory = None,
         prompt_path = _SYSTEM_PROMPT,
-        tools       = [],
+        model_tools = [],
         llm         = llm,
         agent_llm   = None,
     )
@@ -615,23 +609,14 @@ from xr_ai_models import ChatResponse, ToolCall  # noqa: E402
 
 import processors as _proc  # noqa: E402
 import capabilities as _caps  # noqa: E402
-from xr_ai_nat.functions.spatial_math import SpatialMathFunctionsConfig  # noqa: E402
-from xr_ai_nat.functions.xr_tracking import XRTrackingFunctionsConfig  # noqa: E402
 
 
 async def test_render_spatial_native_toolbox_builds() -> None:
-    """The sample's prompt-compatible spatial surface derives from NAT Functions."""
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "tracking",
-            XRTrackingFunctionsConfig(endpoint="tcp://127.0.0.1:65530", timeout_s=0.1),
-        )
-        await builder.add_function_group("spatial_math", SpatialMathFunctionsConfig())
-        await builder.add_function_group("render_spatial", _caps.RenderSpatialToolsConfig())
-        group = await builder.get_function_group("render_spatial")
-        toolbox = _caps.NativeToolbox(await group.get_all_functions())
-
-        definitions = {tool.name: tool for tool in toolbox.definitions()}
+    """The sample's prompt-compatible spatial surface uses native Tool schemas."""
+    tracking = TrackingTools("tcp://127.0.0.1:65530", timeout_s=0.1)
+    try:
+        spatial = _caps.RenderSpatialTools(tracking)
+        definitions = {tool.name: tool for tool in tool_definitions(spatial.tools)}
         expected_parameters = {
             "along_direction": {
                 "origin_x", "origin_y", "origin_z", "target_x", "target_y", "target_z", "distance",
@@ -655,20 +640,24 @@ async def test_render_spatial_native_toolbox_builds() -> None:
         assert set(definitions) == set(expected_parameters)
         for name, parameters in expected_parameters.items():
             assert set(definitions[name].parameters["properties"]) == parameters
+    finally:
+        await tracking.close()
 
 
 async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
-    """The shared builder exposes the complete runtime tool surface without MCP discovery."""
-    async with WorkflowBuilder() as builder:
-        toolbox, _vision_config = await _caps.build_native_toolbox(
-            builder,
-            scene_endpoint="tcp://127.0.0.1:65527",
-            openxr_endpoint="tcp://127.0.0.1:65528",
-            video_memory_endpoint="tcp://127.0.0.1:65529",
-            frame_endpoint=_FakeEndpoint(),
-            vlm=_FakeVLM(),
-        )
-        names = {tool.name for tool in toolbox.definitions()}
+    """NativeCapabilities exposes the complete runtime tool surface without MCP."""
+    capabilities = _caps.NativeCapabilities(
+        scene_endpoint="tcp://127.0.0.1:65527",
+        openxr_endpoint="tcp://127.0.0.1:65528",
+        video_memory_endpoint="tcp://127.0.0.1:65529",
+        frame_endpoint=_FakeEndpoint(),
+        vlm=_FakeVLM(),
+        text_memory_dir="/tmp/xr-render-test-memory",
+    )
+    try:
+        names = {name for name, _tool in capabilities.all.items()}
+    finally:
+        await capabilities.close()
 
     assert names == {
         "add_primitive",
@@ -704,29 +693,30 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
     for recorded lookups); exposing them verbatim would tell the model to fill a
     required ``participant_id`` it cannot know and whose value is discarded.
     Guards the do-not-reverse of main's trimmed ``{question}`` contract."""
-    from xr_render_demo_worker import _WORKER_MANAGED_TOOLS
-
-    async with WorkflowBuilder() as builder:
-        toolbox, _vision_config = await _caps.build_native_toolbox(
-            builder,
-            scene_endpoint="tcp://127.0.0.1:65527",
-            openxr_endpoint="tcp://127.0.0.1:65528",
-            video_memory_endpoint="tcp://127.0.0.1:65529",
-            frame_endpoint=_FakeEndpoint(),
-            vlm=_FakeVLM(),
-        )
+    capabilities = _caps.NativeCapabilities(
+        scene_endpoint="tcp://127.0.0.1:65527",
+        openxr_endpoint="tcp://127.0.0.1:65528",
+        video_memory_endpoint="tcp://127.0.0.1:65529",
+        frame_endpoint=_FakeEndpoint(),
+        vlm=_FakeVLM(),
+        text_memory_dir="/tmp/xr-render-test-memory",
+    )
+    try:
         # The raw native request schemas DO expose the injected context — which is
         # exactly why they must not reach the model verbatim.
-        native = {tool.name: tool for tool in toolbox.definitions()}
+        native = {tool.name: tool for tool in tool_definitions(capabilities.model)}
         assert "participant_id" in native["look_at_current_frame"].parameters["properties"]
         assert "participant_id" in native["look_at_past_frame"].parameters["properties"]
 
         # Assemble the model-facing list exactly as the worker does.
-        tools = toolbox.definitions(
-            exclude=_WORKER_MANAGED_TOOLS
-            | {_proc._LIVE_PERCEPTION_TOOL, _proc._PAST_PERCEPTION_TOOL}
-        )
+        tools = [
+            tool
+            for tool in tool_definitions(capabilities.model)
+            if tool.name not in {_proc._LIVE_PERCEPTION_TOOL, _proc._PAST_PERCEPTION_TOOL}
+        ]
         tools.extend(_proc._PERCEPTION_TOOL_DEFS)
+    finally:
+        await capabilities.close()
 
     model_facing = {tool.name: tool for tool in tools}
     live = model_facing["look_at_current_frame"].parameters
@@ -823,34 +813,30 @@ def _now_us_test() -> int:
 
 @asynccontextmanager
 async def _perception_brain(transport, vlm: _FakeVLM):
-    config = VisionToolsConfig(
-        endpoint=transport.endpoint,
+    capabilities = _caps.NativeCapabilities(
+        scene_endpoint="tcp://127.0.0.1:65527",
+        openxr_endpoint="tcp://127.0.0.1:65528",
+        video_memory_endpoint="tcp://127.0.0.1:65529",
+        frame_endpoint=transport.endpoint,
         vlm=vlm,
-        video_memory=FunctionGroupRef("video_memory"),
+        text_memory_dir="/tmp/xr-render-test-memory",
         frame_max_age_s=60.0,
         frame_timeout_s=0.2,
     )
-    async with WorkflowBuilder() as builder:
-        # A resolvable (offline) video-memory group so the vision group builds;
-        # look_at_current_frame never touches it.
-        await builder.add_function_group(
-            "video_memory",
-            VideoMemoryFunctionsConfig(endpoint="tcp://127.0.0.1:65529"),
-        )
-        await builder.add_function_group("vision", config)
-        vision = await builder.get_function_group("vision")
-        toolbox = _caps.NativeToolbox(await vision.get_all_functions())
+    try:
         yield _proc.RenderSceneAgent(
             transport=transport,
             cfg=None,
-            toolbox=toolbox,
-            release_vision=config.release,
+            tools=capabilities.all,
+            release_vision=capabilities.release,
             text_memory=None,
             prompt_path=_SYSTEM_PROMPT,
-            tools=[],
+            model_tools=[],
             llm=None,
             agent_llm=None,
         )
+    finally:
+        await capabilities.close()
 
 
 def test_perception_tool_def_in_prompt_and_classifier() -> None:

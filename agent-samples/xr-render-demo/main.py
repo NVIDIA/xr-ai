@@ -8,10 +8,10 @@ Architecture (per AGENTS.md + the Agentic AI for XR design doc):
 
   Web client ── LiveKit ──► xr-media-hub ──IPC──► worker (this sample's agent)
   Web client ── WebRTC ──► cloudxr-runtime
-                        worker ──NAT function──► scene ──► LOVR (OpenXR)
+                        worker ──native tool──► scene ──► LOVR (OpenXR)
 
 The worker consumes audio from the hub, computes a sphere radius from voice
-loudness, and invokes sample-local native scene functions. The sample-local
+loudness, and invokes sample-local native scene tools. The sample-local
 scene process owns LOVR and scene state. CloudXR runs alongside as
 its own stream — neither stack passes through the other.
 

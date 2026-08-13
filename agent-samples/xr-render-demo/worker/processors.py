@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Multi-step xr-render-demo agent over native NAT functions.
+"""Multi-step xr-render-demo agent over native Relay-managed tools.
 
 Agentic loop (max ``_MAX_LOOP`` iterations):
   - Nemotron-3-Nano emits an OpenAI ``tool_calls`` payload → execute tool,
@@ -27,15 +27,15 @@ from collections.abc import Callable
 from typing import AsyncIterator
 
 from loguru import logger
-from nat.builder.function import Function
-
 from xr_ai_hub import DataMessage
 from xr_ai_logging import print_task_done_banner
 from xr_ai_models import ChatMessage, LLMService, ToolCall, ToolDef
+from xr_ai_tools import ToolSet
+from xr_ai_tools.capabilities import AddTranscriptRequest, TextMemoryTool
+from xr_ai_tools.tool_calling import handle_tool_call
 from xr_ai_voice import HubVoiceTransport
 
 from config import WorkerConfig
-from capabilities import NativeToolbox
 from tooling import (
     extract_json,
     looks_like_leaked_tool_call,
@@ -162,7 +162,7 @@ def _now_us() -> int:
 
 class RenderSceneAgent:
     """
-    Multi-step agentic loop over native NAT functions.
+    Multi-step agentic loop over native Relay-managed tools.
 
     Uses Nemotron-3-Nano (port 8107) with OpenAI tool calling for the
     reasoning loop; the pre-loop quick-ack shares the same server via the
@@ -181,17 +181,17 @@ class RenderSceneAgent:
         *,
         transport: HubVoiceTransport,
         cfg: WorkerConfig,
-        toolbox: NativeToolbox,
+        tools: ToolSet,
         release_vision: Callable[[str], None],
-        text_memory: Function | None,
+        text_memory: TextMemoryTool | None,
         prompt_path: Path,
-        tools: list[ToolDef],
+        model_tools: list[ToolDef],
         llm: LLMService,
         agent_llm: LLMService,
     ):
         self._transport = transport
         self._cfg = cfg
-        self._toolbox = toolbox
+        self._toolset = tools
         self._release_vision = release_vision
         self._text_memory = text_memory
         self._prompt_path = prompt_path
@@ -201,7 +201,7 @@ class RenderSceneAgent:
         self._still_work_path = _prompts / "still_working.txt"
         self._quick_ack_cache = self._quick_ack_path.read_text(encoding="utf-8").strip()
         self._still_work_cache = self._still_work_path.read_text(encoding="utf-8").strip()
-        self._tools = tools
+        self._tools = model_tools
         self._llm = llm
         self._agent_llm = agent_llm
 
@@ -259,7 +259,7 @@ class RenderSceneAgent:
         # a barge-in cancellation. The "processing" publish is INSIDE the try so
         # a cancellation landing during that await still runs the finally (never
         # leaving the client stuck in "processing"). Status is a per-client
-        # lifecycle signal owned by the render turn; the native vision functions
+        # lifecycle signal owned by the render turn; the native vision tools
         # stay reusable/UI-free.
         try:
             if send_pid:
@@ -393,12 +393,12 @@ class RenderSceneAgent:
             (_now_us(), f"assistant: {assistant_text}"),
         ):
             try:
-                await self._text_memory.ainvoke(
-                    {
-                        "source_id": participant_id,
-                        "timestamp_us": timestamp_us,
-                        "text": text,
-                    }
+                await self._text_memory.execute(
+                    AddTranscriptRequest(
+                        source_id=participant_id,
+                        timestamp_us=timestamp_us,
+                        text=text,
+                    )
                 )
             except Exception:
                 logger.opt(exception=True).warning("text-memory write failed")
@@ -880,15 +880,18 @@ class RenderSceneAgent:
             raise _PerceptionUnavailableError(_NO_FRAME_MSG)
         _trace_log.info("LOOK  {}", question[:120])
         try:
-            result = await self._toolbox.invoke(
+            result = await self._call_tool(
                 _LIVE_PERCEPTION_TOOL,
-                {"participant_id": pid, "question": question},
+                {"participant_id": pid, "query": question},
             )
         except Exception as exc:
             logger.exception("look_at_current_frame failed")
             raise _PerceptionUnavailableError(_NO_FRAME_MSG) from exc
-        _trace_log.info("VLM   {}", str(result.get("answer", ""))[:200])
-        return result
+        answer = result.get("text") if isinstance(result, dict) else result
+        if not answer or answer.startswith(("No camera frame", "VLM server unavailable")):
+            raise _PerceptionUnavailableError(_NO_FRAME_MSG)
+        _trace_log.info("VLM   {}", str(answer)[:200])
+        return {"answer": answer}
 
     async def _look_at_past_frame(self, pid: str, args: dict, ref_us: int) -> dict:
         """Answer a recorded-camera question through the native perception tool.
@@ -898,15 +901,20 @@ class RenderSceneAgent:
         offset. A lookup failure is returned to the model as an error dict —
         unlike the live path, a missing recorded frame does not end the turn.
         """
-        return await self._call_tool(
+        result = await self._call_tool(
             _PAST_PERCEPTION_TOOL,
             {
                 "participant_id": pid,
-                "question": str(args.get("question") or "").strip(),
+                "query": str(args.get("question") or "").strip(),
                 "second_ago": args.get("second_ago", 0),
                 "reference_time_us": ref_us,
             },
         )
+        if isinstance(result, str):
+            return {"answer": result}
+        if isinstance(result, dict) and "text" in result:
+            return {"answer": result["text"]}
+        return result
 
     # ── tool routing ──────────────────────────────────────────────────────────
 
@@ -958,7 +966,16 @@ class RenderSceneAgent:
 
     async def _call_tool(self, tool: str, args: dict, *, silent: bool = False) -> dict | str | list | None:
         try:
-            return await self._toolbox.invoke(tool, args)
+            call = ToolCall(
+                id=f"call_{uuid.uuid4().hex[:12]}",
+                name=tool,
+                arguments=json.dumps(args),
+            )
+            result = await handle_tool_call(call, self._toolset)
+            try:
+                return json.loads(result.message.content)
+            except json.JSONDecodeError:
+                return result.message.content
         except Exception as exc:
             if not silent:
                 logger.error("native tool {} failed: {}", tool, exc)

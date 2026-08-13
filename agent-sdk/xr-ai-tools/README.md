@@ -89,6 +89,14 @@ This exposes names such as `vision__status` and `planner__status` to the model.
 Only finite `Tool` instances belong in a `ToolSet`; streaming `AsyncTool`
 instances are consumed explicitly with `stream()`.
 
+## Typed capability services
+
+Install `xr-ai-tools[services]` for the msgpack/ZMQ RPC client/server and the
+shared tracking, video-memory, historical-vision, text-memory, and spatial
+building blocks. Applications compose these finite tools into their own
+`ToolSet`; service processes use the matching RPC primitives without pulling
+in an agent framework or HTTP server.
+
 ## Finite and streaming live vision tools
 
 Install `xr-ai-tools[live-vision]` for two independent current-frame

@@ -13,7 +13,7 @@ dependencies = [
     "xr-ai-hub-client",
     "xr-ai-agent-runtime",
     "xr-ai-models",
-    "xr-ai-nat[services,vision]",
+    "xr-ai-tools[live-vision,services]",
     "xr-ai-voice",
     "xr-ai-voicegate",
     "xr-ai-logging",
@@ -26,7 +26,7 @@ dependencies = [
 xr-ai-agent-runtime     = { path = "../../../agent-sdk/xr-ai-agent-runtime",                 editable = true }
 xr-ai-hub-client        = { path = "../../../agent-sdk/xr-ai-hub-client",                    editable = true }
 xr-ai-models       = { path = "../../../agent-sdk/xr-ai-models",       editable = true }
-xr-ai-nat          = { path = "../../../agent-sdk/xr-ai-nat",          editable = true }
+xr-ai-tools        = { path = "../../../agent-sdk/xr-ai-tools",        editable = true }
 xr-ai-voice        = { path = "../../../agent-sdk/xr-ai-voice",        editable = true }
 xr-ai-voicegate    = { path = "../../../utils/xr-ai-voicegate",        editable = true }
 xr-ai-logging      = { path = "../../../utils/xr-ai-logging",          editable = true }

@@ -5,14 +5,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
+import uuid
 
 from loguru import logger
 from xr_ai_hub import DataMessage
+from xr_ai_models import ToolCall
 from xr_ai_runtime import AgentRuntime
+from xr_ai_tools import ToolSet
+from xr_ai_tools.tool_calling import handle_tool_call
 from xr_ai_voice import HubVoiceTransport
 
-from capabilities import NativeToolbox
 from dispatch import RENDER_NOTICE_TOPIC, RenderNotice
 from processors import RenderSceneAgent
 
@@ -32,7 +36,7 @@ class RenderDemoAgent:
         *,
         transport: HubVoiceTransport,
         scene_agent: RenderSceneAgent,
-        tools: NativeToolbox,
+        tools: ToolSet,
         runtime: AgentRuntime,
     ) -> None:
         self._transport = transport
@@ -116,7 +120,15 @@ class RenderDemoAgent:
 
     async def _call_render(self, tool: str, args: dict, *, silent: bool = False) -> dict | None:
         try:
-            data = await self._tools.invoke(tool, args)
+            result = await handle_tool_call(
+                ToolCall(
+                    id=f"call_{uuid.uuid4().hex[:12]}",
+                    name=tool,
+                    arguments=json.dumps(args),
+                ),
+                self._tools,
+            )
+            data = json.loads(result.message.content)
             if not isinstance(data, dict):
                 if not silent:
                     logger.error("scene tool {} returned non-dict: {!r}", tool, data)

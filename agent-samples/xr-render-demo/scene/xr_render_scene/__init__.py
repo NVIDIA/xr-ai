@@ -4,27 +4,19 @@
 """Native scene capability owned by the XR render demo."""
 
 from .client import SceneClient
-from .functions import (
-    SceneControlFunctionsConfig,
-    SceneObjectFunctionsConfig,
-    SceneStateFunctionsConfig,
-    SceneUpdateFunctionsConfig,
-)
 from .schemas import (
     AddPrimitiveRequest,
     EmptyRequest,
     RemovePrimitiveRequest,
     UpdatePrimitiveRequest,
 )
+from .tools import SceneTools
 
 __all__ = [
     "AddPrimitiveRequest",
     "EmptyRequest",
     "RemovePrimitiveRequest",
     "SceneClient",
-    "SceneControlFunctionsConfig",
-    "SceneObjectFunctionsConfig",
-    "SceneStateFunctionsConfig",
-    "SceneUpdateFunctionsConfig",
+    "SceneTools",
     "UpdatePrimitiveRequest",
 ]

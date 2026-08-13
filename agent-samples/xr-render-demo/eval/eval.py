@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """
 Agent-LLM eval harness for xr-render-demo. It uses the live model endpoint,
-derives tool schemas from the worker's native NAT functions, and executes tool
+derives schemas from the worker's native tools, and executes tool
 effects against deterministic fixtures so it never mutates the live scene.
 
 Usage:
@@ -23,12 +23,13 @@ import math
 import os
 import re
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 import httpx
 import yaml
-from nat.builder.workflow_builder import WorkflowBuilder
+from xr_ai_tools.tool_calling import tool_definitions
 
 _HERE       = Path(__file__).resolve().parent
 SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
@@ -36,7 +37,7 @@ SYS_PROMPT  = (_HERE / "../worker/prompts/system.txt").resolve()
 # Borrow the worker's config and native-tool assembly so the eval advertises
 # the same model-facing function schemas as the live worker.
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
-from capabilities import build_native_toolbox  # noqa: E402
+from capabilities import NativeCapabilities  # noqa: E402
 from config import load_config  # noqa: E402  — must follow sys.path tweak
 from processors import (  # noqa: E402  — must follow sys.path tweak
     _LIVE_PERCEPTION_TOOL,
@@ -60,10 +61,6 @@ def _agent_llm_base_url() -> str:
 AGENT_LLM   = f"{_agent_llm_base_url()}/v1/chat/completions"  # overridable via --agent-llm
 AGENT_MODEL = "llm"                                                   # overridable via --agent-model
 AGENT_KEY   = ""                                                      # overridable via --agent-api-key / NGC_API_KEY
-# Tools the worker manages internally; hidden from the agent LLM so
-# the eval and the live worker advertise the same tool surface.
-WORKER_MANAGED = {"start_xr", "get_health"}
-
 # Mirror the worker's WorkerConfig defaults — same fixture pose for every
 # test, so prompt regressions are reproducible.
 DEFAULT_POSE = {
@@ -1398,22 +1395,27 @@ class _NullFrameEndpoint:
 
 
 async def _discover_tools() -> list[dict]:
-    async with WorkflowBuilder() as builder:
-        toolbox, _vision_config = await build_native_toolbox(
-            builder,
+    with tempfile.TemporaryDirectory(prefix="xr-render-eval-") as text_memory_dir:
+        capabilities = NativeCapabilities(
             scene_endpoint=_WORKER_CFG.scene_endpoint,
             openxr_endpoint=_WORKER_CFG.openxr_endpoint,
             video_memory_endpoint=_WORKER_CFG.video_memory_endpoint,
             frame_endpoint=_NullFrameEndpoint(),
             vlm=object(),
+            text_memory_dir=text_memory_dir,
         )
-        # Present the model trimmed perception schemas (the worker injects the
-        # participant/reference context the native request models expose).
-        definitions = toolbox.definitions(
-            exclude=WORKER_MANAGED | {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
-        )
-        definitions.extend(_PERCEPTION_TOOL_DEFS)
-        return [definition.to_openai() for definition in definitions]
+        try:
+            # Present the model trimmed perception schemas (the worker injects
+            # participant/reference context into the native request models).
+            definitions = [
+                definition
+                for definition in tool_definitions(capabilities.model)
+                if definition.name not in {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
+            ]
+            definitions.extend(_PERCEPTION_TOOL_DEFS)
+            return [definition.to_openai() for definition in definitions]
+        finally:
+            await capabilities.close()
 
 
 def _format_recent_moves(moves: list[tuple] | None) -> str:
@@ -1753,7 +1755,7 @@ def _fixture_scene_as_render() -> dict:
 
 
 async def _exec_tool(name: str, args_json: str, pose: dict) -> dict:
-    """Execute a tool call. Spatial functions run locally against the
+    """Execute a tool call. Spatial tools run locally against the
     case's fixture pose so rollouts are deterministic.  add_primitive
     returns a fresh per-rollout id (otherwise the model spawns the
     same object N times waiting to "see" it); update / remove return
