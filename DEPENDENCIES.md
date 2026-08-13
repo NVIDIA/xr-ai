@@ -238,6 +238,7 @@ xr-ai-tests  (tests/)
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
     └── Pillow >=10.0   (CPU native-vision and GPU image tests)
+    └── python-multipart >=0.0.9   (STT endpoint tests import stt-server via pythonpath)
     └── pyyaml >=6.0    (CPU subprocess/service configs and GPU service tests)
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
