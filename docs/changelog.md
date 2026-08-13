@@ -9,6 +9,20 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — Voice lifecycle events do not block media processing
+
+`VoiceAgent` schedules participant-departure and interruption publication on
+tasks it owns and cancels during shutdown. Application cleanup therefore runs
+through typed runtime topics without blocking Pipecat's shared frame processor.
+The xr-render agent distinguishes producer supersession from consumer abort:
+supersession completes the prior voice stream before starting its replacement,
+while interruption and departure explicitly close the scene generator without
+publishing a terminator to a voice stream the consumer already evicted.
+
+The render worker's LLM warmup is part of its readiness probe. Health must pass
+before warmup runs, and a failed warmup leaves readiness pending for retry.
+Render-owned model clients close only after active render turns stop.
+
 ### 2026-08-12 — Native tools replace the in-tree MCP compatibility servers
 
 The OXR, render, transcript, vector, video, and VLM MCP server packages are no

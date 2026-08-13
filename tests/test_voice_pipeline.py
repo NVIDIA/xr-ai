@@ -1439,6 +1439,50 @@ async def test_participant_left_clears_seen_output_state() -> None:
     assert "pid-1" not in assistant._seen_output  # noqa: SLF001
 
 
+@pytest.mark.asyncio
+async def test_replacement_query_reports_consumer_aborted_output() -> None:
+    response_started = asyncio.Event()
+    response_closed = asyncio.Event()
+    query_received = asyncio.Event()
+    queries: list[VoiceQuery] = []
+
+    async def response() -> AsyncIterator[str]:
+        try:
+            response_started.set()
+            await asyncio.Event().wait()
+            yield "unreachable"
+        finally:
+            response_closed.set()
+
+    async def handle(query: VoiceQuery) -> None:
+        assert response_closed.is_set()
+        queries.append(query)
+        query_received.set()
+
+    assistant = _VoiceIOProcessor(handle)
+
+    async def capture(
+        _frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        return None
+
+    assistant.push_frame = capture  # type: ignore[method-assign]
+    await assistant.enqueue_response("pid-1", response())
+    await asyncio.wait_for(response_started.wait(), 1.0)
+    await assistant.enqueue_query("pid-1", "replacement", pts_us=9)
+    await asyncio.wait_for(query_received.wait(), 1.0)
+
+    assert queries == [
+        VoiceQuery(
+            participant_id="pid-1",
+            text="replacement",
+            timestamp_us=9,
+            interrupted_output=True,
+        )
+    ]
+
+
 async def test_assistant_notifies_external_runtime_on_interruption_frame():
     interrupted: list[str | None] = []
 

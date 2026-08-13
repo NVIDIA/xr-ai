@@ -162,6 +162,42 @@ class _LifecycleRecorder(Agent):
             await self.changed.wait()
 
 
+class _BlockingLifecycle(Agent):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    @subscribe(INTERRUPTED_TOPIC)
+    async def interrupted(
+        self,
+        _event: VoiceInterrupted,
+        _ctx: RuntimeContext,
+    ) -> None:
+        self.started.set()
+        await self.release.wait()
+
+
+class _OrderedRecorder(Agent):
+    def __init__(self) -> None:
+        super().__init__()
+        self.events: list[str] = []
+        self.changed = asyncio.Event()
+
+    @subscribe(INTERRUPTED_TOPIC)
+    async def interrupted(
+        self,
+        _event: VoiceInterrupted,
+        _ctx: RuntimeContext,
+    ) -> None:
+        self.events.append("interrupted")
+
+    @subscribe(QUERY_TOPIC)
+    async def query(self, _query: UserQuery, _ctx: RuntimeContext) -> None:
+        self.events.append("query")
+        self.changed.set()
+
+
 @asynccontextmanager
 async def _running_voice(
     runtime: AgentRuntime,
@@ -226,14 +262,62 @@ async def test_voice_agent_publishes_configured_lifecycle_topics() -> None:
     runtime.register("voice", voice)
 
     async with _running_voice(runtime, voice, session):
-        await session.run_options["on_participant_left"]("alice")
-        await session.run_options["on_interrupted"](None)
+        assert session.run_options["on_participant_left"]("alice") is None
+        assert session.run_options["on_interrupted"](None) is None
         await asyncio.wait_for(recorder.wait_for(2), 1.0)
 
     assert recorder.events == [
         ("participant-left", "alice"),
         ("interrupted", None),
     ]
+
+
+async def test_voice_lifecycle_publication_does_not_block_media_callback() -> None:
+    session = _Session()
+    blocker = _BlockingLifecycle()
+    runtime = AgentRuntime()
+    runtime.register("blocker", blocker)
+    voice = VoiceAgent(  # type: ignore[arg-type]
+        session,
+        query_topic=QUERY_TOPIC,
+        interrupted_topic=INTERRUPTED_TOPIC,
+        text_input=False,
+    )
+    runtime.register("voice", voice)
+
+    async with _running_voice(runtime, voice, session):
+        assert session.run_options["on_interrupted"]("alice") is None
+        await asyncio.wait_for(blocker.started.wait(), 1.0)
+        assert voice._lifecycle_tasks  # noqa: SLF001
+        blocker.release.set()
+
+
+async def test_replacement_query_publishes_interruption_before_query() -> None:
+    session = _Session()
+    recorder = _OrderedRecorder()
+    runtime = AgentRuntime()
+    runtime.register("recorder", recorder)
+    voice = VoiceAgent(  # type: ignore[arg-type]
+        session,
+        query_topic=QUERY_TOPIC,
+        interrupted_topic=INTERRUPTED_TOPIC,
+        text_input=False,
+    )
+    runtime.register("voice", voice)
+
+    async with _running_voice(runtime, voice, session):
+        assert session.handler is not None
+        await session.handler(
+            VoiceQuery(
+                participant_id="alice",
+                text="replacement",
+                timestamp_us=7,
+                interrupted_output=True,
+            )
+        )
+        await asyncio.wait_for(recorder.changed.wait(), 1.0)
+
+    assert recorder.events == ["interrupted", "query"]
 
 
 async def test_voice_agent_accepts_output_from_multiple_publishers() -> None:

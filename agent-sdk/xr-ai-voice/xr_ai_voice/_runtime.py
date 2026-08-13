@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -187,6 +187,7 @@ class VoiceAgent(Agent):
         self._streams: dict[tuple[str, str, str], _ResponseStream] = {}
         self._response_traces: dict[tuple[str, str, str], _ResponseTrace] = {}
         self._closed_streams: dict[tuple[str, str, str], None] = {}
+        self._lifecycle_tasks: set[asyncio.Task[None]] = set()
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""
@@ -222,6 +223,11 @@ class VoiceAgent(Agent):
             finally:
                 if unsubscribe is not None:
                     unsubscribe()
+                tasks = tuple(self._lifecycle_tasks)
+                for task in tasks:
+                    task.cancel()
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
                 await asyncio.gather(
                     *(stream.aclose() for stream in tuple(self._streams.values()))
                 )
@@ -339,6 +345,13 @@ class VoiceAgent(Agent):
 
     async def _publish_input(self, query: VoiceQuery) -> None:
         runtime = self._running_runtime()
+        if query.interrupted_output and self.interrupted_topic is not None:
+            await runtime.publish(
+                self.interrupted_topic,
+                VoiceInterrupted(),
+                participant_id=query.participant_id,
+                source=self._source,
+            )
         await runtime.publish(
             self.query_topic,
             UserQuery(text=query.text, timestamp_us=query.timestamp_us),
@@ -346,27 +359,50 @@ class VoiceAgent(Agent):
             source=self._source,
         )
 
-    async def _publish_participant_left(self, participant_id: str) -> None:
+    def _publish_participant_left(self, participant_id: str) -> None:
         runtime = self._running_runtime()
         topic = self.participant_left_topic
         assert topic is not None
-        await runtime.publish(
-            topic,
-            VoiceParticipantLeft(),
-            participant_id=participant_id,
-            source=self._source,
+        self._start_lifecycle_task(
+            runtime.publish(
+                topic,
+                VoiceParticipantLeft(),
+                participant_id=participant_id,
+                source=self._source,
+            ),
+            name=f"voice-participant-left:{participant_id}",
         )
 
-    async def _publish_interrupted(self, participant_id: str | None) -> None:
+    def _publish_interrupted(self, participant_id: str | None) -> None:
         runtime = self._running_runtime()
         topic = self.interrupted_topic
         assert topic is not None
-        await runtime.publish(
-            topic,
-            VoiceInterrupted(),
-            participant_id=participant_id,
-            source=self._source,
+        self._start_lifecycle_task(
+            runtime.publish(
+                topic,
+                VoiceInterrupted(),
+                participant_id=participant_id,
+                source=self._source,
+            ),
+            name=f"voice-interrupted:{participant_id or 'all'}",
         )
+
+    def _start_lifecycle_task(
+        self,
+        operation: Awaitable[None],
+        *,
+        name: str,
+    ) -> None:
+        task = asyncio.create_task(operation, name=name)
+        self._lifecycle_tasks.add(task)
+        task.add_done_callback(self._lifecycle_done)
+
+    def _lifecycle_done(self, task: asyncio.Task[None]) -> None:
+        self._lifecycle_tasks.discard(task)
+        if task.cancelled():
+            return
+        if error := task.exception():
+            logger.error("voice lifecycle publication failed: {}", error)
 
     def _running_runtime(self) -> AgentRuntime:
         if self._runtime is None:

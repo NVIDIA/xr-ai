@@ -43,6 +43,25 @@ _TRACE_FILE = "/tmp/xr-agent-trace.log"
 _PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system.txt"
 
 
+async def _probe_warmed_llm(llm, *, warmup: bool) -> bool:
+    """Report ready only after the optional first-turn warmup succeeds."""
+
+    if not await llm.health():
+        return False
+    if not warmup:
+        return True
+    try:
+        await llm.chat(
+            [ChatMessage(role="user", content="Add a small cube.")],
+            max_tokens=40,
+            timeout=120.0,
+        )
+    except Exception:
+        logger.opt(exception=True).warning("LLM warmup failed; readiness will retry")
+        return False
+    return True
+
+
 async def main(
     cfg: WorkerConfig,
     config_path: pathlib.Path | None = None,
@@ -71,6 +90,12 @@ async def main(
     tts = make_tts(models_cfg, "tts")
     vlm_service = make_vlm(models_cfg, "vlm")
 
+    async def llm_probe() -> bool:
+        return await _probe_warmed_llm(
+            llm,
+            warmup=models_cfg.llm("llm").health_check,
+        )
+
     voice_gate_cfg = load_voice_gate_config(pathlib.Path(cfg.voice_gate_yaml))
     session = VoiceSession(
         stt=stt,
@@ -81,27 +106,19 @@ async def main(
             silero_threshold=cfg.silero_threshold,
         ),
         voice_gate=voice_gate_cfg,
+        # Readiness, including the LLM warmup, settles model GPU memory before
+        # an XR session can ask the scene process to create LOVR's Vulkan device.
         probes={
-            "LLM": llm.health,
+            "LLM": llm_probe,
             "agent-LLM": agent_llm.health,
             "VLM": vlm_service.health,
         },
         ready_file=ready_file,
-        closeables=(llm, agent_llm, vlm_service),
+        closeables=(),
+        # SceneModelLoop publishes the panel response itself.
         text_topic="",
         idle_timeout_secs=cfg.idle_timeout_secs,
     )
-
-    # VLM readiness must settle GPU memory before LOVR creates its Vulkan device.
-    if models_cfg.llm("llm").health_check:
-        try:
-            await llm.chat(
-                [ChatMessage(role="user", content="Add a small cube.")],
-                max_tokens=40,
-                timeout=120.0,
-            )
-        except Exception:
-            logger.opt(exception=True).warning("LLM warmup failed")
 
     capabilities = NativeCapabilities(
         scene_endpoint=cfg.scene_endpoint,
@@ -135,22 +152,22 @@ async def main(
         )
         runtime = AgentRuntime()
         owned_tools = tuple(tool for _name, tool in capabilities.all.items())
-        render = runtime.register("xr-render", RenderAgent(scene_loop, owned_tools))
-        XRSessionLifecycle(
-            transport=session.transport,
-            scene_loop=scene_loop,
-            tools=capabilities.all,
-            runtime=runtime,
-        )
         voice = VoiceAgent(
             session,
             query_topic=USER_QUERY_TOPIC,
             text_ignore_topics={"xr.session.started"},
             participant_left_topic=PARTICIPANT_LEFT_TOPIC,
             interrupted_topic=INTERRUPTED_TOPIC,
-            interrupt_on_supersede=True,
         )
         runtime.register("voice", voice)
+        render = runtime.register("xr-render", RenderAgent(scene_loop, owned_tools))
+        # The endpoint retains this bound callback for the worker lifetime.
+        _lifecycle = XRSessionLifecycle(
+            transport=session.transport,
+            scene_loop=scene_loop,
+            tools=capabilities.all,
+            runtime=runtime,
+        )
 
         logger.info("xr_render_demo starting")
         async with runtime:
@@ -159,7 +176,13 @@ async def main(
             finally:
                 await render.stop()
     finally:
-        await capabilities.close()
+        await asyncio.gather(
+            capabilities.close(),
+            session.close(),
+            llm.close(),
+            agent_llm.close(),
+            vlm_service.close(),
+        )
     logger.info("xr_render_demo stopped")
 
 

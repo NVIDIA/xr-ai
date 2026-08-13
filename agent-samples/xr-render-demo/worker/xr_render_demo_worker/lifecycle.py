@@ -8,11 +8,12 @@ import asyncio
 import json
 import time
 import uuid
+from contextlib import suppress
 
 from loguru import logger
 from xr_ai_hub import DataMessage
 from xr_ai_models import ToolCall
-from xr_ai_runtime import AgentRuntime
+from xr_ai_runtime import AgentRuntime, RuntimeClosedError
 from xr_ai_tools import ToolSet
 from xr_ai_tools.tool_calling import handle_tool_call
 from xr_ai_voice import HubVoiceTransport
@@ -92,15 +93,16 @@ class XRSessionLifecycle:
     async def _notify_launch_failed(self, pid: str) -> None:
         """Publish a launch failure through the same agent mailbox as queries."""
 
-        await self._runtime.publish(
-            RENDER_NOTICE_TOPIC,
-            RenderNotice(
-                text="I couldn't start the XR session — try Launch XR again.",
-                interrupt_output=True,
-            ),
-            participant_id=pid,
-            source="xr-session",
-        )
+        with suppress(RuntimeClosedError):
+            await self._runtime.publish(
+                RENDER_NOTICE_TOPIC,
+                RenderNotice(
+                    text="I couldn't start the XR session — try Launch XR again.",
+                    interrupt_output=True,
+                ),
+                participant_id=pid,
+                source="xr-session",
+            )
 
     async def _wait_lovr(self, timeout_s: float = 120.0) -> bool:
         deadline = asyncio.get_running_loop().time() + timeout_s

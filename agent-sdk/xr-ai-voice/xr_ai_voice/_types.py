@@ -18,6 +18,8 @@ class VoiceQuery:
     text: str
     #: Unix-epoch microseconds anchoring the query to when the user spoke or typed.
     timestamp_us: int
+    #: The voice consumer closed active output before accepting this replacement.
+    interrupted_output: bool = False
 
 
 VoiceInputSink: TypeAlias = Callable[[VoiceQuery], Awaitable[None]]

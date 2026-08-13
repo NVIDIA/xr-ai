@@ -150,29 +150,38 @@ class _VoiceIOProcessor(FrameProcessor):
     async def _spawn_query(self, frame: GatedQueryFrame) -> None:
         pid = frame.participant_id
         logger.info("voice input pid={!r}", pid)
+        interrupted_response: asyncio.Task[None] | None = None
         if current := self._inflight.get(pid):
             if not current.done():
-                await self._cancel_pid(pid)
+                interrupted_response = await self._cancel_pid(pid)
         interrupt = self._interrupt_on_supersede and pid in self._seen_output
         if interrupt:
             frame_to_push = InterruptionFrame()
             frame_to_push.transport_source = pid
             await self.push_frame(frame_to_push)
         task = asyncio.create_task(
-            self._run_query(frame),
+            self._run_query(frame, interrupted_response=interrupted_response),
             name=f"voice-input-{pid}",
         )
         self._input_tasks.add(task)
         task.add_done_callback(self._input_tasks.discard)
 
-    async def _run_query(self, frame: GatedQueryFrame) -> None:
+    async def _run_query(
+        self,
+        frame: GatedQueryFrame,
+        *,
+        interrupted_response: asyncio.Task[None] | None,
+    ) -> None:
         pid = frame.participant_id
         try:
+            if interrupted_response is not None:
+                await asyncio.gather(interrupted_response, return_exceptions=True)
             await self._input_sink(
                 VoiceQuery(
                     participant_id=pid,
                     text=frame.text,
                     timestamp_us=frame.pts_us,
+                    interrupted_output=interrupted_response is not None,
                 )
             )
         except asyncio.CancelledError:
@@ -300,13 +309,14 @@ class _VoiceIOProcessor(FrameProcessor):
         except Exception:
             logger.exception("voice interruption callback raised pid={!r}", pid)
 
-    async def _cancel_pid(self, pid: str) -> None:
+    async def _cancel_pid(self, pid: str) -> asyncio.Task[None] | None:
         self._turn_tokens.pop(pid, None)
         for item in self._queued.pop(pid, ()):
             await self._close_response(item.response)
         task = self._inflight.pop(pid, None)
         if task is not None and not task.done():
             task.cancel()
+        return task
 
     @staticmethod
     async def _close_response(response: VoiceResponse) -> None:

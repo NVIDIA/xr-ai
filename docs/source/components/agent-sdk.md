@@ -18,9 +18,9 @@ from:
   `UserQuery` and lifecycle events to application-named topics and consumes
   `voice.output`. `VoiceSession` owns readiness, hub transport, voice gating,
   streaming responses, signals, and cleanup.
-- **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
-  consumers such as `xr-render-demo`. Its `run_voice_pipeline` helper exposes
-  the same IPC-start request-readiness boundary as `VoiceSession`.
+- **`xr-ai-pipecat`** — the direct Pipecat compatibility surface. Current
+  samples use `VoiceSession`; `run_voice_pipeline` remains available to
+  external consumers that still assemble Pipecat processors directly.
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
@@ -343,8 +343,10 @@ ready file is touched only after the input transport enters its hub IPC receive
 loop. `VoiceSession` preserves participant routing, cancels superseded or
 interrupted output, installs signal handlers, and closes its transport and
 model clients. `VoiceAgent` turns transport lifecycle callbacks into typed
-runtime events; application agents subscribe and clean up their own state. A
-pid-less interruption is a global event.
+runtime events on agent-owned tasks, so application cleanup cannot block the
+shared media processor. It cancels and awaits those tasks during shutdown.
+Application agents subscribe and clean up their own state. A pid-less
+interruption is a global event.
 
 ## xr-ai-pipecat
 

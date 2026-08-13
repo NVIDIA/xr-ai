@@ -446,10 +446,11 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
                     participant_id="alice",
                     text="What is in front of me?",
                     timestamp_us=123,
+                    interrupted_output=False,
                 )
             ) is None
             await asyncio.wait_for(response_complete.wait(), 1.0)
-            await options["on_participant_left"]("alice")
+            options["on_participant_left"]("alice")
             async def wait_until_released() -> None:
                 while not _StreamingVisionTool.instances[0].released:
                     await asyncio.sleep(0)

@@ -390,7 +390,7 @@ _LAUNCH_FAIL_MSG = "I couldn't start the XR session — try Launch XR again."
 
 
 class _CaptureTransport:
-    """XRMediaHubTransport double — records send_return_data and owns the
+    """HubVoiceTransport double — records send_return_data and owns the
     target participant. Only the surface the notice path touches."""
 
     def __init__(self) -> None:
@@ -610,6 +610,45 @@ from xr_ai_models import ChatResponse, ToolCall  # noqa: E402
 from xr_render_demo_worker import scene_loop as _loop  # noqa: E402
 from xr_render_demo_worker import spatial_tools as _spatial_tools  # noqa: E402
 from xr_render_demo_worker import tools as _tools  # noqa: E402
+from xr_render_demo_worker import __main__ as _worker  # noqa: E402
+
+
+class _WarmupLLM:
+    def __init__(self, *, healthy: bool, fail_warmup: bool = False) -> None:
+        self.healthy = healthy
+        self.fail_warmup = fail_warmup
+        self.calls: list[tuple[list[ChatMessage], dict]] = []
+
+    async def health(self) -> bool:
+        return self.healthy
+
+    async def chat(self, messages: list[ChatMessage], **kwargs):
+        self.calls.append((messages, kwargs))
+        if self.fail_warmup:
+            raise RuntimeError("still loading")
+
+
+async def test_llm_warmup_waits_for_health() -> None:
+    llm = _WarmupLLM(healthy=False)
+
+    assert await _worker._probe_warmed_llm(llm, warmup=True) is False
+    assert llm.calls == []
+
+
+async def test_llm_readiness_requires_successful_warmup() -> None:
+    llm = _WarmupLLM(healthy=True, fail_warmup=True)
+
+    assert await _worker._probe_warmed_llm(llm, warmup=True) is False
+    assert len(llm.calls) == 1
+
+
+async def test_llm_warmup_probe_uses_first_turn_contract() -> None:
+    llm = _WarmupLLM(healthy=True)
+
+    assert await _worker._probe_warmed_llm(llm, warmup=True) is True
+    messages, options = llm.calls[0]
+    assert [message.content for message in messages] == ["Add a small cube."]
+    assert options == {"max_tokens": 40, "timeout": 120.0}
 
 
 async def test_render_spatial_native_toolbox_builds() -> None:

@@ -73,6 +73,10 @@ sets `interrupt=True` to replace active and queued speech. Producers may copy
 the originating query's `timestamp_us` into `VoiceOutput` so the TTS response
 preserves the input timestamp.
 
+Lifecycle publication runs on `VoiceAgent`-owned tasks, so participant cleanup
+cannot block the shared media processor. The agent cancels and awaits those
+tasks during shutdown.
+
 Relay telemetry treats `voice.output` as a high-cardinality transport topic and
 does not emit runtime scopes per fragment. `VoiceAgent` instead emits one
 `voice.response` agent scope for each finite response or completed incremental

@@ -183,7 +183,10 @@ voice.output topic (agentic-loop quick-ack or final response)
 `VoiceSession` owns interruption handling. A new utterance while TTS is playing
 triggers `ReturnAudioFlush`, so the hub clears the LiveKit audio queue for that
 participant. Its interruption callback also cancels the participant's active
-render-agent task.
+render-agent task without waiting on its cleanup in the media processor. A
+consumer-aborted render stream closes its scene generator without publishing a
+terminator to the already-closed voice stream; producer supersession completes
+the old stream before the replacement starts.
 
 ## Agent runtime and voice topology
 

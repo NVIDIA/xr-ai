@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import suppress
+from dataclasses import dataclass
 
 import nemo_relay
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,13 +46,24 @@ PARTICIPANT_LEFT_TOPIC = Topic("xr-render.participant-left", VoiceParticipantLef
 INTERRUPTED_TOPIC = Topic("xr-render.interrupted", VoiceInterrupted)
 
 
+@dataclass(slots=True)
+class _TurnControl:
+    finish_stream: bool = True
+
+
+@dataclass(slots=True)
+class _Turn:
+    task: asyncio.Task[None]
+    control: _TurnControl
+
+
 class RenderAgent(Agent):
     """Run participant-scoped render turns and publish their spoken chunks."""
 
     def __init__(self, scene: SceneModelLoop, tools: tuple[Tool, ...]) -> None:
         super().__init__(tools)
         self.scene = scene
-        self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._tasks: dict[str, _Turn] = {}
 
     @subscribe(USER_QUERY_TOPIC)
     async def answer_user(self, query: UserQuery, ctx: RuntimeContext) -> None:
@@ -90,11 +103,13 @@ class RenderAgent(Agent):
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("render turns require a participant")
-        await self._cancel(participant_id)
+        await self._cancel(participant_id, finish_stream=True)
+        control = _TurnControl()
         task = asyncio.create_task(
             self._run_turn(
                 text,
                 ctx,
+                control,
                 is_notice=is_notice,
                 interrupt_output=interrupt_output,
                 timestamp_us=timestamp_us,
@@ -102,7 +117,7 @@ class RenderAgent(Agent):
             name=f"xr-render:{participant_id}",
             context=nemo_relay.fork_asyncio_context(),
         )
-        self._tasks[participant_id] = task
+        self._tasks[participant_id] = _Turn(task=task, control=control)
         task.add_done_callback(
             lambda completed, pid=participant_id: self._discard(pid, completed)
         )
@@ -118,7 +133,7 @@ class RenderAgent(Agent):
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("participant-left events require a participant")
-        await self._cancel(participant_id)
+        await self._cancel(participant_id, finish_stream=False)
         await self.scene.on_participant_left(participant_id)
 
     @subscribe(INTERRUPTED_TOPIC)
@@ -131,19 +146,20 @@ class RenderAgent(Agent):
 
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
-            await self._cancel_all()
+            await self._cancel_all(finish_stream=False)
             return
-        await self._cancel(participant_id)
+        await self._cancel(participant_id, finish_stream=False)
 
     async def stop(self) -> None:
         """Cancel active turns before runtime shutdown."""
 
-        await self._cancel_all()
+        await self._cancel_all(finish_stream=False)
 
     async def _run_turn(
         self,
         text: str,
         ctx: RuntimeContext,
+        control: _TurnControl,
         *,
         is_notice: bool,
         interrupt_output: bool,
@@ -164,6 +180,7 @@ class RenderAgent(Agent):
                 await self._run_turn_scoped(
                     text,
                     ctx,
+                    control,
                     is_notice=is_notice,
                     interrupt_output=interrupt_output,
                     timestamp_us=timestamp_us,
@@ -173,6 +190,7 @@ class RenderAgent(Agent):
         self,
         text: str,
         ctx: RuntimeContext,
+        control: _TurnControl,
         *,
         is_notice: bool,
         interrupt_output: bool,
@@ -184,6 +202,7 @@ class RenderAgent(Agent):
             raise ValueError("render turns require a participant")
         response_id = metadata.message_id
         opened = False
+        response: AsyncIterator[str] | None = None
         try:
             if is_notice:
                 response = self.scene.handle_notice(participant_id, text)
@@ -194,20 +213,26 @@ class RenderAgent(Agent):
                 )
             first = True
             async for chunk in response:
-                await ctx.publish(
-                    VOICE_OUTPUT_TOPIC,
-                    VoiceOutput(
-                        text=chunk,
-                        response_id=response_id,
-                        final=False,
-                        interrupt=interrupt_output and first,
-                        timestamp_us=timestamp_us,
-                    ),
-                )
+                try:
+                    await ctx.publish(
+                        VOICE_OUTPUT_TOPIC,
+                        VoiceOutput(
+                            text=chunk,
+                            response_id=response_id,
+                            final=False,
+                            interrupt=interrupt_output and first,
+                            timestamp_us=timestamp_us,
+                        ),
+                    )
+                except RuntimeClosedError:
+                    return
                 first = False
                 opened = True
         finally:
-            if opened:
+            if response is not None:
+                with suppress(Exception, asyncio.CancelledError):
+                    await response.aclose()
+            if opened and control.finish_stream:
                 with suppress(RuntimeClosedError):
                     await ctx.publish(
                         VOICE_OUTPUT_TOPIC,
@@ -217,23 +242,29 @@ class RenderAgent(Agent):
                         ),
                     )
 
-    async def _cancel(self, participant_id: str) -> None:
-        task = self._tasks.pop(participant_id, None)
-        if task is None:
+    async def _cancel(self, participant_id: str, *, finish_stream: bool) -> None:
+        turn = self._tasks.pop(participant_id, None)
+        if turn is None:
             return
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
+        turn.control.finish_stream = finish_stream
+        turn.task.cancel()
+        await asyncio.gather(turn.task, return_exceptions=True)
 
-    async def _cancel_all(self) -> None:
-        tasks = tuple(self._tasks.values())
+    async def _cancel_all(self, *, finish_stream: bool) -> None:
+        turns = tuple(self._tasks.values())
         self._tasks.clear()
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        for turn in turns:
+            turn.control.finish_stream = finish_stream
+            turn.task.cancel()
+        if turns:
+            await asyncio.gather(
+                *(turn.task for turn in turns),
+                return_exceptions=True,
+            )
 
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
-        if self._tasks.get(participant_id) is task:
+        turn = self._tasks.get(participant_id)
+        if turn is not None and turn.task is task:
             self._tasks.pop(participant_id, None)
 
 

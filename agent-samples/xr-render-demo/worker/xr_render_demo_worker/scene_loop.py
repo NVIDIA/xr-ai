@@ -244,16 +244,14 @@ class SceneModelLoop:
 
     async def handle_notice(self, pid: str, text: str) -> AsyncIterator[str]:
         """Deliver one lifecycle notice to the panel and voice output."""
-        send_pid = pid or self._transport.target_participant
-        if send_pid:
-            await self._send(send_pid, text, topic=_AGENT_RESPONSE_TOPIC)
+        await self._send(pid, text, topic=_AGENT_RESPONSE_TOPIC)
         yield text
 
     async def _run_turn(self, pid: str, text: str) -> AsyncIterator[str]:
         text = text.strip()
         if not text:
             return
-        send_pid = pid or self._transport.target_participant
+        send_pid = pid
         # Bracket the whole turn with the client UI status signal: "processing"
         # on entry, "idle" in finally so it always clears — including failure or
         # a barge-in cancellation. The "processing" publish is INSIDE the try so
