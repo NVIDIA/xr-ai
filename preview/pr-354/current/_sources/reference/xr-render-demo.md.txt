@@ -115,7 +115,7 @@ Port 8100 (`vlm-server`).
 
 Loaded in-process by `vlm-server` via HuggingFace transformers
 (Qwen2.5-VL architecture). `<think>…</think>` blocks are stripped before
-returning. Native vision functions read recorded images or acquire a current
+returning. Native vision tools read recorded images or acquire a current
 participant frame, encode it as an image URL, and invoke the shared
 `xr-ai-models` VLM service.
 
@@ -184,10 +184,11 @@ manufacturing voice-pipeline frames.
 
 ## Agentic loop
 
-At worker startup, a NAT `WorkflowBuilder` constructs sample-local scene,
-XR-tracking, spatial-math, vision, video-memory, and text-memory functions.
-The LLM tool schemas are derived from those Functions. `start_xr` and
-`get_health` remain worker-managed lifecycle operations.
+At worker startup, `NativeCapabilities` composes sample-local scene,
+XR-tracking, spatial-math, vision, video-memory, and text-memory `Tool`
+instances into a `ToolSet`. The LLM schemas come from
+`tool_definitions(...)`; `start_xr`, `get_health`, and raw frame extraction
+remain worker-managed lifecycle operations.
 
 On each accepted `xr-render.user-query` event or lifecycle notice:
 
@@ -198,11 +199,11 @@ On each accepted `xr-render.user-query` event or lifecycle notice:
    `position_ahead(1.5)` — results injected into the user message so the
    model skips those tool calls and goes straight to the operation.
 4. **Nemotron-30B :8107** runs with `tools=[…]`, up to 10 iterations:
-   - Model emits `tool_calls` → worker invokes the matching NAT Function → result appended
-     to conversation → next iteration.
-   - Runtime-backed Functions call scene, OpenXR, and video-memory typed
-     services. Spatial math and text memory execute in process, and vision
-     calls the configured `xr-ai-models` VLM service.
+   - Model emits `tool_calls` → `handle_tool_call(...)` validates and invokes
+     the matching native tool → its tool-role message is appended → next iteration.
+   - Service-backed tools call scene, OpenXR, and video-memory typed services.
+     Spatial math and text memory execute in process, and vision calls the
+     configured `xr-ai-models` VLM service.
    - Progress message sent on `agent.progress` topic before each tool
      executes (data channel).
    - If `think=true`: reasoning preamble injected into system prompt
@@ -225,13 +226,13 @@ On each accepted `xr-render.user-query` event or lifecycle notice:
 
 The sample-local scene process owns scene state and LOVR. `openxr-service`
 owns the headless tracking session, and `video-memory-service` owns recorded
-video decoding. `LiveFrameSource` supplies current-frame requests. NAT
-Functions provide the typed tool surface over those services; the demo does
+video decoding. `LiveFrameSource` supplies current-frame requests. Relay-managed
+native tools provide the typed surface over those services; the demo does
 not launch or call MCP adapters.
 
 ### Spatial tool surface
 
-The worker composes XR tracking with shared spatial-math Functions. This
+The worker composes XR tracking with shared spatial-math tools. This
 offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
 in one place:
 
@@ -310,7 +311,7 @@ a streaming client connects. LOVR cannot start before then.
 ## Eval harness
 
 Offline regression suite for the agentic loop, run against the live agent LLM.
-It derives schemas from the worker's native NAT functions and evaluates tool
+It derives schemas from the worker's native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
 [`agent-samples/xr-render-demo/eval/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-samples/xr-render-demo/eval/README.md)

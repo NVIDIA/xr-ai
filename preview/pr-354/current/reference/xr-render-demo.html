@@ -377,9 +377,9 @@
 <h1>xr-render-demo — architecture<a class="headerlink" href="#xr-render-demo-architecture" title="Link to this heading">#</a></h1>
 <p>This page describes the architecture of the xr-render-demo sample. For the
 user-facing
-quickstart, refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/6191f3b29002451431b8eb47ad68bfef18e73135/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr">repository README</a>.
+quickstart, refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr">repository README</a>.
 For inference-server mechanics shared with other samples, refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/6191f3b29002451431b8eb47ad68bfef18e73135/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/docs/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/ai-services.md</span></code></a>.</p>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
 <p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) starts
@@ -530,7 +530,7 @@ to avoid stacking up in the TTS queue behind the real response.</p></li>
 <p>Port 8100 (<code class="docutils literal notranslate"><span class="pre">vlm-server</span></code>).</p>
 <p>Loaded in-process by <code class="docutils literal notranslate"><span class="pre">vlm-server</span></code> via HuggingFace transformers
 (Qwen2.5-VL architecture). <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;…&lt;/think&gt;</span></code> blocks are stripped before
-returning. Native vision functions read recorded images or acquire a current
+returning. Native vision tools read recorded images or acquire a current
 participant frame, encode it as an image URL, and invoke the shared
 <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> VLM service.</p>
 <p>There is a deliberate startup ordering constraint: <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> readiness
@@ -593,10 +593,11 @@ manufacturing voice-pipeline frames.</p>
 </section>
 <section id="agentic-loop">
 <h2>Agentic loop<a class="headerlink" href="#agentic-loop" title="Link to this heading">#</a></h2>
-<p>At worker startup, a NAT <code class="docutils literal notranslate"><span class="pre">WorkflowBuilder</span></code> constructs sample-local scene,
-XR-tracking, spatial-math, vision, video-memory, and text-memory functions.
-The LLM tool schemas are derived from those Functions. <code class="docutils literal notranslate"><span class="pre">start_xr</span></code> and
-<code class="docutils literal notranslate"><span class="pre">get_health</span></code> remain worker-managed lifecycle operations.</p>
+<p>At worker startup, <code class="docutils literal notranslate"><span class="pre">NativeCapabilities</span></code> composes sample-local scene,
+XR-tracking, spatial-math, vision, video-memory, and text-memory <code class="docutils literal notranslate"><span class="pre">Tool</span></code>
+instances into a <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>. The LLM schemas come from
+<code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code>; <code class="docutils literal notranslate"><span class="pre">start_xr</span></code>, <code class="docutils literal notranslate"><span class="pre">get_health</span></code>, and raw frame extraction
+remain worker-managed lifecycle operations.</p>
 <p>On each accepted <code class="docutils literal notranslate"><span class="pre">xr-render.user-query</span></code> event or lifecycle notice:</p>
 <ol class="arabic simple">
 <li><p><strong>Quick-ack</strong> runs first (<code class="docutils literal notranslate"><span class="pre">llm</span></code> :8107, awaited before the loop).</p></li>
@@ -607,11 +608,11 @@ channel only).</p></li>
 model skips those tool calls and goes straight to the operation.</p></li>
 <li><p><strong>Nemotron-30B :8107</strong> runs with <code class="docutils literal notranslate"><span class="pre">tools=[…]</span></code>, up to 10 iterations:</p>
 <ul class="simple">
-<li><p>Model emits <code class="docutils literal notranslate"><span class="pre">tool_calls</span></code> → worker invokes the matching NAT Function → result appended
-to conversation → next iteration.</p></li>
-<li><p>Runtime-backed Functions call scene, OpenXR, and video-memory typed
-services. Spatial math and text memory execute in process, and vision
-calls the configured <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> VLM service.</p></li>
+<li><p>Model emits <code class="docutils literal notranslate"><span class="pre">tool_calls</span></code> → <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> validates and invokes
+the matching native tool → its tool-role message is appended → next iteration.</p></li>
+<li><p>Service-backed tools call scene, OpenXR, and video-memory typed services.
+Spatial math and text memory execute in process, and vision calls the
+configured <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> VLM service.</p></li>
 <li><p>Progress message sent on <code class="docutils literal notranslate"><span class="pre">agent.progress</span></code> topic before each tool
 executes (data channel).</p></li>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">think=true</span></code>: reasoning preamble injected into system prompt
@@ -637,12 +638,12 @@ text memory without model scratch output or tool traces.</p></li>
 <h2>Native capability composition<a class="headerlink" href="#native-capability-composition" title="Link to this heading">#</a></h2>
 <p>The sample-local scene process owns scene state and LOVR. <code class="docutils literal notranslate"><span class="pre">openxr-service</span></code>
 owns the headless tracking session, and <code class="docutils literal notranslate"><span class="pre">video-memory-service</span></code> owns recorded
-video decoding. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. NAT
-Functions provide the typed tool surface over those services; the demo does
+video decoding. <code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> supplies current-frame requests. Relay-managed
+native tools provide the typed surface over those services; the demo does
 not launch or call MCP adapters.</p>
 <section id="spatial-tool-surface">
 <h3>Spatial tool surface<a class="headerlink" href="#spatial-tool-surface" title="Link to this heading">#</a></h3>
-<p>The worker composes XR tracking with shared spatial-math Functions. This
+<p>The worker composes XR tracking with shared spatial-math tools. This
 offloads vector arithmetic the LLM is bad at while keeping pose-dependent math
 in one place:</p>
 <ul class="simple">
@@ -726,10 +727,10 @@ a streaming client connects. LOVR cannot start before then.</p>
 <section id="eval-harness">
 <h2>Eval harness<a class="headerlink" href="#eval-harness" title="Link to this heading">#</a></h2>
 <p>Offline regression suite for the agentic loop, run against the live agent LLM.
-It derives schemas from the worker’s native NAT functions and evaluates tool
+It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/6191f3b29002451431b8eb47ad68bfef18e73135/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/0fb715e3183366a3f7f70f681f7a1b39a05b3a8a/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py

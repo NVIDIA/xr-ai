@@ -379,43 +379,63 @@
 <p>The <code class="docutils literal notranslate"><span class="pre">agent-sdk/</span></code> workspace holds the libraries an xr-ai agent is built
 from:</p>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code></strong> — dependency-light addressable-agent lifecycle,
-typed request/response calls, and typed publish/subscribe for bounded and
-long-running agents.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code></strong> — agents exposing existing native tools and typed
+publish/subscribe.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code></strong> — unified service protocols (<code class="docutils literal notranslate"><span class="pre">LLMService</span></code>, <code class="docutils literal notranslate"><span class="pre">VLMService</span></code>,
 <code class="docutils literal notranslate"><span class="pre">STTService</span></code>, <code class="docutils literal notranslate"><span class="pre">TTSService</span></code>, <code class="docutils literal notranslate"><span class="pre">EmbeddingService</span></code>) plus OpenAI-compatible HTTP clients, driven by a
 structured model deployment profile. Swapping a backend is a configuration
 edit, not a code edit.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code></strong> — the native voice runtime. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes
-<code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> to an application-named topic and consumes <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>; its
-<code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating, streaming
-responses, signals, and cleanup.</p></li>
+<code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> and lifecycle events to application-named topics and consumes
+<code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating,
+streaming responses, signals, and cleanup.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat surface retained for unmigrated
 consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>. Its <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> helper exposes
 the same IPC-start request-readiness boundary as <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code></strong> — the minimal pyzmq + msgpack IPC library every agent uses
 to talk to the XR-Media-Hub (refer to <a class="reference internal" href="server-runtime.html"><span class="doc">Server runtime</span></a>). No LiveKit or
 FastAPI dependency.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — Relay-managed native tools, the generic <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code>
-protocol, and a basic tool-driven agent. Its legacy extras retain existing
-NeMo Agent Toolkit function groups while their concrete capabilities migrate.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code></strong> — Relay-managed native tools and model tool-call
+workflow helpers.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — legacy NeMo Agent Toolkit function groups retained while
+their concrete capabilities migrate.</p></li>
 </ul>
 <hr class="docutils" />
 <section id="xr-ai-agent-runtime">
 <h2>xr-ai-agent-runtime<a class="headerlink" href="#xr-ai-agent-runtime" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> owns stable runtime-local agent addresses, lifecycle hooks,
-bounded per-agent mailboxes, participant-scoped calls, publish/subscribe, call
-timeouts, and background-task cleanup. The public communication surface has
-only two operations:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">call(agent,</span> <span class="pre">message)</span></code> sends one typed message and returns its handler result.
-A side-effecting handler returns <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">publish(topic,</span> <span class="pre">event)</span></code> fans out one typed event without collecting results.</p></li>
-</ul>
-<p>There is one <code class="docutils literal notranslate"><span class="pre">Agent</span></code> lifecycle. A one-shot agent implements only bounded
-handlers; a resident agent additionally starts runtime-owned background work.
-Jobs, streams, separate query/command classes, model loops, planning, and
-memory are not runtime primitives. Raw audio and video remain on the hub path.</p>
+<p><code class="docutils literal notranslate"><span class="pre">AgentRuntime</span></code> provides participant-scoped publish/subscribe. An agent exposes
+ordinary <code class="docutils literal notranslate"><span class="pre">Tool</span></code> and <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> instances from <code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code>. Direct callers
+use <code class="docutils literal notranslate"><span class="pre">execute()</span></code> or <code class="docutils literal notranslate"><span class="pre">stream()</span></code>, and model loops use the same <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code> and
+<code class="docutils literal notranslate"><span class="pre">handle_tool_call()</span></code> path as standalone tools. There is no runtime call
+adapter.</p>
+<p>Agent lifetime is not itself a runtime concern. Domain controls such as starting
+or stopping monitoring remain ordinary tools. Agents are registered before
+runtime startup and own their resources, tasks, and concurrency policy. Shared
+state that is touched by tools and subscriptions must be protected by the
+agent’s lock or private queue. Model loops, planning, and memory remain agent
+implementations. Raw audio and video remain on the hub path.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ToolSet.namespaced({&quot;vision&quot;:</span> <span class="pre">vision.tools,</span> <span class="pre">&quot;planner&quot;:</span> <span class="pre">planner.tools})</span></code>
+assigns unique model-visible names when tools from multiple agents are combined;
+the agents and underlying tools remain unchanged. Participant identity needed
+by direct execution belongs in the tool’s request schema; participant and
+correlation metadata on <code class="docutils literal notranslate"><span class="pre">RuntimeContext</span></code> applies to pub/sub. Agents create,
+cancel, and await their own background tasks. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> settles all fan-out
+deliveries before propagating subscriber failures.</p>
+<p>Relay records each publication and receiving-agent callback as nested runtime
+and agent scopes. These scopes include the topic plus message, correlation,
+participant, source, and subscriber metadata. Agent-owned work that outlives a
+subscription callback starts a fresh Relay scope stack and adds its own agent
+scope, preserving logical correlation in metadata without retaining an ended
+callback as its parent.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Topic.telemetry</span></code> controls runtime cardinality without changing delivery. Keep
+<code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> for commands, state changes, and lifecycle events. High-volume
+transport streams use <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>; their receiving agent records one semantic
+scope after aggregation. The voice output topic follows this pattern, producing
+one <code class="docutils literal notranslate"><span class="pre">voice.response</span></code> scope for either a finite response or a completed stream.
+Voice records provider work separately: <code class="docutils literal notranslate"><span class="pre">voice.stt</span></code> covers final and bounded
+partial-probe transcription, while <code class="docutils literal notranslate"><span class="pre">voice.tts</span></code> covers each sentence synthesis.
+Audio is summarized rather than stored, and playback on the remote client is
+outside these spans.</p>
 </section>
 <hr class="docutils" />
 <section id="xr-ai-models">
@@ -615,30 +635,27 @@ protocols or callers.</p>
 </section>
 </section>
 <hr class="docutils" />
-<section id="native-tools-and-agents">
-<h2>Native tools and agents<a class="headerlink" href="#native-tools-and-agents" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code> is the native migration target for model-driven XR composition.
+<section id="native-tools-and-model-tool-calls">
+<h2>Native tools and model tool calls<a class="headerlink" href="#native-tools-and-model-tool-calls" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code> is the native migration target for model-driven XR composition.
 <code class="docutils literal notranslate"><span class="pre">Tool</span></code> declares Pydantic request and response boundaries and executes its
-handler through NeMo Relay. <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> is the generic async-turn protocol;
-<code class="docutils literal notranslate"><span class="pre">xr_ai_nat.agents.Agent</span></code> is its bounded, stateless tool-loop implementation.
-It builds OpenAI-compatible tool definitions from those schemas and sends each
-model request through an injected <code class="docutils literal notranslate"><span class="pre">LLMService</span></code>.</p>
-<p>Relay scopes each turn and manages the LLM and tool lifecycles. The base package
-does not add an HTTP client, a Hub transport, or an implicit conversation store.
-Applications use <code class="docutils literal notranslate"><span class="pre">as_agent_tool(...)</span></code> to expose any <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> as a
-registered tool; foreground selection, workflow state, and background work stay
-explicit in application code.</p>
-<p><code class="docutils literal notranslate"><span class="pre">xr_ai_nat.live_vision.LiveVisionTool</span></code> acquires a participant-scoped hub frame
-and returns one complete observation through Relay’s finite tool and LLM
-boundaries. Direct voice can wrap the same tool with <code class="docutils literal notranslate"><span class="pre">LiveVisionResponder</span></code>,
-whose provider response uses Relay’s managed streaming LLM path under an Agent
-scope. Both paths replace the inline camera frame in Relay events without
-changing provider input. The split keeps token streaming out of ordinary
-agentic tool calls without reimplementing a partial streaming-tool lifecycle.</p>
-<p>Applications place native tools or an <code class="docutils literal notranslate"><span class="pre">AgentRunner</span></code> inside an
-<code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> agent when they need lifecycle, addressed calls, or
-pub/sub. Relay remains responsible for tool and model execution inside that
-agent; the runtime does not duplicate the tool loop or model boundary.</p>
+handler through NeMo Relay. <code class="docutils literal notranslate"><span class="pre">tool_definitions(...)</span></code> adapts a native catalog to
+<code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> definitions; <code class="docutils literal notranslate"><span class="pre">handle_tool_call(...)</span></code> invokes one model-selected
+call and returns the tool-role message.</p>
+<p>The package does not implement an agent, model loop, Hub transport, or implicit
+conversation store. Applications own prompts, LLM calls, history, iteration,
+foreground selection, workflow state, and background work.</p>
+<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.live_vision.LiveVisionTool</span></code> is the finite current-frame tool; it
+returns one complete observation through Relay’s managed tool and LLM
+boundaries. <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.streaming_vision.StreamingVisionTool</span></code> is a separate
+<code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> that yields typed chunks around Relay’s managed streaming LLM
+boundary. It has no voice or output-transport dependency. Both tools own their
+own frame sources and redact inline camera data from Relay events without
+changing provider input.</p>
+<p>Applications place native tools and model loops inside an agent to group tools
+with their state, and register the agent with <code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> when they
+need pub/sub. Relay remains responsible for tool and model execution; the
+runtime does not duplicate the tool loop or model boundary.</p>
 </section>
 <section id="xr-ai-nat-model-bridge">
 <h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>
@@ -663,10 +680,16 @@ lifecycle ownership.</p>
 <h2>xr-ai-voice<a class="headerlink" href="#xr-ai-voice" title="Link to this heading">#</a></h2>
 <p>Native voice applications work with participant-aware runtime topics rather
 than Pipecat processors. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> owns <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>, publishes accepted
-speech and typed text as the voice-owned <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> schema on an
-application-named topic, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
+input and lifecycle events with voice-owned schemas on application-named
+topics, and subscribes to <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserQuery</span><span class="p">,</span> <span class="n">VadConfig</span><span class="p">,</span> <span class="n">VoiceAgent</span><span class="p">,</span> <span class="n">VoiceSession</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_voice</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">UserQuery</span><span class="p">,</span>
+    <span class="n">VadConfig</span><span class="p">,</span>
+    <span class="n">VoiceAgent</span><span class="p">,</span>
+    <span class="n">VoiceParticipantLeft</span><span class="p">,</span>
+    <span class="n">VoiceSession</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="n">session</span> <span class="o">=</span> <span class="n">VoiceSession</span><span class="p">(</span>
     <span class="n">stt</span><span class="o">=</span><span class="n">stt</span><span class="p">,</span>
@@ -678,14 +701,15 @@ application-named topic, and subscribes to <code class="docutils literal notrans
     <span class="n">closeables</span><span class="o">=</span><span class="p">(</span><span class="n">vlm</span><span class="p">,),</span>
 <span class="p">)</span>
 <span class="n">queries</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.user-query&quot;</span><span class="p">,</span> <span class="n">UserQuery</span><span class="p">)</span>
+<span class="n">participant_left</span> <span class="o">=</span> <span class="n">Topic</span><span class="p">(</span><span class="s2">&quot;my-sample.participant-left&quot;</span><span class="p">,</span> <span class="n">VoiceParticipantLeft</span><span class="p">)</span>
 <span class="n">voice</span> <span class="o">=</span> <span class="n">VoiceAgent</span><span class="p">(</span>
     <span class="n">session</span><span class="p">,</span>
     <span class="n">query_topic</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
-    <span class="n">on_participant_left</span><span class="o">=</span><span class="n">release_participant</span><span class="p">,</span>
+    <span class="n">participant_left_topic</span><span class="o">=</span><span class="n">participant_left</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">runtime</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;voice&quot;</span><span class="p">,</span> <span class="n">voice</span><span class="p">)</span>
 <span class="k">async</span> <span class="k">with</span> <span class="n">runtime</span><span class="p">:</span>
-    <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+    <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The default hub transport is opened only after readiness probes succeed; failed
@@ -693,9 +717,9 @@ readiness closes the session’s model clients without opening hub sockets. The
 ready file is touched only after the input transport enters its hub IPC receive
 loop. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant routing, cancels superseded or
 interrupted output, installs signal handlers, and closes its transport and
-model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> forwards
-<code class="docutils literal notranslate"><span class="pre">on_interrupted(pid)</span></code> so applications can cancel participant work; a pid-less
-interruption passes <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> turns transport lifecycle callbacks into typed
+runtime events; application agents subscribe and clean up their own state. A
+pid-less interruption is a global event.</p>
 </section>
 <section id="xr-ai-pipecat">
 <h2>xr-ai-pipecat<a class="headerlink" href="#xr-ai-pipecat" title="Link to this heading">#</a></h2>
@@ -1191,7 +1215,7 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tests">Tests</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-agents">Native tools and agents</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-model-tool-calls">Native tools and model tool calls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-nat-model-bridge">xr-ai-nat model bridge</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-voice">xr-ai-voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-pipecat">xr-ai-pipecat</a><ul class="nav section-nav flex-column">

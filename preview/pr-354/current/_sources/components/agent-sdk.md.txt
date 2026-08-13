@@ -8,44 +8,68 @@
 The `agent-sdk/` workspace holds the libraries an xr-ai agent is built
 from:
 
-- **`xr-ai-agent-runtime`** — dependency-light addressable-agent lifecycle,
-  typed request/response calls, and typed publish/subscribe for bounded and
-  long-running agents.
+- **`xr-ai-agent-runtime`** — agents exposing existing native tools and typed
+  publish/subscribe.
 - **`xr-ai-models`** — unified service protocols (`LLMService`, `VLMService`,
   `STTService`, `TTSService`, `EmbeddingService`) plus OpenAI-compatible HTTP clients, driven by a
   structured model deployment profile. Swapping a backend is a configuration
   edit, not a code edit.
 - **`xr-ai-voice`** — the native voice runtime. `VoiceAgent` publishes
-  `UserQuery` to an application-named topic and consumes `voice.output`; its
-  `VoiceSession` owns readiness, hub transport, voice gating, streaming
-  responses, signals, and cleanup.
+  `UserQuery` and lifecycle events to application-named topics and consumes
+  `voice.output`. `VoiceSession` owns readiness, hub transport, voice gating,
+  streaming responses, signals, and cleanup.
 - **`xr-ai-pipecat`** — the direct Pipecat surface retained for unmigrated
   consumers such as `xr-render-demo`. Its `run_voice_pipeline` helper exposes
   the same IPC-start request-readiness boundary as `VoiceSession`.
 - **`xr-ai-hub-client`** — the minimal pyzmq + msgpack IPC library every agent uses
   to talk to the XR-Media-Hub (refer to {doc}`server-runtime`). No LiveKit or
   FastAPI dependency.
-- **`xr-ai-nat`** — Relay-managed native tools, the generic `AgentRunner`
-  protocol, and a basic tool-driven agent. Its legacy extras retain existing
-  NeMo Agent Toolkit function groups while their concrete capabilities migrate.
+- **`xr-ai-tools`** — Relay-managed native tools and model tool-call
+  workflow helpers.
+- **`xr-ai-nat`** — legacy NeMo Agent Toolkit function groups retained while
+  their concrete capabilities migrate.
 
 ---
 
 ## xr-ai-agent-runtime
 
-`AgentRuntime` owns stable runtime-local agent addresses, lifecycle hooks,
-bounded per-agent mailboxes, participant-scoped calls, publish/subscribe, call
-timeouts, and background-task cleanup. The public communication surface has
-only two operations:
+`AgentRuntime` provides participant-scoped publish/subscribe. An agent exposes
+ordinary `Tool` and `AsyncTool` instances from `xr-ai-tools`. Direct callers
+use `execute()` or `stream()`, and model loops use the same `ToolSet` and
+`handle_tool_call()` path as standalone tools. There is no runtime call
+adapter.
 
-- `call(agent, message)` sends one typed message and returns its handler result.
-  A side-effecting handler returns `None`.
-- `publish(topic, event)` fans out one typed event without collecting results.
+Agent lifetime is not itself a runtime concern. Domain controls such as starting
+or stopping monitoring remain ordinary tools. Agents are registered before
+runtime startup and own their resources, tasks, and concurrency policy. Shared
+state that is touched by tools and subscriptions must be protected by the
+agent's lock or private queue. Model loops, planning, and memory remain agent
+implementations. Raw audio and video remain on the hub path.
 
-There is one `Agent` lifecycle. A one-shot agent implements only bounded
-handlers; a resident agent additionally starts runtime-owned background work.
-Jobs, streams, separate query/command classes, model loops, planning, and
-memory are not runtime primitives. Raw audio and video remain on the hub path.
+`ToolSet.namespaced({"vision": vision.tools, "planner": planner.tools})`
+assigns unique model-visible names when tools from multiple agents are combined;
+the agents and underlying tools remain unchanged. Participant identity needed
+by direct execution belongs in the tool's request schema; participant and
+correlation metadata on `RuntimeContext` applies to pub/sub. Agents create,
+cancel, and await their own background tasks. `publish()` settles all fan-out
+deliveries before propagating subscriber failures.
+
+Relay records each publication and receiving-agent callback as nested runtime
+and agent scopes. These scopes include the topic plus message, correlation,
+participant, source, and subscriber metadata. Agent-owned work that outlives a
+subscription callback starts a fresh Relay scope stack and adds its own agent
+scope, preserving logical correlation in metadata without retaining an ended
+callback as its parent.
+
+`Topic.telemetry` controls runtime cardinality without changing delivery. Keep
+`"full"` for commands, state changes, and lifecycle events. High-volume
+transport streams use `"none"`; their receiving agent records one semantic
+scope after aggregation. The voice output topic follows this pattern, producing
+one `voice.response` scope for either a finite response or a completed stream.
+Voice records provider work separately: `voice.stt` covers final and bounded
+partial-probe transcription, while `voice.tts` covers each sentence synthesis.
+Audio is summarized rather than stored, and playback on the remote client is
+outside these spans.
 
 ---
 
@@ -228,33 +252,30 @@ The clients can be exercised without a GPU.
 
 ---
 
-## Native tools and agents
+## Native tools and model tool calls
 
-`xr-ai-nat` is the native migration target for model-driven XR composition.
+`xr-ai-tools` is the native migration target for model-driven XR composition.
 `Tool` declares Pydantic request and response boundaries and executes its
-handler through NeMo Relay. `AgentRunner` is the generic async-turn protocol;
-`xr_ai_nat.agents.Agent` is its bounded, stateless tool-loop implementation.
-It builds OpenAI-compatible tool definitions from those schemas and sends each
-model request through an injected `LLMService`.
+handler through NeMo Relay. `tool_definitions(...)` adapts a native catalog to
+`xr-ai-models` definitions; `handle_tool_call(...)` invokes one model-selected
+call and returns the tool-role message.
 
-Relay scopes each turn and manages the LLM and tool lifecycles. The base package
-does not add an HTTP client, a Hub transport, or an implicit conversation store.
-Applications use `as_agent_tool(...)` to expose any `AgentRunner` as a
-registered tool; foreground selection, workflow state, and background work stay
-explicit in application code.
+The package does not implement an agent, model loop, Hub transport, or implicit
+conversation store. Applications own prompts, LLM calls, history, iteration,
+foreground selection, workflow state, and background work.
 
-`xr_ai_nat.live_vision.LiveVisionTool` acquires a participant-scoped hub frame
-and returns one complete observation through Relay's finite tool and LLM
-boundaries. Direct voice can wrap the same tool with `LiveVisionResponder`,
-whose provider response uses Relay's managed streaming LLM path under an Agent
-scope. Both paths replace the inline camera frame in Relay events without
-changing provider input. The split keeps token streaming out of ordinary
-agentic tool calls without reimplementing a partial streaming-tool lifecycle.
+`xr_ai_tools.live_vision.LiveVisionTool` is the finite current-frame tool; it
+returns one complete observation through Relay's managed tool and LLM
+boundaries. `xr_ai_tools.streaming_vision.StreamingVisionTool` is a separate
+`AsyncTool` that yields typed chunks around Relay's managed streaming LLM
+boundary. It has no voice or output-transport dependency. Both tools own their
+own frame sources and redact inline camera data from Relay events without
+changing provider input.
 
-Applications place native tools or an `AgentRunner` inside an
-`xr-ai-agent-runtime` agent when they need lifecycle, addressed calls, or
-pub/sub. Relay remains responsible for tool and model execution inside that
-agent; the runtime does not duplicate the tool loop or model boundary.
+Applications place native tools and model loops inside an agent to group tools
+with their state, and register the agent with `xr-ai-agent-runtime` when they
+need pub/sub. Relay remains responsible for tool and model execution; the
+runtime does not duplicate the tool loop or model boundary.
 
 ## xr-ai-nat model bridge
 
@@ -282,12 +303,18 @@ lifecycle ownership.
 
 Native voice applications work with participant-aware runtime topics rather
 than Pipecat processors. `VoiceAgent` owns `VoiceSession`, publishes accepted
-speech and typed text as the voice-owned `UserQuery` schema on an
-application-named topic, and subscribes to `voice.output`:
+input and lifecycle events with voice-owned schemas on application-named
+topics, and subscribes to `voice.output`:
 
 ```python
 from xr_ai_runtime import Topic
-from xr_ai_voice import UserQuery, VadConfig, VoiceAgent, VoiceSession
+from xr_ai_voice import (
+    UserQuery,
+    VadConfig,
+    VoiceAgent,
+    VoiceParticipantLeft,
+    VoiceSession,
+)
 
 session = VoiceSession(
     stt=stt,
@@ -299,14 +326,15 @@ session = VoiceSession(
     closeables=(vlm,),
 )
 queries = Topic("my-sample.user-query", UserQuery)
+participant_left = Topic("my-sample.participant-left", VoiceParticipantLeft)
 voice = VoiceAgent(
     session,
     query_topic=queries,
-    on_participant_left=release_participant,
+    participant_left_topic=participant_left,
 )
 runtime.register("voice", voice)
 async with runtime:
-    await voice.wait()
+    await voice.run(runtime)
 ```
 
 The default hub transport is opened only after readiness probes succeed; failed
@@ -314,9 +342,9 @@ readiness closes the session's model clients without opening hub sockets. The
 ready file is touched only after the input transport enters its hub IPC receive
 loop. `VoiceSession` preserves participant routing, cancels superseded or
 interrupted output, installs signal handlers, and closes its transport and
-model clients. `VoiceAgent` forwards
-`on_interrupted(pid)` so applications can cancel participant work; a pid-less
-interruption passes `None`.
+model clients. `VoiceAgent` turns transport lifecycle callbacks into typed
+runtime events; application agents subscribe and clean up their own state. A
+pid-less interruption is a global event.
 
 ## xr-ai-pipecat
 
