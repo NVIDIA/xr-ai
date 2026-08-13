@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from PIL import Image
 
 # PyNvVideoCodec initialises NVENC at import time, so a missing
 # libnvidia-encode.so.1 raises RuntimeError (not ImportError) — importorskip
@@ -27,6 +28,8 @@ except (ImportError, RuntimeError, OSError) as exc:
 
 from xr_ai_hub import FrameSignal, PixelFormat, SlotView  # noqa: E402
 
+from video_memory_service.service import VideoMemoryService  # noqa: E402
+from video_memory_service.store import ChunkStore  # noqa: E402
 from xr_media_hub.video import VideoRecorder, VideoRecorderConfig  # noqa: E402
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.gpu]
@@ -139,6 +142,22 @@ async def test_record_synthetic_frames():
         assert meta["num_frames"] >  0
         assert meta["size_bytes"] == len(first)
         assert meta["end_us"]     >= meta["start_us"]
+
+        service = VideoMemoryService(
+            store=ChunkStore(out),
+            out_dir=out / "frames",
+            gpu_id=0,
+        )
+        frame = await service.dispatch(
+            "get_frame_from_time",
+            {
+                "participant_id": pid,
+                "reference_time_us": max(1, int(meta["start_us"])),
+            },
+        )
+        with Image.open(frame["path"]) as image:
+            assert image.format == "PNG"
+            assert image.size == (width, height)
 
 
 async def test_resolution_change_surfaces_error():

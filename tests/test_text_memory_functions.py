@@ -3,9 +3,11 @@
 
 """CPU-only tests for native text-memory tools."""
 
+import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from xr_ai_tools.text_memory import (
     AddTranscriptRequest,
     QueryTranscriptsRequest,
@@ -55,6 +57,19 @@ async def test_text_memory_tools_persist_query_and_summarize(tmp_path: Path) -> 
         "latest_us": None,
     }
     assert (tmp_path / "alice_home.identity").read_text() == "alice@home"
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "alice_home.jsonl").read_text().splitlines()
+    ]
+    assert records == [
+        {"timestamp_us": 20, "text": "later"},
+        {"timestamp_us": 10, "text": "first"},
+    ]
+
+
+def test_text_memory_rejects_blank_transcripts() -> None:
+    with pytest.raises(ValidationError, match="text must not be blank"):
+        AddTranscriptRequest(source_id="alice", timestamp_us=1, text="   ")
 
 
 async def test_text_memory_recalls_role_scoped_conversation(tmp_path: Path) -> None:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from builtins import ExceptionGroup
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -25,6 +26,7 @@ from xr_ai_voice import (
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoiceStreamClosedError,
 )
 from xr_render_scene import EmptyRequest
 
@@ -41,8 +43,17 @@ from xr_render_demo_worker.agent import (  # noqa: E402
     PARTICIPANT_LEFT_TOPIC,
     USER_QUERY_TOPIC,
     RenderAgent,
+    _expected_stream_close,
 )
 from xr_render_demo_worker.lifecycle import XRSessionLifecycle  # noqa: E402
+
+
+def test_expected_stream_close_uses_typed_contract() -> None:
+    typed = VoiceStreamClosedError("voice stream terminator has no open response")
+
+    assert _expected_stream_close(typed)
+    assert _expected_stream_close(ExceptionGroup("delivery", [typed]))
+    assert not _expected_stream_close(ValueError("voice stream terminator has no open response"))
 
 
 class _Scene:

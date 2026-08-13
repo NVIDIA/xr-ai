@@ -22,6 +22,7 @@ from xr_ai_voice import (
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoiceStreamClosedError,
 )
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._types import VoiceQuery
@@ -757,7 +758,7 @@ async def test_unknown_empty_stream_terminator_is_rejected() -> None:
             )
 
     assert len(raised.value.exceptions) == 1
-    assert isinstance(raised.value.exceptions[0], ValueError)
+    assert isinstance(raised.value.exceptions[0], VoiceStreamClosedError)
     assert "no open response" in str(raised.value.exceptions[0])
 
 

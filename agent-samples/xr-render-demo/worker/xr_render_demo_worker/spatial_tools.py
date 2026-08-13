@@ -33,84 +33,88 @@ class PositionAheadRequest(_Request):
 
 
 class PositionRelativeRequest(_Request):
-    forward: float = 0.0
-    right: float = 0.0
-    up: float = 0.0
-    origin_x: float | None = None
-    origin_y: float | None = None
-    origin_z: float | None = None
+    forward: float = Field(default=0.0, description="Signed metres along the user forward axis.")
+    right: float = Field(default=0.0, description="Signed metres along the user right axis.")
+    up: float = Field(default=0.0, description="Signed metres along world up.")
+    origin_x: float | None = Field(default=None, description="Optional world-space origin X.")
+    origin_y: float | None = Field(default=None, description="Optional world-space origin Y.")
+    origin_z: float | None = Field(default=None, description="Optional world-space origin Z.")
 
 
 class PlaceUserRelativeRequest(_Request):
-    direction: Literal["front", "back", "left", "right", "above", "below"]
-    distance: float = Field(default=1.5, ge=0.0)
+    direction: Literal["front", "back", "left", "right", "above", "below"] = Field(
+        description="Named direction relative to the user."
+    )
+    distance: float = Field(default=1.5, ge=0.0, description="Non-negative distance in metres.")
 
 
 class PlaceObjectRelativeRequest(_Request):
-    origin_x: float
-    origin_y: float
-    origin_z: float
-    direction: Literal["front", "back", "left", "right", "above", "below", "next_to"]
-    distance: float = Field(default=0.3, ge=0.0)
+    origin_x: float = Field(description="Anchor world-space X.")
+    origin_y: float = Field(description="Anchor world-space Y.")
+    origin_z: float = Field(description="Anchor world-space Z.")
+    direction: Literal["front", "back", "left", "right", "above", "below", "next_to"] = Field(
+        description="Named relation to the anchor in the user frame."
+    )
+    distance: float = Field(default=0.3, ge=0.0, description="Non-negative distance in metres.")
 
 
 class DisplaceObjectRequest(_Request):
-    current_x: float
-    current_y: float
-    current_z: float
-    right: float = 0.0
-    up: float = 0.0
-    forward: float = 0.0
+    current_x: float = Field(description="Current world-space X.")
+    current_y: float = Field(description="Current world-space Y.")
+    current_z: float = Field(description="Current world-space Z.")
+    right: float = Field(default=0.0, description="Signed metres along the user right axis.")
+    up: float = Field(default=0.0, description="Signed metres along world up.")
+    forward: float = Field(default=0.0, description="Signed metres along the user forward axis.")
 
 
 class DisplaceObjectsRequest(_Request):
-    object_ids: list[str]
-    current_xs: list[float]
-    current_ys: list[float]
-    current_zs: list[float]
-    right: float = 0.0
-    up: float = 0.0
-    forward: float = 0.0
+    object_ids: list[str] = Field(description="Object IDs aligned with the coordinate arrays.")
+    current_xs: list[float] = Field(description="Current world-space X values.")
+    current_ys: list[float] = Field(description="Current world-space Y values.")
+    current_zs: list[float] = Field(description="Current world-space Z values.")
+    right: float = Field(default=0.0, description="Signed metres along the user right axis.")
+    up: float = Field(default=0.0, description="Signed metres along world up.")
+    forward: float = Field(default=0.0, description="Signed metres along the user forward axis.")
 
 
 class PlaceInsideRequest(_Request):
-    movee_id: str
-    container_x: float
-    container_y: float
-    container_z: float
+    movee_id: str = Field(description="ID of the object to move.")
+    container_x: float = Field(description="Container world-space X.")
+    container_y: float = Field(description="Container world-space Y.")
+    container_z: float = Field(description="Container world-space Z.")
 
 
 class BetweenAnchorsRequest(_Request):
-    a_x: float
-    a_y: float
-    a_z: float
-    b_x: float
-    b_y: float
-    b_z: float
+    a_x: float = Field(description="First anchor world-space X.")
+    a_y: float = Field(description="First anchor world-space Y.")
+    a_z: float = Field(description="First anchor world-space Z.")
+    b_x: float = Field(description="Second anchor world-space X.")
+    b_y: float = Field(description="Second anchor world-space Y.")
+    b_z: float = Field(description="Second anchor world-space Z.")
 
 
 class WorldOffsetRequest(_Request):
-    origin_x: float
-    origin_y: float
-    origin_z: float
-    dx: float = 0.0
-    dy: float = 0.0
-    dz: float = 0.0
+    origin_x: float = Field(description="Origin world-space X.")
+    origin_y: float = Field(description="Origin world-space Y.")
+    origin_z: float = Field(description="Origin world-space Z.")
+    dx: float = Field(default=0.0, description="Signed world-space X offset.")
+    dy: float = Field(default=0.0, description="Signed world-space Y offset.")
+    dz: float = Field(default=0.0, description="Signed world-space Z offset.")
 
 
 class AlongDirectionRequest(_Request):
-    origin_x: float
-    origin_y: float
-    origin_z: float
-    target_x: float
-    target_y: float
-    target_z: float
-    distance: float = 0.5
+    origin_x: float = Field(description="Origin world-space X.")
+    origin_y: float = Field(description="Origin world-space Y.")
+    origin_z: float = Field(description="Origin world-space Z.")
+    target_x: float = Field(description="Target world-space X.")
+    target_y: float = Field(description="Target world-space Y.")
+    target_z: float = Field(description="Target world-space Z.")
+    distance: float = Field(default=0.5, description="Signed distance in metres; negative moves away.")
 
 
 class ScaleValueRequest(_Request):
-    current: float
-    factor: float
+    current: float = Field(description="Current scalar size.")
+    factor: float = Field(description="Multiplier applied to the current size.")
 
 
 class HeadPoseResult(BaseModel):

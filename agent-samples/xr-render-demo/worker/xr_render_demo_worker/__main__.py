@@ -161,7 +161,7 @@ async def main(
         runtime.register("voice", voice)
         render = runtime.register("xr-render", RenderAgent(scene_loop))
         # The endpoint retains this bound callback for the worker lifetime.
-        _lifecycle = XRSessionLifecycle(
+        XRSessionLifecycle(
             transport=session.transport,
             scene_loop=scene_loop,
             start_xr=capabilities.scene.start_xr,

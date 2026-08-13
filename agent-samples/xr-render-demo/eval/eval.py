@@ -39,9 +39,9 @@ SYS_PROMPT  = (_HERE / "../worker/xr_render_demo_worker/prompts/system.txt").res
 sys.path.insert(0, str((_HERE / "../worker").resolve()))
 from xr_render_demo_worker.config import load_config  # noqa: E402
 from xr_render_demo_worker.scene_loop import (  # noqa: E402
-    _LIVE_PERCEPTION_TOOL,
-    _PAST_PERCEPTION_TOOL,
-    _PERCEPTION_TOOL_DEFS,
+    LIVE_PERCEPTION_TOOL,
+    PAST_PERCEPTION_TOOL,
+    PERCEPTION_TOOL_DEFS,
 )
 from xr_render_demo_worker.tools import NativeCapabilities  # noqa: E402
 _WORKER_CFG = load_config((_HERE / "../yaml/xr_render_demo_worker.yaml").resolve())
@@ -1410,9 +1410,9 @@ async def _discover_tools() -> list[dict]:
             definitions = [
                 definition
                 for definition in tool_definitions(capabilities.model)
-                if definition.name not in {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
+                if definition.name not in {LIVE_PERCEPTION_TOOL, PAST_PERCEPTION_TOOL}
             ]
-            definitions.extend(_PERCEPTION_TOOL_DEFS)
+            definitions.extend(PERCEPTION_TOOL_DEFS)
             return [definition.to_openai() for definition in definitions]
         finally:
             await capabilities.close()

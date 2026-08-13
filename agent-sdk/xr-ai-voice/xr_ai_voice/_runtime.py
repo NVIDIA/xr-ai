@@ -25,6 +25,10 @@ _OPEN_STREAM_CAPACITY = 1024
 _CLOSED_STREAM_CAPACITY = 1024
 
 
+class VoiceStreamClosedError(ValueError):
+    """Raised when output targets a voice stream the consumer already closed."""
+
+
 class UserQuery(BaseModel):
     """One accepted user query emitted by the voice input boundary."""
 
@@ -281,7 +285,7 @@ class VoiceAgent(Agent):
             if existing is None:
                 if output.final:
                     if not output.text.strip():
-                        raise ValueError("voice stream terminator has no open response")
+                        raise VoiceStreamClosedError("voice stream terminator has no open response")
                     with self._response_scope(
                         participant_id=participant_id,
                         source=metadata.source,
@@ -512,4 +516,5 @@ __all__ = [
     "VoiceInterrupted",
     "VoiceOutput",
     "VoiceParticipantLeft",
+    "VoiceStreamClosedError",
 ]

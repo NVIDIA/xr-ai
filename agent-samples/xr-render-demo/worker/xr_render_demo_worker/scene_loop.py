@@ -50,6 +50,7 @@ from .model_io import (
 _trace_log = logger.bind(trace=True)
 
 _MAX_LOOP = 10  # visual queries need up to 5 steps; give headroom
+_PARTICIPANT_STATE_CAPACITY = 1024
 
 
 # Native perception tools exposed to the model. The processor supplies participant context (and the utterance time for
@@ -216,13 +217,24 @@ class SceneModelLoop:
         ] = {}
         self._recent_moves_max = 5
         # Per-turn snapshot used to compute prev→new pairs on update_primitive.
-        self._pre_move_positions: dict[
-            str, dict[str, tuple[float, float, float]]
-        ] = {}
+        self._pre_move_positions: dict[str, dict[str, tuple[float, float, float]]] = {}
+        self._participant_order: dict[str, None] = {}
+        self._participant_capacity = _PARTICIPANT_STATE_CAPACITY
 
     def reset_history(self, participant_id: str) -> None:
         """Clear one participant's state when a new XR session starts."""
 
+        self._drop_participant_state(participant_id)
+
+    def _touch_participant_state(self, participant_id: str) -> None:
+        self._participant_order.pop(participant_id, None)
+        self._participant_order[participant_id] = None
+        while len(self._participant_order) > self._participant_capacity:
+            stale = next(iter(self._participant_order))
+            self._drop_participant_state(stale)
+
+    def _drop_participant_state(self, participant_id: str) -> None:
+        self._participant_order.pop(participant_id, None)
         self._history.pop(participant_id, None)
         self._recent_moves.pop(participant_id, None)
         self._pre_move_positions.pop(participant_id, None)
@@ -246,6 +258,7 @@ class SceneModelLoop:
         play after the real reply. The single spoken ack covers "I'm on it";
         the panel carries the detailed progress.
         """
+        self._touch_participant_state(pid)
         return self._run_turn(pid, text)
 
     async def handle_notice(self, pid: str, text: str) -> AsyncIterator[str]:
@@ -1021,6 +1034,4 @@ class SceneModelLoop:
     async def on_participant_left(self, pid: str) -> None:
         """Release cached native live-frame state after participant cleanup."""
         self._release_vision(pid)
-        self._history.pop(pid, None)
-        self._recent_moves.pop(pid, None)
-        self._pre_move_positions.pop(pid, None)
+        self._drop_participant_state(pid)

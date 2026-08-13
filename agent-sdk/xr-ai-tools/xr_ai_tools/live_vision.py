@@ -24,6 +24,7 @@ from ._vision import (
     register_frame_sanitizer,
     relay_request,
     response_text,
+    visible_text,
     vision_inputs,
 )
 from .tools import Tool
@@ -89,7 +90,7 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
                 codec=OpenAIChatCodec(),
                 response_codec=OpenAIChatCodec(),
             )
-            text = response_text(response).strip()
+            text = visible_text(response_text(response))
             if not text:
                 return VisionResponse(
                     text="The current camera image did not produce an answer.",

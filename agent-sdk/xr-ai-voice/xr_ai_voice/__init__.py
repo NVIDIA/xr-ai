@@ -16,6 +16,7 @@ from ._runtime import (
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoiceStreamClosedError,
 )
 from ._session import VoiceSession
 from ._transport import HubVoiceTransport
@@ -29,5 +30,6 @@ __all__ = [
     "VoiceInterrupted",
     "VoiceOutput",
     "VoiceParticipantLeft",
+    "VoiceStreamClosedError",
     "VoiceSession",
 ]

@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from xr_ai_models import VLMService
 
+from ._vision import visible_text
 from .tools import Tool
 from .types import StrictRequest
 from .video_memory import HistoricalFrameRequest, VideoMemoryTools
@@ -51,7 +52,7 @@ class HistoricalVisionTool(Tool[HistoricalVisionRequest, VisionResult]):
             request.query,
             system_prompt="Answer directly from this recorded camera frame in one short sentence.",
         )
-        text = (response.content or "").strip()
+        text = visible_text(response.content or "")
         if not text:
             raise RuntimeError("The recorded camera image did not produce an answer.")
         return VisionResult(text=text)

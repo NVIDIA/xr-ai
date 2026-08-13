@@ -6,6 +6,7 @@
 import asyncio
 from pathlib import Path
 
+from pydantic import ValidationError
 from xr_ai_tools.rpc import RPCError
 from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.video_memory import (
@@ -55,6 +56,12 @@ class VideoMemoryService:
         self._gpu_id = gpu_id
 
     async def dispatch(self, operation: str, arguments: dict) -> dict:
+        try:
+            return await self._dispatch(operation, arguments)
+        except ValidationError as exc:
+            raise RPCError(str(exc), code="invalid_request") from exc
+
+    async def _dispatch(self, operation: str, arguments: dict) -> dict:
         if operation == "get_health":
             EmptyRequest.model_validate(arguments)
             return {"ready": True, "recording_enabled": self._store is not None}

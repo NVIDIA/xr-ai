@@ -11,8 +11,10 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import video_memory_service.__main__ as video_memory_main
+from PIL import Image
 from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
 from xr_ai_hub import (
@@ -286,6 +288,104 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
     assert health.ready is True
     with pytest.raises(RPCError, match="unknown operation"):
         await service.dispatch("list_live_participants", {})
+
+
+@pytest.mark.asyncio
+async def test_video_memory_service_validation_and_disabled_mode(
+    tmp_path: Path,
+) -> None:
+    service = VideoMemoryService(store=None, out_dir=tmp_path / "output", gpu_id=0)
+
+    assert await service.dispatch("get_health", {}) == {
+        "ready": True,
+        "recording_enabled": False,
+    }
+    with pytest.raises(RPCError) as invalid:
+        await service.dispatch("get_health", {"unexpected": True})
+    with pytest.raises(RPCError) as disabled:
+        await service.dispatch("get_video_stats", {"participant_id": "alice"})
+
+    assert invalid.value.code == "invalid_request"
+    assert disabled.value.code == "recording_disabled"
+
+
+@pytest.mark.asyncio
+async def test_recorded_frame_decodes_and_exports_png_through_native_rpc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk = tmp_path / "chunk.264"
+    chunk.write_bytes(b"h264")
+    store = ChunkStore(tmp_path / "recordings")
+    monkeypatch.setattr(
+        store,
+        "frame_chunk",
+        lambda _participant_id, _target_us: (
+            chunk,
+            {
+                "start_us": 1_000_000,
+                "end_us": 1_000_000,
+                "num_frames": 1,
+                "width": 2,
+                "height": 2,
+            },
+        ),
+    )
+    nv12 = np.array([[16, 16], [16, 16], [128, 128]], dtype=np.uint8)
+    monkeypatch.setattr(
+        "video_memory_service.service.decode_h264",
+        lambda _data, _gpu_id: [nv12],
+    )
+    service = VideoMemoryService(store=store, out_dir=tmp_path / "output", gpu_id=0)
+    endpoint = f"ipc:///tmp/video-{uuid.uuid4().hex}"
+
+    async with _running_server(endpoint, service.dispatch):
+        video = VideoMemoryTools(endpoint)
+        try:
+            result = await video.get_frame_from_time.execute(
+                HistoricalFrameRequest(
+                    participant_id="alice",
+                    second_ago=1,
+                    reference_time_us=2_000_000,
+                )
+            )
+        finally:
+            await video.close()
+
+    with Image.open(result.path) as image:
+        assert image.format == "PNG"
+        assert image.size == (2, 2)
+    assert result.timestamp_us == 1_000_000
+    assert result.actual_second_ago == 1.0
+
+
+@pytest.mark.asyncio
+async def test_video_memory_process_touches_ready_file_after_rpc_bind(
+    tmp_path: Path,
+) -> None:
+    endpoint = f"ipc://{tmp_path / (uuid.uuid4().hex + '.sock')}"
+    ready_file = tmp_path / "video.ready"
+    task = asyncio.create_task(
+        video_memory_main._serve(
+            {"endpoint": endpoint, "out_dir": str(tmp_path / "output")},
+            ready_file,
+        )
+    )
+    try:
+        for _ in range(100):
+            if ready_file.exists():
+                break
+            await asyncio.sleep(0.01)
+        assert ready_file.exists()
+        video = VideoMemoryTools(endpoint)
+        try:
+            health = await video.get_health()
+        finally:
+            await video.close()
+        assert health.ready is True
+        assert health.recording_enabled is False
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio

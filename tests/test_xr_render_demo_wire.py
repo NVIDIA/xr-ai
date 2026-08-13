@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import runpy
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -123,6 +124,16 @@ def test_worker_config_idle_timeout_opt_in(tmp_path) -> None:
     y.write_text("idle_timeout_secs: 300\n")
     cfg = load_config(y)
     assert cfg.idle_timeout_secs == 300.0
+
+
+def test_eval_harness_imports_public_perception_contracts() -> None:
+    eval_path = (Path(__file__).resolve().parent.parent / "agent-samples"
+                 / "xr-render-demo" / "eval" / "eval.py")
+    namespace = runpy.run_path(str(eval_path), run_name="xr_render_eval_contract")
+
+    assert namespace["LIVE_PERCEPTION_TOOL"] == _loop.LIVE_PERCEPTION_TOOL
+    assert namespace["PAST_PERCEPTION_TOOL"] == _loop.PAST_PERCEPTION_TOOL
+    assert namespace["PERCEPTION_TOOL_DEFS"] == _loop.PERCEPTION_TOOL_DEFS
 
 
 # ── quick-ack wire golden ─────────────────────────────────────────────────────
@@ -679,7 +690,44 @@ async def test_render_spatial_native_toolbox_builds() -> None:
         }
         assert set(definitions) == set(expected_parameters)
         for name, parameters in expected_parameters.items():
-            assert set(definitions[name].parameters["properties"]) == parameters
+            properties = definitions[name].parameters["properties"]
+            assert set(properties) == parameters
+            assert all(prop.get("description") for prop in properties.values())
+    finally:
+        await tracking.close()
+
+
+async def test_render_spatial_vector_tools_execute_edge_cases() -> None:
+    tracking = TrackingTools("tcp://127.0.0.1:65530", timeout_s=0.1)
+    try:
+        spatial = _spatial_tools.RenderSpatialTools(tracking)
+        offset = await spatial.world_offset.execute(
+            _spatial_tools.WorldOffsetRequest(
+                origin_x=1.0, origin_y=2.0, origin_z=3.0,
+                dx=-0.5, dy=1.0, dz=2.0,
+            )
+        )
+        scaled = await spatial.scale_value.execute(
+            _spatial_tools.ScaleValueRequest(current=1.25, factor=2.0)
+        )
+        away = await spatial.along_direction.execute(
+            _spatial_tools.AlongDirectionRequest(
+                origin_x=0.0, origin_y=0.0, origin_z=0.0,
+                target_x=1.0, target_y=0.0, target_z=0.0, distance=-2.0,
+            )
+        )
+
+        assert offset.model_dump() == {"x": 0.5, "y": 3.0, "z": 5.0}
+        assert scaled.value == 2.5
+        assert away.model_dump() == {"x": -2.0, "y": 0.0, "z": 0.0}
+        with pytest.raises(RuntimeError, match="origin and target coincide"):
+            await spatial.along_direction.execute(
+                _spatial_tools.AlongDirectionRequest(
+                    origin_x=1.0, origin_y=1.0, origin_z=1.0,
+                    target_x=1.0, target_y=1.0, target_z=1.0,
+                    distance=0.5,
+                )
+            )
     finally:
         await tracking.close()
 
@@ -1124,3 +1172,24 @@ def test_scene_loop_resets_only_the_target_participant_state() -> None:
     assert brain._history["bob"] == [("b", "two")]  # noqa: SLF001
     assert "bob" in brain._recent_moves  # noqa: SLF001
     assert "bob" in brain._pre_move_positions  # noqa: SLF001
+
+
+def test_scene_loop_bounds_participant_state_as_one_lru_unit() -> None:
+    brain = _make_brain(_CaptureTransport())
+    brain._participant_capacity = 2  # noqa: SLF001
+
+    def seed(participant_id: str) -> None:
+        brain._touch_participant_state(participant_id)  # noqa: SLF001
+        brain._history[participant_id] = [("user", participant_id)]  # noqa: SLF001
+        brain._recent_moves[participant_id] = []  # noqa: SLF001
+        brain._pre_move_positions[participant_id] = {}  # noqa: SLF001
+
+    seed("alice")
+    seed("bob")
+    brain._touch_participant_state("alice")  # noqa: SLF001
+    seed("carol")
+
+    assert list(brain._participant_order) == ["alice", "carol"]  # noqa: SLF001
+    for state in (brain._history, brain._recent_moves,  # noqa: SLF001
+                  brain._pre_move_positions):  # noqa: SLF001
+        assert set(state) == {"alice", "carol"}

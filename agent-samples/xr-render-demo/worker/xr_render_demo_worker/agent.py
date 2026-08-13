@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from builtins import BaseExceptionGroup
+from builtins import ExceptionGroup
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
@@ -27,6 +27,7 @@ from xr_ai_voice import (
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
+    VoiceStreamClosedError,
 )
 
 from .scene_loop import SceneModelLoop
@@ -58,12 +59,10 @@ class _Turn:
     control: _TurnControl
 
 
-def _expected_stream_close(error: BaseException) -> bool:
-    if isinstance(error, RuntimeClosedError):
+def _expected_stream_close(error: Exception) -> bool:
+    if isinstance(error, (RuntimeClosedError, VoiceStreamClosedError)):
         return True
-    if isinstance(error, ValueError):
-        return str(error) == "voice stream terminator has no open response"
-    if isinstance(error, BaseExceptionGroup):
+    if isinstance(error, ExceptionGroup):
         return all(_expected_stream_close(child) for child in error.exceptions)
     return False
 
@@ -132,9 +131,7 @@ class RenderAgent(Agent):
             context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = _Turn(task=task, control=control)
-        task.add_done_callback(
-            lambda completed, pid=participant_id: self._discard(pid, completed)
-        )
+        task.add_done_callback(lambda completed, pid=participant_id: self._discard(pid, completed))
 
     @subscribe(PARTICIPANT_LEFT_TOPIC)
     async def participant_left(
@@ -256,7 +253,7 @@ class RenderAgent(Agent):
                             timestamp_us=timestamp_us,
                         ),
                     )
-                except BaseException as exc:
+                except Exception as exc:
                     if not _expected_stream_close(exc):
                         raise
 

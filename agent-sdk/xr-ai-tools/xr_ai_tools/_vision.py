@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -142,6 +143,12 @@ def response_text(raw_response: object) -> str:
     if not isinstance(content, str):
         raise TypeError("Relay VLM response content must be text")
     return content
+
+
+def visible_text(text: str) -> str:
+    """Remove model-private reasoning blocks from a complete visual answer."""
+
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
 def stream_text(raw_chunk: object) -> str:

@@ -71,7 +71,9 @@ and producer identity is part of the response key so independent agents cannot
 merge output accidentally. Output is serialized per participant; urgent output
 sets `interrupt=True` to replace active and queued speech. Producers may copy
 the originating query's `timestamp_us` into `VoiceOutput` so the TTS response
-preserves the input timestamp.
+preserves the input timestamp. `VoiceStreamClosedError` identifies an empty final
+chunk for a stream that voice already closed, including when wrapped in the
+runtime publication exception group.
 
 Lifecycle publication runs on `VoiceAgent`-owned tasks, so participant cleanup
 cannot block the shared media processor. The agent cancels and awaits those
@@ -92,14 +94,12 @@ the sentence being synthesized. Raw audio is never written to Relay events.
 These scopes measure provider work and downstream handoff, not client playback.
 
 `VoiceSession` is the media engine owned by `VoiceAgent`. It manages
-readiness, hub transport, VAD/STT, voice gating, TTS, signals, and cleanup. It
-The lower-level `VoiceSession.run()`, `enqueue_query()`, and
+readiness, hub transport, VAD/STT, voice gating, TTS, signals, and cleanup; it
+does not execute application handlers. Typed-text ingress is also internal to
+`VoiceAgent`. The lower-level `VoiceSession.run()`, `enqueue_query()`, and
 `enqueue_response()` methods are public for runtime integrations.
 `VoiceSession.endpoint` is available only after entering the session, so model
 health probes complete before the default hub transport opens its sockets.
-
-does not execute application handlers. Typed-text ingress is also internal to
-`VoiceAgent`.
 
 When wake phrases and the listening chime are enabled, the VAD/STT stage probes
 the opening audio while the user is still speaking. A recognized phrase emits

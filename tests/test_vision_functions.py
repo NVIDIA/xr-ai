@@ -109,15 +109,13 @@ def test_frame_to_pil_supports_non_rgb_frame_formats(pixel_format, data) -> None
     assert image.size == (2, 2)
 
 
-async def test_live_vision_answers_from_current_frame() -> None:
+async def test_live_vision_builds_without_video_memory_and_answers_current_frame() -> None:
     endpoint = _Endpoint()
     vlm = _Vlm("It's a red mug.")
     tool = LiveVisionTool(endpoint=endpoint, vlm=vlm)
     await endpoint.frame_callback(_seed_signal())
 
-    result = await tool.execute(
-        VisionRequest(participant_id="alice", query="What am I holding?")
-    )
+    result = await tool.execute(VisionRequest(participant_id="alice", query="What am I holding?"))
 
     assert result.text == "It's a red mug."
     assert result.available is True
@@ -127,14 +125,70 @@ async def test_live_vision_answers_from_current_frame() -> None:
     assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
 
 
+async def test_live_vision_requests_pixels_through_real_hub(hub, make_connector, make_processor, settle) -> None:
+    endpoint = make_processor()
+    tool = LiveVisionTool(endpoint=endpoint, vlm=_Vlm("hub frame"), manage_status=False)
+    connector = make_connector()
+    await connector.register()
+    await settle()
+    await connector.notify_participant_joined("alice", pts_us=1)
+    await settle()
+
+    pixels = bytes([20, 40, 60] * 4)
+    await connector.push_frame(
+        pixels,
+        2,
+        2,
+        PixelFormat.RGB24,
+        time.time_ns() // 1_000,
+        "alice",
+        "camera",
+    )
+    for _ in range(20):
+        if tool.frames.participants() == ["alice"]:
+            break
+        await settle()
+
+    result = await tool.execute(VisionRequest(participant_id="alice", query="What is visible?"))
+
+    assert result.model_dump() == {"text": "hub frame", "available": True}
+
+
+async def test_live_vision_marks_vlm_failure_unavailable_and_idle() -> None:
+    class FailingVlm:
+        async def ask_image(self, *_args, **_kwargs):
+            raise RuntimeError("VLM failed")
+
+    endpoint = _Endpoint()
+    tool = LiveVisionTool(endpoint=endpoint, vlm=FailingVlm())
+    await endpoint.frame_callback(_seed_signal())
+
+    result = await tool.execute(VisionRequest(participant_id="alice", query="What am I holding?"))
+
+    assert result.available is False
+    assert result.text == "VLM server unavailable — please retry."
+    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
+
+
+async def test_live_vision_hides_model_reasoning() -> None:
+    endpoint = _Endpoint()
+    tool = LiveVisionTool(
+        endpoint=endpoint,
+        vlm=_Vlm("<think>inspect pixels</think>\n  a red mug  "),
+    )
+    await endpoint.frame_callback(_seed_signal())
+
+    result = await tool.execute(VisionRequest(participant_id="alice", query="What am I holding?"))
+
+    assert result.text == "a red mug"
+
+
 async def test_live_vision_marks_empty_answer_unavailable() -> None:
     endpoint = _Endpoint()
     tool = LiveVisionTool(endpoint=endpoint, vlm=_Vlm("   "))
     await endpoint.frame_callback(_seed_signal())
 
-    result = await tool.execute(
-        VisionRequest(participant_id="alice", query="What am I holding?")
-    )
+    result = await tool.execute(VisionRequest(participant_id="alice", query="What am I holding?"))
 
     assert result.available is False
     assert "did not produce an answer" in result.text
@@ -163,7 +217,7 @@ async def test_historical_vision_uses_recorded_frame_tool() -> None:
             get_frame,
         )
     )
-    vlm = _Vlm("It was purple.")
+    vlm = _Vlm("<think>check the frame</think>\n It was purple. ")
     tool = HistoricalVisionTool(video=video, vlm=vlm)
 
     result = await tool.execute(
