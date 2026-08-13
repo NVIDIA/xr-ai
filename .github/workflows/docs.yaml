@@ -33,6 +33,7 @@ on:
     tags: ["v*"]
     paths:
       - "docs/**"
+      - "agent-sdk/*/README.md"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"
@@ -42,6 +43,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - "docs/**"
+      - "agent-sdk/*/README.md"
       - ".github/workflows/docs.yaml"
       - ".github/scripts/select_latest_docs_release.py"
       - ".github/scripts/publish_docs.sh"

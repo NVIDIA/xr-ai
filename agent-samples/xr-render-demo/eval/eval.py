@@ -2071,7 +2071,7 @@ def _check_prompt_eval_overlap(
 ) -> tuple[set[str], list[str]]:
     """Detect overlap between prompt worked-examples and eval case
     fixtures.  An overlap turns a generalization probe into a
-    memorization check (see AGENTS.md "Prompt-driven samples").
+    memorization check (see AGENTS.md "Change contract").
 
     Four checks run, each across every case:
       1. Verbatim user utterance (≥12 chars) appearing in the prompt.
@@ -2291,7 +2291,7 @@ async def main() -> None:
             print("\n⚠ PROMPT/EVAL OVERLAP DETECTED — these cases share specifics with "
                   "system.txt and may be measuring memorization rather than "
                   "generalization.  Fix by changing the prompt's worked example "
-                  "(see AGENTS.md \"Prompt-driven samples\"):")
+                  "(see AGENTS.md \"Change contract\"):")
             for line in overlap_issues:
                 print(line)
             print()

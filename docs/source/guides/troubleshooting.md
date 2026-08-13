@@ -222,9 +222,8 @@ back to OpenH264, which is royalty-bearing.
 **Cause:** an idle-timeout that auto-cancels the voice pipeline after a stretch
 with no user or bot speech.
 
-**Status:** disabled by default. `VoiceSession` and `make_voice_pipeline` pass
-`cancel_on_idle_timeout=False` (overriding Pipecat's on-by-default
-`IDLE_TIMEOUT_SECS`), so a quiet session stays connected indefinitely.
+**Status:** disabled by default. `VoiceSession` leaves its private Pipecat idle
+timeout disabled, so a quiet session stays connected indefinitely.
 
 **If you want it:** set `idle_timeout_secs: <seconds>` (e.g. `300` for 5 min)
 in the sample's worker YAML (`simple_vlm_example_worker.yaml` /
@@ -235,7 +234,7 @@ owned by `xr_ai_voice.VoiceSession`.
 
 **Most common cause:** firewall blocking WebRTC media on UDP 7882 (LiveKit).
 
-**Fix:** open ports per [`docs/source/getting_started/networking.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/getting_started/networking.md). The web client
+**Fix:** open ports per {doc}`/getting_started/networking`. The web client
 will appear to connect (signaling on 7880 succeeds) but media frames are
 silently dropped without 7882.
 
@@ -348,7 +347,7 @@ flip `enforce_eager: false` unless you have a measured reason.
 **By design.** The vLLM-backed servers (`vlm_server`,
 `nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
-restarts. See [`docs/source/components/ai-services.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/components/ai-services.md) → *vLLM model
+restarts. See {doc}`/components/ai-services` → *vLLM model
 persistence*.
 
 **Fix:** to fully release VRAM:
@@ -375,4 +374,4 @@ the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (runs started with `--allow-anonymous`) are rate-limited and can
 stall indefinitely; set `HF_TOKEN` and restart
-(see [`docs/source/getting_started/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/getting_started/credentials.md)).
+(see {doc}`/getting_started/credentials`).

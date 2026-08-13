@@ -103,7 +103,7 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     seam: reasoning-field aliasing (nano_v3 →
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
-    for the in-tree services..  Workers depend on this instead of rolling their
+    for the in-tree services. Workers depend on this instead of rolling their
     own httpx wrappers. Profiles may separate adapter, endpoint, and deployment
     metadata while the existing flat YAML schema remains valid.
 
@@ -500,6 +500,22 @@ Web client must be a build that includes the bundled CloudXR JS SDK
 
 ---
 
+## Change impact map
+
+Keep non-obvious fan-out in the same change:
+
+| Component changed | Also update |
+|---|---|
+| `agent-sdk/xr-ai-hub/` API or IPC types | [Agent SDK](docs/source/components/agent-sdk.md), [hub reference](docs/source/reference/agent-sdk-hub.md), and affected sample workers |
+| `services/xr-media-hub/` configuration | Its reference YAML and every sample `xr_media_hub.yaml` |
+| `utils/xr-ai-launcher/` process API | [Process model](docs/source/components/launcher-and-process-model.md) and sample orchestrators |
+| `utils/xr-ai-vllm/` API or `vllm_backend` / `vllm_image` keys | Every vLLM service wrapper and YAML, every per-profile sample copy, and [AI services](docs/source/components/ai-services.md) |
+| Model-service package, command, port, or container name | `services/README.md`, model-server orchestration and cleanup, this map, and [AI services](docs/source/components/ai-services.md) |
+| CloudXR configuration or native-profile helpers | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, its orchestrator, [Adding CloudXR](docs/source/guides/adding-cloudxr.md), and [xr-render reference](docs/source/reference/xr-render-demo.md) |
+| Scene-service configuration | Scene YAML, xr-render orchestrator, and [xr-render reference](docs/source/reference/xr-render-demo.md) |
+| Any `pyproject.toml` dependency | This dependency map and a local lock regeneration |
+| New sample or reusable service | Root and local READMEs, this map, and the relevant Sphinx guide |
+| `xr-ai-models` protocol, profile schema, or preset | Model package reference, preset registry, sample profiles, and architecture rules |
 
 ## Dependency rules (enforced)
 

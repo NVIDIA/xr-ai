@@ -20,3 +20,11 @@ Start with `xr_ai_hub` for raw media/data IPC, or compose `xr_ai_runtime`,
 `xr_ai_tools`, `xr_ai_models`, and `xr_ai_voice` for a tool-using voice agent.
 See the [Agent SDK guide](../docs/source/components/agent-sdk.md) for the package
 boundaries.
+
+## Removed in this release
+
+Deprecated `xr_ai_agent`, `xr_ai_pipecat`, and forwarding submodules under
+`xr_ai_models` are no longer shipped. Use `xr_ai_hub`, `xr_ai_voice` with
+`VoiceAgent`, and the `xr_ai_models` package root respectively. See the
+[release migration guide](../docs/source/reference/migrations.md) for exact
+replacements.

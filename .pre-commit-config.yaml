@@ -6,7 +6,7 @@
 #   pre-commit install                 # wire the pre-commit stage hooks
 #   pre-commit install --hook-type commit-msg   # wire the DCO commit-msg hook
 #
-# See AGENTS.md § DCO sign-off and § License headers.
+# See CONTRIBUTING.md for DCO and docs/source/guides/spdx-headers.md for SPDX.
 
 repos:
   # ── Ruff lint (matches CI: ruff.toml at repo root, version pinned to CI) ──
@@ -22,7 +22,7 @@ repos:
         name: check SPDX headers
         description: >
           Every source file must start with the NVIDIA SPDX header in the
-          comment syntax for its language (see AGENTS.md § License headers).
+          comment syntax for its language (see docs/source/guides/spdx-headers.md).
           Missing headers are auto-inserted; pre-commit then aborts the
           commit so the operator reviews + re-stages the change.
         entry: python3 .github/scripts/check_spdx_headers.py --fix

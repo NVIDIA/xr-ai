@@ -4,15 +4,21 @@
 """``load_models_config`` + preset resolution coverage."""
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
 
 from xr_ai_models import (
     AdapterSpec,
+    Category,
     DeploymentSpec,
     EndpointSpec,
+    KIND_OPENAI_COMPAT,
     LLMSpec,
+    ModelKind,
     EmbeddingSpec,
     STTSpec,
+    Spec,
     TTSSpec,
     VLMSpec,
     load_models_config,
@@ -27,6 +33,13 @@ from xr_ai_models.presets import available_presets, get_preset
 
 
 # ── preset registry ───────────────────────────────────────────────────────
+
+
+def test_package_root_exports_complete_config_surface() -> None:
+    assert KIND_OPENAI_COMPAT == "openai_compat"
+    assert get_args(ModelKind) == ("openai_compat",)
+    assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding"}
+    assert LLMSpec in get_args(Spec)
 
 
 def test_eight_presets_registered() -> None:

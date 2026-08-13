@@ -30,7 +30,9 @@ For the per-package dependency mapping, see [`DEPENDENCIES.md`](DEPENDENCIES.md)
 | `numpy`        | 1.24.0   | BSD-3-Clause  | https://github.com/numpy/numpy |
 | `nemo-relay`   | >=0.7.2,<0.8 | Apache-2.0  | https://github.com/NVIDIA/NeMo-Relay |
 | `Pillow`       | 10.0.0   | HPND          | https://github.com/python-pillow/Pillow |
+| `pipecat-ai`   | >=1.3    | BSD-2-Clause  | https://github.com/pipecat-ai/pipecat |
 | `pydantic`     | >=2.10   | MIT           | https://github.com/pydantic/pydantic |
+| `python-multipart` | >=0.0.9 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | `websockets`   | 12.0     | BSD-3-Clause  | https://github.com/python-websockets/websockets |
 
 ## Swift (iOS / visionOS client)
@@ -51,6 +53,7 @@ The full text of each SPDX license identifier referenced above is available at:
 - **Apache-2.0**: https://www.apache.org/licenses/LICENSE-2.0 — also bundled
   with this repository as [`LICENSE`](LICENSE).
 - **BSD-3-Clause**: https://opensource.org/license/bsd-3-clause
+- **BSD-2-Clause**: https://opensource.org/license/bsd-2-clause
 - **HPND**: https://opensource.org/license/historical-ntu-disclaimer
 - **MIT**: https://opensource.org/license/mit
 

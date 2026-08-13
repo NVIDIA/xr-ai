@@ -63,6 +63,7 @@ _LEGACY_PROJECTS = (
 _LEGACY_ROOTS = {"ai-services", "cloudxr-runtime", "server-runtime"}
 _ALLOWED_LEGACY_REFERENCES = {
     Path("tests/test_service_layout.py"),
+    Path("docs/source/reference/migrations.md"),
 }
 _HUB_PROJECT = _ROOT / "services" / "xr-media-hub"
 _SAMPLE_WEB_CLIENTS = {
@@ -70,12 +71,26 @@ _SAMPLE_WEB_CLIENTS = {
     "xr-render-demo": _ROOT / "client-samples" / "web-xr",
 }
 _RETIRED_AGENT_SDK_PATHS = (
+    "agent-sdk/xr-ai-hub-client",
+    "agent-sdk/xr-ai-agent-runtime",
     "agent-sdk/xr-ai-pipecat",
     "agent-sdk/xr-ai-hub/xr_ai_agent",
     "agent-sdk/xr-ai-models/xr_ai_models/config.py",
     "agent-sdk/xr-ai-models/xr_ai_models/factory.py",
     "agent-sdk/xr-ai-models/xr_ai_models/openai_compat.py",
     "agent-sdk/xr-ai-models/xr_ai_models/protocols.py",
+)
+_RETIRED_AGENT_SDK_MODULES = (
+    "xr_ai_agent",
+    "xr_ai_pipecat",
+    "xr_ai_models.config",
+    "xr_ai_models.factory",
+    "xr_ai_models.openai_compat",
+    "xr_ai_models.protocols",
+)
+_RETIRED_AGENT_SDK_REFERENCES = (
+    "agent-sdk/xr-ai-hub-client/",
+    "agent-sdk/xr-ai-agent-runtime/",
 )
 
 
@@ -128,6 +143,11 @@ def _model_cache_default(path: Path) -> str:
 def test_retired_agent_sdk_surfaces_are_absent() -> None:
     for relative in _RETIRED_AGENT_SDK_PATHS:
         assert not (_ROOT / relative).exists(), relative
+
+
+def test_retired_agent_sdk_modules_are_not_importable() -> None:
+    for module in _RETIRED_AGENT_SDK_MODULES:
+        assert importlib.util.find_spec(module) is None, module
 
 
 def test_reusable_services_are_direct_children() -> None:
@@ -324,6 +344,12 @@ def test_tracked_text_has_no_retired_service_paths() -> None:
             (f"{relative}:{line_number}", "server-runtime/")
             for line_number, line in enumerate(text.splitlines(), start=1)
             if "server-runtime/" in line
+        )
+        stale.extend(
+            (f"{relative}:{line_number}", legacy)
+            for line_number, line in enumerate(text.splitlines(), start=1)
+            for legacy in _RETIRED_AGENT_SDK_REFERENCES
+            if legacy in line
         )
 
     assert not stale, f"retired service paths remain: {stale}"

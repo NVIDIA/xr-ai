@@ -14,7 +14,7 @@ Multiple reusable HTTP servers are available as launchable peers of
 can call them with any OpenAI SDK client or plain `httpx` or `requests`.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct
-children of the [services source index](https://github.com/NVIDIA/xr-ai/blob/main/services/README.md);
+children of the repository's `services/README.md` source index;
 pick an LLM per sample based on the tool-calling, reasoning, and hardware
 trade-offs documented below.
 
@@ -61,6 +61,33 @@ HF_HOME=models hf download nvidia/Cosmos-Reason1-7B
 # NeMo STT server launched from its standalone YAML:
 HF_HOME=models/huggingface hf download nvidia/parakeet-tdt-0.6b-v3
 ```
+
+(migrating-model-caches-from-ai-services)=
+
+## Migrating model caches from `ai-services/`
+
+The service-directory rename does not move ignored model weights. Existing
+installations may still hold VLM, STT, and LLM weights in
+`ai-services/models/`, and TTS weights in `ai-services/tts/models/`; all
+current service profiles resolve to the repository-root `models/` directory.
+
+Stop model services, then merge the caches from the repository root:
+
+```bash
+mkdir -p models
+if [ -d ai-services/models ]; then
+  cp -a -l -n ai-services/models/. models/
+fi
+if [ -d ai-services/tts/models ]; then
+  cp -a -l -n ai-services/tts/models/. models/
+fi
+```
+
+The `-l` option avoids duplicating large weight files and requires both paths
+to use the same filesystem. Omit `-l` when copying across filesystems and
+verify free space first. Keep the old directories until the relocated services
+start successfully without network access. Recreate project environments with
+`uv sync`; do not copy `.venv` directories across the move.
 
 
 ## Adding a server to a sample
@@ -125,7 +152,7 @@ directory and a model profile containing an `embedding` role.
 ## Calling these from a worker
 
 Workers do not hand-roll `httpx` clients against these endpoints.  They
-depend on [`agent-sdk/xr-ai-models`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md),
+depend on {doc}`/reference/agent-sdk-models`,
 load a per-sample model profile, and construct service clients via
 `make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
@@ -166,7 +193,7 @@ legacy entries and direct role mappings. A profile shared with the stdlib-only
 launcher must use the wrapped nested `.json` contract; non-`.json` profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
-[`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md).
+{doc}`/reference/agent-sdk-models`.
 
 ## Hosting models on NVIDIA NIM
 
@@ -202,7 +229,7 @@ disables endpoint health probing, and declares external ownership:
 - **`api_key_env: NGC_API_KEY`** sends the environment value as a bearer
   token. The key is a
   managed credential — `run_stack` injects a saved `NGC_API_KEY` into every
-  subprocess (refer to [`docs/source/getting_started/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/getting_started/credentials.md)); or export it.
+  subprocess (refer to {doc}`/getting_started/credentials`); or export it.
 - **`readiness: none`** is required when the hosted endpoint has no local
   `/health` route.
 - **`ownership: external`** keeps the launcher from starting or stopping the
@@ -287,7 +314,7 @@ another tag, an internal mirror, or a custom build.
 - **NGC pull access** for `nvcr.io/nvidia/vllm`. The wrapper auto-runs
   `docker login nvcr.io` if `NGC_API_KEY` is in the environment (loaded by
   `load_credentials()` from `~/.config/xr-ai/credentials.json` per
-  [`docs/source/getting_started/credentials.md`](https://github.com/NVIDIA/xr-ai/blob/main/docs/source/getting_started/credentials.md)). Otherwise, log in manually once:
+  {doc}`/getting_started/credentials`). Otherwise, log in manually once:
 
   ```bash
   docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY

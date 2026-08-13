@@ -81,6 +81,7 @@ html_show_sphinx = False
 html_title = "XR AI"
 templates_path = ["_templates"]
 html_static_path = ["_static"]
+html_extra_path = ["_redirects"]
 html_css_files = ["css/custom.css"]
 
 # Named ``versioning.html`` so it does not shadow the theme's own

@@ -206,7 +206,7 @@ are a profile change:
 without that route use `readiness: none`, which makes
 `health()` return `True` without a request — otherwise a worker's readiness
 gate would block forever. See
-[`docs/source/components/ai-services.md`](../../docs/source/components/ai-services.md#hosting-models-on-nvidia-nim).
+`docs/source/components/ai-services.md` for hosted endpoint operation.
 
 ## Tests
 

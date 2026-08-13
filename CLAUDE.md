@@ -6,6 +6,7 @@
 # Working instructions
 
 Follow [`AGENTS.md`](AGENTS.md) and the nearest package or sample README.
-`DEPENDENCIES.md` and each affected `uv.lock` must change with any
-`pyproject.toml`. Run relevant tests and Ruff before committing, and sign
-commits with `git commit -s`.
+Update `DEPENDENCIES.md` with any `pyproject.toml` change and regenerate the
+affected project's gitignored `uv.lock` locally. Run relevant tests and Ruff
+before committing, and sign commits with `git commit -s`. After every push,
+check `gh pr checks`; the change is not complete until required CI is green.

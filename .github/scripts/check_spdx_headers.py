@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Enforce the SPDX header convention from ``AGENTS.md`` § License headers.
+Enforce the convention in ``docs/source/guides/spdx-headers.md``.
 
 Every source file we license must start with::
 
@@ -88,7 +88,7 @@ def _copyright_line(path: Path | None = None) -> str:
         f"NVIDIA CORPORATION & AFFILIATES. All rights reserved."
     )
 
-# ── Comment-style mapping (mirrors AGENTS.md § License headers) ─────────────
+# ── Comment-style mapping (mirrors the SPDX headers guide) ─────────────
 _HASH_EXTS = {".py", ".yaml", ".yml", ".toml", ".properties", ".sh", ".pro"}
 _HASH_NAMES = {".gitignore", ".gitattributes", "requirements.txt"}
 _SLASH_EXTS = {".swift", ".kt", ".kts", ".js", ".ts", ".tsx"}
@@ -361,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
                 rel = p
             print(f"  {rel}: {reason}", file=sys.stderr)
         print(
-            "\nSee AGENTS.md § License headers for the exact text and "
+            "\nSee docs/source/guides/spdx-headers.md for the exact text and "
             "comment-syntax mapping.",
             file=sys.stderr,
         )

@@ -90,7 +90,10 @@ See [Adding a sample](docs/source/guides/adding-a-sample.md) and the
 
 - Update the relevant README and `docs/source/` page in the same change as an
   API, command, configuration, package, or quickstart change.
-- Any `pyproject.toml` change must update `DEPENDENCIES.md` and its `uv.lock`.
+- Any `pyproject.toml` change must update `DEPENDENCIES.md`; regenerate the
+  affected project's gitignored `uv.lock` locally to verify resolution.
+- Never put API keys or tokens in source files. Use environment variables or
+  the credential store documented in `docs/source/getting_started/credentials.md`.
 - Do not add an abstraction until two concrete use cases need it.
 - Prompt changes under `agent-samples/*/system.txt` require a corresponding
   eval case. Do not reuse worked-example specifics in the eval fixture.

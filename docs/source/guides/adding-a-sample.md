@@ -57,7 +57,7 @@ uses the wrapped nested JSON shape. The worker passes either form to
 `load_models_config(...)` and constructs services via `make_llm` /
 `make_vlm` / `make_stt` / `make_tts` from `xr_ai_models`.  Schema, preset
 table, compatibility formats, and the profile contract are in
-[`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md).
+{doc}`/reference/agent-sdk-models`.
 
 When the worker is small, keep its implementation in the package's
 `__main__.py`. Split it once argument parsing, lifecycle, configuration, and
