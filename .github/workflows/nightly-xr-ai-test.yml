@@ -86,6 +86,22 @@ jobs:
           nvcc --version
           nvcc --list-gpu-arch | grep compute_89
 
+      - name: Authenticate to NGC
+        env:
+          NGC_API_KEY: ${{ secrets.NGC_API_KEY }}
+        run: |
+          set -euo pipefail
+          docker_config="$RUNNER_TEMP/xr-ai-docker-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "DOCKER_CONFIG=$docker_config" >> "$GITHUB_ENV"
+          install -d -m 0700 "$docker_config"
+
+          if [[ -z "${NGC_API_KEY:-}" ]]; then
+            echo "::error::NGC_API_KEY repository secret is required for nvcr.io images"
+            exit 1
+          fi
+          printf '%s' "$NGC_API_KEY" | docker login nvcr.io \
+            --username '$oauthtoken' --password-stdin
+
       - name: Install uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39  # v3
         with:
@@ -167,6 +183,13 @@ jobs:
             docker rm -f $leftovers || true
           else
             echo "No xr-ai-vllm-* containers to remove."
+          fi
+
+      - name: Remove NGC credentials
+        if: always()
+        run: |
+          if [[ -n "${DOCKER_CONFIG:-}" ]]; then
+            rm -rf "$DOCKER_CONFIG"
           fi
 
   notify:
