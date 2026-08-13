@@ -10,6 +10,7 @@ from builtins import ExceptionGroup
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import nemo_relay
 import pytest
 from pydantic import ValidationError
 from xr_ai_hub import DataMessage
@@ -252,6 +253,71 @@ async def test_voice_agent_accepts_output_from_multiple_publishers() -> None:
         ("alice", "Careful.", True),
         ("alice", "The timer is done.", False),
     ]
+
+
+async def test_voice_agent_records_one_summary_for_finite_and_streamed_output() -> None:
+    session = _Session()
+    runtime = AgentRuntime()
+    voice = VoiceAgent(  # type: ignore[arg-type]
+        session,
+        query_topic=QUERY_TOPIC,
+        text_input=False,
+    )
+    runtime.register("voice", voice)
+    events = []
+    subscriber = "xr-ai-voice-response-summary"
+    nemo_relay.subscribers.register(subscriber, events.append)
+    try:
+        async with _running_voice(runtime, voice, session):
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="Finite answer."),
+                participant_id="alice",
+                source="finite-agent",
+            )
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="Streamed ", response_id="turn-1", final=False),
+                participant_id="alice",
+                source="stream-agent",
+            )
+            await runtime.publish(
+                VOICE_OUTPUT_TOPIC,
+                VoiceOutput(text="answer.", response_id="turn-1"),
+                participant_id="alice",
+                source="stream-agent",
+            )
+            await asyncio.wait_for(session.wait_for(2), 1.0)
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.subscribers.deregister(subscriber)
+
+    starts = [
+        event.to_dict()
+        for event in events
+        if event.name == "voice.response"
+        and event.to_dict().get("scope_category") == "start"
+    ]
+    assert len(starts) == 2
+    by_text = {event["data"]["text"]: event for event in starts}
+    assert by_text["Finite answer."]["data"] | {
+        "streaming": False,
+        "fragment_count": 1,
+    } == by_text["Finite answer."]["data"]
+    assert by_text["Streamed answer."]["data"] | {
+        "streaming": True,
+        "fragment_count": 2,
+    } == by_text["Streamed answer."]["data"]
+    assert by_text["Streamed answer."]["metadata"] | {
+        "participant_id": "alice",
+        "source": "stream-agent",
+        "response_id": "turn-1",
+        "status": "completed",
+    } == by_text["Streamed answer."]["metadata"]
+    assert by_text["Finite answer."]["metadata"]["correlation_id"]
+    assert by_text["Streamed answer."]["metadata"]["correlation_id"]
+    assert "publish:voice.output" not in {event.name for event in events}
+    assert "agent:voice" not in {event.name for event in events}
 
 
 async def test_voice_agent_routes_typed_input() -> None:

@@ -11,9 +11,11 @@ import time
 import uuid
 from builtins import BaseExceptionGroup
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias, TypeVar, cast, get_type_hints
 
+import nemo_relay
 from pydantic import BaseModel
 
 from .agent import Agent
@@ -198,34 +200,68 @@ class AgentRuntime:
             correlation_id=correlation_id,
             parent_message_id=parent_message_id,
         )
-        deliveries: list[asyncio.Task[None]] = []
-        for state, method in tuple(self._subscribers.get(topic.name, ())):
-            task = asyncio.create_task(
-                self._deliver(
-                    state,
-                    method,
-                    value.model_copy(deep=True),
-                    metadata,
-                ),
-                name=f"agent:{state.name}:subscription:{topic.name}",
+        traced = topic.telemetry == "full"
+        publication_scope = (
+            nemo_relay.scope.scope(
+                f"publish:{topic.name}",
+                nemo_relay.ScopeType.Function,
+                input=value.model_dump(mode="json"),
+                metadata=self._relay_metadata(metadata, topic=topic.name),
             )
-            state.deliveries.add(task)
-            task.add_done_callback(state.deliveries.discard)
-            deliveries.append(task)
-        if deliveries:
-            results = await asyncio.gather(*deliveries, return_exceptions=True)
-            errors = [result for result in results if isinstance(result, BaseException)]
-            if errors:
-                raise BaseExceptionGroup("errors during event publication", errors)
+            if traced
+            else nullcontext()
+        )
+        with publication_scope:
+            deliveries: list[asyncio.Task[None]] = []
+            for state, method in tuple(self._subscribers.get(topic.name, ())):
+                task = asyncio.create_task(
+                    self._deliver(
+                        state,
+                        method,
+                        topic.name,
+                        value.model_copy(deep=True),
+                        metadata,
+                        traced=traced,
+                    ),
+                    name=f"agent:{state.name}:subscription:{topic.name}",
+                    context=nemo_relay.fork_asyncio_context(),
+                )
+                state.deliveries.add(task)
+                task.add_done_callback(state.deliveries.discard)
+                deliveries.append(task)
+            if deliveries:
+                results = await asyncio.gather(*deliveries, return_exceptions=True)
+                errors = [
+                    result for result in results if isinstance(result, BaseException)
+                ]
+                if errors:
+                    raise BaseExceptionGroup("errors during event publication", errors)
 
     async def _deliver(
         self,
         state: _AgentState,
         method: BoundSubscriber,
+        topic_name: str,
         message: BaseModel,
         metadata: MessageMetadata,
+        *,
+        traced: bool,
     ) -> None:
-        await method(message, RuntimeContext(self, state.name, metadata))
+        if not traced:
+            await method(message, RuntimeContext(self, state.name, metadata))
+            return
+        with nemo_relay.scope.scope(
+            f"agent:{state.name}",
+            nemo_relay.ScopeType.Agent,
+            input=message.model_dump(mode="json"),
+            metadata=self._relay_metadata(
+                metadata,
+                topic=topic_name,
+                agent=state.name,
+                subscriber=method.__name__,
+            ),
+        ):
+            await method(message, RuntimeContext(self, state.name, metadata))
 
     def _discover_subscriptions(
         self,
@@ -288,6 +324,26 @@ class AgentRuntime:
             parent_message_id=parent_message_id,
             timestamp_us=time.time_ns() // 1_000,
         )
+
+    @staticmethod
+    def _relay_metadata(
+        metadata: MessageMetadata,
+        *,
+        topic: str,
+        agent: str | None = None,
+        subscriber: str | None = None,
+    ) -> dict[str, str | int | None]:
+        return {
+            "topic": topic,
+            "agent": agent,
+            "subscriber": subscriber,
+            "message_id": metadata.message_id,
+            "correlation_id": metadata.correlation_id,
+            "parent_message_id": metadata.parent_message_id,
+            "participant_id": metadata.participant_id,
+            "source": metadata.source,
+            "timestamp_us": metadata.timestamp_us,
+        }
 
 
 __all__ = [

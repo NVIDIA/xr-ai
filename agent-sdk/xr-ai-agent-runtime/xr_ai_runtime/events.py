@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel
 
@@ -20,12 +20,15 @@ class Topic(Generic[MessageT]):
 
     name: str
     message_type: type[MessageT]
+    telemetry: Literal["full", "none"] = "full"
 
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("topic name must not be empty")
         if not issubclass(self.message_type, BaseModel):
             raise TypeError("topic messages must be Pydantic models")
+        if self.telemetry not in ("full", "none"):
+            raise ValueError("topic telemetry must be 'full' or 'none'")
 
     def validate(self, message: MessageT | dict[str, Any]) -> MessageT:
         """Validate a message before delivery."""

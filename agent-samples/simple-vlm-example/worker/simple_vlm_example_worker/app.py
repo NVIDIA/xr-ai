@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
+from threading import Lock
 
+import nemo_relay
 from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
@@ -29,6 +32,34 @@ def _text_transform(default_prompt: str) -> Callable[[str], str]:
     return lambda text: default_prompt if text.lower() == "ping" else text
 
 
+@asynccontextmanager
+async def _relay_event_log(log_file: Path) -> AsyncIterator[Path]:
+    event_path = log_file.parent / "relay-events.jsonl"
+    sink = event_path.open("w", encoding="utf-8")
+    lock = Lock()
+    subscriber = "simple-vlm-compact-event-log"
+
+    def write_event(event: nemo_relay.Event) -> None:
+        if event.kind == "mark" and event.name == "llm.chunk":
+            return
+        with lock:
+            sink.write(event.to_json())
+            sink.write("\n")
+            sink.flush()
+
+    try:
+        nemo_relay.subscribers.register(subscriber, write_event)
+    except Exception:
+        sink.close()
+        raise
+    try:
+        yield event_path
+    finally:
+        await nemo_relay.subscribers.flush_async()
+        nemo_relay.subscribers.deregister(subscriber)
+        sink.close()
+
+
 async def run_app(
     config: WorkerConfig,
     *,
@@ -36,7 +67,7 @@ async def run_app(
 ) -> None:
     """Run the worker until the voice session shuts down."""
 
-    setup_logging("worker")
+    log_file = setup_logging("worker")
     models = load_models_config(config.models_config)
     voice_gate = load_voice_gate_config(config.voice_gate_yaml)
     stt = make_stt(models, "stt")
@@ -83,10 +114,12 @@ async def run_app(
     )
     runtime.register("voice", voice)
 
+    logger.info("Relay events → {}", log_file.parent / "relay-events.jsonl")
     logger.info("simple-vlm-example starting")
-    async with runtime:
-        try:
-            await voice.run(runtime)
-        finally:
-            await simple_vlm.stop()
+    async with _relay_event_log(log_file):
+        async with runtime:
+            try:
+                await voice.run(runtime)
+            finally:
+                await simple_vlm.stop()
     logger.info("simple-vlm-example stopped")

@@ -73,8 +73,14 @@ the workflow boundary with
 `ToolSet.namespaced({"vision": vision.tools, "planner": planner.tools})`.
 This remaps only model-visible catalog names; the agents and underlying tools
 remain unchanged. Participant identity needed by a direct tool belongs in that
-tool's typed request. Relay supplies nested execution tracing, while runtime
-message metadata applies only to pub/sub.
+tool's typed request. Relay records each publication as a function scope
+and each subscription delivery as an agent scope, carrying topic, participant,
+message, correlation, parent-message, source, and subscriber metadata. Tool and
+model scopes invoked by a callback nest under that delivery. Agent-owned
+detached tasks must open a fresh Relay scope stack when their lifetime extends
+beyond the callback, then add an agent scope and preserve logical correlation in
+metadata. This prevents a detached operation from becoming the child of a scope
+that has already ended.
 
 `publish(topic, event)` is the separate asynchronous fan-out operation for
 participant-scoped or global events. An agent that owns resources or background
@@ -82,6 +88,12 @@ work is responsible for controlling them, including creating, cancelling, and
 awaiting its own tasks. The runtime neither knows nor controls whether an
 agent's internal work is running. `publish()` waits for every fan-out delivery
 to settle before propagating any subscriber failures.
+
+Topics default to `telemetry="full"`. High-cardinality transport topics use
+`"none"` when their consumer aggregates fragments and records one semantic
+operation scope. Delivery and failure behavior remains unchanged. Keeping the
+policy on the topic declaration gives every producer and consumer the same
+cardinality behavior.
 
 Tools and subscription callbacks may run concurrently. An agent whose mutable
 state is shared between them owns the appropriate synchronization, such as an

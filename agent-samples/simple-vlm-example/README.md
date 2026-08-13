@@ -55,6 +55,28 @@ The worker and orchestrator consume the deployment profile selected by
 The same profile owns model behavior, endpoints, credentials, readiness, and
 launcher process ownership.
 
+## Relay visibility
+
+The worker writes a compact Relay lifecycle stream to `relay-events.jsonl`
+beside `worker.log` in the per-run log directory printed at startup. The JSONL
+records include runtime publications, receiving-agent callbacks, the complete
+`simple-vlm.turn` lifetime, and nested vision tool and VLM calls. Per-token
+`llm.chunk` marks, incremental `voice.output` fragments, and empty stream
+terminators are omitted. `VoiceAgent` emits one `voice.response` scope containing
+the complete text and timing for both non-streamed and aggregated incremental
+output. Each real STT request is a `voice.stt` scope with a transcript result
+mark, and each sentence synthesis is a `voice.tts` scope. Raw audio is summarized
+by byte count, duration, and sample rate; TTS records synthesis rather than
+client playback. The completed LLM and turn records remain available alongside
+them. No telemetry server or network exporter is required. Live camera bytes are
+replaced with `<redacted:live-camera-frame>`; prompts, questions, responses,
+participant IDs, and correlation metadata remain visible and may contain
+sensitive data.
+
+```bash
+tail -F /tmp/log_simple-vlm-example_*/relay-events.jsonl
+```
+
 Voice-gate behavior remains in `yaml/voice_gate.yaml`. Worker timing, frame
 freshness, the default `ping` question, and optional prompt overrides are in
 `yaml/simple_vlm_example_worker.yaml`; the default prompt ships inside the

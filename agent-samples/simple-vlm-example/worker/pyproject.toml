@@ -10,6 +10,7 @@ name = "simple-vlm-example-worker"
 version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "nemo-relay>=0.7.2,<0.8",
     "xr-ai-agent-runtime",
     "xr-ai-hub-client",
     "xr-ai-logging",

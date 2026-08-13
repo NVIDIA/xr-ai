@@ -10,6 +10,7 @@ from builtins import ExceptionGroup
 from collections.abc import AsyncIterator
 from typing import assert_type
 
+import nemo_relay
 import pytest
 from pydantic import BaseModel
 from xr_ai_models import ChatMessage, ToolCall
@@ -196,6 +197,78 @@ async def test_publish_fans_out_isolated_typed_payloads() -> None:
     assert original == _Observation(labels=["kettle"])
     assert first.received == [("alice", "camera", ["kettle"])]
     assert second.received == [("alice", "camera", ["kettle"])]
+
+
+async def test_publish_records_runtime_and_receiving_agent_scopes() -> None:
+    agent = _VoiceOutput()
+    runtime = AgentRuntime()
+    runtime.register("observer", agent)
+    events = []
+    subscriber = "xr-ai-agent-runtime-scopes"
+    nemo_relay.subscribers.register(subscriber, events.append)
+    try:
+        async with runtime:
+            await runtime.publish(
+                OBSERVATIONS,
+                _Observation(labels=["kettle"]),
+                participant_id="alice",
+                source="camera",
+            )
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.subscribers.deregister(subscriber)
+
+    starts = {
+        event.name: event.to_dict()
+        for event in events
+        if event.kind == "scope" and event.to_dict()["scope_category"] == "start"
+    }
+    publication = starts["publish:vision.observation"]
+    delivery = starts["agent:observer"]
+    assert publication["category"] == "function"
+    assert delivery["category"] == "agent"
+    assert delivery["parent_uuid"] == publication["uuid"]
+    expected_metadata = {
+        "topic": "vision.observation",
+        "agent": "observer",
+        "subscriber": "observe",
+        "participant_id": "alice",
+        "source": "camera",
+    }
+    assert {
+        key: delivery["metadata"][key]
+        for key in expected_metadata
+    } == expected_metadata
+
+
+async def test_untraced_topic_delivers_without_runtime_or_agent_scopes() -> None:
+    quiet_topic = Topic("stream.chunk", _Echo, telemetry="none")
+
+    class Receiver(Agent):
+        def __init__(self) -> None:
+            super().__init__()
+            self.received: list[str] = []
+
+        @subscribe(quiet_topic)
+        async def receive(self, event: _Echo, _ctx: RuntimeContext) -> None:
+            self.received.append(event.text)
+
+    receiver = Receiver()
+    runtime = AgentRuntime()
+    runtime.register("receiver", receiver)
+    events = []
+    subscriber = "xr-ai-agent-runtime-untraced-topic"
+    nemo_relay.subscribers.register(subscriber, events.append)
+    try:
+        async with runtime:
+            await runtime.publish(quiet_topic, _Echo(text="fragment"))
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.subscribers.deregister(subscriber)
+
+    assert receiver.received == ["fragment"]
+    assert "publish:stream.chunk" not in {event.name for event in events}
+    assert "agent:receiver" not in {event.name for event in events}
 
 
 class _FailingSubscriber(Agent):

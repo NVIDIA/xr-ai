@@ -9,6 +9,36 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — Runtime and agent telemetry uses Relay's local event stream
+
+`AgentRuntime` records every typed publication as a Relay function scope and
+every receiving subscription callback as a nested agent scope. The scopes carry
+the runtime topic and existing participant, message, correlation, parent,
+source, and subscriber metadata without changing delivery or failure
+semantics. Each delivery receives a forked Relay context so concurrent fan-out
+cannot mutate the publisher's scope stack. Agent-owned work remains agent-owned;
+a task that outlives its callback starts a fresh scope stack and adds an agent
+scope for its active lifetime, as the simple VLM turn does around its streamed
+response. Logical correlation remains in metadata without parenting the turn to
+an already-ended subscription scope.
+
+The simple VLM worker writes compact ATOF JSONL to `relay-events.jsonl` beside
+`worker.log`. Its subscriber omits per-token `llm.chunk` marks.
+`Topic.telemetry` is the reusable runtime cardinality policy. The
+`voice.output` transport topic uses `"none"`, and `VoiceAgent` emits one
+`voice.response` scope after aggregating either a finite response or a completed
+stream. That scope carries the combined text, fragment count, response and
+participant identity, producer, timing, interrupt flag, and completion status.
+Final and bounded partial-probe STT calls use `voice.stt` function scopes with
+audio summaries and nested transcript result marks. Sentence-level TTS calls use
+`voice.tts` function scopes. This shows provider latency and failures without
+recording raw audio or creating per-audio-frame events; remote client playback
+remains outside the worker's observable boundary.
+Commands, lifecycle messages, tools, models, and turns remain fully traced. The
+worker does not start a collector or emit telemetry over the network. The
+existing live-frame sanitizer remains in the tool scope, while other event
+fields stay observable for local diagnosis.
+
 ### 2026-08-12 — Streaming tools isolate Relay scopes in producer tasks
 
 `AsyncTool` runs each handler in a forked producer task that exclusively owns

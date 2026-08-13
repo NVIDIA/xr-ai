@@ -327,7 +327,12 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
             return Stream()
 
     class Context:
-        metadata = SimpleNamespace(message_id="turn-1", participant_id="alice")
+        agent_name = "simple-vlm"
+        metadata = SimpleNamespace(
+            message_id="turn-1",
+            correlation_id="turn-1",
+            participant_id="alice",
+        )
 
         async def publish(self, *_args, **_kwargs) -> None:
             raise RuntimeError("runtime stopped")
@@ -358,7 +363,9 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     response_tasks: list[asyncio.Task[None]] = []
     response_complete = asyncio.Event()
 
-    monkeypatch.setattr(app, "setup_logging", lambda _name: None)
+    worker_log = tmp_path / "logs" / "worker.log"
+    worker_log.parent.mkdir()
+    monkeypatch.setattr(app, "setup_logging", lambda _name: worker_log)
     monkeypatch.setattr(app, "load_models_config", lambda path: path)
     monkeypatch.setattr(app, "load_voice_gate_config", lambda _path: VoiceGateConfig())
     monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
@@ -414,6 +421,20 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     await app.run_app(config, ready_file=ready_file)
 
     assert ready_file.exists()
+    relay_log = worker_log.parent / "relay-events.jsonl"
+    assert relay_log.exists()
+    relay_events = [
+        yaml.safe_load(line)
+        for line in relay_log.read_text().splitlines()
+    ]
+    assert {event["name"] for event in relay_events} >= {
+        "publish:simple-vlm.user-query",
+        "agent:simple-vlm",
+        "simple-vlm.turn",
+        "voice.response",
+    }
+    assert "publish:voice.output" not in {event["name"] for event in relay_events}
+    assert "agent:voice" not in {event["name"] for event in relay_events}
     assert stt.health_calls == tts.health_calls == vlm.health_calls == 1
     assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
     assert transport.shutdown_calls == 1
@@ -435,6 +456,24 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert callable(run_options["on_interrupted"])
     assert app._text_transform(config.default_prompt)("PING") == config.default_prompt
     assert app._text_transform(config.default_prompt)("What is this?") == "What is this?"
+
+
+async def test_relay_event_log_excludes_stream_chunks(tmp_path) -> None:
+    worker_log = tmp_path / "worker.log"
+
+    async with app._relay_event_log(worker_log):  # noqa: SLF001
+        with nemo_relay.scope.scope("test-turn", nemo_relay.ScopeType.Agent):
+            nemo_relay.scope.event("llm.chunk", data={"text": "fragment"})
+            nemo_relay.scope.event("turn.summary", data={"text": "complete"})
+
+    events = [
+        yaml.safe_load(line)
+        for line in (tmp_path / "relay-events.jsonl").read_text().splitlines()
+    ]
+    names = [event["name"] for event in events]
+    assert "llm.chunk" not in names
+    assert "turn.summary" in names
+    assert names.count("test-turn") == 2
 
 
 async def test_live_vision_tool_returns_a_complete_agent_observation() -> None:
@@ -770,6 +809,24 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
     assert {"tool", "llm"} <= {
         getattr(event, "category", None) for event in events
     }
+    starts = {
+        event.name: event.to_dict()
+        for event in events
+        if event.kind == "scope"
+        and event.to_dict().get("scope_category") == "start"
+    }
+    assert starts["simple-vlm.turn"]["parent_uuid"] != (
+        starts["agent:simple-vlm"]["uuid"]
+    )
+    tool_starts = [
+        event.to_dict()
+        for event in events
+        if event.kind == "scope"
+        and event.to_dict().get("scope_category") == "start"
+        and event.to_dict().get("category") == "tool"
+    ]
+    assert tool_starts
+    assert tool_starts[0]["parent_uuid"] == starts["simple-vlm.turn"]["uuid"]
     llm_events = [
         event.to_json()
         for event in events

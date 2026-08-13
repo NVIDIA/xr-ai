@@ -73,6 +73,20 @@ sets `interrupt=True` to replace active and queued speech. Producers may copy
 the originating query's `timestamp_us` into `VoiceOutput` so the TTS response
 preserves the input timestamp.
 
+Relay telemetry treats `voice.output` as a high-cardinality transport topic and
+does not emit runtime scopes per fragment. `VoiceAgent` instead emits one
+`voice.response` agent scope for each finite response or completed incremental
+stream. Its input contains the combined text, streaming flag, fragment count,
+and interrupt flag; metadata identifies the participant, producer, response,
+timestamp, and completion status.
+
+The media pipeline also emits one `voice.stt` function scope per final or
+bounded partial-probe transcription and one `voice.tts` function scope per
+sentence synthesis. STT inputs contain only byte count, duration, and sample
+rate; a nested `voice.stt.result` mark carries the transcript. TTS inputs carry
+the sentence being synthesized. Raw audio is never written to Relay events.
+These scopes measure provider work and downstream handoff, not client playback.
+
 `VoiceSession` is the media engine owned by `VoiceAgent`. It manages
 readiness, hub transport, VAD/STT, voice gating, TTS, signals, and cleanup. It
 does not execute application handlers. Typed-text ingress is also internal to

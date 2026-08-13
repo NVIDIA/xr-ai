@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Iterable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
+import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from xr_ai_hub import DataMessage
@@ -64,7 +67,19 @@ class VoiceOutput(BaseModel):
         return self
 
 
-VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput)
+VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput, telemetry="none")
+
+
+@dataclass(slots=True)
+class _ResponseTrace:
+    participant_id: str
+    source: str
+    response_id: str
+    correlation_id: str
+    timestamp_us: int
+    interrupt: bool
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    fragments: list[str] = field(default_factory=list)
 
 
 class _ResponseStream(AsyncIterator[str]):
@@ -165,6 +180,7 @@ class VoiceAgent(Agent):
         self._source = "voice"
         self._output_lock = asyncio.Lock()
         self._streams: dict[tuple[str, str, str], _ResponseStream] = {}
+        self._response_traces: dict[tuple[str, str, str], _ResponseTrace] = {}
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""
@@ -225,12 +241,24 @@ class VoiceAgent(Agent):
             else metadata.timestamp_us
         )
         if output.response_id is None:
-            await self.session._enqueue_response(
-                participant_id,
-                output.text,
+            with self._response_scope(
+                participant_id=participant_id,
+                source=metadata.source,
+                response_id=None,
+                correlation_id=metadata.correlation_id,
+                text=output.text,
+                fragment_count=1,
                 interrupt=output.interrupt,
-                pts_us=timestamp_us,
-            )
+                timestamp_us=timestamp_us,
+                streaming=False,
+                status="completed",
+            ):
+                await self.session._enqueue_response(
+                    participant_id,
+                    output.text,
+                    interrupt=output.interrupt,
+                    pts_us=timestamp_us,
+                )
             return
 
         key = (participant_id, metadata.source, output.response_id)
@@ -239,27 +267,53 @@ class VoiceAgent(Agent):
             if output.final:
                 if not output.text.strip():
                     raise ValueError("voice stream terminator has no open response")
-                await self.session._enqueue_response(
-                    participant_id,
-                    output.text,
+                with self._response_scope(
+                    participant_id=participant_id,
+                    source=metadata.source,
+                    response_id=output.response_id,
+                    correlation_id=metadata.correlation_id,
+                    text=output.text,
+                    fragment_count=1,
                     interrupt=output.interrupt,
-                    pts_us=timestamp_us,
-                )
+                    timestamp_us=timestamp_us,
+                    streaming=False,
+                    status="completed",
+                ):
+                    await self.session._enqueue_response(
+                        participant_id,
+                        output.text,
+                        interrupt=output.interrupt,
+                        pts_us=timestamp_us,
+                    )
                 return
             stream = _ResponseStream(
                 self.response_capacity,
                 lambda closed: self._discard_stream(key, closed),
             )
             self._streams[key] = stream
+            self._response_traces[key] = _ResponseTrace(
+                participant_id=participant_id,
+                source=metadata.source,
+                response_id=output.response_id,
+                correlation_id=metadata.correlation_id,
+                timestamp_us=timestamp_us,
+                interrupt=output.interrupt,
+            )
             await self.session._enqueue_response(
                 participant_id,
                 stream,
                 interrupt=output.interrupt,
                 pts_us=timestamp_us,
             )
+        trace = self._response_traces[key]
+        trace.fragments.append(output.text)
+        trace.interrupt = trace.interrupt or output.interrupt
         await stream.send(output.text)
         if output.final:
-            await stream.aclose()
+            try:
+                self._finish_response_trace(key, status="completed")
+            finally:
+                await stream.aclose()
 
     async def _publish_input(self, query: VoiceQuery) -> None:
         runtime = self._running_runtime()
@@ -306,6 +360,67 @@ class VoiceAgent(Agent):
     ) -> None:
         if self._streams.get(key) is stream:
             self._streams.pop(key, None)
+        self._finish_response_trace(key, status="closed")
+
+    def _finish_response_trace(
+        self,
+        key: tuple[str, str, str],
+        *,
+        status: str,
+    ) -> None:
+        trace = self._response_traces.pop(key, None)
+        if trace is None:
+            return
+        with self._response_scope(
+            participant_id=trace.participant_id,
+            source=trace.source,
+            response_id=trace.response_id,
+            correlation_id=trace.correlation_id,
+            text="".join(trace.fragments),
+            fragment_count=len(trace.fragments),
+            interrupt=trace.interrupt,
+            timestamp_us=trace.timestamp_us,
+            streaming=True,
+            status=status,
+            started_at=trace.started_at,
+        ):
+            pass
+
+    @staticmethod
+    def _response_scope(
+        *,
+        participant_id: str,
+        source: str,
+        response_id: str | None,
+        correlation_id: str,
+        text: str,
+        fragment_count: int,
+        interrupt: bool,
+        timestamp_us: int,
+        streaming: bool,
+        status: str,
+        started_at: datetime | None = None,
+    ):
+        return nemo_relay.scope.scope(
+            "voice.response",
+            nemo_relay.ScopeType.Agent,
+            input={
+                "text": text,
+                "streaming": streaming,
+                "fragment_count": fragment_count,
+                "interrupt": interrupt,
+            },
+            metadata={
+                "participant_id": participant_id,
+                "source": source,
+                "response_id": response_id,
+                "correlation_id": correlation_id,
+                "timestamp_us": timestamp_us,
+                "status": status,
+            },
+            timestamp=started_at,
+            end_timestamp=datetime.now(UTC) if started_at is not None else None,
+        )
 
     async def _on_data(self, message: DataMessage) -> None:
         if message.topic in self.text_ignore_topics:

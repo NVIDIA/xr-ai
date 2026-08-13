@@ -38,13 +38,15 @@ CI matrices:
 
 ```
 xr-ai-agent-runtime  (agent-sdk/xr-ai-agent-runtime/)
+    └── nemo-relay >=0.7.2,<0.8
     └── pydantic >=2.10
     └── xr-ai-tools [editable: ../xr-ai-tools]
     In-process typed ``publish`` fan-out for agents that expose ordinary
     ``Tool`` and ``AsyncTool`` instances from ``xr-ai-tools``. Agents own their
     resources, background tasks, lifecycle, and synchronization. Tool
     execution, model clients, tool loops, planning, memory, and raw media
-    transport are not runtime responsibilities.
+    transport are not runtime responsibilities. Relay scopes record runtime
+    publications and receiving-agent subscription callbacks.
 
 xr-ai-hub-client  (agent-sdk/xr-ai-hub-client/)
     └── pyzmq >=27.0
@@ -76,6 +78,7 @@ xr-ai-pipecat  (agent-sdk/xr-ai-pipecat/)
     Not a dep of xr-ai-hub-client itself — import only in workers that use Pipecat.
 
 xr-ai-voice  (agent-sdk/xr-ai-voice/)
+    └── nemo-relay >=0.7.2,<0.8
     └── pydantic >=2.10
     └── xr-ai-agent-runtime [editable: ../xr-ai-agent-runtime]
     └── xr-ai-hub-client [editable: ../xr-ai-hub-client]
@@ -569,7 +572,7 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent-runtime [editable]`, `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-tools[live-vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-tools[live-vision]` pulls in numpy and Pillow) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent-runtime [editable]`, `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-tools[live-vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | nemo-relay >=0.7.2,<0.8, loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-tools[live-vision]` pulls in numpy and Pillow) |
 
 The packaged worker runs a transport-independent `StreamingVisionTool` inside
 `SimpleVlmAgent` and publishes its typed async chunks to `VoiceAgent`. The tool

@@ -23,6 +23,7 @@ import wave
 import warnings
 from typing import Any, AsyncIterator, Sequence
 
+import nemo_relay
 import numpy as np
 import pytest
 from pipecat.frames.frames import (
@@ -241,7 +242,14 @@ async def test_vad_stt_emits_transcription_on_utterance(monkeypatch):
     frame = InputAudioRawFrame(audio=b"\x00\x00" * 320, sample_rate=16000, num_channels=1)
     frame.transport_source = "web-client"
 
-    sink = await _run_chain(proc, sends=[frame])
+    events = []
+    subscriber = "xr-ai-voice-stt-scopes"
+    nemo_relay.subscribers.register(subscriber, events.append)
+    try:
+        sink = await _run_chain(proc, sends=[frame])
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.subscribers.deregister(subscriber)
 
     kinds = [type(f).__name__ for f in sink.frames]
     assert "UserStartedSpeakingFrame" in kinds
@@ -254,6 +262,27 @@ async def test_vad_stt_emits_transcription_on_utterance(monkeypatch):
     assert transcripts[0].user_id         == "web-client"
     assert transcripts[0].transport_source == "web-client"
     assert stt.calls and stt.calls[0][1] == 16000
+    stt_start = next(
+        event.to_dict()
+        for event in events
+        if event.name == "voice.stt"
+        and event.to_dict().get("scope_category") == "start"
+    )
+    stt_result = next(
+        event.to_dict() for event in events if event.name == "voice.stt.result"
+    )
+    assert stt_start["category"] == "function"
+    assert stt_start["data"] == {
+        "audio_bytes": 640,
+        "audio_duration_ms": 20.0,
+        "sample_rate": 16000,
+    }
+    assert stt_start["metadata"] | {
+        "participant_id": "web-client",
+        "mode": "final",
+    } == stt_start["metadata"]
+    assert stt_result["parent_uuid"] == stt_start["uuid"]
+    assert stt_result["data"] == {"text": "hello agent"}
 
 
 @pytest.mark.asyncio
@@ -1461,13 +1490,29 @@ async def test_streaming_tts_sentence_boundary_triggers_synth():
     gate = VoiceGate(VoiceGateConfig(), audio_sink=_NullSink(), tts=tts)
     proc = StreamingTtsProcessor(tts=tts, voice_gate=gate)
 
-    sink = await _run_chain(
-        proc,
-        sends=[TextFrame(text="hello"), TextFrame(text=" world. ")],
-    )
+    events = []
+    subscriber = "xr-ai-voice-tts-scopes"
+    nemo_relay.subscribers.register(subscriber, events.append)
+    try:
+        sink = await _run_chain(
+            proc,
+            sends=[TextFrame(text="hello"), TextFrame(text=" world. ")],
+        )
+        await nemo_relay.subscribers.flush_async()
+    finally:
+        nemo_relay.subscribers.deregister(subscriber)
     assert tts.calls == ["hello world."]
     audio = [f for f in sink.frames if isinstance(f, OutputAudioRawFrame)]
     assert audio, "synth produced no audio frames downstream"
+    tts_start = next(
+        event.to_dict()
+        for event in events
+        if event.name == "voice.tts"
+        and event.to_dict().get("scope_category") == "start"
+    )
+    assert tts_start["category"] == "function"
+    assert tts_start["data"] == {"text": "hello world."}
+    assert tts_start["metadata"]["participant_id"] is None
 
 
 @pytest.mark.asyncio

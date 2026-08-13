@@ -24,6 +24,7 @@ import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable
 
+import nemo_relay
 from loguru import logger
 from pipecat.frames.frames import (
     CancelFrame,
@@ -225,7 +226,12 @@ class VadSttProcessor(FrameProcessor):
             f.transport_source = pid
             await self.push_frame(f)
             try:
-                text = await self._stt.transcribe(audio_bytes, sample_rate=sample_rate)
+                text = await self._transcribe(
+                    audio_bytes,
+                    sample_rate=sample_rate,
+                    participant_id=pid,
+                    mode="final",
+                )
             except Exception:
                 logger.exception("stt transcribe failed pid={!r}", pid)
                 return
@@ -304,7 +310,13 @@ class VadSttProcessor(FrameProcessor):
                 return
 
             try:
-                text = await self._stt.transcribe(bytes(buf), sample_rate=sr)
+                text = await self._transcribe(
+                    bytes(buf),
+                    sample_rate=sr,
+                    participant_id=pid,
+                    mode="partial-probe",
+                    attempt=attempt,
+                )
             except asyncio.CancelledError:
                 return
             except Exception:
@@ -333,6 +345,42 @@ class VadSttProcessor(FrameProcessor):
                     return
                 if decision is None:
                     return
+
+    async def _transcribe(
+        self,
+        audio: bytes,
+        *,
+        sample_rate: int,
+        participant_id: str,
+        mode: str,
+        attempt: int | None = None,
+    ) -> str:
+        metadata: dict[str, object] = {
+            "participant_id": participant_id,
+            "mode": mode,
+        }
+        if attempt is not None:
+            metadata["attempt"] = attempt
+        with nemo_relay.scope.scope(
+            "voice.stt",
+            nemo_relay.ScopeType.Function,
+            input={
+                "audio_bytes": len(audio),
+                "audio_duration_ms": round(
+                    (len(audio) // 2) * 1_000 / max(sample_rate, 1),
+                    3,
+                ),
+                "sample_rate": sample_rate,
+            },
+            metadata=metadata,
+        ):
+            text = await self._stt.transcribe(audio, sample_rate=sample_rate)
+            nemo_relay.scope.event(
+                "voice.stt.result",
+                data={"text": text},
+                metadata={"status": "completed" if text else "empty"},
+            )
+            return text
 
     async def _emit_early_stop(self, pid: str, text: str) -> None:
         """Emit the interrupt sequence for a STOP matched by a partial probe."""

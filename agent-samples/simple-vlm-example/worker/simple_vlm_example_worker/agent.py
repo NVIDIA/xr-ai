@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 
+import nemo_relay
 from xr_ai_runtime import (
     Agent,
     RuntimeClosedError,
@@ -51,6 +52,7 @@ class SimpleVlmAgent(Agent):
         task = asyncio.create_task(
             self._stream(request, ctx),
             name=f"simple-vlm-query:{participant_id}",
+            context=nemo_relay.fork_asyncio_context(),
         )
         self._tasks[participant_id] = task
         task.add_done_callback(
@@ -86,6 +88,25 @@ class SimpleVlmAgent(Agent):
         await self._cancel(participant_id)
 
     async def _stream(self, request: UserQuery, ctx: RuntimeContext) -> None:
+        with nemo_relay.use_scope_stack(nemo_relay.create_scope_stack()):
+            with nemo_relay.scope.scope(
+                "simple-vlm.turn",
+                nemo_relay.ScopeType.Agent,
+                input=request.model_dump(mode="json"),
+                metadata={
+                    "agent": ctx.agent_name,
+                    "message_id": ctx.metadata.message_id,
+                    "correlation_id": ctx.metadata.correlation_id,
+                    "participant_id": ctx.metadata.participant_id,
+                },
+            ):
+                await self._stream_response(request, ctx)
+
+    async def _stream_response(
+        self,
+        request: UserQuery,
+        ctx: RuntimeContext,
+    ) -> None:
         response_id = ctx.metadata.message_id
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
