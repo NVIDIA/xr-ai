@@ -406,15 +406,11 @@ installation.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_voice</span></code></p></td>
 <td><p>Voice agent, session, transport, and pipeline</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">xr_ai_pipecat</span></code></p></td>
-<td><p>Compatibility API for direct Pipecat composition</p></td>
-</tr>
 </tbody>
 </table>
 </div>
 <p>See each package’s README under
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/f02638a84127ab636ca73017174bb89d79a10af3/agent-sdk"><code class="docutils literal notranslate"><span class="pre">agent-sdk/</span></code></a> for its
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/tree/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/agent-sdk"><code class="docutils literal notranslate"><span class="pre">agent-sdk/</span></code></a> for its
 complete public surface.</p>
 <section id="runtime-and-tools">
 <h2>Runtime and tools<a class="headerlink" href="#runtime-and-tools" title="Link to this heading">#</a></h2>
@@ -544,12 +540,6 @@ through PUSH IPC. The <code class="docutils literal notranslate"><span class="pr
 is opt-in and scoped to subscribed participants. The hub aggregates each
 responsible agent’s status and gates readiness on confirmed subscriptions.</p>
 </section>
-<section id="direct-pipecat-compatibility">
-<h2>Direct Pipecat compatibility<a class="headerlink" href="#direct-pipecat-compatibility" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">xr_ai_pipecat</span></code> exposes <code class="docutils literal notranslate"><span class="pre">make_voice_pipeline</span></code>, <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code>, and
-processor-level composition for consumers that construct Pipecat pipelines
-directly. Current samples use <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceSession</span></code>.</p>
-</section>
 </section>
 
 
@@ -605,7 +595,6 @@ directly. Current samples use <code class="docutils literal notranslate"><span c
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#models">Models</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice">Voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-ipc">Hub IPC</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#direct-pipecat-compatibility">Direct Pipecat compatibility</a></li>
 </ul>
   </nav></div>
 

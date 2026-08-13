@@ -383,7 +383,7 @@ orchestrator pattern that wires servers into a sample, refer to
 can call them with any OpenAI SDK client or plain <code class="docutils literal notranslate"><span class="pre">httpx</span></code> or <code class="docutils literal notranslate"><span class="pre">requests</span></code>.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct
-children of the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/services/README.md">services source index</a>;
+children of the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/services/README.md">services source index</a>;
 pick an LLM per sample based on the tool-calling, reasoning, and hardware
 trade-offs documented below.</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -556,7 +556,7 @@ directory and a model profile containing an <code class="docutils literal notran
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
 <p>Workers do not hand-roll <code class="docutils literal notranslate"><span class="pre">httpx</span></code> clients against these endpoints.  They
-depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
+depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
 load a per-sample model profile, and construct service clients via
 <code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
@@ -593,7 +593,7 @@ legacy entries and direct role mappings. A profile shared with the stdlib-only
 launcher must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
 </section>
 <section id="hosting-models-on-nvidia-nim">
 <h2>Hosting models on NVIDIA NIM<a class="headerlink" href="#hosting-models-on-nvidia-nim" title="Link to this heading">#</a></h2>
@@ -627,7 +627,7 @@ disables endpoint health probing, and declares external ownership:</p>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code></strong> sends the environment value as a bearer
 token. The key is a
 managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
-subprocess (refer to <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/docs/source/getting_started/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/source/getting_started/credentials.md</span></code></a>); or export it.</p></li>
+subprocess (refer to <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/docs/source/getting_started/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/source/getting_started/credentials.md</span></code></a>); or export it.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code></strong> is required when the hosted endpoint has no local
 <code class="docutils literal notranslate"><span class="pre">/health</span></code> route.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code></strong> keeps the launcher from starting or stopping the
@@ -720,7 +720,7 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <li><p><strong>NGC pull access</strong> for <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/docs/source/getting_started/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/source/getting_started/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/docs/source/getting_started/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/source/getting_started/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
@@ -777,7 +777,7 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
 <li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
@@ -788,7 +788,7 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
 <li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.

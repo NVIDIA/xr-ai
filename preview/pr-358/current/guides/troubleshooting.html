@@ -564,13 +564,12 @@ with no user or bot speech.</p>
 <p><strong>If you want it:</strong> set <code class="docutils literal notranslate"><span class="pre">idle_timeout_secs:</span> <span class="pre">&lt;seconds&gt;</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">300</span></code> for 5 min)
 in the sample’s worker YAML (<code class="docutils literal notranslate"><span class="pre">simple_vlm_example_worker.yaml</span></code> /
 <code class="docutils literal notranslate"><span class="pre">xr_render_demo_worker.yaml</span></code>); <code class="docutils literal notranslate"><span class="pre">0</span></code> or unset keeps it disabled. The knob is
-owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceSession</span></code> or, for a direct Pipecat consumer,
-<code class="docutils literal notranslate"><span class="pre">xr_ai_pipecat.make_voice_pipeline</span></code>.</p>
+owned by <code class="docutils literal notranslate"><span class="pre">xr_ai_voice.VoiceSession</span></code>.</p>
 </section>
 <section id="browser-client-connects-but-no-audio-or-no-video">
 <h3>Browser client connects but no audio or no video<a class="headerlink" href="#browser-client-connects-but-no-audio-or-no-video" title="Link to this heading">#</a></h3>
 <p><strong>Most common cause:</strong> firewall blocking WebRTC media on UDP 7882 (LiveKit).</p>
-<p><strong>Fix:</strong> open ports per <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/docs/source/getting_started/networking.md"><code class="docutils literal notranslate"><span class="pre">docs/source/getting_started/networking.md</span></code></a>. The web client
+<p><strong>Fix:</strong> open ports per <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/docs/source/getting_started/networking.md"><code class="docutils literal notranslate"><span class="pre">docs/source/getting_started/networking.md</span></code></a>. The web client
 will appear to connect (signaling on 7880 succeeds) but media frames are
 silently dropped without 7882.</p>
 </section>
@@ -668,7 +667,7 @@ flip <code class="docutils literal notranslate"><span class="pre">enforce_eager:
 <p><strong>By design.</strong> The vLLM-backed servers (<code class="docutils literal notranslate"><span class="pre">vlm_server</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code>) survive stack
 restarts so model weights stay loaded across worker crashes and debug
-restarts. See <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/docs/source/components/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/source/components/ai-services.md</span></code></a> → <em>vLLM model
+restarts. See <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/docs/source/components/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/source/components/ai-services.md</span></code></a> → <em>vLLM model
 persistence</em>.</p>
 <p><strong>Fix:</strong> to fully release VRAM:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>xr-ai/agent-samples/xr-render-demo
@@ -690,7 +689,7 @@ the repository root (gitignored, ~16 GB for Cosmos-Reason1-7B alone).</p>
 ~30–60 s. If the download makes no progress, note that unauthenticated
 downloads (runs started with <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>) are rate-limited and can
 stall indefinitely; set <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> and restart
-(see <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/docs/source/getting_started/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/source/getting_started/credentials.md</span></code></a>).</p>
+(see <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/docs/source/getting_started/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/source/getting_started/credentials.md</span></code></a>).</p>
 </section>
 </section>
 </section>

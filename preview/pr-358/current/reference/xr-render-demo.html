@@ -376,9 +376,9 @@
 <h1>xr-render-demo — architecture<a class="headerlink" href="#xr-render-demo-architecture" title="Link to this heading">#</a></h1>
 <p>This page describes the architecture of the xr-render-demo sample. For the
 user-facing
-quickstart, refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr">repository README</a>.
+quickstart, refer to the <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/README.md#xr-render-demo-voice-driven-sphere-in-cloudxr">repository README</a>.
 For inference-server mechanics shared with other samples, refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/docs/source/components/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/source/components/ai-services.md</span></code></a>.</p>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/docs/source/components/ai-services.md"><code class="docutils literal notranslate"><span class="pre">docs/source/components/ai-services.md</span></code></a>.</p>
 <section id="process-stack">
 <h2>Process stack<a class="headerlink" href="#process-stack" title="Link to this heading">#</a></h2>
 <p>The orchestrator (<code class="docutils literal notranslate"><span class="pre">xr_render_demo</span></code>, stdlib-only via <code class="docutils literal notranslate"><span class="pre">xr-ai-launcher</span></code>) starts
@@ -587,9 +587,8 @@ the old stream before the replacement starts.</p>
   → VoiceAgent → private VoiceSession TTS → hub return audio
 </pre></div>
 </div>
-<p>The render worker imports no <code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code> or <code class="docutils literal notranslate"><span class="pre">pipecat-ai</span></code> API. Pipecat is
-an internal implementation detail of <code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code>; application input,
-participant-scoped agent execution, and voice output use public SDK contracts.
+<p>Pipecat is an internal implementation detail of <code class="docutils literal notranslate"><span class="pre">xr-ai-voice</span></code>; application
+input, participant-scoped agent execution, and voice output use public SDK contracts.
 Lifecycle failures publish notices to a sample-local runtime topic instead of
 manufacturing voice-pipeline frames.</p>
 </section>
@@ -732,7 +731,7 @@ a streaming client connects. LOVR cannot start before then.</p>
 It derives schemas from the worker’s native tools and evaluates tool
 effects against deterministic fixtures, so the live LOVR scene is not mutated.
 Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/f02638a84127ab636ca73017174bb89d79a10af3/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/cfbfc21f183d3dd3e26dece28a2e24c88f352c0e/agent-samples/xr-render-demo/eval/README.md"><code class="docutils literal notranslate"><span class="pre">agent-samples/xr-render-demo/eval/README.md</span></code></a>
 for the case format and the watch-mode loop. Run with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>agent-samples/xr-render-demo/worker<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>python<span class="w"> </span>agent-samples/xr-render-demo/eval/eval.py
