@@ -396,8 +396,6 @@ to talk to the XR-Media-Hub (refer to <a class="reference internal" href="server
 FastAPI dependency.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-tools</span></code></strong> — Relay-managed native tools and model tool-call
 workflow helpers.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-nat</span></code></strong> — legacy NeMo Agent Toolkit function groups retained while
-their concrete capabilities migrate.</p></li>
 </ul>
 <hr class="docutils" />
 <section id="xr-ai-agent-runtime">
@@ -655,24 +653,6 @@ changing provider input.</p>
 with their state, and register the agent with <code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> when they
 need pub/sub. Relay remains responsible for tool and model execution; the
 runtime does not duplicate the tool loop or model boundary.</p>
-</section>
-<section id="xr-ai-nat-model-bridge">
-<h2>xr-ai-nat model bridge<a class="headerlink" href="#xr-ai-nat-model-bridge" title="Link to this heading">#</a></h2>
-<p>Unmigrated workflows install <code class="docutils literal notranslate"><span class="pre">xr-ai-nat[agents]</span></code> when they use NAT’s built-in
-agent graphs.
-<code class="docutils literal notranslate"><span class="pre">ModelsLLMConfig</span></code> adapts an <code class="docutils literal notranslate"><span class="pre">xr-ai-models</span></code> <code class="docutils literal notranslate"><span class="pre">LLMService</span></code> to NAT’s LangChain
-client contract:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nat.plugin_api</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMRef</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_nat.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelsLLMConfig</span>
-
-<span class="n">llm_ref</span> <span class="o">=</span> <span class="n">LLMRef</span><span class="p">(</span><span class="s2">&quot;agent_llm&quot;</span><span class="p">)</span>
-<span class="k">await</span> <span class="n">builder</span><span class="o">.</span><span class="n">add_llm</span><span class="p">(</span><span class="n">llm_ref</span><span class="p">,</span> <span class="n">ModelsLLMConfig</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">llm</span><span class="p">))</span>
-</pre></div>
-</div>
-<p>Applications may instead set <code class="docutils literal notranslate"><span class="pre">profile_path</span></code> and <code class="docutils literal notranslate"><span class="pre">role</span></code> for configuration-led
-construction. Exactly one source is required. The provider closes clients it
-constructs from a profile and leaves injected services under the caller’s
-lifecycle ownership.</p>
 </section>
 <hr class="docutils" />
 <section id="xr-ai-voice">
@@ -1217,7 +1197,6 @@ into the hub’s shared-memory ring buffer. The codec is extensible via
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-model-tool-calls">Native tools and model tool calls</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-nat-model-bridge">xr-ai-nat model bridge</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-voice">xr-ai-voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xr-ai-pipecat">xr-ai-pipecat</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#make-voice-pipeline">make_voice_pipeline</a></li>

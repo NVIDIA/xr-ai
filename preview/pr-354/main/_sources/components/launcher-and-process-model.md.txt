@@ -56,8 +56,9 @@ def run() -> None:
   before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
-- **Native voice workers** pass the ready file to `VoiceSession`; `run()`
-  touches it only after the input transport's hub IPC receive loop has started.
+- **Native voice workers** pass the ready file to the `VoiceSession` owned by
+  `VoiceAgent`; the session touches it only after the input transport's hub IPC
+  receive loop has started.
 - **Direct Pipecat workers** call
   `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` to use the
   same IPC-start readiness boundary.

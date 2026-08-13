@@ -26,8 +26,6 @@ from:
   FastAPI dependency.
 - **`xr-ai-tools`** — Relay-managed native tools and model tool-call
   workflow helpers.
-- **`xr-ai-nat`** — legacy NeMo Agent Toolkit function groups retained while
-  their concrete capabilities migrate.
 
 ---
 
@@ -276,26 +274,6 @@ Applications place native tools and model loops inside an agent to group tools
 with their state, and register the agent with `xr-ai-agent-runtime` when they
 need pub/sub. Relay remains responsible for tool and model execution; the
 runtime does not duplicate the tool loop or model boundary.
-
-## xr-ai-nat model bridge
-
-Unmigrated workflows install `xr-ai-nat[agents]` when they use NAT's built-in
-agent graphs.
-`ModelsLLMConfig` adapts an `xr-ai-models` `LLMService` to NAT's LangChain
-client contract:
-
-```python
-from nat.plugin_api import LLMRef
-from xr_ai_nat.llm import ModelsLLMConfig
-
-llm_ref = LLMRef("agent_llm")
-await builder.add_llm(llm_ref, ModelsLLMConfig(service=llm))
-```
-
-Applications may instead set `profile_path` and `role` for configuration-led
-construction. Exactly one source is required. The provider closes clients it
-constructs from a profile and leaves injected services under the caller's
-lifecycle ownership.
 
 ---
 
