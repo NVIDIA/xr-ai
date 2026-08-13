@@ -71,6 +71,20 @@ async def test_stop_clears_endpoint_running_barrier(make_processor):
     await asyncio.gather(running_wait, return_exceptions=True)
 
 
+
+async def test_data_callback_registration_can_be_removed(make_processor):
+    agent = make_processor(auto_subscribe=False)
+
+    async def callback(_message) -> None:
+        return None
+
+    unsubscribe = agent.on_data(callback)
+    assert callback in agent._data_cbs  # noqa: SLF001
+
+    unsubscribe()
+    unsubscribe()
+    assert callback not in agent._data_cbs  # noqa: SLF001
+
 # ── auto_subscribe=False ────────────────────────────────────────────────────
 
 

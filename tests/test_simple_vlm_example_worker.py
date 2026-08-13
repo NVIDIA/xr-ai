@@ -20,7 +20,7 @@ import yaml
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService
 from xr_ai_runtime import AgentRuntime
-from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceSession
+from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput, VoiceSession
 from xr_ai_voicegate import VoiceGateConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -337,7 +337,7 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
         async def publish(self, *_args, **_kwargs) -> None:
             raise RuntimeError("runtime stopped")
 
-    agent = SimpleVlmAgent(Vision())  # type: ignore[arg-type]
+    agent = SimpleVlmAgent(lambda: Vision())  # type: ignore[return-value]
     with pytest.raises(RuntimeError, match="runtime stopped"):
         await agent._stream(  # noqa: SLF001
             UserQuery(text="What is shown?", timestamp_us=123),
@@ -345,6 +345,66 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
         )
 
     assert closed.is_set()
+
+
+async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
+    waiting = asyncio.Event()
+    closed = asyncio.Event()
+    published: list[VoiceOutput] = []
+
+    class Stream:
+        def __init__(self) -> None:
+            self.sent = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if not self.sent:
+                self.sent = True
+                return SimpleNamespace(text="first")
+            waiting.set()
+            await asyncio.Event().wait()
+            raise StopAsyncIteration
+
+        async def aclose(self) -> None:
+            closed.set()
+
+    class Vision:
+        def stream(self, _request):
+            return Stream()
+
+    class Context:
+        agent_name = "simple-vlm"
+        metadata = SimpleNamespace(
+            message_id="turn-1",
+            correlation_id="turn-1",
+            participant_id="alice",
+        )
+
+        async def publish(self, _topic, output) -> None:
+            published.append(output)
+
+    factory_calls: list[None] = []
+    agent = SimpleVlmAgent(
+        lambda: factory_calls.append(None) or Vision()  # type: ignore[return-value]
+    )
+    assert factory_calls == []
+
+    task = asyncio.create_task(
+        agent._stream(  # noqa: SLF001
+            UserQuery(text="What is shown?", timestamp_us=123),
+            Context(),  # type: ignore[arg-type]
+        )
+    )
+    await asyncio.wait_for(waiting.wait(), 1.0)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+    assert factory_calls == [None]
+    assert closed.is_set()
+    assert len(published) == 1
+    assert published[0].final is False
 
 
 async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
@@ -390,8 +450,11 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             ) is None
             await asyncio.wait_for(response_complete.wait(), 1.0)
             await options["on_participant_left"]("alice")
-            while not _StreamingVisionTool.instances[0].released:
-                await asyncio.sleep(0)
+            async def wait_until_released() -> None:
+                while not _StreamingVisionTool.instances[0].released:
+                    await asyncio.sleep(0)
+
+            await asyncio.wait_for(wait_until_released(), 1.0)
 
         async def enqueue_response(
             participant_id: str,
@@ -411,8 +474,8 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
 
             response_tasks.append(asyncio.create_task(consume()))
 
-        session._run = run  # type: ignore[method-assign]  # noqa: SLF001
-        session._enqueue_response = enqueue_response  # type: ignore[method-assign]  # noqa: SLF001
+        session.run = run  # type: ignore[method-assign]
+        session.enqueue_response = enqueue_response  # type: ignore[method-assign]
         return session
 
     monkeypatch.setattr(app, "VoiceSession", make_session)
@@ -713,15 +776,16 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
             self.text = ""
             self.complete = asyncio.Event()
             self.started = asyncio.Event()
+            self.text_topic = "agent.response"
 
         async def __aenter__(self):
             return self
 
-        async def _run(self, _handler, **_options) -> None:
+        async def run(self, _handler, **_options) -> None:
             self.started.set()
             await asyncio.Event().wait()
 
-        async def _enqueue_response(
+        async def enqueue_response(
             self,
             participant_id: str,
             response: str | AsyncIterator[str],
@@ -748,7 +812,7 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
 
     session = Session()
     runtime = AgentRuntime()
-    runtime.register("simple-vlm", SimpleVlmAgent(vision))
+    runtime.register("simple-vlm", SimpleVlmAgent(lambda: vision))
     runtime.register(
         "voice",
         VoiceAgent(  # type: ignore[arg-type]
@@ -854,7 +918,7 @@ async def test_simple_vlm_agent_handles_global_interruption_event() -> None:
     runtime = AgentRuntime()
     runtime.register(
         "simple-vlm",
-        SimpleVlmAgent(BlockingVision()),  # type: ignore[arg-type]
+        SimpleVlmAgent(lambda: BlockingVision()),  # type: ignore[return-value]
     )
 
     async with runtime:

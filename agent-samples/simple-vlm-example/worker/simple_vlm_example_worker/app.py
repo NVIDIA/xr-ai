@@ -94,8 +94,8 @@ async def run_app(
     simple_vlm = runtime.register(
         "simple-vlm",
         SimpleVlmAgent(
-            StreamingVisionTool(
-                endpoint=session.transport.endpoint,
+            lambda: StreamingVisionTool(
+                endpoint=session.endpoint,
                 vlm=vlm,
                 system_prompt=config.system_prompt,
                 frame_max_age_s=config.frame_max_age_s,

@@ -84,7 +84,7 @@ async def test_voice_session_queues_external_responses_through_active_processor(
     processor = _HandlerProcessor()
     session._io_processor = processor  # type: ignore[assignment]  # noqa: SLF001
 
-    await session._enqueue_response(  # noqa: SLF001
+    await session.enqueue_response(
         "alice",
         "Careful.",
         interrupt=True,
@@ -138,7 +138,7 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(
 
     async with session:
         assert not ready_file.exists()
-        run_task = asyncio.create_task(session._run(input_sink))  # noqa: SLF001
+        run_task = asyncio.create_task(session.run(input_sink))
         await runner_started.wait()
         await asyncio.sleep(0)
         assert not ready_file.exists()
@@ -183,6 +183,8 @@ async def test_voice_session_defers_default_transport_until_services_are_ready(
     )
 
     assert transports == []
+    with pytest.raises(RuntimeError, match="not ready"):
+        _ = session.endpoint
     async with session:
         assert session.transport is transports[0]
 

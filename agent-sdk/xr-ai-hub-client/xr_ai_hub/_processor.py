@@ -74,6 +74,7 @@ FrameDataCallback   = Callable[[FrameData],   Awaitable[None]]
 AudioCallback       = Callable[[AudioChunk],       Awaitable[None]]
 DataCallback        = Callable[[DataMessage],      Awaitable[None]]
 ParticipantCallback = Callable[[ParticipantEvent], Awaitable[None]]
+CallbackUnsubscribe = Callable[[], None]
 
 # Reserved topic for internal SDK status messages — not forwarded to app callbacks.
 AGENT_STATUS_TOPIC = "_agent.status"
@@ -358,7 +359,16 @@ class ProcessorEndpoint:
     def on_frame(self,       cb: FrameSignalCallback) -> None: self._frame_cbs.append(cb)
     def on_frame_data(self,  cb: FrameDataCallback)   -> None: self._frame_data_cbs.append(cb)
     def on_audio(self,       cb: AudioCallback)       -> None: self._audio_cbs.append(cb)
-    def on_data(self,        cb: DataCallback)        -> None: self._data_cbs.append(cb)
+    def on_data(self, cb: DataCallback) -> CallbackUnsubscribe:
+        """Register a data callback and return an idempotent unsubscriber."""
+
+        self._data_cbs.append(cb)
+
+        def unsubscribe() -> None:
+            if cb in self._data_cbs:
+                self._data_cbs.remove(cb)
+
+        return unsubscribe
     def on_participant(self, cb: ParticipantCallback) -> None: self._participant_cbs.append(cb)
 
     # ── return path ───────────────────────────────────────────────────────────

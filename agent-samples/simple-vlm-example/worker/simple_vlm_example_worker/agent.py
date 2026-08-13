@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from contextlib import suppress
 
 import nemo_relay
@@ -36,9 +37,10 @@ INTERRUPTED_TOPIC = Topic("simple-vlm.interrupted", VoiceInterrupted)
 class SimpleVlmAgent(Agent):
     """Own streamed user turns and cancellation around a vision tool."""
 
-    def __init__(self, vision: StreamingVisionTool) -> None:
+    def __init__(self, vision_factory: Callable[[], StreamingVisionTool]) -> None:
         super().__init__()
-        self.vision = vision
+        self._vision_factory = vision_factory
+        self._vision: StreamingVisionTool | None = None
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     @subscribe(USER_QUERY_TOPIC)
@@ -71,7 +73,8 @@ class SimpleVlmAgent(Agent):
         if participant_id is None:
             raise ValueError("participant-left events require a participant")
         await self._cancel(participant_id)
-        self.vision.release(participant_id)
+        if self._vision is not None:
+            self._vision.release(participant_id)
 
     @subscribe(INTERRUPTED_TOPIC)
     async def interrupted(
@@ -113,9 +116,12 @@ class SimpleVlmAgent(Agent):
             raise ValueError("simple VLM queries require a participant")
         first = True
         opened = False
-        stream = self.vision.stream(
+        if self._vision is None:
+            self._vision = self._vision_factory()
+        stream = self._vision.stream(
             VisionRequest(participant_id=participant_id, query=request.text)
         )
+        cancelled = False
         try:
             try:
                 async for chunk in stream:
@@ -135,8 +141,11 @@ class SimpleVlmAgent(Agent):
                 close = getattr(stream, "aclose", None)
                 if close is not None:
                     await close()
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
         finally:
-            if opened:
+            if opened and not cancelled:
                 with suppress(RuntimeClosedError):
                     await ctx.publish(
                         VOICE_OUTPUT_TOPIC,
@@ -145,7 +154,6 @@ class SimpleVlmAgent(Agent):
                             timestamp_us=request.timestamp_us,
                         ),
                     )
-
     async def _cancel(self, participant_id: str) -> None:
         task = self._tasks.pop(participant_id, None)
         if task is None:
@@ -169,17 +177,6 @@ class SimpleVlmAgent(Agent):
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(participant_id) is task:
             self._tasks.pop(participant_id, None)
-        if task.cancelled():
-            return
-        error = task.exception()
-        if error is not None:
-            task.get_loop().call_exception_handler(
-                {
-                    "message": "simple VLM response task failed",
-                    "exception": error,
-                    "task": task,
-                }
-            )
 
 
 __all__ = [

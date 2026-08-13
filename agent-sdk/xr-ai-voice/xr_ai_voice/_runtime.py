@@ -21,6 +21,9 @@ from ._types import VoiceQuery
 
 QueryTransform = Callable[[str], str]
 
+_OPEN_STREAM_CAPACITY = 1024
+_CLOSED_STREAM_CAPACITY = 1024
+
 
 class UserQuery(BaseModel):
     """One accepted user query emitted by the voice input boundary."""
@@ -158,7 +161,7 @@ class VoiceAgent(Agent):
         query_topic: Topic[UserQuery],
         response_capacity: int = 32,
         text_input: bool = True,
-        text_ignore_topics: Iterable[str] = (),
+        text_ignore_topics: Iterable[str] | None = None,
         text_transform: QueryTransform | None = None,
         participant_left_topic: Topic[VoiceParticipantLeft] | None = None,
         interrupted_topic: Topic[VoiceInterrupted] | None = None,
@@ -171,7 +174,9 @@ class VoiceAgent(Agent):
         self.query_topic = query_topic
         self.response_capacity = response_capacity
         self.text_input = text_input
-        self.text_ignore_topics = tuple(text_ignore_topics)
+        self.text_ignore_topics = (
+            tuple(text_ignore_topics) if text_ignore_topics is not None else (session.text_topic,)
+        )
         self.text_transform = text_transform
         self.participant_left_topic = participant_left_topic
         self.interrupted_topic = interrupted_topic
@@ -181,6 +186,7 @@ class VoiceAgent(Agent):
         self._output_lock = asyncio.Lock()
         self._streams: dict[tuple[str, str, str], _ResponseStream] = {}
         self._response_traces: dict[tuple[str, str, str], _ResponseTrace] = {}
+        self._closed_streams: dict[tuple[str, str, str], None] = {}
 
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""
@@ -193,12 +199,13 @@ class VoiceAgent(Agent):
             raise ValueError("voice agent source must not be empty")
         self._runtime = runtime
         self._source = source
+        unsubscribe: Callable[[], None] | None = None
         try:
             await self.session.__aenter__()
             try:
                 if self.text_input:
-                    self.session.transport.endpoint.on_data(self._on_data)
-                await self.session._run(
+                    unsubscribe = self.session.endpoint.on_data(self._on_data)
+                await self.session.run(
                     self._publish_input,
                     on_participant_left=(
                         self._publish_participant_left
@@ -213,9 +220,12 @@ class VoiceAgent(Agent):
                     interrupt_on_supersede=self.interrupt_on_supersede,
                 )
             finally:
+                if unsubscribe is not None:
+                    unsubscribe()
                 await asyncio.gather(
                     *(stream.aclose() for stream in tuple(self._streams.values()))
                 )
+                self._closed_streams.clear()
                 await self.session.close()
         finally:
             self._runtime = None
@@ -224,12 +234,6 @@ class VoiceAgent(Agent):
     @subscribe(VOICE_OUTPUT_TOPIC)
     async def output(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
         """Send one voice message using participant and producer metadata."""
-
-        async with self._output_lock:
-            await self._output(output, ctx)
-
-    async def _output(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
-        """Serialize access to response aggregation and the session FIFO."""
 
         metadata = ctx.metadata
         participant_id = metadata.participant_id
@@ -241,36 +245,11 @@ class VoiceAgent(Agent):
             else metadata.timestamp_us
         )
         if output.response_id is None:
-            with self._response_scope(
-                participant_id=participant_id,
-                source=metadata.source,
-                response_id=None,
-                correlation_id=metadata.correlation_id,
-                text=output.text,
-                fragment_count=1,
-                interrupt=output.interrupt,
-                timestamp_us=timestamp_us,
-                streaming=False,
-                status="completed",
-            ):
-                await self.session._enqueue_response(
-                    participant_id,
-                    output.text,
-                    interrupt=output.interrupt,
-                    pts_us=timestamp_us,
-                )
-            return
-
-        key = (participant_id, metadata.source, output.response_id)
-        stream = self._streams.get(key)
-        if stream is None:
-            if output.final:
-                if not output.text.strip():
-                    raise ValueError("voice stream terminator has no open response")
+            async with self._output_lock:
                 with self._response_scope(
                     participant_id=participant_id,
                     source=metadata.source,
-                    response_id=output.response_id,
+                    response_id=None,
                     correlation_id=metadata.correlation_id,
                     text=output.text,
                     fragment_count=1,
@@ -279,42 +258,85 @@ class VoiceAgent(Agent):
                     streaming=False,
                     status="completed",
                 ):
-                    await self.session._enqueue_response(
+                    await self.session.enqueue_response(
                         participant_id,
                         output.text,
                         interrupt=output.interrupt,
                         pts_us=timestamp_us,
                     )
+            return
+
+        key = (participant_id, metadata.source, output.response_id)
+        stream: _ResponseStream
+        async with self._output_lock:
+            if key in self._closed_streams:
                 return
-            stream = _ResponseStream(
-                self.response_capacity,
-                lambda closed: self._discard_stream(key, closed),
-            )
-            self._streams[key] = stream
-            self._response_traces[key] = _ResponseTrace(
-                participant_id=participant_id,
-                source=metadata.source,
-                response_id=output.response_id,
-                correlation_id=metadata.correlation_id,
-                timestamp_us=timestamp_us,
-                interrupt=output.interrupt,
-            )
-            await self.session._enqueue_response(
-                participant_id,
-                stream,
-                interrupt=output.interrupt,
-                pts_us=timestamp_us,
-            )
-        trace = self._response_traces[key]
-        trace.fragments.append(output.text)
-        trace.interrupt = trace.interrupt or output.interrupt
+            existing = self._streams.get(key)
+            if existing is None:
+                if output.final:
+                    if not output.text.strip():
+                        raise ValueError("voice stream terminator has no open response")
+                    with self._response_scope(
+                        participant_id=participant_id,
+                        source=metadata.source,
+                        response_id=output.response_id,
+                        correlation_id=metadata.correlation_id,
+                        text=output.text,
+                        fragment_count=1,
+                        interrupt=output.interrupt,
+                        timestamp_us=timestamp_us,
+                        streaming=False,
+                        status="completed",
+                    ):
+                        await self.session.enqueue_response(
+                            participant_id,
+                            output.text,
+                            interrupt=output.interrupt,
+                            pts_us=timestamp_us,
+                        )
+                    return
+                if len(self._streams) >= _OPEN_STREAM_CAPACITY:
+                    oldest_key = next(iter(self._streams))
+                    await self._streams[oldest_key].aclose()
+                stream = _ResponseStream(
+                    self.response_capacity,
+                    lambda closed: self._discard_stream(key, closed),
+                )
+                trace = _ResponseTrace(
+                    participant_id=participant_id,
+                    source=metadata.source,
+                    response_id=output.response_id,
+                    correlation_id=metadata.correlation_id,
+                    timestamp_us=timestamp_us,
+                    interrupt=output.interrupt,
+                )
+                await self.session.enqueue_response(
+                    participant_id,
+                    stream,
+                    interrupt=output.interrupt,
+                    pts_us=timestamp_us,
+                )
+                if stream.closed.is_set():
+                    self._remember_closed_stream(key)
+                    return
+                self._streams[key] = stream
+                self._response_traces[key] = trace
+            else:
+                stream = existing
+                if output.interrupt:
+                    raise ValueError("only the first chunk of a voice stream may interrupt")
+
+            trace = self._response_traces[key]
+            trace.fragments.append(output.text)
+            trace.interrupt = trace.interrupt or output.interrupt
+
         await stream.send(output.text)
         if output.final:
-            try:
-                self._finish_response_trace(key, status="completed")
-            finally:
-                await stream.aclose()
-
+            async with self._output_lock:
+                if self._streams.get(key) is stream:
+                    self._finish_response_trace(key, status="completed")
+                    await stream.aclose()
+                    await stream.aclose()
     async def _publish_input(self, query: VoiceQuery) -> None:
         runtime = self._running_runtime()
         await runtime.publish(
@@ -327,8 +349,7 @@ class VoiceAgent(Agent):
     async def _publish_participant_left(self, participant_id: str) -> None:
         runtime = self._running_runtime()
         topic = self.participant_left_topic
-        if topic is None:
-            return
+        assert topic is not None
         await runtime.publish(
             topic,
             VoiceParticipantLeft(),
@@ -339,8 +360,7 @@ class VoiceAgent(Agent):
     async def _publish_interrupted(self, participant_id: str | None) -> None:
         runtime = self._running_runtime()
         topic = self.interrupted_topic
-        if topic is None:
-            return
+        assert topic is not None
         await runtime.publish(
             topic,
             VoiceInterrupted(),
@@ -358,9 +378,17 @@ class VoiceAgent(Agent):
         key: tuple[str, str, str],
         stream: _ResponseStream,
     ) -> None:
+        self._remember_closed_stream(key)
         if self._streams.get(key) is stream:
             self._streams.pop(key, None)
         self._finish_response_trace(key, status="closed")
+
+    def _remember_closed_stream(self, key: tuple[str, str, str]) -> None:
+        self._closed_streams.pop(key, None)
+        self._closed_streams[key] = None
+        if len(self._closed_streams) > _CLOSED_STREAM_CAPACITY:
+            oldest = next(iter(self._closed_streams))
+            self._closed_streams.pop(oldest, None)
 
     def _finish_response_trace(
         self,
@@ -421,7 +449,6 @@ class VoiceAgent(Agent):
             timestamp=started_at,
             end_timestamp=datetime.now(UTC) if started_at is not None else None,
         )
-
     async def _on_data(self, message: DataMessage) -> None:
         if message.topic in self.text_ignore_topics:
             return
@@ -432,13 +459,15 @@ class VoiceAgent(Agent):
             self.session.transport.set_target_participant(message.participant_id)
         if self.text_transform is not None:
             text = self.text_transform(text)
+        text = text.strip()
+        if not text:
+            return
         logger.info("text input pid={!r} {!r}", message.participant_id, text[:80])
-        await self.session._enqueue_query(
+        await self.session.enqueue_query(
             message.participant_id,
             text,
             pts_us=message.pts_us,
         )
-
 
 __all__ = [
     "VOICE_OUTPUT_TOPIC",

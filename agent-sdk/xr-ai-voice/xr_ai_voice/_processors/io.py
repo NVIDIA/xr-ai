@@ -50,7 +50,7 @@ class _VoiceIOProcessor(FrameProcessor):
         self,
         input_sink: VoiceInputSink,
         *,
-        transport: "HubVoiceTransport | None" = None,
+        transport: HubVoiceTransport | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
         on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
         interrupt_on_supersede: bool = False,
@@ -62,6 +62,7 @@ class _VoiceIOProcessor(FrameProcessor):
         self._on_interrupted = on_interrupted
         self._interrupt_on_supersede = interrupt_on_supersede
         self._inflight: dict[str, asyncio.Task[None]] = {}
+        self._input_tasks: set[asyncio.Task[None]] = set()
         self._queued: dict[str, deque[_QueuedResponse]] = {}
         self._turn_tokens: dict[str, object] = {}
         # Completed output may still be draining through TTS when new input arrives.
@@ -157,19 +158,14 @@ class _VoiceIOProcessor(FrameProcessor):
             frame_to_push = InterruptionFrame()
             frame_to_push.transport_source = pid
             await self.push_frame(frame_to_push)
-        await self._start_query(frame)
-
-    async def _start_query(self, frame: GatedQueryFrame) -> None:
-        pid = frame.participant_id
-        token = object()
-        self._turn_tokens[pid] = token
         task = asyncio.create_task(
-            self._run_query(frame, token),
+            self._run_query(frame),
             name=f"voice-input-{pid}",
         )
-        self._inflight[pid] = task
+        self._input_tasks.add(task)
+        task.add_done_callback(self._input_tasks.discard)
 
-    async def _run_query(self, frame: GatedQueryFrame, token: object) -> None:
+    async def _run_query(self, frame: GatedQueryFrame) -> None:
         pid = frame.participant_id
         try:
             await self._input_sink(
@@ -183,11 +179,6 @@ class _VoiceIOProcessor(FrameProcessor):
             raise
         except Exception:
             logger.exception("voice input sink raised pid={!r}", pid)
-        finally:
-            if self._turn_tokens.get(pid) is token:
-                self._turn_tokens.pop(pid, None)
-                self._inflight.pop(pid, None)
-                await self._start_next(pid)
 
     async def _spawn_response(self, item: _QueuedResponse) -> None:
         pid = item.participant_id
@@ -268,7 +259,9 @@ class _VoiceIOProcessor(FrameProcessor):
                 await self._push_text(response, pid=pid)
             return
         async for chunk in response:
-            if not chunk or self._turn_tokens.get(pid) is not token:
+            if self._turn_tokens.get(pid) is not token:
+                return
+            if not chunk:
                 continue
             accumulated.append(chunk)
             await self._push_text(chunk, pid=pid)
@@ -324,10 +317,14 @@ class _VoiceIOProcessor(FrameProcessor):
             return
         result = close()
         if inspect.isawaitable(result):
-            await result
+            _ = await result
 
     async def _shutdown(self) -> None:
-        tasks = [task for task in self._inflight.values() if not task.done()]
+        tasks = [
+            task
+            for task in (*self._inflight.values(), *self._input_tasks)
+            if not task.done()
+        ]
         await self._cancel_all()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -342,6 +339,10 @@ class _VoiceIOProcessor(FrameProcessor):
         self._queued.clear()
         self._inflight.clear()
         self._turn_tokens.clear()
+        for task in self._input_tasks:
+            if not task.done():
+                task.cancel()
+        self._input_tasks.clear()
 
 
 __all__ = ["_VoiceIOProcessor"]

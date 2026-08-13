@@ -20,8 +20,10 @@ endpoint = ProcessorEndpoint(
 async def on_data(message: DataMessage) -> None:
     print(message.participant_id, message.topic)
 
-endpoint.on_data(on_data)
+unsubscribe = endpoint.on_data(on_data)
 await endpoint.run()
+
+unsubscribe()  # Remove the callback when its owner stops.
 ```
 
 `LiveFrameSource` adds raw frame acquisition without adding image conversion or

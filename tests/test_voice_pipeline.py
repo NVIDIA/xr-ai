@@ -1153,6 +1153,70 @@ async def test_runtime_input_can_enqueue_incremental_voice_output():
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_interrupting_response_does_not_cancel_query_delivery() -> None:
+    query_started = asyncio.Event()
+    release_query = asyncio.Event()
+
+    async def input_sink(_query: VoiceQuery) -> None:
+        query_started.set()
+        await release_query.wait()
+
+    assistant = _VoiceIOProcessor(input_sink)
+
+    async def capture(
+        _frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        return None
+
+    assistant.push_frame = capture  # type: ignore[method-assign]
+    await assistant.enqueue_query("pid-1", "look")
+    await asyncio.wait_for(query_started.wait(), 1.0)
+    input_task = next(iter(assistant._input_tasks))  # noqa: SLF001
+
+    await assistant.enqueue_response("pid-1", "answer", interrupt=True)
+    await asyncio.wait_for(assistant._inflight["pid-1"], 1.0)  # noqa: SLF001
+
+    assert not input_task.cancelled()
+    release_query.set()
+    await asyncio.wait_for(input_task, 1.0)
+
+
+@pytest.mark.asyncio
+async def test_failed_response_iterator_is_closed() -> None:
+    class FailingStream:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self) -> str:
+            raise RuntimeError("producer failed")
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    async def input_sink(_query: VoiceQuery) -> None:
+        return None
+
+    stream = FailingStream()
+    assistant = _VoiceIOProcessor(input_sink)
+
+    async def capture(
+        _frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        return None
+
+    assistant.push_frame = capture  # type: ignore[method-assign]
+    await assistant.enqueue_response("pid-1", stream)
+    await asyncio.wait_for(assistant._inflight["pid-1"], 1.0)  # noqa: SLF001
+
+    assert stream.closed is True
+
+
 async def test_external_response_stream_uses_normal_assistant_output_frames() -> None:
     frames: list[Frame] = []
 
@@ -1171,7 +1235,7 @@ async def test_external_response_stream_uses_normal_assistant_output_frames() ->
     assistant.push_frame = capture  # type: ignore[method-assign]
     await assistant.enqueue_response("pid-1", chunks(), pts_us=42)
     task = assistant._inflight["pid-1"]  # noqa: SLF001
-    await task
+    _ = await task
 
     assert [frame.text for frame in frames if isinstance(frame, TextFrame)] == [
         "The kettle ",
@@ -1236,8 +1300,11 @@ async def test_external_responses_preserve_participant_fifo() -> None:
 
     assert len(assistant._queued["pid-1"]) == 1  # noqa: SLF001
     release_first.set()
-    while assistant._inflight:  # noqa: SLF001
-        await asyncio.gather(*tuple(assistant._inflight.values()))  # noqa: SLF001
+    async def wait_until_idle() -> None:
+        while assistant._inflight:  # noqa: SLF001
+            await asyncio.gather(*tuple(assistant._inflight.values()))  # noqa: SLF001
+
+    await asyncio.wait_for(wait_until_idle(), 1.0)
 
     assert [frame.text for frame in frames if isinstance(frame, TextFrame)] == [
         "first ",
@@ -1349,6 +1416,29 @@ async def test_voice_io_closes_cancelled_response_stream() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_participant_left_clears_seen_output_state() -> None:
+    async def input_sink(_query: VoiceQuery) -> None:
+        return None
+
+    assistant = _VoiceIOProcessor(input_sink)
+    assistant._seen_output.add("pid-1")  # noqa: SLF001
+
+    async def capture(
+        _frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        return None
+
+    assistant.push_frame = capture  # type: ignore[method-assign]
+    await assistant.process_frame(
+        ParticipantLeftFrame(participant_id="pid-1"),
+        FrameDirection.DOWNSTREAM,
+    )
+
+    assert "pid-1" not in assistant._seen_output  # noqa: SLF001
+
+
 async def test_assistant_notifies_external_runtime_on_interruption_frame():
     interrupted: list[str | None] = []
 

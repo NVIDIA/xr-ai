@@ -89,6 +89,11 @@ These scopes measure provider work and downstream handoff, not client playback.
 
 `VoiceSession` is the media engine owned by `VoiceAgent`. It manages
 readiness, hub transport, VAD/STT, voice gating, TTS, signals, and cleanup. It
+The lower-level `VoiceSession.run()`, `enqueue_query()`, and
+`enqueue_response()` methods are public for runtime integrations.
+`VoiceSession.endpoint` is available only after entering the session, so model
+health probes complete before the default hub transport opens its sockets.
+
 does not execute application handlers. Typed-text ingress is also internal to
 `VoiceAgent`.
 

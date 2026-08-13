@@ -13,6 +13,7 @@ from typing import Any
 
 from loguru import logger
 from pipecat.pipeline.runner import PipelineRunner
+from xr_ai_hub import ProcessorEndpoint
 from xr_ai_models import STTService, TTSService
 from xr_ai_voicegate import VoiceGateConfig
 
@@ -74,6 +75,14 @@ class VoiceSession:
         return self._transport
 
     @property
+    def endpoint(self) -> ProcessorEndpoint:
+        """Return the hub endpoint after readiness has initialized the transport."""
+
+        if self._transport is None:
+            raise RuntimeError("voice session endpoint is not ready")
+        return self._transport.endpoint
+
+    @property
     def is_running(self) -> bool:
         """Whether the session currently accepts voice or text queries."""
         return self._io_processor is not None
@@ -94,7 +103,7 @@ class VoiceSession:
             raise
         return self
 
-    async def _run(
+    async def run(
         self,
         input_sink: VoiceInputSink,
         *,
@@ -185,7 +194,7 @@ class VoiceSession:
             for sig in installed:
                 loop.remove_signal_handler(sig)
 
-    async def _enqueue_query(
+    async def enqueue_query(
         self,
         participant_id: str,
         text: str,
@@ -201,7 +210,7 @@ class VoiceSession:
             pts_us=pts_us,
         )
 
-    async def _enqueue_response(
+    async def enqueue_response(
         self,
         participant_id: str,
         response: VoiceResponse,
