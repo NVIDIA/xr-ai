@@ -1,60 +1,43 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""CPU-only tests for native text memory and its generic MCP adapter."""
+"""CPU-only tests for native text-memory tools."""
 
-from __future__ import annotations
-
-import importlib
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
-from fastmcp import Client as McpClient
-from nat.builder.workflow_builder import WorkflowBuilder
-from xr_ai_nat.functions.text_memory import TextMemoryFunctionsConfig
-from xr_ai_nat.functions.text_memory.functions import (
-    TranscriptSegment,
-    TranscriptStatsResult,
+from xr_ai_tools.text_memory import (
+    AddTranscriptRequest,
+    QueryTranscriptsRequest,
+    RecallConversationRequest,
+    TextMemoryTools,
+    TranscriptStatsRequest,
     _TranscriptStore,
 )
-from xr_ai_nat.mcp import create_mcp_server
+from xr_ai_tools.types import EmptyRequest
 
 
-@asynccontextmanager
-async def _functions(directory):
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "text_memory",
-            TextMemoryFunctionsConfig(directory=directory),
-        )
-        group = await builder.get_function_group("text_memory")
-        yield await group.get_all_functions()
+async def test_text_memory_tools_persist_query_and_summarize(tmp_path: Path) -> None:
+    memory = TextMemoryTools(tmp_path)
 
+    await memory.add_transcript.execute(
+        AddTranscriptRequest(source_id="alice@home", timestamp_us=20, text="later")
+    )
+    await memory.add_transcript.execute(
+        AddTranscriptRequest(source_id="alice@home", timestamp_us=10, text="first")
+    )
 
-async def test_text_memory_functions_persist_query_and_summarize(tmp_path) -> None:
-    async with _functions(tmp_path) as functions:
-        assert set(functions) == {
-            "text_memory__add_transcript",
-            "text_memory__get_transcript_stats",
-            "text_memory__list_sources",
-            "text_memory__query_transcripts",
-        }
-        add = functions["text_memory__add_transcript"]
-        query = functions["text_memory__query_transcripts"]
-        sources = functions["text_memory__list_sources"]
-        stats = functions["text_memory__get_transcript_stats"]
-        assert sources.input_schema.model_json_schema()["properties"] == {}
+    segments = await memory.query_transcripts.execute(
+        QueryTranscriptsRequest(source_id="alice@home", start_us=0, end_us=20)
+    )
+    source_ids = await memory.list_sources.execute(EmptyRequest())
+    summary = await memory.get_transcript_stats.execute(
+        TranscriptStatsRequest(source_id="alice@home")
+    )
+    missing = await memory.get_transcript_stats.execute(
+        TranscriptStatsRequest(source_id="missing")
+    )
 
-        await add.ainvoke({"source_id": "alice@home", "timestamp_us": 20, "text": "later"})
-        await add.ainvoke({"source_id": "alice@home", "timestamp_us": 10, "text": "first"})
-
-        segments = await query.ainvoke(
-            {"source_id": "alice@home", "start_us": 0, "end_us": 20}
-        )
-        source_ids = await sources.ainvoke({})
-        summary = await stats.ainvoke({"source_id": "alice@home"})
-        missing = await stats.ainvoke({"source_id": "missing"})
     assert [segment.text for segment in segments.segments] == ["first", "later"]
     assert source_ids.sources == ["alice@home"]
     assert summary.model_dump() == {
@@ -74,52 +57,42 @@ async def test_text_memory_functions_persist_query_and_summarize(tmp_path) -> No
     assert (tmp_path / "alice_home.identity").read_text() == "alice@home"
 
 
-async def test_generic_mcp_adapter_preserves_list_and_object_results(tmp_path) -> None:
-    async with _functions(tmp_path) as functions:
-        exports = [
-            functions["text_memory__add_transcript"],
-            functions["text_memory__query_transcripts"],
-        ]
-        server = create_mcp_server(
-            "text-memory-test",
-            exports,
-            tool_names={
-                "text_memory__add_transcript": "add_transcript",
-                "text_memory__query_transcripts": "query_transcripts",
-            },
+async def test_text_memory_recalls_role_scoped_conversation(tmp_path: Path) -> None:
+    memory = TextMemoryTools(tmp_path)
+    for source, timestamp, text in (
+        ("alice:user", 10, "hello"),
+        ("alice:agent", 10, "hi"),
+        ("alice:user", 20, "remember this"),
+    ):
+        await memory.add_transcript.execute(
+            AddTranscriptRequest(source_id=source, timestamp_us=timestamp, text=text)
         )
-        async with McpClient(server) as client:
-            tools = {tool.name: tool for tool in await client.list_tools()}
-            added = await client.call_tool(
-                "add_transcript",
-                {"source_id": "agent", "timestamp_us": 100, "text": "remember this"},
-            )
-            queried = await client.call_tool(
-                "query_transcripts",
-                {"source_id": "agent", "start_us": 0, "end_us": 200},
-            )
-    assert set(tools) == {"add_transcript", "query_transcripts"}
-    assert set(tools["add_transcript"].inputSchema["properties"]) == {
-        "source_id",
-        "timestamp_us",
-        "text",
-    }
-    assert added.structured_content == {"ok": True}
-    assert queried.structured_content == {
-        "segments": [{"timestamp_us": 100, "text": "remember this"}]
-    }
+
+    result = await memory.recall_conversation.execute(
+        RecallConversationRequest(participant_id="alice", end_us=10)
+    )
+
+    assert [(entry.role, entry.text) for entry in result.entries] == [
+        ("user", "hello"),
+        ("agent", "hi"),
+    ]
 
 
-async def test_text_memory_disambiguates_sanitized_source_names(tmp_path) -> None:
-    async with _functions(tmp_path) as functions:
-        add = functions["text_memory__add_transcript"]
-        query = functions["text_memory__query_transcripts"]
-        await add.ainvoke({"source_id": "room/a", "timestamp_us": 1, "text": "slash"})
-        await add.ainvoke({"source_id": "room?a", "timestamp_us": 2, "text": "question"})
-        slash = await query.ainvoke({"source_id": "room/a", "start_us": 0, "end_us": 10})
-        question = await query.ainvoke(
-            {"source_id": "room?a", "start_us": 0, "end_us": 10}
-        )
+async def test_text_memory_disambiguates_sanitized_source_names(tmp_path: Path) -> None:
+    memory = TextMemoryTools(tmp_path)
+    await memory.add_transcript.execute(
+        AddTranscriptRequest(source_id="room/a", timestamp_us=1, text="slash")
+    )
+    await memory.add_transcript.execute(
+        AddTranscriptRequest(source_id="room?a", timestamp_us=2, text="question")
+    )
+
+    slash = await memory.query_transcripts.execute(
+        QueryTranscriptsRequest(source_id="room/a", start_us=0, end_us=10)
+    )
+    question = await memory.query_transcripts.execute(
+        QueryTranscriptsRequest(source_id="room?a", start_us=0, end_us=10)
+    )
 
     assert [segment.text for segment in slash.segments] == ["slash"]
     assert [segment.text for segment in question.segments] == ["question"]
@@ -137,26 +110,3 @@ def test_text_memory_store_does_not_follow_identity_symlinks(tmp_path: Path) -> 
 
     with pytest.raises(ValueError, match="escapes transcript directory"):
         store.query("malicious", 0, 1)
-
-
-def test_text_memory_schemas_alias_forwards_transcript_segment() -> None:
-    from xr_ai_nat.functions.text_memory import schemas as schemas_module
-
-    assert schemas_module.TranscriptSegment is TranscriptSegment
-    # TranscriptStats was renamed but kept the same fields, so it stays as an alias.
-    assert schemas_module.TranscriptStats is TranscriptStatsResult
-    assert schemas_module.__all__ == ["TranscriptSegment", "TranscriptStats"]
-
-    with pytest.warns(DeprecationWarning, match="text_memory"):
-        importlib.reload(schemas_module)
-
-
-async def test_mcp_adapter_rejects_ambiguous_or_unknown_names(tmp_path) -> None:
-    async with _functions(tmp_path) as functions:
-        add = functions["text_memory__add_transcript"]
-        with pytest.raises(ValueError, match="unique"):
-            create_mcp_server("duplicate", [add, add])
-        with pytest.raises(ValueError, match="unknown functions"):
-            create_mcp_server("unknown", [add], tool_names={"missing": "add"})
-        with pytest.raises(ValueError, match="unknown functions"):
-            create_mcp_server("unknown", [add], untyped_outputs={"missing"})

@@ -15,7 +15,6 @@ dependencies = [
     "xr-ai-agent-runtime",
     "xr-ai-hub-client",
     "xr-ai-models",
-    "xr-ai-nat[agents,services,vision]",
     "xr-ai-tools[live-vision,services]",
     "xr-ai-pipecat",
     "xr-ai-voice",
@@ -32,8 +31,7 @@ dependencies = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "numpy>=1.24",
-    # Direct test deps used across CPU MCP/vision/service tests and GPU coverage.
-    "fastmcp>=3.4,<4",
+    # Direct test deps used across CPU native vision/service tests and GPU coverage.
     "Pillow>=10.0",
     "pyyaml>=6.0",
 ]
@@ -42,7 +40,6 @@ dependencies = [
 xr-ai-agent-runtime      = { path = "../agent-sdk/xr-ai-agent-runtime",       editable = true }
 xr-ai-hub-client           = { path = "../agent-sdk/xr-ai-hub-client",                        editable = true }
 xr-ai-models          = { path = "../agent-sdk/xr-ai-models",           editable = true }
-xr-ai-nat             = { path = "../agent-sdk/xr-ai-nat",              editable = true }
 xr-ai-tools           = { path = "../agent-sdk/xr-ai-tools",            editable = true }
 xr-ai-pipecat         = { path = "../agent-sdk/xr-ai-pipecat",          editable = true }
 xr-ai-voice           = { path = "../agent-sdk/xr-ai-voice",            editable = true }

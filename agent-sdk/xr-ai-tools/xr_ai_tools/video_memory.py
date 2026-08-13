@@ -49,9 +49,19 @@ class QueryVideoResult(BaseModel):
 
 
 class HistoricalFrameRequest(StrictRequest):
-    participant_id: str = Field(min_length=1)
-    second_ago: int = Field(default=0, ge=0)
-    reference_time_us: int = Field(gt=0)
+    participant_id: str = Field(
+        min_length=1,
+        description="Exact participant identity whose recorded frame should be extracted.",
+    )
+    second_ago: int = Field(
+        default=0,
+        ge=0,
+        description="Whole seconds before reference_time_us.",
+    )
+    reference_time_us: int = Field(
+        gt=0,
+        description="Unix-epoch timestamp in microseconds used as the lookup reference.",
+    )
 
 
 class HistoricalFrameResult(BaseModel):
@@ -61,6 +71,11 @@ class HistoricalFrameResult(BaseModel):
     timestamp_us: int
     second_ago: int
     actual_second_ago: float
+
+
+class VideoHealthResult(BaseModel):
+    ready: bool = True
+    recording_enabled: bool
 
 
 class VideoMemoryTools:
@@ -129,6 +144,17 @@ class VideoMemoryTools:
             await self._rpc.call("get_frame_from_time", request.model_dump())
         )
 
+    async def get_health(self) -> VideoHealthResult:
+        return VideoHealthResult.model_validate(
+            await self._rpc.call("get_health", {}, timeout_s=2.0)
+        )
+
+    async def health(self) -> bool:
+        try:
+            return (await self.get_health()).ready
+        except Exception:
+            return False
+
     async def close(self) -> None:
         await self._rpc.close()
 
@@ -139,6 +165,7 @@ __all__ = [
     "ListRecordedParticipantsResult",
     "QueryVideoRequest",
     "QueryVideoResult",
+    "VideoHealthResult",
     "VideoMemoryTools",
     "VideoStatsRequest",
     "VideoStatsResult",

@@ -9,6 +9,17 @@ Significant decisions, in reverse-chronological order. Update this whenever a
 non-trivial architectural or design decision is made so the rationale is
 preserved and not re-litigated.
 
+### 2026-08-12 — NeMo Agent Toolkit compatibility is retired
+
+All surviving capabilities now use native `xr-ai-tools` contracts. OpenXR,
+video-memory, and RAG services share the toolkit-independent correlated
+msgpack/ZMQ protocol; RAG, tracking, video memory, vision, spatial math, and
+text/conversation memory expose native typed tools. The `xr-ai-nat` package,
+NAT/LangChain provider bridge, generic NAT-to-MCP adapter, migration guide, and
+NAT-only tests are removed. Restored native tests cover RPC correlation and
+remote errors, service/tool interoperability, text-memory path safety, spatial
+fallbacks, and XR scene lifecycle/resync behavior.
+
 ### 2026-08-12 — Voice lifecycle events do not block media processing
 
 `VoiceAgent` schedules participant-departure and interruption publication on

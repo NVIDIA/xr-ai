@@ -59,7 +59,7 @@ class NativeCapabilities:
         self.model = ToolSet(
             tool
             for tool in all_tools
-            if tool.name not in {"start_xr", "get_health", "get_frame_from_time"}
+            if tool.name not in {"start_xr", "get_health"}
         )
 
     def release(self, participant_id: str) -> None:

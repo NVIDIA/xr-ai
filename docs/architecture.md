@@ -13,7 +13,7 @@ design decisions see `docs/changelog.md`.
 
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-agent-sdk/          # Agent runtime, IPC, model, NAT-function, capability, and voice SDK packages
+agent-sdk/          # Agent runtime, IPC, model, native-tool, capability, and voice SDK packages
 utils/              # Shared infra: stdlib-only launcher + loguru logging bridge
 services/           # XR hub, CloudXR, model-serving, and typed XR capability services
 agent-samples/      # End-to-end agent demos

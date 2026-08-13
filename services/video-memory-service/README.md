@@ -10,8 +10,8 @@ history. XR Media Hub writes the H.264 chunks; this process reads those chunks,
 extracts PNG frames with NVDEC, and writes requested clips or frames to
 `out_dir`. It does not subscribe to live hub frames.
 
-Applications expose the service through
-`xr_ai_nat.functions.video_memory.VideoMemoryFunctionsConfig`. The native group
+Applications construct `xr_ai_tools.video_memory.VideoMemoryTools` with the
+private service endpoint. The native tool group
 contains four recorded-history operations:
 
 - `list_recorded_participants` returns exact participant identities.

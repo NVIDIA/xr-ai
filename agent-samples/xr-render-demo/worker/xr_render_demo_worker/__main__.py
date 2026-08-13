@@ -25,15 +25,15 @@ from xr_ai_voicegate import load_voice_gate_config
 from .agent import (
     INTERRUPTED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
-    RenderAgent,
     USER_QUERY_TOPIC,
+    RenderAgent,
 )
 from .config import WorkerConfig, load_config
 from .lifecycle import XRSessionLifecycle
 from .scene_loop import (
-    _LIVE_PERCEPTION_TOOL,
-    _PAST_PERCEPTION_TOOL,
-    _PERCEPTION_TOOL_DEFS,
+    LIVE_PERCEPTION_TOOL,
+    PAST_PERCEPTION_TOOL,
+    PERCEPTION_TOOL_DEFS,
     SceneModelLoop,
 )
 from .tools import NativeCapabilities
@@ -134,9 +134,9 @@ async def main(
         model_tools = [
             tool
             for tool in tool_definitions(capabilities.model)
-            if tool.name not in {_LIVE_PERCEPTION_TOOL, _PAST_PERCEPTION_TOOL}
+            if tool.name not in {LIVE_PERCEPTION_TOOL, PAST_PERCEPTION_TOOL}
         ]
-        model_tools.extend(_PERCEPTION_TOOL_DEFS)
+        model_tools.extend(PERCEPTION_TOOL_DEFS)
         logger.info("native model tools: {}", [tool.name for tool in model_tools])
 
         scene_loop = SceneModelLoop(
@@ -151,7 +151,6 @@ async def main(
             agent_llm=agent_llm,
         )
         runtime = AgentRuntime()
-        owned_tools = tuple(tool for _name, tool in capabilities.all.items())
         voice = VoiceAgent(
             session,
             query_topic=USER_QUERY_TOPIC,
@@ -160,12 +159,13 @@ async def main(
             interrupted_topic=INTERRUPTED_TOPIC,
         )
         runtime.register("voice", voice)
-        render = runtime.register("xr-render", RenderAgent(scene_loop, owned_tools))
+        render = runtime.register("xr-render", RenderAgent(scene_loop))
         # The endpoint retains this bound callback for the worker lifetime.
         _lifecycle = XRSessionLifecycle(
             transport=session.transport,
             scene_loop=scene_loop,
-            tools=capabilities.all,
+            start_xr=capabilities.scene.start_xr,
+            get_health=capabilities.scene.get_health,
             runtime=runtime,
         )
 
@@ -182,6 +182,7 @@ async def main(
             llm.close(),
             agent_llm.close(),
             vlm_service.close(),
+            return_exceptions=True,
         )
     logger.info("xr_render_demo stopped")
 

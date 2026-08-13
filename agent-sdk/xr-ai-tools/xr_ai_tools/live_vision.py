@@ -75,7 +75,7 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
         try:
             image_url = await self._current_image(request.participant_id)
         except FrameUnavailable as exc:
-            return VisionResponse(text=str(exc))
+            return VisionResponse(text=str(exc), available=False)
 
         if self.manage_status:
             await self.endpoint.set_status("processing", request.participant_id)
@@ -89,10 +89,19 @@ class LiveVisionTool(Tool[VisionRequest, VisionResponse]):
                 codec=OpenAIChatCodec(),
                 response_codec=OpenAIChatCodec(),
             )
-            return VisionResponse(text=response_text(response))
+            text = response_text(response).strip()
+            if not text:
+                return VisionResponse(
+                    text="The current camera image did not produce an answer.",
+                    available=False,
+                )
+            return VisionResponse(text=text)
         except Exception:
             _LOGGER.exception("Live VLM request failed")
-            return VisionResponse(text="VLM server unavailable — please retry.")
+            return VisionResponse(
+                text="VLM server unavailable — please retry.",
+                available=False,
+            )
         finally:
             if self.manage_status:
                 await self.endpoint.set_status("idle", request.participant_id)

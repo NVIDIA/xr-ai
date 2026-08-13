@@ -8,12 +8,12 @@ import uuid
 
 import numpy as np
 import pytest
-from nat.builder.workflow_builder import WorkflowBuilder
 from pydantic import ValidationError
 from rag_service import DenseIndex, RAGService
 from rag_service.index import _chunk_text
-from xr_ai_nat.functions._service.rpc import RPCServer
-from xr_ai_nat.functions.rag import RAGFunctionsConfig, RetrieveRequest, RetrieveResult
+from xr_ai_tools.rag import RAGTools, RetrieveRequest
+from xr_ai_tools.rpc import RPCServer
+from xr_ai_tools.types import EmptyRequest
 
 
 class _Embedding:
@@ -162,7 +162,7 @@ async def test_min_score_filters_weak_matches(tmp_path) -> None:
     assert await index.retrieve("unrelated topic", top_k=1) == []
 
 
-async def test_native_function_group_uses_typed_contracts(tmp_path) -> None:
+async def test_native_rag_tools_use_typed_contracts(tmp_path) -> None:
     documents = tmp_path / "documents"
     documents.mkdir()
     (documents / "guide.md").write_text("Reset the task before starting again.")
@@ -177,25 +177,29 @@ async def test_native_function_group_uses_typed_contracts(tmp_path) -> None:
     task = asyncio.create_task(server.serve())
     await asyncio.sleep(0.02)
     try:
-        async with WorkflowBuilder() as builder:
-            await builder.add_function_group("rag", RAGFunctionsConfig(endpoint=endpoint))
-            functions = await (await builder.get_function_group("rag")).get_all_functions()
+        tools = RAGTools(endpoint)
+        try:
             schemas = {
-                name: function.input_schema.model_json_schema()
-                for name, function in functions.items()
+                tool.name: tool.request_model.model_json_schema()
+                for tool in tools.tools
             }
-            result = await functions["rag__retrieve"].ainvoke(
-                {"query": "reset", "top_k": 1},
-                to_type=RetrieveResult,
+            result = await tools.retrieve.execute(
+                RetrieveRequest(query="reset", top_k=1)
             )
-            assert result.results[0].source == "guide.md"
+            documents = await tools.list_documents.execute(EmptyRequest())
+            health = await tools.get_health()
+        finally:
+            await tools.close()
+        assert result.results[0].source == "guide.md"
+        assert documents.documents == ["guide.md"]
+        assert health.ready is True
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
-    assert set(schemas) == {"rag__retrieve", "rag__list_documents"}
-    assert schemas["rag__retrieve"]["properties"]["query"]["minLength"] == 1
-    assert schemas["rag__list_documents"].get("properties", {}) == {}
+    assert set(schemas) == {"retrieve", "list_documents"}
+    assert schemas["retrieve"]["properties"]["query"]["minLength"] == 1
+    assert schemas["list_documents"].get("properties", {}) == {}
 
 
 def test_retrieve_request_rejects_blank_query() -> None:

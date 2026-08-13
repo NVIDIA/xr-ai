@@ -31,9 +31,13 @@ class VisionRequest(BaseModel):
 
 
 class VisionResponse(BaseModel):
-    """A complete answer about the current frame."""
+    """A complete answer and whether current-frame perception succeeded."""
 
     text: str = Field(description="Complete answer text.")
+    available: bool = Field(
+        default=True,
+        description="Whether a current frame produced a usable visual answer.",
+    )
 
 
 class VisionChunk(BaseModel):

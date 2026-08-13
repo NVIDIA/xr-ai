@@ -5,18 +5,15 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
-import uuid
 from contextlib import suppress
 
 from loguru import logger
 from xr_ai_hub import DataMessage
-from xr_ai_models import ToolCall
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError
-from xr_ai_tools import ToolSet
-from xr_ai_tools.tool_calling import handle_tool_call
+from xr_ai_tools import Tool
 from xr_ai_voice import HubVoiceTransport
+from xr_render_scene import EmptyRequest
 
 from .agent import RENDER_NOTICE_TOPIC, RenderNotice
 from .scene_loop import SceneModelLoop
@@ -37,12 +34,14 @@ class XRSessionLifecycle:
         *,
         transport: HubVoiceTransport,
         scene_loop: SceneModelLoop,
-        tools: ToolSet,
+        start_xr: Tool,
+        get_health: Tool,
         runtime: AgentRuntime,
     ) -> None:
         self._transport = transport
         self._scene_loop = scene_loop
-        self._tools = tools
+        self._start_xr = start_xr
+        self._get_health = get_health
         self._runtime = runtime
 
         self._xr_started = False
@@ -56,7 +55,7 @@ class XRSessionLifecycle:
             return
 
         self._transport.set_target_participant(msg.participant_id)
-        self._scene_loop.reset_history()
+        self._scene_loop.reset_history(msg.participant_id)
 
         if self._xr_started:
             await self._transport.send_return_data(DataMessage(
@@ -67,7 +66,7 @@ class XRSessionLifecycle:
             return
 
         logger.info("{} from {} — calling start_xr", msg.topic, msg.participant_id)
-        start_res = await self._call_render("start_xr", {})
+        start_res = await self._call_render(self._start_xr)
         if start_res is None:
             logger.warning("start_xr failed")
             await self._notify_launch_failed(msg.participant_id)
@@ -98,7 +97,7 @@ class XRSessionLifecycle:
                 RENDER_NOTICE_TOPIC,
                 RenderNotice(
                     text="I couldn't start the XR session — try Launch XR again.",
-                    interrupt_output=True,
+                    interrupt_output=False,
                 ),
                 participant_id=pid,
                 source="xr-session",
@@ -107,7 +106,7 @@ class XRSessionLifecycle:
     async def _wait_lovr(self, timeout_s: float = 120.0) -> bool:
         deadline = asyncio.get_running_loop().time() + timeout_s
         while asyncio.get_running_loop().time() < deadline:
-            h = await self._call_render("get_health", {}, silent=True)
+            h = await self._call_render(self._get_health, silent=True)
             if h:
                 if h.get("lovr_started"):
                     return True
@@ -120,23 +119,11 @@ class XRSessionLifecycle:
 
     # ── native scene helper ───────────────────────────────────────────────────
 
-    async def _call_render(self, tool: str, args: dict, *, silent: bool = False) -> dict | None:
+    async def _call_render(self, tool: Tool, *, silent: bool = False) -> dict | None:
         try:
-            result = await handle_tool_call(
-                ToolCall(
-                    id=f"call_{uuid.uuid4().hex[:12]}",
-                    name=tool,
-                    arguments=json.dumps(args),
-                ),
-                self._tools,
-            )
-            data = json.loads(result.message.content)
-            if not isinstance(data, dict):
-                if not silent:
-                    logger.error("scene tool {} returned non-dict: {!r}", tool, data)
-                return None
-            return data
+            result = await tool.execute(EmptyRequest())
+            return result.model_dump(mode="python")
         except Exception as exc:
             if not silent:
-                logger.error("scene tool {}: {}", tool, exc)
+                logger.error("scene tool {}: {}", tool.name, exc)
             return None

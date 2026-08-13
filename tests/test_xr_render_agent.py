@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from pydantic import BaseModel
+from xr_ai_hub import DataMessage
 from xr_ai_runtime import (
     Agent,
     AgentRuntime,
@@ -17,7 +18,7 @@ from xr_ai_runtime import (
     RuntimeContext,
     subscribe,
 )
-from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools import Tool
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     UserQuery,
@@ -50,6 +51,7 @@ class _Scene:
         self.cancelled = asyncio.Event()
         self.closed = asyncio.Event()
         self.departed: list[str] = []
+        self.reset: list[str] = []
 
     async def handle_query(self, _pid: str, text: str):
         async def response():
@@ -71,8 +73,8 @@ class _Scene:
     async def handle_notice(self, _pid: str, text: str):
         yield text
 
-    def reset_history(self) -> None:
-        pass
+    def reset_history(self, participant_id: str) -> None:
+        self.reset.append(participant_id)
 
     async def on_participant_left(self, participant_id: str) -> None:
         self.departed.append(participant_id)
@@ -109,17 +111,40 @@ class _MultiScene:
 
 
 class _Endpoint:
-    def on_data(self, _callback) -> None:
-        pass
+    def __init__(self) -> None:
+        self.callback = None
+
+    def on_data(self, callback) -> None:
+        self.callback = callback
 
 
 class _Transport:
     def __init__(self) -> None:
         self.endpoint = _Endpoint()
+        self.target: str | None = None
+        self.sent = []
+
+    def set_target_participant(self, participant_id: str) -> None:
+        self.target = participant_id
+
+    async def send_return_data(self, message) -> None:
+        self.sent.append(message)
 
 
 class _ToolResult(BaseModel):
     status: str = "ok"
+    lovr_started: bool = False
+    spawn_error: str | None = None
+
+
+def _tool(name: str, handler=None) -> Tool:
+    return Tool(
+        name,
+        f"{name} test tool.",
+        EmptyRequest,
+        _ToolResult,
+        handler or (lambda _request: _ToolResult()),
+    )
 
 
 class _VoiceRecorder(Agent):
@@ -157,7 +182,7 @@ async def test_render_agent_publishes_incremental_voice_output() -> None:
     scene = _Scene()
     output = _VoiceRecorder()
     runtime = AgentRuntime()
-    runtime.register("xr-render", RenderAgent(scene, ()))  # type: ignore[arg-type]
+    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
     runtime.register("test-output", output)
 
     async with runtime:
@@ -185,7 +210,7 @@ async def test_render_agent_supersedes_a_participant_turn() -> None:
     scene = _Scene()
     output = _VoiceRecorder()
     runtime = AgentRuntime()
-    runtime.register("xr-render", RenderAgent(scene, ()))  # type: ignore[arg-type]
+    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
     runtime.register("test-output", output)
 
     async with runtime:
@@ -219,26 +244,17 @@ async def test_render_agent_supersedes_a_participant_turn() -> None:
     assert chunks[0].response_id != chunks[2].response_id
 
 
-async def test_launch_failure_notice_reaches_voice_with_interrupt_and_terminator() -> None:
+async def test_launch_failure_notice_reaches_voice_without_interrupt_and_with_terminator() -> None:
     scene = _Scene()
     output = _VoiceRecorder()
     runtime = AgentRuntime()
-    runtime.register("xr-render", RenderAgent(scene, ()))  # type: ignore[arg-type]
+    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
     runtime.register("test-output", output)
     lifecycle = XRSessionLifecycle(
         transport=_Transport(),  # type: ignore[arg-type]
         scene_loop=scene,  # type: ignore[arg-type]
-        tools=ToolSet(
-            (
-                Tool(
-                    "start_xr",
-                    "Start XR.",
-                    EmptyRequest,
-                    _ToolResult,
-                    lambda _request: _ToolResult(),
-                ),
-            )
-        ),
+        start_xr=_tool("start_xr"),
+        get_health=_tool("get_health"),
         runtime=runtime,
     )
 
@@ -250,7 +266,7 @@ async def test_launch_failure_notice_reaches_voice_with_interrupt_and_terminator
     metadata = [event_metadata for _chunk, event_metadata in output.events]
     assert len(chunks) == 2
     assert "Launch XR again" in chunks[0].text
-    assert chunks[0].interrupt is True
+    assert chunks[0].interrupt is False
     assert chunks[0].final is False
     assert chunks[1].text == ""
     assert chunks[1].final is True
@@ -262,7 +278,7 @@ async def test_interruption_closes_scene_without_orphan_terminator() -> None:
     scene = _Scene()
     output = _VoiceRecorder()
     runtime = AgentRuntime()
-    runtime.register("xr-render", RenderAgent(scene, ()))  # type: ignore[arg-type]
+    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
     runtime.register("test-output", output)
 
     async with runtime:
@@ -290,7 +306,7 @@ async def test_participant_departure_cancels_without_terminator_and_releases_sta
     scene = _Scene()
     output = _VoiceRecorder()
     runtime = AgentRuntime()
-    runtime.register("xr-render", RenderAgent(scene, ()))  # type: ignore[arg-type]
+    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
     runtime.register("test-output", output)
 
     async with runtime:
@@ -317,7 +333,7 @@ async def test_global_interruption_cancels_every_participant_without_terminators
     scene = _MultiScene({"alice", "bob"})
     output = _VoiceRecorder()
     runtime = AgentRuntime()
-    runtime.register("xr-render", RenderAgent(scene, ()))  # type: ignore[arg-type]
+    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
     runtime.register("test-output", output)
 
     async with runtime:
@@ -350,8 +366,100 @@ async def test_launch_failure_after_runtime_shutdown_is_ignored() -> None:
     lifecycle = XRSessionLifecycle(
         transport=_Transport(),  # type: ignore[arg-type]
         scene_loop=_Scene(),  # type: ignore[arg-type]
-        tools=ToolSet(()),
+        start_xr=_tool("start_xr"),
+        get_health=_tool("get_health"),
         runtime=runtime,
     )
 
     await lifecycle._notify_launch_failed("pid-1")  # noqa: SLF001
+
+
+async def test_lifecycle_starts_xr_waits_for_lovr_and_acknowledges_participant() -> None:
+    scene = _Scene()
+    transport = _Transport()
+    runtime = AgentRuntime()
+    lifecycle = XRSessionLifecycle(
+        transport=transport,  # type: ignore[arg-type]
+        scene_loop=scene,  # type: ignore[arg-type]
+        start_xr=_tool("start_xr"),
+        get_health=_tool(
+            "get_health",
+            lambda _request: _ToolResult(lovr_started=True),
+        ),
+        runtime=runtime,
+    )
+
+    await lifecycle._on_data(  # noqa: SLF001
+        DataMessage(
+            participant_id="alice",
+            topic="xr.session.started",
+            pts_us=1,
+            data=b"",
+        )
+    )
+
+    assert scene.reset == ["alice"]
+    assert transport.target == "alice"
+    assert [(message.participant_id, message.topic) for message in transport.sent] == [
+        ("alice", "render.ready")
+    ]
+
+
+async def test_lifecycle_reports_start_error_through_render_agent() -> None:
+    scene = _Scene()
+    transport = _Transport()
+    output = _VoiceRecorder()
+    runtime = AgentRuntime()
+    runtime.register("xr-render", RenderAgent(scene))  # type: ignore[arg-type]
+    runtime.register("test-output", output)
+    lifecycle = XRSessionLifecycle(
+        transport=transport,  # type: ignore[arg-type]
+        scene_loop=scene,  # type: ignore[arg-type]
+        start_xr=_tool(
+            "start_xr",
+            lambda _request: _ToolResult(status="error"),
+        ),
+        get_health=_tool("get_health"),
+        runtime=runtime,
+    )
+
+    async with runtime:
+        await lifecycle._on_data(  # noqa: SLF001
+            DataMessage(
+                participant_id="alice",
+                topic="xr.session.started",
+                pts_us=1,
+                data=b"",
+            )
+        )
+        await asyncio.wait_for(output.final.wait(), 1.0)
+
+    assert transport.sent == []
+    assert "Launch XR again" in output.events[0][0].text
+    assert output.events[0][0].interrupt is False
+
+
+async def test_lifecycle_waits_until_lovr_reports_started(
+    monkeypatch,
+) -> None:
+    calls = 0
+
+    async def health(_request):
+        nonlocal calls
+        calls += 1
+        return _ToolResult(lovr_started=calls == 2)
+
+    async def no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    lifecycle = XRSessionLifecycle(
+        transport=_Transport(),  # type: ignore[arg-type]
+        scene_loop=_Scene(),  # type: ignore[arg-type]
+        start_xr=_tool("start_xr"),
+        get_health=_tool("get_health", health),
+        runtime=AgentRuntime(),
+    )
+
+    assert await lifecycle._wait_lovr(timeout_s=1.0) is True  # noqa: SLF001
+    assert calls == 2

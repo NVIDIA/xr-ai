@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from loguru import logger
-from xr_ai_nat.functions._service.rpc import RPCError
+from xr_ai_tools.rpc import RPCError
 
 
 def safe_name(value: str) -> str:

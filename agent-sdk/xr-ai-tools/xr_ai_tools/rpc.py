@@ -54,6 +54,13 @@ class RPCClient:
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._send_lock = asyncio.Lock()
 
+    async def __aenter__(self) -> "RPCClient":
+        self._ensure_started()
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.close()
+
     def _ensure_started(self) -> None:
         if self._socket is not None:
             return
@@ -74,13 +81,14 @@ class RPCClient:
         timeout_s: float | None = None,
     ) -> dict[str, Any]:
         self._ensure_started()
-        assert self._socket is not None
+        socket = self._socket
+        assert socket is not None
         request_id = uuid.uuid4().hex
         future = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
         try:
             async with self._send_lock:
-                await self._socket.send(
+                await socket.send(
                     _pack(
                         {
                             "version": _PROTOCOL_VERSION,

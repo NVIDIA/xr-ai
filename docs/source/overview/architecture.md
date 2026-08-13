@@ -11,7 +11,7 @@ This page explains how XR-Media-Hub, the transport, and agents fit together.
 
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-agent-sdk/          # IPC, model, NAT-function, and voice-pipeline SDK packages
+agent-sdk/          # runtime, IPC, model, native-tool, and voice SDK packages
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 services/           # XR hub, CloudXR, model-serving, and typed XR capability services
 agent-samples/      # End-to-end agent demos

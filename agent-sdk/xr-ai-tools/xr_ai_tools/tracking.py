@@ -22,6 +22,13 @@ class HeadPose(BaseModel):
     error: str | None = None
 
 
+class OpenXRHealth(BaseModel):
+    status: str = "ok"
+    session_open: bool
+    open_attempts: int
+    last_open_error: str | None = None
+
+
 class TrackingTools:
     """Own the OpenXR-service client and current-user-frame tool."""
 
@@ -48,8 +55,19 @@ class TrackingTools:
             up=pose.up,
         )
 
+    async def get_health(self) -> OpenXRHealth:
+        return OpenXRHealth.model_validate(
+            await self._rpc.call("get_health", {}, timeout_s=2.0)
+        )
+
+    async def health(self) -> bool:
+        try:
+            return (await self.get_health()).session_open
+        except Exception:
+            return False
+
     async def close(self) -> None:
         await self._rpc.close()
 
 
-__all__ = ["HeadPose", "TrackingTools"]
+__all__ = ["HeadPose", "OpenXRHealth", "TrackingTools"]

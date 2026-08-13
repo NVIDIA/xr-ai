@@ -119,7 +119,6 @@ frames are dropped if it is closed.
 | Logging | `utils/xr-ai-logging/` | shared loguru sink + stdlib bridge for every process |
 | Agent runtime | `agent-sdk/xr-ai-agent-runtime/` | Agents with existing native tools and typed pub/sub routing |
 | Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools |
-| Legacy NAT | `agent-sdk/xr-ai-nat/` | NeMo Agent Toolkit compatibility during migration |
 | Reusable services | `services/` | Model-serving and typed capability processes |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |

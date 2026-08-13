@@ -15,7 +15,7 @@ dependencies = [
     "pyyaml>=6.0",
     "xr-ai-logging",
     "xr-ai-models",
-    "xr-ai-nat[services]",
+    "xr-ai-tools[services]",
 ]
 
 [project.scripts]
@@ -24,7 +24,7 @@ rag_service = "rag_service.__main__:run"
 [tool.uv.sources]
 xr-ai-logging = { path = "../../utils/xr-ai-logging", editable = true }
 xr-ai-models = { path = "../../agent-sdk/xr-ai-models", editable = true }
-xr-ai-nat = { path = "../../agent-sdk/xr-ai-nat", editable = true }
+xr-ai-tools = { path = "../../agent-sdk/xr-ai-tools", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["rag_service"]

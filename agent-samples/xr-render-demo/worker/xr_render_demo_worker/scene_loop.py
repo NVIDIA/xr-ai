@@ -52,20 +52,19 @@ _trace_log = logger.bind(trace=True)
 _MAX_LOOP = 10  # visual queries need up to 5 steps; give headroom
 
 
-# Native perception tools (from the ``xr_vision_tools`` group) exposed to the
-# model. The processor supplies participant context (and the utterance time for
+# Native perception tools exposed to the model. The processor supplies participant context (and the utterance time for
 # recorded lookups) that the model never provides.
-_LIVE_PERCEPTION_TOOL = "look_at_current_frame"
-_PAST_PERCEPTION_TOOL = "look_at_past_frame"
+LIVE_PERCEPTION_TOOL = "look_at_current_frame"
+PAST_PERCEPTION_TOOL = "look_at_past_frame"
 
-# Model-facing perception schemas. The native ``xr_vision_tools`` request models
+# Model-facing perception schemas. The native vision request models
 # also carry ``participant_id`` (and ``reference_time_us`` for recorded lookups),
 # which the processor injects — the model never supplies them. Presenting the raw
 # generated schema would tell the model to fill a required ``participant_id`` it
 # cannot know and whose value is discarded, so the model sees these trimmed
 # contracts instead (the worker swaps them in for the native ones).
-_LIVE_PERCEPTION_TOOL_DEF = ToolDef(
-    name=_LIVE_PERCEPTION_TOOL,
+LIVE_PERCEPTION_TOOL_DEF = ToolDef(
+    name=LIVE_PERCEPTION_TOOL,
     description=(
         "Inspect the user's present physical view when a request explicitly requires a visible fact. "
         "Do not use this tool to interpret conversation or inspect the virtual XR scene."
@@ -82,8 +81,8 @@ _LIVE_PERCEPTION_TOOL_DEF = ToolDef(
     },
 )
 
-_PAST_PERCEPTION_TOOL_DEF = ToolDef(
-    name=_PAST_PERCEPTION_TOOL,
+PAST_PERCEPTION_TOOL_DEF = ToolDef(
+    name=PAST_PERCEPTION_TOOL,
     description=(
         "Inspect a recorded camera frame only for an explicitly historical question, using a positive "
         "seconds offset from the user's utterance time."
@@ -105,9 +104,9 @@ _PAST_PERCEPTION_TOOL_DEF = ToolDef(
 )
 
 # Presented to the model in place of the native perception request schemas.
-_PERCEPTION_TOOL_DEFS: tuple[ToolDef, ...] = (
-    _LIVE_PERCEPTION_TOOL_DEF,
-    _PAST_PERCEPTION_TOOL_DEF,
+PERCEPTION_TOOL_DEFS: tuple[ToolDef, ...] = (
+    LIVE_PERCEPTION_TOOL_DEF,
+    PAST_PERCEPTION_TOOL_DEF,
 )
 
 # Spoken when a perception query is asked but no live camera frame can be
@@ -207,19 +206,26 @@ class SceneModelLoop:
 
         # Rolling conversation buffer — last N turns of (user_text, agent_response).
         # Injected as context so the agent understands "fix that", "undo", "the one I just added".
-        self._history: list[tuple[str, str]] = []
+        self._history: dict[str, list[tuple[str, str]]] = {}
         self._history_max = 4
 
         # Move log for "put it back" — (obj_id, prev, new), capped at N.
-        self._recent_moves: list[tuple[str, tuple[float, float, float], tuple[float, float, float]]] = []
+        self._recent_moves: dict[
+            str,
+            list[tuple[str, tuple[float, float, float], tuple[float, float, float]]],
+        ] = {}
         self._recent_moves_max = 5
         # Per-turn snapshot used to compute prev→new pairs on update_primitive.
-        self._pre_move_positions: dict[str, tuple[float, float, float]] = {}
+        self._pre_move_positions: dict[
+            str, dict[str, tuple[float, float, float]]
+        ] = {}
 
-    def reset_history(self) -> None:
-        """Clear conversation state when a new XR session starts."""
+    def reset_history(self, participant_id: str) -> None:
+        """Clear one participant's state when a new XR session starts."""
 
-        self._history.clear()
+        self._history.pop(participant_id, None)
+        self._recent_moves.pop(participant_id, None)
+        self._pre_move_positions.pop(participant_id, None)
 
     async def handle_query(
         self,
@@ -279,7 +285,7 @@ class SceneModelLoop:
         # reasoning enabled.  Await it first so the think flag is ready
         # before the main loop starts. On failure _quick_ack falls back to
         # ("", False); thinking degrades tool-following accuracy.
-        ack, needs_thinking = await self._quick_ack(text)
+        ack, needs_thinking = await self._quick_ack(pid, text)
 
         if ack and send_pid:
             # ACK-SPEAK POLICY (deliberate): speak the quick-ack on EVERY turn,
@@ -367,9 +373,10 @@ class SceneModelLoop:
             )
             display = "Done."
 
-        self._history.append((text, display))
-        if len(self._history) > self._history_max:
-            self._history.pop(0)
+        history = self._history.setdefault(pid, [])
+        history.append((text, display))
+        if len(history) > self._history_max:
+            history.pop(0)
 
         if self._text_memory is not None and send_pid:
             await self._record_turn(send_pid, ref_us, text, display)
@@ -412,7 +419,7 @@ class SceneModelLoop:
 
     # ── quick ack ─────────────────────────────────────────────────────────────
 
-    async def _quick_ack(self, transcript: str) -> tuple[str, bool]:
+    async def _quick_ack(self, pid: str, transcript: str) -> tuple[str, bool]:
         """Fast call: returns (ack_text, needs_thinking).
 
         Passes the last conversation turn as context so corrections like
@@ -420,8 +427,9 @@ class SceneModelLoop:
         """
         # Include the most recent agent action as context.
         context = ""
-        if self._history:
-            last_user, last_agent = self._history[-1]
+        history = self._history.get(pid, ())
+        if history:
+            last_user, last_agent = history[-1]
             context = f"[Previous turn] User: {last_user} / Agent: {last_agent}\n"
 
         messages = [
@@ -547,14 +555,15 @@ class SceneModelLoop:
         ctx_parts: list[str] = []
 
         # ── Scene ──────────────────────────────────────────────────────────────
-        self._pre_move_positions = {}
+        pre_move_positions: dict[str, tuple[float, float, float]] = {}
+        self._pre_move_positions[pid] = pre_move_positions
         if isinstance(scene, dict) and scene.get("objects"):
             objs = scene["objects"]
             lines = ["SCENE OBJECTS:"]
             for o in objs:
                 pos = o.get("position", {})
                 col = o.get("color", {})
-                self._pre_move_positions[o["id"]] = (
+                pre_move_positions[o["id"]] = (
                     float(pos.get("x", 0)),
                     float(pos.get("y", 0)),
                     float(pos.get("z", 0)),
@@ -612,9 +621,10 @@ class SceneModelLoop:
         # Structured move log — machine-readable prior coords for "put it
         # back" / "undo" / "revert" so the model doesn't have to parse free
         # text out of the conversation history.
-        if self._recent_moves:
+        recent_moves = self._recent_moves.get(pid, ())
+        if recent_moves:
             move_lines = []
-            for obj_id, prev, new in self._recent_moves:
+            for obj_id, prev, new in recent_moves:
                 move_lines.append(
                     f"  {obj_id}: ({prev[0]:.2f}, {prev[1]:.2f}, {prev[2]:.2f}) → "
                     f"({new[0]:.2f}, {new[1]:.2f}, {new[2]:.2f})"
@@ -623,9 +633,10 @@ class SceneModelLoop:
 
         # Recent conversation history — lets the agent understand "fix that",
         # "undo", "the sphere I just added", etc.
-        if self._history:
+        history = self._history.get(pid, ())
+        if history:
             hist_lines = []
-            for u, a in self._history:
+            for u, a in history:
                 hist_lines.append(f"  User: {u}")
                 hist_lines.append(f"  Agent: {a}")
             ctx_parts.append("[Recent conversation]\n" + "\n".join(hist_lines))
@@ -867,9 +878,9 @@ class SceneModelLoop:
     async def _look_at_current_frame(self, pid: str, question: str) -> dict:
         """Answer a live-camera question through the native perception tool.
 
-        The ``xr_vision_tools`` group exposes ``look_at_current_frame`` over the
-        always-on live frame source. The processor injects the active
-        participant (which the model never supplies) and raises
+        The native live-vision tool acquires from the always-on frame source.
+        This adapter injects the active participant (which the model never
+        supplies) and raises
         ``_PerceptionUnavailableError`` when no fresh frame or VLM answer is
         available so the turn ends with a short spoken message rather than
         looping or failing silently.
@@ -879,14 +890,16 @@ class SceneModelLoop:
         _trace_log.info("LOOK  {}", question[:120])
         try:
             result = await self._call_tool(
-                _LIVE_PERCEPTION_TOOL,
+                LIVE_PERCEPTION_TOOL,
                 {"participant_id": pid, "query": question},
             )
         except Exception as exc:
             logger.exception("look_at_current_frame failed")
             raise _PerceptionUnavailableError(_NO_FRAME_MSG) from exc
+        if isinstance(result, dict) and result.get("available") is False:
+            raise _PerceptionUnavailableError(_NO_FRAME_MSG)
         answer = result.get("text") if isinstance(result, dict) else result
-        if not answer or answer.startswith(("No camera frame", "VLM server unavailable")):
+        if not answer:
             raise _PerceptionUnavailableError(_NO_FRAME_MSG)
         _trace_log.info("VLM   {}", str(answer)[:200])
         return {"answer": answer}
@@ -900,7 +913,7 @@ class SceneModelLoop:
         unlike the live path, a missing recorded frame does not end the turn.
         """
         result = await self._call_tool(
-            _PAST_PERCEPTION_TOOL,
+            PAST_PERCEPTION_TOOL,
             {
                 "participant_id": pid,
                 "query": str(args.get("question") or "").strip(),
@@ -928,9 +941,9 @@ class SceneModelLoop:
         # Live perception needs participant context that is not model supplied. Intercept
         # before _normalize_tool_args (which would strip the question text if
         # it ever produced an empty value) and before native invocation.
-        if tool == _LIVE_PERCEPTION_TOOL:
+        if tool == LIVE_PERCEPTION_TOOL:
             return await self._look_at_current_frame(pid, str(args.get("question") or "").strip())
-        if tool == _PAST_PERCEPTION_TOOL:
+        if tool == PAST_PERCEPTION_TOOL:
             return await self._look_at_past_frame(pid, args, ref_us)
 
         # Normalize nested dicts that the LLM sometimes generates instead of
@@ -945,7 +958,8 @@ class SceneModelLoop:
         # later turns can answer "put it back" by reading the move log.
         if tool == "update_primitive" and isinstance(result, dict) and result.get("ok"):
             obj_id = args.get("obj_id")
-            prev = self._pre_move_positions.get(obj_id) if obj_id else None
+            pre_move_positions = self._pre_move_positions.setdefault(pid, {})
+            prev = pre_move_positions.get(obj_id) if obj_id else None
             if prev and ("x" in args or "y" in args or "z" in args):
                 new = (
                     float(args.get("x", prev[0])),
@@ -953,12 +967,13 @@ class SceneModelLoop:
                     float(args.get("z", prev[2])),
                 )
                 if new != prev:
-                    self._recent_moves.append((obj_id, prev, new))
-                    if len(self._recent_moves) > self._recent_moves_max:
-                        self._recent_moves.pop(0)
+                    recent_moves = self._recent_moves.setdefault(pid, [])
+                    recent_moves.append((obj_id, prev, new))
+                    if len(recent_moves) > self._recent_moves_max:
+                        recent_moves.pop(0)
                     # Update the snapshot so a second update in the same turn
                     # records (latest → newer), not (original → newer).
-                    self._pre_move_positions[obj_id] = new
+                    pre_move_positions[obj_id] = new
 
         return result
 
@@ -1006,3 +1021,6 @@ class SceneModelLoop:
     async def on_participant_left(self, pid: str) -> None:
         """Release cached native live-frame state after participant cleanup."""
         self._release_vision(pid)
+        self._history.pop(pid, None)
+        self._recent_moves.pop(pid, None)
+        self._pre_move_positions.pop(pid, None)

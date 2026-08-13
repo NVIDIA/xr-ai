@@ -25,11 +25,11 @@ from xr_ai_tools.types import EmptyRequest, SpatialFrame, Vector3
 
 
 class _Request(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """Ignore provider-added fields that are unrelated to the selected tool."""
 
 
 class PositionAheadRequest(_Request):
-    distance: float = Field(default=1.5, description="Distance along the user's gaze, in metres.")
+    distance: float = Field(default=1.5, ge=0.0, description="Distance along the user's gaze, in metres.")
 
 
 class PositionRelativeRequest(_Request):
@@ -43,7 +43,7 @@ class PositionRelativeRequest(_Request):
 
 class PlaceUserRelativeRequest(_Request):
     direction: Literal["front", "back", "left", "right", "above", "below"]
-    distance: float = 1.5
+    distance: float = Field(default=1.5, ge=0.0)
 
 
 class PlaceObjectRelativeRequest(_Request):
@@ -51,7 +51,7 @@ class PlaceObjectRelativeRequest(_Request):
     origin_y: float
     origin_z: float
     direction: Literal["front", "back", "left", "right", "above", "below", "next_to"]
-    distance: float = 0.3
+    distance: float = Field(default=0.3, ge=0.0)
 
 
 class DisplaceObjectRequest(_Request):

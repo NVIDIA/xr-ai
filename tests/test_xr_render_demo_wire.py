@@ -453,7 +453,7 @@ async def test_quick_ack_spoken_on_non_thinking_turn() -> None:
     transport.set_target_participant("pid-1")
     brain = _make_brain(transport)
 
-    async def _fake_quick_ack(_text):
+    async def _fake_quick_ack(_pid, _text):
         return ("On it.", False)  # ack present, needs_thinking = False
 
     async def _fake_loop(*_a, **_k):
@@ -490,7 +490,7 @@ async def test_quick_ack_parses_wellformed_json() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content='{"ack": "On it", "think": true}')
     brain = _make_brain(_CaptureTransport(), llm=_make_spec_llm(stub, "llm"))
-    assert await brain._quick_ack("move the cube") == ("On it", True)  # noqa: SLF001
+    assert await brain._quick_ack("pid-1", "move the cube") == ("On it", True)  # noqa: SLF001
 
 
 async def test_quick_ack_string_think_is_not_truthy() -> None:
@@ -498,7 +498,7 @@ async def test_quick_ack_string_think_is_not_truthy() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content='{"ack": "On it", "think": "false"}')
     brain = _make_brain(_CaptureTransport(), llm=_make_spec_llm(stub, "llm"))
-    assert await brain._quick_ack("move the cube") == ("On it", False)  # noqa: SLF001
+    assert await brain._quick_ack("pid-1", "move the cube") == ("On it", False)  # noqa: SLF001
 
 
 async def test_quick_ack_truncated_json_not_spoken() -> None:
@@ -507,7 +507,7 @@ async def test_quick_ack_truncated_json_not_spoken() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content='{"ack": "Let me ta')
     brain = _make_brain(_CaptureTransport(), llm=_make_spec_llm(stub, "llm"))
-    assert await brain._quick_ack("what am I holding") == ("", False)  # noqa: SLF001
+    assert await brain._quick_ack("pid-1", "what am I holding") == ("", False)  # noqa: SLF001
 
 
 async def test_quick_ack_bare_prose_fallback() -> None:
@@ -515,7 +515,7 @@ async def test_quick_ack_bare_prose_fallback() -> None:
     stub = StubOpenAI()
     stub.set_chat_message(content="On it")
     brain = _make_brain(_CaptureTransport(), llm=_make_spec_llm(stub, "llm"))
-    assert await brain._quick_ack("add a sphere") == ("On it", False)  # noqa: SLF001
+    assert await brain._quick_ack("pid-1", "add a sphere") == ("On it", False)  # noqa: SLF001
 
 
 async def test_quick_ack_transport_error_falls_back_silent_fast() -> None:
@@ -526,7 +526,7 @@ async def test_quick_ack_transport_error_falls_back_silent_fast() -> None:
             raise TimeoutError
 
     brain = _make_brain(_CaptureTransport(), llm=_BoomLLM())
-    assert await brain._quick_ack("move it up") == ("", False)  # noqa: SLF001
+    assert await brain._quick_ack("pid-1", "move it up") == ("", False)  # noqa: SLF001
 
 
 async def test_already_punctuated_ack_not_doubled() -> None:
@@ -535,7 +535,7 @@ async def test_already_punctuated_ack_not_doubled() -> None:
     transport.set_target_participant("pid-1")
     brain = _make_brain(transport)
 
-    async def _fake_quick_ack(_text):
+    async def _fake_quick_ack(_pid, _text):
         return ("On it!", False)
 
     async def _fake_loop(*_a, **_k):
@@ -556,7 +556,7 @@ async def test_empty_ack_yields_no_spoken_line() -> None:
     transport.set_target_participant("pid-1")
     brain = _make_brain(transport)
 
-    async def _fake_quick_ack(_text):
+    async def _fake_quick_ack(_pid, _text):
         return ("", False)
 
     async def _fake_loop(*_a, **_k):
@@ -578,7 +578,7 @@ async def test_unpunctuated_ack_gets_terminal_period() -> None:
     transport.set_target_participant("pid-1")
     brain = _make_brain(transport)
 
-    async def _fake_quick_ack(_text):
+    async def _fake_quick_ack(_pid, _text):
         return ("Let me take a look", True)
 
     async def _fake_loop(*_a, **_k):
@@ -747,14 +747,15 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
         native = {tool.name: tool for tool in tool_definitions(capabilities.model)}
         assert "participant_id" in native["look_at_current_frame"].parameters["properties"]
         assert "participant_id" in native["look_at_past_frame"].parameters["properties"]
+        assert "get_frame_from_time" in native
 
         # Assemble the model-facing list exactly as the worker does.
         tools = [
             tool
             for tool in tool_definitions(capabilities.model)
-            if tool.name not in {_loop._LIVE_PERCEPTION_TOOL, _loop._PAST_PERCEPTION_TOOL}
+            if tool.name not in {_loop.LIVE_PERCEPTION_TOOL, _loop.PAST_PERCEPTION_TOOL}
         ]
-        tools.extend(_loop._PERCEPTION_TOOL_DEFS)
+        tools.extend(_loop.PERCEPTION_TOOL_DEFS)
     finally:
         await capabilities.close()
 
@@ -936,7 +937,7 @@ async def test_perception_unavailable_frame_ends_turn_gracefully() -> None:
 
 def _stub_turn(brain, loop) -> None:
     """Stub the LLM-driven parts so _run_turn exercises only the status bracket."""
-    async def _ack(_text):
+    async def _ack(_pid, _text):
         return "", False
     brain._quick_ack = _ack        # noqa: SLF001
     brain._agentic_loop = loop     # noqa: SLF001
@@ -1098,3 +1099,28 @@ async def test_perception_no_frame_yields_graceful_message() -> None:
     assert not any(b'"startCamera"' in m.data for m in controls)
     # VLM was never reached — there was no frame to ask about.
     assert vlm.calls == []
+
+
+def test_scene_loop_resets_only_the_target_participant_state() -> None:
+    brain = _make_brain(_CaptureTransport())
+    brain._history = {  # noqa: SLF001
+        "alice": [("a", "one")],
+        "bob": [("b", "two")],
+    }
+    brain._recent_moves = {  # noqa: SLF001
+        "alice": [("sphere-0", (0.0, 0.0, 0.0), (1.0, 0.0, 0.0))],
+        "bob": [("box-0", (0.0, 0.0, 0.0), (0.0, 1.0, 0.0))],
+    }
+    brain._pre_move_positions = {  # noqa: SLF001
+        "alice": {"sphere-0": (1.0, 0.0, 0.0)},
+        "bob": {"box-0": (0.0, 1.0, 0.0)},
+    }
+
+    brain.reset_history("alice")
+
+    assert "alice" not in brain._history  # noqa: SLF001
+    assert "alice" not in brain._recent_moves  # noqa: SLF001
+    assert "alice" not in brain._pre_move_positions  # noqa: SLF001
+    assert brain._history["bob"] == [("b", "two")]  # noqa: SLF001
+    assert "bob" in brain._recent_moves  # noqa: SLF001
+    assert "bob" in brain._pre_move_positions  # noqa: SLF001

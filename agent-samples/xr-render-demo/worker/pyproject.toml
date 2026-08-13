@@ -36,4 +36,4 @@ xr-render-scene    = { path = "../scene",                              editable 
 xr_render_demo_worker = "xr_render_demo_worker.__main__:run"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["xr_render_demo_worker"]
+packages = ["xr_render_demo_worker"]

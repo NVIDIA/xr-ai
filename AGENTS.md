@@ -12,14 +12,13 @@ historical decisions in `docs/changelog.md`.
 
 ```
 client-samples/     # Platform clients (Android, iOS/visionOS, Web)
-agent-sdk/          # Seven packages:
+agent-sdk/          # Six packages:
                     #   xr-ai-agent-runtime — agent lifecycles, tools + pub/sub
                     #   xr-ai-hub-client   — IPC client library (pyzmq + msgpack only)
                     #   xr-ai-models       — LLM/VLM/STT/TTS service protocols + OpenAI-compat clients
                     #   xr-ai-pipecat      — optional Pipecat transport bridge (heavier deps)
                     #   xr-ai-voice        — voice runtime (VoiceSession); introduced alongside xr-ai-pipecat
                     #   xr-ai-tools        — toolkit-independent Relay-managed tools
-                    #   xr-ai-nat          — legacy NeMo Agent Toolkit compatibility during migration
 utils/              # Shared infra: launcher, logging, vad, vllm, voicegate
 services/           # XR hub, CloudXR, model-serving, and typed capability services
 agent-samples/      # End-to-end agent demos
@@ -59,14 +58,12 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   `anthropic`, no `litellm`); all in-tree backends speak
   OpenAI-compatible HTTP.
 - **Workers never import from `xr_media_hub` or `xr_ai_launcher`.** Use the
-  public `xr_ai_runtime`, `xr_ai_hub`, `xr_ai_models`, `xr_ai_tools`,
-  `xr_ai_nat`, and `xr_ai_voice` SDK surfaces plus task-specific libraries
+  public `xr_ai_runtime`, `xr_ai_hub`, `xr_ai_models`, `xr_ai_tools`, and
+  `xr_ai_voice` SDK surfaces plus task-specific libraries
   (numpy, torch, …).
-- **Agentic functions are native and in-process.** New and migrated tools live
-  in `xr-ai-tools`; every tool execution passes through NeMo Relay, and all
-  model I/O remains in `xr-ai-models`. `xr-ai-nat` retains
-  NeMo Agent Toolkit compatibility only while existing function groups
-  migrate. The repository does not ship MCP compatibility servers.
+- **Agentic functions are native and in-process.** Tools live in `xr-ai-tools`;
+  every tool execution passes through NeMo Relay, and all model I/O remains in
+  `xr-ai-models`. The repository does not ship MCP compatibility servers.
 - **Agents expose the existing tools from `xr-ai-tools`.** Each `Agent` owns
   state and a set of `Tool` or `AsyncTool` instances. Agents call one another's
   tools directly through `execute()` or `stream()`; model-selected calls use
@@ -76,14 +73,15 @@ deps/               # Gitignored downloaded binaries (e.g. LOVR AppImage)
   memory, and raw media transport remain outside the runtime.
 - **RAG is a native typed capability.** `rag-service` owns document chunking,
   embedding caches, and dense retrieval behind private msgpack/ZMQ;
-  `RAGFunctionsConfig` exposes it as the `xr_rag` NAT function group.
+  `RAGTools` exposes it through the native tool contract.
 - **A process boundary does not imply MCP.** Native applications invoke tools
   directly. XR tracking and video memory call typed services; live frames stay
   with the caller's hub client. Text memory owns participant-scoped JSONL
   storage in process.
 - **Application-specific capabilities stay with their application.** XR render
   scene state, native scene tools, and the LOVR app live together under
-  `agent-samples/xr-render-demo/scene`; they are not exported from `xr-ai-nat`.
+  `agent-samples/xr-render-demo/scene`; they are not exported from the
+  reusable SDK.
 - **Native vision tools own frame acquisition.** The native vision tools
   (`look_at_current_frame` /
   `look_at_past_frame`) acquire the participant's live or recorded frame themselves
@@ -127,8 +125,7 @@ mechanically:
 
 - Import IPC types from `xr_ai_hub`; new and migrated native agent tools come
   from `xr_ai_tools`, model clients from `xr_ai_models`, and the native voice
-  runtime from `xr_ai_voice`. Use `xr_ai_nat` only for compatibility surfaces
-  that have not migrated yet.
+  runtime from `xr_ai_voice`.
 - Raw IPC workers keep `_HUB_PUB` / `_HUB_PUSH` as module-level constants,
   wire `SIGINT` and `SIGTERM` to a synchronous `shutdown()`, cancel asyncio
   tasks first, then call `ep.stop()` + `ep.close()`. Voice workers delegate
@@ -163,22 +160,13 @@ Reference implementation: `agent-samples/simple-vlm-example/`.
 Samples must **reuse** the shared building blocks rather than re-implement
 them. They split across SDK packages by what they depend on:
 
-New and migrated typed agent tools live in `xr-ai-tools`; `xr-ai-nat` retains
-compatibility function groups while they migrate. `SpatialMathFunctionsConfig`
-registers deterministic coordinate operations that receive an explicit spatial
-frame; tracking and process boundaries remain outside the math functions.
-`TextMemoryFunctionsConfig` provides persistent timestamped text without a
-network boundary. `VisionToolsConfig` (`xr_vision_tools`) adds
-`look_at_current_frame` / `look_at_past_frame` question answering over an
-injected `xr-ai-models` VLM, acquiring the participant's live or recorded frame
-itself. `XRTrackingFunctionsConfig` exposes the current user frame through
-the typed OpenXR service without routing native agents through MCP.
-`VideoMemoryFunctionsConfig` exposes recorded-video discovery, queries, and
-frame extraction through a typed service; callers obtain current frames through
-the hub client. `StreamingVisionTool` in `xr-ai-tools` composes raw frame
-acquisition with VLM streaming and stays independent of voice. `ModelsLLMConfig` adapts the `xr-ai-models` service boundary to
-NAT's built-in LangChain-backed agent types; applications install
-`xr-ai-nat[agents]` rather than calling LangChain model clients directly.
+Typed agent tools live in `xr-ai-tools`. Its pure spatial functions receive an
+explicit frame; tracking and process boundaries remain outside the math.
+`TextMemoryTools` provides persistent timestamped text and conversation recall
+without a network boundary. `LiveVisionTool` and `HistoricalVisionTool` acquire
+the participant's live or recorded frame and call an injected `xr-ai-models`
+VLM. `TrackingTools`, `VideoMemoryTools`, and `RAGTools` call their private
+typed services over the shared msgpack/ZMQ RPC boundary. `StreamingVisionTool` in `xr-ai-tools` composes raw frame acquisition with VLM streaming and stays independent of voice.
 
 The public **native voice runtime** lives in `xr-ai-voice` (it depends on
 pipecat internally):

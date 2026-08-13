@@ -88,10 +88,9 @@ function: {name, arguments}}]` with `finish_reason: "tool_calls"`.
 
 Conversation history containing prior tool rounds is passed through verbatim:
 assistant messages with `tool_calls` and `tool`-role messages with
-`tool_call_id` flow into vLLM's chat template so multi-turn tool-calling loops
-(LangChain `ChatOpenAI.bind_tools()`, NAT's `tool_calling_agent`) work out of
-the box. Disable tool calling entirely with `enable_tool_choice: false` in the
-YAML.
+`tool_call_id` flow into vLLM's chat template so native model tool loops and
+other OpenAI-compatible tool-calling clients work out of the box. Disable tool
+calling entirely with `enable_tool_choice: false` in the YAML.
 
 ## Reasoning toggle — per-turn via system prompt
 

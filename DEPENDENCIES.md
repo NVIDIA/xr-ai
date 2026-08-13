@@ -139,68 +139,33 @@ xr-ai-tools  (agent-sdk/xr-ai-tools/)
     └── pydantic >=2.10
     └── [relay] xr-ai-models [editable: ../xr-ai-models]
     └── [live-vision] numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
-    └── [services] msgpack >=1.0, pyzmq >=27.0, xr-ai-models [editable: ../xr-ai-models]
+    └── [services] msgpack >=1.0, pyzmq >=27.0
     Toolkit-independent native tools: Pydantic request and response models,
     Relay-managed finite and async execution, model tool-call workflow helpers,
     participant-scoped live vision, typed capability clients, and service RPC.
 
-xr-ai-nat  (agent-sdk/xr-ai-nat/)
-    └── nvidia-nat-core ==1.8.0
-    └── pydantic >=2.10
-    └── [agents] nvidia-nat-langchain ==1.8.0, xr-ai-models [editable: ../xr-ai-models]
-    └── [mcp] fastmcp >=3.4,<4
-    └── [services] msgpack >=1.0, pyzmq >=27.0
-    └── [vision] httpx >=0.27, numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub-client], xr-ai-models [editable: ../xr-ai-models]
-    └── [voice] xr-ai-voice [editable: ../xr-ai-voice]
-    Typed, in-process NeMo Agent Toolkit functions retained while their
-    concrete capabilities migrate. The ``xr_spatial_math`` function group accepts
-    explicit coordinate frames and
-    performs deterministic spatial calculations without OpenXR, model, or MCP
-    dependencies. ``xr_text_memory`` owns persistent per-source JSONL text
-    history, and ``xr_conversation_memory`` composes it into a participant-
-    oriented ``recall_conversation`` view. Its optional MCP adapter exports an
-    application's explicit native function list without routing native
-    composition through MCP. The ``[voice]`` extra adds the
-    ``xr_ai_nat.adapters`` voice adapters: ``as_voice_handler`` wraps a native
-    function as a voice-session handler, and ``record_voice_transcripts``
-    persists each completed turn under ``{participant_id}:{role}`` — the
-    producer that ``recall_conversation`` reads. Each
-    capability module is its own ``nat.plugins`` discovery entry point; there
-    is no package-wide registration aggregator.
-    ``xr_vision_tools`` exposes ``look_at_current_frame`` and
-    ``look_at_past_frame`` over the always-on live-frame source, acquiring the
-    frame itself and calling an injected xr-ai-models VLM; recorded lookups
-    resolve through the ``xr_video_memory`` group. The replaced NAT
-    streaming function has moved to ``xr-ai-tools``. ``xr_tracking`` calls
-    the typed OpenXR service and returns a complete user coordinate frame.
-    ``xr_video_memory`` calls the typed video-memory service for recorded-video
-    discovery, queries, and frame extraction. ``xr_rag`` calls the typed RAG
-    service for document discovery and dense passage retrieval. Live frames stay with the hub
-    client owned by their caller. The ``agents`` extra registers
-    ``ModelsLLMConfig`` so NAT's built-in LangChain-backed agents delegate
-    model I/O to an ``xr-ai-models`` LLMService.
 
 xr-openxr-service  (services/openxr-service/)
     └── xr-ai-launcher [editable: ../../utils/xr-ai-launcher]
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
+    └── xr-ai-tools[services] [editable: ../../agent-sdk/xr-ai-tools]
     └── pyyaml >=6.0
     └── isaacteleop
     Owns the long-running headless OpenXR and DeviceIO sessions. Exposes plain
     dict head-pose and health messages over private msgpack/ZMQ at port 8330;
-    xr-ai-nat owns the typed client contracts. Root pytest adds this source tree
+    xr-ai-tools owns the typed client contracts. Root pytest adds this source tree
     to its Python path only for CPU-only pose-math regression tests, avoiding a
     test-time isaacteleop installation.
 
 xr-rag-service  (services/rag-service/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
     └── xr-ai-models [editable: ../../agent-sdk/xr-ai-models]
-    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
+    └── xr-ai-tools[services] [editable: ../../agent-sdk/xr-ai-tools]
     └── numpy >=1.24
     └── pyyaml >=6.0
     Recursively indexes Markdown and text documents, caches dense embeddings
     by content and index settings, and exposes private msgpack/ZMQ retrieval at
-    port 8340. Applications consume the typed ``xr_rag`` NAT group.
+    port 8340. Applications consume the native ``RAGTools`` group.
 
 xr-ai-launcher  (utils/xr-ai-launcher/)
     └── (stdlib only — zero runtime deps)
@@ -257,7 +222,7 @@ xr-media-hub  (services/xr-media-hub/)
 
 xr-video-memory-service  (services/video-memory-service/)
     └── xr-ai-logging [editable: ../../utils/xr-ai-logging]
-    └── xr-ai-nat[services] [editable: ../../agent-sdk/xr-ai-nat]
+    └── xr-ai-tools[services] [editable: ../../agent-sdk/xr-ai-tools]
     └── PyNvVideoCodec >=2.2
     └── Pillow >=10.0
     └── numpy >=1.24
@@ -285,9 +250,9 @@ xr-ai-tests  (tests/)
     └── xr-ai-agent-runtime       [editable: ../agent-sdk/xr-ai-agent-runtime]
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub-client]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
-    └── xr-ai-nat[agents,services,vision] [editable: ../agent-sdk/xr-ai-nat]
     └── xr-ai-tools[live-vision,services] [editable: ../agent-sdk/xr-ai-tools]
     └── xr-rag-service [editable: ../services/rag-service]
+    └── xr-video-memory-service [editable: ../services/video-memory-service]
     └── xr-ai-pipecat           [editable: ../agent-sdk/xr-ai-pipecat]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
     └── xr-media-hub            [editable: ../services/xr-media-hub]    (pulls in livekit, livekit-api for the wss /rtc proxy + room-client tests)
@@ -300,15 +265,13 @@ xr-ai-tests  (tests/)
     └── pytest >=8.0
     └── pytest-asyncio >=0.23
     └── numpy >=1.24
-    └── fastmcp >=3.4,<4 (generic NAT-to-MCP adapter contracts)
     └── Pillow >=10.0   (CPU native-vision and GPU image tests)
     └── pyyaml >=6.0    (CPU subprocess/service configs and GPU service tests)
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages
-    (launcher, logging, vllm), native spatial-math, text-memory, and vision
-    function-group tests, generic NAT-to-MCP adapter tests, and the
-    sample-local scene native tools (LOVR is stubbed). Root pytest adds
+    (launcher, logging, vllm), native spatial-math, text-memory, vision, and typed service-tool
+    tests, plus the sample-local scene native tools (LOVR is stubbed). Root pytest adds
     services/stt-server to its Python path (not a dependency) so the
     endpoint tests can import its FastAPI app with a mocked backend,
     avoiding a test-time NeMo installation.
@@ -504,8 +467,8 @@ sample-named topics. `SimpleVlmAgent` handles cancellation and frame cleanup
 inside its own subscriber methods. Voice-gate
 behavior (magic phrases, follow-up grace, listening chime, stop acknowledgement),
 VAD/STT, and sentence-batched TTS remain provided by the shared voice runtime.
-The sample has no direct `xr-ai-pipecat` or MCP dependency and selects no legacy
-NeMo Agent Toolkit extra.
+The sample has no direct `xr-ai-pipecat`, MCP, or legacy agent-framework
+dependency.
 
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
@@ -604,9 +567,8 @@ updated in the same commit**.
   vendor SDKs (no `openai`, no `anthropic`, no `litellm`). All in-tree
   backends speak OpenAI-compatible HTTP; vendor adapters arrive as new
   `kind`s in Phase B if/when needed.
-- `agent-sdk/xr-ai-nat/` — NAT framework dependencies plus only the smallest
-  capability-specific dependencies. Spatial math remains CPU-only and has no
-  tracking, service, model, or MCP dependency.
+- `agent-sdk/xr-ai-tools/` — native tool contracts and only capability-specific
+  optional dependencies. Spatial math remains CPU-only.
 - Agent workers — `xr-ai-hub-client` + `xr-ai-models` + task-specific libs (numpy,
   torch, etc.). Must never import from `xr-media-hub` or `xr-ai-launcher`.
 - New external deps require a note here explaining why they were added.

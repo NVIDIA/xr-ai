@@ -1,11 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""CPU-only tests for video-memory storage, service, and NAT functions."""
+"""CPU-only tests for video-memory storage, service and native tools."""
 
 import asyncio
 import contextlib
-import importlib
 import json
 import time
 import uuid
@@ -14,7 +13,6 @@ from types import SimpleNamespace
 
 import pytest
 import video_memory_service.__main__ as video_memory_main
-from nat.builder.workflow_builder import WorkflowBuilder
 from video_memory_service.service import VideoMemoryService, select_decoded_frame
 from video_memory_service.store import ChunkStore
 from xr_ai_hub import (
@@ -24,16 +22,12 @@ from xr_ai_hub import (
     ParticipantEvent,
     PixelFormat,
 )
-from xr_ai_nat.functions._service.rpc import RPCError, RPCServer
-from xr_ai_nat.functions.video_memory import (
+from xr_ai_tools.rpc import RPCError, RPCServer
+from xr_ai_tools.types import EmptyRequest
+from xr_ai_tools.video_memory import (
     HistoricalFrameRequest,
-    ParticipantsResult,
-    VideoMemoryFunctionsConfig,
-)
-from xr_ai_nat.functions.video_memory._client import (
-    ListRecordedParticipantsRequest,
-    ListRecordedParticipantsResult,
-    VideoHealthResult,
+    QueryVideoRequest,
+    VideoMemoryTools,
     VideoStatsRequest,
 )
 
@@ -145,18 +139,14 @@ def test_chunk_store_does_not_follow_identity_or_directory_symlinks(tmp_path: Pa
 
 @pytest.mark.asyncio
 async def test_list_recorded_participants_tool_schema_is_strict_empty() -> None:
-    """The native tool must expose a strict empty-object input, not the client's
-    optional/nullable `request` compatibility parameter."""
-    async with WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "video", VideoMemoryFunctionsConfig(endpoint="ipc:///tmp/unused")
-        )
-        functions = await (await builder.get_function_group("video")).get_all_functions()
-        schema = functions["video__list_recorded_participants"].input_schema.model_json_schema()
+    video = VideoMemoryTools("ipc:///tmp/unused")
+    try:
+        schema = video.list_recorded_participants.request_model.model_json_schema()
+    finally:
+        await video.close()
 
-    # No leaked `request` wrapper; the empty request flattens to no properties.
     assert schema.get("properties", {}) == {}
-    assert "request" not in schema.get("properties", {})
+    assert schema.get("additionalProperties") is False
 
 
 def test_video_entrypoints_use_defaults_when_packaged_config_is_absent(
@@ -272,24 +262,28 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
     )
     endpoint = f"ipc:///tmp/video-{uuid.uuid4().hex}"
 
-    async with _running_server(endpoint, service.dispatch), WorkflowBuilder() as builder:
-        await builder.add_function_group(
-            "video",
-            VideoMemoryFunctionsConfig(endpoint=endpoint),
-        )
-        group = await builder.get_function_group("video")
-        functions = await group.get_all_functions()
-        recorded = await functions["video__list_recorded_participants"].ainvoke({})
-        stats = await functions["video__get_video_stats"].ainvoke(
-            {"participant_id": "user/name"}
-        )
-        clip = await functions["video__query_video"].ainvoke(
-            {"participant_id": "user/name", "start_us": 1_100_000, "end_us": 2_100_000}
-        )
+    async with _running_server(endpoint, service.dispatch):
+        video = VideoMemoryTools(endpoint)
+        try:
+            recorded = await video.list_recorded_participants.execute(EmptyRequest())
+            stats = await video.get_video_stats.execute(
+                VideoStatsRequest(participant_id="user/name")
+            )
+            clip = await video.query_video.execute(
+                QueryVideoRequest(
+                    participant_id="user/name",
+                    start_us=1_100_000,
+                    end_us=2_100_000,
+                )
+            )
+            health = await video.get_health()
+        finally:
+            await video.close()
 
     assert recorded.participants == ["user/name"]
     assert stats.num_chunks == 2
     assert Path(clip.path).read_bytes() == b"firstsecond"
+    assert health.ready is True
     with pytest.raises(RPCError, match="unknown operation"):
         await service.dispatch("list_live_participants", {})
 
@@ -331,21 +325,6 @@ async def test_recorded_frame_reports_frame_export_errors(tmp_path: Path, monkey
 
     assert error.value.code == "frame_export_error"
 
-
-def test_video_memory_schemas_alias_forwards_and_warns() -> None:
-    import xr_ai_nat.functions.video_memory.schemas as schemas_module
-
-    with pytest.warns(DeprecationWarning):
-        importlib.reload(schemas_module)
-
-    # Unchanged names re-exported.
-    assert schemas_module.VideoStatsRequest is VideoStatsRequest
-    # Renamed models are kept as deprecated aliases (same data contracts).
-    assert schemas_module.ParticipantsResult is ListRecordedParticipantsResult
-    assert schemas_module.VideoMemoryHealth is VideoHealthResult
-    assert schemas_module.EmptyRequest is ListRecordedParticipantsRequest
-    # The pre-rename package-level export is preserved too.
-    assert ParticipantsResult is ListRecordedParticipantsResult
 
 
 def test_historical_frame_schema_requires_an_absolute_reference() -> None:

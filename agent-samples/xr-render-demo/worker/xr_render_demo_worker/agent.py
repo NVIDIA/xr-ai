@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import asyncio
+from builtins import BaseExceptionGroup
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
 
 import nemo_relay
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from xr_ai_runtime import (
     Agent,
@@ -19,7 +21,6 @@ from xr_ai_runtime import (
     Topic,
     subscribe,
 )
-from xr_ai_tools import Tool
 from xr_ai_voice import (
     VOICE_OUTPUT_TOPIC,
     UserQuery,
@@ -57,13 +58,24 @@ class _Turn:
     control: _TurnControl
 
 
+def _expected_stream_close(error: BaseException) -> bool:
+    if isinstance(error, RuntimeClosedError):
+        return True
+    if isinstance(error, ValueError):
+        return str(error) == "voice stream terminator has no open response"
+    if isinstance(error, BaseExceptionGroup):
+        return all(_expected_stream_close(child) for child in error.exceptions)
+    return False
+
+
 class RenderAgent(Agent):
     """Run participant-scoped render turns and publish their spoken chunks."""
 
-    def __init__(self, scene: SceneModelLoop, tools: tuple[Tool, ...]) -> None:
-        super().__init__(tools)
+    def __init__(self, scene: SceneModelLoop) -> None:
+        super().__init__()
         self.scene = scene
         self._tasks: dict[str, _Turn] = {}
+        self._stopped = False
 
     @subscribe(USER_QUERY_TOPIC)
     async def answer_user(self, query: UserQuery, ctx: RuntimeContext) -> None:
@@ -100,6 +112,8 @@ class RenderAgent(Agent):
     ) -> None:
         """Supersede and start one participant's render turn."""
 
+        if self._stopped:
+            return
         participant_id = ctx.metadata.participant_id
         if participant_id is None:
             raise ValueError("render turns require a participant")
@@ -153,6 +167,7 @@ class RenderAgent(Agent):
     async def stop(self) -> None:
         """Cancel active turns before runtime shutdown."""
 
+        self._stopped = True
         await self._cancel_all(finish_stream=False)
 
     async def _run_turn(
@@ -213,6 +228,7 @@ class RenderAgent(Agent):
                 )
             first = True
             async for chunk in response:
+                opened = True
                 try:
                     await ctx.publish(
                         VOICE_OUTPUT_TOPIC,
@@ -227,13 +243,12 @@ class RenderAgent(Agent):
                 except RuntimeClosedError:
                     return
                 first = False
-                opened = True
         finally:
             if response is not None:
                 with suppress(Exception, asyncio.CancelledError):
                     await response.aclose()
             if opened and control.finish_stream:
-                with suppress(RuntimeClosedError):
+                try:
                     await ctx.publish(
                         VOICE_OUTPUT_TOPIC,
                         VoiceOutput(
@@ -241,6 +256,9 @@ class RenderAgent(Agent):
                             timestamp_us=timestamp_us,
                         ),
                     )
+                except BaseException as exc:
+                    if not _expected_stream_close(exc):
+                        raise
 
     async def _cancel(self, participant_id: str, *, finish_stream: bool) -> None:
         turn = self._tasks.pop(participant_id, None)
@@ -266,6 +284,11 @@ class RenderAgent(Agent):
         turn = self._tasks.get(participant_id)
         if turn is not None and turn.task is task:
             self._tasks.pop(participant_id, None)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.error("xr-render turn failed for {}: {!r}", participant_id, error)
 
 
 __all__ = [
