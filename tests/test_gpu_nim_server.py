@@ -90,7 +90,6 @@ async def test_nim_container_serves_profile_llm(tmp_path) -> None:
                 pytest.fail(f"NIM not ready after {_READY_TIMEOUT_S:.0f}s")
             time.sleep(5)
 
-        # Chat through the same profile machinery the sample workers use.
         cfg = load_models_config_from_dict({
             "models": {
                 "llm": {

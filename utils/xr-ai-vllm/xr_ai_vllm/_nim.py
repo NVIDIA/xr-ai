@@ -116,16 +116,16 @@ def serve_nim(
     # shared dir one image's root-owned subtree blocks the next image's
     # non-root writes.
     nim_cache = nim_cache / container_name
-    nim_cache.mkdir(parents=True, exist_ok=True)
     try:
+        nim_cache.mkdir(parents=True, exist_ok=True)
         nim_cache.chmod(0o777)
     except PermissionError:
         # On a shared machine the dir may belong to another OS user; that is
         # fine when their wrapper already made it world-writable.
-        if nim_cache.stat().st_mode & 0o777 != 0o777:
+        if not nim_cache.is_dir() or nim_cache.stat().st_mode & 0o777 != 0o777:
             log.error(
                 "cannot make NIM cache %s world-writable; it is likely owned "
-                "by another user of this machine — chmod 777 it (or pick a "
+                "by another user of this machine: chmod 777 it (or pick a "
                 "different nim_cache in the server YAML) and retry",
                 nim_cache,
             )
