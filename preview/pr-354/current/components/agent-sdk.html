@@ -388,9 +388,9 @@ edit, not a code edit.</p></li>
 <code class="docutils literal notranslate"><span class="pre">UserQuery</span></code> and lifecycle events to application-named topics and consumes
 <code class="docutils literal notranslate"><span class="pre">voice.output</span></code>. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owns readiness, hub transport, voice gating,
 streaming responses, signals, and cleanup.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat surface retained for unmigrated
-consumers such as <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>. Its <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> helper exposes
-the same IPC-start request-readiness boundary as <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-pipecat</span></code></strong> — the direct Pipecat compatibility surface. Current
+samples use <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>; <code class="docutils literal notranslate"><span class="pre">run_voice_pipeline</span></code> remains available to
+external consumers that still assemble Pipecat processors directly.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">xr-ai-hub-client</span></code></strong> — the minimal pyzmq + msgpack IPC library every agent uses
 to talk to the XR-Media-Hub (refer to <a class="reference internal" href="server-runtime.html"><span class="doc">Server runtime</span></a>). No LiveKit or
 FastAPI dependency.</p></li>
@@ -717,8 +717,10 @@ ready file is touched only after the input transport enters its hub IPC receive
 loop. <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> preserves participant routing, cancels superseded or
 interrupted output, installs signal handlers, and closes its transport and
 model clients. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> turns transport lifecycle callbacks into typed
-runtime events; application agents subscribe and clean up their own state. A
-pid-less interruption is a global event.</p>
+runtime events on agent-owned tasks, so application cleanup cannot block the
+shared media processor. It cancels and awaits those tasks during shutdown.
+Application agents subscribe and clean up their own state. A pid-less
+interruption is a global event.</p>
 </section>
 <section id="xr-ai-pipecat">
 <h2>xr-ai-pipecat<a class="headerlink" href="#xr-ai-pipecat" title="Link to this heading">#</a></h2>
