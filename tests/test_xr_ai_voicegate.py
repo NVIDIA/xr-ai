@@ -120,7 +120,7 @@ def _recording_handlers(gate: VoiceGate) -> list[tuple]:
 # ════════════════════════════════════════════════════════════════════════════
 
 
-def test_phrase_strict_prefix_strip_returns_query_tail():
+def test_phrase_at_transcript_start_strips_query_tail():
     """Case 1: 'agent, what am I looking at?' strips to the query tail."""
     pat = build_magic_pattern(["agent"])
     assert strip_magic(pat, "agent, what am I looking at?") == "what am I looking at?"
@@ -151,16 +151,42 @@ def test_phrase_tolerates_internal_and_trailing_punctuation():
 
 
 def test_phrase_mid_sentence_does_not_match():
-    """Case 5: strict-prefix only — 'the agent told me ...' must not strip."""
+    """Case 5: an ordinary mid-sentence mention must not strip."""
     pat = build_magic_pattern(["agent"])
     assert strip_magic(pat, "the agent told me to wait") is None
 
 
 def test_phrase_no_filler_allowance_before_phrase():
     """Case 6: even one filler word before the phrase ('hello agent') is
-    rejected. Strict prefix means literally first token after whitespace."""
+    rejected because no sentence boundary separates it from the phrase."""
     pat = build_magic_pattern(["agent"])
     assert strip_magic(pat, "hello agent") is None
+
+
+@pytest.mark.parametrize("boundary", [".", "?", "!"])
+def test_phrase_after_sentence_boundary_strips_preamble(boundary: str):
+    """A boundary wake discards noisy preamble and returns only the query."""
+    pat = build_magic_pattern(["hey agent"])
+    text = f"Background speech{boundary} Hey agent, what am I looking at?"
+    assert strip_magic(pat, text) == "what am I looking at?"
+
+
+def test_phrase_after_boundary_tolerates_closing_quote():
+    """Closing quote punctuation between a sentence and wake is ignored."""
+    pat = build_magic_pattern(["agent"])
+    assert strip_magic(pat, 'Someone said "noise." Agent, help') == "help"
+
+
+@pytest.mark.parametrize("separator", [",", ";", ":", "-"])
+def test_phrase_after_mid_sentence_punctuation_does_not_match(separator: str):
+    """Only sentence-final punctuation may introduce a later wake phrase."""
+    pat = build_magic_pattern(["agent"])
+    assert strip_magic(pat, f"background{separator} agent, help") is None
+
+
+def test_partial_phrase_after_sentence_boundary_can_continue_matching():
+    gate, _, _ = _gate(phrases=("hey agent",))
+    assert gate.could_match_magic_phrase("background. hey ag") is True
 
 
 def test_phrase_empty_list_yields_none_pattern_and_passthrough_strip():
@@ -351,6 +377,16 @@ async def test_feed_magic_phrase_with_query_fires_on_query_with_fresh_match_true
     await gate.feed("p1", "agent, what is this?")
 
     assert events == [("query", "p1", "what is this?", True)]
+
+
+@pytest.mark.asyncio
+async def test_feed_boundary_phrase_discards_background_and_dispatches_query():
+    gate, _, _ = _gate(phrases=("agent",))
+    events = _recording_handlers(gate)
+
+    await gate.feed("p1", "Which I can find. Agent, what am I looking at?")
+
+    assert events == [("query", "p1", "what am I looking at?", True)]
 
 
 @pytest.mark.asyncio

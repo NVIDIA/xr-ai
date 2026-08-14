@@ -95,7 +95,7 @@ class VoiceGateProcessor(FrameProcessor):
         """Classify a partial prefix and acknowledge a complete wake phrase.
 
         True means acknowledged, False means the prefix needs more audio, and
-        None means it cannot become a configured strict-prefix match.
+        None means the current sentence cannot become a configured match.
         """
         if self._gate.matches_magic_phrase(text):
             await self._emit_chime(pid, early=True)

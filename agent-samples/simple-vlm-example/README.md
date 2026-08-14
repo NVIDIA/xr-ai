@@ -77,7 +77,9 @@ sensitive data.
 tail -F /tmp/log_simple-vlm-example_*/relay-events.jsonl
 ```
 
-Voice-gate behavior remains in `yaml/voice_gate.yaml`. Worker timing, frame
-freshness, the default `ping` question, and optional prompt overrides are in
+Voice-gate behavior remains in `yaml/voice_gate.yaml`. Wake phrases match at
+the start of the transcript or after sentence-final `.`, `?`, or `!`; preceding
+text is discarded before dispatch. Worker timing, frame freshness, the default
+`ping` question, and optional prompt overrides are in
 `yaml/simple_vlm_example_worker.yaml`; the default prompt ships inside the
 worker package.
