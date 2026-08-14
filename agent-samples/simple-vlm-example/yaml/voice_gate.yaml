@@ -5,9 +5,10 @@
 # Consumed by xr_ai_voicegate.VoiceGate inside the unified pipecat pipeline.
 #
 # Magic phrases are sentence-boundary opt-ins: an STT transcript must begin
-# with one of these or contain one after '.', '?', or '!'. Matching is
-# case-insensitive. Text through the matched phrase is stripped before the
-# agent sees the query; commas and other mid-sentence mentions do not match.
+# with one of these or contain one after '.', '?', or '!' followed by
+# whitespace or a closing quote. Matching is case-insensitive. Text through
+# the matched phrase is stripped before the agent sees the query; commas and
+# other mid-sentence mentions do not match.
 magic_phrases:
   - "agent"
   - "hey agent"

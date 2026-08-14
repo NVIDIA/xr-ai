@@ -12,10 +12,11 @@ preserved and not re-litigated.
 ### 2026-08-13 — Wake phrases may follow a sentence boundary
 
 The shared voice gate accepts a configured wake phrase at transcript start or
-after sentence-final `.`, `?`, or `!` punctuation. It discards preceding text
-and the phrase before dispatch, allowing a valid command to survive noisy STT
-preambles without sending background speech to the agent. Commas, semicolons,
-and ordinary mid-sentence mentions remain non-matches to limit false wakes.
+after sentence-final `.`, `?`, or `!` punctuation followed by whitespace or a
+closing quote. It discards preceding text and the phrase before dispatch,
+allowing a valid command to survive noisy STT preambles without sending
+background speech to the agent. Commas, semicolons, URLs, and ordinary
+mid-sentence mentions remain non-matches to limit false wakes.
 
 ### 2026-08-12 — NeMo Agent Toolkit compatibility is retired
 

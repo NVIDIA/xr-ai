@@ -106,7 +106,7 @@ the opening audio while the user is still speaking. A recognized phrase emits
 the chime immediately, while only the final transcript enters the voice gate as
 a query. STOP commands use the same early-probe path for immediate interruption.
 
-The final transcript accepts a wake phrase at its beginning or immediately
-after sentence-final `.`, `?`, or `!` punctuation. Text before that boundary and
-the matched phrase are discarded. A phrase after a comma, semicolon, or within
-ordinary prose does not activate the gate.
+The final transcript accepts a wake phrase at its beginning or after
+sentence-final `.`, `?`, or `!` punctuation followed by whitespace or a closing
+quote. Text before that boundary and the matched phrase are discarded. A phrase
+after a comma, semicolon, or within ordinary prose does not activate the gate.

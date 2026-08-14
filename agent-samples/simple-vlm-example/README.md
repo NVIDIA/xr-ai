@@ -78,8 +78,8 @@ tail -F /tmp/log_simple-vlm-example_*/relay-events.jsonl
 ```
 
 Voice-gate behavior remains in `yaml/voice_gate.yaml`. Wake phrases match at
-the start of the transcript or after sentence-final `.`, `?`, or `!`; preceding
-text is discarded before dispatch. Worker timing, frame freshness, the default
-`ping` question, and optional prompt overrides are in
-`yaml/simple_vlm_example_worker.yaml`; the default prompt ships inside the
-worker package.
+the start of the transcript or after sentence-final `.`, `?`, or `!` followed
+by whitespace or a closing quote; preceding text is discarded before dispatch.
+Worker timing, frame freshness, the default `ping` question, and optional prompt
+overrides are in `yaml/simple_vlm_example_worker.yaml`; the default prompt ships
+inside the worker package.

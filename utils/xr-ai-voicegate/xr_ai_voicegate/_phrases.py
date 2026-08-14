@@ -27,9 +27,9 @@ def build_magic_pattern(phrases: Sequence[str]) -> re.Pattern | None:
     phrase, the literal space between words is treated as "whitespace OR
     punctuation" so STT transcripts like "Hey, agent." still match the
     configured "hey agent". A phrase may begin the transcript or follow
-    sentence-final punctuation; commas and other mid-sentence punctuation do
-    not open the gate. Returns ``None`` when ``phrases`` is empty so the gate
-    degrades to always-on.
+    sentence-final punctuation separated by whitespace or a closing delimiter;
+    commas and other mid-sentence punctuation do not open the gate. Returns
+    ``None`` when ``phrases`` is empty so the gate degrades to always-on.
     """
     cleaned = tuple(p.strip().lower() for p in phrases if p and p.strip())
     if not cleaned:
@@ -40,7 +40,9 @@ def build_magic_pattern(phrases: Sequence[str]) -> re.Pattern | None:
         for p in sorted(cleaned, key=len, reverse=True)
     )
     return re.compile(
-        rf'(?:^|[.!?])[\s"\'\u2019\u201d)\]]*(?:{alts})\b[\s,.:;!?-]*',
+        rf'(?:^[\s"\'\u2019\u201d)\]]*|'
+        rf'[.!?][\s"\'\u2019\u201d)\]]+)'
+        rf'(?:{alts})\b[\s,.:;!?-]*',
         re.IGNORECASE,
     )
 

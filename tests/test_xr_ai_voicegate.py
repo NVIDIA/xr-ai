@@ -177,6 +177,12 @@ def test_phrase_after_boundary_tolerates_closing_quote():
     assert strip_magic(pat, 'Someone said "noise." Agent, help') == "help"
 
 
+@pytest.mark.parametrize("text", ["visit www.agent.com now", "background.agent, help"])
+def test_phrase_after_dot_without_separator_does_not_match(text: str):
+    pat = build_magic_pattern(["agent"])
+    assert strip_magic(pat, text) is None
+
+
 @pytest.mark.parametrize("separator", [",", ";", ":", "-"])
 def test_phrase_after_mid_sentence_punctuation_does_not_match(separator: str):
     """Only sentence-final punctuation may introduce a later wake phrase."""

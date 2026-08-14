@@ -91,18 +91,17 @@ class VoiceGateProcessor(FrameProcessor):
         """Whether partial STT should probe for an early wake acknowledgement."""
         return self._gate.wake_ack_enabled
 
-    async def handle_partial_transcript(self, pid: str, text: str) -> bool | None:
-        """Classify a partial prefix and acknowledge a complete wake phrase.
+    async def handle_partial_transcript(self, pid: str, text: str) -> bool:
+        """Handle a partial transcript and acknowledge a complete wake phrase.
 
-        True means acknowledged, False means the prefix needs more audio, and
-        None means the current sentence cannot become a configured match.
+        True means acknowledged and False means the probe needs more audio.
+        A later sentence can introduce a wake phrase even when the current
+        partial transcript is not a phrase prefix.
         """
         if self._gate.matches_magic_phrase(text):
             await self._emit_chime(pid, early=True)
             return True
-        if self._gate.could_match_magic_phrase(text):
-            return False
-        return None
+        return False
 
     # ── AudioSink ─────────────────────────────────────────────────────────────
 
