@@ -106,9 +106,18 @@ transport remains isolated in `rpc`.
 Install `xr-ai-tools[frames]` for live-frame selection and
 `xr-ai-tools[vision]` for VLM queries. Image selection does not invoke a model:
 `CurrentFrameTool` returns an `ImageFrame`, while
-`VideoMemoryTools.get_frame_from_time` and `sample_recorded_frames` return
-recorded frames. Every frame carries the same `ImageReference`; timed frames
-also share the `TimedImage` contract consumed by video queries.
+`VideoMemoryTools` groups recorded selection by timing:
+
+- `latest_tools` contains `get_latest_video` and `get_latest_frames`;
+  their windows end at the newest recorded timestamp and require only
+  `duration_seconds`.
+- `historical_tools` contains `get_historical_frame`,
+  `get_historical_frames`, and `get_historical_video`; they share one
+  absolute `start_us`, with video and sampling adding `duration_seconds`.
+
+`get_current_frame` joins the latest group conceptually as the live-image
+equivalent. Every selected frame carries the same `ImageReference`; timed
+frames also share the `TimedImage` contract consumed by video queries.
 
 `ImageQueryTool` returns one complete `ImageQueryResult` for any image reference;
 `MultiImageQueryTool` queries an ordered image collection, and `VideoQueryTool`
@@ -123,6 +132,7 @@ image location from VLM events while preserving provider input.
 ```python
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageReference, ImageRegistry
+from xr_ai_tools.video_memory import LatestFramesRequest
 from xr_ai_tools.vision import (
     ImageQueryRequest,
     ImageQueryTool,
@@ -148,8 +158,14 @@ other = await vision.execute(
     )
 )
 
-# A bounded recorded lookup feeds the timed multi-image path directly.
-sample = await video_memory.sample_recorded_frames.execute(sample_request)
+# The newest recorded window needs no caller-supplied timestamp.
+sample = await video_memory.get_latest_frames.execute(
+    LatestFramesRequest(
+        participant_id="alice",
+        duration_seconds=10,
+        frame_budget=8,
+    )
+)
 change = await video.execute(
     VideoQueryRequest(frames=sample.frames, query="What changed over time?")
 )

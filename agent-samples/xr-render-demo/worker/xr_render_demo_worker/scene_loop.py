@@ -53,16 +53,15 @@ _MAX_LOOP = 10  # visual queries need up to 5 steps; give headroom
 _PARTICIPANT_STATE_CAPACITY = 1024
 
 
-# Native perception tools exposed to the model. The processor supplies participant context (and the utterance time for
-# recorded lookups) that the model never provides.
+# Native perception tools exposed to the model. The processor supplies participant
+# and utterance-time context that the model never provides.
 LIVE_PERCEPTION_TOOL = "look_at_current_frame"
 PAST_PERCEPTION_TOOL = "look_at_past_frame"
 CURRENT_FRAME_TOOL = "get_current_frame"
 IMAGE_QUERY_TOOL = "query_image"
 
-# Model-facing perception schemas. The native vision request models
-# also carry ``participant_id`` (and ``reference_time_us`` for recorded lookups),
-# which the processor injects — the model never supplies them. Presenting the raw
+# Model-facing perception schemas. The native selection request models also carry
+# participant and absolute-time fields that the processor injects. Presenting the raw
 # generated schema would tell the model to fill a required ``participant_id`` it
 # cannot know and whose value is discarded, so the model sees these trimmed
 # contracts instead (the worker swaps them in for the native ones).
@@ -931,11 +930,10 @@ class SceneModelLoop:
         unlike the live path, a missing recorded frame does not end the turn.
         """
         frame = await self._call_tool(
-            "get_frame_from_time",
+            "get_historical_frame",
             {
                 "participant_id": pid,
-                "second_ago": args.get("second_ago", 0),
-                "reference_time_us": ref_us,
+                "start_us": ref_us - int(args.get("second_ago", 0)) * 1_000_000,
             },
         )
         if not isinstance(frame, dict) or not isinstance(frame.get("image"), dict):

@@ -11,8 +11,10 @@ from xr_ai_tools.rpc import RPCError
 from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.video_memory import (
     HistoricalFrameRequest,
-    RecordedVideoRequest,
-    SampleFramesRequest,
+    HistoricalFramesRequest,
+    HistoricalVideoRequest,
+    LatestFramesRequest,
+    LatestVideoRequest,
     VideoStatsRequest,
 )
 
@@ -91,31 +93,37 @@ class VideoMemoryService:
             request = VideoStatsRequest.model_validate(arguments)
             store = self._require_store()
             return await asyncio.to_thread(store.stats, request.participant_id)
-        if operation == "get_recorded_video":
-            request = RecordedVideoRequest.model_validate(arguments)
-            store = self._require_store()
-            data = await asyncio.to_thread(
-                store.query,
+        if operation == "get_latest_video":
+            request = LatestVideoRequest.model_validate(arguments)
+            start_us, end_us = await self._latest_window(
                 request.participant_id,
-                request.start_us,
-                request.end_us,
+                request.duration_seconds,
             )
-            path = self._out_dir / (
-                f"{safe_name(request.participant_id)}_{request.start_us}_{request.end_us}.264"
+            return await self._recorded_video(request.participant_id, start_us, end_us)
+        if operation == "get_latest_frames":
+            request = LatestFramesRequest.model_validate(arguments)
+            start_us, end_us = await self._latest_window(
+                request.participant_id,
+                request.duration_seconds,
             )
-            await asyncio.to_thread(path.write_bytes, data)
-            return {
-                "path": str(path),
-                "size": len(data),
-                "start_us": request.start_us,
-                "end_us": request.end_us,
-            }
-        if operation == "get_frame_from_time":
+            return await self._sample_frames(request, start_us, end_us)
+        if operation == "get_historical_frame":
             request = HistoricalFrameRequest.model_validate(arguments)
             return await self._recorded_frame(request)
-        if operation == "sample_recorded_frames":
-            request = SampleFramesRequest.model_validate(arguments)
-            return await self._sample_recorded_frames(request)
+        if operation == "get_historical_video":
+            request = HistoricalVideoRequest.model_validate(arguments)
+            start_us, end_us = self._historical_window(
+                request.start_us,
+                request.duration_seconds,
+            )
+            return await self._recorded_video(request.participant_id, start_us, end_us)
+        if operation == "get_historical_frames":
+            request = HistoricalFramesRequest.model_validate(arguments)
+            start_us, end_us = self._historical_window(
+                request.start_us,
+                request.duration_seconds,
+            )
+            return await self._sample_frames(request, start_us, end_us)
         raise RPCError(f"unknown operation: {operation}", code="unknown_operation")
 
     def _require_store(self) -> ChunkStore:
@@ -123,9 +131,47 @@ class VideoMemoryService:
             raise RPCError("recording disabled", code="recording_disabled")
         return self._store
 
+    async def _latest_window(
+        self,
+        participant_id: str,
+        duration_seconds: int,
+    ) -> tuple[int, int]:
+        stats = await asyncio.to_thread(self._require_store().stats, participant_id)
+        end_us = int(stats["latest_us"])
+        start_us = max(
+            int(stats["earliest_us"]),
+            end_us - duration_seconds * 1_000_000,
+        )
+        return start_us, end_us
+
+    @staticmethod
+    def _historical_window(start_us: int, duration_seconds: int) -> tuple[int, int]:
+        return start_us, start_us + duration_seconds * 1_000_000
+
+    async def _recorded_video(
+        self,
+        participant_id: str,
+        start_us: int,
+        end_us: int,
+    ) -> dict:
+        data = await asyncio.to_thread(
+            self._require_store().query,
+            participant_id,
+            start_us,
+            end_us,
+        )
+        path = self._out_dir / f"{safe_name(participant_id)}_{start_us}_{end_us}.264"
+        await asyncio.to_thread(path.write_bytes, data)
+        return {
+            "path": str(path),
+            "size": len(data),
+            "start_us": start_us,
+            "end_us": end_us,
+        }
+
     async def _recorded_frame(self, request: HistoricalFrameRequest) -> dict:
         store = self._require_store()
-        target_us = request.reference_time_us - request.second_ago * 1_000_000
+        target_us = request.start_us
         chunk, metadata = await asyncio.to_thread(
             store.frame_chunk,
             request.participant_id,
@@ -152,7 +198,7 @@ class VideoMemoryService:
         width = int(metadata.get("width", frames[index].shape[1]))
         height = int(metadata.get("height", frames[index].shape[0] * 2 // 3))
         path = self._out_dir / (
-            f"{safe_name(request.participant_id)}_ago{request.second_ago}_{target_us}.png"
+            f"{safe_name(request.participant_id)}_historical_{target_us}.png"
         )
         try:
             rgb = await asyncio.to_thread(nv12_to_rgb, frames[index], width, height)
@@ -164,14 +210,15 @@ class VideoMemoryService:
             "width": width,
             "height": height,
             "timestamp_us": timestamp_us,
-            "second_ago": request.second_ago,
-            "actual_second_ago": (request.reference_time_us - timestamp_us) / 1_000_000,
         }
 
-    async def _sample_recorded_frames(self, request: SampleFramesRequest) -> dict:
+    async def _sample_frames(
+        self,
+        request: LatestFramesRequest | HistoricalFramesRequest,
+        start_us: int,
+        end_us: int,
+    ) -> dict:
         store = self._require_store()
-        end_us = request.reference_time_us
-        start_us = end_us - request.duration_seconds * 1_000_000
         chunks = await asyncio.to_thread(
             store.overlapping_chunks,
             request.participant_id,

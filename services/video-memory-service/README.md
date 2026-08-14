@@ -12,28 +12,36 @@ extracts PNG frames with NVDEC, and writes requested clips or frames to
 
 Applications construct `xr_ai_tools.video_memory.VideoMemoryTools` with the
 private service endpoint. The native tool group
-contains five recorded-history operations:
+contains discovery operations plus two selection groups:
 
 - `list_recorded_participants` returns exact participant identities.
 - `get_video_stats` returns the available Unix-epoch microsecond range.
-- `get_recorded_video` writes a clip for an absolute Unix-epoch microsecond window.
-- `sample_recorded_frames` returns evenly distributed timestamped PNG frames from the
-  `duration_seconds` ending at `reference_time_us`. `frame_budget` is a hard
-  total cap; sparse recordings may return fewer frames. Requests are bounded to
-  300 seconds and 256 frames. Optional paired `max_width` and `max_height` values fit
-  each PNG within that box while preserving aspect ratio and never upscaling.
-  Each frame retains its `path` and implements the shared `TimedImage` contract,
-  so the returned list can be passed directly to `query_video` inference.
-- `get_frame_from_time` selects a frame at `reference_time_us - second_ago`
-  seconds, where `reference_time_us` is the workflow's event timestamp, and
-  returns the same path-compatible image reference.
+- Latest selection ends at the newest recorded timestamp:
+  - `get_latest_video(participant_id, duration_seconds)` writes the latest H.264
+    window.
+  - `get_latest_frames(participant_id, duration_seconds, ...)` returns
+    evenly distributed timestamped PNG frames from the same window.
+- Historical selection begins at one absolute `start_us`:
+  - `get_historical_frame(participant_id, start_us)` returns the nearest
+    recorded frame.
+  - `get_historical_video(participant_id, start_us, duration_seconds)` writes
+    the H.264 window beginning there.
+  - `get_historical_frames(participant_id, start_us, duration_seconds, ...)`
+    samples that same window.
 
-Every `*_us` field is a Unix-epoch timestamp in microseconds. Keep the
-model-facing offset coarse: use whole `second_ago` values for temporal
-reasoning and use the returned `timestamp_us` to inspect the exact selected
-frame. A current camera frame is not recorded history; obtain it through
+All video windows are bounded to 300 seconds. Sampling adds a hard total
+`frame_budget` cap of 256; sparse recordings may return fewer frames. Optional
+paired `max_width` and `max_height` values fit each PNG within that box while
+preserving aspect ratio and never upscaling. Each sampled frame retains its
+`path` and implements the shared `TimedImage` contract accepted directly by
+`query_video`.
+
+Every `*_us` field is a Unix-epoch timestamp in microseconds. A current camera
+frame is not recorded history; obtain it through
 `xr_ai_tools.current_frame.CurrentFrameTool` in the process that owns the hub
-connection.
+connection. Together, `get_current_frame`, `get_latest_video`, and
+`get_latest_frames` form the latest-media surface; the three
+`*_historical_*` tools use the shared `start_us` convention.
 
 ```yaml
 endpoint: tcp://0.0.0.0:8310

@@ -608,12 +608,8 @@ async def test_unpunctuated_ack_gets_terminal_period() -> None:
 
 # ── live-frame perception routing (look_at_current_frame) ──────────────────────
 #
-# A real-world visual question — "what colour is this thing I'm holding?" — must
-# reach the LIVE-FRAME VLM path, not stall in the reasoning loop. Before the fix
-# the render-demo worker had no frame tracking and never turned the camera on, so
-# a perception query looped on an unanswerable tool (get_frame_from_time, which
-# isn't even registered when recording is disabled) and hung. These tests stub
-# the VLM client + the hub frame path and assert the routing mechanically.
+# A real-world visual question must reach the live-frame VLM path. These tests
+# stub the VLM client and hub frame path to verify that routing contract.
 
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat  # noqa: E402
 from xr_ai_models import ChatResponse, ToolCall  # noqa: E402
@@ -754,9 +750,12 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
         "displace_object",
         "displace_objects",
         "get_current_frame",
-        "get_frame_from_time",
+        "get_historical_frame",
+        "get_historical_frames",
+        "get_historical_video",
         "get_head_pose",
         "get_health",
+        "get_latest_video",
         "get_scene_state",
         "get_video_stats",
         "list_recorded_participants",
@@ -765,11 +764,10 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
         "place_user_relative",
         "position_ahead",
         "position_relative",
-        "get_recorded_video",
         "query_image",
         "query_images",
         "query_video",
-        "sample_recorded_frames",
+        "get_latest_frames",
         "remove_primitive",
         "scale_value",
         "start_xr",
@@ -781,7 +779,7 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
 async def test_model_facing_perception_schema_is_trimmed() -> None:
     """The model sees participant-free perception facades, not internal tools.
 
-    The worker injects participant and reference-time context, selects an image,
+    The worker injects participant and absolute-time context, selects an image,
     and then calls ``query_image`` without exposing either internal contract to
     the model.
     """
@@ -799,7 +797,7 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
         assert "query_image" not in native
         assert "look_at_current_frame" not in native
         assert "look_at_past_frame" not in native
-        assert "get_frame_from_time" in native
+        assert "get_historical_frame" in native
 
         # Assemble the model-facing list exactly as the worker does.
         tools = [
@@ -822,6 +820,7 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
     for schema in (live, past):
         assert "participant_id" not in schema["properties"]
         assert "reference_time_us" not in schema["properties"]
+        assert "start_us" not in schema["properties"]
 
 
 class _FakeEndpoint:

@@ -133,7 +133,9 @@ returning. The render agent selects a current or recorded frame first, then
 passes its `ImageReference` to `query_image`. Its native capability set also
 includes `query_images` for ordered collections and `query_video` for
 timestamped frame sequences; all use the same `xr-ai-models` multi-image VLM
-path.
+path. Recorded selection is grouped into latest tools, whose windows end at the
+newest recording, and historical tools, whose frame or video window begins at
+one absolute `start_us`.
 
 There is a deliberate startup ordering constraint: `VoiceSession` readiness
 blocks on the VLM's `/health` endpoint, which

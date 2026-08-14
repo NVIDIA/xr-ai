@@ -149,10 +149,10 @@ async def test_record_synthetic_frames():
             gpu_id=0,
         )
         frame = await service.dispatch(
-            "get_frame_from_time",
+            "get_historical_frame",
             {
                 "participant_id": pid,
-                "reference_time_us": max(1, int(meta["start_us"])),
+                "start_us": max(1, int(meta["start_us"])),
             },
         )
         with Image.open(frame["path"]) as image:
