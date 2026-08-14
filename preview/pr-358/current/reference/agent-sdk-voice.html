@@ -423,6 +423,41 @@ signals, execution, and cleanup behind <code class="docutils literal notranslate
     <span class="k">await</span> <span class="n">voice</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runtime</span><span class="p">)</span>
 </pre></div>
 </div>
+</section>
+<section id="voice-tuning-and-data-echo">
+<h2>Voice tuning and data echo<a class="headerlink" href="#voice-tuning-and-data-echo" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">VadConfig</span></code> controls utterance boundaries and bounded early transcription:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head text-right"><p>Default</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">silence_duration</span></code></p></td>
+<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.8</span></code></p></td>
+<td><p>Seconds of silence that finalize an utterance.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">min_speech</span></code></p></td>
+<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.15</span></code></p></td>
+<td><p>Minimum speech duration accepted as an utterance.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">silero_threshold</span></code></p></td>
+<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.5</span></code></p></td>
+<td><p>Silero VAD speech-probability threshold.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">stop_probe_after_s</span></code></p></td>
+<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">0.4</span></code></p></td>
+<td><p>Delay before an early wake/STOP transcription probe; set to <code class="docutils literal notranslate"><span class="pre">0</span></code> or less to disable probes.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">VoiceSession.text_topic</span></code> controls the completed-response echo sent through the
+hub data channel. Its default is <code class="docutils literal notranslate"><span class="pre">&quot;agent.response&quot;</span></code>; set it to <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when the
+application publishes its own response data so each turn is delivered only
+once. This setting does not disable TTS or Relay telemetry.</p>
 <p><code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> publishes accepted speech, typed text, participant departure, and
 interruption on application-named topics. Application agents subscribe to the
 events they own, perform cleanup in their own subscriber methods, and may
@@ -472,6 +507,10 @@ health probes complete before the default hub transport opens its sockets.</p>
 the opening audio while the user is still speaking. A recognized phrase emits
 the chime immediately, while only the final transcript enters the voice gate as
 a query. STOP commands use the same early-probe path for immediate interruption.</p>
+<p>The final transcript accepts a wake phrase at its beginning or after
+sentence-final <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, or <code class="docutils literal notranslate"><span class="pre">!</span></code> punctuation followed by whitespace or a closing
+quote. Text before that boundary and the matched phrase are discarded. A phrase
+after a comma, semicolon, or within ordinary prose does not activate the gate.</p>
 </section>
 </section>
 
@@ -525,6 +564,7 @@ a query. STOP commands use the same early-probe path for immediate interruption.
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage">Usage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice-tuning-and-data-echo">Voice tuning and data echo</a></li>
 </ul>
   </nav></div>
 
