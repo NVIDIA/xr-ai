@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""OpenCV-backed QR-code extraction from live participant frames."""
+"""ZXing-C++-backed QR-code extraction from live participant frames."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping
 from inspect import isawaitable, iscoroutinefunction
 from typing import Any, TypeAlias
 
-import cv2
 import numpy as np
+import zxingcpp
 from PIL import Image
 from pydantic import BaseModel, Field
 from xr_ai_hub import FrameUnavailable, LiveFrameSource, ProcessorEndpoint
@@ -74,8 +74,10 @@ QRCodeExtractor: TypeAlias = Callable[
 ]
 
 
-def decode_qr_codes(image: np.ndarray) -> list[DecodedQRCode]:
-    """Decode every readable QR code in a grayscale or BGR image."""
+def extract_qr_codes_zxing(
+    image: Image.Image | np.ndarray,
+) -> list[DecodedQRCode]:
+    """Decode every readable QR code with the ZXing-C++ Python bindings."""
 
     pixels = np.asarray(image)
     if pixels.dtype != np.uint8:
@@ -83,40 +85,25 @@ def decode_qr_codes(image: np.ndarray) -> list[DecodedQRCode]:
     if pixels.ndim not in (2, 3):
         raise ValueError("QR-code image must be grayscale or color")
 
-    decoded, points = _detect_multi(pixels)
-    codes: list[DecodedQRCode] = []
-    if points is None:
-        return codes
-    for data, quadrilateral in zip(decoded, points, strict=False):
-        if not data:
-            continue
-        vertices = np.asarray(quadrilateral, dtype=np.float64).reshape(-1, 2)
-        if vertices.shape != (4, 2):
-            continue
-        corners = tuple(
-            QRCodePoint(x=float(vertex[0]), y=float(vertex[1]))
-            for vertex in vertices
+    barcodes = zxingcpp.read_barcodes(
+        pixels,
+        formats=zxingcpp.BarcodeFormat.QRCode,
+    )
+    return [
+        DecodedQRCode(
+            data=barcode.text,
+            corners=tuple(
+                QRCodePoint(x=float(point.x), y=float(point.y))
+                for point in (
+                    barcode.position.top_left,
+                    barcode.position.top_right,
+                    barcode.position.bottom_right,
+                    barcode.position.bottom_left,
+                )
+            ),
         )
-        codes.append(DecodedQRCode(data=data, corners=corners))
-    return codes
-
-
-def extract_qr_codes_opencv(image: Image.Image) -> list[DecodedQRCode]:
-    """Default extractor that adapts a PIL frame to OpenCV's QR detector."""
-
-    return decode_qr_codes(np.asarray(image.convert("L")))
-
-
-def _detect_multi(image: np.ndarray) -> tuple[tuple[str, ...], np.ndarray | None]:
-    detector = cv2.QRCodeDetector()
-    detected, decoded, points, _straight_codes = detector.detectAndDecodeMulti(image)
-    if detected and decoded and points is not None:
-        return tuple(decoded), points
-
-    data, single_points, _straight_code = detector.detectAndDecode(image)
-    if data and single_points is not None:
-        return (data,), np.asarray(single_points).reshape(1, 4, 2)
-    return (), None
+        for barcode in barcodes
+    ]
 
 
 class QRCodeTool(Tool[QRCodeRequest, QRCodeResult]):
@@ -138,7 +125,7 @@ class QRCodeTool(Tool[QRCodeRequest, QRCodeResult]):
         self.endpoint = endpoint
         self.manage_status = manage_status
         self.extractor = (
-            extractor if extractor is not None else extract_qr_codes_opencv
+            extractor if extractor is not None else extract_qr_codes_zxing
         )
         self.frames = LiveFrameSource(
             endpoint,
@@ -205,6 +192,5 @@ __all__ = [
     "QRCodeRequest",
     "QRCodeResult",
     "QRCodeTool",
-    "decode_qr_codes",
-    "extract_qr_codes_opencv",
+    "extract_qr_codes_zxing",
 ]

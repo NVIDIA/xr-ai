@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""CPU-only tests for OpenCV-backed live QR-code extraction."""
+"""CPU-only tests for ZXing-C++-backed live QR-code extraction."""
 
 from __future__ import annotations
 
@@ -11,7 +11,11 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 from xr_ai_hub import FrameData, FrameSignal, PixelFormat
-from xr_ai_tools.qr_code import QRCodeRequest, QRCodeTool, decode_qr_codes
+from xr_ai_tools.qr_code import (
+    QRCodeRequest,
+    QRCodeTool,
+    extract_qr_codes_zxing,
+)
 
 _QR_MODULES = (
     "0000000000000000000000000",
@@ -94,14 +98,14 @@ class _Endpoint:
         )
 
 
-def test_decode_qr_codes_extracts_every_payload_and_quadrilateral() -> None:
+def test_zxing_extracts_every_qr_payload_and_quadrilateral() -> None:
     qr = _qr_image()
     canvas = np.full((qr.shape[0] + 40, qr.shape[1] * 2 + 80), 255, dtype=np.uint8)
     canvas[20 : 20 + qr.shape[0], 20 : 20 + qr.shape[1]] = qr
     second_x = 60 + qr.shape[1]
     canvas[20 : 20 + qr.shape[0], second_x : second_x + qr.shape[1]] = qr
 
-    codes = decode_qr_codes(canvas)
+    codes = extract_qr_codes_zxing(canvas)
 
     assert [code.data for code in codes] == ["XR AI QR tool", "XR AI QR tool"]
     assert all(code.corners is not None and len(code.corners) == 4 for code in codes)
@@ -179,6 +183,6 @@ def test_qr_code_request_is_strict_and_decoder_validates_pixels() -> None:
     with pytest.raises(ValidationError):
         QRCodeRequest(participant_id="alice", unsupported=True)
     with pytest.raises(TypeError, match="uint8"):
-        decode_qr_codes(np.zeros((10, 10), dtype=np.float32))
+        extract_qr_codes_zxing(np.zeros((10, 10), dtype=np.float32))
     with pytest.raises(ValueError, match="grayscale or color"):
-        decode_qr_codes(np.zeros((10,), dtype=np.uint8))
+        extract_qr_codes_zxing(np.zeros((10,), dtype=np.uint8))
