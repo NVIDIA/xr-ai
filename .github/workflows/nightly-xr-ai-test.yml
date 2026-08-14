@@ -114,6 +114,12 @@ jobs:
           set -euo pipefail
           uv sync --directory services/magpie-tts
 
+      - name: Pre-pull Cosmos3 vLLM image
+        # The public NVIDIA vLLM image supports anonymous pulls. Pull it in a
+        # named step so a cold runner does not spend the GPU test's startup
+        # budget downloading the new Cosmos3-capable runtime.
+        run: docker pull nvcr.io/nvidia/vllm:26.07-py3
+
       - name: Purge leftover xr-ai-vllm containers (pre)
         # Containers are named `xr-ai-vllm-*` by the vLLM launcher. On a
         # persistent self-hosted runner these can survive a previous run

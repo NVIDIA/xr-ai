@@ -1,37 +1,42 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# VLM server configuration — nvidia/Cosmos-Reason1-7B.
+# VLM server configuration — Cosmos3 Nano Reasoner.
 # Auto-discovered by xr-ai-launcher and passed as --config to vlm_server.
 # OpenAI-compatible API at http://localhost:8100/v1 (accepts image_url in messages)
 
-# HuggingFace model ID — any Qwen2.5-VL-compatible model is supported.
-# nvidia/Cosmos-Reason1-7B   — NVIDIA VLM; Apache 2.0 + NVIDIA Open Model License;
-#                              no HF login required; ~16 GB VRAM at BF16
-# nvidia/Cosmos-Reason2-8B   — stronger reasoning; gated — requires HF login + license
-model: nvidia/Cosmos-Reason1-7B
+# hf_overrides selects the Reasoner runtime; details are documented in
+# docs/source/components/ai-services.md#per-server-notes.
+# Cosmos-Reason1 compatibility uses nvidia/Cosmos-Reason1-7B with the
+# cosmos_vlm client preset.
+model: nvidia/Cosmos3-Nano
+hf_overrides:
+  architectures:
+    - Cosmos3ForConditionalGeneration
 
-# HuggingFace token — required for gated models (e.g. Cosmos-Reason2-8B).
-# Accept license at https://huggingface.co/nvidia/Cosmos-Reason2-8B first.
+# HuggingFace token — optional for this public model and required for gated
+# alternatives.
 # !! Do not commit this file with a real token !!
 hf_token: ""
 
 port: 8100
 host: "0.0.0.0"
-cuda_visible_devices: "0"   # share GPU 0 with STT; Nemotron-3-Nano on GPU 1
+cuda_visible_devices: "0"   # share GPU 0 with embeddings; Nemotron/STT use GPU 1
 
 model_cache: ../../../../models
 
-# 0.43 × 47 = 20.2 GiB budget: ~15 GiB model weights + ~5 GiB KV cache.
+# 0.47 × 47 = 22.1 GiB budget: 16.8 GiB Reasoner weights plus multimodal
+# encoder profiling, runtime overhead, and KV cache.
 # Single-image queries have short context so the KV budget is adequate.
-gpu_memory_utilization: 0.43
+gpu_memory_utilization: 0.47
 enforce_eager: true
+async_scheduling: true
+mm_encoder_tp_mode: data
 max_videos_per_prompt: 0
-# 4 fits within the default max_model_len=8192 (each Qwen2.5-VL image is
-# ~1.5k tokens). Raise both together if multi-image turns get larger.
+# Raise max_model_len too if multi-image turns outgrow the context window.
 max_images_per_prompt: 4
 
 # vLLM runtime: pip (this wrapper's venv) or docker (NGC nvcr.io/nvidia/vllm).
 # See services/vlm-server/vlm_server.yaml for the full toggle docs.
 vllm_backend: docker
-vllm_image:   nvcr.io/nvidia/vllm:26.04-py3
+vllm_image:   nvcr.io/nvidia/vllm:26.07-py3

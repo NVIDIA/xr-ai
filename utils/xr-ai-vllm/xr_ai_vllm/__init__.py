@@ -56,6 +56,8 @@ from ._config import (
 log = logging.getLogger(__name__)
 
 # Default NGC image. Override per-server via `vllm_image:` in YAML.
+# vlm-server intentionally pins a newer tag locally for Cosmos3 support; keep
+# that service-specific override in mind when updating this shared default.
 DEFAULT_IMAGE = "nvcr.io/nvidia/vllm:26.04-py3"
 
 
