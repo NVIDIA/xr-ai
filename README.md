@@ -51,6 +51,7 @@ endpoint and no local GPU is required for the agent or hub.
 |---|---|
 | model-servers (shared models) | ~58 GB |
 | simple-vlm-example (standalone) | ~23 GB |
+| background-monitoring-sample (requires model-servers) | ~55 GB (models) + Piper TTS |
 | xr-render-demo (requires model-servers) | ~55 GB (models) + ~2 GB (hub/TTS) |
 | Hub only | none |
 
@@ -326,6 +327,32 @@ NIM containers):
 Each sample has its own `xr_media_hub.yaml` controlling the hub; see
 [`services/xr-media-hub/xr_media_hub.yaml`](services/xr-media-hub/xr_media_hub.yaml)
 for the full option list.
+
+---
+
+### Background monitoring sample (file-only ambient vision + foreground voice)
+
+This sample provides an on-demand visual observation task per connected
+participant and runs foreground voice or typed queries through a generic
+tool-calling agent. The foreground agent can start, stop, or inspect the
+monitor without giving up the foreground, inspect the current view, or query
+recent monitor history. Accepted STT and typed queries, monitoring records,
+foreground turns, and Relay telemetry are written as JSONL under `artifacts/`;
+served.
+
+Start `model-servers`, then run:
+
+```bash
+cd agent-samples/background-monitoring-sample
+uv sync
+uv sync --project worker
+uv run background_monitoring_sample
+```
+
+Connect an existing glasses or platform client with the authenticated URL and
+token printed by the hub. See the
+[sample README](agent-samples/background-monitoring-sample/README.md) for the
+agent topology, output records, transcription semantics, and routing eval.
 
 ---
 

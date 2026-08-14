@@ -1,0 +1,9 @@
+Inspect the current camera frame and compare it with the previous caption.
+Return only one JSON object with exactly these fields:
+{"caption":"visible facts in one concise sentence","changed":false,"summary":""}
+
+Use only visible evidence. Set changed true only for a material change involving
+people, objects, actions, readable text, or a notable scene condition. Ignore
+wording, viewpoint, and lighting differences. When changed is true, summary must
+be one short factual sentence describing only the new material change. When the
+previous caption is null, create a baseline with changed false and an empty summary.

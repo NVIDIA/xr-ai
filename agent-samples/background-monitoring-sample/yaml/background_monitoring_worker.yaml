@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+models_config: models.local.json
+voice_gate_yaml: voice_gate.yaml
+artifacts_dir: ../artifacts
+
+monitor_interval_s: 5.0
+monitor_history_size: 20
+frame_max_age_s: 5.0
+frame_timeout_s: 5.0
+
+silero_threshold: 0.5
+silence_duration: 0.4
+min_speech: 0.1
+idle_timeout_secs: 0

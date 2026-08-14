@@ -1,0 +1,110 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+# Background monitoring sample
+
+This file-only sample keeps one visual monitor available for every connected
+participant while a separate foreground agent answers voice or typed queries.
+Monitoring stays dormant until the foreground model calls the monitor's
+participant-scoped start tool. The model can also inspect the current frame or
+read recent monitor observations. There is no sample web UI, MCP adapter, NAT
+compatibility layer, or activity-viewer process.
+
+The worker composes peer agents through typed runtime topics:
+
+```text
+hub participant join ──────────────────────────────────> file session
+voice STT / typed text ─┬> TranscriptAgent ─────────────> transcript.jsonl
+                       └> ForegroundAgent ─┬> direct answer
+                                           ├> current frame → image query
+                                           ├> FileOutputAgent history tool
+                                           ├> MonitorAgent start/stop/status tools
+                                           ├> Piper TTS
+                                           └> foreground.jsonl
+MonitorAgent while active ──> current frame → image query ──> monitor.jsonl
+```
+
+`MonitorAgent` and `ForegroundAgent` each own an independent image registry,
+`CurrentFrameTool`, and `ImageQueryTool`. The monitor periodically selects and
+queries a frame only while its participant-scoped background task is active.
+It also owns idempotent `start_monitoring`, `stop_monitoring`, and
+`monitoring_status` tools. The foreground agent exposes its own composed
+current-view tool and calls the monitor's control tools directly, binding the
+participant before every operation.
+
+`FileOutputAgent` remains the only durable application sink and owns the
+bounded recent-history tool.
+
+Each foreground turn starts with only the system prompt and current request.
+Its generic native tool loop allows at most four model iterations, matching the
+tea-making sample's agent limit; it carries no conversation across requests.
+Return-direct monitor controls end the turn immediately.
+
+## Run
+
+The sample reuses the LLM, VLM, and STT services from `model-servers` and
+manages its own lightweight Piper TTS process.
+
+```bash
+cd agent-samples/model-servers
+uv sync
+uv run model_servers
+
+cd ../background-monitoring-sample
+uv sync
+uv sync --project worker
+uv run background_monitoring_sample
+```
+
+Connect a glasses or platform client using the authenticated LiveKit URL,
+room, and token printed by the hub. Port 8080 retains token and signaling
+routes, but `web_client_dir` is empty and no static web application is served.
+
+Ask the foreground assistant to start a background task with an optional focus,
+for example “watch for packages near the doorway.” It can report status or stop
+the task on later turns without capturing the foreground. Current-view
+questions and ordinary nonvisual questions work whether monitoring is active
+or stopped.
+
+The default voice gate is always on. Final STT turns and typed text queries
+therefore enter the same `UserQuery` topic and are recorded. If wake phrases
+are configured later in `yaml/voice_gate.yaml`, `transcript.jsonl` records only
+accepted turns after gating, not rejected ambient speech.
+
+## File outputs
+
+Each connection writes to a new participant-scoped directory:
+
+```text
+artifacts/
+├── relay-events.jsonl
+└── <participant>-<utc-session-stamp>/
+    ├── monitor.jsonl
+    ├── transcript.jsonl
+    └── foreground.jsonl
+```
+
+Every per-session file begins with a `session` record and receives a
+`session_end` record on participant departure once that output type has been
+written. Monitor records contain a baseline, observations, unavailable-frame
+notices, or errors. Foreground records include the query, response, and
+model-selected tool names. Relay events contain prompts, responses, participant
+metadata, and tool lifecycles;
+live camera bytes are redacted by the shared vision tool.
+
+The monitoring cadence, history bound, frame timeouts, prompts, VAD settings,
+and output path live in `yaml/background_monitoring_worker.yaml`. Model
+adapters, endpoints, readiness, and deployment ownership live in
+`yaml/models.local.json`.
+
+## Foreground routing eval
+
+The eval checks whether the LLM selects current vision, monitoring history,
+background controls, or no tool. It requires `agent-llm` to be running.
+
+```bash
+cd agent-samples/background-monitoring-sample
+uv run --project worker python eval/eval.py
+```

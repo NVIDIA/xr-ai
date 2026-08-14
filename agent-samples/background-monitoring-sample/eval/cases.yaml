@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: current-visible-fact
+  query: What color is the notebook on the desk in front of me?
+  expected_tool: look_at_current_frame
+
+- name: current-scene-condition
+  query: Is the doorway ahead of me open?
+  expected_tool: look_at_current_frame
+
+- name: recent-change
+  query: What changed around me during the last few minutes?
+  expected_tool: read_monitoring_history
+
+- name: recent-event
+  query: Did anyone enter this area recently?
+  expected_tool: read_monitoring_history
+
+- name: start-background-watch
+  query: Keep an eye out for deliveries being left near the doorway.
+  expected_tool: start_monitoring
+
+- name: stop-background-watch
+  query: You can quit watching the area now.
+  expected_tool: stop_monitoring
+
+- name: background-watch-status
+  query: Are you keeping watch in the background right now?
+  expected_tool: monitoring_status
+
+- name: general-knowledge
+  query: What is the capital of Iceland?
+  expected_tool: null
+
+- name: conversational
+  query: Say hello in one short sentence.
+  expected_tool: null

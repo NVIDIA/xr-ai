@@ -175,6 +175,29 @@ full details (and self-hosted NIM containers).
 Each sample has its own `xr_media_hub.yaml` controlling the hub; refer to
 `services/xr-media-hub/xr_media_hub.yaml` for the full option list.
 
+## Background monitoring sample (file-only ambient vision + foreground voice)
+
+This sample offers one on-demand background visual observation task per
+participant while a separate generic tool-calling agent answers voice or typed
+queries and controls that task. It writes monitor, accepted-transcript,
+foreground-turn, and Relay JSONL files under `artifacts/` and intentionally
+serves no sample web UI.
+
+Start `model-servers`, then run:
+
+```bash
+cd agent-samples/background-monitoring-sample
+uv sync
+uv sync --project worker
+uv run background_monitoring_sample
+```
+
+Connect an existing glasses or platform client using the authenticated URL,
+room, and token printed by the hub. The token and signaling routes remain
+available on port 8080 even though no static application is served. Refer to
+the sample README for output schemas, configuration, and the foreground
+tool-routing eval.
+
 ## XR render demo (voice-driven sphere in CloudXR)
 
 Speak to the web client and a sphere in the streamed scene tracks your voice —
