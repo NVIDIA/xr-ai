@@ -46,10 +46,11 @@ class TimedImage(BaseModel):
 class ImageRegistry:
     """Bounded in-process storage behind opaque image references."""
 
-    def __init__(self, *, capacity: int = 128) -> None:
+    def __init__(self, *, capacity: int = 128, allow_external: bool = False) -> None:
         if capacity <= 0:
             raise ValueError("capacity must be positive")
         self.capacity = capacity
+        self.allow_external = allow_external
         self._images: OrderedDict[str, tuple[ImageInput, str | None]] = OrderedDict()
 
     def put(self, image: ImageInput, *, owner: str | None = None) -> ImageReference:
@@ -72,6 +73,9 @@ class ImageRegistry:
                 raise LookupError(f"image reference is unavailable: {uri}") from exc
             self._images[uri] = (image, owner)
             return image
+
+        if not self.allow_external:
+            raise ValueError("external image references are disabled")
 
         parsed = urlsplit(uri)
         if parsed.scheme in {"http", "https"}:

@@ -39,7 +39,7 @@ class NativeCapabilities:
         self.tracking = TrackingTools(openxr_endpoint)
         self.spatial = RenderSpatialTools(self.tracking)
         self.video = VideoMemoryTools(video_memory_endpoint)
-        self.images = ImageRegistry()
+        self.images = ImageRegistry(allow_external=True)
         self.current_frame = CurrentFrameTool(
             endpoint=frame_endpoint,
             images=self.images,
@@ -72,17 +72,24 @@ class NativeCapabilities:
             self.video_query,
         )
         self.all = ToolSet(all_tools)
+        internal_perception_tools = {
+            tool.name
+            for tool in (
+                *self.video.tools,
+                self.current_frame,
+                self.image_query,
+                self.multi_image_query,
+                self.video_query,
+            )
+        }
         self.model = ToolSet(
             tool
             for tool in all_tools
             if tool.name
-            not in {
+            not in internal_perception_tools
+            | {
                 "start_xr",
                 "get_health",
-                "get_current_frame",
-                "query_image",
-                "query_images",
-                "query_video",
             }
         )
 

@@ -17,7 +17,7 @@ import nemo_relay
 import pytest
 import tomllib
 import yaml
-from xr_ai_hub import FrameData, FrameSignal, PixelFormat, ProcessorEndpoint
+from xr_ai_hub import FrameData, FrameSignal, FrameUnavailable, PixelFormat, ProcessorEndpoint
 from xr_ai_models import ChatResponse, VLMService
 from xr_ai_runtime import AgentRuntime
 from xr_ai_voice import UserQuery, VoiceAgent, VoiceInterrupted, VoiceOutput, VoiceSession
@@ -369,6 +369,44 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
         )
 
     assert closed.is_set()
+
+
+async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> None:
+    published: list[VoiceOutput] = []
+
+    class MissingFrameTool:
+        async def execute(self, _request):
+            try:
+                raise FrameUnavailable("No camera frame available — please try again.")
+            except FrameUnavailable as error:
+                raise RuntimeError("Relay tool execution failed") from error
+
+    class Context:
+        agent_name = "simple-vlm"
+        metadata = SimpleNamespace(
+            message_id="turn-1",
+            correlation_id="turn-1",
+            participant_id="alice",
+        )
+
+        async def publish(self, _topic, output) -> None:
+            published.append(output)
+
+    agent = SimpleVlmAgent(
+        lambda: (MissingFrameTool(), _StreamingImageQueryTool()),  # type: ignore[return-value]
+        _ignore_status,
+    )
+
+    await agent._stream(  # noqa: SLF001
+        UserQuery(text="What is shown?", timestamp_us=123),
+        Context(),  # type: ignore[arg-type]
+    )
+
+    assert [output.text for output in published] == [
+        "No camera frame available — please try again.",
+        "",
+    ]
+    assert [output.final for output in published] == [False, True]
 
 
 async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:

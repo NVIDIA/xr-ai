@@ -203,6 +203,7 @@ class SceneModelLoop:
         self._quick_ack_cache = self._quick_ack_path.read_text(encoding="utf-8").strip()
         self._still_work_cache = self._still_work_path.read_text(encoding="utf-8").strip()
         self._tools = model_tools
+        self._model_tool_names = {tool.name for tool in model_tools}
         self._llm = llm
         self._agent_llm = agent_llm
 
@@ -948,6 +949,8 @@ class SceneModelLoop:
         if isinstance(result, str):
             return {"answer": result}
         if isinstance(result, dict) and "text" in result:
+            if result.get("available") is False:
+                return {"error": result["text"]}
             return {"answer": result["text"]}
         return result
 
@@ -962,6 +965,8 @@ class SceneModelLoop:
         ref_us: int = 0,
     ) -> dict | str | None:
         """Invoke a native tool or a participant-aware perception path."""
+        if tool not in self._model_tool_names:
+            return {"error": f"Unknown model tool: {tool}"}
         # Live perception needs participant context that is not model supplied. Intercept
         # before _normalize_tool_args (which would strip the question text if
         # it ever produced an empty value) and before native invocation.

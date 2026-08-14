@@ -458,6 +458,58 @@ async def test_latest_and_historical_sampling_share_window_semantics(
             assert image.size == (2, 1)
 
 
+@pytest.mark.parametrize("failure", ["pruned", "corrupt", "zero_frames"])
+async def test_frame_sampling_skips_unusable_chunks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    recordings = tmp_path / "recordings"
+    _sample_recording(recordings, "sample/user")
+    original_read_bytes = Path.read_bytes
+    nv12 = np.array(
+        [[16, 16, 16, 16], [16, 16, 16, 16], [128, 128, 128, 128]],
+        dtype=np.uint8,
+    )
+
+    def read_bytes(path: Path) -> bytes:
+        if failure == "pruned" and path.name == "1000000.264":
+            raise FileNotFoundError(path)
+        return original_read_bytes(path)
+
+    def decode(data: bytes, _gpu_id: int) -> list[np.ndarray]:
+        if data == b"1000000":
+            if failure == "corrupt":
+                raise RuntimeError("corrupt chunk")
+            if failure == "zero_frames":
+                return []
+        return [nv12.copy() for _ in range(4)]
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+    monkeypatch.setattr("video_memory_service.service.decode_h264", decode)
+    service = VideoMemoryService(
+        store=ChunkStore(recordings),
+        out_dir=tmp_path / "output",
+        gpu_id=0,
+    )
+
+    result = await service._sample_frames(  # noqa: SLF001
+        HistoricalFramesRequest(
+            participant_id="sample/user",
+            start_us=1_000_000,
+            duration_seconds=7,
+            frame_budget=4,
+        ),
+        1_000_000,
+        8_000_000,
+    )
+
+    assert [frame["timestamp_us"] for frame in result["frames"]] == [
+        6_000_000,
+        8_000_000,
+    ]
+
+
 def test_sampled_png_fits_target_without_upscaling(tmp_path: Path) -> None:
     rgb = np.zeros((2, 4, 3), dtype=np.uint8)
 

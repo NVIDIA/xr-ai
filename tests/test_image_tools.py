@@ -129,7 +129,7 @@ def test_frame_to_pil_supports_non_rgb_frame_formats(pixel_format, data) -> None
 
 
 def test_image_registry_bounds_handles_and_resolves_external_images(tmp_path) -> None:
-    images = ImageRegistry(capacity=1)
+    images = ImageRegistry(capacity=1, allow_external=True)
     expired = images.put(b"first", owner="alice")
     current = images.put(b"second", owner="bob")
 
@@ -143,6 +143,13 @@ def test_image_registry_bounds_handles_and_resolves_external_images(tmp_path) ->
 
     images.release_owner("bob")
     assert len(images) == 0
+
+
+def test_image_registry_rejects_external_images_by_default() -> None:
+    images = ImageRegistry()
+
+    with pytest.raises(ValueError, match="external image references are disabled"):
+        images.resolve(ImageReference(uri="https://example.com/image.png"))
 
 
 def test_image_reference_rejects_inline_data_urls() -> None:
@@ -173,7 +180,9 @@ async def test_current_frame_tool_returns_an_opaque_image_without_a_vlm() -> Non
     }
     encoded = images.resolve(result.image)
     assert isinstance(encoded, bytes)
-    assert Image.open(io.BytesIO(encoded)).size == (2, 2)
+    with Image.open(io.BytesIO(encoded)) as image:
+        size = image.size
+    assert size == (2, 2)
 
 
 async def test_current_frame_tool_requests_pixels_through_real_hub(
@@ -264,7 +273,7 @@ async def test_image_query_accepts_images_not_returned_by_frame_tools(
     uri: str,
     expected_type: type,
 ) -> None:
-    images = ImageRegistry()
+    images = ImageRegistry(allow_external=True)
     vlm = _Vlm("external image")
     tool = ImageQueryTool(images=images, vlm=cast(VLMService, vlm))
 
@@ -314,8 +323,8 @@ async def test_video_query_supplies_ordered_images_and_timestamp_context() -> No
     assert result.text == "the cup was filled"
     sent_images, question, _system_prompt, _headers = vlm.calls[0]
     assert sent_images == [b"first", b"second"]
-    assert "frame 1: timestamp_us=1000000, offset_s=0.000000" in question
-    assert "frame 2: timestamp_us=2500000, offset_s=1.500000" in question
+    assert "frame 1: estimated_timestamp_us=1000000, estimated_offset_s=0.000000" in question
+    assert "frame 2: estimated_timestamp_us=2500000, estimated_offset_s=1.500000" in question
     assert question.endswith("What happened?")
 
 
@@ -329,6 +338,19 @@ def test_video_query_requires_chronological_frames() -> None:
             ],
             query="What happened?",
         )
+
+
+@pytest.mark.parametrize("request_model", [MultiImageQueryRequest, VideoQueryRequest])
+def test_multi_image_queries_match_the_shipped_four_image_limit(request_model) -> None:
+    image = ImageReference(uri="xr-image://test")
+    inputs = [image] * 5
+    field = "images"
+    if request_model is VideoQueryRequest:
+        inputs = [TimedImage(image=image, timestamp_us=index) for index in range(5)]
+        field = "frames"
+
+    with pytest.raises(ValidationError, match="at most 4"):
+        request_model(**{field: inputs, "query": "What happened?"})
 
 
 async def test_image_query_hides_reasoning_and_marks_failures_unavailable() -> None:

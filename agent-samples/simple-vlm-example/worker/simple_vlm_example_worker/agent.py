@@ -152,11 +152,14 @@ class SimpleVlmAgent(Agent):
                 close = getattr(stream, "aclose", None)
                 if close is not None:
                     await close()
-        except FrameUnavailable as exc:
+        except (FrameUnavailable, RuntimeError) as exc:
+            unavailable = _find_frame_unavailable(exc)
+            if unavailable is None:
+                raise
             await ctx.publish(
                 VOICE_OUTPUT_TOPIC,
                 VoiceOutput(
-                    text=str(exc),
+                    text=str(unavailable),
                     response_id=response_id,
                     final=False,
                     interrupt=True,
@@ -203,6 +206,19 @@ class SimpleVlmAgent(Agent):
     def _discard(self, participant_id: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(participant_id) is task:
             self._tasks.pop(participant_id, None)
+
+
+def _find_frame_unavailable(error: BaseException) -> FrameUnavailable | None:
+    """Find a camera error preserved as the cause of a Relay execution error."""
+
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, FrameUnavailable):
+            return current
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return None
 
 
 __all__ = [

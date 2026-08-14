@@ -100,6 +100,10 @@ class HistoricalFramesRequest(_FrameSamplingRequest):
 
 
 class SampledVideoFrame(TimedImage):
+    timestamp_us: int = Field(
+        ge=0,
+        description="Estimated Unix-epoch timestamp interpolated from recording chunk metadata.",
+    )
     path: str
     width: int
     height: int
@@ -130,6 +134,10 @@ class HistoricalFrameRequest(_ParticipantRequest):
 
 
 class HistoricalFrameResult(TimedImage):
+    timestamp_us: int = Field(
+        ge=0,
+        description="Estimated Unix-epoch timestamp interpolated from recording chunk metadata.",
+    )
     path: str
     width: int
     height: int

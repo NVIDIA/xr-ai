@@ -133,9 +133,12 @@ returning. The render agent selects a current or recorded frame first, then
 passes its `ImageReference` to `query_image`. Its native capability set also
 includes `query_images` for ordered collections and `query_video` for
 timestamped frame sequences; all use the same `xr-ai-models` multi-image VLM
-path. Recorded selection is grouped into latest tools, whose windows end at the
-newest recording, and historical tools, whose frame or video window begins at
-one absolute `start_us`.
+path, limited to four images by the shipped Cosmos configuration. These raw
+selectors and query tools are internal composition primitives; the reasoning
+model sees only participant-safe perception facades. Recorded selection is
+grouped into latest tools, whose windows end at the newest recording, and
+historical tools, whose frame or video window begins at one absolute `start_us`.
+Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
 There is a deliberate startup ordering constraint: `VoiceSession` readiness
 blocks on the VLM's `/health` endpoint, which

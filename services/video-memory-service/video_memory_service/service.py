@@ -4,6 +4,7 @@
 """Typed operations over recorded video chunks."""
 
 import asyncio
+import logging
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -20,6 +21,8 @@ from xr_ai_tools.video_memory import (
 
 from .frames import decode_h264, nv12_to_rgb, save_png
 from .store import ChunkStore, safe_name
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def select_decoded_frame(
@@ -241,19 +244,15 @@ class VideoMemoryService:
         seen_timestamps: set[int] = set()
         for chunk, target_times in assignments.items():
             metadata = metadata_by_path[chunk]
-            data = await asyncio.to_thread(chunk.read_bytes)
             try:
+                data = await asyncio.to_thread(chunk.read_bytes)
                 frames = await asyncio.to_thread(decode_h264, data, self._gpu_id)
             except Exception as error:
-                raise RPCError(
-                    f"Decode failed for {chunk.name}: {error}",
-                    code="decode_error",
-                ) from error
+                _LOGGER.warning("Skipping unavailable video chunk %s: %s", chunk, error)
+                continue
             if not frames:
-                raise RPCError(
-                    f"Chunk {chunk.name} decoded zero frames",
-                    code="decode_error",
-                )
+                _LOGGER.warning("Skipping video chunk %s: decoded zero frames", chunk)
+                continue
 
             candidates = self._sample_candidates(
                 chunk,

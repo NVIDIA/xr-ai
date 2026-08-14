@@ -123,11 +123,20 @@ frames also share the `TimedImage` contract consumed by video queries.
 `MultiImageQueryTool` queries an ordered image collection, and `VideoQueryTool`
 queries chronological `TimedImage` frames with their timestamps and relative
 offsets. `StreamingImageQueryTool` preserves the low-latency single-image path.
-All four tools use one list-based inference implementation. References may
-point to selected frames, local paths, file URIs, or HTTP(S) URLs. In-memory
-bytes use a bounded `ImageRegistry`, whose opaque handles keep tool results and
-telemetry small. Query tools forward controlled Relay headers and redact every
-image location from VLM events while preserving provider input.
+All four tools use one list-based inference implementation. The shipped Cosmos
+deployment accepts at most four images in one `query_images` or `query_video`
+call. This inference limit is separate from the video-memory sampling budget;
+select the relevant subset before querying the VLM.
+
+In-memory bytes use a bounded `ImageRegistry`, whose opaque handles keep tool
+results and telemetry small. Registries accept only their own opaque references
+by default. Trusted applications may opt into local paths, file URIs, and
+HTTP(S) URLs with `ImageRegistry(allow_external=True)`, but must not expose an
+external-enabled query tool directly to an untrusted model. Query tools forward
+controlled Relay headers and redact every image location from VLM events while
+preserving provider input. Timelines supplied to video inference are described
+as estimates because recorded-frame timestamps are interpolated from chunk
+metadata rather than persisted per-frame presentation timestamps.
 
 ```python
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
@@ -140,7 +149,7 @@ from xr_ai_tools.vision import (
     VideoQueryTool,
 )
 
-images = ImageRegistry()
+images = ImageRegistry(allow_external=True)
 frames = CurrentFrameTool(endpoint=endpoint, images=images)
 vision = ImageQueryTool(images=images, vlm=vlm)
 video = VideoQueryTool(images=images, vlm=vlm)
@@ -163,7 +172,7 @@ sample = await video_memory.get_latest_frames.execute(
     LatestFramesRequest(
         participant_id="alice",
         duration_seconds=10,
-        frame_budget=8,
+        frame_budget=4,
     )
 )
 change = await video.execute(

@@ -97,10 +97,14 @@ def timestamped_question(query: str, timestamps: Sequence[int | None]) -> str:
     concrete = [timestamp for timestamp in timestamps if timestamp is not None]
     origin = concrete[0]
     timeline = ", ".join(
-        f"frame {index}: timestamp_us={timestamp}, offset_s={(timestamp - origin) / 1_000_000:.6f}"
+        f"frame {index}: estimated_timestamp_us={timestamp}, "
+        f"estimated_offset_s={(timestamp - origin) / 1_000_000:.6f}"
         for index, timestamp in enumerate(concrete, start=1)
     )
-    return f"The images are video frames in chronological order. Timeline: {timeline}\n\n{query}"
+    return (
+        "The images are video frames in chronological order. "
+        f"Timeline values are approximate: {timeline}\n\n{query}"
+    )
 
 
 def openai_response(text: str) -> dict[str, Any]:

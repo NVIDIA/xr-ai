@@ -32,7 +32,7 @@ from .tools import Tool
 from .types import StrictRequest
 
 _LOGGER = logging.getLogger(__name__)
-_MAX_IMAGES = 256
+_MAX_IMAGES = 4
 
 
 class ImageQueryRequest(StrictRequest):
@@ -91,6 +91,15 @@ class _ImageInference:
         query: str,
     ) -> ImageQueryResult:
         try:
+            for image, _timestamp_us in inputs:
+                self.images.resolve(image)
+        except (LookupError, ValueError) as error:
+            _LOGGER.warning("Image input could not be resolved: %s", error)
+            return ImageQueryResult(
+                text="Image input unavailable — please select it again.",
+                available=False,
+            )
+        try:
             register_image_sanitizer()
             response = await nemo_relay.llm.execute(
                 VLM_CALL_NAME,
@@ -125,6 +134,13 @@ class _ImageInference:
     ) -> AsyncIterator[ImageQueryChunk]:
         fragments: list[str] = []
         emitted_output = False
+        try:
+            for image, _timestamp_us in inputs:
+                self.images.resolve(image)
+        except (LookupError, ValueError) as error:
+            _LOGGER.warning("Image input could not be resolved: %s", error)
+            yield ImageQueryChunk(text="Image input unavailable — please select it again.")
+            return
         try:
             register_image_sanitizer()
             stream = await nemo_relay.llm.stream_execute(

@@ -30,14 +30,20 @@ contains discovery operations plus two selection groups:
     samples that same window.
 
 All video windows are bounded to 300 seconds. Sampling adds a hard total
-`frame_budget` cap of 256; sparse recordings may return fewer frames. Optional
-paired `max_width` and `max_height` values fit each PNG within that box while
-preserving aspect ratio and never upscaling. Each sampled frame retains its
-`path` and implements the shared `TimedImage` contract accepted directly by
-`query_video`.
+`frame_budget` cap of 256; sparse recordings and unavailable or corrupt chunks
+may return fewer frames. The budget controls selection and PNG export, not VLM
+inference: the shipped Cosmos configuration accepts at most four images per
+prompt. Native-resolution PNGs and large budgets can produce substantial disk,
+decode, and RPC work, so interactive callers should use a modest budget and set
+paired `max_width` and `max_height` values. Those values fit each PNG within the
+box while preserving aspect ratio and never upscaling. Each sampled frame
+retains its `path` and implements the shared `TimedImage` contract accepted by
+`query_video` after the caller selects no more than the VLM's image limit.
 
-Every `*_us` field is a Unix-epoch timestamp in microseconds. A current camera
-frame is not recorded history; obtain it through
+Every `*_us` field is a Unix-epoch timestamp in microseconds. Exported-frame
+timestamps are estimates linearly interpolated from each chunk's start, end,
+and declared frame count because the recorder does not persist per-frame
+presentation timestamps. A current camera frame is not recorded history; obtain it through
 `xr_ai_tools.current_frame.CurrentFrameTool` in the process that owns the hub
 connection. Together, `get_current_frame`, `get_latest_video`, and
 `get_latest_frames` form the latest-media surface; the three

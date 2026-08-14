@@ -797,7 +797,15 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
         assert "query_image" not in native
         assert "look_at_current_frame" not in native
         assert "look_at_past_frame" not in native
-        assert "get_historical_frame" in native
+        assert not {
+            "get_historical_frame",
+            "get_historical_frames",
+            "get_historical_video",
+            "get_latest_frames",
+            "get_latest_video",
+            "query_images",
+            "query_video",
+        } & native.keys()
 
         # Assemble the model-facing list exactly as the worker does.
         tools = [
@@ -821,6 +829,17 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
         assert "participant_id" not in schema["properties"]
         assert "reference_time_us" not in schema["properties"]
         assert "start_us" not in schema["properties"]
+
+
+async def test_model_dispatch_rejects_tools_outside_the_advertised_schema() -> None:
+    brain = _make_brain(_CaptureTransport())
+
+    result = await brain._execute_tool(  # noqa: SLF001
+        "query_image",
+        {"image": {"uri": "file:///etc/passwd"}, "query": "Read this"},
+    )
+
+    assert result == {"error": "Unknown model tool: query_image"}
 
 
 class _FakeEndpoint:
@@ -923,7 +942,7 @@ async def _perception_brain(transport, vlm: _FakeVLM):
             release_vision=capabilities.release,
             text_memory=None,
             prompt_path=_SYSTEM_PROMPT,
-            model_tools=[],
+            model_tools=list(_loop.PERCEPTION_TOOL_DEFS),
             llm=None,
             agent_llm=None,
         )
