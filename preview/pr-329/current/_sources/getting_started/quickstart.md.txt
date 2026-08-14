@@ -170,11 +170,10 @@ Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.
 
 Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, and the worker. Native NAT Functions
-connect the worker to those capabilities; MCP adapters remain optional outward
-compatibility surfaces. The Pipecat pipeline runs quick-acks
+endpoints, typed capability processes, and the worker. The worker calls those
+processes through Relay-managed native tools. The voice runtime runs quick-acks
 and a Nemotron-30B agentic tool-calling loop over scene, tracking,
-spatial-math, vision, and video-memory Functions. Refer to the xr-render-demo guide for the
+spatial math, vision, and video-memory tools. Refer to the xr-render-demo guide for the
 full process map, agentic-loop details, and the XR session lifecycle.
 
 **Requires `model-servers` to be running first** — the demo does not start its

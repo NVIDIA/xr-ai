@@ -58,7 +58,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="MCP servers" href="mcp-servers.html" />
+    <link rel="next" title="Server runtime" href="server-runtime.html" />
     <link rel="prev" title="AI inference servers" href="ai-services.html" />
 
 
@@ -323,7 +323,6 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,11 +330,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -443,8 +448,6 @@ sample’s <code class="docutils literal notranslate"><span class="pre">yaml/mod
     <span class="c1"># Optional shared components — add as needed:</span>
     <span class="c1"># Process(&quot;cloudxr&quot;, &quot;../../services/cloudxr-runtime&quot;, &quot;cloudxr_runtime&quot;,</span>
     <span class="c1">#         config=&quot;yaml/cloudxr_runtime.yaml&quot;),</span>
-    <span class="c1"># Process(&quot;mcp&quot;,     &quot;../../agent-mcp-servers/oxr-mcp&quot;, &quot;oxr_mcp_server&quot;,</span>
-    <span class="c1">#         config=&quot;yaml/oxr_mcp_server.yaml&quot;),</span>
 <span class="p">]</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -456,14 +459,12 @@ sample’s <code class="docutils literal notranslate"><span class="pre">yaml/mod
 <ul class="simple">
 <li><p><strong>Processes start serially</strong> — each process must create its <code class="docutils literal notranslate"><span class="pre">--ready-file</span></code>
 before the next one starts. Declare processes in dependency order (hub
-before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).</p></li>
+before workers and application processes after the services they call).</p></li>
 <li><p><strong>Every process accepts <code class="docutils literal notranslate"><span class="pre">--ready-file</span> <span class="pre">&lt;path&gt;</span></code></strong> and must <code class="docutils literal notranslate"><span class="pre">Path(path).touch()</span></code>
 when it is fully initialized and ready to serve requests.</p></li>
-<li><p><strong>Native voice workers</strong> pass the ready file to <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code>; <code class="docutils literal notranslate"><span class="pre">run()</span></code>
-touches it only after the input transport’s hub IPC receive loop has started.</p></li>
-<li><p><strong>Direct Pipecat workers</strong> call
-<code class="docutils literal notranslate"><span class="pre">run_voice_pipeline(worker,</span> <span class="pre">transport,</span> <span class="pre">on_ready=ready_file.touch)</span></code> to use the
-same IPC-start readiness boundary.</p></li>
+<li><p><strong>Native voice workers</strong> pass the ready file to the <code class="docutils literal notranslate"><span class="pre">VoiceSession</span></code> owned by
+<code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code>; the session touches it only after the input transport’s hub IPC
+receive loop has started.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> always runs as its own process — never embedded in-process.</p></li>
 <li><p>The worker never imports anything from <code class="docutils literal notranslate"><span class="pre">xr_media_hub</span></code> or <code class="docutils literal notranslate"><span class="pre">xr_ai_launcher</span></code>.</p></li>
 <li><p>Process management lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code>, not inside any process it manages.</p></li>
@@ -625,11 +626,11 @@ behavior). It is a bespoke NeMo docker path, deliberately separate from
       </div>
     </a>
     <a class="right-next"
-       href="mcp-servers.html"
+       href="server-runtime.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">MCP servers</p>
+        <p class="prev-next-title">Server runtime</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

@@ -59,7 +59,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Guides" href="../guides/index.html" />
-    <link rel="prev" title="MCP servers" href="mcp-servers.html" />
+    <link rel="prev" title="Launcher and process model" href="launcher-and-process-model.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -323,7 +323,6 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,11 +330,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -454,9 +459,7 @@ is addressed with <code class="docutils literal notranslate"><span class="pre">d
 transport. LiveKit natively supports client-to-client communication, and an
 application is free to use those native features directly for peer-to-peer
 media or data. Doing so is <strong>outside the scope of XR AI</strong>: the hub neither
-routes nor guarantees that traffic, and because the transport is an
-implementation detail, a future streaming backend may not offer the same
-client-to-client capability. Build on the hub’s participant ↔ agent contract
+routes nor guarantees that traffic. This traffic is outside the hub contract and is not portable across transports. Build on the hub’s participant ↔ agent contract
 for behavior that ports across backends.</p>
 </div>
 </section>
@@ -646,12 +649,12 @@ returns a plain
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="mcp-servers.html"
+       href="launcher-and-process-model.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">MCP servers</p>
+        <p class="prev-next-title">Launcher and process model</p>
       </div>
     </a>
     <a class="right-next"

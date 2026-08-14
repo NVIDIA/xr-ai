@@ -300,7 +300,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -308,11 +307,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -512,11 +517,10 @@ red”, “put it to my left”, “where I’m looking”). Runs against a Ques
 Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.</p>
 <p>Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, and the worker. Native NAT Functions
-connect the worker to those capabilities; MCP adapters remain optional outward
-compatibility surfaces. The Pipecat pipeline runs quick-acks
+endpoints, typed capability processes, and the worker. The worker calls those
+processes through Relay-managed native tools. The voice runtime runs quick-acks
 and a Nemotron-30B agentic tool-calling loop over scene, tracking,
-spatial-math, vision, and video-memory Functions. Refer to the xr-render-demo guide for the
+spatial math, vision, and video-memory tools. Refer to the xr-render-demo guide for the
 full process map, agentic-loop details, and the XR session lifecycle.</p>
 <p><strong>Requires <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> to be running first</strong> — the demo does not start its
 own model services.</p>
