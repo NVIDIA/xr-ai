@@ -57,9 +57,6 @@ def run() -> None:
 - **Native voice workers** pass the ready file to the `VoiceSession` owned by
   `VoiceAgent`; the session touches it only after the input transport's hub IPC
   receive loop has started.
-- **Direct Pipecat workers** call
-  `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` to use the
-  same IPC-start readiness boundary.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
 - The worker never imports anything from `xr_media_hub` or `xr_ai_launcher`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
