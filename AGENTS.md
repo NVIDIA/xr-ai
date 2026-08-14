@@ -197,7 +197,7 @@ When a sample's behaviour is driven by an LLM prompt (e.g.
   case in the sample's `eval/` harness in the same edit. A rule without
   a case is unverified.
 - **Run the cheap gate after every prompt or ops edit** (xr-render-demo:
-  `uv run xr_render_demo_eval basics`). Prompt edits contaminate
+  `uv run xr_render_demo_eval utterances`). Prompt edits contaminate
   neighboring behaviors, and full-suite variance hides single-case
   damage; debug at the lowest tier that reproduces a failure and rerun
   the tiers above it before calling a fix done.

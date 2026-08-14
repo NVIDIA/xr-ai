@@ -11,9 +11,7 @@ shared with other samples, see {doc}`/components/ai-services`.
 
 ## Process stack
 
-The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) starts
-its processes concurrently. There is no startup ordering — every process
-must tolerate peers that are not yet ready. `run_stack` is fail-fast: any
+The orchestrator (`xr_render_demo`, stdlib-only via `xr-ai-launcher`) starts its processes serially in declaration order; each touches its ready file before the next process starts. `run_stack` is fail-fast: any
 exit terminates the whole stack.
 
 | Role | Directory | Command | Port |

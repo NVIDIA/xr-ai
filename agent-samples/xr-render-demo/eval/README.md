@@ -23,13 +23,13 @@ All commands run from the eval project:
 ```bash
 cd agent-samples/xr-render-demo/eval && uv sync   # once
 
-# Full corpus + native cases + basics battery
+# Full corpus + precision cases + utterances battery
 uv run xr_render_demo_eval
 
-# The basics battery alone: the most common utterances, their perturbation
+# The utterances battery alone: the most common utterances, their perturbation
 # classes, and history-bearing variants. Run after EVERY prompt or ops
 # change; full-suite variance hides single-case damage.
-uv run xr_render_demo_eval basics
+uv run xr_render_demo_eval utterances
 
 # Subset by case name (space-separated; unknown names error out)
 uv run xr_render_demo_eval move_left_one_meter between_two_spheres
@@ -82,30 +82,23 @@ description fixed in one step what five prompt variants could not, with
 `spatial_ops` resolving shape synonyms, mangled nouns, and color words
 against the scene deterministically.
 
-## Watcher
+## Prompt-tuning loop
 
-`eval_watch.sh` polls a combined sha1 of every worker prompt file
-(`supervisor_prompt.txt` and `agents/*/prompt.txt`) once per second (hash,
-not mtime: editors re-save without changing bytes). Any content change
-aborts the running eval and starts a new corpus run once the prompts have
-been quiet for 10 seconds, so a prompt-tuning loop can read scores out of
-`/tmp/eval_loop.log` without relaunching between rounds.
+When iterating on `supervisor_prompt.txt` or any subagent prompt, run the
+fast gate manually after each edit:
 
 ```bash
-agent-samples/xr-render-demo/eval/eval_watch.sh
-tail -f /tmp/eval_loop.log
-kill $(cat /tmp/eval_watch.pid)   # stop
+uv run xr_render_demo_eval utterances
 ```
 
-Only one watcher runs at a time; a second invocation refuses to start and
-prints the existing PID. Linux-only (the single-instance guard reads
-`/proc/<pid>/cmdline`).
+25 cases, ~3 minutes. The `scenarios` and `precision` tiers catch
+regressions but take longer; run them before calling a tuning round done.
 
 ## Writing a case
 
 The end-to-end corpus lives in `xr_render_demo_eval/cases.py` (dict-shaped;
 pose override, multi-turn `history`, and undo `recent_moves` are all
-exemplified). Native and basics cases are `Case` dataclasses in
+exemplified). Precision and utterances cases are `Case` dataclasses in
 `xr_render_demo_eval/harness.py`; routing and component cases live in
 `supervisor.py` and `subagents.py`. Copy the closest existing case and edit.
 

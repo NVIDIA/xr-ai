@@ -9,7 +9,7 @@ import sys
 import time
 
 from xr_ai_hub import DataMessage, ParticipantEvent, ProcessorEndpoint
-from xr_ai_nat.functions._service.rpc import RPCClient
+from xr_ai_tools.rpc import RPCClient
 from xr_render_scene import EmptyRequest, SceneClient
 
 CANONICAL = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0, "z": -1},
@@ -62,20 +62,17 @@ async def clear_scene(scene):
         await scene.remove_primitive(RemovePrimitiveRequest(obj_id=item.id))
 
 async def main() -> None:
-    participant = f"live-smoke-{int(time.time())}"
     tracking = RPCClient("tcp://127.0.0.1:8330", timeout_s=10.0)
     scene = SceneClient("tcp://127.0.0.1:8320")
     await clear_scene(scene)
     endpoint = ProcessorEndpoint(sub_addr="ipc:///tmp/xr_hub_pub", push_addr="ipc:///tmp/xr_hub_in")
     run_task = asyncio.create_task(endpoint.run())
     await asyncio.sleep(0.5)
-    await endpoint.inject_participant_event(ParticipantEvent(
-        participant_id=participant, joined=True, pts_us=time.time_ns() // 1_000))
-    await asyncio.sleep(1.0)
 
     failed = 0
     try:
         passed = failed = 0
+        case_index = 0
         for pose_name, p in POSES.items():
             try:
                 await tracking.call("set_sim_pose", p)
@@ -84,6 +81,9 @@ async def main() -> None:
                       "yaml/openxr_service.yaml and restart the stack")
                 raise SystemExit(2) from None
             for prompt, distance in PROMPT_SETS[pose_name]:
+                participant = f"live-pose-{int(time.time())}-{case_index}"
+                await endpoint.inject_participant_event(ParticipantEvent(
+                    participant_id=participant, joined=True, pts_us=time.time_ns() // 1_000))
                 await clear_scene(scene)
                 before = {i.id for i in (await scene.get_scene_state(EmptyRequest())).objects}
                 await endpoint.inject_data(DataMessage(
@@ -119,6 +119,9 @@ async def main() -> None:
                       f"expected ({ex:.2f},{ey:.2f},{ez:.2f}) miss={miss:.2f}")
                 passed += verdict == "PASS"
                 failed += verdict == "FAIL"
+                await endpoint.inject_participant_event(ParticipantEvent(
+                    participant_id=participant, joined=False, pts_us=time.time_ns() // 1_000))
+                case_index += 1
         print(f"\npose matrix: {passed} passed, {failed} failed", flush=True)
     finally:
         try:

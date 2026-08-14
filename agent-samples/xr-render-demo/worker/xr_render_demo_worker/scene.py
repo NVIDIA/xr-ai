@@ -5,51 +5,53 @@
 
 from __future__ import annotations
 
-from nat.plugin_api import Function
-from xr_ai_nat.functions.xr_tracking import HeadPoseRequest
-from xr_render_scene import EmptyRequest, SceneState
+from xr_ai_tools.tracking import TrackingTools
+from xr_ai_tools.types import EmptyRequest, SpatialFrame
+from xr_render_scene import SceneState, SceneTools
 
 
 class SceneContext:
     """Read authoritative scene state and retain the last movement for undo."""
 
-    def __init__(self, get_scene_state: Function, get_user_frame: Function | None = None) -> None:
-        self._get_scene_state = get_scene_state
-        self._get_user_frame = get_user_frame
+    def __init__(self, scene: SceneTools, tracking: TrackingTools | None = None) -> None:
+        self._scene = scene
+        self._tracking = tracking
         self._recent_moves: dict[str, list[str]] = {}
         self._recent_moves_age: dict[str, int] = {}
         self._mutating_delegations: set[str] = set()
         self._any_delegations: set[str] = set()
 
     def mark_mutating(self, participant_id: str) -> None:
-        """Flag that this turn delegated mutating work."""
         self._mutating_delegations.add(participant_id)
         self._any_delegations.add(participant_id)
 
     def mark_delegated(self, participant_id: str) -> None:
-        """Flag that this turn delegated any subagent work."""
         self._any_delegations.add(participant_id)
 
     def take_delegated(self, participant_id: str) -> bool:
-        """Consume and return whether the turn delegated at all."""
         if participant_id in self._any_delegations:
             self._any_delegations.discard(participant_id)
             return True
         return False
 
     def take_mutating(self, participant_id: str) -> bool:
-        """Consume and return whether the turn delegated any mutating work."""
         if participant_id in self._mutating_delegations:
             self._mutating_delegations.discard(participant_id)
             return True
         return False
 
     async def snapshot(self) -> SceneState:
-        """Return the renderer's current typed scene state."""
-        return await self._get_scene_state.ainvoke(EmptyRequest())
+        return await self._scene.get_scene_state.execute(EmptyRequest())
+
+    async def user_frame(self) -> SpatialFrame | None:
+        if self._tracking is None:
+            return None
+        try:
+            return await self._tracking.get_user_frame.execute(EmptyRequest())
+        except Exception:
+            return None
 
     async def describe(self, participant_id: str, *, bearings: bool = False) -> str:
-        """Format the current scene and participant's last movement for a subagent."""
         state = await self.snapshot()
         parts = [f"[SCENE OBJECTS]\n{state.model_dump_json()}"]
         if bearings and (computed := await self._bearings(state)):
@@ -61,11 +63,8 @@ class SceneContext:
         return "\n\n".join(parts)
 
     async def _bearings(self, state: SceneState) -> str:
-        if self._get_user_frame is None or not state.objects:
-            return ""
-        try:
-            frame = await self._get_user_frame.ainvoke(HeadPoseRequest())
-        except Exception:
+        frame = await self.user_frame()
+        if frame is None or not state.objects:
             return ""
         lines = []
         for item in state.objects:
@@ -74,12 +73,12 @@ class SceneContext:
             dz = item.position.z - frame.origin.z
             right = dx * frame.right.x + dy * frame.right.y + dz * frame.right.z
             ahead = dx * frame.forward.x + dy * frame.forward.y + dz * frame.forward.z
-            lines.append(f"  {item.id}: {right:+.2f} right, {ahead:+.2f} ahead, {dy:+.2f} up")
+            up = dx * frame.up.x + dy * frame.up.y + dz * frame.up.z
+            lines.append(f"  {item.id}: {right:+.2f} right, {ahead:+.2f} ahead, {up:+.2f} up")
         return "\n".join(lines)
 
     @staticmethod
     def changes(before: SceneState, after: SceneState) -> str:
-        """Summarize what actually changed between two snapshots; empty if nothing."""
         old = {item.id: item for item in before.objects}
         new = {item.id: item for item in after.objects}
         lines = []
@@ -110,7 +109,6 @@ class SceneContext:
         return {item.id: (item.position.x, item.position.y, item.position.z) for item in state.objects}
 
     async def record_moves(self, participant_id: str, before: SceneState) -> None:
-        """Record positions changed during one turn so a later undo can restore them."""
         before_positions = self.positions(before)
         after_positions = self.positions(await self.snapshot())
         moves = [
@@ -118,9 +116,6 @@ class SceneContext:
             for object_id, position in after_positions.items()
             if object_id in before_positions and before_positions[object_id] != position
         ]
-        # A turn that moved nothing keeps the previous turn's undo data
-        # alive for one more turn; older records would restore stale
-        # positions on a much later "put it back".
         if moves:
             self._recent_moves[participant_id] = moves
             self._recent_moves_age[participant_id] = 0

@@ -9,7 +9,7 @@ import sys
 import time
 
 from xr_ai_hub import DataMessage, ParticipantEvent, ProcessorEndpoint
-from xr_ai_nat.functions._service.rpc import RPCClient
+from xr_ai_tools.rpc import RPCClient
 from xr_render_scene import AddPrimitiveRequest, EmptyRequest, SceneClient
 
 CANONICAL = {"position": {"x": 0, "y": 1.6, "z": 0}, "forward": {"x": 0, "y": 0, "z": -1},
@@ -162,6 +162,7 @@ async def main() -> None:
         await scene.close()
         await tracking.close()
         run_task.cancel()
+    sys.exit(1 if failed else 0)
 
 
 def run() -> None:

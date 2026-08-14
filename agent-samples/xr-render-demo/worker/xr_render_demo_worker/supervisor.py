@@ -1,45 +1,38 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compose the sample's focused agent Functions into its top-level workflow."""
+"""Scene supervisor: coordinate five focused subagents over a direct LLM loop."""
+
+from __future__ import annotations
 
 from pathlib import Path
 
-from loguru import logger
-from nat.builder.function import LambdaFunction
-from nat.plugin_api import Builder, Function, FunctionBaseConfig, FunctionInfo, FunctionRef, LLMRef
-from nat.plugins.langchain.agent.tool_calling_agent.register import ToolCallAgentWorkflowConfig
-from xr_ai_models import LLMService
-from xr_ai_nat.functions.text_memory import RecallConversationRequest
-from xr_ai_nat.llm import ModelsLLMConfig
+from xr_ai_models import ChatMessage, LLMService
+from xr_ai_tools import Tool, ToolSet
+from xr_ai_tools.historical_vision import HistoricalVisionTool
+from xr_ai_tools.live_vision import LiveVisionTool
+from xr_ai_tools.text_memory import RecallConversationRequest, TextMemoryTools
+from xr_ai_tools.tool_calling import tool_definitions
+from xr_ai_tools.tracking import TrackingTools
+from xr_render_scene import SceneTools
 
+from ._loop import tool_loop
 from .agents import (
-    AppearanceAgentConfig,
-    MemoryAgentConfig,
-    ObjectAgentConfig,
-    PlacementAgentConfig,
-    VisionAgentConfig,
+    make_appearance_agent,
+    make_memory_agent,
+    make_object_agent,
+    make_placement_agent,
+    make_vision_agent,
 )
 from .models import SceneReply, SceneRequest
 from .scene import SceneContext
-from .spatial_ops import CreationLedger
 
 _PROMPT = Path(__file__).with_name("supervisor_prompt.txt")
-_LLM_NAME = LLMRef("scene_llm")
 
-# Words that cannot end a complete command; VAD truncation leaves them
-# dangling ("Put the sphere on the"). The model reliably autocompletes such
-# fragments from scene state, so they never reach it.
 _DANGLING_WORDS = frozenset(
     "a an the my your its of to on in at by and or with near under over "
     "onto into between behind above below beside toward towards from".split()
 )
-
-
-def _is_truncated(transcript: str) -> bool:
-    words = transcript.strip().rstrip(".?!,;").lower().split()
-    return bool(words) and words[-1] in _DANGLING_WORDS
-
 
 _ARTICLES = frozenset({"a", "an", "the", "my", "your", "its"})
 
@@ -55,6 +48,11 @@ _ACTION_VERBS = frozenset(
 )
 
 
+def _is_truncated(transcript: str) -> bool:
+    words = transcript.strip().rstrip(".?!,;").lower().split()
+    return bool(words) and words[-1] in _DANGLING_WORDS
+
+
 def _truncated_reply(transcript: str) -> str:
     words = transcript.strip().rstrip(".?!,;").split()
     tail = words[-1]
@@ -64,7 +62,6 @@ def _truncated_reply(transcript: str) -> str:
 
 
 def _splice_completion(prefix: str, completion: str) -> str:
-    """Join a cut-off request with its answer, merging overlapping words."""
     head = prefix.strip().rstrip(".?!,;")
     tail_words = completion.strip().rstrip(".?!,;").split()
     head_words = head.split()
@@ -72,8 +69,7 @@ def _splice_completion(prefix: str, completion: str) -> str:
         if (
             len(head_words) >= overlap
             and len(tail_words) >= overlap
-            and [word.lower() for word in head_words[-overlap:]]
-            == [word.lower() for word in tail_words[:overlap]]
+            and [w.lower() for w in head_words[-overlap:]] == [w.lower() for w in tail_words[:overlap]]
         ):
             tail_words = tail_words[overlap:]
             break
@@ -81,12 +77,6 @@ def _splice_completion(prefix: str, completion: str) -> str:
 
 
 def _resolve_truncation_reply(prefix: str, transcript: str) -> str | None:
-    """Decide what a turn following the truncation ask-back means.
-
-    Returns the transcript to process, or None when the turn cancels the
-    cut-off request. A turn with its own action verb is a fresh command; a
-    bare fragment answers the ask and splices onto the cut-off prefix.
-    """
     words = transcript.strip().rstrip(".?!,;").lower()
     if words in _CANCEL_PHRASES:
         return None
@@ -95,43 +85,41 @@ def _resolve_truncation_reply(prefix: str, transcript: str) -> str | None:
     return _splice_completion(prefix, transcript)
 
 
-class SceneSupervisorConfig(FunctionBaseConfig, name="xr_render_scene_supervisor"):
-    """Registry and tracing identity for the supervisor function."""
+class SceneSupervisor:
 
+    def __init__(
+        self,
+        llm: LLMService,
+        scene: SceneTools,
+        tracking: TrackingTools,
+        text_memory: TextMemoryTools,
+        live_vision: LiveVisionTool | None = None,
+        past_vision: HistoricalVisionTool | None = None,
+        *,
+        subagent_tools: list[Tool] | None = None,
+    ) -> None:
+        context = SceneContext(scene, tracking)
+        if subagent_tools is None:
+            if live_vision is None or past_vision is None:
+                raise ValueError("live_vision and past_vision are required when subagent_tools is not provided")
+            subagent_tools = [
+                make_placement_agent(llm, scene, tracking, context),
+                make_appearance_agent(llm, scene, context),
+                make_object_agent(llm, scene, tracking, context),
+                make_vision_agent(llm, live_vision, past_vision, context),
+                make_memory_agent(llm, text_memory),
+            ]
+        self._llm = llm
+        self._context = context
+        self._text_memory = text_memory
+        self._toolset = ToolSet(subagent_tools)
+        self._tool_defs = tool_definitions(self._toolset)
+        self._prompt = _PROMPT.read_text(encoding="utf-8").strip()
 
-async def scene_supervisor(
-    *,
-    builder: Builder,
-    llm: LLMService,
-    context: SceneContext | None = None,
-) -> Function:
-    """Compose five subagents without knowing their transitive capabilities."""
-    await builder.add_llm(
-        _LLM_NAME,
-        ModelsLLMConfig(
-            service=llm,
-            model_name="xr-scene-agent",
-            max_tokens=2048,
-            temperature=0.0,
-            recover_tool_calls=True,
-        ),
-    )
-    if context is None:
-        scene_state = await builder.get_function_group("scene_state")
-        scene_functions = await scene_state.get_all_functions()
-        tracking = await builder.get_function_group("tracking")
-        tracking_functions = await tracking.get_all_functions()
-        context = SceneContext(
-            scene_functions["scene_state__get_scene_state"],
-            tracking_functions["tracking__get_user_frame"],
+    async def _recent_conversation(self, participant_id: str) -> tuple[str, str]:
+        recalled = await self._text_memory.recall_conversation.execute(
+            RecallConversationRequest(participant_id=participant_id)
         )
-    conversations = await builder.get_function_group("conversations")
-    conversation_functions = await conversations.get_all_functions()
-    recall = conversation_functions["conversations__recall_conversation"]
-
-    async def recent_conversation(participant_id: str) -> tuple[str, str]:
-        """Return the conversation block plus any pending cut-off request."""
-        recalled = await recall.ainvoke(RecallConversationRequest(participant_id=participant_id))
         entries = recalled.entries[-8:]
         if not entries:
             return "", ""
@@ -143,99 +131,67 @@ async def scene_supervisor(
             and entries[-2].role == "user"
         ):
             pending = entries[-2].text
-        lines = [f"  {'User' if entry.role == 'user' else 'Agent'}: {entry.text}" for entry in entries]
+        lines = [f"  {'User' if e.role == 'user' else 'Agent'}: {e.text}" for e in entries]
         block = (
             "[Recent conversation] (already handled; never a source of new work)\n"
             + "\n".join(lines) + "\n\n"
         )
         return block, pending
 
-    ledger = CreationLedger()
-    subagents = (
-        ("placement_agent", PlacementAgentConfig(context=context)),
-        ("appearance_agent", AppearanceAgentConfig(context=context)),
-        ("object_agent", ObjectAgentConfig(context=context, ledger=ledger)),
-        ("vision_agent", VisionAgentConfig(context=context)),
-        ("memory_agent", MemoryAgentConfig()),
-    )
-    for name, config in subagents:
-        await builder.add_function(name, config)
-
-    reasoning = await builder.add_function(
-        "supervisor_reasoning",
-        ToolCallAgentWorkflowConfig(
-            llm_name=_LLM_NAME,
-            tool_names=[FunctionRef(name) for name, _config in subagents],
-            system_prompt=_PROMPT.read_text(encoding="utf-8").strip(),
-            handle_tool_errors=True,
-            max_iterations=12,
-            max_empty_response_retries=1,
-        ),
-    )
-
-    async def supervise(request: SceneRequest) -> SceneReply:
+    async def handle(self, request: SceneRequest) -> SceneReply:
         if _is_truncated(request.transcript):
             return SceneReply(response=_truncated_reply(request.transcript))
-        conversation, pending_truncation = await recent_conversation(request.participant_id)
+
+        conversation, pending_truncation = await self._recent_conversation(request.participant_id)
         transcript = request.transcript
         if pending_truncation:
             resolved = _resolve_truncation_reply(pending_truncation, transcript)
             if resolved is None:
                 return SceneReply(response="Okay, never mind that.")
             transcript = resolved
-        ledger.reset()
-        context.take_mutating(request.participant_id)
-        context.take_delegated(request.participant_id)
-        before = await context.snapshot()
-        message = (
+
+        self._context.take_mutating(request.participant_id)
+        self._context.take_delegated(request.participant_id)
+        before = await self._context.snapshot()
+
+        user_message = (
             f"Active participant: {request.participant_id}\n"
             f"Utterance timestamp: {request.timestamp_us}\n"
-            f"{await context.describe(request.participant_id)}\n\n"
+            f"{await self._context.describe(request.participant_id)}\n\n"
             f"{conversation}"
             f"User request: {transcript}"
         )
-        # A failed reasoning pass must degrade, not raise: the verification
-        # pass below then gets a chance to complete the turn.
-        try:
-            output = await reasoning.ainvoke(message, to_type=str)
-        except Exception as error:
-            logger.error("supervisor reasoning failed: {}", error)
-            output = "Something went wrong on my side; please say that again."
+        messages = [
+            ChatMessage(role="system", content=self._prompt),
+            ChatMessage(role="user", content=user_message),
+        ]
+
+        output = await tool_loop(
+            self._llm, messages, self._tool_defs, self._toolset, max_tokens=2048
+        )
+
         # Conversational turns (no delegation, reply is a question) skip
-        # the verification pass so chat stays single-pass. Feeding the diff
-        # back on turns that DID mutate makes the model re-delegate
-        # completed work with jittered arguments, defeating both scoring
-        # and the creation ledger.
-        # An ask-back with NO delegation behind it is genuine conversation;
-        # an ask-back after a delegation (e.g. vision degraded) is a turn
-        # that may still owe a mutation, so it keeps the rescue pass.
-        context.take_mutating(request.participant_id)
-        delegated_any = context.take_delegated(request.participant_id)
+        # the verification pass. An ask-back after delegation keeps the pass
+        # in case the subagent owed a mutation it didn't complete.
+        self._context.take_mutating(request.participant_id)
+        delegated_any = self._context.take_delegated(request.participant_id)
         conversational = not delegated_any and str(output or "").rstrip().endswith("?")
-        if not conversational and not SceneContext.changes(before, await context.snapshot()):
-            verification = (
-                f"{message}\n\n"
-                f"Your reply so far: {output}\n"
-                "Verified scene changes this turn: none. If the request needed a"
-                " scene change, delegate the remaining work now; if it needed"
-                " none, repeat your final answer."
+
+        if not conversational and not SceneContext.changes(before, await self._context.snapshot()):
+            verification_messages = messages + [
+                ChatMessage(role="assistant", content=output or ""),
+                ChatMessage(role="user", content=(
+                    "Verified scene changes this turn: none. If the request needed a"
+                    " scene change, delegate the remaining work now; if it needed"
+                    " none, repeat your final answer."
+                )),
+            ]
+            output = await tool_loop(
+                self._llm, verification_messages, self._tool_defs, self._toolset, max_tokens=2048
             )
-            try:
-                output = await reasoning.ainvoke(verification, to_type=str)
-            except Exception as error:
-                logger.error("supervisor verification pass failed: {}", error)
-                output = "Something went wrong on my side; please say that again."
-        await context.record_moves(request.participant_id, before)
-        return SceneReply(response=str(output or "Done."))
 
-    return LambdaFunction.from_info(
-        config=SceneSupervisorConfig(),
-        info=FunctionInfo.from_fn(
-            supervise,
-            description="Coordinate focused XR subagents to satisfy one complete request.",
-        ),
-        instance_name="xr_scene_supervisor",
-    )
+        await self._context.record_moves(request.participant_id, before)
+        return SceneReply(response=output or "Done.")
 
 
-__all__ = ["scene_supervisor"]
+__all__ = ["SceneSupervisor"]

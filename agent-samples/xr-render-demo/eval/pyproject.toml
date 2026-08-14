@@ -13,7 +13,7 @@ dependencies = [
     "xr-render-demo-worker",
     "xr-render-scene",
     "xr-ai-models",
-    "xr-ai-nat[agents,services]",
+    "xr-ai-tools[live-vision,services]",
     "pyyaml>=6.0",
 ]
 
@@ -21,7 +21,7 @@ dependencies = [
 xr-render-demo-worker = { path = "../worker", editable = true }
 xr-render-scene = { path = "../scene", editable = true }
 xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
-xr-ai-nat = { path = "../../../agent-sdk/xr-ai-nat", editable = true }
+xr-ai-tools = { path = "../../../agent-sdk/xr-ai-tools", editable = true }
 
 [project.scripts]
 xr_render_demo_eval = "xr_render_demo_eval.harness:run"

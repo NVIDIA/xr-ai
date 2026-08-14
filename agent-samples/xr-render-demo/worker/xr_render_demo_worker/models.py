@@ -20,8 +20,8 @@ class SceneReply(BaseModel):
 class SubagentTask(BaseModel):
     """Self-contained task passed from the supervisor to one focused agent.
 
-    Model-visible: NAT lifts this docstring into every subagent's tool
-    schema, so it shapes how the supervisor phrases delegations.
+    Model-visible: this docstring is exposed in the subagent tool schema
+    and shapes how the supervisor phrases delegations.
     """
 
     instruction: str = Field(description="Focused task including facts returned by earlier subagents.")

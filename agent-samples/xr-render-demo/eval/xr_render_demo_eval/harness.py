@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run the real native-NAT render workflow against an in-memory XR scene."""
+"""Run the render workflow against an in-memory XR scene."""
 
 import argparse
 import asyncio
@@ -9,19 +9,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from nat.builder.workflow_builder import WorkflowBuilder
-from nat.plugin_api import Builder, FunctionGroup, FunctionGroupBaseConfig, register_function_group
-from pydantic import ConfigDict, Field
 from xr_ai_models import load_models_config, make_llm
-from xr_ai_nat.functions.spatial_math import SpatialMathFunctionsConfig
-from xr_ai_nat.functions.text_memory import ConversationEntry, RecallConversationRequest, RecallConversationResult
-from xr_ai_nat.functions.types import SpatialFrame, Vector3
-from xr_ai_nat.functions.vision import HistoricalVisionRequest, LiveVisionRequest, LiveVisionResult
-from xr_ai_nat.functions.xr_tracking import HeadPose, HeadPoseRequest
+from xr_ai_tools import Tool
+from xr_ai_tools.text_memory import (
+    ConversationEntry,
+    RecallConversationRequest,
+    RecallConversationResult,
+)
+from xr_ai_tools.types import SpatialFrame, Vector3
 from xr_render_demo_worker.config import load_config
 from xr_render_demo_worker.models import SceneRequest
-from xr_render_demo_worker.scene import SceneContext
-from xr_render_demo_worker.supervisor import SceneSupervisorConfig
+from xr_render_demo_worker.supervisor import SceneSupervisor
 from xr_render_scene import (
     AddPrimitiveRequest,
     AddPrimitiveResult,
@@ -51,126 +49,71 @@ _DEFAULT_POSE = {
 }
 
 
-class _EvalSceneStateConfig(FunctionGroupBaseConfig, name="xr_render_eval_scene_state"):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    scene: Any = Field(exclude=True, repr=False)
+class _FakeSceneTools:
+    def __init__(self, fake: "FakeScene") -> None:
+        self.get_scene_state = Tool("get_scene_state", "Return scene.", EmptyRequest, SceneState, fake.get_scene_state)
+        self.update_primitive = Tool(
+            "update_primitive", "Update.", UpdatePrimitiveRequest, MutationResult, fake.update_primitive)
+        self.add_primitive = Tool(
+            "add_primitive", "Add.", AddPrimitiveRequest, AddPrimitiveResult, fake.add_primitive)
+        self.remove_primitive = Tool(
+            "remove_primitive", "Remove.", RemovePrimitiveRequest, MutationResult, fake.remove_primitive)
+        async def _noop(req: Any) -> None:
+            return None
+        self.start_xr = Tool("start_xr", "Start.", EmptyRequest, None, _noop)
+        self.get_health = Tool("get_health", "Health.", EmptyRequest, None, _noop)
+        self.tools = (self.get_scene_state, self.update_primitive, self.add_primitive,
+                      self.remove_primitive, self.start_xr, self.get_health)
 
 
-@register_function_group(config_type=_EvalSceneStateConfig)
-async def _eval_scene_state(config: _EvalSceneStateConfig, _builder: Builder):
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "get_scene_state",
-        config.scene.get_scene_state,
-        description="Return the scene.",
-    )
-    yield group
+class _FakeTrackingTools:
+    def __init__(self, pose: SpatialFrame) -> None:
+        self.get_user_frame = Tool("get_user_frame", "User frame.", EmptyRequest, SpatialFrame, lambda _: pose)
 
 
-class _EvalSceneUpdatesConfig(FunctionGroupBaseConfig, name="xr_render_eval_scene_updates"):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    scene: Any = Field(exclude=True, repr=False)
+class _FakeTextMemoryTools:
+    def __init__(self, fake: "FakeScene") -> None:
+        async def recall(req: RecallConversationRequest) -> RecallConversationResult:
+            fake.calls.append(("recall_conversation", req.model_dump()))
+            entries: list[ConversationEntry] = []
+            for i, (user_text, agent_text) in enumerate(fake.history):
+                entries.append(ConversationEntry(timestamp_us=(i + 1) * 1_000_000, role="user", text=user_text))
+                entries.append(ConversationEntry(timestamp_us=(i + 1) * 1_000_000 + 1, role="agent", text=agent_text))
+            if fake.memory_answer:
+                entries.append(ConversationEntry(timestamp_us=1, role="agent", text=fake.memory_answer))
+            return RecallConversationResult(entries=entries)
+
+        self.recall_conversation = Tool(
+            "recall_conversation", "Recall.", RecallConversationRequest, RecallConversationResult, recall)
+        async def _noop_transcript(req: Any) -> None:
+            return None
+        self.add_transcript = Tool("add_transcript", "Add.", EmptyRequest, None, _noop_transcript)
 
 
-@register_function_group(config_type=_EvalSceneUpdatesConfig)
-async def _eval_scene_updates(config: _EvalSceneUpdatesConfig, _builder: Builder):
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "update_primitive",
-        config.scene.update_primitive,
-        description="Update an object.",
-    )
-    yield group
+class _FakeLiveVisionTool:
+    def __init__(self, fake: "FakeScene") -> None:
+        self._fake = fake
+
+    async def execute(self, request: Any) -> Any:
+        from xr_ai_tools._vision import VisionResponse
+
+        self._fake.calls.append(("look_at_current_frame", {"question": request.query}))
+        if self._fake.vision_error:
+            return VisionResponse(text=self._fake.vision_error, available=False)
+        return VisionResponse(text=self._fake.vision_answer or "Nothing notable is visible.", available=True)
 
 
-class _EvalSceneObjectsConfig(FunctionGroupBaseConfig, name="xr_render_eval_scene_objects"):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    scene: Any = Field(exclude=True, repr=False)
+class _FakePastVisionTool:
+    def __init__(self, fake: "FakeScene") -> None:
+        self._fake = fake
 
+    async def execute(self, request: Any) -> Any:
+        from xr_ai_tools.historical_vision import VisionResult
 
-@register_function_group(config_type=_EvalSceneObjectsConfig)
-async def _eval_scene_objects(config: _EvalSceneObjectsConfig, _builder: Builder):
-    group = FunctionGroup(config=config)
-    group.add_function("add_primitive", config.scene.add_primitive, description="Add an object.")
-    group.add_function("remove_primitive", config.scene.remove_primitive, description="Remove an object.")
-    yield group
-
-
-class _EvalTrackingConfig(FunctionGroupBaseConfig, name="xr_render_eval_tracking"):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    tracking: Any = Field(exclude=True, repr=False)
-
-
-@register_function_group(config_type=_EvalTrackingConfig)
-async def _eval_tracking(config: _EvalTrackingConfig, _builder: Builder):
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "get_user_frame",
-        config.tracking.get_user_frame,
-        description="Return a test user frame.",
-    )
-    yield group
-
-
-class _EvalVisionConfig(FunctionGroupBaseConfig, name="xr_render_eval_vision"):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    scene: Any = Field(exclude=True, repr=False)
-
-
-@register_function_group(config_type=_EvalVisionConfig)
-async def _eval_vision(config: _EvalVisionConfig, _builder: Builder):
-    async def look(request: LiveVisionRequest) -> LiveVisionResult:
-        config.scene.calls.append(("look_at_current_frame", request.model_dump()))
-        if config.scene.vision_error:
-            raise RuntimeError(config.scene.vision_error)
-        # A real VLM always says something; an empty fixture must not derail
-        # the rollout, only decline to reward the spurious look.
-        return LiveVisionResult(answer=config.scene.vision_answer or "Nothing notable is visible.")
-
-    async def look_past(request: HistoricalVisionRequest) -> LiveVisionResult:
-        config.scene.calls.append(("look_at_past_frame", request.model_dump()))
-        if config.scene.vision_error:
-            raise RuntimeError(config.scene.vision_error)
-        return LiveVisionResult(answer=config.scene.vision_answer or "Nothing notable is visible.")
-
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "look_at_current_frame",
-        look,
-        description="Observe the user's live camera.",
-    )
-    group.add_function(
-        "look_at_past_frame",
-        look_past,
-        description="Observe a recorded camera frame.",
-    )
-    yield group
-
-
-class _EvalConversationConfig(FunctionGroupBaseConfig, name="xr_render_eval_conversations"):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    scene: Any = Field(exclude=True, repr=False)
-
-
-@register_function_group(config_type=_EvalConversationConfig)
-async def _eval_conversations(config: _EvalConversationConfig, _builder: Builder):
-    async def recall(request: RecallConversationRequest) -> RecallConversationResult:
-        config.scene.calls.append(("recall_conversation", request.model_dump()))
-        entries = []
-        for index, (user_text, agent_text) in enumerate(config.scene.history):
-            entries.append(ConversationEntry(timestamp_us=(index + 1) * 1_000_000, role="user", text=user_text))
-            entries.append(ConversationEntry(timestamp_us=(index + 1) * 1_000_000 + 1, role="agent", text=agent_text))
-        if config.scene.memory_answer:
-            entries.append(ConversationEntry(timestamp_us=1, role="agent", text=config.scene.memory_answer))
-        return RecallConversationResult(entries=entries)
-
-    group = FunctionGroup(config=config)
-    group.add_function(
-        "recall_conversation",
-        recall,
-        description="Recall older conversation.",
-    )
-    yield group
+        self._fake.calls.append(("look_at_past_frame", {"question": request.query}))
+        if self._fake.vision_error:
+            raise RuntimeError(self._fake.vision_error)
+        return VisionResult(text=self._fake.vision_answer or "Nothing notable is visible.")
 
 
 @dataclass(frozen=True)
@@ -178,7 +121,7 @@ class Case:
     name: str
     request: str
     scene: tuple[dict[str, Any], ...] = ()
-    pose: HeadPose | None = None
+    pose: SpatialFrame | None = None
     vision: str = ""
     vision_error: str = ""
     required_tools: frozenset[str] = frozenset()
@@ -254,15 +197,11 @@ CASES = (
     Case(
         name="create_in_front_of_moved_user",
         request="Add a yellow cone ahead of me.",
-        pose=HeadPose(
-            is_valid=True,
-            position=Vector3(x=2.0, y=1.6, z=1.5),
+        pose=SpatialFrame(
+            origin=Vector3(x=2.0, y=1.6, z=1.5),
             forward=Vector3(x=0, y=0, z=-1),
             right=Vector3(x=1, y=0, z=0),
             up=Vector3(x=0, y=1, z=0),
-            yaw_deg=0,
-            pitch_deg=0,
-            ts=1,
         ),
         required_tools=frozenset({"add_primitive", "get_user_frame"}),
         forbidden_tools=frozenset({"update_primitive"}),
@@ -332,10 +271,21 @@ def _scene_object(item: dict[str, Any]) -> SceneObject:
     )
 
 
+def _build_pose(override: dict | None = None) -> SpatialFrame:
+    base = _DEFAULT_POSE
+    merged = {**base, **(override or {})}
+    return SpatialFrame(
+        origin=Vector3(**merged["position"]),
+        forward=Vector3(**merged["forward"]),
+        right=Vector3(**merged["right"]),
+        up=Vector3(**merged["up"]),
+    )
+
+
 @dataclass
 class FakeScene:
     objects: dict[str, SceneObject]
-    pose: HeadPose
+    pose: SpatialFrame
     vision_answer: str
     vision_error: str
     memory_answer: str
@@ -344,12 +294,11 @@ class FakeScene:
     counters: dict[str, int] = field(default_factory=dict)
 
     @classmethod
-    def from_case(cls, case: Case) -> "FakeScene":
+    def from_case(cls, case: "Case") -> "FakeScene":
         objects = [SceneObject.model_validate(item) for item in case.scene]
-        pose = case.pose or HeadPose.model_validate(_DEFAULT_POSE)
         return cls(
             {item.id: item for item in objects},
-            pose,
+            case.pose or _build_pose(),
             case.vision,
             case.vision_error,
             case.memory,
@@ -359,14 +308,22 @@ class FakeScene:
     @classmethod
     def from_corpus_case(cls, case: dict[str, Any]) -> "FakeScene":
         objects = [_scene_object(item) for item in case.get("scene", ())]
-        pose = HeadPose.model_validate({**_DEFAULT_POSE, **(case.get("pose") or {})})
         return cls(
             {item.id: item for item in objects},
-            pose,
+            _build_pose(case.get("pose")),
             case.get("vlm_answer", ""),
             "",
             case.get("memory", ""),
             tuple(case.get("history", ())),
+        )
+
+    def make_tools(self) -> tuple:
+        return (
+            _FakeSceneTools(self),
+            _FakeTrackingTools(self.pose),
+            _FakeTextMemoryTools(self),
+            _FakeLiveVisionTool(self),
+            _FakePastVisionTool(self),
         )
 
     async def add_primitive(self, request: AddPrimitiveRequest) -> AddPrimitiveResult:
@@ -420,27 +377,6 @@ class FakeScene:
     async def get_scene_state(self, request: EmptyRequest) -> SceneState:
         self.calls.append(("get_scene_state", {}))
         return SceneState(objects=list(self.objects.values()))
-
-    async def bind(self, builder: Builder) -> None:
-        scene = self
-
-        class Tracking:
-            async def get_user_frame(self, request: HeadPoseRequest) -> SpatialFrame:
-                scene.calls.append(("get_user_frame", {}))
-                return SpatialFrame(
-                    origin=scene.pose.position,
-                    forward=scene.pose.forward,
-                    right=scene.pose.right,
-                    up=scene.pose.up,
-                )
-
-        await builder.add_function_group("scene_state", _EvalSceneStateConfig(scene=self))
-        await builder.add_function_group("scene_updates", _EvalSceneUpdatesConfig(scene=self))
-        await builder.add_function_group("scene_objects", _EvalSceneObjectsConfig(scene=self))
-        await builder.add_function_group("tracking", _EvalTrackingConfig(tracking=Tracking()))
-        await builder.add_function_group("spatial", SpatialMathFunctionsConfig())
-        await builder.add_function_group("vision", _EvalVisionConfig(scene=self))
-        await builder.add_function_group("conversations", _EvalConversationConfig(scene=self))
 
 
 _MUTATING = frozenset({"add_primitive", "update_primitive", "remove_primitive"})
@@ -537,36 +473,31 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
     scene = FakeScene.from_corpus_case(case)
     llm = make_llm(load_models_config(_CONFIG.models_yaml), "agent_llm")
     try:
-        async with WorkflowBuilder() as builder:
-            await scene.bind(builder)
-            scene_group = await builder.get_function_group("scene_state")
-            scene_functions = await scene_group.get_all_functions()
-            tracking_group = await builder.get_function_group("tracking")
-            tracking_functions = await tracking_group.get_all_functions()
-            context = SceneContext(
-                scene_functions["scene_state__get_scene_state"],
-                tracking_functions["tracking__get_user_frame"],
-            )
-            context._recent_moves[_PARTICIPANT] = [
+        fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past = scene.make_tools()
+        supervisor = SceneSupervisor(
+            llm=llm,
+            scene=fake_scene,
+            tracking=fake_tracking,
+            text_memory=fake_text_memory,
+            live_vision=fake_live,
+            past_vision=fake_past,
+        )
+        if case.get("recent_moves"):
+            supervisor._context._recent_moves[_PARTICIPANT] = [
                 f"{object_id}: previously at {before}, now at {after}"
                 for object_id, before, after in case.get("recent_moves", ())
             ]
-            supervisor = await builder.add_function(
-                "scene_supervisor", SceneSupervisorConfig(llm=llm, context=context)
-            )
-            # A crashed rollout is a case result, not an eval abort: score
-            # whatever calls it made before failing.
-            try:
-                reply = await supervisor.ainvoke(
-                    SceneRequest(
-                        transcript=case["user"],
-                        participant_id=_PARTICIPANT,
-                        timestamp_us=10_000_000,
-                    )
+        try:
+            reply = await supervisor.handle(
+                SceneRequest(
+                    transcript=case["user"],
+                    participant_id=_PARTICIPANT,
+                    timestamp_us=10_000_000,
                 )
-                response = reply.response
-            except Exception as exc:
-                response = f"<workflow error: {exc}>"
+            )
+            response = reply.response
+        except Exception as exc:
+            response = f"<workflow error: {exc}>"
     finally:
         await llm.close()
     ok, why = check_corpus(scene.calls, case)
@@ -575,9 +506,9 @@ async def run_corpus_case(case: dict[str, Any]) -> bool:
     return ok
 
 
-# The basics battery: the most common utterances, their observed live STT
+# The utterances battery: the most common utterances, their observed live STT
 # corruptions, and history-bearing variants. Run after EVERY prompt or ops
-# change (`uv run xr_render_demo_eval basics`); prompt edits keep breaking exactly these through
+# change (`uv run xr_render_demo_eval utterances`); prompt edits keep breaking exactly these through
 # example contamination, and the full corpus hides one-case damage inside its
 # run-to-run variance. Utterances must stay disjoint from prompt examples.
 _BASICS_SCENE = (
@@ -590,9 +521,9 @@ _BASICS_HISTORY = (
     ("Add a cyan cube.", "Added a cyan cube."),
     ("Make a green sphere.", "Created a green sphere."),
 )
-_NO_MUTATION = _MUTATING
+_FORBID_MUTATIONS = _MUTATING
 
-BASICS = (
+UTTERANCES = (
     Case(
         name="basics_create_cube",
         request="Make a red cube.",
@@ -744,7 +675,7 @@ BASICS = (
         request="Put the sphere on the",
         scene=_BASICS_SCENE,
         history=_BASICS_HISTORY,
-        forbidden_tools=_NO_MUTATION,
+        forbidden_tools=_FORBID_MUTATIONS,
     ),
     Case(
         name="basics_truncated_then_completed",
@@ -767,7 +698,7 @@ BASICS = (
             *_BASICS_HISTORY,
             ("Put the sphere on the", "I think I missed the end of that. On the what?"),
         ),
-        forbidden_tools=_NO_MUTATION,
+        forbidden_tools=_FORBID_MUTATIONS,
     ),
     Case(
         name="basics_truncated_then_full_command",
@@ -797,14 +728,14 @@ BASICS = (
         request="Sounds good.",
         scene=_BASICS_SCENE,
         history=_BASICS_HISTORY,
-        forbidden_tools=_NO_MUTATION,
+        forbidden_tools=_FORBID_MUTATIONS,
     ),
     Case(
         name="basics_correction_with_history",
         request="That's the wrong sphere.",
         scene=_BASICS_SCENE,
         history=_BASICS_HISTORY,
-        forbidden_tools=_NO_MUTATION,
+        forbidden_tools=_FORBID_MUTATIONS,
     ),
 )
 
@@ -813,22 +744,26 @@ async def run_case(case: Case) -> bool:
     scene = FakeScene.from_case(case)
     llm = make_llm(load_models_config(_CONFIG.models_yaml), "agent_llm")
     try:
-        async with WorkflowBuilder() as builder:
-            await scene.bind(builder)
-            supervisor = await builder.add_function(
-                "scene_supervisor", SceneSupervisorConfig(llm=llm)
-            )
-            try:
-                reply = await supervisor.ainvoke(
-                    SceneRequest(
-                        transcript=case.request,
-                        participant_id=_PARTICIPANT,
-                        timestamp_us=10_000_000,
-                    )
+        fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past = scene.make_tools()
+        supervisor = SceneSupervisor(
+            llm=llm,
+            scene=fake_scene,
+            tracking=fake_tracking,
+            text_memory=fake_text_memory,
+            live_vision=fake_live,
+            past_vision=fake_past,
+        )
+        try:
+            reply = await supervisor.handle(
+                SceneRequest(
+                    transcript=case.request,
+                    participant_id=_PARTICIPANT,
+                    timestamp_us=10_000_000,
                 )
-                response = reply.response
-            except Exception as exc:
-                response = f"<workflow error: {exc}>"
+            )
+            response = reply.response
+        except Exception as exc:
+            response = f"<workflow error: {exc}>"
     finally:
         await llm.close()
     called = {name for name, _arguments in scene.calls}
@@ -904,12 +839,12 @@ def audit_prompts() -> None:
     worker = (Path(__file__).resolve().parent / "../../worker/xr_render_demo_worker").resolve()
     prompts = sorted(worker.rglob("*prompt*.txt"))
     utterances = [case["user"] for case in CORPUS_CASES if case.get("user")]
-    utterances += [case.request for case in (*CASES, *BASICS)]
+    utterances += [case.request for case in (*CASES, *UTTERANCES)]
     fixture_ids = {
         item["id"]
         for case in CORPUS_CASES
         for item in case.get("scene", ())
-    } | {item["id"] for case in (*CASES, *BASICS) for item in case.scene}
+    } | {item["id"] for case in (*CASES, *UTTERANCES) for item in case.scene}
     # The other tiers score the same prompts; their inputs must stay
     # disjoint from prompt examples too.
     try:
@@ -956,23 +891,23 @@ async def main() -> None:
     args = parser.parse_args()
     audit_prompts()
     wanted = set(args.cases)
-    if wanted == {"basics"}:
-        wanted = {case.name for case in BASICS}
+    if wanted == {"utterances"}:
+        wanted = {case.name for case in UTTERANCES}
     corpus = [case for case in CORPUS_CASES if not wanted or case["name"] in wanted]
-    native = [case for case in CASES if not wanted or case.name in wanted]
-    basics = [case for case in BASICS if not wanted or case.name in wanted]
-    if not corpus and not native and not basics:
+    precision = [case for case in CASES if not wanted or case.name in wanted]
+    utterances = [case for case in UTTERANCES if not wanted or case.name in wanted]
+    if not corpus and not precision and not utterances:
         raise SystemExit(f"unknown cases: {args.cases}")
     corpus_results = [await run_corpus_case(case) for case in corpus]
-    native_results = [await run_case(case) for case in native]
-    basics_results = [await run_case(case) for case in basics]
+    precision_results = [await run_case(case) for case in precision]
+    utterances_results = [await run_case(case) for case in utterances]
     if corpus_results:
-        print(f"corpus: {sum(corpus_results)}/{len(corpus_results)} passed")
-    if native_results:
-        print(f"native: {sum(native_results)}/{len(native_results)} passed")
-    if basics_results:
-        print(f"basics: {sum(basics_results)}/{len(basics_results)} passed")
-    if not all(corpus_results + native_results + basics_results):
+        print(f"scenarios: {sum(corpus_results)}/{len(corpus_results)} passed")
+    if precision_results:
+        print(f"precision: {sum(precision_results)}/{len(precision_results)} passed")
+    if utterances_results:
+        print(f"utterances: {sum(utterances_results)}/{len(utterances_results)} passed")
+    if not all(corpus_results + precision_results + utterances_results):
         raise SystemExit(1)
 
 

@@ -9,18 +9,21 @@ directly.
 """
 
 import pytest
+from xr_ai_tools import Tool
+from xr_ai_tools.types import EmptyRequest, SpatialFrame, Vector3
 from xr_render_demo_worker.spatial_ops import CreationLedger, TurnGuard, _Leaves
-from xr_render_scene import SceneObject, SceneState
-
-
-class _Fn:
-    def __init__(self, result=None):
-        self.result = result
-        self.calls = []
-
-    async def ainvoke(self, request):
-        self.calls.append(request)
-        return self.result
+from xr_render_scene import (
+    AddPrimitiveRequest,
+    AddPrimitiveResult,
+    MutationResult,
+    RemovePrimitiveRequest,
+    SceneObject,
+    SceneState,
+    UpdatePrimitiveRequest,
+)
+from xr_render_scene import (
+    EmptyRequest as SceneEmptyRequest,
+)
 
 
 def _obj(object_id, kind, color, position=(0.0, 1.6, -1.5), size=0.1):
@@ -32,14 +35,85 @@ def _obj(object_id, kind, color, position=(0.0, 1.6, -1.5), size=0.1):
     )
 
 
+class _FakeScene:
+    def __init__(self, objects):
+        self._state = SceneState(objects=list(objects))
+        self._objects = {o.id: o for o in objects}
+        self.calls = []
+        counter = {}
+        for o in objects:
+            kind = o.id.rsplit("-", 1)[0]
+            n = int(o.id.rsplit("-", 1)[1]) if "-" in o.id else 0
+            counter[kind] = max(counter.get(kind, -1), n)
+        self._counter = counter
+
+    async def get_scene_state(self, req): return self._state
+    async def update_primitive(self, req):
+        self.calls.append(("update_primitive", req.model_dump(exclude_none=True)))
+        if req.obj_id in self._objects:
+            cur = self._objects[req.obj_id].model_dump()
+            for f in ("x", "y", "z"):
+                if getattr(req, f, None) is not None:
+                    cur["position"][f] = getattr(req, f)
+            for f in ("r", "g", "b"):
+                if getattr(req, f, None) is not None:
+                    cur["color"][f] = getattr(req, f)
+            if req.size is not None:
+                cur["size"] = req.size
+            self._objects[req.obj_id] = SceneObject.model_validate(cur)
+            self._state = SceneState(objects=list(self._objects.values()))
+        return MutationResult(ok=True)
+    async def remove_primitive(self, req):
+        self.calls.append(("remove_primitive", req.model_dump()))
+        self._objects.pop(req.obj_id, None)
+        self._state = SceneState(objects=list(self._objects.values()))
+        return MutationResult(ok=True)
+    async def add_primitive(self, req):
+        self.calls.append(("add_primitive", req.model_dump()))
+        kind = req.prim_type
+        n = self._counter.get(kind, -1) + 1
+        self._counter[kind] = n
+        obj_id = f"{kind}-{n}"
+        self._objects[obj_id] = SceneObject.model_validate({
+            "id": obj_id, "type": kind,
+            "position": {"x": req.x, "y": req.y, "z": req.z},
+            "color": {"r": req.r, "g": req.g, "b": req.b}, "size": req.size,
+        })
+        self._state = SceneState(objects=list(self._objects.values()))
+        return AddPrimitiveResult(id=obj_id, ok=True)
+
+
+_DEFAULT_FRAME = SpatialFrame(
+    origin=Vector3(x=0, y=1.6, z=0),
+    forward=Vector3(x=0, y=0, z=-1),
+    right=Vector3(x=1, y=0, z=0),
+    up=Vector3(x=0, y=1, z=0),
+)
+
+
+class _FakeSceneTools:
+    def __init__(self, fake):
+        self.get_scene_state = Tool(
+            "get_scene_state", ".", SceneEmptyRequest, SceneState, fake.get_scene_state)
+        self.update_primitive = Tool(
+            "update_primitive", ".", UpdatePrimitiveRequest, MutationResult, fake.update_primitive)
+        self.add_primitive = Tool(
+            "add_primitive", ".", AddPrimitiveRequest, AddPrimitiveResult, fake.add_primitive)
+        self.remove_primitive = Tool(
+            "remove_primitive", ".", RemovePrimitiveRequest, MutationResult, fake.remove_primitive)
+
+
+class _FakeTrackingTools:
+    def __init__(self, frame=None):
+        f = frame or _DEFAULT_FRAME
+        self.get_user_frame = Tool("get_user_frame", ".", EmptyRequest, SpatialFrame, lambda _: f)
+
+
 def _leaves(objects, guard=None, ledger=None):
-    state = SceneState(objects=objects)
-    functions = {
-        "scene_state__get_scene_state": _Fn(state),
-        "scene_updates__update_primitive": _Fn({}),
-        "scene_objects__remove_primitive": _Fn({}),
-    }
-    return _Leaves(functions, ledger=ledger, guard=guard), functions
+    fake = _FakeScene(objects)
+    scene = _FakeSceneTools(fake)
+    tracking = _FakeTrackingTools()
+    return _Leaves(scene, tracking, ledger=ledger, guard=guard), fake
 
 
 async def test_exact_id_wins():
@@ -129,10 +203,7 @@ async def test_id_shaped_miss_lists_ids_without_halting():
 async def test_halt_blocks_moves_but_not_creates():
     guard = TurnGuard()
     ledger = CreationLedger()
-    leaves, functions = _leaves([_obj("sphere-0", "sphere", (0, 0, 1))], guard=guard, ledger=ledger)
-    functions["scene_objects__add_primitive"] = _Fn(
-        type("R", (), {"id": "box-0"})()
-    )
+    leaves, _ = _leaves([_obj("sphere-0", "sphere", (0, 0, 1))], guard=guard, ledger=ledger)
     guard.halted = True
     with pytest.raises(ValueError, match="report that failure back"):
         await leaves.write("sphere-0", (0, 0, 0))
@@ -164,23 +235,12 @@ async def test_color_words_resolve_fuzzy_default_and_copy():
 
 async def test_ledger_dedupes_identical_creates():
     ledger = CreationLedger()
-    leaves, functions = _leaves([], ledger=ledger)
-    results = iter([type("R", (), {"id": "box-0"})(), type("R", (), {"id": "box-1"})()])
-
-    class _Adder:
-        def __init__(self):
-            self.calls = []
-
-        async def ainvoke(self, request):
-            self.calls.append(request)
-            return next(results)
-
-    adder = _Adder()
-    functions["scene_objects__add_primitive"] = adder
+    leaves, fake = _leaves([], ledger=ledger)
+    # Both calls have the same rounded key → ledger dedupes to one actual add.
     first = await leaves.add("box", (0.001, 1.0, 0.0), (1, 0, 0), 0.1)
     second = await leaves.add("box", (0.004, 1.0, 0.0), (1, 0, 0), 0.1)
     assert first.id == second.id == "box-0"
-    assert len(adder.calls) == 1
+    assert len([c for c in fake.calls if c[0] == "add_primitive"]) == 1
     assert first.created_this_turn == 1
     ledger.reset()
     third = await leaves.add("box", (0.001, 1.0, 0.0), (1, 0, 0), 0.1)

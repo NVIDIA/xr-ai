@@ -20,17 +20,14 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from nat.builder.workflow_builder import WorkflowBuilder
-from nat.plugin_api import LLMRef
 from xr_ai_models import load_models_config, make_llm
-from xr_ai_nat.functions.xr_tracking import HeadPose
-from xr_ai_nat.llm import ModelsLLMConfig
+from xr_ai_tools.types import SpatialFrame, Vector3
 from xr_render_demo_worker.agents import (
-    AppearanceAgentConfig,
-    MemoryAgentConfig,
-    ObjectAgentConfig,
-    PlacementAgentConfig,
-    VisionAgentConfig,
+    make_appearance_agent,
+    make_memory_agent,
+    make_object_agent,
+    make_placement_agent,
+    make_vision_agent,
 )
 from xr_render_demo_worker.models import SubagentResult, SubagentTask
 from xr_render_demo_worker.scene import SceneContext
@@ -440,7 +437,7 @@ CASES = (
         ),
         vision_error="No camera frame available.",
         required_tools=("look_at_current_frame",),
-        answer_contains="no visual fact",
+        answer_contains="no camera",
     ),
     SubagentCase(
         name="vision_answers_scene_from_data",
@@ -483,13 +480,18 @@ CASES = (
     ),
 )
 
-_AGENT_CONFIGS = {
-    "placement": lambda context: PlacementAgentConfig(context=context),
-    "object": lambda context: ObjectAgentConfig(context=context),
-    "appearance": lambda context: AppearanceAgentConfig(context=context),
-    "vision": lambda context: VisionAgentConfig(context=context),
-    "memory": lambda _context: MemoryAgentConfig(),
-}
+def _make_agent(case_agent, llm, fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past, context):
+    if case_agent == "placement":
+        return make_placement_agent(llm, fake_scene, fake_tracking, context)
+    if case_agent == "appearance":
+        return make_appearance_agent(llm, fake_scene, context)
+    if case_agent == "object":
+        return make_object_agent(llm, fake_scene, fake_tracking, context)
+    if case_agent == "vision":
+        return make_vision_agent(llm, fake_live, fake_past, context)
+    if case_agent == "memory":
+        return make_memory_agent(llm, fake_text_memory)
+    raise ValueError(f"unknown agent: {case_agent!r}")
 
 
 def _args_match(actual: dict[str, Any], expected: dict[str, Any]) -> bool:
@@ -534,53 +536,42 @@ def check(calls: list[tuple[str, dict[str, Any]]], case: SubagentCase, reply: st
     return True, f"matched {len(case.expect)} mutation(s)"
 
 
+def _default_pose(override: dict | None = None) -> SpatialFrame:
+    base = harness._DEFAULT_POSE
+    merged = {**base, **(override or {})}
+    return SpatialFrame(
+        origin=Vector3(**merged["position"]),
+        forward=Vector3(**merged["forward"]),
+        right=Vector3(**merged["right"]),
+        up=Vector3(**merged["up"]),
+    )
+
+
 async def run_case(case: SubagentCase) -> bool:
     objects = [SceneObject.model_validate(item) for item in case.scene]
     scene = harness.FakeScene(
         {item.id: item for item in objects},
-        HeadPose.model_validate({**harness._DEFAULT_POSE, **(case.pose or {})}),
+        _default_pose(case.pose),
         case.vision_answer,
         case.vision_error,
         case.memory,
     )
     llm = make_llm(load_models_config(harness._CONFIG.models_yaml), "agent_llm")
     try:
-        async with WorkflowBuilder() as builder:
-            await scene.bind(builder)
-            await builder.add_llm(
-                LLMRef("scene_llm"),
-                ModelsLLMConfig(
-                    service=llm,
-                    model_name="xr-scene-agent",
-                    max_tokens=2048,
-                    temperature=0.0,
-                    recover_tool_calls=True,
-                ),
-            )
-            scene_group = await builder.get_function_group("scene_state")
-            scene_functions = await scene_group.get_all_functions()
-            tracking_group = await builder.get_function_group("tracking")
-            tracking_functions = await tracking_group.get_all_functions()
-            context = SceneContext(
-                scene_functions["scene_state__get_scene_state"],
-                tracking_functions["tracking__get_user_frame"],
-            )
-            context._recent_moves[_PARTICIPANT] = list(case.recent_moves)
-            agent = await builder.add_function(
-                f"{case.agent}_agent",
-                _AGENT_CONFIGS[case.agent](context),
-            )
-            # A crashed rollout is a case result, not an eval abort.
-            try:
-                reply = await agent.ainvoke(
-                    SubagentTask(
-                        instruction=case.instruction,
-                        participant_id=_PARTICIPANT,
-                        reference_time_us=10_000_000,
-                    )
+        fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past = scene.make_tools()
+        context = SceneContext(fake_scene, fake_tracking)
+        context._recent_moves[_PARTICIPANT] = list(case.recent_moves)
+        agent = _make_agent(case.agent, llm, fake_scene, fake_tracking, fake_text_memory, fake_live, fake_past, context)
+        try:
+            reply = await agent.execute(
+                SubagentTask(
+                    instruction=case.instruction,
+                    participant_id=_PARTICIPANT,
+                    reference_time_us=10_000_000,
                 )
-            except Exception as exc:
-                reply = SubagentResult(result=f"<workflow error: {exc}>")
+            )
+        except Exception as exc:
+            reply = SubagentResult(result=f"<workflow error: {exc}>")
     finally:
         await llm.close()
     ok, why = check(scene.calls, case, reply.result)

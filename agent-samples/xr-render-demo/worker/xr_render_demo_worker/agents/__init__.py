@@ -3,16 +3,16 @@
 
 """Focused subagents composed by the scene supervisor."""
 
-from .appearance import AppearanceAgentConfig
-from .memory import MemoryAgentConfig
-from .object import ObjectAgentConfig
-from .placement import PlacementAgentConfig
-from .vision import VisionAgentConfig
+from .appearance.agent import make_appearance_agent
+from .memory.agent import make_memory_agent
+from .object.agent import make_object_agent
+from .placement.agent import make_placement_agent
+from .vision.agent import make_vision_agent
 
 __all__ = [
-    "AppearanceAgentConfig",
-    "MemoryAgentConfig",
-    "ObjectAgentConfig",
-    "PlacementAgentConfig",
-    "VisionAgentConfig",
+    "make_appearance_agent",
+    "make_memory_agent",
+    "make_object_agent",
+    "make_placement_agent",
+    "make_vision_agent",
 ]

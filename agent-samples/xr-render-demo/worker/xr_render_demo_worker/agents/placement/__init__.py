@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Placement subagent."""
+from .agent import make_placement_agent
 
-from .agent import PlacementAgentConfig
-
-__all__ = ["PlacementAgentConfig"]
+__all__ = ["make_placement_agent"]

@@ -1,41 +1,46 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Wire model services, native NAT function groups, subagents, and the voice session."""
+"""Wire model services, native tools, the supervisor, and the agent runtime."""
 
 from __future__ import annotations
 
+import pathlib
 from pathlib import Path
 
 from loguru import logger
-from nat.builder.workflow_builder import WorkflowBuilder
 from xr_ai_logging import setup_logging
-from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
-from xr_ai_nat.adapters import as_voice_handler, record_voice_transcripts
-from xr_ai_nat.functions.spatial_math import SpatialMathFunctionsConfig
-from xr_ai_nat.functions.text_memory import ConversationMemoryFunctionsConfig, TextMemoryFunctionsConfig
-from xr_ai_nat.functions.video_memory import VideoMemoryFunctionsConfig
-from xr_ai_nat.functions.vision import VisionToolsConfig
-from xr_ai_nat.functions.xr_tracking import XRTrackingFunctionsConfig
-from xr_ai_voice import VadConfig, VoiceSession
+from xr_ai_models import make_llm, make_stt, make_tts, make_vlm
+from xr_ai_runtime import AgentRuntime
+from xr_ai_tools.historical_vision import HistoricalVisionTool
+from xr_ai_tools.live_vision import LiveVisionTool
+from xr_ai_tools.text_memory import TextMemoryTools
+from xr_ai_tools.tracking import TrackingTools
+from xr_ai_tools.video_memory import VideoMemoryTools
+from xr_ai_voice import VadConfig, VoiceAgent, VoiceSession
 from xr_ai_voicegate import load_voice_gate_config
-from xr_render_scene import (
-    SceneControlFunctionsConfig,
-    SceneObjectFunctionsConfig,
-    SceneStateFunctionsConfig,
-    SceneUpdateFunctionsConfig,
-)
+from xr_render_scene import SceneTools
 
-from .config import WorkerConfig
-from .models import SceneRequest
-from .supervisor import scene_supervisor
+from .agent import (
+    INTERRUPTED_TOPIC,
+    PARTICIPANT_LEFT_TOPIC,
+    USER_QUERY_TOPIC,
+    RenderAgent,
+)
+from .config import WorkerConfig, load_models
+from .supervisor import SceneSupervisor
 from .xr_session import XRSessionController
 
 
-async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> None:
-    """Run the render sample until the shared voice session exits."""
+async def run_app(
+    config: WorkerConfig,
+    config_path: pathlib.Path | None = None,
+    *,
+    ready_file: Path | None = None,
+) -> None:
+    """Run the render sample until the runtime exits."""
     setup_logging("worker")
-    models = load_models_config(config.models_yaml)
+    models = load_models(config_path)
     llm = make_llm(models, "agent_llm")
     stt = make_stt(models, "stt")
     tts = make_tts(models, "tts")
@@ -56,47 +61,57 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         idle_timeout_secs=config.idle_timeout_secs,
     )
 
-    async with session, WorkflowBuilder() as builder:
-        await builder.add_function_group("scene_state", SceneStateFunctionsConfig(endpoint=config.scene_endpoint))
-        await builder.add_function_group("scene_updates", SceneUpdateFunctionsConfig(endpoint=config.scene_endpoint))
-        await builder.add_function_group("scene_objects", SceneObjectFunctionsConfig(endpoint=config.scene_endpoint))
-        await builder.add_function_group("scene_control", SceneControlFunctionsConfig(endpoint=config.scene_endpoint))
-        await builder.add_function_group("tracking", XRTrackingFunctionsConfig(endpoint=config.openxr_endpoint))
-        await builder.add_function_group("spatial", SpatialMathFunctionsConfig())
-        await builder.add_function_group("text_memory", TextMemoryFunctionsConfig(directory=config.text_memory_dir))
-        await builder.add_function_group("conversations", ConversationMemoryFunctionsConfig())
-        await builder.add_function_group(
-            "video_memory",
-            VideoMemoryFunctionsConfig(endpoint=config.video_memory_endpoint),
-        )
-        vision = VisionToolsConfig(endpoint=session.transport.endpoint, vlm=vlm)
-        await builder.add_function_group("vision", vision)
+    scene = SceneTools(config.scene_endpoint)
+    tracking = TrackingTools(config.openxr_endpoint)
+    text_memory = TextMemoryTools(config.text_memory_dir)
+    video = VideoMemoryTools(config.video_memory_endpoint)
+    live_vision = LiveVisionTool(
+        endpoint=session.transport.endpoint,
+        vlm=vlm,
+        system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
+        manage_status=False,
+    )
+    past_vision = HistoricalVisionTool(video=video, vlm=vlm)
 
-        supervisor = await scene_supervisor(builder=builder, llm=llm)
-        handler = as_voice_handler(
+    try:
+        supervisor = SceneSupervisor(
+            llm=llm,
+            scene=scene,
+            tracking=tracking,
+            text_memory=text_memory,
+            live_vision=live_vision,
+            past_vision=past_vision,
+        )
+
+        render = RenderAgent(
             supervisor,
-            request=lambda turn: SceneRequest(
-                transcript=turn.text,
-                participant_id=turn.participant_id,
-                timestamp_us=turn.timestamp_us,
-            ),
-            response=lambda reply: reply.response,
+            on_participant_left=live_vision.release,
         )
-        text_memory = await builder.get_function_group("text_memory")
-        text_memory_functions = await text_memory.get_all_functions()
-        scene_control = await builder.get_function_group("scene_control")
-        scene_control_functions = await scene_control.get_all_functions()
-        xr_session = XRSessionController(
+        voice = VoiceAgent(
+            session,
+            query_topic=USER_QUERY_TOPIC,
+            text_ignore_topics={"xr.session.started"},
+            participant_left_topic=PARTICIPANT_LEFT_TOPIC,
+            interrupted_topic=INTERRUPTED_TOPIC,
+        )
+        runtime = AgentRuntime()
+        runtime.register("voice", voice)
+        runtime.register("xr-render", render)
+
+        XRSessionController(
             session=session,
-            start_xr=scene_control_functions["scene_control__start_xr"],
-            get_render_health=scene_control_functions["scene_control__get_health"],
-        )
-        xr_session.attach()
+            start_xr=scene.start_xr,
+            get_render_health=scene.get_health,
+        ).attach()
 
         logger.info("xr-render-demo worker starting")
-        await session.run(
-            handler,
-            observer=record_voice_transcripts(text_memory_functions["text_memory__add_transcript"]),
-            on_participant_left=vision.release,
-        )
+        async with runtime:
+            try:
+                await voice.run(runtime)
+            finally:
+                await render.stop()
         logger.info("xr-render-demo worker stopped")
+    finally:
+        await scene.client.close()
+        await tracking.close()
+        await video.close()

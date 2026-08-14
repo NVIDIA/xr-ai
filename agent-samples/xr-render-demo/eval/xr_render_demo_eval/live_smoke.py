@@ -47,6 +47,7 @@ async def main() -> None:
                 break
         else:
             print("no scene change within 60s")
+            sys.exit(1)
     finally:
         await scene.close()
         run_task.cancel()
