@@ -27,5 +27,5 @@ then only serves health.
 
 The samples launch one of these per managed NIM service in the
 `models.vlm_llm_nim.json` deployment profile (the worker reads the same
-profile's model entries). See `docs/ai-services.md` "Hosting models on
+profile's model entries). See `docs/source/components/ai-services.md` "Hosting models on
 NVIDIA NIM".

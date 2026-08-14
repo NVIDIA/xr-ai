@@ -9,7 +9,8 @@
 # deployment.ownership decides what the orchestrator does: `managed` entries
 # it launches itself, `reused` entries it expects already running, `external`
 # entries need no local process. Managed model servers persist across stack
-# restarts (docs/ai-services.md "Model-server persistence"); on a profile
+# restarts (docs/source/components/ai-services.md "Model-server persistence");
+# on a profile
 # switch the incoming server evicts whatever held its port. Shipped presets:
 #   models.local.json     — reuses the model-servers stack for STT, LLMs,
 #                           and VLM (start model-servers first); owns piper
@@ -23,7 +24,8 @@
 #                           don't fit next to CloudXR + LOVR + the LLM/VLM
 #                           NIMs on 2x48 GB; see the model-servers
 #                           vlm_speech_nim profile for capable boxes.
-# Only hosted needs a sample-side NGC_API_KEY (see docs/credentials.md);
+# Only hosted needs a sample-side NGC_API_KEY
+# (see docs/source/getting_started/credentials.md);
 # the NIM stacks carry their own credentials in model-servers. Entries
 # mix freely; copy a preset under any name and select it here. This is the
 # only change needed to switch.

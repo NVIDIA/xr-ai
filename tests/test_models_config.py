@@ -37,7 +37,7 @@ from xr_ai_models.presets import available_presets, get_preset
 
 def test_package_root_exports_complete_config_surface() -> None:
     assert KIND_OPENAI_COMPAT == "openai_compat"
-    assert get_args(ModelKind) == ("openai_compat",)
+    assert get_args(ModelKind) == ("openai_compat", "riva_grpc")
     assert set(get_args(Category)) == {"llm", "vlm", "stt", "tts", "embedding"}
     assert LLMSpec in get_args(Spec)
 
