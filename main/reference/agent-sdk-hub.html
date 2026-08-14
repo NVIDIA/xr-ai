@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Reference &#8212; XR AI</title>
+    <title>xr-ai-hub &#8212; XR AI</title>
   
   
   
@@ -51,15 +51,15 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/index';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/agent-sdk-hub';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
 
     <link rel="icon" href="../_static/favicon.png"/>
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="xr-ai-hub" href="agent-sdk-hub.html" />
-    <link rel="prev" title="Troubleshooting" href="../guides/troubleshooting.html" />
+    <link rel="next" title="xr-ai-models" href="agent-sdk-models.html" />
+    <link rel="prev" title="Reference" href="index.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -198,6 +198,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -284,7 +288,7 @@
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["../../v0.1.0-beta/reference/index.html", "index.html"];
+    var urls = ["../../v0.1.0-beta/index.html", "agent-sdk-hub.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];
@@ -330,8 +334,8 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">xr-ai-hub</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
@@ -374,7 +378,10 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Reference</span></li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">xr-ai-hub</span></li>
   </ul>
 </nav>
 </div>
@@ -395,20 +402,107 @@
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 -->
-<section id="reference">
-<h1>Reference<a class="headerlink" href="#reference" title="Link to this heading">#</a></h1>
-<p>Detailed reference for the xr-render-demo stack.</p>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-hub.html">xr-ai-hub</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-models.html">xr-ai-models</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-runtime.html">xr-ai-runtime</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-tools.html">xr-ai-tools</a></li>
-<li class="toctree-l1"><a class="reference internal" href="agent-sdk-voice.html">xr-ai-voice</a></li>
-<li class="toctree-l1"><a class="reference internal" href="migrations.html">Release migration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="xr-render-demo.html">xr-render-demo — architecture</a></li>
-</ul>
+<section id="xr-ai-hub">
+<h1>xr-ai-hub<a class="headerlink" href="#xr-ai-hub" title="Link to this heading">#</a></h1>
+<p>The minimal agent-side client for XR-Media-Hub. It depends only on pyzmq and
+msgpack and deliberately contains no LiveKit, web-server, model, NAT, or voice
+pipeline code.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataMessage</span><span class="p">,</span> <span class="n">ProcessorEndpoint</span>
+
+<span class="n">endpoint</span> <span class="o">=</span> <span class="n">ProcessorEndpoint</span><span class="p">(</span>
+    <span class="n">sub_addr</span><span class="o">=</span><span class="s2">&quot;ipc:///tmp/xr_hub_pub&quot;</span><span class="p">,</span>
+    <span class="n">push_addr</span><span class="o">=</span><span class="s2">&quot;ipc:///tmp/xr_hub_in&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_data</span><span class="p">(</span><span class="n">message</span><span class="p">:</span> <span class="n">DataMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">participant_id</span><span class="p">,</span> <span class="n">message</span><span class="o">.</span><span class="n">topic</span><span class="p">)</span>
+
+<span class="n">unsubscribe</span> <span class="o">=</span> <span class="n">endpoint</span><span class="o">.</span><span class="n">on_data</span><span class="p">(</span><span class="n">on_data</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">endpoint</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+
+<span class="n">unsubscribe</span><span class="p">()</span>  <span class="c1"># Remove the callback when its owner stops.</span>
+</pre></div>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> adds raw frame acquisition without adding image conversion or
+model dependencies. Use <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.streaming_vision.StreamingVisionTool</span></code> when the
+desired interface is a model-facing async vision tool rather than raw pixels.</p>
+<section id="subscription-and-roster-contract">
+<h2>Subscription and roster contract<a class="headerlink" href="#subscription-and-roster-contract" title="Link to this heading">#</a></h2>
+<p>Participants are the subscription unit. With <code class="docutils literal notranslate"><span class="pre">auto_subscribe=True</span></code> (the
+default), the endpoint subscribes when a participant joins and unsubscribes on
+leave. Set <code class="docutils literal notranslate"><span class="pre">filter</span></code> to a <code class="docutils literal notranslate"><span class="pre">Subscribe</span></code> flag combination to drop data, audio, or
+video at the ZMQ socket; set <code class="docutils literal notranslate"><span class="pre">auto_subscribe=False</span></code> and call <code class="docutils literal notranslate"><span class="pre">subscribe(pid)</span></code>
+for explicitly assigned participants.</p>
+<p><code class="docutils literal notranslate"><span class="pre">run()</span></code> requests a roster automatically for auto-subscribing endpoints so an
+agent started mid-session learns participants who already joined. The hub
+replays ordinary joined events, so <code class="docutils literal notranslate"><span class="pre">on_participant</span></code> callbacks must be
+idempotent. <code class="docutils literal notranslate"><span class="pre">request_roster()</span></code> triggers the same replay explicitly.</p>
+<p>ZMQ subscriptions take effect asynchronously. Await
+<code class="docutils literal notranslate"><span class="pre">wait_for_subscriptions(timeout=...)</span></code> before advertising availability when a
+caller manages readiness itself. It returns <code class="docutils literal notranslate"><span class="pre">False</span></code> when the hub cannot confirm
+the subscription before the timeout.</p>
+</section>
+<section id="frames">
+<h2>Frames<a class="headerlink" href="#frames" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">on_frame</span></code> receives metadata without copying pixels. Call
+<code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">endpoint.request_frame(signal)</span></code> to obtain <code class="docutils literal notranslate"><span class="pre">FrameData</span></code> only when needed;
+concurrent requests for the same participant and track are coalesced.
+<code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> provides a higher-level fresh-frame lookup and releases cached
+participant state on departure.</p>
+</section>
+<section id="return-path">
+<h2>Return path<a class="headerlink" href="#return-path" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Method</p></th>
+<th class="head"><p>Effect</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">send_return_data(message)</span></code></p></td>
+<td><p>Route text or binary data to <code class="docutils literal notranslate"><span class="pre">message.participant_id</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">send_return_audio(chunk)</span></code></p></td>
+<td><p>Route PCM audio to <code class="docutils literal notranslate"><span class="pre">chunk.participant_id</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">flush_return_audio(pid)</span></code></p></td>
+<td><p>Drop that participant’s hub-queued return audio when interrupting playback.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set_status(status,</span> <span class="pre">participant_id=None)</span></code></p></td>
+<td><p>Record this agent’s status; omitting the participant broadcasts the default to every connected participant in scope.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mark_ready()</span></code></p></td>
+<td><p>Set the endpoint’s default status to <code class="docutils literal notranslate"><span class="pre">ready</span></code>, including for participants who join later.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">republish_statuses()</span></code></p></td>
+<td><p>Re-send recorded state after a client reconnect or missed one-shot update.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">request_roster()</span></code></p></td>
+<td><p>Ask the hub to replay joined events for the current roster.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Return traffic is always participant-routed. The endpoint never publishes a
+worker’s availability directly to clients; the hub aggregates agent state.</p>
+</section>
+<section id="readiness">
+<h2>Readiness<a class="headerlink" href="#readiness" title="Link to this heading">#</a></h2>
+<p>Readiness participation is opt-in with <code class="docutils literal notranslate"><span class="pre">announces_readiness=True</span></code>. An endpoint
+answers only for participants it subscribes to, and <code class="docutils literal notranslate"><span class="pre">set_status</span></code> is a logged
+no-op for passive endpoints. The hub combines every responsible agent’s state
+and confirms a live subscription before exposing <code class="docutils literal notranslate"><span class="pre">ready</span></code> to the client.</p>
+<p><code class="docutils literal notranslate"><span class="pre">agent_id</span></code> identifies this endpoint’s status. Pass it explicitly or set
+<code class="docutils literal notranslate"><span class="pre">XR_AI_AGENT_ID</span></code>; otherwise the endpoint generates a process-local value.</p>
+</section>
+<section id="shared-memory-and-codec-extensions">
+<h2>Shared memory and codec extensions<a class="headerlink" href="#shared-memory-and-codec-extensions" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ShmRingBuffer</span></code> and <code class="docutils literal notranslate"><span class="pre">SlotView</span></code> expose zero-copy frame views for callers that
+read raw pixels. A slot remains owned until <code class="docutils literal notranslate"><span class="pre">release_slot()</span></code>. The msgpack codec
+supports application payload types through <code class="docutils literal notranslate"><span class="pre">register_encoder</span></code> and
+<code class="docutils literal notranslate"><span class="pre">register_decoder</span></code>; choose new type identifiers without changing existing
+wire tags.</p>
+</section>
 </section>
 
 
@@ -422,20 +516,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../guides/troubleshooting.html"
+       href="index.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Troubleshooting</p>
+        <p class="prev-next-title">Reference</p>
       </div>
     </a>
     <a class="right-next"
-       href="agent-sdk-hub.html"
+       href="agent-sdk-models.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">xr-ai-hub</p>
+        <p class="prev-next-title">xr-ai-models</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -446,9 +540,29 @@
             
             
 
-<div class="bd-sidebar-secondary"></div>
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#subscription-and-roster-contract">Subscription and roster contract</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frames">Frames</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#return-path">Return path</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readiness">Readiness</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-memory-and-codec-extensions">Shared memory and codec extensions</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
 

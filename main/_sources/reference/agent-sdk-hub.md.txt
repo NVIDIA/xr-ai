@@ -3,13 +3,9 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Reference
+# xr-ai-hub
 
-Detailed reference for the xr-render-demo stack.
-
-```{toctree}
-:glob:
-:maxdepth: 1
-
-*
+```{include} ../../../agent-sdk/xr-ai-hub/README.md
+:start-after: "# xr-ai-hub"
+:relative-docs: ../../../agent-sdk/xr-ai-hub/
 ```

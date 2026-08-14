@@ -3,13 +3,9 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# Reference
+# xr-ai-voice
 
-Detailed reference for the xr-render-demo stack.
-
-```{toctree}
-:glob:
-:maxdepth: 1
-
-*
+```{include} ../../../agent-sdk/xr-ai-voice/README.md
+:start-after: "# xr-ai-voice"
+:relative-docs: ../../../agent-sdk/xr-ai-voice/
 ```
