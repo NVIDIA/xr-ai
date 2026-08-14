@@ -5,7 +5,7 @@
 
 # Components
 
-The server runtime, agent SDK, MCP servers, AI services, and the launcher and process model.
+The server runtime, agent SDK, AI services, and the launcher and process model.
 
 ```{toctree}
 :glob:

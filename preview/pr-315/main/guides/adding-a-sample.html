@@ -323,7 +323,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,11 +330,17 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -483,7 +488,7 @@ uses the wrapped nested JSON shape. The worker passes either form to
 <code class="docutils literal notranslate"><span class="pre">load_models_config(...)</span></code> and constructs services via <code class="docutils literal notranslate"><span class="pre">make_llm</span></code> /
 <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code> / <code class="docutils literal notranslate"><span class="pre">make_stt</span></code> / <code class="docutils literal notranslate"><span class="pre">make_tts</span></code> from <code class="docutils literal notranslate"><span class="pre">xr_ai_models</span></code>.  Schema, preset
 table, compatibility formats, and the profile contract are in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
+<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>.</p>
 <p>When the worker is small, keep its implementation in the package’s
 <code class="docutils literal notranslate"><span class="pre">__main__.py</span></code>. Split it once argument parsing, lifecycle, configuration, and
 workflow composition become distinct responsibilities.</p>
@@ -551,7 +556,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-hub-client  = { path = &quot;../../../agent-sdk/xr-ai-hub-client&quot;, editable = true }
+xr-ai-hub-client  = { path = &quot;../../../agent-sdk/xr-ai-hub&quot;, editable = true }
 xr-ai-models = { path = &quot;../../../agent-sdk/xr-ai-models&quot;, editable = true }
 
 [project.scripts]
