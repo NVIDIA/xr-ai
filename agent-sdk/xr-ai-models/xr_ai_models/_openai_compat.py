@@ -447,17 +447,24 @@ class OpenAICompatVLM:
     def health_url(self) -> str:
         return self._llm.health_url
 
-    def _build_messages(
-        self, image: ImageInput, question: str, system_prompt: str
+    def _build_image_messages(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        system_prompt: str,
     ) -> list[ChatMessage]:
-        url = _normalize_image(image)
+        if not images:
+            raise ValueError("at least one image is required")
         msgs: list[ChatMessage] = []
         if system_prompt:
             msgs.append(ChatMessage(role="system", content=system_prompt))
         msgs.append(
             ChatMessage(
                 role="user",
-                content=[ImagePart(url=url), TextPart(text=question)],
+                content=[
+                    *(ImagePart(url=_normalize_image(image)) for image in images),
+                    TextPart(text=question),
+                ],
             )
         )
         return msgs
@@ -473,8 +480,29 @@ class OpenAICompatVLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> ChatResponse:
+        return await self.ask_images(
+            [image],
+            question,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+            headers=headers,
+        )
+
+    async def ask_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> ChatResponse:
         return await self._llm.chat(
-            self._build_messages(image, question, system_prompt),
+            self._build_image_messages(images, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
             headers=headers,
         )
@@ -528,8 +556,30 @@ class OpenAICompatVLM:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
+        async for chunk in self.stream_images(
+            [image],
+            question,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+            headers=headers,
+        ):
+            yield chunk
+
+    async def stream_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> AsyncIterator[str]:
         async for chunk in self._llm.stream(
-            self._build_messages(image, question, system_prompt),
+            self._build_image_messages(images, question, system_prompt),
             max_tokens=max_tokens, temperature=temperature, timeout=timeout,
             headers=headers,
         ):

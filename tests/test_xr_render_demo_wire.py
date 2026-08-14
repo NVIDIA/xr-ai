@@ -765,9 +765,11 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
         "place_user_relative",
         "position_ahead",
         "position_relative",
-        "query_video",
+        "get_recorded_video",
         "query_image",
-        "sample_recorded_video",
+        "query_images",
+        "query_video",
+        "sample_recorded_frames",
         "remove_primitive",
         "scale_value",
         "start_xr",
@@ -863,16 +865,16 @@ class _CaptureTransportWithEndpoint(_CaptureTransport):
 
 
 class _FakeVLM:
-    """VLMService double — records the ask_image call and returns a canned
+    """VLMService double — records image calls and returns a canned
     ChatResponse so we can assert the perception path reached the VLM."""
 
     def __init__(self, answer: str = "It's a red mug.") -> None:
         self.answer = answer
         self.calls: list[tuple[str, str]] = []
 
-    async def ask_image(self, image, question, *, system_prompt: str = "",
-                        **_kw) -> ChatResponse:
-        self.calls.append((image, question))
+    async def ask_images(self, images, question, *, system_prompt: str = "",
+                         **_kw) -> ChatResponse:
+        self.calls.append((images, question))
         return ChatResponse(
             content=self.answer, reasoning=None, tool_calls=None,
             finish_reason="stop", raw={},
@@ -961,8 +963,9 @@ async def test_perception_query_reaches_vlm_frame_path() -> None:
 
     # Reached the VLM with selected JPEG bytes + the question.
     assert len(vlm.calls) == 1
-    image, question = vlm.calls[0]
-    assert isinstance(image, bytes)
+    images, question = vlm.calls[0]
+    assert len(images) == 1
+    assert isinstance(images[0], bytes)
     assert "colour" in question
     # The pixel request used the seeded live frame.
     assert transport.endpoint.frame_requests == [sig]

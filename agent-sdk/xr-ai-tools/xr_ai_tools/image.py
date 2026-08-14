@@ -34,6 +34,15 @@ class ImageReference(BaseModel):
         return value
 
 
+class TimedImage(BaseModel):
+    """An image reference positioned on a microsecond timeline."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    image: ImageReference
+    timestamp_us: int = Field(ge=0)
+
+
 class ImageRegistry:
     """Bounded in-process storage behind opaque image references."""
 
@@ -87,4 +96,4 @@ class ImageRegistry:
         return len(self._images)
 
 
-__all__ = ["ImageReference", "ImageRegistry"]
+__all__ = ["ImageReference", "ImageRegistry", "TimedImage"]

@@ -33,11 +33,12 @@ from xr_ai_tools.rpc import RPCError, RPCServer
 from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.video_memory import (
     HistoricalFrameRequest,
-    QueryVideoRequest,
-    SampleVideoRequest,
+    RecordedVideoRequest,
+    SampleFramesRequest,
     VideoMemoryTools,
     VideoStatsRequest,
 )
+from xr_ai_tools.vision import VideoQueryRequest
 
 
 class _FrameEndpoint:
@@ -303,8 +304,8 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
             stats = await video.get_video_stats.execute(
                 VideoStatsRequest(participant_id="user/name")
             )
-            clip = await video.query_video.execute(
-                QueryVideoRequest(
+            clip = await video.get_recorded_video.execute(
+                RecordedVideoRequest(
                     participant_id="user/name",
                     start_us=1_100_000,
                     end_us=2_100_000,
@@ -323,7 +324,7 @@ async def test_video_memory_functions_call_typed_service(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
-async def test_sample_recorded_video_respects_total_frame_budget(
+async def test_sample_recorded_frames_respects_total_frame_budget(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -350,8 +351,8 @@ async def test_sample_recorded_video_respects_total_frame_budget(
     async with _running_server(endpoint, service.dispatch):
         video = VideoMemoryTools(endpoint)
         try:
-            result = await video.sample_recorded_video.execute(
-                SampleVideoRequest(
+            result = await video.sample_recorded_frames.execute(
+                SampleFramesRequest(
                     participant_id="sample/user",
                     reference_time_us=8_000_000,
                     duration_seconds=7,
@@ -374,6 +375,13 @@ async def test_sample_recorded_video_respects_total_frame_budget(
     assert result.start_us == 1_000_000
     assert result.end_us == 8_000_000
     assert result.max_width == result.max_height == 2
+    query = VideoQueryRequest(frames=result.frames, query="What changed?")
+    assert [frame.timestamp_us for frame in query.frames] == [
+        1_000_000,
+        3_000_000,
+        6_000_000,
+        8_000_000,
+    ]
     for frame in result.frames:
         assert (frame.width, frame.height) == (2, 1)
         assert frame.image.uri == frame.path
@@ -392,16 +400,16 @@ def test_sampled_png_fits_target_without_upscaling(tmp_path: Path) -> None:
     ) == (4, 2)
 
 
-def test_sample_recorded_video_schema_bounds_work() -> None:
+def test_sample_recorded_frames_schema_bounds_work() -> None:
     with pytest.raises(ValueError, match="less than or equal to 256"):
-        SampleVideoRequest(
+        SampleFramesRequest(
             participant_id="user",
             reference_time_us=10_000_000,
             duration_seconds=1,
             frame_budget=257,
         )
     with pytest.raises(ValueError, match="before the Unix epoch"):
-        SampleVideoRequest(
+        SampleFramesRequest(
             participant_id="user",
             reference_time_us=1_000_000,
             duration_seconds=1,
@@ -409,7 +417,7 @@ def test_sample_recorded_video_schema_bounds_work() -> None:
         )
 
     with pytest.raises(ValueError, match="must be provided together"):
-        SampleVideoRequest(
+        SampleFramesRequest(
             participant_id="user",
             reference_time_us=10_000_000,
             duration_seconds=1,
@@ -417,7 +425,7 @@ def test_sample_recorded_video_schema_bounds_work() -> None:
             max_width=640,
         )
 
-    schema = SampleVideoRequest.model_json_schema()
+    schema = SampleFramesRequest.model_json_schema()
     assert schema["properties"]["duration_seconds"]["maximum"] == 300
     assert schema["properties"]["frame_budget"]["maximum"] == 256
     assert schema["properties"]["max_width"]["anyOf"][0]["exclusiveMinimum"] == 0

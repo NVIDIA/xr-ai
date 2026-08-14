@@ -20,12 +20,16 @@ from xr_ai_tools.current_frame import (
     CurrentFrameRequest,
     CurrentFrameTool,
 )
-from xr_ai_tools.image import ImageReference, ImageRegistry
+from xr_ai_tools.image import ImageReference, ImageRegistry, TimedImage
 from xr_ai_tools.vision import (
     ImageQueryRequest,
     ImageQueryResult,
     ImageQueryTool,
+    MultiImageQueryRequest,
+    MultiImageQueryTool,
     StreamingImageQueryTool,
+    VideoQueryRequest,
+    VideoQueryTool,
 )
 
 
@@ -35,26 +39,26 @@ class _Vlm:
         self.calls: list[tuple[Any, str, str, dict[str, str]]] = []
         self.stream_calls: list[tuple[Any, str, str, dict[str, str]]] = []
 
-    async def ask_image(
+    async def ask_images(
         self,
-        image: Any,
+        images: list[Any],
         question: str,
         *,
         system_prompt: str = "",
         headers: dict[str, str] | None = None,
     ) -> ChatResponse:
-        self.calls.append((image, question, system_prompt, dict(headers or {})))
+        self.calls.append((images, question, system_prompt, dict(headers or {})))
         return ChatResponse(self.content, None, None, "stop", {})
 
-    async def stream(
+    async def stream_images(
         self,
-        image: Any,
+        images: list[Any],
         question: str,
         *,
         system_prompt: str = "",
         headers: dict[str, str] | None = None,
     ):
-        self.stream_calls.append((image, question, system_prompt, dict(headers or {})))
+        self.stream_calls.append((images, question, system_prompt, dict(headers or {})))
         for token in ("a ", "blue ", "square"):
             yield token
 
@@ -238,8 +242,8 @@ async def test_image_query_consumes_selected_bytes_and_redacts_relay_events() ->
         nemo_relay.subscribers.deregister(subscriber)
 
     assert result == ImageQueryResult(text="a blue square")
-    sent_image, question, system_prompt, headers = vlm.calls[0]
-    assert sent_image == b"jpeg bytes"
+    sent_images, question, system_prompt, headers = vlm.calls[0]
+    assert sent_images == [b"jpeg bytes"]
     assert question == "What is shown?"
     assert system_prompt == "Answer briefly."
     assert headers["X-Relay-Session"] == "turn-8"
@@ -272,7 +276,59 @@ async def test_image_query_accepts_images_not_returned_by_frame_tools(
     )
 
     assert result.text == "external image"
-    assert isinstance(vlm.calls[0][0], expected_type)
+    assert isinstance(vlm.calls[0][0][0], expected_type)
+
+
+async def test_multi_image_query_preserves_caller_order() -> None:
+    images = ImageRegistry()
+    first = images.put(b"first")
+    second = images.put(b"second")
+    vlm = _Vlm("changed from empty to full")
+    tool = MultiImageQueryTool(images=images, vlm=cast(VLMService, vlm))
+
+    result = await tool.execute(
+        MultiImageQueryRequest(
+            images=[first, second],
+            query="What changed?",
+        )
+    )
+
+    assert result.text == "changed from empty to full"
+    assert vlm.calls[0][:2] == ([b"first", b"second"], "What changed?")
+
+
+async def test_video_query_supplies_ordered_images_and_timestamp_context() -> None:
+    images = ImageRegistry()
+    first = TimedImage(image=images.put(b"first"), timestamp_us=1_000_000)
+    second = TimedImage(image=images.put(b"second"), timestamp_us=2_500_000)
+    vlm = _Vlm("the cup was filled")
+    tool = VideoQueryTool(images=images, vlm=cast(VLMService, vlm))
+
+    result = await tool.execute(
+        VideoQueryRequest(
+            frames=[first, second],
+            query="What happened?",
+        )
+    )
+
+    assert result.text == "the cup was filled"
+    sent_images, question, _system_prompt, _headers = vlm.calls[0]
+    assert sent_images == [b"first", b"second"]
+    assert "frame 1: timestamp_us=1000000, offset_s=0.000000" in question
+    assert "frame 2: timestamp_us=2500000, offset_s=1.500000" in question
+    assert question.endswith("What happened?")
+
+
+def test_video_query_requires_chronological_frames() -> None:
+    image = ImageReference(uri="https://example.com/frame.jpg")
+    with pytest.raises(ValidationError, match="chronological"):
+        VideoQueryRequest(
+            frames=[
+                TimedImage(image=image, timestamp_us=2),
+                TimedImage(image=image, timestamp_us=1),
+            ],
+            query="What happened?",
+        )
 
 
 async def test_image_query_hides_reasoning_and_marks_failures_unavailable() -> None:
@@ -285,7 +341,7 @@ async def test_image_query_hides_reasoning_and_marks_failures_unavailable() -> N
     assert (await reasoning.execute(ImageQueryRequest(image=image, query="What?"))).text == "a red mug"
 
     class FailingVlm:
-        async def ask_image(self, *_args, **_kwargs):
+        async def ask_images(self, *_args, **_kwargs):
             raise RuntimeError("VLM failed")
 
     failure = ImageQueryTool(
@@ -312,12 +368,12 @@ async def test_streaming_image_query_yields_typed_chunks() -> None:
     chunks = [chunk async for chunk in tool.stream(ImageQueryRequest(image=image, query="What is shown?"))]
 
     assert [chunk.text for chunk in chunks] == ["a ", "blue ", "square"]
-    assert vlm.stream_calls[0][:3] == (b"image", "What is shown?", "Answer briefly.")
+    assert vlm.stream_calls[0][:3] == ([b"image"], "What is shown?", "Answer briefly.")
 
 
 async def test_streaming_image_query_stops_after_partial_failure() -> None:
     class PartialFailureVlm:
-        async def stream(self, *_args, **_kwargs):
+        async def stream_images(self, *_args, **_kwargs):
             yield "The object is "
             raise RuntimeError("stream disconnected")
 
@@ -334,7 +390,7 @@ async def test_streaming_image_query_stops_after_partial_failure() -> None:
 
 async def test_streaming_image_query_reports_failure_before_output() -> None:
     class ImmediateFailureVlm:
-        async def stream(self, *_args, **_kwargs):
+        async def stream_images(self, *_args, **_kwargs):
             if False:
                 yield ""
             raise RuntimeError("stream unavailable")

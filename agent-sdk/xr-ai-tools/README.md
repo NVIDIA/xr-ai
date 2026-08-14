@@ -106,25 +106,34 @@ transport remains isolated in `rpc`.
 Install `xr-ai-tools[frames]` for live-frame selection and
 `xr-ai-tools[vision]` for VLM queries. Image selection does not invoke a model:
 `CurrentFrameTool` returns an `ImageFrame`, while
-`VideoMemoryTools.get_frame_from_time` and `sample_recorded_video` return
-recorded frames. Every result carries an `ImageReference` and retains its path
-or frame metadata.
+`VideoMemoryTools.get_frame_from_time` and `sample_recorded_frames` return
+recorded frames. Every frame carries the same `ImageReference`; timed frames
+also share the `TimedImage` contract consumed by video queries.
 
 `ImageQueryTool` returns one complete `ImageQueryResult` for any image reference;
-`StreamingImageQueryTool` yields `ImageQueryChunk` values. References may point
-to a selected frame, local path, file URI, or HTTP(S) URL. In-memory bytes use a
-bounded `ImageRegistry`, whose opaque handles keep tool results and telemetry
-small. Both query tools forward controlled Relay headers and redact image
-locations from VLM events while preserving provider input.
+`MultiImageQueryTool` queries an ordered image collection, and `VideoQueryTool`
+queries chronological `TimedImage` frames with their timestamps and relative
+offsets. `StreamingImageQueryTool` preserves the low-latency single-image path.
+All four tools use one list-based inference implementation. References may
+point to selected frames, local paths, file URIs, or HTTP(S) URLs. In-memory
+bytes use a bounded `ImageRegistry`, whose opaque handles keep tool results and
+telemetry small. Query tools forward controlled Relay headers and redact every
+image location from VLM events while preserving provider input.
 
 ```python
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageReference, ImageRegistry
-from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
+from xr_ai_tools.vision import (
+    ImageQueryRequest,
+    ImageQueryTool,
+    VideoQueryRequest,
+    VideoQueryTool,
+)
 
 images = ImageRegistry()
 frames = CurrentFrameTool(endpoint=endpoint, images=images)
 vision = ImageQueryTool(images=images, vlm=vlm)
+video = VideoQueryTool(images=images, vlm=vlm)
 
 frame = await frames.execute(CurrentFrameRequest(participant_id="alice"))
 answer = await vision.execute(
@@ -137,5 +146,11 @@ other = await vision.execute(
         image=ImageReference(uri="/tmp/reference.png"),
         query="Does this match the current object?",
     )
+)
+
+# A bounded recorded lookup feeds the timed multi-image path directly.
+sample = await video_memory.sample_recorded_frames.execute(sample_request)
+change = await video.execute(
+    VideoQueryRequest(frames=sample.frames, query="What changed over time?")
 )
 ```

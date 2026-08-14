@@ -200,8 +200,9 @@ streaming Piper TTS audio plus a `vlm.response` text message.
 
 The packaged worker uses `CurrentFrameTool` to select an image, then passes its
 lightweight reference to `StreamingImageQueryTool` inside `SimpleVlmAgent` and
-publishes the result chunks to `VoiceAgent`. Pipecat remains private to the
-voice runtime and no MCP client is involved. See the
+publishes the result chunks to `VoiceAgent`. The same inference path supports
+one image, ordered image collections, and timestamped frame sequences. Pipecat
+remains private to the voice runtime and no MCP client is involved. See the
 [sample README](agent-samples/simple-vlm-example/README.md) for the worker
 layout and configuration boundaries.
 

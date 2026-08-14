@@ -14,7 +14,7 @@ from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import TextMemoryTool
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
-from xr_ai_tools.vision import ImageQueryTool
+from xr_ai_tools.vision import ImageQueryTool, MultiImageQueryTool, VideoQueryTool
 from xr_render_scene import SceneTools
 
 from .spatial_tools import RenderSpatialTools
@@ -51,6 +51,16 @@ class NativeCapabilities:
             vlm=vlm,
             system_prompt="Answer directly from the supplied camera image in one short plain-English sentence.",
         )
+        self.multi_image_query = MultiImageQueryTool(
+            images=self.images,
+            vlm=vlm,
+            system_prompt="Answer directly from the supplied images in one short plain-English sentence.",
+        )
+        self.video_query = VideoQueryTool(
+            images=self.images,
+            vlm=vlm,
+            system_prompt="Answer directly from the supplied timed frames in one short plain-English sentence.",
+        )
         self.text_memory = TextMemoryTool(text_memory_dir)
         all_tools = (
             *self.scene.tools,
@@ -58,6 +68,8 @@ class NativeCapabilities:
             *self.video.tools,
             self.current_frame,
             self.image_query,
+            self.multi_image_query,
+            self.video_query,
         )
         self.all = ToolSet(all_tools)
         self.model = ToolSet(
@@ -69,6 +81,8 @@ class NativeCapabilities:
                 "get_health",
                 "get_current_frame",
                 "query_image",
+                "query_images",
+                "query_video",
             }
         )
 

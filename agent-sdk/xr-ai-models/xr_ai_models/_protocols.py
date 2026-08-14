@@ -146,6 +146,18 @@ class VLMService(Protocol):
         headers: Mapping[str, str] | None = None,
     ) -> ChatResponse: pass
 
+    async def ask_images(
+        self,
+        images: Sequence[ImageInput],
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> ChatResponse: pass
+
     async def ask_video(
         self,
         video: VideoInput,
@@ -161,6 +173,18 @@ class VLMService(Protocol):
     def stream(
         self,
         image: ImageInput,
+        question: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> AsyncIterator[str]: pass
+
+    def stream_images(
+        self,
+        images: Sequence[ImageInput],
         question: str,
         *,
         system_prompt: str = "",

@@ -130,8 +130,10 @@ Port 8100 (`vlm-server`).
 Loaded in-process by `vlm-server` via HuggingFace transformers
 (Qwen2.5-VL architecture). `<think>…</think>` blocks are stripped before
 returning. The render agent selects a current or recorded frame first, then
-passes its `ImageReference` to the shared `query_image` tool backed by the
-`xr-ai-models` VLM service.
+passes its `ImageReference` to `query_image`. Its native capability set also
+includes `query_images` for ordered collections and `query_video` for
+timestamped frame sequences; all use the same `xr-ai-models` multi-image VLM
+path.
 
 There is a deliberate startup ordering constraint: `VoiceSession` readiness
 blocks on the VLM's `/health` endpoint, which

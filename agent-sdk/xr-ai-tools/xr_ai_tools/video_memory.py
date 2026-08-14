@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, model_validator
 
-from .image import ImageReference
+from .image import ImageReference, TimedImage
 from .rpc import RPCClient
 from .tools import Tool
 from .types import EmptyRequest, StrictRequest
@@ -30,26 +30,26 @@ class VideoStatsResult(BaseModel):
     latest_us: int
 
 
-class QueryVideoRequest(StrictRequest):
+class RecordedVideoRequest(StrictRequest):
     participant_id: str = Field(min_length=1)
     start_us: int = Field(gt=0)
     end_us: int = Field(gt=0)
 
     @model_validator(mode="after")
-    def validate_window(self) -> QueryVideoRequest:
+    def validate_window(self) -> RecordedVideoRequest:
         if self.end_us <= self.start_us:
             raise ValueError("end_us must be greater than start_us")
         return self
 
 
-class QueryVideoResult(BaseModel):
+class RecordedVideoResult(BaseModel):
     path: str
     size: int
     start_us: int
     end_us: int
 
 
-class SampleVideoRequest(StrictRequest):
+class SampleFramesRequest(StrictRequest):
     participant_id: str = Field(
         min_length=1,
         description="Exact participant identity whose recorded video should be sampled.",
@@ -80,7 +80,7 @@ class SampleVideoRequest(StrictRequest):
     )
 
     @model_validator(mode="after")
-    def validate_window(self) -> SampleVideoRequest:
+    def validate_window(self) -> SampleFramesRequest:
         start_us = self.reference_time_us - self.duration_seconds * 1_000_000
         if start_us <= 0:
             raise ValueError("duration_seconds extends before the Unix epoch")
@@ -89,12 +89,10 @@ class SampleVideoRequest(StrictRequest):
         return self
 
 
-class SampledVideoFrame(BaseModel):
+class SampledVideoFrame(TimedImage):
     path: str
-    image: ImageReference
     width: int
     height: int
-    timestamp_us: int
 
     @model_validator(mode="before")
     @classmethod
@@ -104,7 +102,7 @@ class SampledVideoFrame(BaseModel):
         return value
 
 
-class SampleVideoResult(BaseModel):
+class SampleFramesResult(BaseModel):
     frames: list[SampledVideoFrame]
     start_us: int
     end_us: int
@@ -171,19 +169,19 @@ class VideoMemoryTools:
             VideoStatsResult,
             self._get_video_stats,
         )
-        self.query_video = Tool(
-            "query_video",
-            "Write an H.264 clip overlapping an absolute Unix-epoch microsecond window and return its local path.",
-            QueryVideoRequest,
-            QueryVideoResult,
-            self._query_video,
+        self.get_recorded_video = Tool(
+            "get_recorded_video",
+            "Return an H.264 recording overlapping an absolute Unix-epoch microsecond window.",
+            RecordedVideoRequest,
+            RecordedVideoResult,
+            self._get_recorded_video,
         )
-        self.sample_recorded_video = Tool(
-            "sample_recorded_video",
-            "Sample a bounded number and optional maximum resolution of recorded frames ending at reference_time_us.",
-            SampleVideoRequest,
-            SampleVideoResult,
-            self._sample_recorded_video,
+        self.sample_recorded_frames = Tool(
+            "sample_recorded_frames",
+            "Return bounded timestamped image frames from recorded history ending at reference_time_us.",
+            SampleFramesRequest,
+            SampleFramesResult,
+            self._sample_recorded_frames,
         )
         self.get_frame_from_time = Tool(
             "get_frame_from_time",
@@ -195,8 +193,8 @@ class VideoMemoryTools:
         self.tools = (
             self.list_recorded_participants,
             self.get_video_stats,
-            self.query_video,
-            self.sample_recorded_video,
+            self.get_recorded_video,
+            self.sample_recorded_frames,
             self.get_frame_from_time,
         )
 
@@ -213,17 +211,20 @@ class VideoMemoryTools:
             await self._rpc.call("get_video_stats", request.model_dump())
         )
 
-    async def _query_video(self, request: QueryVideoRequest) -> QueryVideoResult:
-        return QueryVideoResult.model_validate(
-            await self._rpc.call("query_video", request.model_dump())
+    async def _get_recorded_video(
+        self,
+        request: RecordedVideoRequest,
+    ) -> RecordedVideoResult:
+        return RecordedVideoResult.model_validate(
+            await self._rpc.call("get_recorded_video", request.model_dump())
         )
 
-    async def _sample_recorded_video(
+    async def _sample_recorded_frames(
         self,
-        request: SampleVideoRequest,
-    ) -> SampleVideoResult:
-        return SampleVideoResult.model_validate(
-            await self._rpc.call("sample_recorded_video", request.model_dump())
+        request: SampleFramesRequest,
+    ) -> SampleFramesResult:
+        return SampleFramesResult.model_validate(
+            await self._rpc.call("sample_recorded_frames", request.model_dump())
         )
 
     async def _get_frame_from_time(
@@ -253,11 +254,11 @@ __all__ = [
     "HistoricalFrameRequest",
     "HistoricalFrameResult",
     "ListRecordedParticipantsResult",
-    "QueryVideoRequest",
-    "QueryVideoResult",
+    "RecordedVideoRequest",
+    "RecordedVideoResult",
+    "SampleFramesRequest",
+    "SampleFramesResult",
     "SampledVideoFrame",
-    "SampleVideoRequest",
-    "SampleVideoResult",
     "VideoHealthResult",
     "VideoMemoryTools",
     "VideoStatsRequest",

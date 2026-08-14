@@ -11,8 +11,8 @@ from xr_ai_tools.rpc import RPCError
 from xr_ai_tools.types import EmptyRequest
 from xr_ai_tools.video_memory import (
     HistoricalFrameRequest,
-    QueryVideoRequest,
-    SampleVideoRequest,
+    RecordedVideoRequest,
+    SampleFramesRequest,
     VideoStatsRequest,
 )
 
@@ -91,8 +91,8 @@ class VideoMemoryService:
             request = VideoStatsRequest.model_validate(arguments)
             store = self._require_store()
             return await asyncio.to_thread(store.stats, request.participant_id)
-        if operation == "query_video":
-            request = QueryVideoRequest.model_validate(arguments)
+        if operation == "get_recorded_video":
+            request = RecordedVideoRequest.model_validate(arguments)
             store = self._require_store()
             data = await asyncio.to_thread(
                 store.query,
@@ -113,9 +113,9 @@ class VideoMemoryService:
         if operation == "get_frame_from_time":
             request = HistoricalFrameRequest.model_validate(arguments)
             return await self._recorded_frame(request)
-        if operation == "sample_recorded_video":
-            request = SampleVideoRequest.model_validate(arguments)
-            return await self._sample_recorded_video(request)
+        if operation == "sample_recorded_frames":
+            request = SampleFramesRequest.model_validate(arguments)
+            return await self._sample_recorded_frames(request)
         raise RPCError(f"unknown operation: {operation}", code="unknown_operation")
 
     def _require_store(self) -> ChunkStore:
@@ -168,7 +168,7 @@ class VideoMemoryService:
             "actual_second_ago": (request.reference_time_us - timestamp_us) / 1_000_000,
         }
 
-    async def _sample_recorded_video(self, request: SampleVideoRequest) -> dict:
+    async def _sample_recorded_frames(self, request: SampleFramesRequest) -> dict:
         store = self._require_store()
         end_us = request.reference_time_us
         start_us = end_us - request.duration_seconds * 1_000_000

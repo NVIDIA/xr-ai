@@ -158,26 +158,26 @@ class _StreamingVlm:
         self.calls = []
         self.ask_calls = []
 
-    async def ask_image(
+    async def ask_images(
         self,
-        image,
+        images,
         question: str,
         *,
         system_prompt: str = "",
         headers=None,
     ) -> ChatResponse:
-        self.ask_calls.append((image, question, system_prompt, dict(headers or {})))
+        self.ask_calls.append((images, question, system_prompt, dict(headers or {})))
         return ChatResponse("a blue square", None, None, "stop", {})
 
-    async def stream(
+    async def stream_images(
         self,
-        image,
+        images,
         question: str,
         *,
         system_prompt: str = "",
         headers=None,
     ):
-        self.calls.append((image, question, system_prompt, dict(headers or {})))
+        self.calls.append((images, question, system_prompt, dict(headers or {})))
         for token in ("a ", "blue ", "square"):
             yield token
 
@@ -611,8 +611,9 @@ async def test_selected_frame_returns_a_complete_agent_observation() -> None:
         nemo_relay.subscribers.deregister(subscriber)
 
     assert result == ImageQueryResult(text="a blue square")
-    image, question, system_prompt, headers = vlm.ask_calls[0]
-    assert isinstance(image, bytes)
+    images, question, system_prompt, headers = vlm.ask_calls[0]
+    assert len(images) == 1
+    assert isinstance(images[0], bytes)
     assert question == "What is shown?"
     assert system_prompt == "Answer briefly."
     assert headers["X-Relay-Session"] == "turn-8"
@@ -672,8 +673,9 @@ async def test_selected_frame_streams_typed_image_query_chunks() -> None:
         nemo_relay.subscribers.deregister(subscriber)
 
     assert [chunk.text for chunk in chunks] == ["a ", "blue ", "square"]
-    image, question, system_prompt, headers = vlm.calls[0]
-    assert isinstance(image, bytes)
+    images, question, system_prompt, headers = vlm.calls[0]
+    assert len(images) == 1
+    assert isinstance(images[0], bytes)
     assert question == "What is shown?"
     assert system_prompt == "Answer briefly."
     assert headers["X-Relay-Session"] == "turn-7"
@@ -688,15 +690,15 @@ async def test_streaming_image_query_stops_after_a_partial_failure() -> None:
         def __init__(self) -> None:
             self.calls = []
 
-        async def stream(
+        async def stream_images(
             self,
-            image,
+            images,
             question: str,
             *,
             system_prompt: str = "",
             headers=None,
         ):
-            self.calls.append((image, question, system_prompt, dict(headers or {})))
+            self.calls.append((images, question, system_prompt, dict(headers or {})))
             yield "The object is "
             raise RuntimeError("stream disconnected")
 
@@ -721,7 +723,7 @@ async def test_streaming_image_query_stops_after_a_partial_failure() -> None:
 
 async def test_streaming_image_query_reports_failure_before_any_output() -> None:
     class _ImmediateFailureVlm:
-        async def stream(self, *_args, **_kwargs):
+        async def stream_images(self, *_args, **_kwargs):
             if False:
                 yield ""
             raise RuntimeError("stream unavailable")
@@ -880,8 +882,9 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
         nemo_relay.subscribers.deregister(subscriber)
 
     assert session.text == "a blue square"
-    image, question, system_prompt, headers = vlm.calls[0]
-    assert isinstance(image, bytes)
+    images, question, system_prompt, headers = vlm.calls[0]
+    assert len(images) == 1
+    assert isinstance(images[0], bytes)
     assert question == "What is shown?"
     assert system_prompt == "Answer briefly."
     assert headers["X-Relay-Session"] == "turn-9"

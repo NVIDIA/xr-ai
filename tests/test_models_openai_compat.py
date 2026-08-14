@@ -425,6 +425,40 @@ async def test_vlm_ask_image_with_string_passes_through_url() -> None:
         "https://example.com/img.png"
 
 
+async def test_vlm_ask_images_preserves_order_and_uses_one_question() -> None:
+    stub = StubOpenAI()
+    stub.set_chat_message(content="the object moved")
+    async with OpenAICompatVLM(
+        "http://stub", "vlm", client=stub.client(),
+    ) as vlm:
+        response = await vlm.ask_images(
+            [_PNG_HEADER, "https://example.com/second.png"],
+            "What changed?",
+        )
+
+    assert response.content == "the object moved"
+    parts = stub.last_json()["messages"][0]["content"]
+    assert [part["type"] for part in parts] == [
+        "image_url",
+        "image_url",
+        "text",
+    ]
+    assert parts[0]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert parts[1]["image_url"]["url"] == "https://example.com/second.png"
+    assert parts[2] == {"type": "text", "text": "What changed?"}
+
+
+async def test_vlm_multi_image_paths_reject_empty_input() -> None:
+    stub = StubOpenAI()
+    async with OpenAICompatVLM(
+        "http://stub", "vlm", client=stub.client(),
+    ) as vlm:
+        with pytest.raises(ValueError, match="at least one image"):
+            await vlm.ask_images([], "What changed?")
+        with pytest.raises(ValueError, match="at least one image"):
+            _ = [chunk async for chunk in vlm.stream_images([], "What changed?")]
+
+
 async def test_vlm_ask_image_includes_system_prompt_when_set() -> None:
     stub = StubOpenAI()
     async with OpenAICompatVLM(

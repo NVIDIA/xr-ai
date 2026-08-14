@@ -145,12 +145,18 @@ class VLMService(Protocol):
     async def ask_image(self, image, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
                         timeout=None, headers=None) -> ChatResponse: ...
+    async def ask_images(self, images, question, *, system_prompt="",
+                         max_tokens=None, temperature=None,
+                         timeout=None, headers=None) -> ChatResponse: ...
     async def ask_video(self, video, question, *, system_prompt="",
                         max_tokens=None, temperature=None,
                         timeout=None, headers=None) -> ChatResponse: ...
     def stream(self, image, question, *, system_prompt="",
                max_tokens=None, temperature=None,
                timeout=None, headers=None) -> AsyncIterator[str]: ...
+    def stream_images(self, images, question, *, system_prompt="",
+                      max_tokens=None, temperature=None,
+                      timeout=None, headers=None) -> AsyncIterator[str]: ...
     async def health(self) -> bool: ...
 
 class STTService(Protocol):
@@ -176,6 +182,10 @@ into the same surface.
 per-call headers for execution context such as Relay session lineage. The model
 profile remains the authority for credentials: callers cannot supply an
 `Authorization` header.
+
+`ask_image()` and `stream()` are one-image wrappers over `ask_images()` and
+`stream_images()`. Multi-image calls preserve caller order and place every
+image in one OpenAI-compatible user message before the question.
 
 ## Remote / hosted-NIM endpoints
 

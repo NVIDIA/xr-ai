@@ -432,10 +432,10 @@ the latest video frame via streaming VLM and replies with both
 
 The packaged worker uses `CurrentFrameTool` for frame acquisition and passes its
 opaque `ImageReference` to a transport-independent `StreamingImageQueryTool`
-inside `SimpleVlmAgent`. The query tool has no voice dependency and uses NeMo
-Relay's managed streaming LLM path. Camera bytes stay in a bounded in-process
-registry and image locations are redacted from VLM telemetry while the provider
-receives the original frame.
+inside `SimpleVlmAgent`. Single-image, ordered multi-image, and timestamped
+frame-sequence inference share the same list-based VLM path. Camera bytes stay
+in a bounded in-process registry and image locations are redacted from VLM
+telemetry while the provider receives the original frames.
 `VoiceAgent` owns `VoiceSession`, readiness, hub transport, signals, and the
 private Pipecat pipeline; it routes `"ping"` and ad-hoc text through the same
 sample-named `UserQuery` topic as speech and publishes lifecycle events on

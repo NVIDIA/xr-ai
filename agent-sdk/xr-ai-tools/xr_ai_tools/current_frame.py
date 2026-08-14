@@ -7,22 +7,20 @@ from __future__ import annotations
 
 import asyncio
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 from xr_ai_hub import LiveFrameSource, ProcessorEndpoint
 
 from ._pixels import encode_image_bytes, frame_to_pil
-from .image import ImageReference, ImageRegistry
+from .image import ImageRegistry, TimedImage
 from .tools import Tool
 from .types import StrictRequest
 
 
-class ImageFrame(BaseModel):
+class ImageFrame(TimedImage):
     """One selected camera frame and its source metadata."""
 
-    image: ImageReference
     width: int = Field(gt=0)
     height: int = Field(gt=0)
-    timestamp_us: int = Field(ge=0)
     sequence: int = Field(ge=0)
     participant_id: str = Field(min_length=1)
     track_id: str = ""
