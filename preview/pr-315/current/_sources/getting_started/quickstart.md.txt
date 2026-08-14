@@ -17,6 +17,17 @@ immediately — the services keep running in the background with weights hot.
 Start this once before running `xr-render-demo`, or whenever you want to
 pre-warm models:
 
+:::{important}
+After updating, stop any existing model servers before starting this stack:
+
+```bash
+uv run model_servers --stop
+```
+
+Persisted vLLM processes or containers may otherwise keep serving the previous
+model and image even though the checked-in configuration now selects Cosmos3.
+:::
+
 ```bash
 cd agent-samples/model-servers
 uv sync

@@ -391,6 +391,15 @@ on startup.</p>
 immediately — the services keep running in the background with weights hot.
 Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or whenever you want to
 pre-warm models:</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>After updating, stop any existing model servers before starting this stack:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Persisted vLLM processes or containers may otherwise keep serving the previous
+model and image even though the checked-in configuration now selects Cosmos3.</p>
+</div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/model-servers
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers
