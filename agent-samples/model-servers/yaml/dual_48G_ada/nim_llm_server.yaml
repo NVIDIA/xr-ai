@@ -5,7 +5,7 @@
 # Nemotron-3-Nano is the same agent model the local vlm_llm profile runs;
 # its A3B MoE decode is fast enough to cover the reactive role too. Swap in
 # any LLM NIM from https://catalog.ngc.nvidia.com.
-image:     nvcr.io/nim/nvidia/nemotron-3-nano:latest
+image:     nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10
 http_port: 8106
 
 nim_cache: ../../../../models/nim

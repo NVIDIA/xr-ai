@@ -198,28 +198,69 @@ def _requested_env(argv: list[str]) -> dict[str, str]:
     return env
 
 
-def _container_env_matches(name: str, argv: list[str]) -> bool:
-    """True iff *name*'s creation-time env carries every requested KEY=VALUE.
+def _container_config_matches(name: str, argv: list[str], image: str) -> bool:
+    """True iff *name* was created from *image* with every requested KEY=VALUE.
 
     Fail-open: if the container cannot be inspected, reuse proceeds and the
-    health gate decides.
+    health gate decides; the warning makes the unverified reuse visible.
     """
     requested = _requested_env(argv)
-    if not requested:
-        return True
     try:
         out = subprocess.run(
             ["docker", "inspect", "--format",
-             "{{range .Config.Env}}{{println .}}{{end}}", name],
+             "{{.Config.Image}}\n{{range .Config.Env}}{{println .}}{{end}}",
+             name],
             capture_output=True, text=True, timeout=10, check=True,
         ).stdout
     except (FileNotFoundError, subprocess.TimeoutExpired,
             subprocess.CalledProcessError):
+        log.warning(
+            "could not inspect container %s; reusing it WITHOUT verifying "
+            "its image and configuration match the current YAML", name,
+        )
         return True
+    lines = out.splitlines()
+    if not lines or lines[0] != image:
+        return False
     actual = dict(
-        line.partition("=")[::2] for line in out.splitlines() if "=" in line
+        line.partition("=")[::2] for line in lines[1:] if "=" in line
     )
     return all(actual.get(key) == value for key, value in requested.items())
+
+
+def evict_local_listener(port: int, log_prefix: str) -> None:
+    """SIGTERM an xr-ai pip-mode server holding *port* (profile switch).
+
+    A non-xr-ai listener is left alone with a hint; the subsequent launch
+    fails to bind rather than this helper killing an unrelated process.
+    """
+    pid, checked, listening = pid_on_port_checked(port)
+    if not checked or not listening or pid is None:
+        return
+    if not (
+        is_xr_ai_server_process(pid, "vllm", port)
+        or is_xr_ai_server_process(pid, "stt", port)
+    ):
+        print(
+            f"[{log_prefix}] port {port} is held by pid {pid}, which is not "
+            f"an xr-ai server; the launch will fail to bind unless it is "
+            f"stopped",
+            flush=True,
+        )
+        return
+    print(
+        f"[{log_prefix}] port {port} is held by xr-ai server pid {pid}; "
+        f"stopping it to make way",
+        flush=True,
+    )
+    try:
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(40):
+            time.sleep(0.5)
+            os.kill(pid, 0)
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 def stop_container(name: str, timeout_s: int = 20) -> bool:
@@ -613,12 +654,17 @@ def run_container(
             # identity via the health probe.
             log.error("could not evict container %s from port %d", holder, port)
             sys.exit(1)
+    if checked and not holder:
+        # The same profile switch can leave a pip-mode server on this port;
+        # it too can answer the health probe and be mistaken for ours.
+        evict_local_listener(port, log_prefix)
 
     # A running same-name container may have been created under a different
-    # configuration (a profile switch that moves GPUs, or an edited YAML);
-    # its creation-time config is immutable, so recreate on mismatch.
-    if container_running(container_name) and not _container_env_matches(
-        container_name, argv,
+    # configuration (a profile switch that moves GPUs, an edited YAML, or a
+    # bumped image pin); its creation-time config is immutable, so recreate
+    # on mismatch.
+    if container_running(container_name) and not _container_config_matches(
+        container_name, argv, image,
     ):
         print(
             f"[{log_prefix}] container {container_name} is running with a "

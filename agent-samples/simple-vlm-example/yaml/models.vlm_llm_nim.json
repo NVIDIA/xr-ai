@@ -38,7 +38,8 @@
       },
       "endpoint": {
         "base_url": "http://localhost:8100",
-        "readiness": "none"
+        "readiness": "health",
+        "health_path": "/v1/health/ready"
       },
       "deployment": {
         "ownership": "reused",

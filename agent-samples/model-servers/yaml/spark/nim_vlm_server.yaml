@@ -7,7 +7,7 @@
 # 3200-token input cap on this class of GPU, below its own ~3330-token
 # per-image cost, so every image request 500s.
 # UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
-image:     nvcr.io/nim/nvidia/cosmos-reason1-7b:latest
+image:     nvcr.io/nim/nvidia/cosmos-reason1-7b:1.4.1
 http_port: 8100
 
 nim_cache: ../../../../models/nim

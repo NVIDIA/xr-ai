@@ -3,7 +3,7 @@
 
 # Self-hosted NIM: Riva TTS (magpie). Workers reach the gRPC port via the
 # riva_grpc model kind; http_port serves /v1/health/ready only.
-image:     nvcr.io/nim/nvidia/magpie-tts-multilingual:latest
+image:     nvcr.io/nim/nvidia/magpie-tts-multilingual:1.9.0
 http_port: 9011
 grpc_port: 50052
 

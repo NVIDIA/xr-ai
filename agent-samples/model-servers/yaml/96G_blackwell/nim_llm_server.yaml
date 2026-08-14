@@ -6,7 +6,7 @@
 # its A3B MoE decode is fast enough to cover the reactive role too. Swap in
 # any LLM NIM from https://catalog.ngc.nvidia.com.
 # UNTESTED ESTIMATE for this GPU profile; validated values are dual_48G_ada's.
-image:     nvcr.io/nim/nvidia/nemotron-3-nano:latest
+image:     nvcr.io/nim/nvidia/nemotron-3-nano:2.0.10
 http_port: 8106
 
 nim_cache: ../../../../models/nim

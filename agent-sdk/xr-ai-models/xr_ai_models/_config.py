@@ -79,6 +79,8 @@ class EndpointSpec:
     readiness: Readiness = "health"
     """How the client determines whether the endpoint is ready."""
 
+    health_path: str = "/health"
+
     @property
     def health_check(self) -> bool:
         """Whether readiness requires a successful endpoint health check."""
@@ -163,6 +165,10 @@ class _RoleSpec:
         """Whether readiness requires a successful endpoint health check."""
 
         return self.endpoint.health_check
+
+    @property
+    def health_path(self) -> str:
+        return self.endpoint.health_path
 
     @property
     def function_id(self) -> str | None:
@@ -710,6 +716,7 @@ def _construct(category: Category, body: dict[str, Any]) -> Spec:
         api_key_env=_optional_str(body, "api_key_env"),
         timeout=_timeout(body, category),
         readiness=_readiness(body),
+        health_path=_health_path(body),
     )
     adapter = AdapterSpec(
         kind=kind,
@@ -759,6 +766,13 @@ def _readiness(body: dict[str, Any]) -> Readiness:
     if "health_check" in body and (readiness == "health") != legacy:
         raise ValueError("readiness conflicts with health_check")
     return readiness
+
+
+def _health_path(body: dict[str, Any]) -> str:
+    path = body.get("health_path", "/health")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ValueError("health_path must be a string starting with '/'")
+    return path
 
 
 def _deployment(value: Any) -> DeploymentSpec:

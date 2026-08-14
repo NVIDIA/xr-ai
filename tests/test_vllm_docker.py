@@ -346,7 +346,10 @@ class TestRunContainer:
         captured: dict = {}
         monkeypatch.setattr(d, "_docker_available", lambda: True)
         monkeypatch.setattr(d, "container_on_port_checked", lambda port: (None, True))
-        monkeypatch.setattr(d, "_container_env_matches", lambda name, argv: True)
+        monkeypatch.setattr(d, "evict_local_listener", lambda port, log_prefix: None)
+        monkeypatch.setattr(
+            d, "_container_config_matches", lambda name, argv, image: True,
+        )
         monkeypatch.setattr(d, "container_running", lambda name: False)
         monkeypatch.setattr(d, "container_exists", lambda name: False)
         monkeypatch.setattr(d, "_LogStreamer", self._FakeStreamer)
@@ -425,7 +428,9 @@ class TestRunContainer:
             _docker, "container_on_port_checked",
             lambda port: ("xr-ai-test-ctr", True),
         )
-        monkeypatch.setattr(_docker, "_container_env_matches", lambda name, argv: True)
+        monkeypatch.setattr(
+            _docker, "_container_config_matches", lambda name, argv, image: True,
+        )
 
         def _no_evict(*a, **kw):
             raise AssertionError("must not evict our own container")
@@ -461,7 +466,9 @@ class TestRunContainer:
         state = {"running": True}
         monkeypatch.setattr(_docker, "container_running", lambda name: state["running"])
         monkeypatch.setattr(_docker, "container_exists", lambda name: state["running"])
-        monkeypatch.setattr(_docker, "_container_env_matches", lambda name, argv: False)
+        monkeypatch.setattr(
+            _docker, "_container_config_matches", lambda name, argv, image: False,
+        )
         removed: list[str] = []
 
         def _remove(name):
@@ -536,6 +543,130 @@ class TestRunContainer:
         ]
         assert popen_argvs == [["docker", "run", "some-image"]]
 
+    def test_local_pip_listener_is_evicted_when_no_container_holds_port(
+        self, monkeypatch, tmp_path,
+    ):
+        # A pip-mode vLLM left by a profile switch can answer the health
+        # probe and be mistaken for a reusable container.
+        self._common_stubs(monkeypatch, _docker)
+        evictions: list[int] = []
+        monkeypatch.setattr(
+            _docker, "evict_local_listener",
+            lambda port, log_prefix: evictions.append(port),
+        )
+        monkeypatch.setattr(_docker._lifecycle, "health_ok", lambda url, **kw: True)
+        kwargs = self._kwargs(tmp_path)
+        _docker.run_container(**kwargs)
+        assert evictions == [1]
+
+    def test_config_match_compares_image(self, monkeypatch):
+        def _inspect(cmd, **kw):
+            class _R:
+                stdout = "old-image\nNIM_KVCACHE_PERCENT=0.7\n"
+            return _R()
+
+        monkeypatch.setattr(_docker.subprocess, "run", _inspect)
+        argv = ["docker", "run", "-e", "NIM_KVCACHE_PERCENT=0.7", "old-image"]
+        assert _docker._container_config_matches("c", argv, "old-image")
+        assert not _docker._container_config_matches("c", argv, "old-image:2.0")
+
+    def test_config_match_fails_open_on_inspect_error(self, monkeypatch, caplog):
+        import subprocess as sp
+
+        def _boom(cmd, **kw):
+            raise sp.CalledProcessError(1, cmd)
+
+        monkeypatch.setattr(_docker.subprocess, "run", _boom)
+        with caplog.at_level("WARNING"):
+            assert _docker._container_config_matches("c", ["docker", "run"], "img")
+        assert "WITHOUT verifying" in caplog.text
+
+
+class TestEvictLocalListener:
+    def test_xr_ai_listener_is_terminated(self, monkeypatch):
+        monkeypatch.setattr(
+            _docker, "pid_on_port_checked", lambda port: (4242, True, True),
+        )
+        monkeypatch.setattr(
+            _docker, "is_xr_ai_server_process", lambda pid, label, port: True,
+        )
+        sent: list[int] = []
+
+        def _kill(pid, sig):
+            if sig == 0:
+                raise ProcessLookupError
+            sent.append(sig)
+
+        monkeypatch.setattr(_docker.os, "kill", _kill)
+        monkeypatch.setattr(_docker.time, "sleep", lambda s: None)
+        _docker.evict_local_listener(8100, "test")
+        assert sent == [_docker.signal.SIGTERM]
+
+    def test_non_xr_ai_listener_is_left_alone(self, monkeypatch):
+        monkeypatch.setattr(
+            _docker, "pid_on_port_checked", lambda port: (4242, True, True),
+        )
+        monkeypatch.setattr(
+            _docker, "is_xr_ai_server_process", lambda pid, label, port: False,
+        )
+
+        def _no_kill(pid, sig):
+            raise AssertionError("must not signal an unrelated process")
+
+        monkeypatch.setattr(_docker.os, "kill", _no_kill)
+        _docker.evict_local_listener(8100, "test")
+
+    def test_free_port_is_a_noop(self, monkeypatch):
+        monkeypatch.setattr(
+            _docker, "pid_on_port_checked", lambda port: (None, True, False),
+        )
+
+        def _no_kill(pid, sig):
+            raise AssertionError("nothing to signal on a free port")
+
+        monkeypatch.setattr(_docker.os, "kill", _no_kill)
+        _docker.evict_local_listener(8100, "test")
+
+
+class TestPipEviction:
+    def test_pip_run_evicts_container_holding_its_port(self, monkeypatch):
+        from xr_ai_vllm import _pip
+
+        evicted: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            _pip._docker, "container_on_port_checked",
+            lambda port: ("xr-ai-nim-cosmos-reason1-7b", True),
+        )
+        monkeypatch.setattr(
+            _pip._docker, "stop_container",
+            lambda name, **kw: evicted.append(("stop", name)) or True,
+        )
+        monkeypatch.setattr(
+            _pip._docker, "remove_container",
+            lambda name: evicted.append(("rm", name)) or True,
+        )
+        monkeypatch.setattr(_pip._lifecycle, "health_ok", lambda url, **kw: True)
+        monkeypatch.setattr(
+            _pip._lifecycle, "idle_until_stopped", lambda *a, **kw: None,
+        )
+
+        def _no_popen(*a, **kw):
+            raise AssertionError("reuse path must not spawn vllm")
+
+        monkeypatch.setattr(_pip.subprocess, "Popen", _no_popen)
+        _pip.run(
+            persistent=True,
+            log_prefix="test",
+            vllm_argv=["vllm", "serve", "m"],
+            host="0.0.0.0",
+            port=8100,
+            ready_file=None,
+        )
+        assert evicted == [
+            ("stop", "xr-ai-nim-cosmos-reason1-7b"),
+            ("rm", "xr-ai-nim-cosmos-reason1-7b"),
+        ]
+
 
 class TestContainerHelpers:
     def test_container_exists_false_when_docker_missing(self):
@@ -570,6 +701,7 @@ class TestRun:
             patch("xr_ai_vllm._docker._docker_available", return_value=True),
             patch("xr_ai_vllm._docker.container_on_port_checked",
                   return_value=(None, True)),
+            patch("xr_ai_vllm._docker.evict_local_listener"),
             patch("xr_ai_vllm._docker._lifecycle.health_ok", return_value=False),
             patch("xr_ai_vllm._docker.container_exists", return_value=True),
             patch("xr_ai_vllm._docker.container_running", return_value=False),

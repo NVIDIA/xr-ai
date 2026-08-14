@@ -157,6 +157,39 @@ nim_llm:
     assert nim.base_url == "https://integrate.api.nvidia.com"
 
 
+async def test_health_path_defaults_and_reaches_the_client(tmp_path) -> None:
+    cfg = load_models_config(_write(tmp_path, """
+local_llm:
+  kind:     preset:nemotron3_nano
+  base_url: http://localhost:8107
+nim_llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    http://localhost:8106
+  model_name:  nvidia/nemotron-3-nano
+  health_path: /v1/health/ready
+"""))
+    assert cfg.llm("local_llm").health_path == "/health"
+    assert cfg.llm("nim_llm").health_path == "/v1/health/ready"
+    llm = make_llm(cfg, "nim_llm")
+    try:
+        assert llm.health_url == "http://localhost:8106/v1/health/ready"
+    finally:
+        await llm.close()
+
+
+def test_health_path_must_be_an_absolute_path(tmp_path) -> None:
+    with pytest.raises(ValueError, match="health_path"):
+        load_models_config(_write(tmp_path, """
+llm:
+  kind:        openai_compat
+  category:    llm
+  base_url:    http://localhost:8106
+  model_name:  m
+  health_path: v1/health/ready
+"""))
+
+
 def test_profile_separates_adapter_endpoint_and_deployment(tmp_path) -> None:
     cfg = load_models_config(_write(tmp_path, """
 models:

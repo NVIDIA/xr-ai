@@ -191,9 +191,10 @@ def test_model_servers_nim_profile_parses() -> None:
     assert llm.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
     vlm = cfg.vlm("vlm")
     assert vlm.model_name == "nvidia/cosmos-reason1-7b"
-    # NIM's health route is /v1/health/ready, not /health; the container
-    # gates readiness, so the client must not probe.
-    assert vlm.health_check is False
+    # NIM's health route is /v1/health/ready, not /health.
+    assert vlm.health_check is True
+    assert vlm.health_path == "/v1/health/ready"
+    assert cfg.llm("llm").health_path == "/v1/health/ready"
     assert cfg.stt("stt").kind == "openai_compat"
 
 
@@ -214,7 +215,10 @@ def test_sample_vlm_llm_nim_profiles_reuse_the_nim_stack(sample: str) -> None:
     cfg = load_models_config(path)
     vlm = cfg.vlm("vlm")
     assert vlm.kind == "openai_compat"
-    assert vlm.health_check is False
+    # A reused NIM is probed for real readiness: a dead model-servers stack
+    # must fail fast, not at first inference.
+    assert vlm.health_check is True
+    assert vlm.health_path == "/v1/health/ready"
     assert vlm.deployment.ownership == "reused"
     assert vlm.deployment.service == "vlm-nim"
     # Speech stays on the shared local servers in the 2x48 GB nim stack.
