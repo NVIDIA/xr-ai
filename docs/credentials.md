@@ -71,6 +71,11 @@ set it ahead of time:
 export NGC_API_KEY=nvapi-xxx
 ```
 
+Nightly GPU CI reads the same value from a required repository Actions secret
+named `NGC_API_KEY`. Scheduled, manual, and same-repository pull-request runs
+use it only in the NGC authentication step; fork pull requests do not receive
+the secret.
+
 ## How a token is resolved
 
 `load_credentials()` (always) and `ensure_credentials()` (NGC only) resolve in

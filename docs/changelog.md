@@ -21,11 +21,13 @@ mid-sentence mentions remain non-matches to limit false wakes.
 ### 2026-08-12 — Nightly GPU CI authenticates to NGC explicitly
 
 The nightly GPU workflow logs in to `nvcr.io` with the repository's
-`NGC_API_KEY` before setup and tests begin. The login uses a per-run Docker
-configuration under `RUNNER_TEMP`, inherited by the model-service subprocesses
-without exposing the API key to pytest, and removes that configuration during
-always-run cleanup. Nightly correctness therefore does not depend on a cached
-vLLM image or mutable Docker credentials on the self-hosted runner.
+`NGC_API_KEY` before setup and tests begin, then verifies access to the vLLM
+image manifest. A job-scoped, per-run `DOCKER_CONFIG` is inherited by model
+subprocesses without exposing the key to pytest; fork pull requests run without
+the secret. CI authenticates directly because `_maybe_ngc_login()` checks the
+default Docker config rather than this isolated path. Always-run cleanup deletes
+the isolated config and removes credentials leaked to the runner-global config
+by earlier workflow revisions.
 
 ### 2026-08-12 — NeMo Agent Toolkit compatibility is retired
 

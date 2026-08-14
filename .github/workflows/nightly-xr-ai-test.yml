@@ -8,9 +8,11 @@ name: nightly XR AI test
 # the default `tests` workflow (ubuntu-latest). Mirrors the local
 # `tests/run_local_gpu_tests.sh` entry point.
 #
-# Setup note: the GPU runner's Docker needs the NVIDIA runtime registered
-# (`sudo nvidia-ctk runtime configure --runtime=docker`); without it the
-# vLLM tests fail at container launch.
+# Setup notes:
+# - The GPU runner's Docker needs the NVIDIA runtime registered
+#   (`sudo nvidia-ctk runtime configure --runtime=docker`).
+# - The repository needs an Actions secret named `NGC_API_KEY` so trusted
+#   events can authenticate pulls from `nvcr.io`.
 
 on:
   schedule:
@@ -43,6 +45,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure isolated Docker credentials
+        run: |
+          set -euo pipefail
+          docker_config="$RUNNER_TEMP/xr-ai-docker-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 0700 "$docker_config"
+          echo "DOCKER_CONFIG=$docker_config" >> "$GITHUB_ENV"
 
       - name: Discover CUDA toolkit
         # Prefer CUDA 13.0 (current target), but fall back through the
@@ -87,20 +96,20 @@ jobs:
           nvcc --list-gpu-arch | grep compute_89
 
       - name: Authenticate to NGC
+        if: >-
+          github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository
         env:
           NGC_API_KEY: ${{ secrets.NGC_API_KEY }}
         run: |
           set -euo pipefail
-          docker_config="$RUNNER_TEMP/xr-ai-docker-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          echo "DOCKER_CONFIG=$docker_config" >> "$GITHUB_ENV"
-          install -d -m 0700 "$docker_config"
-
           if [[ -z "${NGC_API_KEY:-}" ]]; then
             echo "::error::NGC_API_KEY repository secret is required for nvcr.io images"
             exit 1
           fi
           printf '%s' "$NGC_API_KEY" | docker login nvcr.io \
             --username '$oauthtoken' --password-stdin
+          docker manifest inspect nvcr.io/nvidia/vllm:26.04-py3 >/dev/null
 
       - name: Install uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39  # v3
@@ -188,9 +197,11 @@ jobs:
       - name: Remove NGC credentials
         if: always()
         run: |
+          set -u
           if [[ -n "${DOCKER_CONFIG:-}" ]]; then
-            rm -rf "$DOCKER_CONFIG"
+            rm -rf -- "$DOCKER_CONFIG"
           fi
+          DOCKER_CONFIG="$HOME/.docker" docker logout nvcr.io || true
 
   notify:
     name: alert on failure
