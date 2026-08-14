@@ -397,7 +397,10 @@ cleanup.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
-  `video_recording.out_dir`. Current frames stay with the caller's hub client.
+  `video_recording.out_dir`. Historical sampling accepts a duration and a
+  hard total frame budget, decoding each selected chunk once. Optional maximum
+  width and height bounds preserve aspect ratio and never upscale the exported
+  PNGs. Current frames stay with the caller's hub client.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample's `yaml/` directory and set `model_cache` to

@@ -400,9 +400,10 @@ pipeline code.</p>
 <span class="n">unsubscribe</span><span class="p">()</span>  <span class="c1"># Remove the callback when its owner stops.</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> adds raw frame acquisition without adding image conversion or
-model dependencies. Use <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.streaming_vision.StreamingVisionTool</span></code> when the
-desired interface is a model-facing async vision tool rather than raw pixels.</p>
+<p><code class="docutils literal notranslate"><span class="pre">LiveFrameSource</span></code> adds raw frame acquisition without image conversion or model
+dependencies. <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.current_frame.CurrentFrameTool</span></code> converts selected
+frames into lightweight references; the query tools in <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.vision</span></code>
+perform model inference separately.</p>
 <section id="subscription-and-roster-contract">
 <h2>Subscription and roster contract<a class="headerlink" href="#subscription-and-roster-contract" title="Link to this heading">#</a></h2>
 <p>Participants are the subscription unit. With <code class="docutils literal notranslate"><span class="pre">auto_subscribe=True</span></code> (the
