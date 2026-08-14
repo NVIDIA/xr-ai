@@ -45,13 +45,48 @@ _QR_MODULES = (
     "0000000000000000000000000",
 )
 
+_SECOND_QR_MODULES = (
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00001111111001000011111110000",
+    "00001000001010011010000010000",
+    "00001011101000010010111010000",
+    "00001011101011110010111010000",
+    "00001011101000000010111010000",
+    "00001000001011011010000010000",
+    "00001111111010101011111110000",
+    "00000000000001001000000000000",
+    "00001111101111010101010100000",
+    "00000011000000100000011010000",
+    "00000010011101011100011100000",
+    "00001110000110011101011110000",
+    "00000000111100100101000000000",
+    "00000000000011010001101110000",
+    "00001111111010111011010100000",
+    "00001000001001011001011100000",
+    "00001011101011001010000000000",
+    "00001011101010100001110100000",
+    "00001011101011011000010000000",
+    "00001000001011001101111000000",
+    "00001111111011101110100100000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+    "00000000000000000000000000000",
+)
 
-def _qr_image(scale: int = 6) -> np.ndarray:
-    modules = np.array(
-        [[0 if value == "1" else 255 for value in row] for row in _QR_MODULES],
+
+def _qr_image(
+    modules: tuple[str, ...] = _QR_MODULES,
+    scale: int = 6,
+) -> np.ndarray:
+    pixels = np.array(
+        [[0 if value == "1" else 255 for value in row] for row in modules],
         dtype=np.uint8,
     )
-    return modules.repeat(scale, axis=0).repeat(scale, axis=1)
+    return pixels.repeat(scale, axis=0).repeat(scale, axis=1)
 
 
 class _Endpoint:
@@ -99,15 +134,21 @@ class _Endpoint:
 
 
 def test_zxing_extracts_every_qr_payload_and_quadrilateral() -> None:
-    qr = _qr_image()
-    canvas = np.full((qr.shape[0] + 40, qr.shape[1] * 2 + 80), 255, dtype=np.uint8)
-    canvas[20 : 20 + qr.shape[0], 20 : 20 + qr.shape[1]] = qr
-    second_x = 60 + qr.shape[1]
-    canvas[20 : 20 + qr.shape[0], second_x : second_x + qr.shape[1]] = qr
+    first = _qr_image()
+    second = _qr_image(_SECOND_QR_MODULES)
+    canvas = np.full(
+        (max(first.shape[0], second.shape[0]) + 40, first.shape[1] + second.shape[1] + 80),
+        255,
+        dtype=np.uint8,
+    )
+    canvas[20 : 20 + first.shape[0], 20 : 20 + first.shape[1]] = first
+    second_x = 60 + first.shape[1]
+    canvas[20 : 20 + second.shape[0], second_x : second_x + second.shape[1]] = second
 
     codes = extract_qr_codes_zxing(canvas)
 
-    assert [code.data for code in codes] == ["XR AI QR tool", "XR AI QR tool"]
+    assert {code.data for code in codes} == {"XR AI QR tool", "second QR payload"}
+    assert len(codes) == 2
     assert all(code.corners is not None and len(code.corners) == 4 for code in codes)
     assert all(
         point.x >= 0 and point.y >= 0
