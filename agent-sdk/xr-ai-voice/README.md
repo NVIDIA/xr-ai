@@ -49,6 +49,22 @@ async with runtime:
     await voice.run(runtime)
 ```
 
+## Voice tuning and data echo
+
+`VadConfig` controls utterance boundaries and bounded early transcription:
+
+| Field | Default | Meaning |
+|---|---:|---|
+| `silence_duration` | `0.8` | Seconds of silence that finalize an utterance. |
+| `min_speech` | `0.15` | Minimum speech duration accepted as an utterance. |
+| `silero_threshold` | `0.5` | Silero VAD speech-probability threshold. |
+| `stop_probe_after_s` | `0.4` | Delay before an early wake/STOP transcription probe; set to `0` or less to disable probes. |
+
+`VoiceSession.text_topic` controls the completed-response echo sent through the
+hub data channel. Its default is `"agent.response"`; set it to `""` when the
+application publishes its own response data so each turn is delivered only
+once. This setting does not disable TTS or Relay telemetry.
+
 `VoiceAgent` publishes accepted speech, typed text, participant departure, and
 interruption on application-named topics. Application agents subscribe to the
 events they own, perform cleanup in their own subscriber methods, and may

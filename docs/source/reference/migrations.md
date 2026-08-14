@@ -11,9 +11,21 @@ compatibility package. Update out-of-tree code as follows:
 | Removed surface | Replacement |
 |---|---|
 | `xr_ai_agent` | Import `ProcessorEndpoint` and IPC types from `xr_ai_hub`. |
-| `xr_ai_pipecat` | Compose `xr_ai_voice.VoiceSession` and `VoiceAgent` with `xr_ai_runtime.AgentRuntime`. Pipecat remains private to `xr-ai-voice`. |
-| `BrainProcessor` and `make_voice_pipeline` | Put application behavior in an `Agent` subscriber and let `VoiceAgent` own the voice pipeline. |
+| `BrainProcessor` and `make_voice_pipeline` | Put application behavior in an `xr_ai_runtime.Agent` subscriber and let `xr_ai_voice.VoiceAgent` own the voice pipeline. |
+| `run_voice_pipeline` | Run the composed application with `await VoiceAgent.run(runtime)`. Lower-level integrations can use `await VoiceSession.run(input_sink)`. |
+| `VadConfig` | Import the unchanged tuning model from `xr_ai_voice`. |
+| `GatedQueryFrame` | Subscribe to the application query topic carrying `xr_ai_voice.UserQuery`. |
+| `ParticipantLeftFrame` and `InterruptionFrame` | Subscribe to application topics carrying `VoiceParticipantLeft` and `VoiceInterrupted`. Participant joins and voice-gate greetings remain session-owned. |
+| `BrainResponseEndFrame` | Publish a finite `VoiceOutput`, or terminate an incremental response with `final=True`. |
+| `VadSttProcessor`, `VoiceGateProcessor`, and `StreamingTtsProcessor` | Configure `VoiceSession` with `VadConfig`, `VoiceGateConfig`, and `text_topic`; pipeline processors are private implementation details. |
+| `XRMediaHubTransport` | Use `xr_ai_voice.HubVoiceTransport` only when an application must share a transport explicitly; otherwise let `VoiceSession` create it. |
+| `SttClient` and `TtsClient` | Construct services through `xr_ai_models.make_stt` and `make_tts`, or use `OpenAICompatSTT` and `OpenAICompatTTS` directly. |
+| `http_probe`, `mcp_probe`, and `wait_for_services` | Pass additional readiness callables through `VoiceSession(probes=...)`; MCP readiness is no longer part of the voice SDK. |
+| `xr_ai_pipecat.audio` conversion helpers | Let `VoiceSession` own media conversion. Applications that process raw hub media should use `xr_ai_hub` types and own their format conversion. |
 | `xr_ai_models.config`, `factory`, `openai_compat`, and `protocols` | Import public names directly from `xr_ai_models`. This includes `KIND_OPENAI_COMPAT`, `ModelKind`, `Category`, and `Spec`. |
+
+Pipecat remains an internal implementation detail of `xr-ai-voice`; applications
+no longer assemble or subclass its frame processors.
 
 The source directories now match their Python imports:
 `agent-sdk/xr-ai-hub-client/` became `agent-sdk/xr-ai-hub/` and

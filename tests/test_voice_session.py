@@ -73,6 +73,21 @@ class _Service:
         self.closed += 1
 
 
+class _PipelineTask:
+    def __init__(self, on_cancel=None) -> None:
+        self.cancel_calls = 0
+        self._on_cancel = on_cancel
+
+    async def cancel(self) -> None:
+        self.cancel_calls += 1
+        if self._on_cancel is not None:
+            self._on_cancel()
+
+
+async def _ignore_query(_query) -> None:
+    pass
+
+
 async def test_voice_session_queues_external_responses_through_active_processor() -> None:
     service = _Service()
     session = VoiceSession(
@@ -157,6 +172,154 @@ async def test_voice_session_owns_readiness_ready_file_and_cleanup(
     assert stt.closed == 1
     assert tts.closed == 1
     assert extra.closed == 1
+
+
+async def test_voice_session_reannounces_current_status(monkeypatch) -> None:
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    worker = _PipelineTask(on_cancel=runner_finished.set)
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), worker),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+    monkeypatch.setattr(session_module, "_STATUS_REANNOUNCE_INTERVAL_S", 0.01)
+
+    service = _Service()
+    transport = _Transport()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    async with session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        await runner_started.wait()
+        transport.started.set()
+        for _ in range(20):
+            if transport.endpoint.republish_calls:
+                break
+            await asyncio.sleep(0.01)
+
+        assert transport.endpoint.statuses == ["ready"]
+        assert transport.endpoint.republish_calls > 0
+
+        runner_finished.set()
+        assert await run_task is None
+
+
+async def test_voice_session_allows_early_clean_pipeline_exit(monkeypatch) -> None:
+    class _Runner:
+        async def run(self, _worker) -> None:
+            return
+
+    worker = _PipelineTask()
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), worker),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+
+    service = _Service()
+    transport = _Transport()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    async with session:
+        assert await session.run(_ignore_query) is None
+
+    assert worker.cancel_calls == 0
+    assert transport.endpoint.statuses == []
+
+
+async def test_voice_session_propagates_pipeline_runner_error(monkeypatch) -> None:
+    class _Runner:
+        async def run(self, _worker) -> None:
+            raise ValueError("runner failure")
+
+    worker = _PipelineTask()
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), worker),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+
+    service = _Service()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        transport=_Transport(),  # type: ignore[arg-type]
+    )
+
+    async with session:
+        with pytest.raises(ValueError, match="runner failure"):
+            await session.run(_ignore_query)
+
+    assert worker.cancel_calls == 0
+
+
+async def test_voice_session_cancels_pipeline_when_ready_file_touch_fails(
+    monkeypatch,
+) -> None:
+    runner_started = asyncio.Event()
+    runner_finished = asyncio.Event()
+
+    class _Runner:
+        async def run(self, _worker) -> None:
+            runner_started.set()
+            await runner_finished.wait()
+
+    class _FailingReadyFile:
+        def touch(self) -> None:
+            raise OSError("ready file unavailable")
+
+    worker = _PipelineTask(on_cancel=runner_finished.set)
+    monkeypatch.setattr(
+        session_module,
+        "_build_voice_pipeline",
+        lambda **_kwargs: (object(), worker),
+    )
+    monkeypatch.setattr(session_module, "PipelineRunner", _Runner)
+
+    service = _Service()
+    transport = _Transport()
+    session = VoiceSession(
+        stt=service,  # type: ignore[arg-type]
+        tts=service,  # type: ignore[arg-type]
+        vad=VadConfig(),
+        voice_gate=VoiceGateConfig(),
+        ready_file=_FailingReadyFile(),  # type: ignore[arg-type]
+        transport=transport,  # type: ignore[arg-type]
+    )
+
+    async with session:
+        run_task = asyncio.create_task(session.run(_ignore_query))
+        await runner_started.wait()
+        transport.started.set()
+        with pytest.raises(OSError, match="ready file unavailable"):
+            await run_task
+
+    assert worker.cancel_calls == 1
+    assert transport.endpoint.statuses == []
 
 
 async def test_voice_session_defers_default_transport_until_services_are_ready(
