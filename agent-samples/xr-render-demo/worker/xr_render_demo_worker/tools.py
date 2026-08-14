@@ -9,11 +9,12 @@ from typing import Any
 
 from xr_ai_models import VLMService
 from xr_ai_tools import ToolSet
-from xr_ai_tools.historical_vision import HistoricalVisionTool
-from xr_ai_tools.live_vision import LiveVisionTool
+from xr_ai_tools.current_frame import CurrentFrameTool
+from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.text_memory import TextMemoryTool
 from xr_ai_tools.tracking import TrackingTools
 from xr_ai_tools.video_memory import VideoMemoryTools
+from xr_ai_tools.vision import ImageQueryTool
 from xr_render_scene import SceneTools
 
 from .spatial_tools import RenderSpatialTools
@@ -38,32 +39,41 @@ class NativeCapabilities:
         self.tracking = TrackingTools(openxr_endpoint)
         self.spatial = RenderSpatialTools(self.tracking)
         self.video = VideoMemoryTools(video_memory_endpoint)
-        self.live_vision = LiveVisionTool(
+        self.images = ImageRegistry()
+        self.current_frame = CurrentFrameTool(
             endpoint=frame_endpoint,
-            vlm=vlm,
-            system_prompt="Answer directly from the visible camera image in one short plain-English sentence.",
+            images=self.images,
             frame_max_age_s=frame_max_age_s,
             frame_timeout_s=frame_timeout_s,
-            manage_status=False,
         )
-        self.past_vision = HistoricalVisionTool(video=self.video, vlm=vlm)
+        self.image_query = ImageQueryTool(
+            images=self.images,
+            vlm=vlm,
+            system_prompt="Answer directly from the supplied camera image in one short plain-English sentence.",
+        )
         self.text_memory = TextMemoryTool(text_memory_dir)
         all_tools = (
             *self.scene.tools,
             *self.spatial.tools,
             *self.video.tools,
-            self.live_vision,
-            self.past_vision,
+            self.current_frame,
+            self.image_query,
         )
         self.all = ToolSet(all_tools)
         self.model = ToolSet(
             tool
             for tool in all_tools
-            if tool.name not in {"start_xr", "get_health"}
+            if tool.name
+            not in {
+                "start_xr",
+                "get_health",
+                "get_current_frame",
+                "query_image",
+            }
         )
 
     def release(self, participant_id: str) -> None:
-        self.live_vision.release(participant_id)
+        self.current_frame.release(participant_id)
 
     async def close(self) -> None:
         await asyncio.gather(

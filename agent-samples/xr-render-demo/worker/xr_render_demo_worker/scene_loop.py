@@ -57,6 +57,8 @@ _PARTICIPANT_STATE_CAPACITY = 1024
 # recorded lookups) that the model never provides.
 LIVE_PERCEPTION_TOOL = "look_at_current_frame"
 PAST_PERCEPTION_TOOL = "look_at_past_frame"
+CURRENT_FRAME_TOOL = "get_current_frame"
+IMAGE_QUERY_TOOL = "query_image"
 
 # Model-facing perception schemas. The native vision request models
 # also carry ``participant_id`` (and ``reference_time_us`` for recorded lookups),
@@ -891,20 +893,23 @@ class SceneModelLoop:
     async def _look_at_current_frame(self, pid: str, question: str) -> dict:
         """Answer a live-camera question through the native perception tool.
 
-        The native live-vision tool acquires from the always-on frame source.
-        This adapter injects the active participant (which the model never
-        supplies) and raises
-        ``_PerceptionUnavailableError`` when no fresh frame or VLM answer is
-        available so the turn ends with a short spoken message rather than
-        looping or failing silently.
+        This adapter selects a frame, passes its reference to the VLM tool,
+        injects the active participant, and turns unavailable perception into
+        a short user-facing response.
         """
         if not pid:
             raise _PerceptionUnavailableError(_NO_FRAME_MSG)
         _trace_log.info("LOOK  {}", question[:120])
         try:
+            frame = await self._call_tool(
+                CURRENT_FRAME_TOOL,
+                {"participant_id": pid},
+            )
+            if not isinstance(frame, dict) or not isinstance(frame.get("image"), dict):
+                raise RuntimeError("current frame selection failed")
             result = await self._call_tool(
-                LIVE_PERCEPTION_TOOL,
-                {"participant_id": pid, "query": question},
+                IMAGE_QUERY_TOOL,
+                {"image": frame["image"], "query": question},
             )
         except Exception as exc:
             logger.exception("look_at_current_frame failed")
@@ -925,13 +930,21 @@ class SceneModelLoop:
         offset. A lookup failure is returned to the model as an error dict —
         unlike the live path, a missing recorded frame does not end the turn.
         """
-        result = await self._call_tool(
-            PAST_PERCEPTION_TOOL,
+        frame = await self._call_tool(
+            "get_frame_from_time",
             {
                 "participant_id": pid,
-                "query": str(args.get("question") or "").strip(),
                 "second_ago": args.get("second_ago", 0),
                 "reference_time_us": ref_us,
+            },
+        )
+        if not isinstance(frame, dict) or not isinstance(frame.get("image"), dict):
+            return frame
+        result = await self._call_tool(
+            IMAGE_QUERY_TOOL,
+            {
+                "image": frame["image"],
+                "query": str(args.get("question") or "").strip(),
             },
         )
         if isinstance(result, str):

@@ -376,6 +376,7 @@ async def test_sample_recorded_video_respects_total_frame_budget(
     assert result.max_width == result.max_height == 2
     for frame in result.frames:
         assert (frame.width, frame.height) == (2, 1)
+        assert frame.image.uri == frame.path
         with Image.open(frame.path) as image:
             assert image.size == (2, 1)
 
@@ -489,6 +490,7 @@ async def test_recorded_frame_decodes_and_exports_png_through_native_rpc(
         assert image.size == (2, 2)
     assert result.timestamp_us == 1_000_000
     assert result.actual_second_ago == 1.0
+    assert result.image.uri == result.path
 
 
 @pytest.mark.asyncio
@@ -557,8 +559,6 @@ async def test_recorded_frame_reports_frame_export_errors(tmp_path: Path, monkey
         )
 
     assert error.value.code == "frame_export_error"
-
-
 
 def test_historical_frame_schema_requires_an_absolute_reference() -> None:
     with pytest.raises(ValueError, match="greater than 0"):

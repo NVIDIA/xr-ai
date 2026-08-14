@@ -15,7 +15,7 @@ dependencies = [
     "xr-ai-hub-client",
     "xr-ai-logging",
     "xr-ai-models",
-    "xr-ai-tools[live-vision]",
+    "xr-ai-tools[frames,vision]",
     "xr-ai-voice",
     "xr-ai-voicegate",
     "loguru>=0.7",

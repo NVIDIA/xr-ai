@@ -753,20 +753,20 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
         "between_anchors",
         "displace_object",
         "displace_objects",
+        "get_current_frame",
         "get_frame_from_time",
         "get_head_pose",
         "get_health",
         "get_scene_state",
         "get_video_stats",
         "list_recorded_participants",
-        "look_at_current_frame",
-        "look_at_past_frame",
         "place_inside_by_id",
         "place_object_relative",
         "place_user_relative",
         "position_ahead",
         "position_relative",
         "query_video",
+        "query_image",
         "sample_recorded_video",
         "remove_primitive",
         "scale_value",
@@ -777,11 +777,12 @@ async def test_live_worker_and_eval_share_native_toolbox_assembly() -> None:
 
 
 async def test_model_facing_perception_schema_is_trimmed() -> None:
-    """The perception tools reach the model with participant/reference context
-    stripped. The worker injects ``participant_id`` (and ``reference_time_us``
-    for recorded lookups); exposing them verbatim would tell the model to fill a
-    required ``participant_id`` it cannot know and whose value is discarded.
-    Guards the do-not-reverse of main's trimmed ``{question}`` contract."""
+    """The model sees participant-free perception facades, not internal tools.
+
+    The worker injects participant and reference-time context, selects an image,
+    and then calls ``query_image`` without exposing either internal contract to
+    the model.
+    """
     capabilities = _tools.NativeCapabilities(
         scene_endpoint="tcp://127.0.0.1:65527",
         openxr_endpoint="tcp://127.0.0.1:65528",
@@ -791,11 +792,11 @@ async def test_model_facing_perception_schema_is_trimmed() -> None:
         text_memory_dir="/tmp/xr-render-test-memory",
     )
     try:
-        # The raw native request schemas DO expose the injected context — which is
-        # exactly why they must not reach the model verbatim.
         native = {tool.name: tool for tool in tool_definitions(capabilities.model)}
-        assert "participant_id" in native["look_at_current_frame"].parameters["properties"]
-        assert "participant_id" in native["look_at_past_frame"].parameters["properties"]
+        assert "get_current_frame" not in native
+        assert "query_image" not in native
+        assert "look_at_current_frame" not in native
+        assert "look_at_past_frame" not in native
         assert "get_frame_from_time" in native
 
         # Assemble the model-facing list exactly as the worker does.
@@ -958,10 +959,10 @@ async def test_perception_query_reaches_vlm_frame_path() -> None:
             pid="pid-1",
         )
 
-    # Reached the VLM with the encoded frame + the question.
+    # Reached the VLM with selected JPEG bytes + the question.
     assert len(vlm.calls) == 1
     image, question = vlm.calls[0]
-    assert image.startswith("data:image/jpeg;base64,")
+    assert isinstance(image, bytes)
     assert "colour" in question
     # The pixel request used the seeded live frame.
     assert transport.endpoint.frame_requests == [sig]
@@ -970,7 +971,7 @@ async def test_perception_query_reaches_vlm_frame_path() -> None:
 
 
 async def test_perception_unavailable_frame_ends_turn_gracefully() -> None:
-    """A failed live-vision invocation ends the turn via the graceful no-frame path.
+    """A failed image query ends the turn via the graceful no-frame path.
 
     The native ``look_at_current_frame`` raises (no frame / no VLM answer); the
     processor converts any failure into a ``_PerceptionUnavailableError`` carrying

@@ -92,25 +92,50 @@ instances are consumed explicitly with `stream()`.
 ## Typed capability services
 
 Install `xr-ai-tools[services]` for the msgpack/ZMQ RPC client/server and the
-shared tracking, video-memory, historical-vision, text-memory, and spatial
+shared tracking, video-memory, text-memory, and spatial
 building blocks. Applications compose these finite tools into their own
 `ToolSet`; service processes use the matching RPC primitives without pulling
 in an agent framework or HTTP server.
 
 Each capability has a focused import surface: `tracking`, `video_memory`,
-`historical_vision`, `text_memory`, `spatial`, and their shared request types in
-`types`. RPC transport remains isolated in `rpc`.
+`text_memory`, `spatial`, and their shared request types in `types`. RPC
+transport remains isolated in `rpc`.
 
-## Finite and streaming live vision tools
+## Image selection and VLM query tools
 
-Install `xr-ai-tools[live-vision]` for two independent current-frame
-tools. `LiveVisionTool` is a finite `Tool` that returns one complete
-`VisionResponse` for agentic planning. `StreamingVisionTool` is an `AsyncTool`
-that yields typed `VisionChunk` values. It has no voice dependency or output
-transport; applications decide how to consume its async stream.
+Install `xr-ai-tools[frames]` for live-frame selection and
+`xr-ai-tools[vision]` for VLM queries. Image selection does not invoke a model:
+`CurrentFrameTool` returns an `ImageFrame`, while
+`VideoMemoryTools.get_frame_from_time` and `sample_recorded_video` return
+recorded frames. Every result carries an `ImageReference` and retains its path
+or frame metadata.
 
-Each tool owns its own participant frame source and calls an injected
-`VLMService`. Both forward controlled Relay headers and redact inline camera
-frames from events while preserving provider input. The finite path uses
-Relay's managed tool and LLM boundaries; the streaming path uses a typed tool
-scope around Relay's managed streaming LLM boundary.
+`ImageQueryTool` returns one complete `ImageQueryResult` for any image reference;
+`StreamingImageQueryTool` yields `ImageQueryChunk` values. References may point
+to a selected frame, local path, file URI, or HTTP(S) URL. In-memory bytes use a
+bounded `ImageRegistry`, whose opaque handles keep tool results and telemetry
+small. Both query tools forward controlled Relay headers and redact image
+locations from VLM events while preserving provider input.
+
+```python
+from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
+from xr_ai_tools.image import ImageReference, ImageRegistry
+from xr_ai_tools.vision import ImageQueryRequest, ImageQueryTool
+
+images = ImageRegistry()
+frames = CurrentFrameTool(endpoint=endpoint, images=images)
+vision = ImageQueryTool(images=images, vlm=vlm)
+
+frame = await frames.execute(CurrentFrameRequest(participant_id="alice"))
+answer = await vision.execute(
+    ImageQueryRequest(image=frame.image, query="What is on the table?")
+)
+
+# The same VLM tool accepts images that did not come from a camera tool.
+other = await vision.execute(
+    ImageQueryRequest(
+        image=ImageReference(uri="/tmp/reference.png"),
+        query="Does this match the current object?",
+    )
+)
+```

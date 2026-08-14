@@ -22,14 +22,18 @@ contains five recorded-history operations:
   total cap; sparse recordings may return fewer frames. Requests are bounded to
   300 seconds and 256 frames. Optional paired `max_width` and `max_height` values fit
   each PNG within that box while preserving aspect ratio and never upscaling.
+  Each frame retains its `path` and also exposes it as an `ImageReference` for
+  direct use with the image-query tools.
 - `get_frame_from_time` selects a frame at `reference_time_us - second_ago`
-  seconds, where `reference_time_us` is the workflow's event timestamp.
+  seconds, where `reference_time_us` is the workflow's event timestamp, and
+  returns the same path-compatible image reference.
 
 Every `*_us` field is a Unix-epoch timestamp in microseconds. Keep the
 model-facing offset coarse: use whole `second_ago` values for temporal
 reasoning and use the returned `timestamp_us` to inspect the exact selected
 frame. A current camera frame is not recorded history; obtain it through
-`xr_ai_hub.LiveFrameSource` in the process that owns the hub connection.
+`xr_ai_tools.current_frame.CurrentFrameTool` in the process that owns the hub
+connection.
 
 ```yaml
 endpoint: tcp://0.0.0.0:8310

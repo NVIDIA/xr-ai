@@ -15,7 +15,9 @@ from loguru import logger
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime
-from xr_ai_tools.streaming_vision import StreamingVisionTool
+from xr_ai_tools.current_frame import CurrentFrameTool
+from xr_ai_tools.image import ImageRegistry
+from xr_ai_tools.vision import StreamingImageQueryTool
 from xr_ai_voice import VadConfig, VoiceAgent, VoiceSession
 from xr_ai_voicegate import load_voice_gate_config
 
@@ -91,16 +93,24 @@ async def run_app(
     )
 
     runtime = AgentRuntime()
+    images = ImageRegistry()
     simple_vlm = runtime.register(
         "simple-vlm",
         SimpleVlmAgent(
-            lambda: StreamingVisionTool(
-                endpoint=session.endpoint,
-                vlm=vlm,
-                system_prompt=config.system_prompt,
-                frame_max_age_s=config.frame_max_age_s,
-                frame_timeout_s=config.frame_timeout_s,
-            )
+            lambda: (
+                CurrentFrameTool(
+                    endpoint=session.endpoint,
+                    images=images,
+                    frame_max_age_s=config.frame_max_age_s,
+                    frame_timeout_s=config.frame_timeout_s,
+                ),
+                StreamingImageQueryTool(
+                    images=images,
+                    vlm=vlm,
+                    system_prompt=config.system_prompt,
+                ),
+            ),
+            session.endpoint.set_status,
         ),
     )
 

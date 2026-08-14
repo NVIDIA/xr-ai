@@ -36,12 +36,18 @@ from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[r
     SimpleVlmAgent,
 )
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
-from xr_ai_tools.live_vision import (  # noqa: E402
-    LiveVisionTool,
-    VisionRequest,
-    VisionResponse,
+from xr_ai_tools import current_frame as current_frame_module  # noqa: E402
+from xr_ai_tools.current_frame import (  # noqa: E402
+    CurrentFrameRequest,
+    CurrentFrameTool,
 )
-from xr_ai_tools.streaming_vision import StreamingVisionTool  # noqa: E402
+from xr_ai_tools.image import ImageReference, ImageRegistry  # noqa: E402
+from xr_ai_tools.vision import (  # noqa: E402
+    ImageQueryRequest,
+    ImageQueryResult,
+    ImageQueryTool,
+    StreamingImageQueryTool,
+)
 
 
 class _Service:
@@ -67,12 +73,18 @@ class _Transport:
 
 
 class _DataEndpoint:
+    def __init__(self) -> None:
+        self.statuses: list[tuple[str, str]] = []
+
     def on_data(self, callback) -> None:
         self.data_callback = callback
 
+    async def set_status(self, status: str, participant_id: str) -> None:
+        self.statuses.append((status, participant_id))
 
-class _StreamingVisionTool:
-    instances: list["_StreamingVisionTool"] = []
+
+class _CurrentFrameTool:
+    instances: list["_CurrentFrameTool"] = []
 
     def __init__(self, **kwargs) -> None:
         self.kwargs = kwargs
@@ -80,13 +92,38 @@ class _StreamingVisionTool:
         self.released: list[str] = []
         self.instances.append(self)
 
+    async def execute(self, request):
+        self.requests.append(request)
+        return SimpleNamespace(image=ImageReference(uri="https://example.com/frame.jpg"))
+
     def release(self, participant_id: str) -> None:
         self.released.append(participant_id)
+
+
+class _StreamingImageQueryTool:
+    instances: list["_StreamingImageQueryTool"] = []
+
+    def __init__(self, **kwargs) -> None:
+        self.kwargs = kwargs
+        self.requests = []
+        self.instances.append(self)
 
     async def stream(self, request):
         self.requests.append(request)
         for text in ("a ", "blue square"):
             yield SimpleNamespace(text=text)
+
+
+class _SelectedFrameTool:
+    async def execute(self, _request):
+        return SimpleNamespace(image=ImageReference(uri="https://example.com/frame.jpg"))
+
+    def release(self, _participant_id: str) -> None:
+        pass
+
+
+async def _ignore_status(_status: str, _participant_id: str) -> None:
+    pass
 
 
 class _LiveEndpoint:
@@ -150,9 +187,7 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     package = _WORKER_DIR / "simple_vlm_example_worker"
     dependencies = set(project["project"]["dependencies"])
 
-    assert project["project"]["scripts"]["simple_vlm_example_worker"] == (
-        "simple_vlm_example_worker.__main__:run"
-    )
+    assert project["project"]["scripts"]["simple_vlm_example_worker"] == ("simple_vlm_example_worker.__main__:run")
     assert "xr-ai-hub-client" in dependencies
     assert "xr-ai-agent-runtime" in dependencies
     assert project["tool"]["uv"]["sources"]["xr-ai-agent-runtime"]["path"] == (
@@ -168,14 +203,12 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
     assert (
         _WORKER_DIR / project["tool"]["uv"]["sources"]["xr-ai-hub-client"]["path"]
     ).resolve().is_dir()
-    assert "xr-ai-tools[live-vision]" in dependencies
+    assert "xr-ai-tools[frames,vision]" in dependencies
     assert all("[vision" not in dependency and "[voice" not in dependency for dependency in dependencies)
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-pipecat" not in dependencies
     assert all("mcp" not in dependency.lower() for dependency in dependencies)
-    assert project["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
-        "simple_vlm_example_worker"
-    ]
+    assert project["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["simple_vlm_example_worker"]
     assert {
         "__init__.py",
         "__main__.py",
@@ -183,11 +216,7 @@ def test_worker_is_a_package_with_module_and_console_entry_points() -> None:
         "app.py",
         "config.py",
         "prompts/system.txt",
-    } <= {
-        str(path.relative_to(package))
-        for path in package.rglob("*")
-        if path.is_file()
-    }
+    } <= {str(path.relative_to(package)) for path in package.rglob("*") if path.is_file()}
     assert not (_WORKER_DIR / "agent.py").exists()
     assert not (_WORKER_DIR / "simple_vlm_example_worker.py").exists()
 
@@ -234,12 +263,7 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
     config_path = _SAMPLE_DIR / "yaml" / "simple_vlm_example_worker.yaml"
     config = load_config(config_path)
     raw = yaml.safe_load(config_path.read_text())
-    prompt = (
-        _WORKER_DIR
-        / "simple_vlm_example_worker"
-        / "prompts"
-        / "system.txt"
-    ).read_text()
+    prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "system.txt").read_text()
 
     assert config.models_config == _SAMPLE_DIR / "yaml" / "models.local.json"
     assert config.voice_gate_yaml == _SAMPLE_DIR / "yaml" / "voice_gate.yaml"
@@ -256,12 +280,7 @@ def test_shipped_config_preserves_models_and_prompt_behavior() -> None:
 
 
 def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:
-    prompt = (
-        _WORKER_DIR
-        / "simple_vlm_example_worker"
-        / "prompts"
-        / "system.txt"
-    ).read_text()
+    prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "system.txt").read_text()
 
     for config_path in (None, tmp_path / "missing.yaml"):
         config = load_config(config_path)
@@ -273,12 +292,7 @@ def test_config_without_a_file_uses_packaged_defaults(tmp_path) -> None:
 def test_blank_inline_prompt_uses_packaged_default(tmp_path) -> None:
     config_path = tmp_path / "worker.yaml"
     config_path.write_text("system_prompt:\n")
-    prompt = (
-        _WORKER_DIR
-        / "simple_vlm_example_worker"
-        / "prompts"
-        / "system.txt"
-    ).read_text()
+    prompt = (_WORKER_DIR / "simple_vlm_example_worker" / "prompts" / "system.txt").read_text()
 
     assert load_config(config_path).system_prompt == prompt
 
@@ -344,7 +358,10 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
         async def publish(self, *_args, **_kwargs) -> None:
             raise RuntimeError("runtime stopped")
 
-    agent = SimpleVlmAgent(lambda: Vision())  # type: ignore[return-value]
+    agent = SimpleVlmAgent(
+        lambda: (_SelectedFrameTool(), Vision()),  # type: ignore[return-value]
+        _ignore_status,
+    )
     with pytest.raises(RuntimeError, match="runtime stopped"):
         await agent._stream(  # noqa: SLF001
             UserQuery(text="What is shown?", timestamp_us=123),
@@ -394,7 +411,8 @@ async def test_cancelled_vlm_turn_does_not_publish_stream_terminator() -> None:
 
     factory_calls: list[None] = []
     agent = SimpleVlmAgent(
-        lambda: factory_calls.append(None) or Vision()  # type: ignore[return-value]
+        lambda: factory_calls.append(None) or (_SelectedFrameTool(), Vision()),  # type: ignore[return-value]
+        _ignore_status,
     )
     assert factory_calls == []
 
@@ -438,7 +456,8 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     monkeypatch.setattr(app, "make_stt", lambda _models, _name: stt)
     monkeypatch.setattr(app, "make_vlm", lambda _models, _name: vlm)
     monkeypatch.setattr(app, "make_tts", lambda _models, _name: tts)
-    monkeypatch.setattr(app, "StreamingVisionTool", _StreamingVisionTool)
+    monkeypatch.setattr(app, "CurrentFrameTool", _CurrentFrameTool)
+    monkeypatch.setattr(app, "StreamingImageQueryTool", _StreamingImageQueryTool)
 
     def make_session(**kwargs):
         session = VoiceSession(transport=transport, **kwargs)  # type: ignore[arg-type]
@@ -448,18 +467,22 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             if session.ready_file:
                 session.ready_file.touch()
             run_options.update(options)
-            assert await handler(
-                SimpleNamespace(
-                    participant_id="alice",
-                    text="What is in front of me?",
-                    timestamp_us=123,
-                    interrupted_output=False,
+            assert (
+                await handler(
+                    SimpleNamespace(
+                        participant_id="alice",
+                        text="What is in front of me?",
+                        timestamp_us=123,
+                        interrupted_output=False,
+                    )
                 )
-            ) is None
+                is None
+            )
             await asyncio.wait_for(response_complete.wait(), 1.0)
             options["on_participant_left"]("alice")
+
             async def wait_until_released() -> None:
-                while not _StreamingVisionTool.instances[0].released:
+                while not _CurrentFrameTool.instances[0].released:
                     await asyncio.sleep(0)
 
             await asyncio.wait_for(wait_until_released(), 1.0)
@@ -472,11 +495,7 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
             pts_us: int | None = None,
         ) -> None:
             async def consume() -> None:
-                text = (
-                    response
-                    if isinstance(response, str)
-                    else "".join([chunk async for chunk in response])
-                )
+                text = response if isinstance(response, str) else "".join([chunk async for chunk in response])
                 responses.append((participant_id, text, interrupt, pts_us))
                 response_complete.set()
 
@@ -487,17 +506,15 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
         return session
 
     monkeypatch.setattr(app, "VoiceSession", make_session)
-    _StreamingVisionTool.instances.clear()
+    _CurrentFrameTool.instances.clear()
+    _StreamingImageQueryTool.instances.clear()
 
     await app.run_app(config, ready_file=ready_file)
 
     assert ready_file.exists()
     relay_log = worker_log.parent / "relay-events.jsonl"
     assert relay_log.exists()
-    relay_events = [
-        yaml.safe_load(line)
-        for line in relay_log.read_text().splitlines()
-    ]
+    relay_events = [yaml.safe_load(line) for line in relay_log.read_text().splitlines()]
     assert {event["name"] for event in relay_events} >= {
         "publish:simple-vlm.user-query",
         "agent:simple-vlm",
@@ -510,17 +527,15 @@ async def test_app_wires_text_voice_cleanup_readiness_and_shutdown(
     assert stt.close_calls == tts.close_calls == vlm.close_calls == 1
     assert transport.shutdown_calls == 1
     assert sessions[0].text_topic == "vlm.response"
-    assert _StreamingVisionTool.instances[0].kwargs["endpoint"] is transport.endpoint
-    assert _StreamingVisionTool.instances[0].kwargs["system_prompt"] == config.system_prompt
-    assert _StreamingVisionTool.instances[0].kwargs["frame_max_age_s"] == (
-        config.frame_max_age_s
-    )
-    assert _StreamingVisionTool.instances[0].kwargs["frame_timeout_s"] == (
-        config.frame_timeout_s
-    )
-    assert _StreamingVisionTool.instances[0].released == ["alice"]
-    assert _StreamingVisionTool.instances[0].requests[0].participant_id == "alice"
-    assert _StreamingVisionTool.instances[0].requests[0].query == "What is in front of me?"
+    assert _CurrentFrameTool.instances[0].kwargs["endpoint"] is transport.endpoint
+    assert _CurrentFrameTool.instances[0].kwargs["frame_max_age_s"] == (config.frame_max_age_s)
+    assert _CurrentFrameTool.instances[0].kwargs["frame_timeout_s"] == (config.frame_timeout_s)
+    assert _CurrentFrameTool.instances[0].released == ["alice"]
+    assert _CurrentFrameTool.instances[0].requests[0].participant_id == "alice"
+    assert _StreamingImageQueryTool.instances[0].kwargs["vlm"] is vlm
+    assert _StreamingImageQueryTool.instances[0].kwargs["system_prompt"] == (config.system_prompt)
+    assert _StreamingImageQueryTool.instances[0].requests[0].query == ("What is in front of me?")
+    assert _StreamingImageQueryTool.instances[0].requests[0].image.uri == ("https://example.com/frame.jpg")
     assert responses == [("alice", "a blue square", True, 123)]
     assert all(task.done() for task in response_tasks)
     assert run_options["interrupt_on_supersede"] is True
@@ -537,21 +552,23 @@ async def test_relay_event_log_excludes_stream_chunks(tmp_path) -> None:
             nemo_relay.scope.event("llm.chunk", data={"text": "fragment"})
             nemo_relay.scope.event("turn.summary", data={"text": "complete"})
 
-    events = [
-        yaml.safe_load(line)
-        for line in (tmp_path / "relay-events.jsonl").read_text().splitlines()
-    ]
+    events = [yaml.safe_load(line) for line in (tmp_path / "relay-events.jsonl").read_text().splitlines()]
     names = [event["name"] for event in events]
     assert "llm.chunk" not in names
     assert "turn.summary" in names
     assert names.count("test-turn") == 2
 
 
-async def test_live_vision_tool_returns_a_complete_agent_observation() -> None:
+async def test_selected_frame_returns_a_complete_agent_observation() -> None:
     endpoint = _LiveEndpoint()
     vlm = _StreamingVlm()
-    vision = LiveVisionTool(
+    images = ImageRegistry()
+    frames = CurrentFrameTool(
         endpoint=cast(ProcessorEndpoint, endpoint),
+        images=images,
+    )
+    vision = ImageQueryTool(
+        images=images,
         vlm=cast(VLMService, vlm),
         system_prompt="Answer briefly.",
     )
@@ -584,37 +601,37 @@ async def test_live_vision_tool_returns_a_complete_agent_observation() -> None:
     nemo_relay.subscribers.register(subscriber, events.append)
     nemo_relay.intercepts.register_llm_request(intercept, 0, False, add_header)
     try:
+        frame = await frames.execute(CurrentFrameRequest(participant_id="alice"))
         result = await vision.execute(
-            VisionRequest(participant_id="alice", query="What is shown?"),
+            ImageQueryRequest(image=frame.image, query="What is shown?"),
         )
         await nemo_relay.subscribers.flush_async()
     finally:
         nemo_relay.intercepts.deregister_llm_request(intercept)
         nemo_relay.subscribers.deregister(subscriber)
 
-    assert result == VisionResponse(text="a blue square")
+    assert result == ImageQueryResult(text="a blue square")
     image, question, system_prompt, headers = vlm.ask_calls[0]
-    assert image.startswith("data:image/jpeg;base64,")
+    assert isinstance(image, bytes)
     assert question == "What is shown?"
     assert system_prompt == "Answer briefly."
     assert headers["X-Relay-Session"] == "turn-8"
-    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
     assert {"tool", "llm"} <= {getattr(event, "category", None) for event in events}
-    llm_events = [
-        event.to_json()
-        for event in events
-        if getattr(event, "category", None) == "llm"
-    ]
+    llm_events = [event.to_json() for event in events if getattr(event, "category", None) == "llm"]
     assert llm_events
-    assert all(image not in event for event in llm_events)
-    assert any("<redacted:live-camera-frame>" in event for event in llm_events)
+    assert any("<redacted:image>" in event for event in llm_events)
 
 
-async def test_streaming_vision_tool_yields_typed_chunks() -> None:
+async def test_selected_frame_streams_typed_image_query_chunks() -> None:
     endpoint = _LiveEndpoint()
     vlm = _StreamingVlm()
-    vision = StreamingVisionTool(
+    images = ImageRegistry()
+    frames = CurrentFrameTool(
         endpoint=cast(ProcessorEndpoint, endpoint),
+        images=images,
+    )
+    vision = StreamingImageQueryTool(
+        images=images,
         vlm=cast(VLMService, vlm),
         system_prompt="Answer briefly.",
     )
@@ -633,8 +650,8 @@ async def test_streaming_vision_tool_yields_typed_chunks() -> None:
         )
     )
     events = []
-    subscriber = "simple-vlm-live-vision"
-    intercept = "simple-vlm-live-vision-header"
+    subscriber = "simple-vlm-image-query"
+    intercept = "simple-vlm-image-query-header"
 
     def add_header(_name, request, annotated):
         headers = dict(request.headers)
@@ -647,15 +664,8 @@ async def test_streaming_vision_tool_yields_typed_chunks() -> None:
     nemo_relay.subscribers.register(subscriber, events.append)
     nemo_relay.intercepts.register_llm_request(intercept, 0, False, add_header)
     try:
-        chunks = [
-            chunk
-            async for chunk in vision.stream(
-                VisionRequest(
-                    participant_id="alice",
-                    query="What is shown?",
-                )
-            )
-        ]
+        frame = await frames.execute(CurrentFrameRequest(participant_id="alice"))
+        chunks = [chunk async for chunk in vision.stream(ImageQueryRequest(image=frame.image, query="What is shown?"))]
         await nemo_relay.subscribers.flush_async()
     finally:
         nemo_relay.intercepts.deregister_llm_request(intercept)
@@ -663,23 +673,17 @@ async def test_streaming_vision_tool_yields_typed_chunks() -> None:
 
     assert [chunk.text for chunk in chunks] == ["a ", "blue ", "square"]
     image, question, system_prompt, headers = vlm.calls[0]
-    assert image.startswith("data:image/jpeg;base64,")
+    assert isinstance(image, bytes)
     assert question == "What is shown?"
     assert system_prompt == "Answer briefly."
     assert headers["X-Relay-Session"] == "turn-7"
-    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
     assert {"tool", "llm"} <= {getattr(event, "category", None) for event in events}
-    llm_events = [
-        event.to_json()
-        for event in events
-        if getattr(event, "category", None) == "llm"
-    ]
+    llm_events = [event.to_json() for event in events if getattr(event, "category", None) == "llm"]
     assert llm_events
-    assert all(image not in event for event in llm_events)
-    assert any("<redacted:live-camera-frame>" in event for event in llm_events)
+    assert any("<redacted:image>" in event for event in llm_events)
 
 
-async def test_streaming_vision_stops_after_a_partial_stream_failure(monkeypatch) -> None:
+async def test_streaming_image_query_stops_after_a_partial_failure() -> None:
     class _PartialFailureVlm:
         def __init__(self) -> None:
             self.calls = []
@@ -696,85 +700,90 @@ async def test_streaming_vision_stops_after_a_partial_stream_failure(monkeypatch
             yield "The object is "
             raise RuntimeError("stream disconnected")
 
-    endpoint = _LiveEndpoint()
-    vision = StreamingVisionTool(
-        endpoint=cast(ProcessorEndpoint, endpoint),
+    images = ImageRegistry()
+    vision = StreamingImageQueryTool(
+        images=images,
         vlm=cast(VLMService, _PartialFailureVlm()),
     )
-
-    async def current_image(_participant_id: str) -> str:
-        return "data:image/jpeg;base64,frame"
-
-    monkeypatch.setattr(vision, "_current_image", current_image)
 
     chunks = [
         chunk.text
         async for chunk in vision.stream(
-            VisionRequest(participant_id="alice", query="What is shown?"),
+            ImageQueryRequest(
+                image=images.put(b"frame"),
+                query="What is shown?",
+            ),
         )
     ]
 
     assert chunks == ["The object is "]
-    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
 
 
-async def test_streaming_vision_reports_failure_before_any_output(monkeypatch) -> None:
+async def test_streaming_image_query_reports_failure_before_any_output() -> None:
     class _ImmediateFailureVlm:
         async def stream(self, *_args, **_kwargs):
             if False:
                 yield ""
             raise RuntimeError("stream unavailable")
 
-    endpoint = _LiveEndpoint()
-    vision = StreamingVisionTool(
-        endpoint=cast(ProcessorEndpoint, endpoint),
+    images = ImageRegistry()
+    vision = StreamingImageQueryTool(
+        images=images,
         vlm=cast(VLMService, _ImmediateFailureVlm()),
     )
-
-    async def current_image(_participant_id: str) -> str:
-        return "data:image/jpeg;base64,frame"
-
-    monkeypatch.setattr(vision, "_current_image", current_image)
 
     chunks = [
         chunk.text
         async for chunk in vision.stream(
-            VisionRequest(participant_id="alice", query="What is shown?"),
+            ImageQueryRequest(
+                image=images.put(b"frame"),
+                query="What is shown?",
+            ),
         )
     ]
 
     assert chunks == ["VLM server unavailable — please retry."]
-    assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
 
 
-async def test_vision_tools_propagate_frame_conversion_errors(monkeypatch) -> None:
+async def test_current_frame_tool_propagates_conversion_errors(monkeypatch) -> None:
     endpoint = _LiveEndpoint()
-    vlm = _StreamingVlm()
-    finite = LiveVisionTool(
+    frames = CurrentFrameTool(
         endpoint=cast(ProcessorEndpoint, endpoint),
-        vlm=cast(VLMService, vlm),
+        images=ImageRegistry(),
     )
-    streaming = StreamingVisionTool(
-        endpoint=cast(ProcessorEndpoint, endpoint),
-        vlm=cast(VLMService, vlm),
+    await endpoint.frame_callback(
+        FrameSignal(
+            slot=0,
+            seq=1,
+            pts_us=time.time_ns() // 1_000,
+            width=2,
+            height=2,
+            fmt=PixelFormat.RGB24,
+            data_sz=12,
+            participant_id="alice",
+            track_id="camera",
+        )
     )
 
-    async def malformed_frame(_participant_id: str) -> str:
+    def malformed_frame(_frame):
         raise ValueError("malformed pixels")
 
-    monkeypatch.setattr(finite, "_current_image", malformed_frame)
-    monkeypatch.setattr(streaming, "_current_image", malformed_frame)
-    request = VisionRequest(participant_id="alice", query="What is shown?")
+    monkeypatch.setattr(current_frame_module, "frame_to_pil", malformed_frame)
 
     with pytest.raises(RuntimeError, match="malformed pixels"):
-        await finite.execute(request)
+        await frames.execute(CurrentFrameRequest(participant_id="alice"))
 
 
 async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
     endpoint = _LiveEndpoint()
     vlm = _StreamingVlm()
-    vision = StreamingVisionTool(
+    images = ImageRegistry()
+    frames = CurrentFrameTool(
         endpoint=cast(ProcessorEndpoint, endpoint),
+        images=images,
+    )
+    vision = StreamingImageQueryTool(
+        images=images,
         vlm=cast(VLMService, vlm),
         system_prompt="Answer briefly.",
     )
@@ -806,11 +815,7 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
             assert pts_us == 123
 
             async def consume() -> None:
-                self.text = (
-                    response
-                    if isinstance(response, str)
-                    else "".join([chunk async for chunk in response])
-                )
+                self.text = response if isinstance(response, str) else "".join([chunk async for chunk in response])
                 self.complete.set()
 
             asyncio.create_task(consume())
@@ -820,7 +825,10 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
 
     session = Session()
     runtime = AgentRuntime()
-    runtime.register("simple-vlm", SimpleVlmAgent(lambda: vision))
+    runtime.register(
+        "simple-vlm",
+        SimpleVlmAgent(lambda: (frames, vision), endpoint.set_status),
+    )
     runtime.register(
         "voice",
         VoiceAgent(  # type: ignore[arg-type]
@@ -873,23 +881,18 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
 
     assert session.text == "a blue square"
     image, question, system_prompt, headers = vlm.calls[0]
-    assert image.startswith("data:image/jpeg;base64,")
+    assert isinstance(image, bytes)
     assert question == "What is shown?"
     assert system_prompt == "Answer briefly."
     assert headers["X-Relay-Session"] == "turn-9"
     assert endpoint.statuses == [("processing", "alice"), ("idle", "alice")]
-    assert {"tool", "llm"} <= {
-        getattr(event, "category", None) for event in events
-    }
+    assert {"tool", "llm"} <= {getattr(event, "category", None) for event in events}
     starts = {
         event.name: event.to_dict()
         for event in events
-        if event.kind == "scope"
-        and event.to_dict().get("scope_category") == "start"
+        if event.kind == "scope" and event.to_dict().get("scope_category") == "start"
     }
-    assert starts["simple-vlm.turn"]["parent_uuid"] != (
-        starts["agent:simple-vlm"]["uuid"]
-    )
+    assert starts["simple-vlm.turn"]["parent_uuid"] != (starts["agent:simple-vlm"]["uuid"])
     tool_starts = [
         event.to_dict()
         for event in events
@@ -899,14 +902,9 @@ async def test_sample_runtime_streams_vision_through_voice_agent() -> None:
     ]
     assert tool_starts
     assert tool_starts[0]["parent_uuid"] == starts["simple-vlm.turn"]["uuid"]
-    llm_events = [
-        event.to_json()
-        for event in events
-        if getattr(event, "category", None) == "llm"
-    ]
+    llm_events = [event.to_json() for event in events if getattr(event, "category", None) == "llm"]
     assert llm_events
-    assert all(image not in event for event in llm_events)
-    assert any("<redacted:live-camera-frame>" in event for event in llm_events)
+    assert any("<redacted:image>" in event for event in llm_events)
 
 
 async def test_simple_vlm_agent_handles_global_interruption_event() -> None:
@@ -926,7 +924,10 @@ async def test_simple_vlm_agent_handles_global_interruption_event() -> None:
     runtime = AgentRuntime()
     runtime.register(
         "simple-vlm",
-        SimpleVlmAgent(lambda: BlockingVision()),  # type: ignore[return-value]
+        SimpleVlmAgent(
+            lambda: (_SelectedFrameTool(), BlockingVision()),  # type: ignore[return-value]
+            _ignore_status,
+        ),
     )
 
     async with runtime:

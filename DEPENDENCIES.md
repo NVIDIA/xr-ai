@@ -111,11 +111,13 @@ xr-ai-tools  (agent-sdk/xr-ai-tools/)
     └── nemo-relay >=0.7.2,<0.8
     └── pydantic >=2.10
     └── [relay] xr-ai-models [editable: ../xr-ai-models]
-    └── [live-vision] numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub], xr-ai-models [editable: ../xr-ai-models]
+    ├── [frames] numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub]
+    ├── [vision] xr-ai-models [editable: ../xr-ai-models]
     └── [services] msgpack >=1.0, pyzmq >=27.0
     Toolkit-independent native tools: Pydantic request and response models,
     Relay-managed finite and async execution, model tool-call workflow helpers,
-    participant-scoped live vision, typed capability clients, and service RPC.
+    frame selection, single/multi-image inference, typed capability clients,
+    and service RPC.
 
 
 xr-openxr-service  (services/openxr-service/)
@@ -223,7 +225,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-agent-runtime       [editable: ../agent-sdk/xr-ai-runtime]
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
-    └── xr-ai-tools[live-vision,services] [editable: ../agent-sdk/xr-ai-tools]
+    └── xr-ai-tools[frames,services,vision] [editable: ../agent-sdk/xr-ai-tools]
     └── xr-rag-service [editable: ../services/rag-service]
     └── xr-video-memory-service [editable: ../services/video-memory-service]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
@@ -426,13 +428,14 @@ the latest video frame via streaming VLM and replies with both
 | Sub-project | Package | Internal deps | External deps |
 |---|---|---|---|
 | Orchestrator | `simple-vlm-example` | `xr-ai-launcher` | — |
-| Worker | `simple-vlm-example-worker` | `xr-ai-agent-runtime [editable]`, `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-tools[live-vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | nemo-relay >=0.7.2,<0.8, loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-tools[live-vision]` pulls in numpy and Pillow) |
+| Worker | `simple-vlm-example-worker` | `xr-ai-agent-runtime [editable]`, `xr-ai-hub-client [editable]`, `xr-ai-logging [editable]`, `xr-ai-models [editable]`, `xr-ai-tools[frames,vision] [editable]`, `xr-ai-voice [editable]`, `xr-ai-voicegate [editable]` | nemo-relay >=0.7.2,<0.8, loguru >=0.7, pyyaml >=6.0 (`xr-ai-voice` pulls in VAD, pipecat-ai, numpy, and scipy; `xr-ai-tools[frames]` pulls in numpy and Pillow) |
 
-The packaged worker runs a transport-independent `StreamingVisionTool` inside
-`SimpleVlmAgent` and publishes its typed async chunks to `VoiceAgent`. The tool
-owns current-frame acquisition through `xr-ai-hub-client`, has no voice
-dependency, and uses NeMo Relay's managed streaming LLM path. Camera bytes are
-redacted from Relay telemetry while the provider receives the original frame.
+The packaged worker uses `CurrentFrameTool` for frame acquisition and passes its
+opaque `ImageReference` to a transport-independent `StreamingImageQueryTool`
+inside `SimpleVlmAgent`. The query tool has no voice dependency and uses NeMo
+Relay's managed streaming LLM path. Camera bytes stay in a bounded in-process
+registry and image locations are redacted from VLM telemetry while the provider
+receives the original frame.
 `VoiceAgent` owns `VoiceSession`, readiness, hub transport, signals, and the
 private Pipecat pipeline; it routes `"ping"` and ad-hoc text through the same
 sample-named `UserQuery` topic as speech and publishes lifecycle events on
@@ -481,12 +484,12 @@ user-relative requests such as "to my left".
 |---|---|---|---|
 | Orchestrator | `xr-render-demo` | `xr-ai-launcher`, `xr-ai-logging` | loguru >=0.7 |
 | Scene | `xr-render-scene` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-tools[services]` | pyzmq >=27.0, msgpack >=1.0, pyyaml >=6.0 |
-| Worker | `xr-render-demo-worker` | `xr-ai-agent-runtime` [editable], `xr-ai-hub-client`, `xr-ai-models` [editable], `xr-ai-tools[live-vision,services]` [editable], `xr-ai-voice` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pydantic >=2.12, pyyaml >=6.0 (native scene, tracking, spatial-math, video-memory, vision, and text-memory tools replace capability MCP clients; `xr-ai-voice` privately supplies VAD and speech-pipeline dependencies). |
+| Worker | `xr-render-demo-worker` | `xr-ai-agent-runtime` [editable], `xr-ai-hub-client`, `xr-ai-models` [editable], `xr-ai-tools[frames,services,vision]` [editable], `xr-ai-voice` [editable], `xr-ai-voicegate` [editable], `xr-ai-logging` [editable], `xr-render-scene` [editable] | pydantic >=2.12, pyyaml >=6.0 (native scene, tracking, spatial-math, video-memory, vision, and text-memory tools replace capability MCP clients; `xr-ai-voice` privately supplies VAD and speech-pipeline dependencies). |
 
 Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `yaml/models.yaml` and loaded via `xr-ai-models` `load_models_config` /
 `make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
-a transitive dep of `xr-ai-voice` and `xr-ai-tools[live-vision]`.
+a transitive dep of `xr-ai-voice` and `xr-ai-tools[frames]`.
 
 Requires `model-servers` to be running first — model servers are declared as
 `launch_mode="reuse"` so the launcher skips spawning them but the dependency

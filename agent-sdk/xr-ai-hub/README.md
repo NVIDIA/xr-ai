@@ -26,9 +26,10 @@ await endpoint.run()
 unsubscribe()  # Remove the callback when its owner stops.
 ```
 
-`LiveFrameSource` adds raw frame acquisition without adding image conversion or
-model dependencies. Use `xr_ai_tools.streaming_vision.StreamingVisionTool` when the
-desired interface is a model-facing async vision tool rather than raw pixels.
+`LiveFrameSource` adds raw frame acquisition without image conversion or model
+dependencies. `xr_ai_tools.current_frame.CurrentFrameTool` converts selected
+frames into lightweight references; the query tools in `xr_ai_tools.vision`
+perform model inference separately.
 
 ## Subscription and roster contract
 

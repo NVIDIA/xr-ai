@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared schemas and Relay codecs for live-vision tools."""
+"""Relay request helpers shared by finite and streaming image-query tools."""
 
 from __future__ import annotations
 
@@ -11,50 +11,19 @@ from collections.abc import Mapping
 from typing import Any
 
 import nemo_relay
-from pydantic import BaseModel, ConfigDict, Field
 
 VLM_CALL_NAME = "xr-ai-vlm"
-_FRAME_REDACTION = "<redacted:live-camera-frame>"
+_IMAGE_REDACTION = "<redacted:image>"
 
 
-class VisionRequest(BaseModel):
-    """Ask one question about a participant's current live camera frame."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    participant_id: str = Field(
-        description="Participant whose camera frame should be inspected.",
-    )
-    query: str = Field(
-        min_length=1,
-        description="Question to answer from the camera frame.",
-    )
-
-
-class VisionResponse(BaseModel):
-    """A complete answer and whether current-frame perception succeeded."""
-
-    text: str = Field(description="Complete answer text.")
-    available: bool = Field(
-        default=True,
-        description="Whether a current frame produced a usable visual answer.",
-    )
-
-
-class VisionChunk(BaseModel):
-    """One text fragment from a streamed current-frame answer."""
-
-    text: str = Field(description="A partial fragment of the streamed answer text.")
-
-
-def register_frame_sanitizer() -> None:
-    """Redact the current frame from events in the active tool scope."""
+def register_image_sanitizer() -> None:
+    """Redact image locations from VLM events in the active tool scope."""
 
     nemo_relay.scope_local.register_llm_sanitize_request(
         nemo_relay.scope.get_handle(),
-        "xr-ai-live-frame",
+        "xr-ai-image",
         0,
-        _sanitize_live_frame,
+        _sanitize_image,
     )
 
 
@@ -63,7 +32,7 @@ def relay_request(
     image_url: str,
     query: str,
 ) -> nemo_relay.LLMRequest:
-    """Build the shared OpenAI-compatible current-frame request."""
+    """Build one OpenAI-compatible image question request."""
 
     return nemo_relay.LLMRequest(
         {},
@@ -115,7 +84,7 @@ def vision_inputs(content: Mapping[str, object]) -> tuple[str, str, str]:
 
 
 def openai_response(text: str) -> dict[str, Any]:
-    """Build the complete Relay response used by both VLM paths."""
+    """Build the complete Relay response used by both image-query paths."""
 
     return {
         "model": VLM_CALL_NAME,
@@ -168,7 +137,7 @@ def stream_text(raw_chunk: object) -> str:
     return content
 
 
-def _sanitize_live_frame(
+def _sanitize_image(
     request: nemo_relay.LLMRequest,
     _context: nemo_relay.LlmSanitizeRequestContext,
 ) -> nemo_relay.LLMRequest:
@@ -186,7 +155,7 @@ def _sanitize_live_frame(
                     continue
                 image = part.get("image_url")
                 if isinstance(image, dict) and isinstance(image.get("url"), str):
-                    image["url"] = _FRAME_REDACTION
+                    image["url"] = _IMAGE_REDACTION
     return nemo_relay.LLMRequest(dict(request.headers), content)
 
 

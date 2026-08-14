@@ -21,11 +21,12 @@ The worker is a package under `worker/simple_vlm_example_worker/`:
 `VoiceAgent` owns `VoiceSession`, which provides STT/TTS/VLM readiness, the hub
 voice transport, voice-gate processing, streaming TTS, signals, and cleanup.
 It publishes accepted speech and typed text as `UserQuery` on this sample's
-topic. `SimpleVlmAgent` subscribes to that topic, owns participant-scoped
-streaming and cancellation around the transport-independent
-`StreamingVisionTool`, and publishes chunks to `voice.output`. The tool has no
-voice dependency and sends its provider stream through Relay's managed LLM
-path. The camera frame is redacted from Relay telemetry. `VoiceAgent` publishes
+topic. `SimpleVlmAgent` subscribes to that topic, selects the participant's
+current image with `CurrentFrameTool`, passes its opaque reference to the
+transport-independent `StreamingImageQueryTool`, and publishes chunks to
+`voice.output`. The query tool has no voice dependency and sends its provider
+stream through Relay's managed LLM path. Camera bytes stay out of tool results
+and image locations are redacted from VLM telemetry. `VoiceAgent` publishes
 participant departure and interruption on sample-named topics;
 `SimpleVlmAgent` subscribes and releases its own cached frames and tasks. A
 newer turn cancels and interrupts a superseded response. `app.py` only composes
@@ -68,10 +69,10 @@ output. Each real STT request is a `voice.stt` scope with a transcript result
 mark, and each sentence synthesis is a `voice.tts` scope. Raw audio is summarized
 by byte count, duration, and sample rate; TTS records synthesis rather than
 client playback. The completed LLM and turn records remain available alongside
-them. No telemetry server or network exporter is required. Live camera bytes are
-replaced with `<redacted:live-camera-frame>`; prompts, questions, responses,
-participant IDs, and correlation metadata remain visible and may contain
-sensitive data.
+them. No telemetry server or network exporter is required. Image locations are
+replaced with `<redacted:image>`; prompts, questions, responses, participant
+IDs, and correlation metadata remain visible and may contain sensitive data.
+Opaque live-frame handles remain small even when the source frame is large.
 
 ```bash
 tail -F /tmp/log_simple-vlm-example_*/relay-events.jsonl

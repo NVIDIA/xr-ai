@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, model_validator
 
+from .image import ImageReference
 from .rpc import RPCClient
 from .tools import Tool
 from .types import EmptyRequest, StrictRequest
@@ -90,9 +91,17 @@ class SampleVideoRequest(StrictRequest):
 
 class SampledVideoFrame(BaseModel):
     path: str
+    image: ImageReference
     width: int
     height: int
     timestamp_us: int
+
+    @model_validator(mode="before")
+    @classmethod
+    def add_image_reference(cls, value: object) -> object:
+        if isinstance(value, dict) and "image" not in value and isinstance(value.get("path"), str):
+            return {**value, "image": {"uri": value["path"]}}
+        return value
 
 
 class SampleVideoResult(BaseModel):
@@ -123,11 +132,19 @@ class HistoricalFrameRequest(StrictRequest):
 
 class HistoricalFrameResult(BaseModel):
     path: str
+    image: ImageReference
     width: int
     height: int
     timestamp_us: int
     second_ago: int
     actual_second_ago: float
+
+    @model_validator(mode="before")
+    @classmethod
+    def add_image_reference(cls, value: object) -> object:
+        if isinstance(value, dict) and "image" not in value and isinstance(value.get("path"), str):
+            return {**value, "image": {"uri": value["path"]}}
+        return value
 
 
 class VideoHealthResult(BaseModel):

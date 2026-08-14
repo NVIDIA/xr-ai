@@ -48,9 +48,15 @@ def frame_to_pil(frame: FrameData) -> Image.Image:
     raise ValueError(f"Unsupported pixel format: {frame.fmt!r}")
 
 
-def encode_image(image: Image.Image) -> str:
-    """Encode one image as an OpenAI-compatible JPEG data URL."""
+def encode_image_bytes(image: Image.Image) -> bytes:
+    """Encode one image as JPEG bytes."""
 
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG", quality=90)
-    return f"data:image/jpeg;base64,{base64.b64encode(buffer.getvalue()).decode()}"
+    return buffer.getvalue()
+
+
+def encode_image(image: Image.Image) -> str:
+    """Encode one image as an OpenAI-compatible JPEG data URL."""
+
+    return f"data:image/jpeg;base64,{base64.b64encode(encode_image_bytes(image)).decode()}"
