@@ -179,3 +179,42 @@ change = await video.execute(
     VideoQueryRequest(frames=sample.frames, query="What changed over time?")
 )
 ```
+
+## QR-code reading and extraction
+
+Install `xr-ai-tools[qr-code]` to use `QRCodeTool`. The finite
+`read_qr_codes` tool acquires a participant's current camera frame and uses
+ZXing-C++ by default. Its typed result distinguishes an unavailable frame from
+a valid frame with no readable code, and returns every decoded UTF-8 payload
+with optional source-image corner coordinates. When one frame contains
+multiple QR codes, `result.codes` contains one entry for each code.
+
+```python
+from xr_ai_tools.qr_code import QRCodeRequest, QRCodeTool
+
+qr_codes = QRCodeTool(endpoint=processor_endpoint)
+result = await qr_codes.execute(QRCodeRequest(participant_id="participant-1"))
+for code in result.codes:
+    print(code.data, code.corners)
+```
+
+Frame acquisition and extraction are separate. Pass any sync or async callable
+as `extractor=` to replace ZXing-C++ without changing the tool or its callers.
+The callable receives one RGB `PIL.Image.Image` and returns an iterable of
+`DecodedQRCode` values or equivalent dictionaries; `corners` may be omitted by
+backends that decode without localization.
+
+```python
+async def model_extractor(image):
+    return await custom_qr_model.extract(image)
+
+
+qr_codes = QRCodeTool(
+    endpoint=processor_endpoint,
+    extractor=model_extractor,
+)
+```
+
+Call `release(participant_id)` when a participant disconnects. Applications
+that expose the tool to a model should inject the active participant identity
+at their workflow boundary, as they do for other participant-scoped tools.

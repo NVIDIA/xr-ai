@@ -121,7 +121,7 @@ frames are dropped if it is closed.
 | Agent runtime | `agent-sdk/xr-ai-runtime/` | Agent registration and typed pub/sub routing |
 | Models | `agent-sdk/xr-ai-models/` | Typed model protocols and OpenAI-compatible clients |
 | Voice | `agent-sdk/xr-ai-voice/` | Voice agent, session, transport, and pipeline |
-| Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools |
+| Agent tools | `agent-sdk/xr-ai-tools/` | Toolkit-independent Relay-managed native tools, including QR-code extraction |
 | Reusable services | `services/` | Model-serving and typed capability processes |
 | Agent demos | `agent-samples/` | End-to-end agent pipelines |
 | Tests | `tests/` | Multi-client / multi-agent integration tests |

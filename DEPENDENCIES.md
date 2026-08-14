@@ -113,11 +113,12 @@ xr-ai-tools  (agent-sdk/xr-ai-tools/)
     └── [relay] xr-ai-models [editable: ../xr-ai-models]
     ├── [frames] numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub]
     ├── [vision] xr-ai-models [editable: ../xr-ai-models]
+    ├── [qr-code] numpy >=1.24, zxing-cpp >=2.3,<4, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub]
     └── [services] msgpack >=1.0, pyzmq >=27.0
     Toolkit-independent native tools: Pydantic request and response models,
     Relay-managed finite and async execution, model tool-call workflow helpers,
-    frame selection, single/multi-image inference, typed capability clients,
-    and service RPC.
+    frame selection, single/multi-image inference, participant-scoped QR-code
+    extraction, typed capability clients, and service RPC.
 
 
 xr-openxr-service  (services/openxr-service/)
@@ -225,7 +226,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-agent-runtime       [editable: ../agent-sdk/xr-ai-runtime]
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
-    └── xr-ai-tools[frames,services,vision] [editable: ../agent-sdk/xr-ai-tools]
+    └── xr-ai-tools[frames,qr-code,services,vision] [editable: ../agent-sdk/xr-ai-tools]
     └── xr-rag-service [editable: ../services/rag-service]
     └── xr-video-memory-service [editable: ../services/video-memory-service]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
@@ -245,8 +246,9 @@ xr-ai-tests  (tests/)
     The unmarked suite is multi-client / multi-agent integration tests over
     the IPC layer, driven via ZMQ `ipc://` only — no Docker / LiveKit /
     NVENC required. Also covers unit tests for the leaf util packages
-    (launcher, logging, vllm), native spatial-math, text-memory, vision, and typed service-tool
-    tests, plus the sample-local scene native tools (LOVR is stubbed). Root pytest adds
+    (launcher, logging, vllm), native spatial-math, text-memory, vision, QR-code,
+    and typed service-tool tests, plus the sample-local scene native tools (LOVR
+    is stubbed). Root pytest adds
     services/stt-server to its Python path (not a dependency) so the
     endpoint tests can import its FastAPI app with a mocked backend,
     avoiding a test-time NeMo installation.
