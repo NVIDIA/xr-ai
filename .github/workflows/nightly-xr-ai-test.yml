@@ -11,8 +11,8 @@ name: nightly XR AI test
 # Setup notes:
 # - The GPU runner's Docker needs the NVIDIA runtime registered
 #   (`sudo nvidia-ctk runtime configure --runtime=docker`).
-# - The repository needs an Actions secret named `NGC_API_KEY` so trusted
-#   events can authenticate pulls from `nvcr.io`.
+# - The repository needs an Actions secret named `NGC_API_KEY`, backed by an
+#   NGC Personal or Service Key with NGC Catalog access.
 
 on:
   schedule:
@@ -109,7 +109,10 @@ jobs:
           fi
           printf '%s' "$NGC_API_KEY" | docker login nvcr.io \
             --username '$oauthtoken' --password-stdin
-          docker manifest inspect nvcr.io/nvidia/vllm:26.04-py3 >/dev/null
+          if ! docker manifest inspect nvcr.io/nvidia/vllm:26.04-py3 >/dev/null; then
+            echo "::error::NGC_API_KEY must grant NGC Catalog access to nvidia/vllm"
+            exit 1
+          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39  # v3

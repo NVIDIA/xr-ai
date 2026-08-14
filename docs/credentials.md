@@ -72,9 +72,10 @@ export NGC_API_KEY=nvapi-xxx
 ```
 
 Nightly GPU CI reads the same value from a required repository Actions secret
-named `NGC_API_KEY`. Scheduled, manual, and same-repository pull-request runs
-use it only in the NGC authentication step; fork pull requests do not receive
-the secret.
+named `NGC_API_KEY`. Use an NGC Personal or Service Key authorized for **NGC
+Catalog**; an endpoint-only NVIDIA API key cannot pull `nvcr.io` images.
+Scheduled, manual, and same-repository pull-request runs use the key only in the
+NGC authentication step; fork pull requests do not receive the secret.
 
 ## How a token is resolved
 
