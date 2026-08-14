@@ -305,3 +305,32 @@ result = await fill_polygon.execute(
     )
 )
 ```
+
+## Image OCR
+
+Install `xr-ai-tools[ocr]` for `OCRTool`, a finite native tool that reads text
+and numeric equipment values from a PNG or JPEG image. It accepts an injected
+`OCRService`, so model selection remains in the model profile:
+
+```python
+from xr_ai_models import load_models_config, make_ocr
+from xr_ai_tools.ocr import OCRRequest, OCRTool
+
+models = load_models_config("yaml/models.local.json")
+ocr = make_ocr(models, "ocr")
+tool = OCRTool(ocr=ocr, allow_local_paths=True)
+
+result = await tool.execute(OCRRequest(image="meter.png", merge_level="word"))
+print(result.text)
+await ocr.close()
+```
+
+Programmatic callers receive reading-order text plus detections, confidences,
+and normalized bounding boxes. Model-selected calls see the plain recognized
+text. Switching to hosted Nemotron OCR v2, a self-hosted NIM using Hugging Face
+weights, or a VLM OCR fallback does not change the tool.
+
+Base64 data URLs are accepted by default. Local paths and HTTP(S) URLs are
+disabled unless the application opts in with `allow_local_paths=True` or
+`allow_remote_urls=True`. Treat model-provided tool arguments as untrusted:
+enable only the source types that the application controls.

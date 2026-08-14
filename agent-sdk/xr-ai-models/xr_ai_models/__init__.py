@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unified service protocols and OpenAI-compatible clients for XR AI models.
+"""Unified service protocols and HTTP clients for XR AI models.
 
 Repository code talks to the typed ``*Service`` protocols. The concrete
-``OpenAICompat*`` clients cover every in-tree backend and external
-OpenAI-compatible endpoints.
+``OpenAICompat*`` clients cover the chat, speech, and embedding backends;
+``NvidiaOCR`` covers the Image OCR NIM contract. Additional backend kinds slot
+into the private factory without changing protocols or callers.
 """
 from ._protocols import (
     Capabilities,
@@ -16,6 +17,11 @@ from ._protocols import (
     ImageInput,
     ImagePart,
     LLMService,
+    OCRDetection,
+    OCRMergeLevel,
+    OCRPoint,
+    OCRResponse,
+    OCRService,
     STTService,
     TextPart,
     ToolCall,
@@ -25,6 +31,7 @@ from ._protocols import (
     VideoPart,
     VLMService,
 )
+from ._ocr import NvidiaOCR, VLMOCR
 from ._openai_compat import (
     OpenAICompatLLM,
     OpenAICompatEmbedding,
@@ -38,10 +45,13 @@ from ._config import (
     DeploymentSpec,
     EmbeddingSpec,
     EndpointSpec,
+    KIND_NVIDIA_OCR,
     KIND_OPENAI_COMPAT,
+    KIND_RIVA_GRPC,
     LLMSpec,
     ModelKind,
     ModelsConfig,
+    OCRSpec,
     Spec,
     STTSpec,
     TTSSpec,
@@ -49,7 +59,7 @@ from ._config import (
     load_models_config,
     load_models_config_from_dict,
 )
-from ._factory import make_embedding, make_llm, make_stt, make_tts, make_vlm
+from ._factory import make_embedding, make_llm, make_ocr, make_stt, make_tts, make_vlm
 from ._riva_grpc import RivaSTT, RivaTTS
 
 __all__ = [
@@ -61,6 +71,11 @@ __all__ = [
     "ImageInput",
     "ImagePart",
     "LLMService",
+    "OCRDetection",
+    "OCRMergeLevel",
+    "OCRPoint",
+    "OCRResponse",
+    "OCRService",
     "STTService",
     "TextPart",
     "ToolCall",
@@ -74,17 +89,22 @@ __all__ = [
     "OpenAICompatSTT",
     "OpenAICompatTTS",
     "OpenAICompatVLM",
+    "NvidiaOCR",
+    "VLMOCR",
     "AdapterSpec",
     "Category",
     "DeploymentSpec",
     "EmbeddingSpec",
     "EndpointSpec",
+    "KIND_NVIDIA_OCR",
     "KIND_OPENAI_COMPAT",
+    "KIND_RIVA_GRPC",
     "RivaSTT",
     "RivaTTS",
     "LLMSpec",
     "ModelKind",
     "ModelsConfig",
+    "OCRSpec",
     "Spec",
     "STTSpec",
     "TTSSpec",
@@ -93,6 +113,7 @@ __all__ = [
     "load_models_config_from_dict",
     "make_llm",
     "make_embedding",
+    "make_ocr",
     "make_stt",
     "make_tts",
     "make_vlm",

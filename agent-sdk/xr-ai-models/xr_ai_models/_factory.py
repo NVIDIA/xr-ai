@@ -4,7 +4,13 @@
 """``make_*`` constructors that dispatch a :class:`Spec` to a concrete client."""
 from __future__ import annotations
 
-from ._config import KIND_OPENAI_COMPAT, KIND_RIVA_GRPC, ModelsConfig
+from ._config import (
+    KIND_NVIDIA_OCR,
+    KIND_OPENAI_COMPAT,
+    KIND_RIVA_GRPC,
+    ModelsConfig,
+)
+from ._ocr import VLMOCR, NvidiaOCR
 from ._openai_compat import (
     OpenAICompatEmbedding,
     OpenAICompatLLM,
@@ -12,7 +18,15 @@ from ._openai_compat import (
     OpenAICompatTTS,
     OpenAICompatVLM,
 )
-from ._protocols import Capabilities, EmbeddingService, LLMService, STTService, TTSService, VLMService
+from ._protocols import (
+    Capabilities,
+    EmbeddingService,
+    LLMService,
+    OCRService,
+    STTService,
+    TTSService,
+    VLMService,
+)
 
 
 def make_embedding(config: ModelsConfig, name: str) -> EmbeddingService:
@@ -85,6 +99,43 @@ def make_vlm(config: ModelsConfig, name: str) -> VLMService:
             health_path=endpoint.health_path,
         )
     raise ValueError(f"unsupported VLM kind: {adapter.kind!r}")
+
+
+def make_ocr(config: ModelsConfig, name: str) -> OCRService:
+    """Construct the OCR service for the named configuration entry.
+
+    NVIDIA Image OCR NIM roles use :class:`NvidiaOCR`; OpenAI-compatible OCR
+    roles adapt a configured VLM behind the same :class:`OCRService` protocol.
+    """
+
+    spec = config.ocr(name)
+    adapter = spec.adapter
+    endpoint = spec.endpoint
+    if adapter.kind == KIND_NVIDIA_OCR:
+        return NvidiaOCR(
+            base_url=endpoint.base_url,
+            model_name=adapter.model_name,
+            request_path=adapter.request_path,
+            health_path=endpoint.health_path,
+            api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
+            health_path=endpoint.health_path,
+        )
+    if adapter.kind == KIND_OPENAI_COMPAT:
+        vlm = OpenAICompatVLM(
+            base_url=endpoint.base_url,
+            model_name=adapter.model_name,
+            capabilities=Capabilities(**adapter.capabilities),
+            default_extras=adapter.default_extras,
+            api_key_env=endpoint.api_key_env,
+            timeout=endpoint.timeout,
+            health_check=endpoint.health_check,
+        )
+        if adapter.prompt:
+            return VLMOCR(vlm, prompt=adapter.prompt)
+        return VLMOCR(vlm)
+    raise ValueError(f"unsupported OCR kind: {adapter.kind!r}")
 
 
 def make_stt(config: ModelsConfig, name: str) -> STTService:

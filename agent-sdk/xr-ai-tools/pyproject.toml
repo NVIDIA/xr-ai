@@ -20,6 +20,7 @@ relay = ["xr-ai-models"]
 frames = ["numpy>=1.24", "Pillow>=10.0", "xr-ai-hub-client"]
 image-editing = ["Pillow>=10.0"]
 vision = ["xr-ai-models"]
+ocr = ["xr-ai-models"]
 marker-tracking = [
     "numpy>=1.24",
     "opencv-contrib-python-headless>=4.8,<5",

@@ -157,6 +157,52 @@ class Capabilities:
     """Whether the endpoint can return model reasoning."""
 
 
+OCRMergeLevel = Literal["word", "sentence", "paragraph"]
+"""Granularity used to merge neighboring OCR detections."""
+
+
+@dataclass(frozen=True)
+class OCRPoint:
+    """One normalized image coordinate returned by an OCR backend."""
+
+    x: float
+    """Horizontal coordinate normalized to the image width."""
+
+    y: float
+    """Vertical coordinate normalized to the image height."""
+
+
+@dataclass(frozen=True)
+class OCRDetection:
+    """One recognized text region in reading order."""
+
+    text: str
+    """Text recognized in this region."""
+
+    confidence: float | None = None
+    """Backend confidence score, when supplied."""
+
+    bounding_box: tuple[OCRPoint, ...] = ()
+    """Ordered normalized vertices surrounding the recognized region."""
+
+
+@dataclass(frozen=True)
+class OCRResponse:
+    """Backend-neutral OCR output for one image."""
+
+    text: str
+    """All recognized text in reading order."""
+
+    detections: tuple[OCRDetection, ...]
+    """Structured text regions in reading order."""
+
+    model: str | None
+    """Backend model identifier, when supplied."""
+
+    raw: dict[str, Any]
+    """Unmodified provider response object."""
+
+
 @runtime_checkable
 class LLMService(Protocol):
     """Structural interface for text chat-completion services."""
@@ -286,6 +332,33 @@ class VLMService(Protocol):
         headers: Mapping[str, str] | None = None,
     ) -> AsyncIterator[str]:
         """Stream response text for a question about multiple images."""
+
+        pass
+
+    async def health(self) -> bool:
+        """Return whether the configured endpoint is ready for requests."""
+
+        pass
+
+    async def close(self) -> None:
+        """Release resources owned by the service."""
+
+        pass
+
+
+@runtime_checkable
+class OCRService(Protocol):
+    """Structural interface for optical character recognition services."""
+
+    async def recognize(
+        self,
+        image: ImageInput,
+        *,
+        merge_level: OCRMergeLevel = "paragraph",
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> OCRResponse:
+        """Recognize visible text in one image."""
 
         pass
 

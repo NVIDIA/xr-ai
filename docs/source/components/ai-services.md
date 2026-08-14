@@ -10,8 +10,8 @@ orchestrator pattern that wires servers into a sample, refer to
 {doc}`/guides/adding-a-sample`.
 
 Multiple reusable HTTP servers are available as launchable peers of
-`services/xr-media-hub/`. All expose an OpenAI-compatible REST API so agent workers
-can call them with any OpenAI SDK client or plain `httpx` or `requests`.
+`services/xr-media-hub/`. In-tree servers expose OpenAI-compatible REST APIs;
+NVIDIA Image OCR NIM uses its typed `/v1/ocr` contract behind `OCRService`.
 Reference services cover vision-language reasoning, speech recognition,
 text-to-speech, embeddings, and large language models. The projects are direct
 children of the repository's `services/README.md` source index;
@@ -154,8 +154,8 @@ directory and a model profile containing an `embedding` role.
 Workers do not hand-roll `httpx` clients against these endpoints.  They
 depend on {doc}`/reference/agent-sdk-models`,
 load a per-sample model profile, and construct service clients via
-`make_llm`, `make_vlm`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
-OpenAI-compatible wire format and the per-model quirks (reasoning-field
+`make_llm`, `make_vlm`, `make_ocr`, `make_stt`, `make_tts`, and `make_embedding`. The SDK encapsulates the
+model wire formats and per-model quirks (reasoning-field
 aliasing, `chat_template_kwargs`, served-model-name strings) so callers
 never branch on backend.
 
@@ -313,6 +313,18 @@ table (`_MODEL_SERVICES` in model-servers, `_MODEL_PROCESSES` in a sample);
 a service name with no row fails fast at startup, and adding one row plus
 its config YAML is the only orchestrator edit the profile system ever
 needs.
+
+### Nemotron OCR v2
+
+Nemotron OCR v2 uses NVIDIA Image OCR NIM's `/v1/ocr` wire format, isolated
+behind `OCRService` and `make_ocr(...)`. A self-hosted NIM uses the
+`nemotron_ocr_v2` preset with `base_url: http://localhost:8000`; set
+`NIM_ENGINE_MODEL_DOWNLOAD_PROVIDER=hf` and `HF_TOKEN` to load its weights from
+Hugging Face. Hosted build.nvidia.com inference uses the full
+`https://ai.api.nvidia.com/v1/cv/nvidia/nemotron-ocr-v2` URL,
+`api_key_env: NGC_API_KEY`, `readiness: none`, and `request_path: null` in the
+adapter. See the complete local, hosted, and VLM-fallback profiles in the
+[`xr-ai-models` README](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md#nemotron-ocr-v2).
 
 ## Model-server persistence
 
