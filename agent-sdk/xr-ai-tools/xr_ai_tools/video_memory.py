@@ -104,16 +104,8 @@ class SampledVideoFrame(TimedImage):
         ge=0,
         description="Estimated Unix-epoch timestamp interpolated from recording chunk metadata.",
     )
-    path: str
     width: int
     height: int
-
-    @model_validator(mode="before")
-    @classmethod
-    def add_image_reference(cls, value: object) -> object:
-        if isinstance(value, dict) and "image" not in value and isinstance(value.get("path"), str):
-            return {**value, "image": {"uri": value["path"]}}
-        return value
 
 
 class SampleFramesResult(BaseModel):
@@ -138,16 +130,8 @@ class HistoricalFrameResult(TimedImage):
         ge=0,
         description="Estimated Unix-epoch timestamp interpolated from recording chunk metadata.",
     )
-    path: str
     width: int
     height: int
-
-    @model_validator(mode="before")
-    @classmethod
-    def add_image_reference(cls, value: object) -> object:
-        if isinstance(value, dict) and "image" not in value and isinstance(value.get("path"), str):
-            return {**value, "image": {"uri": value["path"]}}
-        return value
 
 
 class VideoHealthResult(BaseModel):

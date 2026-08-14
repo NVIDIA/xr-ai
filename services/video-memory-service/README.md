@@ -36,9 +36,10 @@ inference: the shipped Cosmos configuration accepts at most four images per
 prompt. Native-resolution PNGs and large budgets can produce substantial disk,
 decode, and RPC work, so interactive callers should use a modest budget and set
 paired `max_width` and `max_height` values. Those values fit each PNG within the
-box while preserving aspect ratio and never upscaling. Each sampled frame
-retains its `path` and implements the shared `TimedImage` contract accepted by
-`query_video` after the caller selects no more than the VLM's image limit.
+box while preserving aspect ratio and never upscaling. Each sampled or
+historical frame exposes its exported PNG only through the shared
+`TimedImage.image` reference accepted by `query_video`, after the caller selects
+no more than the VLM's image limit.
 
 Every `*_us` field is a Unix-epoch timestamp in microseconds. Exported-frame
 timestamps are estimates linearly interpolated from each chunk's start, end,

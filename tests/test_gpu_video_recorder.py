@@ -155,7 +155,7 @@ async def test_record_synthetic_frames():
                 "start_us": max(1, int(meta["start_us"])),
             },
         )
-        with Image.open(frame["path"]) as image:
+        with Image.open(frame["image"]["uri"]) as image:
             assert image.format == "PNG"
             assert image.size == (width, height)
 

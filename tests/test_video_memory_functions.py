@@ -453,8 +453,8 @@ async def test_latest_and_historical_sampling_share_window_semantics(
     ]
     for frame in result.frames:
         assert (frame.width, frame.height) == (2, 1)
-        assert frame.image.uri == frame.path
-        with Image.open(frame.path) as image:
+        assert "path" not in frame.model_dump()
+        with Image.open(frame.image.uri) as image:
             assert image.size == (2, 1)
 
 
@@ -620,11 +620,11 @@ async def test_recorded_frame_decodes_and_exports_png_through_native_rpc(
         finally:
             await video.close()
 
-    with Image.open(result.path) as image:
+    with Image.open(result.image.uri) as image:
         assert image.format == "PNG"
         assert image.size == (2, 2)
     assert result.timestamp_us == 1_000_000
-    assert result.image.uri == result.path
+    assert "path" not in result.model_dump()
 
 
 @pytest.mark.asyncio

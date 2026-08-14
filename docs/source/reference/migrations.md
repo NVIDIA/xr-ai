@@ -27,6 +27,7 @@ compatibility package. Update out-of-tree code as follows:
 | `HistoricalVisionTool` | Select with `VideoMemoryTools.get_historical_frame`, then pass its `ImageReference` to `ImageQueryTool`. |
 | Recorded `query_video(start_us, end_us)` RPC | Use `get_historical_video(start_us, duration_seconds)` or `get_latest_video(duration_seconds)`. The new `query_video` name is VLM inference over caller-selected `TimedImage` values. |
 | `get_frame_from_time(reference_time_us, second_ago)` | Subtract the offset in the caller and use `get_historical_frame(start_us)`. |
+| `HistoricalFrameResult.path` and `SampledVideoFrame.path` | Read the canonical exported-frame location from `result.image.uri`. |
 
 Pipecat remains an internal implementation detail of `xr-ai-voice`; applications
 no longer assemble or subclass its frame processors.

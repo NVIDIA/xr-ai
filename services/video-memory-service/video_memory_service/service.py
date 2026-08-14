@@ -209,7 +209,7 @@ class VideoMemoryService:
         except Exception as error:
             raise RPCError(f"Frame export failed: {error}", code="frame_export_error") from error
         return {
-            "path": str(path),
+            "image": {"uri": str(path)},
             "width": width,
             "height": height,
             "timestamp_us": timestamp_us,
@@ -303,7 +303,7 @@ class VideoMemoryService:
                     ) from error
                 sampled.append(
                     {
-                        "path": str(path),
+                        "image": {"uri": str(path)},
                         "width": width,
                         "height": height,
                         "timestamp_us": timestamp_us,
