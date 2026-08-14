@@ -260,7 +260,7 @@ def evict_local_listener(port: int, log_prefix: str) -> None:
             os.kill(pid, 0)
         os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
-        pass
+        pass  # the listener exiting is the goal state
 
 
 def stop_container(name: str, timeout_s: int = 20) -> bool:
