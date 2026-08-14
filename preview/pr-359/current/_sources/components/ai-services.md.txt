@@ -401,8 +401,11 @@ cleanup.
   newest recorded timestamp and require only a duration. Historical frame,
   video, and sampling requests share an absolute `start_us`; video windows add
   a duration. Sampling also accepts a hard total frame budget, decodes each
-  selected chunk once, and can bound exported PNG dimensions. Current frames
-  stay with the caller's hub client.
+  selected chunk once, skips unavailable or corrupt chunks when other frames
+  remain, and can bound exported PNG dimensions. The sampled timestamps are
+  estimates interpolated from chunk metadata. The selection budget may be up
+  to 256, but the shipped Cosmos VLM accepts no more than four selected images
+  per inference request. Current frames stay with the caller's hub client.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample's `yaml/` directory and set `model_cache` to

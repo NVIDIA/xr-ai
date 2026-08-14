@@ -23,6 +23,10 @@ compatibility package. Update out-of-tree code as follows:
 | `http_probe`, `mcp_probe`, and `wait_for_services` | Pass additional readiness callables through `VoiceSession(probes=...)`; MCP readiness is no longer part of the voice SDK. |
 | `xr_ai_pipecat.audio` conversion helpers | Let `VoiceSession` own media conversion. Applications that process raw hub media should use `xr_ai_hub` types and own their format conversion. |
 | `xr_ai_models.config`, `factory`, `openai_compat`, and `protocols` | Import public names directly from `xr_ai_models`. This includes `KIND_OPENAI_COMPAT`, `ModelKind`, `Category`, and `Spec`. |
+| `LiveVisionTool` and `StreamingVisionTool` | Select with `CurrentFrameTool`, then pass its `ImageReference` to `ImageQueryTool` or `StreamingImageQueryTool`. |
+| `HistoricalVisionTool` | Select with `VideoMemoryTools.get_historical_frame`, then pass its `ImageReference` to `ImageQueryTool`. |
+| Recorded `query_video(start_us, end_us)` RPC | Use `get_historical_video(start_us, duration_seconds)` or `get_latest_video(duration_seconds)`. The new `query_video` name is VLM inference over caller-selected `TimedImage` values. |
+| `get_frame_from_time(reference_time_us, second_ago)` | Subtract the offset in the caller and use `get_historical_frame(start_us)`. |
 
 Pipecat remains an internal implementation detail of `xr-ai-voice`; applications
 no longer assemble or subclass its frame processors.
