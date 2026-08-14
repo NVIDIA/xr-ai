@@ -280,6 +280,10 @@ To use any OpenAI-compatible VLM instead, change only the OCR role's adapter:
 }
 ```
 
+`request_path` is specific to the `nvidia_ocr` adapter and is rejected on the
+OpenAI-compatible VLM fallback. The endpoint-level `health_path` is honored by
+both backends.
+
 ## Tests
 
 `tests/test_models_*.py` exercise the wire format against a

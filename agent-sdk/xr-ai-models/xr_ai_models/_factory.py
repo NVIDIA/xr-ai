@@ -120,7 +120,6 @@ def make_ocr(config: ModelsConfig, name: str) -> OCRService:
             api_key_env=endpoint.api_key_env,
             timeout=endpoint.timeout,
             health_check=endpoint.health_check,
-            health_path=endpoint.health_path,
         )
     if adapter.kind == KIND_OPENAI_COMPAT:
         vlm = OpenAICompatVLM(
@@ -131,6 +130,7 @@ def make_ocr(config: ModelsConfig, name: str) -> OCRService:
             api_key_env=endpoint.api_key_env,
             timeout=endpoint.timeout,
             health_check=endpoint.health_check,
+            health_path=endpoint.health_path,
         )
         if adapter.prompt:
             return VLMOCR(vlm, prompt=adapter.prompt)

@@ -50,8 +50,9 @@ _OCR_RESPONSE = {
 
 
 class _OCRStub:
-    def __init__(self) -> None:
+    def __init__(self, ocr_response: object = _OCR_RESPONSE) -> None:
         self.requests: list[httpx.Request] = []
+        self.ocr_response = ocr_response
 
     def client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(transport=httpx.MockTransport(self._handle))
@@ -60,9 +61,11 @@ class _OCRStub:
         self.requests.append(request)
         if request.url.path == "/meter.png":
             return httpx.Response(200, content=_PNG, headers={"content-type": "image/png"})
+        if request.url.path == "/redirect.png":
+            return httpx.Response(302, headers={"location": "/meter.png"})
         if request.method == "GET":
             return httpx.Response(200, json={"ready": True})
-        return httpx.Response(200, json=_OCR_RESPONSE)
+        return httpx.Response(200, json=self.ocr_response)
 
 
 async def test_nvidia_ocr_sends_nim_payload_and_parses_detections(monkeypatch) -> None:
@@ -133,6 +136,19 @@ async def test_nvidia_ocr_downloads_http_images_without_leaking_api_key(
     assert ocr_request.headers["Authorization"] == "Bearer nvapi-test"
 
 
+async def test_nvidia_ocr_does_not_follow_image_redirects() -> None:
+    stub = _OCRStub()
+    client = stub.client()
+    ocr = NvidiaOCR("https://ocr.example.test", client=client)
+    try:
+        with pytest.raises(httpx.HTTPStatusError, match="302 Found"):
+            await ocr.recognize("https://images.example.test/redirect.png")
+    finally:
+        await client.aclose()
+
+    assert [request.url.path for request in stub.requests] == ["/redirect.png"]
+
+
 async def test_nvidia_ocr_accepts_hosted_full_invoke_url() -> None:
     stub = _OCRStub()
     client = stub.client()
@@ -174,17 +190,39 @@ async def test_nvidia_ocr_reads_local_path_and_rejects_unsupported_images(
     assert result.text == "12.7 V"
 
 
+@pytest.mark.parametrize(
+    ("payload", "error"),
+    [
+        ({"data": [{}, {}]}, "exactly one image result"),
+        ({"data": [{}]}, "must contain text_detections"),
+    ],
+)
+async def test_nvidia_ocr_rejects_malformed_responses(
+    payload: object,
+    error: str,
+) -> None:
+    stub = _OCRStub(payload)
+    client = stub.client()
+    ocr = NvidiaOCR("https://ocr.example.test", client=client)
+    try:
+        with pytest.raises(ValueError, match=error):
+            await ocr.recognize(_PNG)
+    finally:
+        await client.aclose()
+
+
 class _VLM:
     capabilities = Capabilities(vision=True)
 
-    def __init__(self) -> None:
+    def __init__(self, content: str = "  220 V  ") -> None:
         self.calls: list[tuple[Any, str, dict[str, Any]]] = []
         self.closed = False
+        self.content = content
 
     async def ask_image(self, image, question, **kwargs):
         self.calls.append((image, question, kwargs))
         return ChatResponse(
-            content="  220 V  ",
+            content=self.content,
             reasoning=None,
             tool_calls=None,
             finish_reason="stop",
@@ -213,6 +251,16 @@ async def test_vlm_ocr_adapts_any_vlm_to_the_same_protocol() -> None:
     ]
     assert vlm.closed is True
     assert isinstance(ocr, OCRService)
+
+
+async def test_vlm_ocr_preserves_an_empty_result() -> None:
+    ocr = VLMOCR(_VLM("  \n "))
+
+    result = await ocr.recognize(_PNG)
+
+    assert result.text == ""
+    assert result.detections == ()
+    assert result.model == "replacement-vlm"
 
 
 async def test_make_ocr_switches_backends_from_the_model_profile() -> None:
@@ -271,3 +319,53 @@ def test_hosted_profile_can_override_the_preset_request_path() -> None:
     assert spec.adapter.request_path is None
     assert spec.endpoint.health_check is False
     assert config.required_credentials == ("NGC_API_KEY",)
+
+
+def test_openai_ocr_rejects_nvidia_only_request_path() -> None:
+    adapter = {
+        "kind": "openai_compat",
+        "model_name": "vlm",
+        "capabilities": {"vision": True},
+        "request_path": "/custom",
+    }
+
+    with pytest.raises(ValueError, match="request_path"):
+        load_models_config_from_dict(
+            {
+                "models": {
+                    "ocr": {
+                        "category": "ocr",
+                        "adapter": adapter,
+                        "endpoint": {"base_url": "http://localhost:8100"},
+                    }
+                }
+            }
+        )
+
+
+async def test_openai_ocr_honors_endpoint_health_path() -> None:
+    config = load_models_config_from_dict(
+        {
+            "models": {
+                "ocr": {
+                    "category": "ocr",
+                    "adapter": {
+                        "kind": "openai_compat",
+                        "model_name": "vlm",
+                        "capabilities": {"vision": True},
+                    },
+                    "endpoint": {
+                        "base_url": "http://localhost:8100",
+                        "health_path": "/ready",
+                    },
+                }
+            }
+        }
+    )
+
+    ocr = make_ocr(config, "ocr")
+    try:
+        assert isinstance(ocr, VLMOCR)
+        assert ocr._vlm.health_url == "http://localhost:8100/ready"
+    finally:
+        await ocr.close()

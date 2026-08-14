@@ -108,7 +108,7 @@ class NvidiaOCR:
             kwargs: dict[str, Any] = {}
             if timeout is not None:
                 kwargs["timeout"] = timeout
-            response = await self._client.get(image, follow_redirects=True, **kwargs)
+            response = await self._client.get(image, follow_redirects=False, **kwargs)
             response.raise_for_status()
             mime = response.headers.get("content-type", "").split(";", 1)[0].lower()
             if mime not in _SUPPORTED_MIME_TYPES:

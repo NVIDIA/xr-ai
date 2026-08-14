@@ -96,6 +96,8 @@ change, even when an individual dependency publishes newer Python wheels.
     - `zxing-cpp>=2.3,<4`
     - `Pillow>=10.0`
     - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
+  - `ocr`:
+    - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `relay`:
     - `xr-ai-models` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
   - `services`:
@@ -557,7 +559,7 @@ change, even when an individual dependency publishes newer Python wheels.
   - `xr-ai-agent-runtime` → [`xr-ai-agent-runtime`](agent-sdk/xr-ai-runtime/) (local, editable)
   - `xr-ai-hub-client` → [`xr-ai-hub-client`](agent-sdk/xr-ai-hub/) (local, editable)
   - `xr-ai-models[riva]` → [`xr-ai-models`](agent-sdk/xr-ai-models/) (local, editable)
-  - `xr-ai-tools[frames,image-editing,marker-tracking,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
+  - `xr-ai-tools[frames,image-editing,marker-tracking,ocr,services,vision]` → [`xr-ai-tools`](agent-sdk/xr-ai-tools/) (local, editable)
   - `xr-ai-voice` → [`xr-ai-voice`](agent-sdk/xr-ai-voice/) (local, editable)
   - `xr-ai-web-events` → [`xr-ai-web-events`](agent-sdk/xr-ai-web-events/) (local, editable)
   - `xr-media-hub` → [`xr-media-hub`](services/xr-media-hub/) (local, editable)

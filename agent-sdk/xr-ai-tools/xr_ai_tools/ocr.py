@@ -18,7 +18,8 @@ class OCRRequest(StrictRequest):
     image: str = Field(
         min_length=1,
         description=(
-            "PNG or JPEG as a local path, HTTP(S) URL, or base64 data URL."
+            "PNG or JPEG as a base64 data URL, or an application-enabled "
+            "local path or HTTP(S) URL."
         ),
     )
     merge_level: OCRMergeLevel = Field(
@@ -47,8 +48,16 @@ class OCRResult(BaseModel):
 class OCRTool(Tool[OCRRequest, OCRResult]):
     """Read visible text from one image with an injected OCR service."""
 
-    def __init__(self, *, ocr: OCRService) -> None:
+    def __init__(
+        self,
+        *,
+        ocr: OCRService,
+        allow_local_paths: bool = False,
+        allow_remote_urls: bool = False,
+    ) -> None:
         self.ocr = ocr
+        self._allow_local_paths = allow_local_paths
+        self._allow_remote_urls = allow_remote_urls
         super().__init__(
             "read_image_text",
             "Read visible text and numeric equipment values from a PNG or JPEG image.",
@@ -59,7 +68,11 @@ class OCRTool(Tool[OCRRequest, OCRResult]):
         )
 
     async def _read(self, request: OCRRequest) -> OCRResult:
-        image = _image_input(request.image)
+        image = _image_input(
+            request.image,
+            allow_local_paths=self._allow_local_paths,
+            allow_remote_urls=self._allow_remote_urls,
+        )
         response = await self.ocr.recognize(
             image,
             merge_level=request.merge_level,
@@ -81,9 +94,20 @@ class OCRTool(Tool[OCRRequest, OCRResult]):
         )
 
 
-def _image_input(image: str) -> str | Path:
-    if image.startswith(("data:", "http://", "https://")):
+def _image_input(
+    image: str,
+    *,
+    allow_local_paths: bool,
+    allow_remote_urls: bool,
+) -> str | Path:
+    if image.startswith("data:"):
         return image
+    if image.startswith(("http://", "https://")):
+        if not allow_remote_urls:
+            raise ValueError("OCR remote URLs are disabled")
+        return image
+    if not allow_local_paths:
+        raise ValueError("OCR local paths are disabled")
     return Path(image)
 
 

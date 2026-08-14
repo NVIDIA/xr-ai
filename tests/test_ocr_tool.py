@@ -6,6 +6,7 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
 from xr_ai_models import OCRDetection, OCRPoint, OCRResponse
 from xr_ai_tools.ocr import OCRRequest, OCRTool
 
@@ -34,7 +35,7 @@ async def test_ocr_tool_reads_equipment_value_from_path(tmp_path: Path) -> None:
     image = tmp_path / "meter.png"
     image.write_bytes(b"image")
     service = _OCR()
-    tool = OCRTool(ocr=service)
+    tool = OCRTool(ocr=service, allow_local_paths=True)
 
     result = await tool.execute(OCRRequest(image=str(image), merge_level="word"))
 
@@ -50,6 +51,36 @@ async def test_ocr_tool_reads_equipment_value_from_path(tmp_path: Path) -> None:
         "model": "nvidia/nemotron-ocr-v2",
     }
     assert service.calls == [(image, "word")]
+
+
+@pytest.mark.parametrize(
+    ("image", "error"),
+    [
+        ("meter.png", "local paths are disabled"),
+        ("https://images.example.test/meter.png", "remote URLs are disabled"),
+    ],
+)
+async def test_ocr_tool_rejects_external_sources_by_default(
+    image: str,
+    error: str,
+) -> None:
+    service = _OCR()
+    tool = OCRTool(ocr=service)
+
+    with pytest.raises(RuntimeError, match=error):
+        await tool.execute(OCRRequest(image=image))
+
+    assert service.calls == []
+
+
+async def test_ocr_tool_allows_remote_urls_when_enabled() -> None:
+    service = _OCR()
+    tool = OCRTool(ocr=service, allow_remote_urls=True)
+    image = "https://images.example.test/meter.png"
+
+    await tool.execute(OCRRequest(image=image))
+
+    assert service.calls == [(image, "paragraph")]
 
 
 async def test_ocr_tool_model_visible_result_is_plain_text() -> None:

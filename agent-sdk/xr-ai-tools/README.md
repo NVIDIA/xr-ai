@@ -325,12 +325,13 @@ print(result.text)
 await ocr.close()
 ```
 
+Model-provided tool arguments are untrusted, so `OCRTool` accepts only inline
+base64 data URLs by default. Enable `allow_local_paths` or `allow_remote_urls`
+only when the application trusts those source types; local paths can expose
+host files and remote URLs can reach services available to the worker. Remote
+image downloads do not follow redirects.
+
 Programmatic callers receive reading-order text plus detections, confidences,
 and normalized bounding boxes. Model-selected calls see the plain recognized
 text. Switching to hosted Nemotron OCR v2, a self-hosted NIM using Hugging Face
 weights, or a VLM OCR fallback does not change the tool.
-
-Base64 data URLs are accepted by default. Local paths and HTTP(S) URLs are
-disabled unless the application opts in with `allow_local_paths=True` or
-`allow_remote_urls=True`. Treat model-provided tool arguments as untrusted:
-enable only the source types that the application controls.
