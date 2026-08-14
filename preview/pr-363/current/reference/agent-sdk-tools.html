@@ -473,9 +473,18 @@ transport remains isolated in <code class="docutils literal notranslate"><span c
 <p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[frames]</span></code> for live-frame selection and
 <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[vision]</span></code> for VLM queries. Image selection does not invoke a model:
 <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> returns an <code class="docutils literal notranslate"><span class="pre">ImageFrame</span></code>, while
-<code class="docutils literal notranslate"><span class="pre">VideoMemoryTools.get_frame_from_time</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_recorded_frames</span></code> return
-recorded frames. Every frame carries the same <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code>; timed frames
-also share the <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> contract consumed by video queries.</p>
+<code class="docutils literal notranslate"><span class="pre">VideoMemoryTools</span></code> groups recorded selection by timing:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">latest_tools</span></code> contains <code class="docutils literal notranslate"><span class="pre">get_latest_video</span></code> and <code class="docutils literal notranslate"><span class="pre">get_latest_frames</span></code>;
+their windows end at the newest recorded timestamp and require only
+<code class="docutils literal notranslate"><span class="pre">duration_seconds</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">historical_tools</span></code> contains <code class="docutils literal notranslate"><span class="pre">get_historical_frame</span></code>,
+<code class="docutils literal notranslate"><span class="pre">get_historical_frames</span></code>, and <code class="docutils literal notranslate"><span class="pre">get_historical_video</span></code>; they share one
+absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>, with video and sampling adding <code class="docutils literal notranslate"><span class="pre">duration_seconds</span></code>.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">get_current_frame</span></code> joins the latest group conceptually as the live-image
+equivalent. Every selected frame carries the same <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code>; timed
+frames also share the <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> contract consumed by video queries.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code> returns one complete <code class="docutils literal notranslate"><span class="pre">ImageQueryResult</span></code> for any image reference;
 <code class="docutils literal notranslate"><span class="pre">MultiImageQueryTool</span></code> queries an ordered image collection, and <code class="docutils literal notranslate"><span class="pre">VideoQueryTool</span></code>
 queries chronological <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> frames with their timestamps and relative
@@ -487,6 +496,7 @@ telemetry small. Query tools forward controlled Relay headers and redact every
 image location from VLM events while preserving provider input.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.current_frame</span><span class="w"> </span><span class="kn">import</span> <span class="n">CurrentFrameRequest</span><span class="p">,</span> <span class="n">CurrentFrameTool</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageReference</span><span class="p">,</span> <span class="n">ImageRegistry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.video_memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">LatestFramesRequest</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.vision</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">ImageQueryRequest</span><span class="p">,</span>
     <span class="n">ImageQueryTool</span><span class="p">,</span>
@@ -512,8 +522,14 @@ image location from VLM events while preserving provider input.</p>
     <span class="p">)</span>
 <span class="p">)</span>
 
-<span class="c1"># A bounded recorded lookup feeds the timed multi-image path directly.</span>
-<span class="n">sample</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video_memory</span><span class="o">.</span><span class="n">sample_recorded_frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sample_request</span><span class="p">)</span>
+<span class="c1"># The newest recorded window needs no caller-supplied timestamp.</span>
+<span class="n">sample</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video_memory</span><span class="o">.</span><span class="n">get_latest_frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">LatestFramesRequest</span><span class="p">(</span>
+        <span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span>
+        <span class="n">duration_seconds</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">frame_budget</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
 <span class="n">change</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
     <span class="n">VideoQueryRequest</span><span class="p">(</span><span class="n">frames</span><span class="o">=</span><span class="n">sample</span><span class="o">.</span><span class="n">frames</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">&quot;What changed over time?&quot;</span><span class="p">)</span>
 <span class="p">)</span>
