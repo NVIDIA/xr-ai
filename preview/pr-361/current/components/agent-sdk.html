@@ -649,10 +649,10 @@ boundaries. <code class="docutils literal notranslate"><span class="pre">xr_ai_t
 boundary. It has no voice or output-transport dependency. Both tools own their
 own frame sources and redact inline camera data from Relay events without
 changing provider input.</p>
-<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.qr_code.QRCodeTool</span></code> is an optional OpenCV-backed finite tool. It
+<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.qr_code.QRCodeTool</span></code> is an optional ZXing-C++-backed finite tool. It
 acquires a participant’s current frame, decodes all readable QR payloads off
 the event loop, and returns each payload with its four image-space corners.
-Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[qr-code]</span></code> to use it. OpenCV is the default extractor;
+Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[qr-code]</span></code> to use it. ZXing-C++ is the default extractor;
 applications can inject any sync or async callable that accepts an RGB PIL
 image and returns the same typed payload contract, including a model-backed
 implementation that does not provide corner coordinates.</p>
