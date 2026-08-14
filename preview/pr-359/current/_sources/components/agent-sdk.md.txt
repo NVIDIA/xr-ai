@@ -262,13 +262,13 @@ The package does not implement an agent, model loop, Hub transport, or implicit
 conversation store. Applications own prompts, LLM calls, history, iteration,
 foreground selection, workflow state, and background work.
 
-`xr_ai_tools.live_vision.LiveVisionTool` is the finite current-frame tool; it
-returns one complete observation through Relay's managed tool and LLM
-boundaries. `xr_ai_tools.streaming_vision.StreamingVisionTool` is a separate
-`AsyncTool` that yields typed chunks around Relay's managed streaming LLM
-boundary. It has no voice or output-transport dependency. Both tools own their
-own frame sources and redact inline camera data from Relay events without
-changing provider input.
+Image selection is independent of inference. `CurrentFrameTool` returns a live
+`ImageFrame`; `VideoMemoryTools` returns recorded frames. Their lightweight
+`ImageReference` values can be passed to finite `ImageQueryTool` or streaming
+`StreamingImageQueryTool`, and the same query tools accept caller-supplied local
+paths and HTTP(S) URLs. A bounded `ImageRegistry` keeps live bytes behind opaque
+handles so tool results and Relay telemetry do not scale with image size. VLM
+events redact image locations without changing provider input.
 
 Applications place native tools and model loops inside an agent to group tools
 with their state, and register the agent with `xr-ai-agent-runtime` when they

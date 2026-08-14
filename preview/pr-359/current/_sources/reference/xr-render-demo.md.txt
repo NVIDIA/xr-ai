@@ -115,8 +115,8 @@ Port 8100 (`vlm-server`).
 
 Loaded in-process by `vlm-server` via HuggingFace transformers
 (Qwen2.5-VL architecture). `<think>…</think>` blocks are stripped before
-returning. Native vision tools read recorded images or acquire a current
-participant frame, encode it as an image URL, and invoke the shared
+returning. The render agent selects a current or recorded frame first, then
+passes its `ImageReference` to the shared `query_image` tool backed by the
 `xr-ai-models` VLM service.
 
 There is a deliberate startup ordering constraint: `VoiceSession` readiness

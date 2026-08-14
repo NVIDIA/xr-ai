@@ -642,13 +642,13 @@ call and returns the tool-role message.</p>
 <p>The package does not implement an agent, model loop, Hub transport, or implicit
 conversation store. Applications own prompts, LLM calls, history, iteration,
 foreground selection, workflow state, and background work.</p>
-<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.live_vision.LiveVisionTool</span></code> is the finite current-frame tool; it
-returns one complete observation through Relay’s managed tool and LLM
-boundaries. <code class="docutils literal notranslate"><span class="pre">xr_ai_tools.streaming_vision.StreamingVisionTool</span></code> is a separate
-<code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code> that yields typed chunks around Relay’s managed streaming LLM
-boundary. It has no voice or output-transport dependency. Both tools own their
-own frame sources and redact inline camera data from Relay events without
-changing provider input.</p>
+<p>Image selection is independent of inference. <code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> returns a live
+<code class="docutils literal notranslate"><span class="pre">ImageFrame</span></code>; <code class="docutils literal notranslate"><span class="pre">VideoMemoryTools</span></code> returns recorded frames. Their lightweight
+<code class="docutils literal notranslate"><span class="pre">ImageReference</span></code> values can be passed to finite <code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code> or streaming
+<code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code>, and the same query tools accept caller-supplied local
+paths and HTTP(S) URLs. A bounded <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code> keeps live bytes behind opaque
+handles so tool results and Relay telemetry do not scale with image size. VLM
+events redact image locations without changing provider input.</p>
 <p>Applications place native tools and model loops inside an agent to group tools
 with their state, and register the agent with <code class="docutils literal notranslate"><span class="pre">xr-ai-agent-runtime</span></code> when they
 need pub/sub. Relay remains responsible for tool and model execution; the
