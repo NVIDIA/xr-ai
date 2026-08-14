@@ -45,9 +45,8 @@ from xr_ai_voicegate._phrases import STOP_RE
 from .._frames import ParticipantLeftFrame
 
 
-# True acknowledges, False requests another bounded probe, and None rejects
-# the prefix so ordinary ambient speech does not consume all probe attempts.
-PartialTranscriptHandler = Callable[[str, str], Awaitable[bool | None]]
+# True acknowledges and False requests another bounded probe.
+PartialTranscriptHandler = Callable[[str, str], Awaitable[bool]]
 _MAX_PARTIAL_PROBES = 3
 
 
@@ -342,8 +341,6 @@ class VadSttProcessor(FrameProcessor):
                     return
                 if decision is True:
                     logger.info("early wake phrase acknowledged pid={!r}", pid)
-                    return
-                if decision is None:
                     return
 
     async def _transcribe(

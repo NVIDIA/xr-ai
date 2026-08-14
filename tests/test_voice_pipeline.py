@@ -539,32 +539,6 @@ async def test_vad_stt_retries_partial_probe_after_background_sentence(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_vad_stt_stops_partial_probes_after_rejected_prefix(monkeypatch):
-    _StagedVad.instances.clear()
-    stt = _StagedStt(texts=["ordinary room conversation"])
-
-    async def reject_partial(_pid: str, _text: str) -> bool | None:
-        return None
-
-    monkeypatch.setattr("xr_ai_voice._processors.vad_stt.VadDetector", _StagedVad)
-    proc = VadSttProcessor(
-        stt=stt,
-        vad_cfg=VadConfig(stop_probe_after_s=0.05),
-        on_partial_transcript=reject_partial,
-    )
-    frame = InputAudioRawFrame(
-        audio=b"\x00\x00" * 320,
-        sample_rate=16000,
-        num_channels=1,
-    )
-    frame.transport_source = "web-client"
-
-    await _run_chain(proc, sends=[frame], settle_s=0.25)
-
-    assert len(stt.calls) == 1
-
-
-@pytest.mark.asyncio
 async def test_vad_stt_stop_probe_emits_interruption_on_stop_match(monkeypatch):
     """When the probe's partial transcript matches ``STOP_RE`` the
     processor pushes ``InterruptionFrame`` + the matched
