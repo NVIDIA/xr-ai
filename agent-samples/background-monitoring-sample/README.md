@@ -5,12 +5,12 @@
 
 # Background monitoring sample
 
-This file-only sample keeps one visual monitor available for every connected
-participant while a separate foreground agent answers voice or typed queries.
+This sample writes monitoring output only to files and keeps one visual monitor
+available for every connected participant while a separate foreground agent answers voice or typed queries.
 Monitoring stays dormant until the foreground model calls the monitor's
 participant-scoped start tool. The model can also inspect the current frame or
-read recent monitor observations. There is no sample web UI, MCP adapter, NAT
-compatibility layer, or activity-viewer process.
+read recent monitor observations. The shared connection web client is served, but there is no monitoring dashboard,
+MCP adapter, NAT compatibility layer, or activity-viewer process.
 
 The worker composes peer agents through typed runtime topics:
 
@@ -26,9 +26,10 @@ voice STT / typed text ─┬> TranscriptAgent ───────────
 MonitorAgent while active ──> current frame → image query ──> monitor.jsonl
 ```
 
-`MonitorAgent` and `ForegroundAgent` each own an independent image registry,
-`CurrentFrameTool`, and `ImageQueryTool`. The monitor periodically selects and
-queries a frame only while its participant-scoped background task is active.
+`ParticipantImageAgent` owns the shared image registry, `CurrentFrameTool`, and
+participant image cleanup. The monitor and foreground agents own their respective
+`ImageQueryTool` instances and acquire frames through that image agent. The monitor
+periodically queries a frame only while its participant-scoped task is active.
 It also owns idempotent `start_monitoring`, `stop_monitoring`, and
 `monitoring_status` tools. The foreground agent exposes its own composed
 current-view tool and calls the monitor's control tools directly, binding the
@@ -59,8 +60,9 @@ uv run background_monitoring_sample
 ```
 
 Connect a glasses or platform client using the authenticated LiveKit URL,
-room, and token printed by the hub. Port 8080 retains token and signaling
-routes, but `web_client_dir` is empty and no static web application is served.
+room, and token printed by the hub. Port 8080 serves the shared connection web client together with the authenticated
+token and signaling routes. Monitoring output remains file-only; no monitoring
+dashboard is included.
 
 Ask the foreground assistant to start a background task with an optional focus,
 for example “watch for packages near the doorway.” It can report status or stop

@@ -67,7 +67,7 @@ _ALLOWED_LEGACY_REFERENCES = {
 }
 _HUB_PROJECT = _ROOT / "services" / "xr-media-hub"
 _SAMPLE_WEB_CLIENTS = {
-    "background-monitoring-sample": None,
+    "background-monitoring-sample": _ROOT / "client-samples" / "web",
     "simple-vlm-example": _ROOT / "client-samples" / "web",
     "xr-render-demo": _ROOT / "client-samples" / "web-xr",
 }
@@ -315,13 +315,9 @@ def test_hub_configuration_web_client_paths_resolve(monkeypatch) -> None:
     for config_path in config_paths:
         config = yaml.safe_load(config_path.read_text())
         sample = config_path.parents[1].name
-        expected = _SAMPLE_WEB_CLIENTS[sample]
-        if expected is None:
-            assert config["web_client_dir"] == ""
-        else:
-            assert (config_path.parent / config["web_client_dir"]).resolve() == (
-                expected
-            )
+        assert (config_path.parent / config["web_client_dir"]).resolve() == (
+            _SAMPLE_WEB_CLIENTS[sample]
+        )
 
 
 def test_tracked_text_has_no_retired_service_paths() -> None:

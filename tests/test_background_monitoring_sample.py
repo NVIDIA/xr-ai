@@ -77,7 +77,7 @@ def _make_monitor(endpoint: SimpleNamespace | None = None) -> MonitorAgent:
     )
 
 
-def test_sample_uses_named_native_agents_without_legacy_or_web_ui() -> None:
+def test_sample_uses_named_native_agents_and_shared_connection_client() -> None:
     project = tomllib.loads((_WORKER / "pyproject.toml").read_text())
     dependencies = set(project["project"]["dependencies"])
     package = _WORKER / "background_monitoring_worker"
@@ -90,18 +90,23 @@ def test_sample_uses_named_native_agents_without_legacy_or_web_ui() -> None:
         "events.py",
         "file_output.py",
         "foreground.py",
+        "images.py",
         "monitor.py",
+        "qr_instruments.py",
         "transcript.py",
     } <= {path.name for path in package.glob("*.py")}
     assert "xr-ai-agent-runtime" in dependencies
-    assert "xr-ai-tools[frames,vision]" in dependencies
+    assert "xr-ai-tools[frames,image-editing,qr-code,vision]" in dependencies
     assert "xr-ai-voice" in dependencies
     assert "xr-ai-nat" not in dependencies
     assert "xr-ai-pipecat" not in dependencies
     assert all("mcp" not in dependency.lower() for dependency in dependencies)
     hub = yaml.safe_load((_SAMPLE / "yaml" / "xr_media_hub.yaml").read_text())
     assert hub["enable_token_server"] is True
-    assert hub["web_client_dir"] == ""
+    assert (
+        (_SAMPLE / "yaml" / hub["web_client_dir"]).resolve()
+        == _REPO / "client-samples" / "web"
+    )
     assert not any(path.name == "web" for path in _SAMPLE.iterdir())
 
 
