@@ -169,7 +169,9 @@ xr-ai-vllm  (utils/xr-ai-vllm/)
     `--stop` flow.  Besides `serve` / `stop_persistent_servers`, exposes the
     shared wrapper helpers `resolve_model_cache`, `load_config`, `setup_hf_env`,
     and `gpu_compute_major` (all stdlib-only; pyyaml is imported function-locally
-    inside `load_config` so the `--stop` path stays dependency-free).
+    inside `load_config` so the `--stop` path stays dependency-free). Docker
+    containers carry a deterministic launch fingerprint; containers created
+    with stale model, image, GPU, or vLLM arguments are replaced before reuse.
 
 xr-ai-vad  (utils/xr-ai-vad/)
     └── numpy >=1.24
