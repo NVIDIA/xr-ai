@@ -62,6 +62,14 @@ LAB_INSTRUMENTS_READ_TOOL = "lab_instruments__read"
 LAB_INSTRUMENTS_START_TOOL = "lab_instruments__start"
 LAB_INSTRUMENTS_STOP_TOOL = "lab_instruments__stop"
 _MAX_TOOL_ROUNDS = 4
+_STATE_CHANGING_TOOLS = frozenset(
+    {
+        VISUAL_MONITOR_START_TOOL,
+        VISUAL_MONITOR_STOP_TOOL,
+        LAB_INSTRUMENTS_START_TOOL,
+        LAB_INSTRUMENTS_STOP_TOOL,
+    }
+)
 
 _CURRENT_VIEW_DESCRIPTION = (
     "Access the glasses camera for current or deictic visual requests, including "
@@ -198,6 +206,7 @@ def required_foreground_tool(query: str) -> str | None:
         or "start monitoring" in normalized
         or "keep an eye" in normalized
         or "watch for" in normalized
+        or normalized.startswith(("watch ", "please watch "))
     )
     if instrument:
         if status:
@@ -331,7 +340,15 @@ class ForegroundAgent(Agent):
                 return
 
     async def _answer(self, query: str, participant_id: str) -> tuple[str, list[str]]:
-        tools = self._participant_tools(participant_id)
+        required_tool = required_foreground_tool(query)
+        participant_tools = self._participant_tools(participant_id)
+        tools = ToolSet(
+            {
+                name: tool
+                for name, tool in participant_tools.items()
+                if name not in _STATE_CHANGING_TOOLS or name == required_tool
+            }
+        )
         definitions = tool_definitions(tools)
         messages = [
             ChatMessage(role="system", content=self._prompt),
@@ -345,7 +362,6 @@ class ForegroundAgent(Agent):
             ),
         ]
         used: list[str] = []
-        required_tool = required_foreground_tool(query)
         for round_index in range(_MAX_TOOL_ROUNDS):
             response = await self._llm.chat(
                 messages,

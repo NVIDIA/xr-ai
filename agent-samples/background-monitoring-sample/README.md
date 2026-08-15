@@ -7,8 +7,9 @@
 
 This sample writes monitoring output only to files and keeps one visual monitor
 available for every connected participant while a separate foreground agent answers voice or typed queries.
-Monitoring stays dormant until the foreground model calls the monitor's
-participant-scoped start tool. The model can also inspect the current frame or
+Monitoring stays dormant until the current request explicitly asks to start it;
+only then does the foreground agent expose the matching participant-scoped
+start tool to the model. The model can also inspect the current frame or
 read recent monitor observations. The shared connection web client is served, but there is no monitoring dashboard,
 MCP adapter, NAT compatibility layer, or activity-viewer process.
 
@@ -38,7 +39,9 @@ participant before every operation.
 
 `FileOutputAgent` owns structured durable outputs and the bounded recent-history
 tool. `QRInstrumentAgent` separately writes source-frame snapshots used to debug
-QR extraction.
+QR extraction. The shared QR decoder scans the whole frame at native resolution
+and at one enlarged resolution, then maps every decoded corner back to the source
+frame.
 
 Each foreground turn starts with only the system prompt and current request.
 Its native tool loop uses the tea-making sample's namespaced route catalog and

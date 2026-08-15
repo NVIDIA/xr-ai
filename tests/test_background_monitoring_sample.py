@@ -46,8 +46,11 @@ from background_monitoring_worker.file_output import (  # noqa: E402  # pyright:
 from background_monitoring_worker.foreground import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     CURRENT_VIEW_TOOL,
     FOREGROUND_TOOL_DEFS,
+    LAB_INSTRUMENTS_START_TOOL,
+    LAB_INSTRUMENTS_STOP_TOOL,
     RECENT_VISUAL_HISTORY_TOOL,
     VISUAL_MONITOR_START_TOOL,
+    VISUAL_MONITOR_STOP_TOOL,
     ForegroundAgent,
 )
 from background_monitoring_worker.images import (  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -417,6 +420,44 @@ async def test_foreground_background_control_returns_direct(tmp_path: Path) -> N
         assert status.active is True
 
         await monitor.stop()
+
+
+@pytest.mark.asyncio
+async def test_foreground_hides_monitor_controls_without_explicit_intent(
+    tmp_path: Path,
+) -> None:
+    class Llm:
+        def __init__(self) -> None:
+            self.tool_names: set[str] = set()
+
+        async def chat(self, _messages, *, tools, **_kwargs):
+            self.tool_names = {tool.name for tool in tools}
+            return ChatResponse("I heard you.", None, None, "stop", {})
+
+    llm = Llm()
+    images = _make_images()
+    agent = ForegroundAgent(
+        llm=llm,  # type: ignore[arg-type]
+        images=images,
+        vlm=SimpleNamespace(),  # type: ignore[arg-type]
+        files=FileOutputAgent(tmp_path, history_size=2),
+        monitor=_make_monitor(images),
+        qr_instruments=_make_qr(images),
+        prompt="Route one request.",
+    )
+
+    response, used = await agent._answer("To Peter.", "participant-2")
+
+    assert response == "I heard you."
+    assert used == []
+    assert llm.tool_names.isdisjoint(
+        {
+            VISUAL_MONITOR_START_TOOL,
+            VISUAL_MONITOR_STOP_TOOL,
+            LAB_INSTRUMENTS_START_TOOL,
+            LAB_INSTRUMENTS_STOP_TOOL,
+        }
+    )
 
 
 @pytest.mark.asyncio
