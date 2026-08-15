@@ -18,7 +18,7 @@ from xr_ai_runtime import AgentRuntime
 from xr_ai_tools.current_frame import CurrentFrameTool
 from xr_ai_tools.image import ImageRegistry
 from xr_ai_tools.vision import StreamingImageQueryTool
-from xr_ai_voice import VadConfig, VoiceAgent, VoiceSession
+from xr_ai_voice import VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .agent import (
@@ -76,7 +76,8 @@ async def run_app(
     vlm = make_vlm(models, "vlm")
     tts = make_tts(models, "tts")
 
-    session = VoiceSession(
+    voice = VoiceAgent(
+        query_topic=USER_QUERY_TOPIC,
         stt=stt,
         tts=tts,
         vad=VadConfig(
@@ -90,6 +91,10 @@ async def run_app(
         closeables=(vlm,),
         text_topic="vlm.response",
         idle_timeout_secs=config.idle_timeout_secs,
+        text_transform=_text_transform(config.default_prompt),
+        participant_left_topic=PARTICIPANT_LEFT_TOPIC,
+        interrupted_topic=INTERRUPTED_TOPIC,
+        interrupt_on_supersede=True,
     )
 
     runtime = AgentRuntime()
@@ -99,7 +104,7 @@ async def run_app(
         SimpleVlmAgent(
             lambda: (
                 CurrentFrameTool(
-                    endpoint=session.endpoint,
+                    endpoint=voice.endpoint,
                     images=images,
                     frame_max_age_s=config.frame_max_age_s,
                     frame_timeout_s=config.frame_timeout_s,
@@ -110,20 +115,8 @@ async def run_app(
                     system_prompt=config.system_prompt,
                 ),
             ),
-            lambda status, participant_id: session.endpoint.set_status(
-                status,
-                participant_id,
-            ),
+            voice.endpoint.set_status,
         ),
-    )
-
-    voice = VoiceAgent(
-        session,
-        query_topic=USER_QUERY_TOPIC,
-        text_transform=_text_transform(config.default_prompt),
-        participant_left_topic=PARTICIPANT_LEFT_TOPIC,
-        interrupted_topic=INTERRUPTED_TOPIC,
-        interrupt_on_supersede=True,
     )
     runtime.register("voice", voice)
 

@@ -8,10 +8,12 @@ One call composes:
     input → VadStt → VoiceGate → runtime I/O → StreamingTts → output
 
 and returns the assembled :class:`Pipeline` plus a :class:`PipelineWorker`
-ready for :meth:`WorkerRunner.run`. :class:`VoiceSession` owns this private
-assembly path.
+ready for :meth:`WorkerRunner.run`. `VoiceAgent` owns this private assembly
+path through its internal media session.
 """
 from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker
@@ -34,6 +36,7 @@ def _build_voice_pipeline(
     io_processor: _VoiceIOProcessor,
     vad_cfg: VadConfig,
     voice_gate_cfg: VoiceGateConfig,
+    on_final_transcript: Callable[[str, str, int], Awaitable[None]] | None = None,
     text_topic: str = "agent.response",
     idle_timeout_secs: float | None = None,
 ) -> tuple[Pipeline, PipelineWorker]:
@@ -75,6 +78,7 @@ def _build_voice_pipeline(
             if voice_gate_proc.early_wake_ack_enabled
             else None
         ),
+        on_final_transcript=on_final_transcript,
     )
 
     pipeline = Pipeline([

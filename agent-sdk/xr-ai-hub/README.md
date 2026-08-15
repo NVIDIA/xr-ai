@@ -89,6 +89,3 @@ read raw pixels. A slot remains owned until `release_slot()`. The msgpack codec
 supports application payload types through `register_encoder` and
 `register_decoder`; choose new type identifiers without changing existing
 wire tags.
-
-`on_audio()` and `on_data()` both return idempotent unsubscribe callbacks for
-owners that need to detach before the endpoint itself stops.

@@ -12,12 +12,14 @@ from contextlib import asynccontextmanager
 
 import nemo_relay
 import pytest
+import xr_ai_voice
 from pydantic import ValidationError
 from xr_ai_hub import AudioChunk, DataMessage, MsgType
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import (
     VOICE_AUDIO_TOPIC,
     VOICE_OUTPUT_TOPIC,
+    VOICE_TRANSCRIPT_TOPIC,
     UserQuery,
     VoiceAgent,
     VoiceAudio,
@@ -25,6 +27,7 @@ from xr_ai_voice import (
     VoiceOutput,
     VoiceParticipantLeft,
     VoiceStreamClosedError,
+    VoiceTranscript,
 )
 from xr_ai_voice import _runtime as voice_runtime_module
 from xr_ai_voice._types import VoiceQuery
@@ -170,6 +173,20 @@ class _AudioRecorder(Agent):
         while len(self.messages) < count:
             self.changed.clear()
             await self.changed.wait()
+
+
+class _TranscriptRecorder(Agent):
+    def __init__(self) -> None:
+        super().__init__()
+        self.messages: list[tuple[str | None, str, VoiceTranscript]] = []
+        self.changed = asyncio.Event()
+
+    @subscribe(VOICE_TRANSCRIPT_TOPIC)
+    async def record(self, transcript: VoiceTranscript, ctx: RuntimeContext) -> None:
+        self.messages.append(
+            (ctx.metadata.participant_id, ctx.metadata.source, transcript)
+        )
+        self.changed.set()
 
 
 class _BlockingAudioRecorder(Agent):
@@ -338,6 +355,75 @@ async def test_voice_agent_publishes_to_configured_query_topic() -> None:
     assert session.closed is True
 
 
+async def test_voice_agent_publishes_final_transcript_before_query_gating() -> None:
+    session = _Session()
+    transcripts = _TranscriptRecorder()
+    queries = _InputRecorder()
+    runtime = AgentRuntime()
+    runtime.register("transcripts", transcripts)
+    runtime.register("queries", queries)
+    voice = VoiceAgent(  # type: ignore[arg-type]
+        session,
+        query_topic=QUERY_TOPIC,
+        text_input=False,
+    )
+    runtime.register("voice", voice)
+
+    async with _running_voice(runtime, voice, session):
+        await session.run_options["on_transcript"](
+            "alice",
+            "background conversation",
+            123,
+        )
+
+    assert transcripts.messages == [
+        (
+            "alice",
+            "voice",
+            VoiceTranscript(text="background conversation", timestamp_us=123),
+        )
+    ]
+    assert queries.messages == []
+    assert VOICE_TRANSCRIPT_TOPIC.telemetry == "full"
+
+
+async def test_transcript_subscriber_failure_does_not_block_accepted_query() -> None:
+    class FailingTranscriptAgent(Agent):
+        @subscribe(VOICE_TRANSCRIPT_TOPIC)
+        async def fail(
+            self,
+            _transcript: VoiceTranscript,
+            _ctx: RuntimeContext,
+        ) -> None:
+            raise RuntimeError("subscriber failed")
+
+    session = _Session()
+    queries = _InputRecorder()
+    runtime = AgentRuntime()
+    runtime.register("failing-transcript", FailingTranscriptAgent())
+    runtime.register("queries", queries)
+    voice = VoiceAgent(  # type: ignore[arg-type]
+        session,
+        query_topic=QUERY_TOPIC,
+        text_input=False,
+    )
+    runtime.register("voice", voice)
+
+    async with _running_voice(runtime, voice, session):
+        await session.run_options["on_transcript"]("alice", "hey agent listen", 7)
+        assert session.handler is not None
+        await session.handler(
+            VoiceQuery(
+                participant_id="alice",
+                text="listen",
+                timestamp_us=7,
+            )
+        )
+        await asyncio.wait_for(queries.changed.wait(), 1.0)
+
+    assert [query.text for _pid, _source, query in queries.messages] == ["listen"]
+
+
 async def test_voice_agent_publishes_every_raw_audio_chunk_before_query_gating(
     make_processor,
 ) -> None:
@@ -374,7 +460,6 @@ async def test_voice_agent_publishes_every_raw_audio_chunk_before_query_gating(
         )
     ]
     assert VOICE_AUDIO_TOPIC.telemetry == "none"
-    assert endpoint._audio_cbs == []  # noqa: SLF001
     assert voice._audio_owned_tasks == set()  # noqa: SLF001
 
 
@@ -508,7 +593,6 @@ async def test_voice_agent_cancels_inflight_audio_publication_on_shutdown(
     assert recorder.cancelled.is_set()
     assert voice._audio_queues == {}  # noqa: SLF001
     assert voice._audio_owned_tasks == set()  # noqa: SLF001
-    assert endpoint._audio_cbs == []  # noqa: SLF001
 
 
 async def test_participant_left_awaits_audio_worker_cleanup(make_processor) -> None:
@@ -1065,3 +1149,8 @@ def test_voice_agent_rejects_nonpositive_audio_capacity() -> None:
             query_topic=QUERY_TOPIC,
             audio_capacity=0,
         )
+
+
+def test_voice_session_is_not_part_of_the_public_api() -> None:
+    assert "VoiceSession" not in xr_ai_voice.__all__
+    assert not hasattr(xr_ai_voice, "VoiceSession")

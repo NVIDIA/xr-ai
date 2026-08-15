@@ -37,8 +37,8 @@ async def _reannounce_status(transport: HubVoiceTransport) -> None:
             logger.opt(exception=True).warning("agent-status reannouncement failed")
 
 
-class VoiceSession:
-    """Own readiness, transport, pipeline execution, signals, and cleanup."""
+class _VoiceSession:
+    """Private media engine owned by :class:`VoiceAgent`."""
 
     def __init__(
         self,
@@ -87,7 +87,7 @@ class VoiceSession:
         """Whether the session currently accepts voice or text queries."""
         return self._io_processor is not None
 
-    async def __aenter__(self) -> "VoiceSession":
+    async def __aenter__(self) -> "_VoiceSession":
         if self._closed:
             raise RuntimeError("voice session is closed")
         probes = {
@@ -107,6 +107,7 @@ class VoiceSession:
         self,
         input_sink: VoiceInputSink,
         *,
+        on_transcript: Callable[[str, str, int], Awaitable[None]] | None = None,
         on_participant_left: Callable[[str], Awaitable[None] | None] | None = None,
         on_interrupted: Callable[[str | None], Awaitable[None] | None] | None = None,
         interrupt_on_supersede: bool = False,
@@ -129,6 +130,7 @@ class VoiceSession:
             io_processor=io_processor,
             vad_cfg=self.vad,
             voice_gate_cfg=self.voice_gate,
+            on_final_transcript=on_transcript,
             text_topic=self.text_topic,
             idle_timeout_secs=self.idle_timeout_secs,
         )

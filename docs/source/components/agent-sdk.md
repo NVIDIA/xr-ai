@@ -120,24 +120,29 @@ chunks per stream. A full queue drops its oldest queued chunk to retain the
 newest live audio. Subscriber failures do not stop later chunks, and all audio
 workers are cancelled and awaited during cleanup.
 
+Every non-empty final STT result is also published before wake-phrase filtering
+on `VOICE_TRANSCRIPT_TOPIC` as `VoiceTranscript`. This includes speech that the
+gate rejects because it contains no wake phrase. Early wake/STOP probes remain
+private and are not published as final transcripts. Accepted speech is
+published separately as `UserQuery` after the gate removes the wake phrase and
+any preceding background speech.
+
 Accepted speech and typed text are published as `UserQuery` events, participant
 and interruption lifecycle events use application-named topics, and voice
-consumes `voice.output`. `VoiceSession` owns model readiness, hub transport,
-voice gating, the media pipeline, signal handling, and cleanup. Pipecat remains
-an implementation detail for current samples.
+consumes `voice.output`. `VoiceAgent` privately owns model readiness, hub
+transport, voice gating, the media pipeline, signal handling, and cleanup.
+Pipecat and the media session remain implementation details.
 
 ```python
 voice = VoiceAgent(
-    VoiceSession(
-        stt=stt,
-        tts=tts,
-        vad=VadConfig(),
-        voice_gate=voice_gate_config,
-        probes={"vlm": vlm.health},
-        ready_file=ready_file,
-        closeables=(vlm,),
-    ),
     query_topic=queries,
+    stt=stt,
+    tts=tts,
+    vad=VadConfig(),
+    voice_gate=voice_gate_config,
+    probes={"vlm": vlm.health},
+    ready_file=ready_file,
+    closeables=(vlm,),
     participant_left_topic=participant_left,
 )
 runtime.register("voice", voice)
@@ -146,11 +151,12 @@ async with runtime:
     await voice.run(runtime)
 ```
 
-The session opens hub transport only after readiness probes succeed and touches
-the ready file after its receive loop starts. It preserves participant routing,
-cancels superseded or interrupted output, and closes transports and model
-clients. Application agents subscribe to lifecycle events and clean up their
-own participant state.
+The private session opens hub transport only after readiness probes succeed and
+touches the ready file after its receive loop starts. `VoiceAgent.endpoint` and
+`VoiceAgent.transport` expose that owned hub boundary when another component
+needs it. The agent preserves participant routing, cancels superseded or
+interrupted output, and closes transports and model clients. Application agents
+subscribe to lifecycle events and clean up their own participant state.
 
 ## Hub IPC
 

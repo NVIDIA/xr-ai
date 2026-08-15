@@ -7,17 +7,24 @@ from __future__ import annotations
 
 import asyncio
 from builtins import BaseExceptionGroup
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from xr_ai_hub import AudioChunk, DataMessage
+from xr_ai_hub import AudioChunk, DataMessage, ProcessorEndpoint
+from xr_ai_models import STTService, TTSService
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
+from xr_ai_voicegate import VoiceGateConfig
 
-from ._session import VoiceSession
+from ._processors import VadConfig
+from ._readiness import ProbeFn
+from ._session import _VoiceSession
+from ._transport import HubVoiceTransport
 from ._types import VoiceQuery
 
 QueryTransform = Callable[[str], str]
@@ -32,6 +39,15 @@ class VoiceStreamClosedError(ValueError):
 
 class UserQuery(BaseModel):
     """One accepted user query emitted by the voice input boundary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1)
+    timestamp_us: int = Field(ge=0)
+
+
+class VoiceTranscript(BaseModel):
+    """One final STT result emitted before voice-gate filtering."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -89,6 +105,7 @@ class VoiceOutput(BaseModel):
 
 
 VOICE_AUDIO_TOPIC = Topic("voice.audio", VoiceAudio, telemetry="none")
+VOICE_TRANSCRIPT_TOPIC = Topic("voice.transcript", VoiceTranscript)
 VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput, telemetry="none")
 
 
@@ -175,9 +192,19 @@ class VoiceAgent(Agent):
 
     def __init__(
         self,
-        session: VoiceSession,
+        _session: _VoiceSession | None = None,
         *,
         query_topic: Topic[UserQuery],
+        stt: STTService | None = None,
+        tts: TTSService | None = None,
+        vad: VadConfig | None = None,
+        voice_gate: VoiceGateConfig | None = None,
+        probes: Mapping[str, ProbeFn] | None = None,
+        ready_file: Path | None = None,
+        closeables: Iterable[Any] = (),
+        text_topic: str = "agent.response",
+        idle_timeout_secs: float | None = None,
+        transport: HubVoiceTransport | None = None,
         response_capacity: int = 32,
         audio_capacity: int = 32,
         text_input: bool = True,
@@ -191,14 +218,47 @@ class VoiceAgent(Agent):
             raise ValueError("voice response capacity must be positive")
         if audio_capacity <= 0:
             raise ValueError("voice audio capacity must be positive")
+        if _session is None:
+            missing = [
+                name
+                for name, value in (
+                    ("stt", stt),
+                    ("tts", tts),
+                    ("vad", vad),
+                    ("voice_gate", voice_gate),
+                )
+                if value is None
+            ]
+            if missing:
+                raise TypeError(
+                    "VoiceAgent requires " + ", ".join(missing)
+                )
+            assert stt is not None
+            assert tts is not None
+            assert vad is not None
+            assert voice_gate is not None
+            _session = _VoiceSession(
+                stt=stt,
+                tts=tts,
+                vad=vad,
+                voice_gate=voice_gate,
+                probes=probes,
+                ready_file=ready_file,
+                closeables=closeables,
+                text_topic=text_topic,
+                idle_timeout_secs=idle_timeout_secs,
+                transport=transport,
+            )
         super().__init__()
-        self.session = session
+        self._session = _session
         self.query_topic = query_topic
         self.response_capacity = response_capacity
         self.audio_capacity = audio_capacity
         self.text_input = text_input
         self.text_ignore_topics = (
-            tuple(text_ignore_topics) if text_ignore_topics is not None else (session.text_topic,)
+            tuple(text_ignore_topics)
+            if text_ignore_topics is not None
+            else (self._session.text_topic,)
         )
         self.text_transform = text_transform
         self.participant_left_topic = participant_left_topic
@@ -218,6 +278,18 @@ class VoiceAgent(Agent):
         self._audio_failure_warned: set[tuple[str, str]] = set()
         self._accepting_audio = False
 
+    @property
+    def endpoint(self) -> ProcessorEndpoint:
+        """Return the hub endpoint owned by this voice agent."""
+
+        return self._session.transport.endpoint
+
+    @property
+    def transport(self) -> HubVoiceTransport:
+        """Return the hub voice transport owned by this agent."""
+
+        return self._session.transport
+
     async def run(self, runtime: AgentRuntime, *, source: str = "voice") -> None:
         """Run the owned voice session and bridge it to a running runtime."""
 
@@ -229,17 +301,17 @@ class VoiceAgent(Agent):
             raise ValueError("voice agent source must not be empty")
         self._runtime = runtime
         self._source = source
-        unsubscribe_audio: Callable[[], None] | None = None
         unsubscribe_data: Callable[[], None] | None = None
         try:
-            await self.session.__aenter__()
+            await self._session.__aenter__()
             try:
-                unsubscribe_audio = self.session.endpoint.on_audio(self._publish_audio)
+                self._session.endpoint.on_audio(self._publish_audio)
                 self._accepting_audio = True
                 if self.text_input:
-                    unsubscribe_data = self.session.endpoint.on_data(self._on_data)
-                await self.session.run(
+                    unsubscribe_data = self._session.endpoint.on_data(self._on_data)
+                await self._session.run(
                     self._publish_input,
+                    on_transcript=self._publish_transcript,
                     on_participant_left=self._participant_left,
                     on_interrupted=(
                         self._publish_interrupted
@@ -250,8 +322,6 @@ class VoiceAgent(Agent):
                 )
             finally:
                 self._accepting_audio = False
-                if unsubscribe_audio is not None:
-                    unsubscribe_audio()
                 if unsubscribe_data is not None:
                     unsubscribe_data()
                 await self._stop_audio_tasks()
@@ -264,10 +334,17 @@ class VoiceAgent(Agent):
                     *(stream.aclose() for stream in tuple(self._streams.values()))
                 )
                 self._closed_streams.clear()
-                await self.session.close()
+                await self._session.close()
         finally:
             self._runtime = None
             self._source = "voice"
+
+    async def close(self) -> None:
+        """Close the media resources owned by this voice agent."""
+
+        self._accepting_audio = False
+        await self._stop_audio_tasks()
+        await self._session.close()
 
     @subscribe(VOICE_OUTPUT_TOPIC)
     async def output(self, output: VoiceOutput, ctx: RuntimeContext) -> None:
@@ -296,7 +373,7 @@ class VoiceAgent(Agent):
                     streaming=False,
                     status="completed",
                 ):
-                    await self.session.enqueue_response(
+                    await self._session.enqueue_response(
                         participant_id,
                         output.text,
                         interrupt=output.interrupt,
@@ -326,7 +403,7 @@ class VoiceAgent(Agent):
                         streaming=False,
                         status="completed",
                     ):
-                        await self.session.enqueue_response(
+                        await self._session.enqueue_response(
                             participant_id,
                             output.text,
                             interrupt=output.interrupt,
@@ -348,7 +425,7 @@ class VoiceAgent(Agent):
                     timestamp_us=timestamp_us,
                     interrupt=output.interrupt,
                 )
-                await self.session.enqueue_response(
+                await self._session.enqueue_response(
                     participant_id,
                     stream,
                     interrupt=output.interrupt,
@@ -390,6 +467,41 @@ class VoiceAgent(Agent):
             participant_id=query.participant_id,
             source=self._source,
         )
+
+    async def _publish_transcript(
+        self,
+        participant_id: str,
+        text: str,
+        timestamp_us: int,
+    ) -> None:
+        """Publish one final STT result without affecting command gating."""
+
+        runtime = self._running_runtime()
+        try:
+            await runtime.publish(
+                VOICE_TRANSCRIPT_TOPIC,
+                VoiceTranscript(text=text, timestamp_us=timestamp_us),
+                participant_id=participant_id,
+                source=self._source,
+            )
+        except asyncio.CancelledError:
+            raise
+        except BaseExceptionGroup as error:
+            if runtime.running:
+                logger.error(
+                    "voice transcript publication failed; query gating will continue "
+                    "pid={!r}: {}",
+                    participant_id,
+                    error,
+                )
+        except Exception as error:
+            if runtime.running:
+                logger.error(
+                    "voice transcript publication failed; query gating will continue "
+                    "pid={!r}: {}",
+                    participant_id,
+                    error,
+                )
 
     async def _publish_audio(self, chunk: AudioChunk) -> None:
         runtime = self._runtime
@@ -676,17 +788,17 @@ class VoiceAgent(Agent):
         if message.topic in self.text_ignore_topics:
             return
         text = (message.data or b"").decode("utf-8", errors="replace").strip()
-        if not text or not self.session.is_running:
+        if not text or not self._session.is_running:
             return
-        if not self.session.transport.target_participant:
-            self.session.transport.set_target_participant(message.participant_id)
+        if not self._session.transport.target_participant:
+            self._session.transport.set_target_participant(message.participant_id)
         if self.text_transform is not None:
             text = self.text_transform(text)
         text = text.strip()
         if not text:
             return
         logger.info("text input pid={!r} {!r}", message.participant_id, text[:80])
-        await self.session.enqueue_query(
+        await self._session.enqueue_query(
             message.participant_id,
             text,
             pts_us=message.pts_us,
@@ -695,6 +807,7 @@ class VoiceAgent(Agent):
 __all__ = [
     "VOICE_AUDIO_TOPIC",
     "VOICE_OUTPUT_TOPIC",
+    "VOICE_TRANSCRIPT_TOPIC",
     "UserQuery",
     "VoiceAgent",
     "VoiceAudio",
@@ -702,4 +815,5 @@ __all__ = [
     "VoiceOutput",
     "VoiceParticipantLeft",
     "VoiceStreamClosedError",
+    "VoiceTranscript",
 ]

@@ -358,16 +358,7 @@ class ProcessorEndpoint:
 
     def on_frame(self,       cb: FrameSignalCallback) -> None: self._frame_cbs.append(cb)
     def on_frame_data(self,  cb: FrameDataCallback)   -> None: self._frame_data_cbs.append(cb)
-    def on_audio(self, cb: AudioCallback) -> CallbackUnsubscribe:
-        """Register an audio callback and return an idempotent unsubscriber."""
-
-        self._audio_cbs.append(cb)
-
-        def unsubscribe() -> None:
-            if cb in self._audio_cbs:
-                self._audio_cbs.remove(cb)
-
-        return unsubscribe
+    def on_audio(self,       cb: AudioCallback)       -> None: self._audio_cbs.append(cb)
     def on_data(self, cb: DataCallback) -> CallbackUnsubscribe:
         """Register a data callback and return an idempotent unsubscriber."""
 

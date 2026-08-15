@@ -3,15 +3,15 @@
 
 """Public voice runtime for XR agents.
 
+Applications configure and register :class:`VoiceAgent`; media sessions,
 Pipecat, audio framing, and pipeline processors are implementation details.
-Applications register :class:`VoiceAgent`; :class:`VoiceSession` owns its media
-pipeline and service lifecycle.
 """
 
 from ._processors import VadConfig
 from ._runtime import (
     VOICE_AUDIO_TOPIC,
     VOICE_OUTPUT_TOPIC,
+    VOICE_TRANSCRIPT_TOPIC,
     UserQuery,
     VoiceAgent,
     VoiceAudio,
@@ -19,8 +19,8 @@ from ._runtime import (
     VoiceOutput,
     VoiceParticipantLeft,
     VoiceStreamClosedError,
+    VoiceTranscript,
 )
-from ._session import VoiceSession
 from ._transport import HubVoiceTransport
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "VadConfig",
     "VOICE_AUDIO_TOPIC",
     "VOICE_OUTPUT_TOPIC",
+    "VOICE_TRANSCRIPT_TOPIC",
     "UserQuery",
     "VoiceAgent",
     "VoiceAudio",
@@ -35,5 +36,5 @@ __all__ = [
     "VoiceOutput",
     "VoiceParticipantLeft",
     "VoiceStreamClosedError",
-    "VoiceSession",
+    "VoiceTranscript",
 ]

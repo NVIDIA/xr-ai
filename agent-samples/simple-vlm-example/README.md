@@ -18,10 +18,11 @@ The worker is a package under `worker/simple_vlm_example_worker/`:
 - `app.py` composes the native runtime.
 - `prompts/system.txt` owns the VLM system prompt.
 
-`VoiceAgent` owns `VoiceSession`, which provides STT/TTS/VLM readiness, the hub
-voice transport, voice-gate processing, streaming TTS, signals, and cleanup.
-It publishes accepted speech and typed text as `UserQuery` on this sample's
-topic. `SimpleVlmAgent` subscribes to that topic, selects the participant's
+`VoiceAgent` privately owns STT/TTS/VLM readiness, the hub voice transport,
+voice-gate processing, streaming TTS, signals, and cleanup. It publishes every
+final pre-gate STT result on `voice.transcript`, including speech without the
+wake phrase, and publishes accepted speech and typed text as `UserQuery` on
+this sample's topic. `SimpleVlmAgent` subscribes to that topic, selects the participant's
 current image with `CurrentFrameTool`, passes its opaque reference to the
 transport-independent `StreamingImageQueryTool`, and publishes chunks to
 `voice.output`. The query tool has no voice dependency and sends its provider
