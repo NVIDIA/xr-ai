@@ -127,11 +127,18 @@ calls (thinking stays off):
 
 Port 8100 (`vlm-server`).
 
-Served by vLLM from the unified `nvidia/Cosmos3-Nano` checkpoint. An explicit
-architecture override selects the text-output Reasoner without loading the
-separate Generator pipeline. Native vision tools read recorded images or acquire a current
-participant frame, encode it as an image URL, and invoke the shared
-`xr-ai-models` VLM service.
+Served by vLLM from `nvidia/Cosmos3-Nano` as described in
+{doc}`AI services </components/ai-services>`. The render agent first selects a
+current or recorded frame and passes its `ImageReference` to `query_image`.
+Its native capability set also
+includes `query_images` for ordered collections and `query_video` for
+timestamped frame sequences; all use the same `xr-ai-models` multi-image VLM
+path, limited to four images by the shipped Cosmos configuration. These raw
+selectors and query tools are internal composition primitives; the reasoning
+model sees only participant-safe perception facades. Recorded selection is
+grouped into latest tools, whose windows end at the newest recording, and
+historical tools, whose frame or video window begins at one absolute `start_us`.
+Recorded-frame timestamps are estimates interpolated from chunk metadata.
 
 There is a deliberate startup ordering constraint: `VoiceSession` readiness
 blocks on the VLM's `/health` endpoint, which

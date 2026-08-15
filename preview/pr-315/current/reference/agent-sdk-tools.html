@@ -460,26 +460,89 @@ instances are consumed explicitly with <code class="docutils literal notranslate
 <section id="typed-capability-services">
 <h2>Typed capability services<a class="headerlink" href="#typed-capability-services" title="Link to this heading">#</a></h2>
 <p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[services]</span></code> for the msgpack/ZMQ RPC client/server and the
-shared tracking, video-memory, historical-vision, text-memory, and spatial
+shared tracking, video-memory, text-memory, and spatial
 building blocks. Applications compose these finite tools into their own
 <code class="docutils literal notranslate"><span class="pre">ToolSet</span></code>; service processes use the matching RPC primitives without pulling
 in an agent framework or HTTP server.</p>
 <p>Each capability has a focused import surface: <code class="docutils literal notranslate"><span class="pre">tracking</span></code>, <code class="docutils literal notranslate"><span class="pre">video_memory</span></code>,
-<code class="docutils literal notranslate"><span class="pre">historical_vision</span></code>, <code class="docutils literal notranslate"><span class="pre">text_memory</span></code>, <code class="docutils literal notranslate"><span class="pre">spatial</span></code>, and their shared request types in
-<code class="docutils literal notranslate"><span class="pre">types</span></code>. RPC transport remains isolated in <code class="docutils literal notranslate"><span class="pre">rpc</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">text_memory</span></code>, <code class="docutils literal notranslate"><span class="pre">spatial</span></code>, and their shared request types in <code class="docutils literal notranslate"><span class="pre">types</span></code>. RPC
+transport remains isolated in <code class="docutils literal notranslate"><span class="pre">rpc</span></code>.</p>
 </section>
-<section id="finite-and-streaming-live-vision-tools">
-<h2>Finite and streaming live vision tools<a class="headerlink" href="#finite-and-streaming-live-vision-tools" title="Link to this heading">#</a></h2>
-<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[live-vision]</span></code> for two independent current-frame
-tools. <code class="docutils literal notranslate"><span class="pre">LiveVisionTool</span></code> is a finite <code class="docutils literal notranslate"><span class="pre">Tool</span></code> that returns one complete
-<code class="docutils literal notranslate"><span class="pre">VisionResponse</span></code> for agentic planning. <code class="docutils literal notranslate"><span class="pre">StreamingVisionTool</span></code> is an <code class="docutils literal notranslate"><span class="pre">AsyncTool</span></code>
-that yields typed <code class="docutils literal notranslate"><span class="pre">VisionChunk</span></code> values. It has no voice dependency or output
-transport; applications decide how to consume its async stream.</p>
-<p>Each tool owns its own participant frame source and calls an injected
-<code class="docutils literal notranslate"><span class="pre">VLMService</span></code>. Both forward controlled Relay headers and redact inline camera
-frames from events while preserving provider input. The finite path uses
-Relay’s managed tool and LLM boundaries; the streaming path uses a typed tool
-scope around Relay’s managed streaming LLM boundary.</p>
+<section id="image-selection-and-vlm-query-tools">
+<h2>Image selection and VLM query tools<a class="headerlink" href="#image-selection-and-vlm-query-tools" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[frames]</span></code> for live-frame selection and
+<code class="docutils literal notranslate"><span class="pre">xr-ai-tools[vision]</span></code> for VLM queries. Image selection does not invoke a model:
+<code class="docutils literal notranslate"><span class="pre">CurrentFrameTool</span></code> returns an <code class="docutils literal notranslate"><span class="pre">ImageFrame</span></code>, while
+<code class="docutils literal notranslate"><span class="pre">VideoMemoryTools</span></code> groups recorded selection by timing:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">latest_tools</span></code> contains <code class="docutils literal notranslate"><span class="pre">get_latest_video</span></code> and <code class="docutils literal notranslate"><span class="pre">get_latest_frames</span></code>;
+their windows end at the newest recorded timestamp and require only
+<code class="docutils literal notranslate"><span class="pre">duration_seconds</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">historical_tools</span></code> contains <code class="docutils literal notranslate"><span class="pre">get_historical_frame</span></code>,
+<code class="docutils literal notranslate"><span class="pre">get_historical_frames</span></code>, and <code class="docutils literal notranslate"><span class="pre">get_historical_video</span></code>; they share one
+absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>, with video and sampling adding <code class="docutils literal notranslate"><span class="pre">duration_seconds</span></code>.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">get_current_frame</span></code> joins the latest group conceptually as the live-image
+equivalent. Every selected frame carries the same <code class="docutils literal notranslate"><span class="pre">ImageReference</span></code>; timed
+frames also share the <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> contract consumed by video queries.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ImageQueryTool</span></code> returns one complete <code class="docutils literal notranslate"><span class="pre">ImageQueryResult</span></code> for any image reference;
+<code class="docutils literal notranslate"><span class="pre">MultiImageQueryTool</span></code> queries an ordered image collection, and <code class="docutils literal notranslate"><span class="pre">VideoQueryTool</span></code>
+queries chronological <code class="docutils literal notranslate"><span class="pre">TimedImage</span></code> frames with their timestamps and relative
+offsets. <code class="docutils literal notranslate"><span class="pre">StreamingImageQueryTool</span></code> preserves the low-latency single-image path.
+All four tools use one list-based inference implementation. The shipped Cosmos
+deployment accepts at most four images in one <code class="docutils literal notranslate"><span class="pre">query_images</span></code> or <code class="docutils literal notranslate"><span class="pre">query_video</span></code>
+call. This inference limit is separate from the video-memory sampling budget;
+select the relevant subset before querying the VLM.</p>
+<p>In-memory bytes use a bounded <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code>, whose opaque handles keep tool
+results and telemetry small. Registries accept only their own opaque references
+by default. Trusted applications may opt into local paths, file URIs, and
+HTTP(S) URLs with <code class="docutils literal notranslate"><span class="pre">ImageRegistry(allow_external=True)</span></code>, but must not expose an
+external-enabled query tool directly to an untrusted model. Query tools forward
+controlled Relay headers and redact every image location from VLM events while
+preserving provider input. Timelines supplied to video inference are described
+as estimates because recorded-frame timestamps are interpolated from chunk
+metadata rather than persisted per-frame presentation timestamps.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.current_frame</span><span class="w"> </span><span class="kn">import</span> <span class="n">CurrentFrameRequest</span><span class="p">,</span> <span class="n">CurrentFrameTool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImageReference</span><span class="p">,</span> <span class="n">ImageRegistry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.video_memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">LatestFramesRequest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.vision</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ImageQueryRequest</span><span class="p">,</span>
+    <span class="n">ImageQueryTool</span><span class="p">,</span>
+    <span class="n">VideoQueryRequest</span><span class="p">,</span>
+    <span class="n">VideoQueryTool</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">images</span> <span class="o">=</span> <span class="n">ImageRegistry</span><span class="p">(</span><span class="n">allow_external</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">frames</span> <span class="o">=</span> <span class="n">CurrentFrameTool</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="n">endpoint</span><span class="p">,</span> <span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">)</span>
+<span class="n">vision</span> <span class="o">=</span> <span class="n">ImageQueryTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">,</span> <span class="n">vlm</span><span class="o">=</span><span class="n">vlm</span><span class="p">)</span>
+<span class="n">video</span> <span class="o">=</span> <span class="n">VideoQueryTool</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">images</span><span class="p">,</span> <span class="n">vlm</span><span class="o">=</span><span class="n">vlm</span><span class="p">)</span>
+
+<span class="n">frame</span> <span class="o">=</span> <span class="k">await</span> <span class="n">frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">CurrentFrameRequest</span><span class="p">(</span><span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">))</span>
+<span class="n">answer</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vision</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">ImageQueryRequest</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">frame</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">&quot;What is on the table?&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1"># The same VLM tool accepts images that did not come from a camera tool.</span>
+<span class="n">other</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vision</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">ImageQueryRequest</span><span class="p">(</span>
+        <span class="n">image</span><span class="o">=</span><span class="n">ImageReference</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="s2">&quot;/tmp/reference.png&quot;</span><span class="p">),</span>
+        <span class="n">query</span><span class="o">=</span><span class="s2">&quot;Does this match the current object?&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1"># The newest recorded window needs no caller-supplied timestamp.</span>
+<span class="n">sample</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video_memory</span><span class="o">.</span><span class="n">get_latest_frames</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">LatestFramesRequest</span><span class="p">(</span>
+        <span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span>
+        <span class="n">duration_seconds</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">frame_budget</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">change</span> <span class="o">=</span> <span class="k">await</span> <span class="n">video</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="n">VideoQueryRequest</span><span class="p">(</span><span class="n">frames</span><span class="o">=</span><span class="n">sample</span><span class="o">.</span><span class="n">frames</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="s2">&quot;What changed over time?&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
 </section>
 
@@ -534,7 +597,7 @@ scope around Relay’s managed streaming LLM boundary.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-model-tool-calls">Native tools and model tool calls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typed-capability-services">Typed capability services</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#finite-and-streaming-live-vision-tools">Finite and streaming live vision tools</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-selection-and-vlm-query-tools">Image selection and VLM query tools</a></li>
 </ul>
   </nav></div>
 

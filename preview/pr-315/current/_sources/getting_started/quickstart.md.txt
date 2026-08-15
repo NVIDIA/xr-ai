@@ -70,9 +70,8 @@ channel, or send the literal text `"ping"` — all routes go through the same VL
 pipeline against the latest video frame. Replies arrive as streaming Piper TTS
 audio plus a `vlm.response` text message.
 
-Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. The local
-configuration explicitly selects vLLM's reasoner-only loader from the unified
-checkpoint; it does not instantiate the separate Generator pipeline.
+Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
+{doc}`AI services </components/ai-services>` for runtime-selection details.
 
 There are two ways to run it:
 

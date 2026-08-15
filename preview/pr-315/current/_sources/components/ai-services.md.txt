@@ -359,13 +359,18 @@ cleanup.
 
 ## Per-server notes
 
-- **vlm-server** defaults to the Cosmos3 Nano Reasoner. Its required
-  `Cosmos3ForConditionalGeneration` architecture override selects vLLM's
-  reasoner-only weight mapper from the unified checkpoint; xr-ai never enables
-  the Generator's separate `--omni` path. Cosmos-Reason1
-  remains available by pairing `model: nvidia/Cosmos-Reason1-7B` with the
-  `cosmos_vlm` client preset. Hosting backend is selectable per YAML — refer
-  to *Choosing the vLLM runtime* above.
+- **vlm-server** defaults to the Cosmos3 Nano Reasoner. Hugging Face publishes
+  Reasoner and Generator weights in the unified `nvidia/Cosmos3-Nano`
+  checkpoint. The required `Cosmos3ForConditionalGeneration` architecture
+  override selects vLLM's native Reasoner loader: despite its generic class
+  name, it maps only the understanding tower and vision encoder and drops the
+  Generator weights. The Generator requires vLLM's separate `--omni` path,
+  which xr-ai intentionally does not enable. The checkpoint's official chat
+  template emits the assistant answer directly and has no `enable_thinking`
+  branch or `<think>` delimiters, so the client preset needs no reasoning-field
+  mapping. Cosmos-Reason1 remains available by pairing
+  `model: nvidia/Cosmos-Reason1-7B` with the `cosmos_vlm` client preset. Hosting
+  backend is selectable per YAML — refer to *Choosing the vLLM runtime* above.
 - **llama-nemotron-llm** is a thin wrapper around `vllm serve` for
   `Llama-3.1-Nemotron-Nano-8B-v1`. vLLM handles native Llama-3.1 tool calling
   via the `llama3_json` parser — `tools=[...]` in the request is rendered via
@@ -403,7 +408,15 @@ cleanup.
 - **video-memory-service** owns recorded chunk queries, NVDEC, and PNG output
   behind typed msgpack/ZMQ on port 8310. Set `recordings_dir` in its YAML to
   enable recorded-video operations; the path must match the hub's
-  `video_recording.out_dir`. Current frames stay with the caller's hub client.
+  `video_recording.out_dir`. Latest video and sampling windows end at the
+  newest recorded timestamp and require only a duration. Historical frame,
+  video, and sampling requests share an absolute `start_us`; video windows add
+  a duration. Sampling also accepts a hard total frame budget, decodes each
+  selected chunk once, skips unavailable or corrupt chunks when other frames
+  remain, and can bound exported PNG dimensions. The sampled timestamps are
+  estimates interpolated from chunk metadata. The selection budget may be up
+  to 256, but the shipped Cosmos VLM accepts no more than four selected images
+  per inference request. Current frames stay with the caller's hub client.
 - Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).
 - **Sample YAMLs** for each service ship in their own service directory.
   Copy them to your sample's `yaml/` directory and set `model_cache` to

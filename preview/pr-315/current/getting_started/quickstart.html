@@ -434,9 +434,8 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 channel, or send the literal text <code class="docutils literal notranslate"><span class="pre">&quot;ping&quot;</span></code> — all routes go through the same VLM
 pipeline against the latest video frame. Replies arrive as streaming Piper TTS
 audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
-<p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. The local
-configuration explicitly selects vLLM’s reasoner-only loader from the unified
-checkpoint; it does not instantiate the separate Generator pipeline.</p>
+<p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>There are two ways to run it:</p>
 <p><strong>Standalone</strong> (~23 GB VRAM) — starts its own VLM and STT, owns them for the
 session, and stops them when you exit:</p>
