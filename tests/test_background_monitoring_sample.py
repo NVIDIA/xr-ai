@@ -21,7 +21,11 @@ from xr_ai_tools.current_frame import CurrentFrameRequest, ImageFrame
 from xr_ai_tools.image import ImageReference
 from xr_ai_tools.tool_calling import handle_tool_call, tool_definitions
 from xr_ai_tools.vision import ImageQueryRequest, ImageQueryResult
-from xr_ai_voice import UserQuery, VoiceParticipantLeft
+from xr_ai_voice import (
+    VOICE_TRANSCRIPT_TOPIC,
+    VoiceParticipantLeft,
+    VoiceTranscript,
+)
 
 _REPO = Path(__file__).resolve().parents[1]
 _SAMPLE = _REPO / "agent-samples" / "background-monitoring-sample"
@@ -34,7 +38,6 @@ from background_monitoring_worker.events import (  # noqa: E402  # pyright: igno
     MONITOR_RECORD_TOPIC,
     PARTICIPANT_JOINED_TOPIC,
     PARTICIPANT_LEFT_TOPIC,
-    USER_QUERY_TOPIC,
     ForegroundRecord,
     MonitorRecord,
     ParticipantJoined,
@@ -261,8 +264,8 @@ async def test_file_output_records_transcript_monitor_and_foreground(tmp_path: P
             participant_id="glasses/user",
         )
         await runtime.publish(
-            USER_QUERY_TOPIC,
-            UserQuery(text="What changed?", timestamp_us=now),
+            VOICE_TRANSCRIPT_TOPIC,
+            VoiceTranscript(text="What changed?", timestamp_us=now),
             participant_id="glasses/user",
         )
         for index in range(3):

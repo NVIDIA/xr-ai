@@ -16,7 +16,7 @@ from xr_ai_hub import ParticipantEvent
 from xr_ai_logging import setup_logging
 from xr_ai_models import load_models_config, make_llm, make_stt, make_tts, make_vlm
 from xr_ai_runtime import AgentRuntime, RuntimeClosedError
-from xr_ai_voice import VadConfig, VoiceAgent, VoiceSession
+from xr_ai_voice import VadConfig, VoiceAgent
 from xr_ai_voicegate import load_voice_gate_config
 
 from .config import WorkerConfig
@@ -72,7 +72,8 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     vlm = make_vlm(models, "vlm")
     stt = make_stt(models, "stt")
     tts = make_tts(models, "tts")
-    session = VoiceSession(
+    voice = VoiceAgent(
+        query_topic=USER_QUERY_TOPIC,
         stt=stt,
         tts=tts,
         vad=VadConfig(
@@ -86,6 +87,9 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         closeables=(llm, vlm),
         text_topic="",
         idle_timeout_secs=config.idle_timeout_secs,
+        participant_left_topic=PARTICIPANT_LEFT_TOPIC,
+        interrupted_topic=INTERRUPTED_TOPIC,
+        interrupt_on_supersede=True,
     )
 
     runtime = AgentRuntime()
@@ -99,7 +103,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
     images = runtime.register(
         "images",
         ParticipantImageAgent(
-            endpoint=session.transport.endpoint,
+            endpoint=voice.endpoint,
             frame_max_age_s=config.frame_max_age_s,
             frame_timeout_s=config.frame_timeout_s,
         ),
@@ -135,16 +139,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         ),
     )
     runtime.register("transcript", TranscriptAgent())
-    voice = runtime.register(
-        "voice",
-        VoiceAgent(
-            session,
-            query_topic=USER_QUERY_TOPIC,
-            participant_left_topic=PARTICIPANT_LEFT_TOPIC,
-            interrupted_topic=INTERRUPTED_TOPIC,
-            interrupt_on_supersede=True,
-        ),
-    )
+    runtime.register("voice", voice)
 
     async def participant_event(event: ParticipantEvent) -> None:
         if not event.joined:
@@ -159,7 +154,7 @@ async def run_app(config: WorkerConfig, *, ready_file: Path | None = None) -> No
         except RuntimeClosedError:
             return
 
-    session.transport.endpoint.on_participant(participant_event)
+    voice.endpoint.on_participant(participant_event)
 
     logger.info("file outputs → {}", config.artifacts_dir)
     logger.info("background-monitoring-sample starting")

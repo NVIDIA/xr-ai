@@ -16,8 +16,8 @@ The worker composes peer agents through typed runtime topics:
 
 ```text
 hub participant join ──────────────────────────────────> file session
-voice STT / typed text ─┬> TranscriptAgent ─────────────> transcript.jsonl
-                       └> ForegroundAgent ─┬> direct answer
+final voice STT ─────────> TranscriptAgent ─────────────> transcript.jsonl
+accepted STT / typed text ─> ForegroundAgent ─┬> direct answer
                                            ├> current frame → image query
                                            ├> FileOutputAgent history tool
                                            ├> MonitorAgent start/stop/status tools
@@ -77,10 +77,10 @@ the task on later turns without capturing the foreground. Current-view
 questions and ordinary nonvisual questions work whether monitoring is active
 or stopped.
 
-The default voice gate is always on. Final STT turns and typed text queries
-therefore enter the same `UserQuery` topic and are recorded. If wake phrases
-are configured later in `yaml/voice_gate.yaml`, `transcript.jsonl` records only
-accepted turns after gating, not rejected ambient speech.
+Every non-empty final STT result is written to `transcript.jsonl` before voice
+gating, including ambient speech rejected by a configured wake phrase. The
+default gate is always on, so every final STT turn also reaches the foreground
+as a `UserQuery`. Typed text reaches the foreground but is not an STT transcript.
 
 ## File outputs
 
