@@ -464,6 +464,14 @@ agent-created background tasks.</p>
 <p>Agents protect shared mutable state with their own lock or queue. They also
 create, cancel, and await their own tasks. <code class="docutils literal notranslate"><span class="pre">publish()</span></code> waits for all deliveries
 and then propagates subscriber failures.</p>
+<p>Image tools share bounded <code class="docutils literal notranslate"><span class="pre">ImageRegistry</span></code> references so model-visible results
+do not contain raw pixels. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[image-editing]</span></code> to use
+<code class="docutils literal notranslate"><span class="pre">ImagePolygonFillTool</span></code>, which copies an image, fills the area enclosed by at
+least three ordered pixel coordinates with magenta, and returns a new lossless
+PNG reference. The source reference remains unchanged, and the edited reference
+inherits its owner so lifecycle cleanup releases both images. It can be passed
+directly to the single-image or multi-image VLM query tools. Invalid polygons
+and unavailable source references return recoverable unavailable results.</p>
 <p>Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. <code class="docutils literal notranslate"><span class="pre">Topic.telemetry</span></code> controls event volume without changing
 delivery: use <code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> for semantic events and <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> for high-volume
@@ -546,6 +554,17 @@ through PUSH IPC. The <code class="docutils literal notranslate"><span class="pr
 is opt-in and scoped to subscribed participants. The hub aggregates each
 responsible agent’s status and gates readiness on confirmed subscriptions.</p>
 </section>
+<section id="qr-code-extraction">
+<h2>QR-code extraction<a class="headerlink" href="#qr-code-extraction" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">xr_ai_tools.qr_code.QRCodeTool</span></code> is an optional ZXing-C++-backed finite tool.
+It acquires a participant’s current frame, decodes all readable QR payloads off
+the event loop, and returns every QR code in the frame as a separate payload
+with its four image-space corners. Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[qr-code]</span></code> to use it.</p>
+<p>ZXing-C++ is the default extractor. Applications can inject any sync or async
+callable that accepts an RGB PIL image and returns the same typed payload
+contract, including a model-backed implementation that does not provide corner
+coordinates.</p>
+</section>
 </section>
 
 
@@ -601,6 +620,7 @@ responsible agent’s status and gates readiness on confirmed subscriptions.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#models">Models</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voice">Voice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-ipc">Hub IPC</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#qr-code-extraction">QR-code extraction</a></li>
 </ul>
   </nav></div>
 

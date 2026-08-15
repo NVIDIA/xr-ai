@@ -17,6 +17,17 @@ immediately — the services keep running in the background with weights hot.
 Start this once before running `xr-render-demo`, or whenever you want to
 pre-warm models:
 
+:::{important}
+After updating, stop any existing model servers before starting this stack:
+
+```bash
+uv run model_servers --stop
+```
+
+Persisted vLLM processes or containers may otherwise keep serving the previous
+model and image even though the checked-in configuration now selects Cosmos3.
+:::
+
 ```bash
 cd agent-samples/model-servers
 uv sync
@@ -26,7 +37,7 @@ uv run model_servers
 GPU profiles are auto-detected (`dual_48G_ada`, `spark`, `96G_blackwell`). These
 are presets for common configurations; to run on a different GPU, refer to
 {doc}`Running on other GPUs </getting_started/requirements>`.
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
 The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
@@ -39,7 +50,7 @@ they cannot be stopped, avoiding GPU overcommit.
 uv run model_servers --omni-stack
 ```
 
-`HF_TOKEN` is required by default: without it the ~50 GB first-run download
+`HF_TOKEN` is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 {doc}`credentials guide </getting_started/credentials>` for how to set it, or
 pass `--allow-anonymous` to run without one.
@@ -59,7 +70,8 @@ channel, or send the literal text `"ping"` — all routes go through the same VL
 pipeline against the latest video frame. Replies arrive as streaming Piper TTS
 audio plus a `vlm.response` text message.
 
-Uses `nvidia/Cosmos-Reason1-7B` (NVIDIA Open Model License + Apache 2.0).
+Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. Refer to
+{doc}`AI services </components/ai-services>` for runtime-selection details.
 
 There are two ways to run it:
 
@@ -72,7 +84,7 @@ uv sync
 uv run simple_vlm_example
 ```
 
-On the very first run weights download from HuggingFace (~23 GB; can take
+On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes). `HF_TOKEN` is required by default; pass `--allow-anonymous`
 to run without one (refer to the
 {doc}`credentials guide </getting_started/credentials>`).
@@ -120,6 +132,9 @@ a moment, and you hear the reply through your speakers.
 
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
+
+To use Cosmos-Reason1 instead, set `model: nvidia/Cosmos-Reason1-7B` in that
+file and select `cosmos_vlm` as the VLM adapter preset in `models.local.json`.
 
 **Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
 your server, and select it in the worker config:
