@@ -1,0 +1,43 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+# Release migration
+
+This release removes deprecated SDK aliases and the standalone Pipecat
+compatibility package. Update out-of-tree code as follows:
+
+| Removed surface | Replacement |
+|---|---|
+| `xr_ai_agent` | Import `ProcessorEndpoint` and IPC types from `xr_ai_hub`. |
+| `BrainProcessor` and `make_voice_pipeline` | Put application behavior in an `xr_ai_runtime.Agent` subscriber and let `xr_ai_voice.VoiceAgent` own the voice pipeline. |
+| `run_voice_pipeline` | Run the composed application with `await VoiceAgent.run(runtime)`. Lower-level integrations can use `await VoiceSession.run(input_sink)`. |
+| `VadConfig` | Import the unchanged tuning model from `xr_ai_voice`. |
+| `GatedQueryFrame` | Subscribe to the application query topic carrying `xr_ai_voice.UserQuery`. |
+| `ParticipantLeftFrame` and `InterruptionFrame` | Subscribe to application topics carrying `VoiceParticipantLeft` and `VoiceInterrupted`. Participant joins and voice-gate greetings remain session-owned. |
+| `BrainResponseEndFrame` | Publish a finite `VoiceOutput`, or terminate an incremental response with `final=True`. |
+| `VadSttProcessor`, `VoiceGateProcessor`, and `StreamingTtsProcessor` | Configure `VoiceSession` with `VadConfig`, `VoiceGateConfig`, and `text_topic`; pipeline processors are private implementation details. |
+| `XRMediaHubTransport` | Use `xr_ai_voice.HubVoiceTransport` only when an application must share a transport explicitly; otherwise let `VoiceSession` create it. |
+| `SttClient` and `TtsClient` | Construct services through `xr_ai_models.make_stt` and `make_tts`, or use `OpenAICompatSTT` and `OpenAICompatTTS` directly. |
+| `http_probe`, `mcp_probe`, and `wait_for_services` | Pass additional readiness callables through `VoiceSession(probes=...)`; MCP readiness is no longer part of the voice SDK. |
+| `xr_ai_pipecat.audio` conversion helpers | Let `VoiceSession` own media conversion. Applications that process raw hub media should use `xr_ai_hub` types and own their format conversion. |
+| `xr_ai_models.config`, `factory`, `openai_compat`, and `protocols` | Import public names directly from `xr_ai_models`. This includes `KIND_OPENAI_COMPAT`, `ModelKind`, `Category`, and `Spec`. |
+| `LiveVisionTool` and `StreamingVisionTool` | Select with `CurrentFrameTool`, then pass its `ImageReference` to `ImageQueryTool` or `StreamingImageQueryTool`. |
+| `HistoricalVisionTool` | Select with `VideoMemoryTools.get_historical_frame`, then pass its `ImageReference` to `ImageQueryTool`. |
+| Recorded `query_video(start_us, end_us)` RPC | Use `get_historical_video(start_us, duration_seconds)` or `get_latest_video(duration_seconds)`. The new `query_video` name is VLM inference over caller-selected `TimedImage` values. |
+| `get_frame_from_time(reference_time_us, second_ago)` | Subtract the offset in the caller and use `get_historical_frame(start_us)`. |
+| `HistoricalFrameResult.path` and `SampledVideoFrame.path` | Read the canonical exported-frame location from `result.image.uri`. |
+
+Pipecat remains an internal implementation detail of `xr-ai-voice`; applications
+no longer assemble or subclass its frame processors.
+
+The source directories now match their Python imports:
+`agent-sdk/xr-ai-hub-client/` became `agent-sdk/xr-ai-hub/` and
+`agent-sdk/xr-ai-agent-runtime/` became `agent-sdk/xr-ai-runtime/`. Distribution
+names remain `xr-ai-hub-client` and `xr-ai-agent-runtime`, so package dependency
+names do not change.
+
+If upgrading a checkout that already downloaded model weights, follow
+{ref}`the model-cache migration <migrating-model-caches-from-ai-services>` to
+reuse the ignored caches rather than downloading them again.

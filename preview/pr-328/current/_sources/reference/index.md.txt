@@ -5,7 +5,7 @@
 
 # Reference
 
-Deep references: the xr-render-demo stack and the decision changelog.
+Detailed reference for the xr-render-demo stack.
 
 ```{toctree}
 :glob:

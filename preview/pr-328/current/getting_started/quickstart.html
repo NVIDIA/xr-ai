@@ -300,7 +300,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -308,11 +307,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -386,6 +391,15 @@ on startup.</p>
 immediately — the services keep running in the background with weights hot.
 Start this once before running <code class="docutils literal notranslate"><span class="pre">xr-render-demo</span></code>, or whenever you want to
 pre-warm models:</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>After updating, stop any existing model servers before starting this stack:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--stop
+</pre></div>
+</div>
+<p>Persisted vLLM processes or containers may otherwise keep serving the previous
+model and image even though the checked-in configuration now selects Cosmos3.</p>
+</div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/model-servers
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>model_servers
@@ -395,9 +409,9 @@ uv<span class="w"> </span>run<span class="w"> </span>model_servers
 are presets for common configurations; to run on a different GPU, refer to
 <a class="reference internal" href="requirements.html"><span class="doc">Running on other GPUs</span></a>.
 The dual-Ada default stack starts VLM and embeddings on GPU 0 before STT and
-the 30B agent LLM on GPU 1. Other profiles retain 30B-before-smaller-vLLM
+the 30B agent LLM on GPU 1. Other profiles retain 30B-before-smaller-VLM
 startup, and the independently selected Omni stack keeps its existing order.
-On first run each model downloads from HuggingFace (~50 GB total; can take
+On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.</p>
 <p>The default <code class="docutils literal notranslate"><span class="pre">--vlm-llm-stack</span></code> starts Nemotron-3 Nano (8107), Cosmos (8100),
 STT (8103), and embeddings (8109). Use <code class="docutils literal notranslate"><span class="pre">--omni-stack</span></code> to replace Nano and
@@ -407,7 +421,7 @@ they cannot be stopped, avoiding GPU overcommit.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>model_servers<span class="w"> </span>--omni-stack
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the ~50 GB first-run download
+<p><code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default: without it the large first-run download
 can stall indefinitely. Refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a> for how to set it, or
 pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code> to run without one.</p>
@@ -423,7 +437,8 @@ pass <code class="docutils literal notranslate"><span class="pre">--allow-anonym
 channel, or send the literal text <code class="docutils literal notranslate"><span class="pre">&quot;ping&quot;</span></code> — all routes go through the same VLM
 pipeline against the latest video frame. Replies arrive as streaming Piper TTS
 audio plus a <code class="docutils literal notranslate"><span class="pre">vlm.response</span></code> text message.</p>
-<p>Uses <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos-Reason1-7B</span></code> (NVIDIA Open Model License + Apache 2.0).</p>
+<p>Uses the text-output Reasoner from <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code> by default. Refer to
+<a class="reference internal" href="../components/ai-services.html"><span class="doc">AI services</span></a> for runtime-selection details.</p>
 <p>There are two ways to run it:</p>
 <p><strong>Standalone</strong> (~23 GB VRAM) — starts its own VLM and STT, owns them for the
 session, and stops them when you exit:</p>
@@ -432,7 +447,7 @@ uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>simple_vlm_example
 </pre></div>
 </div>
-<p>On the very first run weights download from HuggingFace (~23 GB; can take
+<p>On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes). <code class="docutils literal notranslate"><span class="pre">HF_TOKEN</span></code> is required by default; pass <code class="docutils literal notranslate"><span class="pre">--allow-anonymous</span></code>
 to run without one (refer to the
 <a class="reference internal" href="credentials.html"><span class="doc">credentials guide</span></a>).</p>
@@ -473,6 +488,8 @@ automatically. Click <strong>Connect</strong>.</p>
 a moment, and you hear the reply through your speakers.</p>
 <p><strong>Local model</strong> — override the model weights or GPU settings by editing
 <code class="docutils literal notranslate"><span class="pre">vlm_server.yaml</span></code> in the sample directory.</p>
+<p>To use Cosmos-Reason1 instead, set <code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> in that
+file and select <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> as the VLM adapter preset in <code class="docutils literal notranslate"><span class="pre">models.local.json</span></code>.</p>
 <p><strong>Remote model</strong> — copy <code class="docutils literal notranslate"><span class="pre">yaml/models.hosted.json</span></code>, point its VLM endpoint at
 your server, and select it in the worker config:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
@@ -501,7 +518,7 @@ it is not stored in YAML; the overlay only names the env var via
 <code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code>. Refer to the credentials and AI-services guides for
 full details (and self-hosted NIM containers).</p>
 <p>Each sample has its own <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> controlling the hub; refer to
-<code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub.yaml</span></code> for the full option list.</p>
+<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> for the full option list.</p>
 </section>
 </section>
 <section id="xr-render-demo-voice-driven-sphere-in-cloudxr">
@@ -512,11 +529,10 @@ red”, “put it to my left”, “where I’m looking”). Runs against a Ques
 Pro on the same LAN, or the IWER emulator built into the web client for desktop
 dev.</p>
 <p>Under the hood, the orchestrator launches the hub, CloudXR runtime, model
-endpoints, typed capability processes, and the worker. Native NAT Functions
-connect the worker to those capabilities; MCP adapters remain optional outward
-compatibility surfaces. The Pipecat pipeline runs quick-acks
+endpoints, typed capability processes, and the worker. The worker calls those
+processes through Relay-managed native tools. The voice runtime runs quick-acks
 and a Nemotron-30B agentic tool-calling loop over scene, tracking,
-spatial-math, vision, and video-memory Functions. Refer to the xr-render-demo guide for the
+spatial math, vision, and video-memory tools. Refer to the xr-render-demo guide for the
 full process map, agentic-loop details, and the XR session lifecycle.</p>
 <p><strong>Requires <code class="docutils literal notranslate"><span class="pre">model-servers</span></code> to be running first</strong> — the demo does not start its
 own model services.</p>
@@ -581,15 +597,15 @@ prompt — not in YAML) and just don’t start the local <code class="docutils l
 model-servers. Refer to the AI-services guide.</p>
 </section>
 </section>
-<section id="hub-only-server-runtime-standalone">
-<h2>Hub only (server-runtime standalone)<a class="headerlink" href="#hub-only-server-runtime-standalone" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>server-runtime
+<section id="hub-only-standalone">
+<h2>Hub only (standalone)<a class="headerlink" href="#hub-only-standalone" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>services/xr-media-hub
 uv<span class="w"> </span>sync
 uv<span class="w"> </span>run<span class="w"> </span>xr_media_hub
 </pre></div>
 </div>
 <p>Useful for development or when running an agent in a separate terminal. The
-XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub.yaml</span></code>.</p>
+XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code>.</p>
 </section>
 </section>
 
@@ -653,7 +669,7 @@ XR-Media-Hub auto-discovers <code class="docutils literal notranslate"><span cla
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-start-the-demo">Step 2 — Start the demo</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-only-server-runtime-standalone">Hub only (server-runtime standalone)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-only-standalone">Hub only (standalone)</a></li>
 </ul>
   </nav></div>
 
