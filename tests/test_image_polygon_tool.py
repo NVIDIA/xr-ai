@@ -105,7 +105,7 @@ def test_image_point_rejects_negative_or_extra_values() -> None:
 async def test_image_polygon_fill_tool_returns_a_new_registry_image() -> None:
     images = ImageRegistry()
     source_bytes = _png_bytes()
-    source = images.put(source_bytes)
+    source = images.put(source_bytes, owner="alice")
     tool = ImagePolygonFillTool(images=images)
 
     result = await tool.execute(
@@ -125,3 +125,9 @@ async def test_image_polygon_fill_tool_returns_a_new_registry_image() -> None:
     assert isinstance(edited, bytes)
     assert _read_pixel(edited, (4, 4)) == (255, 0, 255)
     assert images.resolve(source) == source_bytes
+
+    images.release_owner("alice")
+    with pytest.raises(LookupError, match="unavailable"):
+        images.resolve(source)
+    with pytest.raises(LookupError, match="unavailable"):
+        images.resolve(result.image)

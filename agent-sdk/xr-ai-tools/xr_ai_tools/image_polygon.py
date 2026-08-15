@@ -133,7 +133,9 @@ class ImagePolygonFillTool(Tool[ImagePolygonFillRequest, ImagePolygonFillResult]
             source,
             request.coordinates,
         )
-        return ImagePolygonFillResult(image=self.images.put(output))
+        return ImagePolygonFillResult(
+            image=self.images.put_derived(output, source=request.image)
+        )
 
 
 __all__ = [

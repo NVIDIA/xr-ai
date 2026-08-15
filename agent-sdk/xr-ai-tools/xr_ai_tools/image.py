@@ -62,6 +62,24 @@ class ImageRegistry:
             self._images.popitem(last=False)
         return ImageReference(uri=uri)
 
+    def put_derived(
+        self,
+        image: ImageInput,
+        *,
+        source: ImageReference,
+    ) -> ImageReference:
+        """Store derived image input with the source reference's owner."""
+
+        if source.uri.startswith(_IMAGE_SCHEME):
+            try:
+                _source_image, owner = self._images[source.uri]
+            except KeyError as exc:
+                raise LookupError(f"image reference is unavailable: {source.uri}") from exc
+        else:
+            self.resolve(source)
+            owner = None
+        return self.put(image, owner=owner)
+
     def resolve(self, reference: ImageReference) -> ImageInput:
         """Resolve an opaque handle or normalize an external image location."""
 

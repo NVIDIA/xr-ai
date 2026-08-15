@@ -138,6 +138,10 @@ preserving provider input. Timelines supplied to video inference are described
 as estimates because recorded-frame timestamps are interpolated from chunk
 metadata rather than persisted per-frame presentation timestamps.
 
+Derived images use `ImageRegistry.put_derived(...)` to inherit the source
+reference's owner, so participant or workflow cleanup releases the source and
+all derived pixels together.
+
 ```python
 from xr_ai_tools.current_frame import CurrentFrameRequest, CurrentFrameTool
 from xr_ai_tools.image import ImageReference, ImageRegistry
@@ -226,7 +230,8 @@ standard magenta (`#FF00FF`). `ImagePolygonFillTool` accepts an image reference
 and at least three ordered pixel coordinates. It connects the final point to
 the first, validates that the polygon is inside the image and encloses an area,
 and stores a new lossless PNG without changing the source image. The returned
-reference can be passed directly to an image query tool.
+reference inherits the source owner and can be passed directly to an image
+query tool.
 
 ```python
 from pathlib import Path

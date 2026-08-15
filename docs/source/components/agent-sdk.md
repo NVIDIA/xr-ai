@@ -75,7 +75,8 @@ do not contain raw pixels. Install `xr-ai-tools[image-editing]` to use
 `ImagePolygonFillTool`, which copies an image, fills the area enclosed by at
 least three ordered pixel coordinates with magenta, and returns a new lossless
 PNG reference. The source reference remains unchanged, and the edited reference
-can be passed directly to the single-image or multi-image VLM query tools.
+inherits its owner so lifecycle cleanup releases both images. It can be passed
+directly to the single-image or multi-image VLM query tools.
 
 Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. `Topic.telemetry` controls event volume without changing
