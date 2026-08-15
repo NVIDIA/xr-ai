@@ -76,7 +76,8 @@ do not contain raw pixels. Install `xr-ai-tools[image-editing]` to use
 least three ordered pixel coordinates with magenta, and returns a new lossless
 PNG reference. The source reference remains unchanged, and the edited reference
 inherits its owner so lifecycle cleanup releases both images. It can be passed
-directly to the single-image or multi-image VLM query tools.
+directly to the single-image or multi-image VLM query tools. Invalid polygons
+and unavailable source references return recoverable unavailable results.
 
 Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. `Topic.telemetry` controls event volume without changing
@@ -165,3 +166,15 @@ Video pixels are pulled on demand with `request_frame()` or
 `LiveFrameSource`; frame signals do not copy pixels. Readiness participation
 is opt-in and scoped to subscribed participants. The hub aggregates each
 responsible agent's status and gates readiness on confirmed subscriptions.
+
+## QR-code extraction
+
+`xr_ai_tools.qr_code.QRCodeTool` is an optional ZXing-C++-backed finite tool.
+It acquires a participant's current frame, decodes all readable QR payloads off
+the event loop, and returns every QR code in the frame as a separate payload
+with its four image-space corners. Install `xr-ai-tools[qr-code]` to use it.
+
+ZXing-C++ is the default extractor. Applications can inject any sync or async
+callable that accepts an RGB PIL image and returns the same typed payload
+contract, including a model-backed implementation that does not provide corner
+coordinates.

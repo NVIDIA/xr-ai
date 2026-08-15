@@ -157,3 +157,15 @@ Video pixels are pulled on demand with `request_frame()` or
 `LiveFrameSource`; frame signals do not copy pixels. Readiness participation
 is opt-in and scoped to subscribed participants. The hub aggregates each
 responsible agent's status and gates readiness on confirmed subscriptions.
+
+## QR-code extraction
+
+`xr_ai_tools.qr_code.QRCodeTool` is an optional ZXing-C++-backed finite tool.
+It acquires a participant's current frame, decodes all readable QR payloads off
+the event loop, and returns every QR code in the frame as a separate payload
+with its four image-space corners. Install `xr-ai-tools[qr-code]` to use it.
+
+ZXing-C++ is the default extractor. Applications can inject any sync or async
+callable that accepts an RGB PIL image and returns the same typed payload
+contract, including a model-backed implementation that does not provide corner
+coordinates.

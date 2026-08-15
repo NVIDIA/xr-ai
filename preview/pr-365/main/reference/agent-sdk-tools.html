@@ -567,6 +567,41 @@ metadata rather than persisted per-frame presentation timestamps.</p>
 </pre></div>
 </div>
 </section>
+<section id="qr-code-reading-and-extraction">
+<h2>QR-code reading and extraction<a class="headerlink" href="#qr-code-reading-and-extraction" title="Link to this heading">#</a></h2>
+<p>Install <code class="docutils literal notranslate"><span class="pre">xr-ai-tools[qr-code]</span></code> to use <code class="docutils literal notranslate"><span class="pre">QRCodeTool</span></code>. The finite
+<code class="docutils literal notranslate"><span class="pre">read_qr_codes</span></code> tool acquires a participant’s current camera frame and uses
+ZXing-C++ by default. Its typed result distinguishes an unavailable frame from
+a valid frame with no readable code, and returns every decoded UTF-8 payload
+with optional source-image corner coordinates. When one frame contains
+multiple QR codes, <code class="docutils literal notranslate"><span class="pre">result.codes</span></code> contains one entry for each code.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">xr_ai_tools.qr_code</span><span class="w"> </span><span class="kn">import</span> <span class="n">QRCodeRequest</span><span class="p">,</span> <span class="n">QRCodeTool</span>
+
+<span class="n">qr_codes</span> <span class="o">=</span> <span class="n">QRCodeTool</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">qr_codes</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">QRCodeRequest</span><span class="p">(</span><span class="n">participant_id</span><span class="o">=</span><span class="s2">&quot;participant-1&quot;</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">codes</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">code</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">code</span><span class="o">.</span><span class="n">corners</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Frame acquisition and extraction are separate. Pass any sync or async callable
+as <code class="docutils literal notranslate"><span class="pre">extractor=</span></code> to replace ZXing-C++ without changing the tool or its callers.
+The callable receives one RGB <code class="docutils literal notranslate"><span class="pre">PIL.Image.Image</span></code> and returns an iterable of
+<code class="docutils literal notranslate"><span class="pre">DecodedQRCode</span></code> values or equivalent dictionaries; <code class="docutils literal notranslate"><span class="pre">corners</span></code> may be omitted by
+backends that decode without localization.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">model_extractor</span><span class="p">(</span><span class="n">image</span><span class="p">):</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">custom_qr_model</span><span class="o">.</span><span class="n">extract</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+
+
+<span class="n">qr_codes</span> <span class="o">=</span> <span class="n">QRCodeTool</span><span class="p">(</span>
+    <span class="n">endpoint</span><span class="o">=</span><span class="n">processor_endpoint</span><span class="p">,</span>
+    <span class="n">extractor</span><span class="o">=</span><span class="n">model_extractor</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Call <code class="docutils literal notranslate"><span class="pre">release(participant_id)</span></code> when a participant disconnects. Applications
+that expose the tool to a model should inject the active participant identity
+at their workflow boundary, as they do for other participant-scoped tools.</p>
+</section>
 </section>
 
 
@@ -621,6 +656,7 @@ metadata rather than persisted per-frame presentation timestamps.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#native-tools-and-model-tool-calls">Native tools and model tool calls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typed-capability-services">Typed capability services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-selection-and-vlm-query-tools">Image selection and VLM query tools</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#qr-code-reading-and-extraction">QR-code reading and extraction</a></li>
 </ul>
   </nav></div>
 
