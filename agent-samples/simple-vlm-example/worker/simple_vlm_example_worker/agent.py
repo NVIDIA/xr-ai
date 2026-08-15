@@ -130,7 +130,26 @@ class SimpleVlmAgent(Agent):
         try:
             if self._vision is None or self._frames is None:
                 self._frames, self._vision = self._vision_factory()
-            frame = await self._frames.execute(CurrentFrameRequest(participant_id=participant_id))
+            try:
+                frame = await self._frames.execute(
+                    CurrentFrameRequest(participant_id=participant_id)
+                )
+            except (FrameUnavailable, RuntimeError) as exc:
+                unavailable = _frame_unavailable_message(exc)
+                if unavailable is None:
+                    raise
+                await ctx.publish(
+                    VOICE_OUTPUT_TOPIC,
+                    VoiceOutput(
+                        text=unavailable,
+                        response_id=response_id,
+                        final=False,
+                        interrupt=True,
+                        timestamp_us=request.timestamp_us,
+                    ),
+                )
+                opened = True
+                return
             await self._set_status("processing", participant_id)
             processing = True
             stream = self._vision.stream(ImageQueryRequest(image=frame.image, query=request.text))
@@ -152,21 +171,6 @@ class SimpleVlmAgent(Agent):
                 close = getattr(stream, "aclose", None)
                 if close is not None:
                     await close()
-        except (FrameUnavailable, RuntimeError) as exc:
-            unavailable = _find_frame_unavailable(exc)
-            if unavailable is None:
-                raise
-            await ctx.publish(
-                VOICE_OUTPUT_TOPIC,
-                VoiceOutput(
-                    text=str(unavailable),
-                    response_id=response_id,
-                    final=False,
-                    interrupt=True,
-                    timestamp_us=request.timestamp_us,
-                ),
-            )
-            opened = True
         except asyncio.CancelledError:
             cancelled = True
             raise
@@ -208,14 +212,19 @@ class SimpleVlmAgent(Agent):
             self._tasks.pop(participant_id, None)
 
 
-def _find_frame_unavailable(error: BaseException) -> FrameUnavailable | None:
-    """Find a camera error preserved as the cause of a Relay execution error."""
+def _frame_unavailable_message(error: BaseException) -> str | None:
+    """Recover a camera error from native or Relay-scrubbed exceptions."""
 
+    relay_prefix = "internal error: FrameUnavailable:"
     seen: set[int] = set()
     current: BaseException | None = error
     while current is not None and id(current) not in seen:
         if isinstance(current, FrameUnavailable):
-            return current
+            return str(current)
+        if isinstance(current, RuntimeError):
+            message = str(current)
+            if message.startswith(relay_prefix):
+                return message.removeprefix(relay_prefix).strip()
         seen.add(id(current))
         current = current.__cause__ or current.__context__
     return None

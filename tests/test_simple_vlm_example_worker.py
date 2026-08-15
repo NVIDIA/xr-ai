@@ -36,10 +36,12 @@ from simple_vlm_example_worker.agent import (  # noqa: E402  # pyright: ignore[r
     SimpleVlmAgent,
 )
 from simple_vlm_example_worker.config import load_config  # noqa: E402  # pyright: ignore[reportMissingImports]
+from xr_ai_tools import Tool  # noqa: E402
 from xr_ai_tools import current_frame as current_frame_module  # noqa: E402
 from xr_ai_tools.current_frame import (  # noqa: E402
     CurrentFrameRequest,
     CurrentFrameTool,
+    ImageFrame,
 )
 from xr_ai_tools.image import ImageReference, ImageRegistry  # noqa: E402
 from xr_ai_tools.vision import (  # noqa: E402
@@ -374,12 +376,20 @@ async def test_simple_vlm_agent_closes_tool_stream_when_publication_fails() -> N
 async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> None:
     published: list[VoiceOutput] = []
 
-    class MissingFrameTool:
-        async def execute(self, _request):
-            try:
-                raise FrameUnavailable("No camera frame available — please try again.")
-            except FrameUnavailable as error:
-                raise RuntimeError("Relay tool execution failed") from error
+    async def missing_frame(_request: CurrentFrameRequest) -> ImageFrame:
+        raise FrameUnavailable("No camera frame available — please try again.")
+
+    missing_frame_tool = Tool(
+        "missing_camera_frame",
+        "Reproduce a missing camera frame through the real Relay boundary.",
+        CurrentFrameRequest,
+        ImageFrame,
+        missing_frame,
+    )
+    with pytest.raises(RuntimeError, match="internal error: FrameUnavailable") as wrapped:
+        await missing_frame_tool.execute(CurrentFrameRequest(participant_id="alice"))
+    assert wrapped.value.__cause__ is None
+    assert wrapped.value.__context__ is None
 
     class Context:
         agent_name = "simple-vlm"
@@ -393,7 +403,7 @@ async def test_simple_vlm_agent_reports_relay_wrapped_missing_camera_frame() -> 
             published.append(output)
 
     agent = SimpleVlmAgent(
-        lambda: (MissingFrameTool(), _StreamingImageQueryTool()),  # type: ignore[return-value]
+        lambda: (missing_frame_tool, _StreamingImageQueryTool()),  # type: ignore[return-value]
         _ignore_status,
     )
 

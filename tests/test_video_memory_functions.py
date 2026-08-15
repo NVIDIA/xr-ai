@@ -141,6 +141,62 @@ def test_chunk_store_preserves_identities_and_windows(tmp_path: Path) -> None:
     ] == ["1000000.264", "2000000.264"]
 
 
+def test_chunk_store_skips_chunk_pruned_during_metadata_enumeration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _recording(tmp_path, "user/name")
+    store = ChunkStore(tmp_path)
+    original_metadata = store._metadata
+
+    def metadata(path: Path) -> dict | None:
+        if path.name == "1000000.264":
+            path.unlink()
+            path.with_suffix(".json").unlink()
+        return original_metadata(path)
+
+    monkeypatch.setattr(store, "_metadata", metadata)
+
+    assert [
+        path.name
+        for path, _metadata in store.overlapping_chunks(
+            "user/name",
+            1_000_000,
+            3_000_000,
+        )
+    ] == ["2000000.264"]
+
+    (tmp_path / "safe-user" / "2000000.264").unlink()
+    (tmp_path / "safe-user" / "2000000.json").unlink()
+    with pytest.raises(RPCError) as unavailable:
+        store.overlapping_chunks("user/name", 1_000_000, 3_000_000)
+    assert unavailable.value.code == "not_found"
+
+
+def test_chunk_store_stats_uses_the_enumerated_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = ChunkStore(tmp_path)
+    missing = tmp_path / "pruned.264"
+    monkeypatch.setattr(
+        store,
+        "chunks",
+        lambda _participant_id: [
+            (
+                missing,
+                {
+                    "start_us": 1_000_000,
+                    "end_us": 2_000_000,
+                    "size_bytes": 7,
+                },
+            )
+        ],
+    )
+
+    assert store.stats("user/name")["total_bytes"] == 7
+
+
 def test_chunk_store_path_escape_has_a_stable_rpc_error(tmp_path: Path) -> None:
     store = ChunkStore(tmp_path / "recordings")
 
