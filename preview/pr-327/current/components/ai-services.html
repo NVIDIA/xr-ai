@@ -300,7 +300,6 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -308,11 +307,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -380,12 +385,13 @@
 orchestrator pattern that wires servers into a sample, refer to
 <a class="reference internal" href="../guides/adding-a-sample.html"><span class="doc">Adding a new sample</span></a>.</p>
 <p>Multiple reusable HTTP servers are available as launchable peers of
-<code class="docutils literal notranslate"><span class="pre">server-runtime/</span></code>. All expose an OpenAI-compatible REST API so agent workers
+<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code>. All expose an OpenAI-compatible REST API so agent workers
 can call them with any OpenAI SDK client or plain <code class="docutils literal notranslate"><span class="pre">httpx</span></code> or <code class="docutils literal notranslate"><span class="pre">requests</span></code>.
 Reference services cover vision-language reasoning, speech recognition,
-text-to-speech, embeddings, and large language models. Three LLM backends ship
-side-by-side under <code class="docutils literal notranslate"><span class="pre">ai-services/llm/</span></code> — pick one per sample based on the
-tool-calling, reasoning, and hardware trade-offs documented below.</p>
+text-to-speech, embeddings, and large language models. The projects are direct
+children of the repository’s <code class="docutils literal notranslate"><span class="pre">services/README.md</span></code> source index;
+pick an LLM per sample based on the tool-calling, reasoning, and hardware
+trade-offs documented below.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Server</p></th>
@@ -396,77 +402,65 @@ tool-calling, reasoning, and hardware trade-offs documented below.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/vlm-server/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/vlm-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">vlm_server</span></code></p></td>
 <td><p>8100</p></td>
-<td><p>Cosmos-Reason1-7B</p></td>
+<td><p>Cosmos3 Nano Reasoner</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/stt-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/stt-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">stt_server</span></code></p></td>
 <td><p>8103</p></td>
 <td><p>parakeet-tdt-0.6b-v3</p></td>
 <td><p>NeMo ASR in-process</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/tts/magpie/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/magpie-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">magpie_tts_server</span></code></p></td>
 <td><p>8104</p></td>
 <td><p>magpie_tts_multilingual_357m</p></td>
 <td><p>NeMo TTS in-process</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/tts/piper/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/piper-tts/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">piper_tts_server</span></code></p></td>
 <td><p>8105</p></td>
 <td><p>rhasspy/piper-voices (ONNX)</p></td>
 <td><p>piper-tts in-process</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/llm/llama_nemotron/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">llama_nemotron_llm_server</span></code></p></td>
 <td><p>8106</p></td>
 <td><p>Llama-3.1-Nemotron-Nano-8B-v1</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/llm/nemotron3_nano/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron3_nano_llm_server</span></code></p></td>
 <td><p>8107</p></td>
 <td><p>NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/llm/nemotron_omni/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/nemotron-omni-llm/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nemotron_omni_llm_server</span></code></p></td>
 <td><p>8108</p></td>
 <td><p>Nemotron-3-Nano-Omni-30B-A3B-Reasoning (NVFP4, FP8, or BF16, GPU-selected)</p></td>
 <td><p>vLLM (pip or docker) — multimodal (text + video)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ai-services/embedding-server/</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/embedding-server/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">embedding_server</span></code></p></td>
 <td><p>8109</p></td>
 <td><p>llama-nemotron-embed-1b-v2</p></td>
 <td><p>vLLM (pip or docker)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/transcript-mcp/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">transcript_mcp_server</span></code></p></td>
-<td><p>8200</p></td>
-<td><p>—</p></td>
-<td><p>JSONL + FastMCP</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services/video-memory-service/</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">video_memory_service</span></code></p></td>
 <td><p>8310</p></td>
 <td><p>—</p></td>
 <td><p>Typed recorded-video capability</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/video-mcp/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">video_mcp_server</span></code></p></td>
-<td><p>8210</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">services/rag-service/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rag_service</span></code></p></td>
+<td><p>8340</p></td>
 <td><p>—</p></td>
-<td><p>FastMCP → recorded service + live hub IPC</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/vlm-mcp/</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">vlm_mcp_server</span></code></p></td>
-<td><p>8240</p></td>
-<td><p>—</p></td>
-<td><p>FastMCP → vlm-server (<code class="docutils literal notranslate"><span class="pre">ask_image</span></code> tool)</p></td>
+<td><p>Typed dense document retrieval capability</p></td>
 </tr>
 </tbody>
 </table>
@@ -499,38 +493,60 @@ two separate trees under the service’s resolved <code class="docutils literal 
 </table>
 </div>
 <p>(The NeMo servers additionally cache non-HF artifacts under <code class="docutils literal notranslate"><span class="pre">&lt;model_cache&gt;/nemo/</span></code>.)</p>
-<p><code class="docutils literal notranslate"><span class="pre">model_cache</span></code> itself is set per YAML and resolved relative to the YAML file,
-so it differs by launch layout: the model-servers profile YAMLs resolve it to
-<code class="docutils literal notranslate"><span class="pre">models/</span></code> at the repository root, while the standalone YAMLs shipped next to
-each service resolve it to <code class="docutils literal notranslate"><span class="pre">ai-services/models/</span></code>. A model downloaded into one
-tree is invisible to consumers of the others, so check the tree your YAML
-actually points at before concluding a model is missing. For a manual
-<code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span></code>, set <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> to match both the consumer and the layout:</p>
+<p><code class="docutils literal notranslate"><span class="pre">model_cache</span></code> itself is set per YAML and resolved relative to the YAML file.
+Both the model-servers profiles and the standalone service YAMLs resolve it to
+<code class="docutils literal notranslate"><span class="pre">models/</span></code> at the repository root. For a manual <code class="docutils literal notranslate"><span class="pre">hf</span> <span class="pre">download</span></code>, set <code class="docutils literal notranslate"><span class="pre">HF_HOME</span></code> to
+match the consumer:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># vLLM-served model, launched via a model-servers profile</span>
 <span class="c1"># (model_cache resolves to models/ at the repository root):</span>
-<span class="nv">HF_HOME</span><span class="o">=</span>models<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/Cosmos-Reason1-7B
+<span class="nv">HF_HOME</span><span class="o">=</span>models<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/Cosmos3-Nano
 
-<span class="c1"># STT server launched from its standalone YAML</span>
-<span class="c1"># (model_cache resolves to ai-services/models/):</span>
-<span class="nv">HF_HOME</span><span class="o">=</span>ai-services/models/huggingface<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/parakeet-tdt-0.6b-v3
+<span class="c1"># NeMo STT server launched from its standalone YAML:</span>
+<span class="nv">HF_HOME</span><span class="o">=</span>models/huggingface<span class="w"> </span>hf<span class="w"> </span>download<span class="w"> </span>nvidia/parakeet-tdt-0.6b-v3
 </pre></div>
 </div>
+</section>
+<section id="migrating-model-caches-from-ai-services">
+<span id="id1"></span><h2>Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code><a class="headerlink" href="#migrating-model-caches-from-ai-services" title="Link to this heading">#</a></h2>
+<p>The service-directory rename does not move ignored model weights. Existing
+installations may still hold VLM, STT, and LLM weights in
+<code class="docutils literal notranslate"><span class="pre">ai-services/models/</span></code>, and TTS weights in <code class="docutils literal notranslate"><span class="pre">ai-services/tts/models/</span></code>; all
+current service profiles resolve to the repository-root <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory.</p>
+<p>Stop model services, then merge the caches from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>models
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-d<span class="w"> </span>ai-services/models<span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">  </span>cp<span class="w"> </span>-a<span class="w"> </span>-l<span class="w"> </span>-n<span class="w"> </span>ai-services/models/.<span class="w"> </span>models/
+<span class="k">fi</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-d<span class="w"> </span>ai-services/tts/models<span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">  </span>cp<span class="w"> </span>-a<span class="w"> </span>-l<span class="w"> </span>-n<span class="w"> </span>ai-services/tts/models/.<span class="w"> </span>models/
+<span class="k">fi</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">-l</span></code> option avoids duplicating large weight files and requires both paths
+to use the same filesystem. Omit <code class="docutils literal notranslate"><span class="pre">-l</span></code> when copying across filesystems and
+verify free space first. Keep the old directories until the relocated services
+start successfully without network access. Recreate project environments with
+<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code>; do not copy <code class="docutils literal notranslate"><span class="pre">.venv</span></code> directories across the move.</p>
 </section>
 <section id="adding-a-server-to-a-sample">
 <h2>Adding a server to a sample<a class="headerlink" href="#adding-a-server-to-a-sample" title="Link to this heading">#</a></h2>
 <p><strong>1 — Add the process to the orchestrator:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">PROCESSES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../server-runtime&quot;</span><span class="p">,</span>                     <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../ai-services/vlm-server&quot;</span><span class="p">,</span>             <span class="s2">&quot;vlm_server&quot;</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/xr-media-hub&quot;</span><span class="p">,</span>                    <span class="s2">&quot;xr_media_hub&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/vlm-server&quot;</span><span class="p">,</span>               <span class="s2">&quot;vlm_server&quot;</span><span class="p">),</span>   <span class="c1"># ← add as needed</span>
     <span class="c1"># Pick ONE LLM backend per sample — they bind different default ports</span>
     <span class="c1"># (8106 / 8107) so running more than one at once is allowed but</span>
     <span class="c1"># usually unnecessary.</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../ai-services/llm/llama_nemotron&quot;</span><span class="p">,</span>     <span class="s2">&quot;llama_nemotron_llm_server&quot;</span><span class="p">),</span>
-    <span class="c1"># Process(&quot;llm&quot;,  &quot;../../ai-services/llm/nemotron3_nano&quot;,     &quot;nemotron3_nano_llm_server&quot;),</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../ai-services/stt-server&quot;</span><span class="p">,</span>             <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;llm&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/llama-nemotron-llm&quot;</span><span class="p">,</span>       <span class="s2">&quot;llama_nemotron_llm_server&quot;</span><span class="p">),</span>
+    <span class="c1"># Process(&quot;llm&quot;,  &quot;../../services/nemotron3-nano-llm&quot;,       &quot;nemotron3_nano_llm_server&quot;),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;stt&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/stt-server&quot;</span><span class="p">,</span>               <span class="s2">&quot;stt_server&quot;</span><span class="p">),</span>
+    <span class="c1"># Add these together when the application uses native document retrieval.</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;embedding&quot;</span><span class="p">,</span> <span class="s2">&quot;../../services/embedding-server&quot;</span><span class="p">,</span>      <span class="s2">&quot;embedding_server&quot;</span><span class="p">),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;rag&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/rag-service&quot;</span><span class="p">,</span>               <span class="s2">&quot;rag_service&quot;</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="s2">&quot;yaml/rag_service.yaml&quot;</span><span class="p">),</span>
     <span class="c1"># Pick one TTS server</span>
-    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../ai-services/tts/piper&quot;</span><span class="p">,</span>    <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
-    <span class="c1"># Process(&quot;tts&quot;,    &quot;../../ai-services/tts/magpie&quot;,             &quot;magpie_tts_server&quot;),</span>
+    <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;tts&quot;</span><span class="p">,</span>    <span class="s2">&quot;../../services/piper-tts&quot;</span><span class="p">,</span>                 <span class="s2">&quot;piper_tts_server&quot;</span><span class="p">),</span>
+    <span class="c1"># Process(&quot;tts&quot;,  &quot;../../services/magpie-tts&quot;,                &quot;magpie_tts_server&quot;),</span>
     <span class="n">Process</span><span class="p">(</span><span class="s2">&quot;worker&quot;</span><span class="p">,</span> <span class="s2">&quot;worker&quot;</span><span class="p">,</span>                                   <span class="s2">&quot;my_agent_worker&quot;</span><span class="p">),</span>
 <span class="p">]</span>
 </pre></div>
@@ -542,27 +558,33 @@ voice quality and multilingual support when GPU is available; swap the
 <code class="docutils literal notranslate"><span class="pre">Process</span></code> row and YAML.</p>
 <p><strong>2 — Copy the reference YAML to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>yaml
-cp<span class="w"> </span>../../ai-services/vlm-server/vlm_server.yaml<span class="w"> </span>./yaml/vlm_server.yaml
+cp<span class="w"> </span>../../services/vlm-server/vlm_server.yaml<span class="w"> </span>./yaml/vlm_server.yaml
 <span class="c1"># Pick ONE LLM YAML — copy the one matching the Process you picked above.</span>
-cp<span class="w"> </span>../../ai-services/llm/llama_nemotron/llama_nemotron_llm_server.yaml<span class="w"> </span>./yaml/llama_nemotron_llm_server.yaml
-<span class="c1"># cp ../../ai-services/llm/nemotron3_nano/nemotron3_nano_llm_server.yaml ./yaml/nemotron3_nano_llm_server.yaml</span>
-cp<span class="w"> </span>../../ai-services/stt-server/stt_server.yaml<span class="w"> </span>./yaml/stt_server.yaml
-cp<span class="w"> </span>../../ai-services/tts/piper/piper_tts_server.yaml<span class="w"> </span>./yaml/piper_tts_server.yaml
+cp<span class="w"> </span>../../services/llama-nemotron-llm/llama_nemotron_llm_server.yaml<span class="w"> </span>./yaml/llama_nemotron_llm_server.yaml
+<span class="c1"># cp ../../services/nemotron3-nano-llm/nemotron3_nano_llm_server.yaml ./yaml/nemotron3_nano_llm_server.yaml</span>
+cp<span class="w"> </span>../../services/stt-server/stt_server.yaml<span class="w"> </span>./yaml/stt_server.yaml
+cp<span class="w"> </span>../../services/embedding-server/embedding_server.yaml<span class="w"> </span>./yaml/embedding_server.yaml
+cp<span class="w"> </span>../../services/rag-service/rag_service.yaml<span class="w"> </span>./yaml/rag_service.yaml
+cp<span class="w"> </span>../../services/piper-tts/piper_tts_server.yaml<span class="w"> </span>./yaml/piper_tts_server.yaml
 <span class="c1"># Or for Magpie (multilingual, GPU, ~2-5 s/sentence):</span>
-cp<span class="w"> </span>../../ai-services/tts/magpie/magpie_tts_server.yaml<span class="w"> </span>./yaml/magpie_tts_server.yaml
-<span class="c1"># MCP servers:</span>
-cp<span class="w"> </span>../../agent-mcp-servers/transcript-mcp/transcript_mcp_server.yaml<span class="w"> </span>./yaml/transcript_mcp_server.yaml
+cp<span class="w"> </span>../../services/magpie-tts/magpie_tts_server.yaml<span class="w"> </span>./yaml/magpie_tts_server.yaml
 cp<span class="w"> </span>../../services/video-memory-service/video_memory_service.yaml<span class="w"> </span>./yaml/video_memory_service.yaml
-cp<span class="w"> </span>../../agent-mcp-servers/video-mcp/video_mcp_server.yaml<span class="w"> </span>./yaml/video_mcp_server.yaml
 </pre></div>
 </div>
+<p>The standalone model-service YAMLs contain <code class="docutils literal notranslate"><span class="pre">model_cache:</span> <span class="pre">../../models</span></code> for their
+original <code class="docutils literal notranslate"><span class="pre">services/&lt;project&gt;/</span></code> location. After copying them one level deeper
+into <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>, change that value to <code class="docutils literal notranslate"><span class="pre">../../../models</span></code> so
+the cache still resolves to the repository-root <code class="docutils literal notranslate"><span class="pre">models/</span></code> directory. Capability
+and capability configurations without a <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> key need no change.</p>
 <p>Edit the YAML as needed (model, port, device, etc.). The launcher auto-discovers
-<code class="docutils literal notranslate"><span class="pre">yaml/&lt;command&gt;.yaml</span></code> in the sample root and passes it as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">yaml/&lt;command&gt;.yaml</span></code> in the sample root and passes it as <code class="docutils literal notranslate"><span class="pre">--config</span></code>.
+For RAG, also point <code class="docutils literal notranslate"><span class="pre">rag_service.yaml</span></code> at an application-owned document
+directory and a model profile containing an <code class="docutils literal notranslate"><span class="pre">embedding</span></code> role.</p>
 </section>
 <section id="calling-these-from-a-worker">
 <h2>Calling these from a worker<a class="headerlink" href="#calling-these-from-a-worker" title="Link to this heading">#</a></h2>
 <p>Workers do not hand-roll <code class="docutils literal notranslate"><span class="pre">httpx</span></code> clients against these endpoints.  They
-depend on <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/724efff1988c2f5a738b80ed8d5568bc223e70e3/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models</span></code></a>,
+depend on <a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>,
 load a per-sample model profile, and construct service clients via
 <code class="docutils literal notranslate"><span class="pre">make_llm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_vlm</span></code>, <code class="docutils literal notranslate"><span class="pre">make_stt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_tts</span></code>, and <code class="docutils literal notranslate"><span class="pre">make_embedding</span></code>. The SDK encapsulates the
 OpenAI-compatible wire format and the per-model quirks (reasoning-field
@@ -599,7 +621,7 @@ legacy entries and direct role mappings. A profile shared with the stdlib-only
 launcher must use the wrapped nested <code class="docutils literal notranslate"><span class="pre">.json</span></code> contract; non-<code class="docutils literal notranslate"><span class="pre">.json</span></code> profiles are
 rejected before deployment metadata is read. Full protocol surface, the preset
 table, and the profile contract are in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/724efff1988c2f5a738b80ed8d5568bc223e70e3/agent-sdk/xr-ai-models/README.md"><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-models/README.md</span></code></a>.</p>
+<a class="reference internal" href="../reference/agent-sdk-models.html"><span class="doc">xr-ai-models</span></a>.</p>
 </section>
 <section id="hosting-models-on-nvidia-nim">
 <h2>Hosting models on NVIDIA NIM<a class="headerlink" href="#hosting-models-on-nvidia-nim" title="Link to this heading">#</a></h2>
@@ -615,7 +637,7 @@ disables endpoint health probing, and declares external ownership:</p>
 <span class="w">      </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vlm&quot;</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_compat&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;model_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvidia/cosmos-reason1-7b&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;model_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nvidia/cosmos3-nano-reasoner&quot;</span><span class="p">,</span>
 <span class="w">        </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;vision&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;streaming&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="nt">&quot;endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
@@ -633,7 +655,7 @@ disables endpoint health probing, and declares external ownership:</p>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">api_key_env:</span> <span class="pre">NGC_API_KEY</span></code></strong> sends the environment value as a bearer
 token. The key is a
 managed credential — <code class="docutils literal notranslate"><span class="pre">run_stack</span></code> injects a saved <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> into every
-subprocess (refer to <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/724efff1988c2f5a738b80ed8d5568bc223e70e3/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>); or export it.</p></li>
+subprocess (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>); or export it.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">readiness:</span> <span class="pre">none</span></code></strong> is required when the hosted endpoint has no local
 <code class="docutils literal notranslate"><span class="pre">/health</span></code> route.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">ownership:</span> <span class="pre">external</span></code></strong> keeps the launcher from starting or stopping the
@@ -725,12 +747,15 @@ sending a signal; absent servers are silently skipped.</p>
 </div>
 <p>Both modes honor identical configuration keys — same model, same port, same vLLM
 flags. The dispatcher lives in <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-vllm/</span></code>. Switching is one YAML edit:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
-<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.04-py3</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># vlm-server (Cosmos3)</span>
+<span class="nt">vllm_backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
+<span class="nt">vllm_image</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">nvcr.io/nvidia/vllm:26.07-py3</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.04-py3</span></code>; override to pin
-another tag, an internal mirror, or a custom build.</p>
+<p><code class="docutils literal notranslate"><span class="pre">vllm_image:</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm:26.07-py3</span></code> for vlm-server,
+whose Cosmos3 support requires vLLM 0.23 or newer. The other wrappers retain
+their <code class="docutils literal notranslate"><span class="pre">26.04-py3</span></code> default. Override either to pin another tag, an internal
+mirror, or a custom build.</p>
 <section id="docker-mode-prerequisites">
 <h3>docker mode — prerequisites<a class="headerlink" href="#docker-mode-prerequisites" title="Link to this heading">#</a></h3>
 <ul>
@@ -741,7 +766,7 @@ must succeed without <code class="docutils literal notranslate"><span class="pre
 <li><p><strong>NGC pull access</strong> for <code class="docutils literal notranslate"><span class="pre">nvcr.io/nvidia/vllm</span></code>. The wrapper auto-runs
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">nvcr.io</span></code> if <code class="docutils literal notranslate"><span class="pre">NGC_API_KEY</span></code> is in the environment (loaded by
 <code class="docutils literal notranslate"><span class="pre">load_credentials()</span></code> from <code class="docutils literal notranslate"><span class="pre">~/.config/xr-ai/credentials.json</span></code> per
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/724efff1988c2f5a738b80ed8d5568bc223e70e3/docs/credentials.md"><code class="docutils literal notranslate"><span class="pre">docs/credentials.md</span></code></a>). Otherwise, log in manually once:</p>
+<a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>). Otherwise, log in manually once:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>login<span class="w"> </span>nvcr.io<span class="w"> </span>-u<span class="w"> </span><span class="s1">&#39;$oauthtoken&#39;</span><span class="w"> </span>-p<span class="w"> </span><span class="nv">$NGC_API_KEY</span>
 </pre></div>
 </div>
@@ -786,11 +811,19 @@ cleanup.</p>
 <section id="per-server-notes">
 <h2>Per-server notes<a class="headerlink" href="#per-server-notes" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>vlm-server</strong> is a thin launcher around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for Cosmos-Reason1-7B
-(or any Qwen2.5-VL-compatible VLM). vLLM handles weight loading, image
-decoding, and the OpenAI-compatible HTTP API. Hosting backend is selectable
-per YAML — refer to <em>Choosing the vLLM runtime</em> above.</p></li>
-<li><p><strong>llm/llama_nemotron</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
+<li><p><strong>vlm-server</strong> defaults to the Cosmos3 Nano Reasoner. Hugging Face publishes
+Reasoner and Generator weights in the unified <code class="docutils literal notranslate"><span class="pre">nvidia/Cosmos3-Nano</span></code>
+checkpoint. The required <code class="docutils literal notranslate"><span class="pre">Cosmos3ForConditionalGeneration</span></code> architecture
+override selects vLLM’s native Reasoner loader: despite its generic class
+name, it maps only the understanding tower and vision encoder and drops the
+Generator weights. The Generator requires vLLM’s separate <code class="docutils literal notranslate"><span class="pre">--omni</span></code> path,
+which xr-ai intentionally does not enable. The checkpoint’s official chat
+template emits the assistant answer directly and has no <code class="docutils literal notranslate"><span class="pre">enable_thinking</span></code>
+branch or <code class="docutils literal notranslate"><span class="pre">&lt;think&gt;</span></code> delimiters, so the client preset needs no reasoning-field
+mapping. Cosmos-Reason1 remains available by pairing
+<code class="docutils literal notranslate"><span class="pre">model:</span> <span class="pre">nvidia/Cosmos-Reason1-7B</span></code> with the <code class="docutils literal notranslate"><span class="pre">cosmos_vlm</span></code> client preset. Hosting
+backend is selectable per YAML — refer to <em>Choosing the vLLM runtime</em> above.</p></li>
+<li><p><strong>llama-nemotron-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">Llama-3.1-Nemotron-Nano-8B-v1</span></code>. vLLM handles native Llama-3.1 tool calling
 via the <code class="docutils literal notranslate"><span class="pre">llama3_json</span></code> parser — <code class="docutils literal notranslate"><span class="pre">tools=[...]</span></code> in the request is rendered via
 the model’s chat template and the resulting tool calls come back in OpenAI
@@ -798,9 +831,9 @@ wire format (<code class="docutils literal notranslate"><span class="pre">finish
 <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">on&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;detailed</span> <span class="pre">thinking</span> <span class="pre">off&quot;</span></code> in a system or user
 message; reasoning preamble is <strong>not</strong> stripped server-side. Hosting backend
 is selectable per YAML (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/724efff1988c2f5a738b80ed8d5568bc223e70e3/ai-services/llm/llama_nemotron/README.md"><code class="docutils literal notranslate"><span class="pre">ai-services/llm/llama_nemotron/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/01caa9674962fbf91af9211e26763ea3736932e8/services/llama-nemotron-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/llama-nemotron-llm/README.md</span></code></a>
 for the full HTTP contract and tuning knobs.</p></li>
-<li><p><strong>llm/nemotron3_nano</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
+<li><p><strong>nemotron3-nano-llm</strong> is a thin wrapper around <code class="docutils literal notranslate"><span class="pre">vllm</span> <span class="pre">serve</span></code> for
 <code class="docutils literal notranslate"><span class="pre">NVIDIA-Nemotron-3-Nano-30B-A3B-{NVFP4,FP8}</span></code> (auto-selected by GPU compute
 capability). vLLM handles tool calling (<code class="docutils literal notranslate"><span class="pre">qwen3_coder</span></code> parser), reasoning
 extraction (<code class="docutils literal notranslate"><span class="pre">nano_v3</span></code> parser — auto-fetched into <code class="docutils literal notranslate"><span class="pre">model_cache</span></code>), and
@@ -809,9 +842,9 @@ FlashInfer FP4 MoE kernels. Requires a Blackwell-class GPU (B200 or RTX PRO
 <code class="docutils literal notranslate"><span class="pre">enforce_eager:</span> <span class="pre">true</span></code> by default to avoid the silent 3–8 min CUDA graph and
 FlashInfer autotune on cold start. Hosting backend is selectable per YAML
 (refer to <em>Choosing the vLLM runtime</em>). Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/724efff1988c2f5a738b80ed8d5568bc223e70e3/ai-services/llm/nemotron3_nano/README.md"><code class="docutils literal notranslate"><span class="pre">ai-services/llm/nemotron3_nano/README.md</span></code></a>
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/01caa9674962fbf91af9211e26763ea3736932e8/services/nemotron3-nano-llm/README.md"><code class="docutils literal notranslate"><span class="pre">services/nemotron3-nano-llm/README.md</span></code></a>
 for the vLLM flags it forwards and Blackwell prerequisites.</p></li>
-<li><p><strong>llm/nemotron_omni</strong> is a vLLM-backed multimodal LLM serving
+<li><p><strong>nemotron-omni-llm</strong> is a vLLM-backed multimodal LLM serving
 <code class="docutils literal notranslate"><span class="pre">Nemotron-3-Nano-Omni-30B-A3B-Reasoning</span></code> (text + video input) at port 8108.
 The YAML auto-selects between three model variants by detected GPU compute
 capability: NVFP4 on Blackwell (SM100+), FP8 on Ada and Hopper, BF16 forced via
@@ -821,27 +854,26 @@ swap backends. Hosting backend is selectable per YAML (refer to <em>Choosing the
 vLLM runtime</em>); persists across stack restarts in both pip and docker modes.</p></li>
 <li><p><strong>stt-server</strong> loads parakeet-tdt-0.6b-v3 via NeMo ASR in-process.
 English-only; the <code class="docutils literal notranslate"><span class="pre">language</span></code> and <code class="docutils literal notranslate"><span class="pre">temperature</span></code> form fields are accepted but ignored.</p></li>
-<li><p><strong>tts/magpie</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>
-<li><p><strong>tts/piper</strong> serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
+<li><p><strong>magpie-tts</strong> loads magpie_tts_multilingual_357m via NeMo TTS in-process.</p></li>
+<li><p><strong>piper-tts</strong> serves any rhasspy/piper-voices ONNX voice; ~100 ms/sentence on CPU.
 All inference runs in a thread pool so the asyncio loop is never blocked.</p></li>
-<li><p><strong>transcript-mcp-server</strong> is pure FastMCP at <code class="docutils literal notranslate"><span class="pre">/mcp</span></code> on port 8200.
-Records are keyed by free-form <code class="docutils literal notranslate"><span class="pre">source_id</span></code> (live participant identity
-<em>or</em> an internal source name like <code class="docutils literal notranslate"><span class="pre">&quot;agent-vlm&quot;</span></code>). Tools:
-<code class="docutils literal notranslate"><span class="pre">query_transcripts</span></code>, <code class="docutils literal notranslate"><span class="pre">add_transcript</span></code> (worker ingest), <code class="docutils literal notranslate"><span class="pre">list_sources</span></code>,
-<code class="docutils literal notranslate"><span class="pre">get_transcript_stats</span></code>. Transcripts persist as JSONL alongside a
-<code class="docutils literal notranslate"><span class="pre">.identity</span></code> sidecar so list and query round-trip raw IDs cleanly even
-when sanitized filenames collide.</p></li>
 <li><p><strong>video-memory-service</strong> owns recorded chunk queries, NVDEC, and PNG output
 behind typed msgpack/ZMQ on port 8310. Set <code class="docutils literal notranslate"><span class="pre">recordings_dir</span></code> in its YAML to
 enable recorded-video operations; the path must match the hub’s
-<code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. Current frames stay with the caller’s hub client.</p></li>
-<li><p><strong>video-mcp-server</strong> is the optional FastMCP compatibility adapter at
-<code class="docutils literal notranslate"><span class="pre">/mcp</span></code> on port 8210. It discovers whether recording is enabled from the
-service and preserves the existing conditional tool surface.</p></li>
+<code class="docutils literal notranslate"><span class="pre">video_recording.out_dir</span></code>. Latest video and sampling windows end at the
+newest recorded timestamp and require only a duration. Historical frame,
+video, and sampling requests share an absolute <code class="docutils literal notranslate"><span class="pre">start_us</span></code>; video windows add
+a duration. Sampling also accepts a hard total frame budget, decodes each
+selected chunk once, skips unavailable or corrupt chunks when other frames
+remain, and can bound exported PNG dimensions. The sampled timestamps are
+estimates interpolated from chunk metadata. The selection budget may be up
+to 256, but the shipped Cosmos VLM accepts no more than four selected images
+per inference request. Current frames stay with the caller’s hub client.</p></li>
 <li><p>Ports are configurable — avoid conflicts with LiveKit (7880–7882) and hub (8080, 8090).</p></li>
 <li><p><strong>Sample YAMLs</strong> for each service ship in their own service directory.
-Copy them to your sample root and adjust <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> (<code class="docutils literal notranslate"><span class="pre">../../models</span></code> resolves
-to <code class="docutils literal notranslate"><span class="pre">xr-ai/models/</span></code> from any <code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/</span></code> directory).</p></li>
+Copy them to your sample’s <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory and set <code class="docutils literal notranslate"><span class="pre">model_cache</span></code> to
+<code class="docutils literal notranslate"><span class="pre">../../../models</span></code>, which resolves to <code class="docutils literal notranslate"><span class="pre">xr-ai/models/</span></code> from
+<code class="docutils literal notranslate"><span class="pre">agent-samples/&lt;name&gt;/yaml/</span></code>.</p></li>
 </ul>
 </section>
 </section>
@@ -896,6 +928,7 @@ to <code class="docutils literal notranslate"><span class="pre">xr-ai/models/</s
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#two-huggingface-cache-roots">Two HuggingFace cache roots</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migrating-model-caches-from-ai-services">Migrating model caches from <code class="docutils literal notranslate"><span class="pre">ai-services/</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-server-to-a-sample">Adding a server to a sample</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calling-these-from-a-worker">Calling these from a worker</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hosting-models-on-nvidia-nim">Hosting models on NVIDIA NIM</a></li>
