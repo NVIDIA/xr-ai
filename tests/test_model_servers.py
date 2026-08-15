@@ -38,13 +38,13 @@ _embedding = importlib.util.module_from_spec(_EMBEDDING_SPEC)
 _EMBEDDING_SPEC.loader.exec_module(_embedding)
 
 
-def test_default_stack_uses_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_stack_uses_omni(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_model_servers, "detect_gpu_config", lambda: "spark")
 
     processes = _model_servers._build_processes()
 
-    assert [process.name for process in processes] == ["stt", "agent-llm", "vlm", "embedding"]
-    assert [process.port for process in processes] == [8103, 8107, 8100, 8109]
+    assert [process.name for process in processes] == ["stt", "omni", "embedding"]
+    assert [process.port for process in processes] == [8103, 8108, 8109]
 
 
 def test_omni_stack_replaces_nano_and_cosmos(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,7 +144,7 @@ def test_starting_stack_stops_incompatible_persistent_models(
 
 @pytest.mark.parametrize(
     ("argv", "expected"),
-    [([], "vlm-llm"), (["--vlm-llm-stack"], "vlm-llm"), (["--omni-stack"], "omni")],
+    [([], "omni"), (["--vlm-llm-stack"], "vlm-llm"), (["--omni-stack"], "omni")],
 )
 def test_cli_selects_requested_stack(
     monkeypatch: pytest.MonkeyPatch,

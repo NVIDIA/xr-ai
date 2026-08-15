@@ -5,14 +5,14 @@
 # Each entry maps a logical name to a preset + base_url.
 # Presets live in agent-sdk/xr-ai-models/xr_ai_models/presets/.
 
-# llm and agent_llm intentionally share the Nemotron-3-Nano server.
+# All three logical roles intentionally share the Nemotron-3-Nano-Omni server.
 llm:
-  kind: preset:nemotron3_nano
-  base_url: http://localhost:8107
+  kind: preset:nemotron_omni
+  base_url: http://localhost:8108
 
 agent_llm:
-  kind: preset:nemotron3_nano
-  base_url: http://localhost:8107
+  kind: preset:nemotron_omni
+  base_url: http://localhost:8108
 
 stt:
   kind: preset:parakeet_stt
@@ -23,5 +23,14 @@ tts:
   base_url: http://localhost:8105
 
 vlm:
-  kind: preset:cosmos3_nano_reasoner
-  base_url: http://localhost:8100
+  kind: openai_compat
+  category: vlm
+  model_name: llm
+  base_url: http://localhost:8108
+  default_extras:
+    chat_template_kwargs:
+      enable_thinking: false
+  capabilities:
+    streaming: true
+    vision: true
+    video: true

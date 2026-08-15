@@ -165,8 +165,9 @@ contains only wrapper messages — nothing from inside the container.
 **Health probe** — confirm vLLM never reached the `/health` endpoint:
 
 ```bash
-curl -fsS http://127.0.0.1:8107/health   # nemotron3_nano (agent-llm)
-curl -fsS http://127.0.0.1:8100/health   # vlm_server
+curl -fsS http://127.0.0.1:8108/health   # nemotron_omni (default LLM + VLM)
+curl -fsS http://127.0.0.1:8107/health   # nemotron3_nano (legacy stack)
+curl -fsS http://127.0.0.1:8100/health   # vlm_server (legacy stack)
 ```
 
 **Container post-mortem** — the wrapper streams `docker logs -f` into the
@@ -331,7 +332,7 @@ the IWER emulator built into the web client itself for desktop dev.
 
 ### vLLM cold start takes 3–8 minutes
 
-**Symptom:** `vlm_server` or `nemotron3_nano_llm_server` weight load is fast,
+**Symptom:** a vLLM server's weight load is fast,
 but the server then sits silent for several minutes before becoming healthy.
 
 **Cause:** CUDA graph capture + FlashInfer FP4 MoE autotune happen on first
@@ -344,8 +345,8 @@ flip `enforce_eager: false` unless you have a measured reason.
 
 ### `xr_render_demo` exits but VRAM is still pinned
 
-**By design.** The vLLM-backed servers (`vlm_server`,
-`nemotron3_nano_llm_server`) survive stack
+**By design.** The vLLM-backed servers (`nemotron_omni_llm_server`,
+`vlm_server`, and `nemotron3_nano_llm_server`) survive stack
 restarts so model weights stay loaded across worker crashes and debug
 restarts. See {doc}`/components/ai-services` → *vLLM model
 persistence*.

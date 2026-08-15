@@ -87,15 +87,13 @@ def _model_backend() -> str:
 #
 # With model_backend: nim (in xr_render_demo_worker.yaml) the worker loads
 # models.nim.yaml automatically — run LLM/VLM on hosted NIM and just don't start the local
-# agent-llm / vlm model-servers. STT/TTS stay local. See
+# omni model server. STT/TTS stay local. See
 # docs/source/components/ai-services.md "Hosting models on NVIDIA NIM".
 def _build_processes() -> list[Process]:
     return [
         Process("stt",       "../../services/stt-server",            "stt_server",
                 launch_mode="reuse"),
-        Process("agent-llm", "../../services/nemotron3-nano-llm",    "nemotron3_nano_llm_server",
-                launch_mode="reuse"),
-        Process("vlm",       "../../services/vlm-server",            "vlm_server",
+        Process("omni",      "../../services/nemotron-omni-llm",    "nemotron_omni_llm_server",
                 launch_mode="reuse"),
         Process("hub",        "../../services/xr-media-hub",                "xr_media_hub",
                 config="yaml/xr_media_hub.yaml"),

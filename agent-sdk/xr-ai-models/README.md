@@ -39,9 +39,9 @@ async with make_llm(config, "agent_llm") as llm:
   "models": {
     "agent_llm": {
       "category": "llm",
-      "adapter": {"preset": "nemotron3_nano"},
-      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "agent-llm"}
+      "adapter": {"preset": "nemotron_omni"},
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "omni"}
     }
   }
 }
@@ -55,7 +55,7 @@ Built-in presets — see `xr_ai_models/presets/`:
 | `cosmos_vlm`     | vlm-server               | Cosmos-Reason1 compatibility option; image + video; `enable_thinking=false` by default; video requires `max_videos_per_prompt >= 1` |
 | `llama_nemotron` | llama-nemotron-llm-server | OpenAI tool calling via llama3_json (server-side) |
 | `nemotron3_nano` | nemotron3-nano-llm-server | reasoning field: `reasoning` |
-| `nemotron_omni`  | nemotron-omni-llm-server  | reasoning field: `reasoning_content`, vision + video |
+| `nemotron_omni`  | nemotron-omni-llm-server  | default LLM; reasoning field: `reasoning_content`, thinking off unless requested, vision + video |
 | `nemotron_embedding` | embedding-server | OpenAI-compatible dense embeddings |
 | `parakeet_stt`   | stt-server               | |
 | `piper_tts`      | tts/piper                | |

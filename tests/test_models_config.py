@@ -63,6 +63,14 @@ def test_get_preset_returns_deep_copy() -> None:
     assert p2["capabilities"]["tool_calls"] is True
 
 
+def test_nemotron_omni_disables_thinking_by_default() -> None:
+    preset = get_preset("nemotron_omni")
+
+    assert preset["default_extras"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+
+
 def test_unknown_preset_raises() -> None:
     with pytest.raises(KeyError, match="unknown preset"):
         get_preset("nope")

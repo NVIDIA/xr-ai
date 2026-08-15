@@ -4,7 +4,7 @@
 """Multi-step model loop for the xr-render scene agent.
 
 Agentic loop (max ``_MAX_LOOP`` iterations):
-  - Nemotron-3-Nano emits an OpenAI ``tool_calls`` payload → execute tool,
+  - Nemotron-3-Nano-Omni emits an OpenAI ``tool_calls`` payload → execute tool,
     append result, continue.
   - When the model returns text instead of a tool call, that text is the
     final user-visible response.
@@ -165,7 +165,7 @@ class SceneModelLoop:
     """
     Multi-step agentic loop over native Relay-managed tools.
 
-    Uses Nemotron-3-Nano (port 8107) with OpenAI tool calling for the
+    Uses Nemotron-3-Nano-Omni (port 8108) with OpenAI tool calling for the
     reasoning loop; the pre-loop quick-ack shares the same server via the
     `llm` logical model.
 

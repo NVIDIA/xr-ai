@@ -473,11 +473,11 @@ run this first to warm up model weights before starting any demo sample.
 |---|---|---|---|
 | Orchestrator | `model-servers` | `xr-ai-launcher`, `xr-ai-logging`, `xr-ai-vllm` (for `--stop`) | — |
 
-The default `--vlm-llm-stack` starts stt-server (8103),
-nemotron3-nano-llm-server (8107, `persistent=True`), and vlm-server (8100,
-`persistent=True`), plus embedding-server (8109, `persistent=True`).
-`--omni-stack` replaces Nano and Cosmos with nemotron-omni-llm-server (8108,
-`persistent=True`) while retaining stt-server and embedding-server. The stacks
+The default `--omni-stack` starts stt-server (8103),
+nemotron-omni-llm-server (8108, `persistent=True`), and embedding-server
+(8109, `persistent=True`). `--vlm-llm-stack` selects the legacy
+nemotron3-nano-llm-server (8107) and vlm-server (8100) pair while retaining
+stt-server and embedding-server. The stacks
 are mutually exclusive; `--stop` shuts down every model-server port without
 selecting one.
 GPU profiles: `dual_48G_ada`, `spark`, `96G_blackwell` (auto-detected).
@@ -500,12 +500,12 @@ Model endpoints (llm, agent_llm, stt, tts, vlm) are declared in
 `make_llm` / `make_stt` / `make_tts` / `make_vlm`.  `httpx` is retained as
 a transitive dep of `xr-ai-voice` and `xr-ai-tools[frames]`.
 
-Requires `model-servers` to be running first — model servers are declared as
-`launch_mode="reuse"` so the launcher skips spawning them but the dependency
-is explicit in the process list.
+Requires `model-servers` to be running first — the Omni model server is
+declared as `launch_mode="reuse"` so the launcher skips spawning it but the
+dependency is explicit in the process list.
 Starts: hub, cloudxr-runtime, piper-tts (8105), video-memory (8310),
-scene (8320), openxr-service (8330), and worker. The model-server
-entries are declared with `launch_mode="reuse"` and must already be healthy.
+scene (8320), openxr-service (8330), and worker. The model-server entry is
+declared with `launch_mode="reuse"` and must already be healthy.
 No MCP adapters run in the sample stack.
 Web client must be a build that includes the bundled CloudXR JS SDK
 (see `client-samples/web-xr-build/`).

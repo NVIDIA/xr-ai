@@ -25,7 +25,8 @@ uv run model_servers --stop
 ```
 
 Persisted vLLM processes or containers may otherwise keep serving the previous
-model and image even though the checked-in configuration now selects Cosmos3.
+model and image even though the checked-in configuration now selects
+Nemotron-3 Nano Omni.
 :::
 
 ```bash
@@ -40,14 +41,15 @@ are presets for common configurations; to run on a different GPU, refer to
 On first run each model downloads from HuggingFace (tens of GB; can take
 tens of minutes). On subsequent runs the containers restart in under a minute.
 
-The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
-STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
-Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
+The default stack starts Nemotron-3 Nano Omni (8108), STT (8103), and
+embeddings (8109). The Omni server backs both LLM and vision requests. Use
+`--vlm-llm-stack` to run the legacy Nemotron-3 Nano (8107) and Cosmos (8100)
+pair instead.
 Switching stacks stops the incompatible persistent models first and aborts if
 they cannot be stopped, avoiding GPU overcommit.
 
 ```bash
-uv run model_servers --omni-stack
+uv run model_servers --vlm-llm-stack
 ```
 
 `HF_TOKEN` is required by default: without it the large first-run download
@@ -89,9 +91,9 @@ several minutes). `HF_TOKEN` is required by default; pass `--allow-anonymous`
 to run without one (refer to the
 {doc}`credentials guide </getting_started/credentials>`).
 
-**With model-servers pre-running** — if VLM (port 8100) and STT (port 8103) are
-already up from `model-servers`, the demo detects them at startup and reuses
-them. No extra flags needed. When you exit, those services keep running.
+**With model-servers pre-running** — start `model_servers --vlm-llm-stack` to
+pre-warm VLM (port 8100) and STT (port 8103). The demo detects and reuses them.
+When you exit, those services keep running.
 
 ### Step 1 — Start the server
 
@@ -258,8 +260,8 @@ model_backend: nim     # default is "local"
 The worker loads `yaml/models.nim.yaml` for native model-backed Functions.
 Provide an
 `NGC_API_KEY` as an **environment variable** (or via the launcher credential
-prompt — not in YAML) and just don't start the local `agent-llm` / `vlm`
-model-servers. Refer to the AI-services guide.
+prompt — not in YAML) and just don't start the local `omni` model server.
+Refer to the AI-services guide.
 
 ## Hub only (standalone)
 

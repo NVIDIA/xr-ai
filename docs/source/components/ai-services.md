@@ -180,9 +180,9 @@ deployment ownership:
   "models": {
     "agent_llm": {
       "category": "llm",
-      "adapter": {"preset": "nemotron3_nano"},
-      "endpoint": {"base_url": "http://localhost:8107", "readiness": "health"},
-      "deployment": {"ownership": "reused", "service": "agent-llm"}
+      "adapter": {"preset": "nemotron_omni"},
+      "endpoint": {"base_url": "http://localhost:8108", "readiness": "health"},
+      "deployment": {"ownership": "reused", "service": "omni"}
     }
   }
 }
@@ -242,8 +242,8 @@ so the local VLM process is omitted and `NGC_API_KEY` is requested
 automatically. Select `models.local.json` to switch back.
 
 `xr-render-demo` retains its `model_backend: nim` selector and
-`models.nim.yaml` overlay. Run it without the local `agent-llm` / `vlm`
-model-servers and provide `NGC_API_KEY`.
+`models.nim.yaml` overlay. Run it without the local `omni` model server and
+provide `NGC_API_KEY`.
 
 **Self-hosted NIM containers** work the same way: point `base_url` at the
 container (e.g. `http://localhost:8000`), set `readiness: health`, and choose

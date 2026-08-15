@@ -84,23 +84,26 @@ def test_models_yaml_loads() -> None:
     tts_spec      = cfg.tts("tts")
     vlm_spec      = cfg.vlm("vlm")
 
-    assert llm_spec.base_url       == "http://localhost:8107"
-    assert agent_llm_spec.base_url == "http://localhost:8107"
+    assert llm_spec.base_url       == "http://localhost:8108"
+    assert agent_llm_spec.base_url == "http://localhost:8108"
     assert stt_spec.base_url       == "http://localhost:8103"
     assert tts_spec.base_url       == "http://localhost:8105"
-    assert vlm_spec.base_url       == "http://localhost:8100"
+    assert vlm_spec.base_url       == "http://localhost:8108"
 
-    # nemotron3_nano preset must set reasoning_field so ChatResponse.reasoning
-    # is populated from the server's "reasoning" field.
-    assert agent_llm_spec.reasoning_field == "reasoning"
+    # nemotron_omni preset must set reasoning_field so ChatResponse.reasoning
+    # is populated from vLLM's "reasoning_content" field.
+    assert agent_llm_spec.reasoning_field == "reasoning_content"
 
-    # Both logical models share the nemotron3_nano server. The preset must pin
-    # thinking off at the wire level: Nemotron-3-Nano's template defaults
+    # Both logical LLMs share the Omni server. The preset must pin thinking off
+    # at the wire level: Nemotron-3-Nano-Omni's template defaults
     # thinking-on, which would burn the quick-ack's 40-token budget on hidden
     # reasoning and return empty content with finish_reason="length".
     for spec in (llm_spec, agent_llm_spec):
         assert spec.model_name == "llm"
         assert spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
+    assert vlm_spec.model_name == "llm"
+    assert vlm_spec.capabilities["vision"] is True
+    assert vlm_spec.default_extras["chat_template_kwargs"] == {"enable_thinking": False}
 
 
 def test_worker_config_idle_timeout_disabled_by_default() -> None:
@@ -244,7 +247,7 @@ async def test_agentic_loop_wire_golden_thinking_on() -> None:
 
     body = stub.last_json()
 
-    # Model name from nemotron3_nano preset.
+    # Model name from the nemotron_omni preset.
     assert body["model"]       == "llm"
     assert body["max_tokens"]  == 2048
     assert body["temperature"] == 0.0
@@ -297,15 +300,15 @@ async def test_agentic_loop_wire_golden_thinking_off() -> None:
 
 
 async def test_agentic_loop_reasoning_field_normalized() -> None:
-    """nemotron3_nano preset uses reasoning_field='reasoning'; SDK exposes it as ChatResponse.reasoning."""
+    """The Omni reasoning field is normalized to ChatResponse.reasoning."""
     stub = StubOpenAI()
     stub.set_chat_message(
         content="I placed the sphere ahead of you.",
         reasoning="RESOLVE: user said 'in front' → forward direction. COMPUTE: pos = head + fwd × 1.5",
-        reasoning_field="reasoning",  # nano_v3 server writes to "reasoning"
+        reasoning_field="reasoning_content",
     )
 
-    agent_llm = _make_llm(stub, reasoning_field="reasoning")
+    agent_llm = _make_llm(stub, reasoning_field="reasoning_content")
 
     resp = await agent_llm.chat(
         [ChatMessage(role="user", content="Add a sphere in front")],

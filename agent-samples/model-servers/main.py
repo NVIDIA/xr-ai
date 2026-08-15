@@ -9,13 +9,13 @@ process exits.  Model weights stay hot across stack restarts.
 
 Servers started
 ---------------
-  default / --vlm-llm-stack
+  --vlm-llm-stack
     stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
     agent-llm  — NVIDIA-Nemotron-3-Nano-30B-A3B     port 8107  (vLLM)
     vlm        — nvidia/Cosmos3-Nano Reasoner       port 8100  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
 
-  --omni-stack
+  default / --omni-stack
     stt        — nvidia/parakeet-tdt-0.6b-v3        port 8103  (NeMo ASR)
     omni       — Nemotron-3-Nano-Omni-30B-A3B       port 8108  (vLLM)
     embedding  — nvidia/llama-nemotron-embed-1b-v2  port 8109  (vLLM)
@@ -47,10 +47,8 @@ _INCOMPATIBLE_STACK_SERVICES = {
     "omni": [("omni", 8108)],
 }
 
-# agent-llm (Nemotron-30B) loads first on single-GPU profiles so its
-# FlashInfer MoE JIT compilation runs with the full GPU free.  The compiled
-# kernels are cached after the first run (~3-8 min).
-def _build_processes(stack: str = "vlm-llm") -> list[Process]:
+
+def _build_processes(stack: str = "omni") -> list[Process]:
     """Return the selected shared model stack for the detected GPU profile."""
     ai = f"yaml/{detect_gpu_config()}"
     embedding_config = f"{ai}/embedding_server_{stack.replace('-', '_')}.yaml"
@@ -118,13 +116,13 @@ def run() -> None:
     )
     mode.add_argument(
         "--omni-stack", action="store_const", const="omni", dest="stack",
-        help="Start Nemotron-3-Nano-Omni with STT instead of the VLM + LLM stack.",
+        help="Start the default Nemotron-3-Nano-Omni stack.",
     )
     mode.add_argument(
         "--vlm-llm-stack", action="store_const", const="vlm-llm", dest="stack",
-        help="Start the default Nemotron-3-Nano + Cosmos VLM stack.",
+        help="Start the legacy Nemotron-3-Nano + Cosmos VLM stack.",
     )
-    p.set_defaults(stack="vlm-llm")
+    p.set_defaults(stack="omni")
     p.add_argument("--allow-anonymous", action="store_true",
                    help="Start without HF_TOKEN (unauthenticated downloads "
                         "of the multi-GB checkpoints may stall indefinitely).")
