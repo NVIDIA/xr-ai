@@ -114,6 +114,12 @@ VAD, STT, or wake-phrase filtering. Agents can subscribe to
 Relay telemetry disabled because its payload contains raw interleaved float32
 PCM.
 
+Audio delivery is FIFO within each participant and track, with independent
+streams allowed to progress concurrently. `audio_capacity` defaults to 32 queued
+chunks per stream. A full queue drops its oldest queued chunk to retain the
+newest live audio. Subscriber failures do not stop later chunks, and all audio
+workers are cancelled and awaited during cleanup.
+
 Accepted speech and typed text are published as `UserQuery` events, participant
 and interruption lifecycle events use application-named topics, and voice
 consumes `voice.output`. `VoiceSession` owns model readiness, hub transport,

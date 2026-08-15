@@ -466,8 +466,10 @@ state is shared between them owns the appropriate synchronization, such as an
 head-of-line blocking on unrelated or streaming tools.</p>
 <p>Domain controls such as <code class="docutils literal notranslate"><span class="pre">start_monitoring</span></code>, <code class="docutils literal notranslate"><span class="pre">stop_monitoring</span></code>, and <code class="docutils literal notranslate"><span class="pre">status</span></code> are
 ordinary tools. Agent lifetime itself is not a model tool. Model loops,
-planning, memory, and model clients remain agent implementations. Raw audio and
-video stay on the XR-Media-Hub path.</p>
+planning, memory, and model clients remain agent implementations. Raw video
+stays on the XR-Media-Hub path. <code class="docutils literal notranslate"><span class="pre">VoiceAgent</span></code> additionally mirrors inbound raw
+audio onto its bounded, telemetry-disabled <code class="docutils literal notranslate"><span class="pre">voice.audio</span></code> runtime topic for
+explicit subscribers.</p>
 </section>
 
 
