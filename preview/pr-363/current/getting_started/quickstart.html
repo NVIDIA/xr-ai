@@ -508,10 +508,11 @@ full details (and self-hosted NIM containers).</p>
 </section>
 <section id="background-monitoring-sample-file-only-ambient-vision-foreground-voice">
 <h2>Background monitoring sample (file-only ambient vision + foreground voice)<a class="headerlink" href="#background-monitoring-sample-file-only-ambient-vision-foreground-voice" title="Link to this heading">#</a></h2>
-<p>This sample runs one background visual observation task per participant while
-a separate foreground agent answers voice or typed queries. It writes monitor,
-accepted-transcript, foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code>
-and intentionally serves no sample web UI.</p>
+<p>This sample offers one on-demand background visual observation task per
+participant while a separate generic tool-calling agent answers voice or typed
+queries and controls that task. It writes monitor, accepted-transcript,
+foreground-turn, and Relay JSONL files under <code class="docutils literal notranslate"><span class="pre">artifacts/</span></code> and intentionally
+serves no sample web UI.</p>
 <p>Start <code class="docutils literal notranslate"><span class="pre">model-servers</span></code>, then run:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>agent-samples/background-monitoring-sample
 uv<span class="w"> </span>sync

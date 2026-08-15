@@ -160,10 +160,11 @@ Each sample has its own `xr_media_hub.yaml` controlling the hub; refer to
 
 ## Background monitoring sample (file-only ambient vision + foreground voice)
 
-This sample runs one background visual observation task per participant while
-a separate foreground agent answers voice or typed queries. It writes monitor,
-accepted-transcript, foreground-turn, and Relay JSONL files under `artifacts/`
-and intentionally serves no sample web UI.
+This sample offers one on-demand background visual observation task per
+participant while a separate generic tool-calling agent answers voice or typed
+queries and controls that task. It writes monitor, accepted-transcript,
+foreground-turn, and Relay JSONL files under `artifacts/` and intentionally
+serves no sample web UI.
 
 Start `model-servers`, then run:
 
