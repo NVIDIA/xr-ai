@@ -51,7 +51,8 @@ Built-in presets — see `xr_ai_models/presets/`:
 
 | Preset | Service it targets | Notes |
 |---|---|---|
-| `cosmos_vlm`     | vlm-server               | image + video; `enable_thinking=false` by default. Video requires vlm-server's `max_videos_per_prompt >= 1` |
+| `cosmos3_nano_reasoner` | vlm-server          | default; Cosmos3 Nano text-output Reasoner, image + video; video requires `max_videos_per_prompt >= 1` |
+| `cosmos_vlm`     | vlm-server               | Cosmos-Reason1 compatibility option; image + video; `enable_thinking=false` by default; video requires `max_videos_per_prompt >= 1` |
 | `llama_nemotron` | llama-nemotron-llm-server | OpenAI tool calling via llama3_json (server-side) |
 | `nemotron3_nano` | nemotron3-nano-llm-server | reasoning field: `reasoning` |
 | `nemotron_omni`  | nemotron-omni-llm-server  | reasoning field: `reasoning_content`, vision + video |
@@ -199,7 +200,7 @@ are a profile change:
       "category": "vlm",
       "adapter": {
         "kind": "openai_compat",
-        "model_name": "nvidia/cosmos-reason1-7b"
+        "model_name": "nvidia/cosmos3-nano-reasoner"
       },
       "endpoint": {
         "base_url": "https://integrate.api.nvidia.com",

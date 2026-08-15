@@ -103,7 +103,8 @@ xr-ai-models  (agent-sdk/xr-ai-models/)
     seam: reasoning-field aliasing (nano_v3 →
     `reasoning`, nemotron_v3 → `reasoning_content`), `chat_template_kwargs`
     plumbing for `enable_thinking` / `thinking_budget`, and built-in presets
-    for the in-tree services. Workers depend on this instead of rolling their
+    for the in-tree services, including distinct Cosmos3 Nano Reasoner and
+    Cosmos-Reason1 VLM profiles. Workers depend on this instead of rolling their
     own httpx wrappers. Profiles may separate adapter, endpoint, and deployment
     metadata while the existing flat YAML schema remains valid.
 
@@ -263,12 +264,15 @@ xr-ai-tests  (tests/)
     service rather than being redeclared here.
 
 vlm-server  (services/vlm-server/)
-    └── vllm >=0.12.0
+    └── vllm >=0.23.0
     └── pyyaml >=6.0
     └── hf-transfer >=0.1.4
     └── xr-ai-logging  [editable: ../../utils/xr-ai-logging]
     └── xr-ai-vllm     [editable: ../../utils/xr-ai-vllm]
-    Model: nvidia/Cosmos-Reason1-7B (Qwen2.5-VL architecture, vLLM).
+    Default model: the text-output Reasoner from nvidia/Cosmos3-Nano. Runtime
+    selection details are documented in
+    docs/source/components/ai-services.md#per-server-notes.
+    nvidia/Cosmos-Reason1-7B remains configurable with the cosmos_vlm preset.
     Wrapper Popens `vllm serve` so the launcher's killpg() does not reach
     vLLM — model survives stack restarts.
     vllm_backend: pip|docker — pip path uses the wrapper's vllm; docker path
@@ -362,7 +366,7 @@ piper-tts-server  (services/piper-tts/)
 
 | Server | Package | Command | Default port | Model | Backend |
 |---|---|---|---|---|---|
-| `services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos-Reason1-7B | vLLM (pip or docker) |
+| `services/vlm-server/` | `vlm-server` | `vlm_server` | 8100 | Cosmos3 Nano Reasoner | vLLM (pip or docker) |
 | `services/stt-server/` | `stt-server` | `stt_server` | 8103 | parakeet-tdt-0.6b-v3 | NeMo ASR in-process |
 | `services/magpie-tts/` | `magpie-tts-server` | `magpie_tts_server` | 8104 | magpie_tts_multilingual_357m | NeMo TTS in-process |
 | `services/piper-tts/` | `piper-tts-server` | `piper_tts_server` | 8105 | rhasspy/piper-voices (ONNX) | piper-tts in-process |
@@ -450,9 +454,10 @@ The sample has no MCP or legacy agent-framework dependency.
 Worker calls stt-server (8103), vlm-server (8100), and piper-tts-server
 (8105) over HTTP via `xr-ai-models` SDK — no model weights loaded
 in-process. The `models_config` key selects a structured deployment profile:
-`models.local.json` manages the default services, `models.hosted.json` uses an
-external NVIDIA NIM VLM, and `models.omni.json` reuses Nemotron-Omni on port
-8108. These profiles separate adapter behavior, endpoint readiness and
+`models.local.json` manages the default Cosmos3 Nano Reasoner service,
+`models.hosted.json` uses the hosted Cosmos3 Nano Reasoner NIM, and
+`models.omni.json` reuses Nemotron-Omni on port 8108. These profiles separate
+adapter behavior, endpoint readiness and
 credentials, and launcher ownership. Voice-gate knobs are configured via
 `yaml/voice_gate.yaml`.
 
@@ -516,6 +521,7 @@ Keep non-obvious fan-out in the same change:
 | `utils/xr-ai-launcher/` process API | [Process model](docs/source/components/launcher-and-process-model.md) and sample orchestrators |
 | `utils/xr-ai-vllm/` API or `vllm_backend` / `vllm_image` keys | Every vLLM service wrapper and YAML, every per-profile sample copy, and [AI services](docs/source/components/ai-services.md) |
 | Model-service package, command, port, or container name | `services/README.md`, model-server orchestration and cleanup, this map, and [AI services](docs/source/components/ai-services.md) |
+| vlm-server model or configuration | Its reference YAML, every model-server profile, model presets, and [AI services](docs/source/components/ai-services.md) |
 | CloudXR configuration or native-profile helpers | `agent-samples/xr-render-demo/yaml/cloudxr_runtime.yaml`, its orchestrator, [Adding CloudXR](docs/source/guides/adding-cloudxr.md), and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Scene-service configuration | Scene YAML, xr-render orchestrator, and [xr-render reference](docs/source/reference/xr-render-demo.md) |
 | Any `pyproject.toml` dependency | This dependency map and a local lock regeneration |

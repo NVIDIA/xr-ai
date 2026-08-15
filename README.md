@@ -157,6 +157,17 @@ immediately — the services keep running in the background with weights hot.
 Start this once before running `xr-render-demo`, or whenever you want to
 pre-warm models:
 
+> [!IMPORTANT]
+> After updating, stop any existing model servers before starting this stack:
+>
+> ```bash
+> uv run model_servers --stop
+> ```
+>
+> Persisted vLLM processes or containers may otherwise keep serving the
+> previous model and image even though the checked-in configuration now selects
+> Cosmos3.
+
 ```bash
 cd agent-samples/model-servers
 uv sync
@@ -164,10 +175,12 @@ uv run model_servers
 ```
 
 GPU profiles are auto-detected (`dual_48G_ada` / `spark` / `96G_blackwell`).
-On first run each model downloads from HuggingFace (~50 GB total; can take
-tens of minutes).  On subsequent runs the containers restart in under a minute.
+On first run the stack downloads roughly 60 GB from Hugging Face and can take
+tens of minutes. The VLM process loads the Cosmos3 8B Reasoner weights. On
+subsequent runs the containers restart in under a minute.
 
-The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), Cosmos (8100),
+The default `--vlm-llm-stack` starts Nemotron-3 Nano (8107), the Cosmos3 Nano
+Reasoner (8100),
 STT (8103), and embeddings (8109). Use `--omni-stack` to replace Nano and
 Cosmos with Nemotron-3 Nano Omni (8108); STT and embeddings remain available.
 On `dual_48G_ada`, the default stack places Cosmos and embeddings on GPU 0;
@@ -179,7 +192,7 @@ they cannot be stopped, avoiding GPU overcommit.
 uv run model_servers --omni-stack
 ```
 
-`HF_TOKEN` is required by default: without it the ~50 GB first-run download
+`HF_TOKEN` is required by default: without it the roughly 60 GB first-run download
 can stall indefinitely.  See [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)
 for how to set it, or pass `--allow-anonymous` to run without one.
 
@@ -206,7 +219,9 @@ remains private to the voice runtime and no MCP client is involved. See the
 [sample README](agent-samples/simple-vlm-example/README.md) for the worker
 layout and configuration boundaries.
 
-Uses `nvidia/Cosmos-Reason1-7B` (NVIDIA Open Model License + Apache 2.0).
+Uses the text-output Reasoner from `nvidia/Cosmos3-Nano` by default. See the
+[VLM server notes](docs/source/components/ai-services.md#per-server-notes) for
+runtime-selection details.
 
 There are two ways to run it:
 
@@ -219,7 +234,7 @@ uv sync
 uv run simple_vlm_example
 ```
 
-On the very first run weights download from HuggingFace (~23 GB; can take
+On the very first run weights download from HuggingFace (tens of GB; can take
 several minutes).  `HF_TOKEN` is required by default; pass
 `--allow-anonymous` to run without one (see
 [`docs/source/getting_started/credentials.md`](docs/source/getting_started/credentials.md)).
@@ -269,6 +284,9 @@ after a moment, and you hear the reply through your speakers.
 
 **Local model** — override the model weights or GPU settings by editing
 `vlm_server.yaml` in the sample directory.
+
+To use Cosmos-Reason1 instead, set `model: nvidia/Cosmos-Reason1-7B` in that
+file and select `cosmos_vlm` as the VLM adapter preset in `models.local.json`.
 
 **Remote model** — copy `yaml/models.hosted.json`, point its VLM endpoint at
 your server, and select it in the worker config:

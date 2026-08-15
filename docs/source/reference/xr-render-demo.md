@@ -123,14 +123,14 @@ calls (thinking stays off):
   position"* on a 10s repeat. Sent to the data channel only — never spoken,
   to avoid stacking up in the TTS queue behind the real response.
 
-## VLM — Cosmos-Reason1-7B
+## VLM — Cosmos3 Nano Reasoner
 
 Port 8100 (`vlm-server`).
 
-Loaded in-process by `vlm-server` via HuggingFace transformers
-(Qwen2.5-VL architecture). `<think>…</think>` blocks are stripped before
-returning. The render agent selects a current or recorded frame first, then
-passes its `ImageReference` to `query_image`. Its native capability set also
+Served by vLLM from `nvidia/Cosmos3-Nano` as described in
+{doc}`AI services </components/ai-services>`. The render agent first selects a
+current or recorded frame and passes its `ImageReference` to `query_image`.
+Its native capability set also
 includes `query_images` for ordered collections and `query_video` for
 timestamped frame sequences; all use the same `xr-ai-models` multi-image VLM
 path, limited to four images by the shipped Cosmos configuration. These raw

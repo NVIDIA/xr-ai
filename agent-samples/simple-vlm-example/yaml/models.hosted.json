@@ -9,7 +9,7 @@
       "category": "vlm",
       "adapter": {
         "kind": "openai_compat",
-        "model_name": "nvidia/nemotron-nano-12b-v2-vl",
+        "model_name": "nvidia/cosmos3-nano-reasoner",
         "capabilities": {"streaming": true, "vision": true}
       },
       "endpoint": {
