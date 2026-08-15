@@ -57,7 +57,7 @@ uses the wrapped nested JSON shape. The worker passes either form to
 `load_models_config(...)` and constructs services via `make_llm` /
 `make_vlm` / `make_stt` / `make_tts` from `xr_ai_models`.  Schema, preset
 table, compatibility formats, and the profile contract are in
-[`agent-sdk/xr-ai-models/README.md`](https://github.com/NVIDIA/xr-ai/blob/main/agent-sdk/xr-ai-models/README.md).
+{doc}`/reference/agent-sdk-models`.
 
 When the worker is small, keep its implementation in the package's
 `__main__.py`. Split it once argument parsing, lifecycle, configuration, and
@@ -113,7 +113,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-xr-ai-hub-client  = { path = "../../../agent-sdk/xr-ai-hub-client", editable = true }
+xr-ai-hub-client  = { path = "../../../agent-sdk/xr-ai-hub", editable = true }
 xr-ai-models = { path = "../../../agent-sdk/xr-ai-models", editable = true }
 
 [project.scripts]
@@ -141,7 +141,7 @@ from xr_ai_launcher import Process, run_stack
 _BASE = Path(__file__).resolve().parent
 
 PROCESSES = [
-    Process("hub",    "../../server-runtime", "xr_media_hub"),
+    Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
     Process("worker", "worker",               "<snake_name>_worker"),
 ]
 

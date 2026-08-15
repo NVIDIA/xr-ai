@@ -34,15 +34,13 @@ The orchestrator declares the process sequence in code:
 _BASE = Path(__file__).resolve().parent   # sample root
 
 PROCESSES = [
-    Process("hub",    "../../server-runtime", "xr_media_hub",
+    Process("hub",    "../../services/xr-media-hub", "xr_media_hub",
             config="yaml/xr_media_hub.yaml"),
     Process("worker", "worker",               "my_agent_worker",
             config="yaml/my_agent_worker.yaml"),
     # Optional shared components — add as needed:
-    # Process("cloudxr", "../../cloudxr-runtime",       "cloudxr_runtime",
+    # Process("cloudxr", "../../services/cloudxr-runtime", "cloudxr_runtime",
     #         config="yaml/cloudxr_runtime.yaml"),
-    # Process("mcp",     "../../agent-mcp-servers/oxr-mcp", "oxr_mcp_server",
-    #         config="yaml/oxr_mcp_server.yaml"),
 ]
 
 def run() -> None:
@@ -53,16 +51,14 @@ def run() -> None:
 
 - **Processes start serially** — each process must create its `--ready-file`
   before the next one starts. Declare processes in dependency order (hub
-  before workers, cloudxr before MCP servers that open OpenXR sessions, etc.).
+  before workers and application processes after the services they call).
 - **Every process accepts `--ready-file <path>`** and must `Path(path).touch()`
   when it is fully initialized and ready to serve requests.
-- **Native voice workers** pass the ready file to `VoiceSession`; `run()`
-  touches it only after the input transport's hub IPC receive loop has started.
-- **Direct Pipecat workers** call
-  `run_voice_pipeline(worker, transport, on_ready=ready_file.touch)` to use the
-  same IPC-start readiness boundary.
+- **Native voice workers** pass the ready file to the `VoiceSession` owned by
+  `VoiceAgent`; the session touches it only after the input transport's hub IPC
+  receive loop has started.
 - `xr_media_hub` always runs as its own process — never embedded in-process.
-- The worker never imports anything from `server-runtime` or `utils/xr-ai-launcher/`.
+- The worker never imports anything from `xr_media_hub` or `xr_ai_launcher`.
 - Process management lives in `utils/xr-ai-launcher/`, not inside any process it manages.
 - `run_stack` is fail-fast: if any process exits, the rest are terminated.
 
@@ -79,10 +75,10 @@ The stack is declared as a sequence of `Process` or `Parallel` items:
 
 ```python
 PROCESSES = [
-    Process("hub",    "../../server-runtime", "xr_media_hub"),
+    Process("hub",    "../../services/xr-media-hub", "xr_media_hub"),
     Parallel([
-        Process("stt", "../../ai-services/stt-server", "stt_server"),
-        Process("tts", "../../ai-services/tts/piper",  "piper_tts_server"),
+        Process("stt", "../../services/stt-server", "stt_server"),
+        Process("tts", "../../services/piper-tts",  "piper_tts_server"),
     ]),
     Process("worker", "worker", "my_agent_worker"),
 ]

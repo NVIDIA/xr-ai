@@ -323,7 +323,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,11 +330,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -403,20 +408,17 @@
 <section id="top-level-layout">
 <h2>Top-level layout<a class="headerlink" href="#top-level-layout" title="Link to this heading">#</a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">-</span><span class="n">samples</span><span class="o">/</span>     <span class="c1"># Platform clients (Android, iOS/visionOS, Web)</span>
-<span class="n">server</span><span class="o">-</span><span class="n">runtime</span><span class="o">/</span>     <span class="c1"># XR-Media-Hub core + LiveKit transport</span>
-<span class="n">agent</span><span class="o">-</span><span class="n">sdk</span><span class="o">/</span>          <span class="c1"># IPC, model, NAT-function, and voice-pipeline SDK packages</span>
+<span class="n">agent</span><span class="o">-</span><span class="n">sdk</span><span class="o">/</span>          <span class="c1"># runtime, IPC, model, native-tool, and voice SDK packages</span>
 <span class="n">utils</span><span class="o">/</span>              <span class="c1"># Shared infra: launcher, logging, vad, vllm, voicegate</span>
-<span class="n">cloudxr</span><span class="o">-</span><span class="n">runtime</span><span class="o">/</span>    <span class="c1"># NVIDIA CloudXR integration: OpenXR runtime + WSS proxy, opt-in per sample</span>
-<span class="n">ai</span><span class="o">-</span><span class="n">services</span><span class="o">/</span>        <span class="c1"># OpenAI-compatible AI inference servers (VLM, STT, TTS, LLM)</span>
-<span class="n">agent</span><span class="o">-</span><span class="n">mcp</span><span class="o">-</span><span class="n">servers</span><span class="o">/</span>  <span class="c1"># Optional MCP compatibility adapters for non-NAT consumers</span>
+<span class="n">services</span><span class="o">/</span>           <span class="c1"># XR hub, CloudXR, model-serving, and typed XR capability services</span>
 <span class="n">agent</span><span class="o">-</span><span class="n">samples</span><span class="o">/</span>      <span class="c1"># End-to-end agent demos</span>
 <span class="n">tests</span><span class="o">/</span>              <span class="c1"># Multi-client / multi-agent integration tests</span>
-<span class="n">docs</span><span class="o">/</span>               <span class="c1"># Design docs and topic deep-dives</span>
+<span class="n">docs</span><span class="o">/</span><span class="n">source</span><span class="o">/</span>        <span class="c1"># User and contributor documentation</span>
 </pre></div>
 </div>
 </section>
-<section id="key-design-decisions">
-<h2>Key design decisions<a class="headerlink" href="#key-design-decisions" title="Link to this heading">#</a></h2>
+<section id="architecture-boundaries">
+<h2>Architecture boundaries<a class="headerlink" href="#architecture-boundaries" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><strong>One hub, many clients, many agents.</strong> A single hub instance fans the
 inbound stream out to every connected <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> (agent) and
@@ -428,12 +430,11 @@ When LiveKit is the transport, return audio is published as one track per
 participant (<code class="docutils literal notranslate"><span class="pre">xr-hub-return-{pid}</span></code>) with subscribe permissions restricted to
 that participant; return data uses <code class="docutils literal notranslate"><span class="pre">destination_identities</span></code> for the same
 reason. Agents never need to know.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-hub-client</span></code></strong> contains only the agent-facing IPC layer. Its
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-hub</span></code></strong> contains only the agent-facing IPC layer. Its
 sole runtime dependencies are <code class="docutils literal notranslate"><span class="pre">pyzmq</span></code> and <code class="docutils literal notranslate"><span class="pre">msgpack</span></code> — no LiveKit, FastAPI,
 or uvicorn.</p></li>
-<li><p><strong>Native agents compose typed NAT functions in process.</strong> Runtime-backed
-functions call typed capability services, while deterministic functions run
-locally. MCP adapters only republish selected functions for MCP consumers.</p></li>
+<li><p><strong>Native agents compose typed tools in process.</strong> Service-backed tools call
+typed capability services, while deterministic tools run locally.</p></li>
 <li><p><strong>No API keys or tokens in source files</strong> — use environment variables or
 <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> (refer to <a class="reference internal" href="../getting_started/credentials.html"><span class="doc">Credentials</span></a>).</p></li>
 </ul>
@@ -459,10 +460,7 @@ participant id cannot be a prefix of another (<code class="docutils literal notr
 <p>Because every response is addressed back to the participant it came from, a
 single agent process can serve several participants concurrently without
 cross-talk: it receives each participant’s audio, video, and data tagged with
-that participant’s id, and addresses its replies to the same id. How richly a
-given sample uses this is up to the sample — the <code class="docutils literal notranslate"><span class="pre">glasses-agent</span></code> and
-<code class="docutils literal notranslate"><span class="pre">simple-vlm-example</span></code> workers are written around one active speaker, while the
-transport and isolation guarantees hold for any number of connected participants.</p>
+that participant’s id, and addresses its replies to the same id. A sample may choose a narrower concurrency policy, while the transport and isolation guarantees hold for any number of connected participants.</p>
 <p>Refer to the <a class="reference internal" href="../components/server-runtime.html"><span class="doc">Isolation contract</span></a> for the
 enforcement details.</p>
 </section>
@@ -470,7 +468,7 @@ enforcement details.</p>
 <h2>Hub configuration<a class="headerlink" href="#hub-configuration" title="Link to this heading">#</a></h2>
 <p>Each sample provides its own <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> in its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code> directory
 (e.g. <code class="docutils literal notranslate"><span class="pre">agent-samples/simple-vlm-example/yaml/xr_media_hub.yaml</span></code>).
-<code class="docutils literal notranslate"><span class="pre">server-runtime/</span></code> also contains a reference copy documenting all available
+<code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> also contains a reference copy documenting all available
 fields.</p>
 <p>Paths inside the YAML (e.g. <code class="docutils literal notranslate"><span class="pre">web_client_dir</span></code>) resolve relative to the YAML
 file’s own directory, not CWD. <code class="docutils literal notranslate"><span class="pre">HubLauncher</span></code> finds the YAML automatically by
@@ -552,7 +550,7 @@ grant camera and microphone permissions without HTTPS.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#top-level-layout">Top-level layout</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-design-decisions">Key design decisions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture-boundaries">Architecture boundaries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-user-sessions">Multi-user sessions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hub-configuration">Hub configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#known-limitations">Known limitations</a><ul class="nav section-nav flex-column">
