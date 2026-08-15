@@ -284,7 +284,7 @@
   (function () {
     // Navigate by index into a build-time list, never by reading the URL back
     // out of the DOM, so page text can never become a navigation target.
-    var urls = ["changelog.html", "../../main/reference/changelog.html"];
+    var urls = ["changelog.html", "../../main/index.html"];
     var select = document.getElementById("version-select");
     select.addEventListener("change", function () {
       var url = urls[select.selectedIndex];

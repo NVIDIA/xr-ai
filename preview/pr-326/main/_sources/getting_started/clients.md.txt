@@ -196,10 +196,6 @@ Android XR hardware or the emulator, and two areas are expected to need work:
   or passthrough), so it will not render head-tracked or spatialized content.
 ```
 
-A fully immersive Android XR client — spatialized UI, head and hand input, and
-optional CloudXR remote rendering — is future work. For an immersive XR path
-today, refer to the **Web-XR (XR render demo)** client described above.
-
 ## iOS/visionOS
 
 The iOS/visionOS client (`client-samples/ios-visionos/`) is a SwiftUI sample

@@ -58,7 +58,7 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Troubleshooting" href="troubleshooting.html" />
+    <link rel="next" title="SPDX license headers" href="spdx-headers.html" />
     <link rel="prev" title="Adding CloudXR to a sample" href="adding-cloudxr.html" />
 
 
@@ -198,10 +198,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -323,7 +319,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../components/agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../components/mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../components/server-runtime.html">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,11 +326,17 @@
 <li class="toctree-l2"><a class="reference internal" href="adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -399,155 +400,24 @@
 -->
 <section id="contributing-and-conventions">
 <h1>Contributing and conventions<a class="headerlink" href="#contributing-and-conventions" title="Link to this heading">#</a></h1>
-<p>The conventions every change to xr-ai must satisfy. The authoritative
-sources live at the repository root and override anything summarized here:</p>
-<ul class="simple">
-<li><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
-— how to build, test, and submit changes, plus the PR process and the
-Developer Certificate of Origin (DCO) sign-off requirement.</p></li>
-<li><p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> — despite
-the name (which follows the <a class="reference external" href="https://agents.md">agents.md</a> convention), this
-is the working-conventions doc for <strong>both human developers and AI
-assistants</strong>: architecture, the process model, sample layout, license-header
-rules, and the change log.</p></li>
-</ul>
-<section id="code-style">
-<h2>Code style<a class="headerlink" href="#code-style" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p>Use meaningful, descriptive names for variables, functions, and types in all
-languages.</p></li>
-<li><p>Write short docstrings for public modules, classes, and functions.</p></li>
-<li><p>Prefer clarity over clever tricks; keep code warnings and linter errors to a
-minimum.</p></li>
-</ul>
-<p>Per-language specifics:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Language</p></th>
-<th class="head"><p>Locations</p></th>
-<th class="head"><p>Conventions</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Python</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">server-runtime/</span></code>, <code class="docutils literal notranslate"><span class="pre">agent-sdk/</span></code>, <code class="docutils literal notranslate"><span class="pre">utils/</span></code>, <code class="docutils literal notranslate"><span class="pre">services/</span></code>, <code class="docutils literal notranslate"><span class="pre">agent-mcp-servers/</span></code>, <code class="docutils literal notranslate"><span class="pre">agent-samples/</span></code>, <code class="docutils literal notranslate"><span class="pre">tests/</span></code></p></td>
-<td><p>Target Python 3.11+ (CI runs 3.11 and 3.12); follow PEP 8; use type annotations and f-strings; manage environments with <code class="docutils literal notranslate"><span class="pre">uv</span></code> (each sub-project is its own uv project — run <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> in its directory).</p></td>
-</tr>
-<tr class="row-odd"><td><p>Swift</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/ios-visionos/</span></code></p></td>
-<td><p>Use the toolchain pinned by <code class="docutils literal notranslate"><span class="pre">//</span> <span class="pre">swift-tools-version:</span></code> in <code class="docutils literal notranslate"><span class="pre">Package.swift</span></code>; stick to Xcode’s default formatting.</p></td>
-</tr>
-<tr class="row-even"><td><p>Kotlin</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/android/</span></code></p></td>
-<td><p>Use the Kotlin and Android Gradle Plugin versions pinned in <code class="docutils literal notranslate"><span class="pre">gradle/libs.versions.toml</span></code>; follow the Kotlin official style.</p></td>
-</tr>
-<tr class="row-odd"><td><p>JavaScript</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">client-samples/web/</span></code></p></td>
-<td><p>Plain ES modules, no build step; keep dependencies minimal.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="documentation-and-changelog-discipline">
-<h2>Documentation and changelog discipline<a class="headerlink" href="#documentation-and-changelog-discipline" title="Link to this heading">#</a></h2>
-<p>A change is not done until the docs reflect it. Update <code class="docutils literal notranslate"><span class="pre">README.md</span></code> (and any
-relevant sub-repository docs), <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, and <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> <strong>in the same
-commit</strong> as the code change. This applies to new packages, changed entry
-points, new quickstart flows, renamed commands, and new configuration files.</p>
-<p>Record significant new decisions in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/docs/changelog.md"><code class="docutils literal notranslate"><span class="pre">docs/changelog.md</span></code></a>
-(reverse chronological). Architectural rationale and historical context belong
-in the changelog, not in source comments.</p>
-</section>
-<section id="dependency-discipline">
-<h2>Dependency discipline<a class="headerlink" href="#dependency-discipline" title="Link to this heading">#</a></h2>
-<p><a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
-at the repository root is the authoritative dependency map. <strong>Any change to a
-<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> must update <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> in the same commit</strong> — a change
-is not complete until <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> reflects it. Several hard rules follow
-from this map (for example, <code class="docutils literal notranslate"><span class="pre">utils/xr-ai-launcher/</span></code> is stdlib-only and
-<code class="docutils literal notranslate"><span class="pre">agent-sdk/xr-ai-hub-client</span></code> depends only on <code class="docutils literal notranslate"><span class="pre">pyzmq</span></code> + <code class="docutils literal notranslate"><span class="pre">msgpack</span></code>); refer to
-<code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> for the full set.</p>
-</section>
-<section id="spdx-license-headers">
-<h2>SPDX license headers<a class="headerlink" href="#spdx-license-headers" title="Link to this heading">#</a></h2>
-<p>This repository uses <a class="reference external" href="https://reuse.software/">REUSE</a> and SPDX headers on every
-source file we own. The hard rule lives in <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>: every new source file
-gets the SPDX header at the top. This section documents the comment-style
-choices and edge cases.</p>
-<section id="the-header">
-<h3>The header<a class="headerlink" href="#the-header" title="Link to this heading">#</a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">SPDX</span><span class="o">-</span><span class="n">FileCopyrightText</span><span class="p">:</span> <span class="n">Copyright</span> <span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="mi">2026</span> <span class="n">NVIDIA</span> <span class="n">CORPORATION</span> <span class="o">&amp;</span> <span class="n">AFFILIATES</span><span class="o">.</span> <span class="n">All</span> <span class="n">rights</span> <span class="n">reserved</span><span class="o">.</span>
-<span class="n">SPDX</span><span class="o">-</span><span class="n">License</span><span class="o">-</span><span class="n">Identifier</span><span class="p">:</span> <span class="n">Apache</span><span class="o">-</span><span class="mf">2.0</span>
+<p>The root <a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
+explains setup, testing, pull requests, and DCO sign-off.
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/AGENTS.md"><code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code></a> contains the
+architecture and change constraints used by both humans and coding agents.
+<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/DEPENDENCIES.md"><code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code></a>
+is the package dependency map.</p>
+<p>For a Python change:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>&lt;affected-project&gt;
+uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>pytest
+uv<span class="w"> </span>tool<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>&lt;changed-python-files&gt;
 </pre></div>
 </div>
-<p>The Apache-2.0 license text lives in
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/LICENSE"><code class="docutils literal notranslate"><span class="pre">LICENSE</span></code></a>. REUSE does not
-auto-update the copyright year when you touch a file; include the current year
-when adding or editing headers.</p>
-</section>
-<section id="comment-style-by-file-type">
-<h3>Comment style by file type<a class="headerlink" href="#comment-style-by-file-type" title="Link to this heading">#</a></h3>
-<p>Use the comment syntax for the file’s language and place the header before any
-other content, with one blank line separating it from the body:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Style</p></th>
-<th class="head"><p>Used for</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">…</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">.py</span></code>, <code class="docutils literal notranslate"><span class="pre">.yaml</span></code>/<code class="docutils literal notranslate"><span class="pre">.yml</span></code>, <code class="docutils literal notranslate"><span class="pre">.toml</span></code>, <code class="docutils literal notranslate"><span class="pre">.properties</span></code>, <code class="docutils literal notranslate"><span class="pre">.sh</span></code>, <code class="docutils literal notranslate"><span class="pre">.pro</span></code>, <code class="docutils literal notranslate"><span class="pre">.gitignore</span></code>, <code class="docutils literal notranslate"><span class="pre">.gitattributes</span></code>, <code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">//</span> <span class="pre">…</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">.swift</span></code>, <code class="docutils literal notranslate"><span class="pre">.kt</span></code>/<code class="docutils literal notranslate"><span class="pre">.kts</span></code>, <code class="docutils literal notranslate"><span class="pre">.js</span></code>, <code class="docutils literal notranslate"><span class="pre">.ts</span></code>/<code class="docutils literal notranslate"><span class="pre">.tsx</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&lt;!--</span> <span class="pre">…</span> <span class="pre">--&gt;</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">.xml</span></code>, <code class="docutils literal notranslate"><span class="pre">.html</span></code>, <code class="docutils literal notranslate"><span class="pre">.plist</span></code>, <code class="docutils literal notranslate"><span class="pre">.entitlements</span></code>, <code class="docutils literal notranslate"><span class="pre">.md</span></code></p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>Insert the header <strong>after</strong> these required first-line directives when present:
-<code class="docutils literal notranslate"><span class="pre">#!/...</span></code> shebangs, <code class="docutils literal notranslate"><span class="pre">&lt;?xml</span> <span class="pre">…?&gt;</span></code> declarations, <code class="docutils literal notranslate"><span class="pre">&lt;!DOCTYPE</span> <span class="pre">…&gt;</span></code>, and Swift’s
-<code class="docutils literal notranslate"><span class="pre">//</span> <span class="pre">swift-tools-version:</span></code> directive.</p>
-<p>To add or fix headers, install the
-<a class="reference external" href="https://github.com/fsfe/reuse-tool">reuse tool</a> (<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">tool</span> <span class="pre">install</span> <span class="pre">reuse</span></code>) and
-run, for example:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>reuse<span class="w"> </span>annotate<span class="w"> </span>-t<span class="w"> </span>compact<span class="w"> </span>-l<span class="w"> </span>Apache-2.0<span class="w"> </span>--skip-unrecognised<span class="w"> </span>-r<span class="w"> </span>path/to/file
-</pre></div>
-</div>
-</section>
-<section id="files-to-skip">
-<h3>Files to skip<a class="headerlink" href="#files-to-skip" title="Link to this heading">#</a></h3>
-<p>Skip files that can’t carry comments or aren’t ours to license: <code class="docutils literal notranslate"><span class="pre">LICENSE</span></code>,
-<code class="docutils literal notranslate"><span class="pre">*.json</span></code>, <code class="docutils literal notranslate"><span class="pre">*.resolved</span></code>, binary assets (e.g. <code class="docutils literal notranslate"><span class="pre">*.gif</span></code>), <code class="docutils literal notranslate"><span class="pre">.gitkeep</span></code> markers,
-Xcode-managed files (<code class="docutils literal notranslate"><span class="pre">*.pbxproj</span></code>, <code class="docutils literal notranslate"><span class="pre">*.xcworkspacedata</span></code>), and third-party Gradle
-wrapper files (<code class="docutils literal notranslate"><span class="pre">gradlew</span></code>, <code class="docutils literal notranslate"><span class="pre">gradlew.bat</span></code>,
-<code class="docutils literal notranslate"><span class="pre">gradle/wrapper/gradle-wrapper.properties</span></code>).</p>
-</section>
-<section id="enforcement">
-<h3>Enforcement<a class="headerlink" href="#enforcement" title="Link to this heading">#</a></h3>
-<p>Headers are enforced locally by
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/.github/scripts/check_spdx_headers.py"><code class="docutils literal notranslate"><span class="pre">.github/scripts/check_spdx_headers.py</span></code></a>,
-wired into
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/.pre-commit-config.yaml"><code class="docutils literal notranslate"><span class="pre">.pre-commit-config.yaml</span></code></a>.
-Run <code class="docutils literal notranslate"><span class="pre">pre-commit</span> <span class="pre">install</span></code> once after cloning to enable it;
-<code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">.github/scripts/check_spdx_headers.py</span></code> audits the whole tree at any
-time. The same check runs in CI as a backstop:
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/.github/workflows/spdx.yml"><code class="docutils literal notranslate"><span class="pre">.github/workflows/spdx.yml</span></code></a>.</p>
-</section>
-</section>
-<section id="pull-requests">
-<h2>Pull requests<a class="headerlink" href="#pull-requests" title="Link to this heading">#</a></h2>
-<p>Create a feature branch, keep code and docs in the same commit, ensure builds
-and tests pass locally and in CI, and describe motivation, changes, and testing
-in the PR. All commits must be signed off (<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">commit</span> <span class="pre">-s</span></code>) per the DCO. Refer to
-<a class="reference external" href="https://github.com/NVIDIA/xr-ai/blob/main/CONTRIBUTING.md"><code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code></a>
-for the full PR process and the DCO text.</p>
-</section>
+<p>Update the relevant README and this documentation with user-visible changes.
+A <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> change also requires a <code class="docutils literal notranslate"><span class="pre">DEPENDENCIES.md</span></code> update; regenerate
+the affected project’s gitignored <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> locally. New source files require an
+SPDX header; see
+<a class="reference internal" href="spdx-headers.html"><span class="std std-doc">SPDX headers</span></a>.</p>
 </section>
 
 
@@ -570,11 +440,11 @@ for the full PR process and the DCO text.</p>
       </div>
     </a>
     <a class="right-next"
-       href="troubleshooting.html"
+       href="spdx-headers.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Troubleshooting</p>
+        <p class="prev-next-title">SPDX license headers</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -585,35 +455,9 @@ for the full PR process and the DCO text.</p>
             
             
 
-
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+<div class="bd-sidebar-secondary"></div>
 
 
-  <div class="sidebar-secondary-item">
-<div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> On this page
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-style">Code style</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-and-changelog-discipline">Documentation and changelog discipline</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dependency-discipline">Dependency discipline</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spdx-license-headers">SPDX license headers</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-header">The header</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#comment-style-by-file-type">Comment style by file type</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#files-to-skip">Files to skip</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#enforcement">Enforcement</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pull-requests">Pull requests</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
 

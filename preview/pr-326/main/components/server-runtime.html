@@ -59,7 +59,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Guides" href="../guides/index.html" />
-    <link rel="prev" title="MCP servers" href="mcp-servers.html" />
+    <link rel="prev" title="Launcher and process model" href="launcher-and-process-model.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -323,7 +323,6 @@
 <li class="toctree-l2"><a class="reference internal" href="agent-sdk.html">Agent SDK</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ai-services.html">AI inference servers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="launcher-and-process-model.html">Launcher and process model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mcp-servers.html">MCP servers</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Server runtime</a></li>
 </ul>
 </details></li>
@@ -331,11 +330,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-a-sample.html">Adding a new sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/adding-cloudxr.html">Adding CloudXR to a sample</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/contributing-and-conventions.html">Contributing and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/spdx-headers.html">SPDX license headers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/troubleshooting.html">Troubleshooting</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/changelog.html">Decision changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-hub.html">xr-ai-hub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-models.html">xr-ai-models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-runtime.html">xr-ai-runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-tools.html">xr-ai-tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/agent-sdk-voice.html">xr-ai-voice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/migrations.html">Release migration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/xr-render-demo.html">xr-render-demo — architecture</a></li>
 </ul>
 </details></li>
@@ -399,7 +404,7 @@
 -->
 <section id="server-runtime">
 <h1>Server runtime<a class="headerlink" href="#server-runtime" title="Link to this heading">#</a></h1>
-<p>The <code class="docutils literal notranslate"><span class="pre">server-runtime/</span></code> package hosts the <strong>XR-Media-Hub</strong> — the single process
+<p>The <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/</span></code> package hosts the <strong>XR-Media-Hub</strong> — the single process
 clients connect to and agents fan out from. It owns the internal LiveKit
 transport, the shared-memory + ZMQ IPC boundary to agents, the per-participant
 return path, and the same-origin <code class="docutils literal notranslate"><span class="pre">wss://</span></code> proxy that fronts LiveKit signaling.</p>
@@ -410,7 +415,7 @@ return path, and the same-origin <code class="docutils literal notranslate"><spa
 </pre></div>
 </div>
 <p>Configuration comes from a <code class="docutils literal notranslate"><span class="pre">xr_media_hub.yaml</span></code> file (defaults are used when
-none is found). <code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub.yaml</span></code> is the reference copy
+none is found). <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub.yaml</span></code> is the reference copy
 documenting every field; each sample ships its own copy under its <code class="docutils literal notranslate"><span class="pre">yaml/</span></code>
 directory. Relative paths inside the YAML (such as <code class="docutils literal notranslate"><span class="pre">web_client_dir</span></code>) resolve
 against the YAML file’s own directory, not the working directory.</p>
@@ -454,9 +459,7 @@ is addressed with <code class="docutils literal notranslate"><span class="pre">d
 transport. LiveKit natively supports client-to-client communication, and an
 application is free to use those native features directly for peer-to-peer
 media or data. Doing so is <strong>outside the scope of XR AI</strong>: the hub neither
-routes nor guarantees that traffic, and because the transport is an
-implementation detail, a future streaming backend may not offer the same
-client-to-client capability. Build on the hub’s participant ↔ agent contract
+routes nor guarantees that traffic. This traffic is outside the hub contract and is not portable across transports. Build on the hub’s participant ↔ agent contract
 for behavior that ports across backends.</p>
 </div>
 </section>
@@ -489,7 +492,7 @@ checks at startup.</p>
 <section id="ipc-boundary-to-agents">
 <h2>IPC boundary to agents<a class="headerlink" href="#ipc-boundary-to-agents" title="Link to this heading">#</a></h2>
 <p>The hub and its producers and consumers communicate over ZMQ using msgpack-encoded
-messages. The layer lives in <code class="docutils literal notranslate"><span class="pre">server-runtime/xr_media_hub/ipc/</span></code> and defines
+messages. The layer lives in <code class="docutils literal notranslate"><span class="pre">services/xr-media-hub/xr_media_hub/ipc/</span></code> and defines
 three endpoints:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -551,7 +554,7 @@ registered at import time via <code class="docutils literal notranslate"><span c
 <p>Agent code should import the IPC types and <code class="docutils literal notranslate"><span class="pre">ProcessorEndpoint</span></code> from
 <code class="docutils literal notranslate"><span class="pre">xr_ai_hub</span></code> directly, <strong>not</strong> from <code class="docutils literal notranslate"><span class="pre">xr_media_hub.ipc</span></code>. The agent SDK’s only
 runtime dependencies are <code class="docutils literal notranslate"><span class="pre">pyzmq</span></code> and <code class="docutils literal notranslate"><span class="pre">msgpack</span></code> — importing from the agent SDK
-avoids pulling in the full server-runtime dependency tree (LiveKit, FastAPI,
+avoids pulling in the full XR-Media-Hub dependency tree (LiveKit, FastAPI,
 uvicorn, GPU codecs). <code class="docutils literal notranslate"><span class="pre">xr_media_hub.ipc</span></code> re-exports the same names for the
 server side.</p>
 </div>
@@ -646,12 +649,12 @@ returns a plain
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="mcp-servers.html"
+       href="launcher-and-process-model.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">MCP servers</p>
+        <p class="prev-next-title">Launcher and process model</p>
       </div>
     </a>
     <a class="right-next"
