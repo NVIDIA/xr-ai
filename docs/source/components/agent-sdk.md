@@ -167,14 +167,15 @@ Video pixels are pulled on demand with `request_frame()` or
 is opt-in and scoped to subscribed participants. The hub aggregates each
 responsible agent's status and gates readiness on confirmed subscriptions.
 
-## QR-code extraction
+## Marker tracking
 
-`xr_ai_tools.qr_code.QRCodeTool` is an optional ZXing-C++-backed finite tool.
-It acquires a participant's current frame, decodes all readable QR payloads off
-the event loop, and returns every QR code in the frame as a separate payload
-with its four image-space corners. Install `xr-ai-tools[qr-code]` to use it.
+`xr_ai_tools.marker_tracking.MarkerTrackingTool` is an optional finite tool for
+QR and ArUco detection. It acquires a participant's current frame, runs enabled
+detectors off the event loop, and returns every marker through one
+`marker_type`, `value`, and four-corner contract. QR values are ZXing-C++
+decoded text; ArUco values are decimal IDs detected with a configured OpenCV
+predefined dictionary. Install `xr-ai-tools[marker-tracking]` to use it.
 
-ZXing-C++ is the default extractor. Applications can inject any sync or async
-callable that accepts an RGB PIL image and returns the same typed payload
-contract, including a model-backed implementation that does not provide corner
-coordinates.
+QR and ArUco are enabled by default. Initialization may select either family
+and choose the ArUco dictionary without changing the model-visible
+`track_markers` request or result schema.

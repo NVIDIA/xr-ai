@@ -184,38 +184,39 @@ change = await video.execute(
 )
 ```
 
-## QR-code reading and extraction
+## Marker tracking
 
-Install `xr-ai-tools[qr-code]` to use `QRCodeTool`. The finite
-`read_qr_codes` tool acquires a participant's current camera frame and uses
-ZXing-C++ by default. Its typed result distinguishes an unavailable frame from
-a valid frame with no readable code, and returns every decoded UTF-8 payload
-with optional source-image corner coordinates. When one frame contains
-multiple QR codes, `result.codes` contains one entry for each code.
+Install `xr-ai-tools[marker-tracking]` to use `MarkerTrackingTool`. The finite
+`track_markers` tool acquires a participant's current camera frame and detects
+QR codes with ZXing-C++ and ArUco markers with OpenCV. Its typed result
+distinguishes an unavailable frame from a valid frame with no marker. Every
+marker has the same `marker_type`, `value`, and four-corner contract: `value`
+is decoded text for QR codes and the decimal marker ID for ArUco markers.
 
 ```python
-from xr_ai_tools.qr_code import QRCodeRequest, QRCodeTool
+from xr_ai_tools.marker_tracking import (
+    MarkerTrackingRequest,
+    MarkerTrackingTool,
+    MarkerType,
+)
 
-qr_codes = QRCodeTool(endpoint=processor_endpoint)
-result = await qr_codes.execute(QRCodeRequest(participant_id="participant-1"))
-for code in result.codes:
-    print(code.data, code.corners)
+markers = MarkerTrackingTool(endpoint=processor_endpoint)
+result = await markers.execute(
+    MarkerTrackingRequest(participant_id="participant-1")
+)
+for marker in result.markers:
+    print(marker.marker_type, marker.value, marker.corners)
 ```
 
-Frame acquisition and extraction are separate. Pass any sync or async callable
-as `extractor=` to replace ZXing-C++ without changing the tool or its callers.
-The callable receives one RGB `PIL.Image.Image` and returns an iterable of
-`DecodedQRCode` values or equivalent dictionaries; `corners` may be omitted by
-backends that decode without localization.
+Both marker families are enabled by default. Select families only while
+initializing the tool; requests and results do not change. ArUco detection uses
+`DICT_4X4_50` by default and accepts any OpenCV predefined dictionary name.
 
 ```python
-async def model_extractor(image):
-    return await custom_qr_model.extract(image)
-
-
-qr_codes = QRCodeTool(
+aruco_only = MarkerTrackingTool(
     endpoint=processor_endpoint,
-    extractor=model_extractor,
+    marker_types=(MarkerType.ARUCO,),
+    aruco_dictionary="DICT_6X6_250",
 )
 ```
 

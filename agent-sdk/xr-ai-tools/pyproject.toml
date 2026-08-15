@@ -20,7 +20,13 @@ relay = ["xr-ai-models"]
 frames = ["numpy>=1.24", "Pillow>=10.0", "xr-ai-hub-client"]
 image-editing = ["Pillow>=10.0"]
 vision = ["xr-ai-models"]
-qr-code = ["numpy>=1.24", "zxing-cpp>=2.3,<4", "Pillow>=10.0", "xr-ai-hub-client"]
+marker-tracking = [
+    "numpy>=1.24",
+    "opencv-contrib-python-headless>=4.8,<5",
+    "zxing-cpp>=2.3,<4",
+    "Pillow>=10.0",
+    "xr-ai-hub-client",
+]
 services = ["msgpack>=1.0", "pyzmq>=27.0"]
 
 [tool.uv.sources]

@@ -115,13 +115,13 @@ xr-ai-tools  (agent-sdk/xr-ai-tools/)
     ├── [frames] numpy >=1.24, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub]
     ├── [image-editing] Pillow >=10.0
     ├── [vision] xr-ai-models [editable: ../xr-ai-models]
-    ├── [qr-code] numpy >=1.24, zxing-cpp >=2.3,<4, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub]
+    ├── [marker-tracking] numpy >=1.24, opencv-contrib-python-headless >=4.8,<5, zxing-cpp >=2.3,<4, Pillow >=10.0, xr-ai-hub-client [editable: ../xr-ai-hub]
     └── [services] msgpack >=1.0, pyzmq >=27.0
     Toolkit-independent native tools: Pydantic request and response models,
     Relay-managed finite and async execution, model tool-call workflow helpers,
     frame selection, lossless polygon image editing, single/multi-image
-    inference, participant-scoped QR-code extraction, typed capability clients,
-    and service RPC.
+    inference, participant-scoped QR and ArUco marker tracking, typed capability
+    clients, and service RPC.
 
 
 xr-openxr-service  (services/openxr-service/)
@@ -231,7 +231,7 @@ xr-ai-tests  (tests/)
     └── xr-ai-agent-runtime       [editable: ../agent-sdk/xr-ai-runtime]
     └── xr-ai-hub-client             [editable: ../agent-sdk/xr-ai-hub]
     └── xr-ai-models            [editable: ../agent-sdk/xr-ai-models]
-    └── xr-ai-tools[frames,image-editing,qr-code,services,vision] [editable: ../agent-sdk/xr-ai-tools]
+    └── xr-ai-tools[frames,image-editing,marker-tracking,services,vision] [editable: ../agent-sdk/xr-ai-tools]
     └── xr-rag-service [editable: ../services/rag-service]
     └── xr-video-memory-service [editable: ../services/video-memory-service]
     └── xr-ai-voice             [editable: ../agent-sdk/xr-ai-voice]
