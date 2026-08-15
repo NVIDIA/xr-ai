@@ -107,11 +107,18 @@ and deployment configuration.
 
 ## Voice
 
-`VoiceAgent` publishes accepted speech and typed text as `UserQuery` events,
-publishes participant and interruption lifecycle events, and consumes
-`voice.output`. `VoiceSession` owns model readiness, hub transport, voice
-gating, the media pipeline, signal handling, and cleanup. Pipecat remains an
-implementation detail for current samples.
+`VoiceAgent` publishes every incoming microphone chunk on `voice.audio` before
+VAD, STT, or wake-phrase filtering. Agents can subscribe to
+`VOICE_AUDIO_TOPIC` to receive silence and non-wake-phrase speech as
+`VoiceAudio`; the participant is carried in runtime metadata. The topic has
+Relay telemetry disabled because its payload contains raw interleaved float32
+PCM.
+
+Accepted speech and typed text are published as `UserQuery` events, participant
+and interruption lifecycle events use application-named topics, and voice
+consumes `voice.output`. `VoiceSession` owns model readiness, hub transport,
+voice gating, the media pipeline, signal handling, and cleanup. Pipecat remains
+an implementation detail for current samples.
 
 ```python
 voice = VoiceAgent(

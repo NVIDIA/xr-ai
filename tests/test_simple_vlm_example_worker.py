@@ -79,6 +79,14 @@ class _DataEndpoint:
     def __init__(self) -> None:
         self.statuses: list[tuple[str, str]] = []
 
+    def on_audio(self, callback):
+        self.audio_callback = callback
+
+        def unsubscribe() -> None:
+            self.audio_callback = None
+
+        return unsubscribe
+
     def on_data(self, callback) -> None:
         self.data_callback = callback
 

@@ -8,9 +8,10 @@
 The voice runtime for XR agents. Pipecat implements the media pipeline, but
 applications work with XR concepts rather than Pipecat modules:
 
-- `VoiceAgent` publishes accepted speech, text, participant departure, and
-  interruption as voice-owned schemas on application-named topics; it
-  subscribes to `voice.output`.
+- `VoiceAgent` publishes every raw microphone chunk on `voice.audio`, then
+  publishes accepted speech, text, participant departure, and interruption as
+  voice-owned schemas on application-named topics; it subscribes to
+  `voice.output`.
 - `VoiceSession` owns readiness, hub transport, private pipeline assembly,
   signals, execution, and cleanup behind `VoiceAgent`.
 - `HubVoiceTransport` is available when an application needs to share one transport explicitly.
@@ -65,10 +66,19 @@ hub data channel. Its default is `"agent.response"`; set it to `""` when the
 application publishes its own response data so each turn is delivered only
 once. This setting does not disable TTS or Relay telemetry.
 
-`VoiceAgent` publishes accepted speech, typed text, participant departure, and
-interruption on application-named topics. Application agents subscribe to the
-events they own, perform cleanup in their own subscriber methods, and may
-publish finite or incremental `VoiceOutput` messages:
+`VoiceAgent` publishes every incoming microphone chunk on `voice.audio` before
+VAD, STT, or wake-phrase filtering. This includes silence and speech that does
+not contain the configured wake phrase, so agents that need the complete input
+stream can subscribe to `VOICE_AUDIO_TOPIC`. `VoiceAudio.data` is the original
+interleaved little-endian float32 PCM from the hub; the payload also carries its
+sample rate, channel and sample counts, capture timestamp, and track ID. The
+participant ID and `voice` source are runtime metadata. The topic disables
+Relay telemetry so raw audio is never recorded in runtime scopes.
+
+Accepted speech, typed text, participant departure, and interruption remain on
+application-named topics. Application agents subscribe to the events they own,
+perform cleanup in their own subscriber methods, and may publish finite or
+incremental `VoiceOutput` messages:
 
 ```python
 from xr_ai_voice import VOICE_OUTPUT_TOPIC, VoiceOutput

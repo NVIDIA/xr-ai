@@ -10,9 +10,11 @@ pipeline and service lifecycle.
 
 from ._processors import VadConfig
 from ._runtime import (
+    VOICE_AUDIO_TOPIC,
     VOICE_OUTPUT_TOPIC,
     UserQuery,
     VoiceAgent,
+    VoiceAudio,
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
@@ -24,9 +26,11 @@ from ._transport import HubVoiceTransport
 __all__ = [
     "HubVoiceTransport",
     "VadConfig",
+    "VOICE_AUDIO_TOPIC",
     "VOICE_OUTPUT_TOPIC",
     "UserQuery",
     "VoiceAgent",
+    "VoiceAudio",
     "VoiceInterrupted",
     "VoiceOutput",
     "VoiceParticipantLeft",

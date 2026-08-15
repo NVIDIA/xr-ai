@@ -13,12 +13,14 @@ from contextlib import asynccontextmanager
 import nemo_relay
 import pytest
 from pydantic import ValidationError
-from xr_ai_hub import DataMessage
+from xr_ai_hub import AudioChunk, DataMessage
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 from xr_ai_voice import (
+    VOICE_AUDIO_TOPIC,
     VOICE_OUTPUT_TOPIC,
     UserQuery,
     VoiceAgent,
+    VoiceAudio,
     VoiceInterrupted,
     VoiceOutput,
     VoiceParticipantLeft,
@@ -33,6 +35,14 @@ INTERRUPTED_TOPIC = Topic("test.interrupted", VoiceInterrupted)
 
 
 class _Endpoint:
+    def on_audio(self, callback):
+        self.audio_callback = callback
+
+        def unsubscribe() -> None:
+            self.audio_callback = None
+
+        return unsubscribe
+
     def on_data(self, callback):
         self.data_callback = callback
 
@@ -130,6 +140,18 @@ class _InputRecorder(Agent):
     @subscribe(QUERY_TOPIC)
     async def record(self, query: UserQuery, ctx: RuntimeContext) -> None:
         self.messages.append((ctx.metadata.participant_id, ctx.metadata.source, query))
+        self.changed.set()
+
+
+class _AudioRecorder(Agent):
+    def __init__(self) -> None:
+        super().__init__()
+        self.messages: list[tuple[str | None, str, VoiceAudio]] = []
+        self.changed = asyncio.Event()
+
+    @subscribe(VOICE_AUDIO_TOPIC)
+    async def record(self, audio: VoiceAudio, ctx: RuntimeContext) -> None:
+        self.messages.append((ctx.metadata.participant_id, ctx.metadata.source, audio))
         self.changed.set()
 
 
@@ -246,6 +268,50 @@ async def test_voice_agent_publishes_to_configured_query_topic() -> None:
         )
     ]
     assert session.closed is True
+
+
+async def test_voice_agent_publishes_every_raw_audio_chunk_before_query_gating() -> None:
+    session = _Session()
+    recorder = _AudioRecorder()
+    runtime = AgentRuntime()
+    runtime.register("recorder", recorder)
+    voice = VoiceAgent(  # type: ignore[arg-type]
+        session,
+        query_topic=QUERY_TOPIC,
+        text_input=False,
+    )
+    runtime.register("voice", voice)
+    chunk = AudioChunk(
+        pts_us=7,
+        sample_rate=48_000,
+        channels=2,
+        samples=480,
+        data=b"raw-pcm",
+        participant_id="alice",
+        track_id="microphone-1",
+    )
+
+    async with _running_voice(runtime, voice, session):
+        await session.transport.endpoint.audio_callback(chunk)
+        await asyncio.wait_for(recorder.changed.wait(), 1.0)
+        assert session.handler is not None
+
+    assert recorder.messages == [
+        (
+            "alice",
+            "voice",
+            VoiceAudio(
+                data=b"raw-pcm",
+                sample_rate=48_000,
+                channels=2,
+                samples=480,
+                timestamp_us=7,
+                track_id="microphone-1",
+            ),
+        )
+    ]
+    assert VOICE_AUDIO_TOPIC.telemetry == "none"
+    assert session.transport.endpoint.audio_callback is None
 
 
 async def test_voice_agent_publishes_configured_lifecycle_topics() -> None:

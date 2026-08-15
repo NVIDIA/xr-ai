@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 import nemo_relay
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from xr_ai_hub import DataMessage
+from xr_ai_hub import AudioChunk, DataMessage
 from xr_ai_runtime import Agent, AgentRuntime, RuntimeContext, Topic, subscribe
 
 from ._session import VoiceSession
@@ -36,6 +36,19 @@ class UserQuery(BaseModel):
 
     text: str = Field(min_length=1)
     timestamp_us: int = Field(ge=0)
+
+
+class VoiceAudio(BaseModel):
+    """One unprocessed microphone chunk received from the media hub."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: bytes
+    sample_rate: int = Field(gt=0)
+    channels: int = Field(gt=0)
+    samples: int = Field(ge=0)
+    timestamp_us: int = Field(ge=0)
+    track_id: str
 
 
 class VoiceParticipantLeft(BaseModel):
@@ -74,6 +87,7 @@ class VoiceOutput(BaseModel):
         return self
 
 
+VOICE_AUDIO_TOPIC = Topic("voice.audio", VoiceAudio, telemetry="none")
 VOICE_OUTPUT_TOPIC = Topic("voice.output", VoiceOutput, telemetry="none")
 
 
@@ -204,12 +218,14 @@ class VoiceAgent(Agent):
             raise ValueError("voice agent source must not be empty")
         self._runtime = runtime
         self._source = source
-        unsubscribe: Callable[[], None] | None = None
+        unsubscribe_audio: Callable[[], None] | None = None
+        unsubscribe_data: Callable[[], None] | None = None
         try:
             await self.session.__aenter__()
             try:
+                unsubscribe_audio = self.session.endpoint.on_audio(self._publish_audio)
                 if self.text_input:
-                    unsubscribe = self.session.endpoint.on_data(self._on_data)
+                    unsubscribe_data = self.session.endpoint.on_data(self._on_data)
                 await self.session.run(
                     self._publish_input,
                     on_participant_left=(
@@ -225,8 +241,10 @@ class VoiceAgent(Agent):
                     interrupt_on_supersede=self.interrupt_on_supersede,
                 )
             finally:
-                if unsubscribe is not None:
-                    unsubscribe()
+                if unsubscribe_audio is not None:
+                    unsubscribe_audio()
+                if unsubscribe_data is not None:
+                    unsubscribe_data()
                 tasks = tuple(self._lifecycle_tasks)
                 for task in tasks:
                     task.cancel()
@@ -360,6 +378,21 @@ class VoiceAgent(Agent):
             self.query_topic,
             UserQuery(text=query.text, timestamp_us=query.timestamp_us),
             participant_id=query.participant_id,
+            source=self._source,
+        )
+
+    async def _publish_audio(self, chunk: AudioChunk) -> None:
+        await self._running_runtime().publish(
+            VOICE_AUDIO_TOPIC,
+            VoiceAudio(
+                data=chunk.data,
+                sample_rate=chunk.sample_rate,
+                channels=chunk.channels,
+                samples=chunk.samples,
+                timestamp_us=chunk.pts_us,
+                track_id=chunk.track_id,
+            ),
+            participant_id=chunk.participant_id,
             source=self._source,
         )
 
@@ -510,9 +543,11 @@ class VoiceAgent(Agent):
         )
 
 __all__ = [
+    "VOICE_AUDIO_TOPIC",
     "VOICE_OUTPUT_TOPIC",
     "UserQuery",
     "VoiceAgent",
+    "VoiceAudio",
     "VoiceInterrupted",
     "VoiceOutput",
     "VoiceParticipantLeft",
