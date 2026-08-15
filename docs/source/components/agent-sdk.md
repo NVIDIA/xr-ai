@@ -76,7 +76,8 @@ do not contain raw pixels. Install `xr-ai-tools[image-editing]` to use
 least three ordered pixel coordinates with magenta, and returns a new lossless
 PNG reference. The source reference remains unchanged, and the edited reference
 inherits its owner so lifecycle cleanup releases both images. It can be passed
-directly to the single-image or multi-image VLM query tools.
+directly to the single-image or multi-image VLM query tools. Invalid polygons
+and unavailable source references return recoverable unavailable results.
 
 Relay records publications, subscriber callbacks, tool calls, and model calls
 as nested scopes. `Topic.telemetry` controls event volume without changing

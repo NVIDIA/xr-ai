@@ -4,6 +4,7 @@
 """Pixel-accurate coverage for the magenta polygon-fill image tool."""
 
 import io
+import json
 
 import pytest
 from PIL import Image
@@ -131,3 +132,55 @@ async def test_image_polygon_fill_tool_returns_a_new_registry_image() -> None:
         images.resolve(source)
     with pytest.raises(LookupError, match="unavailable"):
         images.resolve(result.image)
+
+
+async def test_image_polygon_fill_invoke_returns_unavailable_for_a_stale_image() -> None:
+    images = ImageRegistry(capacity=1)
+    stale = images.put(_png_bytes())
+    images.put(_png_bytes())
+    tool = ImagePolygonFillTool(images=images)
+
+    invocation = await tool.invoke(
+        json.dumps(
+            {
+                "image": stale.model_dump(),
+                "coordinates": [
+                    {"x": 1, "y": 1},
+                    {"x": 6, "y": 1},
+                    {"x": 3, "y": 6},
+                ],
+            }
+        )
+    )
+
+    assert json.loads(invocation.content) == {
+        "image": None,
+        "available": False,
+        "message": "Image input unavailable — please select it again.",
+    }
+
+
+async def test_image_polygon_fill_invoke_returns_invalid_for_out_of_bounds_polygon() -> None:
+    images = ImageRegistry()
+    source = images.put(_png_bytes())
+    tool = ImagePolygonFillTool(images=images)
+
+    invocation = await tool.invoke(
+        json.dumps(
+            {
+                "image": source.model_dump(),
+                "coordinates": [
+                    {"x": 1, "y": 1},
+                    {"x": 8, "y": 1},
+                    {"x": 3, "y": 6},
+                ],
+            }
+        )
+    )
+
+    result = json.loads(invocation.content)
+    assert result["image"] is None
+    assert result["available"] is False
+    assert result["message"] == (
+        "Image polygon invalid — polygon coordinate (8.0, 1.0) is outside the 8x8 image"
+    )

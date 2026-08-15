@@ -231,7 +231,9 @@ and at least three ordered pixel coordinates. It connects the final point to
 the first, validates that the polygon is inside the image and encloses an area,
 and stores a new lossless PNG without changing the source image. The returned
 reference inherits the source owner and can be passed directly to an image
-query tool.
+query tool. Stale image references and invalid polygons return
+`available=False` with a recoverable message instead of raising an internal
+tool error.
 
 ```python
 from pathlib import Path

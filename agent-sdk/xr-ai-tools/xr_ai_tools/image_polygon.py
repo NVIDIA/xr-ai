@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import math
 from collections.abc import Sequence
 from pathlib import Path
@@ -20,6 +21,7 @@ from .tools import Tool
 from .types import StrictRequest
 
 _MAGENTA_RGB = (255, 0, 255)
+_LOGGER = logging.getLogger(__name__)
 
 
 class ImagePoint(BaseModel):
@@ -52,7 +54,18 @@ class ImagePolygonFillRequest(StrictRequest):
 class ImagePolygonFillResult(BaseModel):
     """A lossless PNG copy containing the filled polygon."""
 
-    image: ImageReference = Field(description="Opaque reference to the edited PNG image.")
+    image: ImageReference | None = Field(
+        default=None,
+        description="Opaque reference to the edited PNG image when available.",
+    )
+    available: bool = Field(
+        default=True,
+        description="Whether the supplied image and polygon produced an edited image.",
+    )
+    message: str | None = Field(
+        default=None,
+        description="Recoverable failure detail when no edited image was produced.",
+    )
 
 
 def _open_image(source: ImageInput) -> Image.Image:
@@ -127,15 +140,37 @@ class ImagePolygonFillTool(Tool[ImagePolygonFillRequest, ImagePolygonFillResult]
         )
 
     async def _fill(self, request: ImagePolygonFillRequest) -> ImagePolygonFillResult:
-        source = self.images.resolve(request.image)
-        output = await asyncio.to_thread(
-            fill_polygon_magenta,
-            source,
-            request.coordinates,
-        )
-        return ImagePolygonFillResult(
-            image=self.images.put_derived(output, source=request.image)
-        )
+        try:
+            source = self.images.resolve(request.image)
+        except (LookupError, ValueError) as error:
+            _LOGGER.warning("Image input could not be resolved: %s", error)
+            return ImagePolygonFillResult(
+                available=False,
+                message="Image input unavailable — please select it again.",
+            )
+
+        try:
+            output = await asyncio.to_thread(
+                fill_polygon_magenta,
+                source,
+                request.coordinates,
+            )
+        except (OSError, ValueError) as error:
+            _LOGGER.warning("Image polygon could not be filled: %s", error)
+            return ImagePolygonFillResult(
+                available=False,
+                message=f"Image polygon invalid — {error}",
+            )
+
+        try:
+            image = self.images.put_derived(output, source=request.image)
+        except (LookupError, ValueError) as error:
+            _LOGGER.warning("Source image was released during polygon fill: %s", error)
+            return ImagePolygonFillResult(
+                available=False,
+                message="Image input unavailable — please select it again.",
+            )
+        return ImagePolygonFillResult(image=image)
 
 
 __all__ = [
