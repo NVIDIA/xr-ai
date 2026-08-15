@@ -20,6 +20,12 @@ class LiveKitConnectorConfig:
     lk_port_tcp: int = 7881   # WebRTC TCP
     lk_port_udp: int = 7882   # WebRTC UDP
 
+    # Discover and advertise the host's public IP for clients outside a NAT.
+    lk_use_external_ip: bool = False
+    # Some cloud NATs do not support the self-ping LiveKit uses to validate the
+    # discovered IP. This setting has an effect only with external IP enabled.
+    lk_skip_external_ip_validation: bool = False
+
     # ── Internal URL for the Python room client (direct WS, no proxy) ─────────
     lk_internal_url: str = "ws://127.0.0.1:7880"
 
