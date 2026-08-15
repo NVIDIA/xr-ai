@@ -15,7 +15,7 @@ dependencies = [
     "xr-ai-agent-runtime",
     "xr-ai-hub-client",
     "xr-ai-models",
-    "xr-ai-tools[frames,qr-code,services,vision]",
+    "xr-ai-tools[frames,image-editing,qr-code,services,vision]",
     "xr-ai-voice",
     "xr-media-hub",
     "xr-ai-launcher",
